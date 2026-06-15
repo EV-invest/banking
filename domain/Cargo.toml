@@ -1,0 +1,13 @@
+[package]
+name = "domain"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom.workspace = true
+ev = { workspace = true, features = ["wasm"] }
+
+[dependencies]
+ev.workspace = true
+thiserror.workspace = true
