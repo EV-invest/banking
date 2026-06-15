@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package fund.v1;
+
+// Internal gRPC surface for the fund. Closed system: consumed only by other
+// in-fund services, never the public internet. Scaffold only — a single health
+// probe; real services are added here as the system grows.
+service HealthService {
+  rpc Check(CheckRequest) returns (CheckResponse);
+}
+
+message CheckRequest {}
+
+message CheckResponse {
+  string status = 1;
+}
