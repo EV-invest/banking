@@ -76,8 +76,10 @@ venv/
 ## Local TigerBeetle
 .tb/
 .tb-client
+## Node
+node_modules/
 ## Generated frontend CSS
-frontend/assets/tailwind.css
+frontend/public/tailwind.css
 ## LLMs
 AGENTS.md
 CLAUDE.md

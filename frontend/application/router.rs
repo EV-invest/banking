@@ -5,7 +5,7 @@ use crate::{
 	views::{Home, NotFound},
 };
 
-const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css", CssAssetOptions::new());
+const TAILWIND_CSS: Asset = asset!("/public/tailwind.css", CssAssetOptions::new());
 
 #[component]
 pub fn App() -> Element {
