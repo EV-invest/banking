@@ -1,0 +1,12 @@
+{
+  "name": "ev-fund",
+  "private": true,
+  "description": "Root delegator — builds the Dioxus frontend's Tailwind CSS. No app code lives in JS.",
+  "scripts": {
+    "css": "npx --yes @tailwindcss/cli@^4 -i frontend/input.css -o frontend/assets/tailwind.css",
+    "css:watch": "npx --yes @tailwindcss/cli@^4 -i frontend/input.css -o frontend/assets/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.3.0"
+  }
+}
