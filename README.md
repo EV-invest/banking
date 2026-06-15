@@ -1,7 +1,7 @@
 # ev_fund
 ![Minimum Supported Rust Version](https://img.shields.io/badge/nightly-1.92+-ab6000.svg)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs&style=flat-square" height="20">](https://docs.rs/ev_fund)
-[<img alt="WebAssembly" src="https://img.shields.io/badge/WebAssembly-654ff0?style=for-the-badge&labelColor=555555&logo=webassembly&logoColor=white&style=flat-square" height="20">](https://webassembly.org)
+[<img alt="WebAssembly" src="https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white" height="20">](https://webassembly.org)
 
 
 

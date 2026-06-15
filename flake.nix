@@ -34,8 +34,10 @@
             ## Local TigerBeetle
             .tb/
             .tb-client
+            ## Node
+            node_modules/
             ## Generated frontend CSS
-            frontend/assets/tailwind.css
+            frontend/public/tailwind.css
             ## LLMs
             AGENTS.md
             CLAUDE.md
@@ -216,6 +218,11 @@
             ${dyldFallback}
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo"
+            # tailwind v4 resolves `@import "tailwindcss"` from node_modules, so
+            # the package must be installed before the CSS build.
+            if [ ! -d node_modules/tailwindcss ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+              npm install
+            fi
             npm run css
             npm run css:watch & css=$!
             trap 'kill "$css" 2>/dev/null || true' EXIT INT TERM
@@ -347,7 +354,7 @@
                 # readme-fw regenerates README on every entry and has no wasm badge
                 # key — append a WebAssembly badge after the docs.rs one, once.
                 if [ -f ./README.md ] && ! grep -qi WebAssembly ./README.md; then
-                  ${gnused}/bin/sed -i '/docs\.rs/a [<img alt="WebAssembly" src="https://img.shields.io/badge/WebAssembly-654ff0?style=for-the-badge&labelColor=555555&logo=webassembly&logoColor=white&style=flat-square" height="20">](https://webassembly.org)' ./README.md
+                  ${gnused}/bin/sed -i '/docs\.rs/a [<img alt="WebAssembly" src="https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white" height="20">](https://webassembly.org)' ./README.md
                 fi
 
                 ${linkTbClient}

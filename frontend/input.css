@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "../public/tokens.css";
+@import "./public/tokens.css";
 
 /* Scan Dioxus RSX source for class names (flat layout — no src/) */
 @source "./application/**/*.rs";
