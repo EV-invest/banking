@@ -29,6 +29,7 @@ pub mod claims;
 pub mod interceptor;
 pub mod jwks;
 pub mod service;
+pub mod telemetry;
 
 pub use authorizer::Authorizer;
 pub use claims::Claims;

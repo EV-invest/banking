@@ -11,8 +11,7 @@ workspace = true
 
 [dependencies]
 anyhow.workspace = true
-# The auth service serves the generated AuthService gRPC routes (issuance), so it
-# depends on contracts. contracts must NOT depend back on it (no cycle).
+ev = { workspace = true, features = ["error_monitoring"] }
 evbanking_contracts.workspace = true
 jsonwebtoken.workspace = true
 serde.workspace = true

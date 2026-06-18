@@ -1,5 +1,5 @@
 //! Observability adapter — the seam that hands captured errors to the monitoring
-//! vendor (Sentry).
+//! vendor via the shared `ev::error_monitoring` library (Sentry).
 //!
 //! The gRPC driving adapter calls [`report`] so the vendor can be swapped or
 //! disabled without touching call sites (initialisation itself lives in `main`).
@@ -12,5 +12,5 @@
 /// domain errors — not found, validation, conflict — are client mistakes and
 /// must not be reported here.
 pub fn report(err: &dyn std::error::Error) {
-	sentry::capture_error(err);
+	ev::error_monitoring::report(err);
 }
