@@ -1,13 +1,21 @@
 //! Shared domain crate.
 //!
-//! The single source of truth for domain types across the workspace; `backend`
-//! and `frontend` depend on it, never on each other, and it stays wasm-safe.
+//! The single source of truth for domain types across the platform. The hub
+//! server (`piggybank-core`) depends on it, and so do other service repos and
+//! their wasm frontends (it stays wasm-safe). It never depends on the hub server
+//! or any adapter.
 //!
-//! Scaffold: this seeds only the cross-cutting [`error::DomainError`] and
-//! re-exports the `ev` architecture building blocks. Aggregates, value objects,
-//! and ports are added under a `model` module as real features land.
+//! Scaffold: this seeds the cross-cutting [`error::DomainError`], re-exports the
+//! `ev` architecture building blocks, and declares the four bounded contexts the
+//! hub owns. Each context module is an empty placeholder — aggregates, value
+//! objects, and ports land there as real features arrive.
 
 pub mod error;
+
+pub mod allocations;
+pub mod auth;
+pub mod balance;
+pub mod users;
 
 /// Re-export of the `architecture` feature of the external `ev` crate — the
 /// shared DDD tactical building blocks (`Id`, `Entity`, `AggregateRoot`,
