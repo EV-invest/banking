@@ -1,0 +1,114 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@evinvest/uikit/styles/tokens.css";
+
+/* The shared UI kit ships compiled, so its utility classes live in node_modules.
+   Tailwind ignores node_modules by default — point it at the kit's dist so the
+   classes baked into `@evinvest/uikit` components are generated. */
+@source "../../node_modules/@evinvest/uikit/dist";
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    font-family: var(--font-sans);
+  }
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-main-accent-t1/30 selection:text-main-mist;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-serif-display {
+    font-family: var(--font-serif);
+    letter-spacing: -0.02em;
+  }
+
+  /* Uppercase tracking + tabular nums; Inter carries the label texture
+     that Space Mono used to provide, while keeping column-aligned digits. */
+  .font-mono-tech {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 3rem;
+      padding-right: 3rem;
+      max-width: 1440px;
+    }
+  }
+}
+
+/* Custom premium scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #070d18;
+}
+::-webkit-scrollbar-thumb {
+  background: #1b2742;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2a9d8f;
+}
+
+/* Research-zone texture — faint dot-grid over a soft centre vignette. */
+.research-texture {
+  background-color: var(--color-main-surface);
+  background-image:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(42, 157, 143, 0.05),
+      transparent 60%
+    ),
+    radial-gradient(rgba(230, 225, 211, 0.05) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    22px 22px;
+  background-position:
+    center top,
+    center;
+}
+
+/* Research reading panel — near-black field with a faint cool mottle. */
+.research-panel {
+  position: relative;
+  background-color: var(--color-main-black);
+}
+.research-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      75% 60% at 30% 25%,
+      rgba(154, 166, 184, 0.045),
+      transparent 70%
+    ),
+    radial-gradient(60% 80% at 80% 90%, rgba(7, 13, 24, 0.6), transparent 70%);
+}
+.research-panel > * {
+  position: relative;
+}
