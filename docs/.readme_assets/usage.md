@@ -35,5 +35,5 @@ Ctrl-C tears the whole stack down. Per-area build, test, and layout details live
 in each folder's README — see the table above.
 
 A dev shell with the full toolchain (Rust nightly + `wasm32`, Node, Postgres,
-TigerBeetle, Redis, protobuf) is auto-activated by `.envrc` + direnv, or via
-`nix develop`.
+TigerBeetle, Redis, protobuf, Playwright browsers) is auto-activated by `.envrc` +
+direnv, or via `nix develop`.
