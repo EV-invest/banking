@@ -23,6 +23,7 @@
 
 use std::sync::Arc;
 
+use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use infrastructure::tigerbeetle::TigerBeetle;
 use sqlx::PgPool;
@@ -37,16 +38,24 @@ pub mod services;
 /// Postgres pool is the **control plane** (metadata, id-mapping, event
 /// log/outbox, projections); TigerBeetle is the **data plane** (authoritative
 /// money); the [`Authorizer`] verifies inbound requests via the in-process
-/// channel to the auth task.
+/// channel to the auth task; [`Analytics`] is the product-analytics seam
+/// (native PostHog capture, a no-op until `POSTHOG_KEY` is set) that RPC handlers
+/// capture events through as they land.
 #[derive(Clone)]
 pub struct AppState {
 	pub pool: PgPool,
 	pub tigerbeetle: Arc<TigerBeetle>,
 	pub authorizer: Authorizer,
+	pub analytics: Analytics,
 }
 
 impl AppState {
-	pub fn new(pool: PgPool, tigerbeetle: Arc<TigerBeetle>, authorizer: Authorizer) -> Self {
-		Self { pool, tigerbeetle, authorizer }
+	pub fn new(pool: PgPool, tigerbeetle: Arc<TigerBeetle>, authorizer: Authorizer, analytics: Analytics) -> Self {
+		Self {
+			pool,
+			tigerbeetle,
+			authorizer,
+			analytics,
+		}
 	}
 }
