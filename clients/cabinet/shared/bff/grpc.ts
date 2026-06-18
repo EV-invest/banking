@@ -1,6 +1,6 @@
 // BFF → hub gRPC bridge (server-side only).
 //
-// The core BFF is the single egress to the hub's tonic backend. It loads the
+// The cabinet BFF is the single egress to the hub's tonic backend. It loads the
 // proto at runtime with @grpc/proto-loader and calls the service directly — no
 // TypeScript codegen step. `tonic` + `tonic-build` generate the Rust side on
 // every `cargo build`; the TS BFF reads the same `contracts/proto`. Keep this

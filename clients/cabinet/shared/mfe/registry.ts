@@ -2,7 +2,7 @@
 //
 // The registry maps logical names to {tag, scriptUrl, kind}. Independent deploys
 // land by editing this file (or, in production, a per-env config the BFF fetches)
-// — never by rebuilding core. Served to the browser via /api/mfe-registry.
+// — never by rebuilding cabinet. Served to the browser via /api/mfe-registry.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";

@@ -191,7 +191,7 @@
         # Runs `piggybank-core`, which spawns the core gRPC services and the auth
         # service as in-process tasks. A reachable Postgres + TigerBeetle are the
         # prerequisites (`.#db`/`.#tb`, or `.#dev`). No HTTP: browser traffic
-        # reaches the hub through the `clients/core` BFF. Defaults mirror
+        # reaches the hub through the `clients/cabinet` BFF. Defaults mirror
         # piggybank/core/.env.example; any value already in the environment wins.
         runPiggybank = pkgs.writeShellApplication {
           name = "run-piggybank";
@@ -219,16 +219,16 @@
         # ── clients (Turborepo: Next.js host) ───────────────────────────────
         # npm workspaces rooted at the repo; deps install once into the hoisted
         # node_modules (`npm install` also generates/updates the lockfile). The
-        # `core` host BFF reaches the backend over gRPC.
-        runCore = pkgs.writeShellApplication {
-          name = "run-core";
+        # `cabinet` host BFF reaches the backend over gRPC.
+        runCabinet = pkgs.writeShellApplication {
+          name = "run-cabinet";
           runtimeInputs = with pkgs; [ nodejs git ];
           text = ''
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo"
             [ -d node_modules/next ] || npm install
             export GRPC_ADDR="''${GRPC_ADDR:-127.0.0.1:50051}"
-            exec npm run dev --workspace @evbanking/core
+            exec npm run dev --workspace @evbanking/cabinet
           '';
         };
 
@@ -284,7 +284,7 @@
         # ── local TigerBeetle ───────────────────────────────────────────────
         # Project-local ledger under .tb/ (gitignored). First run formats a
         # single-replica cluster; later runs just start it. Port 3033 keeps the
-        # ledger off the 3000 web range owned by `core`.
+        # ledger off the 3000 web range owned by `cabinet`.
         runTigerbeetle = pkgs.writeShellApplication {
           name = "run-tigerbeetle";
           runtimeInputs = [ tigerbeetleBin pkgs.git ];
@@ -307,7 +307,7 @@
         };
 
         # ── full dev orchestrator ───────────────────────────────────────────
-        # `nix run .#dev` → Postgres + TigerBeetle + Redis + piggybank + core.
+        # `nix run .#dev` → Postgres + TigerBeetle + Redis + piggybank + cabinet.
         # Postgres starts first, then the rest. A single trap tears the whole tree
         # down on exit.
         runDev = pkgs.writeShellApplication {
@@ -335,24 +335,24 @@
 
             echo "▶ piggybank (:50051 core / :50052 auth)"
             ${runPiggybank}/bin/run-piggybank & pids+=($!)
-            echo "▶ core      (:3000)"
-            ${runCore}/bin/run-core & pids+=($!)
+            echo "▶ cabinet   (:3000)"
+            ${runCabinet}/bin/run-cabinet & pids+=($!)
 
             wait
           '';
         };
       in
       {
-        # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + piggybank + core)
+        # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + piggybank + cabinet)
         # `nix run .#piggybank` → hub server: core gRPC + auth tasks (needs DB + TB: `.#db`/`.#tb` or `.#dev`)
-        # `nix run .#core`      → Next.js host shell + BFF (:3000, needs piggybank on :50051)
+        # `nix run .#cabinet`   → Next.js host shell + BFF (:3000, needs piggybank on :50051)
         # `nix run .#db`        → local Postgres only
         # `nix run .#tb`        → local TigerBeetle only
         # `nix run .#redis`     → local Redis (central auth store) only
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           piggybank = { type = "app"; program = "${runPiggybank}/bin/run-piggybank"; };
-          core = { type = "app"; program = "${runCore}/bin/run-core"; };
+          cabinet = { type = "app"; program = "${runCabinet}/bin/run-cabinet"; };
           db = { type = "app"; program = "${runPostgres}/bin/run-postgres"; };
           tb = { type = "app"; program = "${runTigerbeetle}/bin/run-tigerbeetle"; };
           redis = { type = "app"; program = "${runRedis}/bin/run-redis"; };
