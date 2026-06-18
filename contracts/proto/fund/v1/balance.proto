@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package fund.v1;
+
+// BalanceService — the fund's own capital (company money).
+//
+// Reads authoritative balances from the TigerBeetle ledger; metadata and events
+// from Postgres. Scaffold: declared to lock the namespace; RPCs land here as the
+// balance feature arrives. See docs/ARCHITECTURE.md.
+service BalanceService {}

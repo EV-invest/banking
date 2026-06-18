@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package fund.v1;
+
+// AllocationsService — distribution of company and user capital inside the fund
+// and across external services.
+//
+// Allocation moves are cross-boundary sagas over TigerBeetle two-phase transfers.
+// Scaffold: declared to lock the namespace; RPCs land here as the allocations
+// feature arrives. See docs/ARCHITECTURE.md.
+service AllocationsService {}

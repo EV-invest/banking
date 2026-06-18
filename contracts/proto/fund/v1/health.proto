@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package fund.v1;
+
+// Liveness probe for the hub's gRPC surface. Used by the `core` BFF smoke path
+// (browser -> BFF -> gRPC) and by service health checks.
+service HealthService {
+  rpc Check(CheckRequest) returns (CheckResponse);
+}
+
+message CheckRequest {}
+
+message CheckResponse {
+  string status = 1;
+}

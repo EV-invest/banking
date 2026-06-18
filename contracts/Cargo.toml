@@ -1,0 +1,17 @@
+[package]
+name = "evfund_contracts"
+version = "0.1.0"
+edition = "2024"
+description = "gRPC wire contracts for the EV fund hub — generated tonic client+server stubs, re-exporting the shared auth flow. The dependency other service repos import (by git)."
+license = "BlueOak-1.0.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+prost.workspace = true
+tonic.workspace = true
+
+[build-dependencies]
+tonic-build.workspace = true
