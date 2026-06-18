@@ -1,16 +1,4 @@
-# ev_fund
-![Minimum Supported Rust Version](https://img.shields.io/badge/nightly-1.92+-ab6000.svg)
-[<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs&style=flat-square" height="20">](https://docs.rs/ev_fund)
-[<img alt="WebAssembly" src="https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white" height="20">](https://webassembly.org)
-
-`fund` is the central public hub of the `EV Investment` platform — the one process
-that owns the money, the identities, and the contracts. A Cargo + Turborepo
-monorepo: a Rust gRPC hub (`piggybank`) and Next.js clients over a shared,
-wasm-safe `domain` crate. Every other service lives in its own repo and talks
-**only to the hub, over gRPC** — never to another service.
-
-## Usage
-### Layout
+## Layout
 
 | Path | What | Stack | Details |
 | ---- | ---- | ----- | ------- |
@@ -27,7 +15,7 @@ gRPC dependency other repos import; the published `@evinvest/uikit` is the share
 design source of truth for the clients. There is **no HTTP on the hub** — browser
 traffic reaches it through the `clients/core` BFF, which proxies HTTP↔gRPC.
 
-### Run
+## Run
 
 Every app is a flake app. `nix run` resolves the repo root at runtime, so there's
 no need to enter the dev shell first.
@@ -49,27 +37,3 @@ in each folder's README — see the table above.
 A dev shell with the full toolchain (Rust nightly + `wasm32`, Node, Postgres,
 TigerBeetle, Redis, protobuf) is auto-activated by `.envrc` + direnv, or via
 `nix develop`.
-
-<!-- Per-area details live in each folder's README and the full architecture in docs/ARCHITECTURE.md — not duplicated here. -->
-
-
-<br>
-
-<sup>
-	This repository follows <a href="https://github.com/valeratrades/.github/tree/master/best_practices">my best practices</a> and <a href="https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md">Tiger Style</a> (except "proper capitalization for acronyms": (VsrState, not VSRState) and formatting). For project's architecture, see <a href="./docs/ARCHITECTURE.md">ARCHITECTURE.md</a>.
-</sup>
-
-#### License
-
-<sup>
-	Licensed under <a href="LICENSE">Blue Oak 1.0.0</a>
-</sup>
-
-<br>
-
-<sub>
-	Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this crate by you, as defined in the Apache-2.0 license, shall
-be licensed as above, without any additional terms or conditions.
-</sub>
-

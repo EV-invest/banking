@@ -391,12 +391,6 @@
                   ${gnused}/bin/sed -i '/docs\.rs/a [<img alt="WebAssembly" src="https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white" height="20">](https://webassembly.org)' ./README.md
                 fi
 
-                # readme-fw has no body/content key either — link the architecture
-                # doc once, as its own block after the badges (idempotent).
-                if [ -f ./README.md ] && ! grep -q 'docs/ARCHITECTURE.md' ./README.md; then
-                  ${gnused}/bin/sed -i 's|\(.*webassembly\.org.*\)|\1\n\n> **Architecture** — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).|' ./README.md
-                fi
-
                 ${linkTbClient}
               '';
 
