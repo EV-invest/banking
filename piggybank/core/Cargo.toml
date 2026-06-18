@@ -1,0 +1,32 @@
+[package]
+name = "piggybank-core"
+version = "0.1.0"
+edition = "2024"
+description = "The EV fund hub server — composition root that runs the core gRPC services and the auth service as in-process tasks over Postgres + TigerBeetle."
+license = "BlueOak-1.0.0"
+publish = false
+default-run = "piggybank"
+
+[[bin]]
+name = "piggybank"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+domain.workspace = true
+dotenvy.workspace = true
+evfund_auth.workspace = true
+evfund_contracts.workspace = true
+sentry = { workspace = true, features = ["tracing"] }
+sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres"] }
+tigerbeetle.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tonic.workspace = true
+tonic-web.workspace = true
+tower.workspace = true
+tower-http = { workspace = true, features = ["trace"] }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }

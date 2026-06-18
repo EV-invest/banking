@@ -1,0 +1,21 @@
+[package]
+name = "evfund_auth"
+version = "0.1.0"
+edition = "2024"
+description = "The hub's auth service + the shared, server-only verification flow. Runs inside piggybank-core as its own task (issuance gRPC + in-process Authorizer channel); also imported by every service repo for stateless JWKS verification. Wasm-unsafe by design."
+license = "BlueOak-1.0.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+# The auth service serves the generated AuthService gRPC routes (issuance), so it
+# depends on contracts. contracts must NOT depend back on it (no cycle).
+evfund_contracts.workspace = true
+jsonwebtoken.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "sync"] }
+tonic.workspace = true
