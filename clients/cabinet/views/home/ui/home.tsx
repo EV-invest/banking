@@ -8,7 +8,7 @@ export function HomeView() {
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">EV Banking · Console</p>
         <h1 className="max-w-3xl text-5xl leading-tight">The hub shell</h1>
         <p className="max-w-2xl text-muted-foreground">
-          <code>core</code> composes microfrontends from other services — React or Rust/WASM, inline widgets or whole
+          <code>cabinet</code> composes microfrontends from other services — React or Rust/WASM, inline widgets or whole
           pages — as custom elements, and proxies browser requests to the hub&apos;s gRPC backend.
         </p>
         <HealthBadge />

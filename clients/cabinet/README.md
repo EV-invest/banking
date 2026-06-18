@@ -1,13 +1,13 @@
-# core — host shell + BFF
+# cabinet — host shell + BFF
 
 The root constructor for the bank's clients. Two jobs:
 
 1. **Microfrontend composition.** Every microfrontend (React or Rust/WASM, inline
-   widget or whole page) is a self-registering **custom element**. `core` mounts
+   widget or whole page) is a self-registering **custom element**. `cabinet` mounts
    them with [`<RemoteElement>`](./shared/mfe/RemoteElement.tsx), resolving each by
    logical name from the [registry](./mfe-registry.json) (served at
    `/api/mfe-registry`). Remotes deploy independently — change the registry, not
-   `core`. Light DOM only (Tailwind v4 tokens break in shadow DOM).
+   `cabinet`. Light DOM only (Tailwind v4 tokens break in shadow DOM).
    - Inline widget: render `<RemoteElement>` anywhere in a page.
    - Whole page: the catch-all route `app/(mfe)/[service]/[[...slug]]` mounts a page MFE.
 
@@ -23,6 +23,6 @@ the React / Rust-WASM producer recipes.
 ## Dev
 
 ```
-nix run .#core      # this app on :3000 (needs the backend on :50051)
-nix run .#dev       # full stack: postgres + tigerbeetle + backend + core
+nix run .#cabinet      # this app on :3000 (needs the backend on :50051)
+nix run .#dev       # full stack: postgres + tigerbeetle + backend + cabinet
 ```

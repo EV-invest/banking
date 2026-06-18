@@ -13,7 +13,7 @@ logic or DB migrations until a feature explicitly asks.
 
 ```
    ┌───────────────────────────── banking (this repo) ─────────────────────────────┐
-   │  clients/core (Next.js BFF) ──gRPC──▶  piggybank (one process)              │
+   │  clients/cabinet (Next.js BFF) ──gRPC──▶  piggybank (one process)              │
    │      ▲  composes <mfe-*>                 ├─ core task  : gRPC services       │
    │      │  custom elements                  │              (balance/users/…)    │
    │                                          └─ auth task  : issuance gRPC       │
@@ -21,9 +21,9 @@ logic or DB migrations until a feature explicitly asks.
    │                                           Postgres (control) · TigerBeetle   │
    │                                           (money) · Redis (central auth)     │
    └─────────────────────────────────────────────────────────────────────────────┘
-   browser ─HTTP─▶ clients/core BFF ─gRPC─▶ piggybank core
+   browser ─HTTP─▶ clients/cabinet BFF ─gRPC─▶ piggybank core
    other service repos (separate): own logic+allocations ─gRPC (evbanking_contracts)─▶ piggybank;
-     verify client tokens locally via evbanking_auth; own microfrontends mount into clients/core.
+     verify client tokens locally via evbanking_auth; own microfrontends mount into clients/cabinet.
 ```
 
 ## Cargo workspace (crate graph)
@@ -66,9 +66,9 @@ the clients. `evbanking_contracts` vendors the proto, so a downstream repo adds 
 one git dependency (plus `evbanking_auth` for the verification flow) with no protoc
 toolchain.
 
-The hub's only TS surface (`core`'s BFF) is a thin gRPC proxy, so it needs no
+The hub's only TS surface (`cabinet`'s BFF) is a thin gRPC proxy, so it needs no
 TypeScript codegen: it reads the same `contracts/proto` at runtime with
-`@grpc/proto-loader` (`clients/core/shared/bff/grpc.ts`). No buf, no second
+`@grpc/proto-loader` (`clients/cabinet/shared/bff/grpc.ts`). No buf, no second
 toolchain — tonic + tonic-build do everything.
 
 ## Auth
@@ -101,7 +101,7 @@ flow) and `evbanking_contracts` (the stubs).
 refresh-token rotation + reuse detection, optional `jti` revocation. A per-user
 `token_version` claim gives coarse "revoke all" without fleet state.
 
-**Browser.** The BFF token-handler pattern: `clients/core` is the OAuth confidential
+**Browser.** The BFF token-handler pattern: `clients/cabinet` is the OAuth confidential
 client, holds tokens server-side, and gives the browser only a
 `__Host-`/`HttpOnly`/`SameSite` cookie + CSRF defense, scoped to a real apex domain.
 
@@ -112,29 +112,29 @@ distinct `aud`); graduate to SPIFFE/SPIRE only at platform scale.
 
 ## Microfrontends
 
-The host (`clients/core`, Next.js 16 App Router) composes microfrontends from
+The host (`clients/cabinet`, Next.js 16 App Router) composes microfrontends from
 other repos at runtime. A microfrontend can be a **whole page or an inline
 component**, and may be React or Rust/WASM.
 
 **Universal contract — a custom element.** Every microfrontend ships one
 self-registering ESM bundle that calls `customElements.define('mfe-<team>-<name>',
-…)`. The host renders it with [`<RemoteElement>`](../clients/core/shared/mfe/RemoteElement.tsx):
+…)`. The host renders it with [`<RemoteElement>`](../clients/cabinet/shared/mfe/RemoteElement.tsx):
 load the bundle by URL → `customElements.whenDefined(tag)` → render `<tag>`,
 mapping props to attributes/properties and CustomEvents to callbacks. The boundary
-is identical for React, Dioxus, and Leptos, so `core` treats every microfrontend
+is identical for React, Dioxus, and Leptos, so `cabinet` treats every microfrontend
 the same. **Light DOM only** — Tailwind v4 `@property` tokens break inside shadow
 roots, and global tokens/uikit must cascade in.
 
-- **Registry.** `core` resolves a logical name → `{tag, scriptUrl, kind}` from a
-  per-env registry (`clients/core/mfe-registry.json`, served at
+- **Registry.** `cabinet` resolves a logical name → `{tag, scriptUrl, kind}` from a
+  per-env registry (`clients/cabinet/mfe-registry.json`, served at
   `/api/mfe-registry`). Independent deploys land by editing the registry, not
-  rebuilding `core`. Tags are globally unique and versioned (the custom-element
+  rebuilding `cabinet`. Tags are globally unique and versioned (the custom-element
   registry is global).
 - **Page-level** = the same element mounted at a route
-  (`clients/core/app/(mfe)/[service]/[[...slug]]`); `core` keeps its chrome.
+  (`clients/cabinet/app/(mfe)/[service]/[[...slug]]`); `cabinet` keeps its chrome.
 - **React producer** (other repos): wrap a component as a custom element with
   `@r2wc/react-to-web-component` directly — the hub ships no producer SDK (its
-  only TS is `core`). _Optional_ optimization for React-to-React widgets: Module
+  only TS is `cabinet`). _Optional_ optimization for React-to-React widgets: Module
   Federation 2.0 **runtime** (`@module-federation/runtime` + `bridge-react`) to
   share one React instance — never `@module-federation/nextjs-mf`
   (App-Router-unsupported, sunsetting).
@@ -147,11 +147,11 @@ roots, and global tokens/uikit must cascade in.
 - **Rejected:** Next.js Multi-Zones as the primary mechanism (path-only; can't
   embed a widget). It may return later only for standalone legacy sub-sites.
 
-**BFF (orthogonal, server-side).** `core` route handlers proxy browser HTTP to the
+**BFF (orthogonal, server-side).** `cabinet` route handlers proxy browser HTTP to the
 hub's tonic backend with `@grpc/grpc-js` + `@grpc/proto-loader` (it reads
 `contracts/proto` at runtime — no TS codegen). No microfrontend talks to the
-backend directly — `core` is the single auth/egress boundary. WASM MFEs call
-`core`'s same-origin BFF over `fetch` (the backend's `tonic-web` layer also allows
+backend directly — `cabinet` is the single auth/egress boundary. WASM MFEs call
+`cabinet`'s same-origin BFF over `fetch` (the backend's `tonic-web` layer also allows
 direct gRPC-Web when latency demands it).
 
 ## Event sourcing + CQRS
@@ -184,10 +184,10 @@ facts in Postgres would double-bookkeep.
 
 | `nix run .#`          | What                                                        | Port                          |
 | --------------------- | ----------------------------------------------------------- | ----------------------------- |
-| `dev`                 | postgres + tigerbeetle + redis + piggybank + core | —                             |
+| `dev`                 | postgres + tigerbeetle + redis + piggybank + cabinet | —                             |
 | `piggybank`           | hub server: core gRPC + auth tasks (tonic-web)              | `:50051` core / `:50052` auth |
-| `core`                | Next.js host shell + BFF                                    | `:3000`                       |
+| `cabinet`             | Next.js host shell + BFF                                    | `:3000`                       |
 | `db` / `tb` / `redis` | local Postgres / TigerBeetle / Redis                        | `:5432` / `:3033` / `:6379`   |
 
 See [`flake.nix`](../flake.nix) for the apps and dev shell, and per-area READMEs
-(e.g. [`clients/core/README.md`](../clients/core/README.md)) for details.
+(e.g. [`clients/cabinet/README.md`](../clients/cabinet/README.md)) for details.

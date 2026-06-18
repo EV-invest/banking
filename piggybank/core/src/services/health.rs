@@ -1,7 +1,7 @@
 use evbanking_contracts::banking::v1::{CheckRequest, CheckResponse, health_service_server::HealthService};
 use tonic::{Request, Response, Status};
 
-/// Liveness probe for the gRPC surface. Backs the `core` BFF smoke path
+/// Liveness probe for the gRPC surface. Backs the `cabinet` BFF smoke path
 /// (browser → BFF → gRPC).
 #[derive(Default)]
 pub struct Health;
