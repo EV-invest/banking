@@ -28,7 +28,7 @@ let cached: HealthClient | undefined;
 
 function healthClient(): HealthClient {
   if (cached) return cached;
-  const definition = protoLoader.loadSync("fund/v1/health.proto", {
+  const definition = protoLoader.loadSync("banking/v1/health.proto", {
     includeDirs: [PROTO_DIR],
     keepCase: true,
     longs: String,
@@ -37,9 +37,9 @@ function healthClient(): HealthClient {
     oneofs: true,
   });
   const pkg = grpc.loadPackageDefinition(definition) as unknown as {
-    fund: { v1: { HealthService: HealthClientCtor } };
+    banking: { v1: { HealthService: HealthClientCtor } };
   };
-  cached = new pkg.fund.v1.HealthService(GRPC_ADDR, grpc.credentials.createInsecure());
+  cached = new pkg.banking.v1.HealthService(GRPC_ADDR, grpc.credentials.createInsecure());
   return cached;
 }
 

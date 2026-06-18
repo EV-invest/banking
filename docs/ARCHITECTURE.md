@@ -1,6 +1,6 @@
 # Architecture
 
-`fund` is the **central public hub** of the EV fund platform. It owns the money,
+`banking` is the **central public hub** of the EV banking platform. It owns the money,
 the identities, the contracts, and the client shell; every other service lives in
 its own repo and talks **only to the hub, over gRPC**. Services never talk to each
 other — not directly, not even via a hub round trip.
@@ -12,59 +12,58 @@ logic or DB migrations until a feature explicitly asks.
 ## Topology
 
 ```
-   ┌───────────────────────────── fund (this repo) ─────────────────────────────┐
+   ┌───────────────────────────── banking (this repo) ─────────────────────────────┐
    │  clients/core (Next.js BFF) ──gRPC──▶  piggybank (one process)              │
    │      ▲  composes <mfe-*>                 ├─ core task  : gRPC services       │
    │      │  custom elements                  │              (balance/users/…)    │
-   │  clients/landing (Next.js)               └─ auth task  : issuance gRPC       │
+   │                                          └─ auth task  : issuance gRPC       │
    │                                           core ◀─Authorizer channel─ auth    │
    │                                           Postgres (control) · TigerBeetle   │
    │                                           (money) · Redis (central auth)     │
    └─────────────────────────────────────────────────────────────────────────────┘
    browser ─HTTP─▶ clients/core BFF ─gRPC─▶ piggybank core
-   other service repos (separate): own logic+allocations ─gRPC (evfund_contracts)─▶ piggybank;
-     verify client tokens locally via evfund_auth; own microfrontends mount into clients/core.
+   other service repos (separate): own logic+allocations ─gRPC (evbanking_contracts)─▶ piggybank;
+     verify client tokens locally via evbanking_auth; own microfrontends mount into clients/core.
 ```
 
 ## Cargo workspace (crate graph)
 
 ```
 domain            → ev (architecture feature)          [wasm-safe]
-evfund_contracts  → (tonic-build over proto/)
-evfund_auth       → evfund_contracts
-piggybank-core    → domain, evfund_contracts, evfund_auth
+evbanking_contracts  → (tonic-build over proto/)
+evbanking_auth       → evbanking_contracts
+piggybank-core    → domain, evbanking_contracts, evbanking_auth
 ```
 
 | Crate                                | Role                                                                                                                                            | wasm-safe |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
 | `domain/`                            | Pure DDD types over `ev::architecture`; the four bounded contexts (`balance`, `users`, `allocations`, `auth`). Source of truth across platform. | **yes**   |
-| `evfund_contracts` (`contracts/`)    | gRPC wire contracts: tonic client+server stubs from `proto/`. Other repos import it for the client stubs.                                       | no        |
-| `evfund_auth` (`piggybank/auth/`)    | The auth **service** (issuance gRPC + in-process `Authorizer` channel) **and** the shared verification flow (JWKS verify + interceptor).        | no        |
+| `evbanking_contracts` (`contracts/`)    | gRPC wire contracts: tonic client+server stubs from `proto/`. Other repos import it for the client stubs.                                       | no        |
+| `evbanking_auth` (`piggybank/auth/`)    | The auth **service** (issuance gRPC + in-process `Authorizer` channel) **and** the shared verification flow (JWKS verify + interceptor).        | no        |
 | `piggybank-core` (`piggybank/core/`) | The hub server: composition root that runs the core gRPC services and the auth service as in-process tasks; data-plane services + infra.        | no        |
 
-`domain` never depends on an adapter, and the wasm-unsafe `evfund_auth` is never a
+`domain` never depends on an adapter, and the wasm-unsafe `evbanking_auth` is never a
 dependency of `domain` — so `domain` stays wasm-safe for service frontends.
-`evfund_auth` depends on `evfund_contracts` (it serves the `AuthService` routes), so
+`evbanking_auth` depends on `evbanking_contracts` (it serves the `AuthService` routes), so
 `contracts` must never depend back on it.
 
 ## Bounded contexts
 
 | Context       | Owns                                                    | Authoritative store        |
 | ------------- | ------------------------------------------------------- | -------------------------- |
-| `balance`     | the fund's own capital (company money)                  | TigerBeetle                |
+| `balance`     | the bank's own capital (company money)                  | TigerBeetle                |
 | `users`       | investor accounts and their investments                 | Postgres + TigerBeetle     |
-| `allocations` | distribution of capital inside the fund and to services | TigerBeetle (sagas)        |
+| `allocations` | distribution of capital inside the bank and to services | TigerBeetle (sagas)        |
 | `auth`        | identities + token issuance/verification                | Postgres + Redis (central) |
-| `landing`     | the public marketing site                               | — (`clients/landing`)      |
 
 ## Contracts pipeline
 
-`contracts/proto/fund/v1/*.proto` is the single source of truth, and there is a
+`contracts/proto/banking/v1/*.proto` is the single source of truth, and there is a
 **single codegen path**: `contracts/build.rs` runs `tonic-build` (client **and**
 server) on every `cargo build`. `piggybank-core` uses the data-plane servers,
-`evfund_auth` uses the `AuthService` server (issuance routes), and other repos use
-the clients. `evfund_contracts` vendors the proto, so a downstream repo adds it as
-one git dependency (plus `evfund_auth` for the verification flow) with no protoc
+`evbanking_auth` uses the `AuthService` server (issuance routes), and other repos use
+the clients. `evbanking_contracts` vendors the proto, so a downstream repo adds it as
+one git dependency (plus `evbanking_auth` for the verification flow) with no protoc
 toolchain.
 
 The hub's only TS surface (`core`'s BFF) is a thin gRPC proxy, so it needs no
@@ -79,7 +78,7 @@ with the hub's own core ↔ auth check done **in-process**, not over the wire.
 
 **Inside the hub (`piggybank`).** `core` and `auth` run as two tasks in one
 process (spawned by `piggybank-core`'s composition root). The `auth` task
-(`evfund_auth`) owns the signing keys / JWKS / refresh store, serves its **own
+(`evbanking_auth`) owns the signing keys / JWKS / refresh store, serves its **own
 issuance gRPC routes** (`auth_grpc_addr`, e.g. `:50052`) — exchanging a client
 login for the hub's JWT, refresh, JWKS — and hands `core` an [`Authorizer`]: a
 cloneable handle over an in-process channel. `core`'s gRPC interceptor authorizes
@@ -93,10 +92,10 @@ Google's token inward — and publishes JWKS.
 
 **External services (separate processes).** They can't share the in-process
 channel, so they verify the hub's JWTs **locally** against cached JWKS via
-`evfund_auth`'s interceptor + `verify_token`: **no per-request round trip, no
+`evbanking_auth`'s interceptor + `verify_token`: **no per-request round trip, no
 per-service token storage.** A per-service Redis denylist is an anti-pattern — it
-reintroduces the round trip JWTs exist to avoid. They depend on `evfund_auth` (the
-flow) and `evfund_contracts` (the stubs).
+reintroduces the round trip JWTs exist to avoid. They depend on `evbanking_auth` (the
+flow) and `evbanking_contracts` (the stubs).
 
 **State.** The **only** stateful auth store is one **central** Redis (`REDIS_URL`):
 refresh-token rotation + reuse detection, optional `jti` revocation. A per-user
@@ -185,10 +184,9 @@ facts in Postgres would double-bookkeep.
 
 | `nix run .#`          | What                                                        | Port                          |
 | --------------------- | ----------------------------------------------------------- | ----------------------------- |
-| `dev`                 | postgres + tigerbeetle + redis + piggybank + core + landing | —                             |
+| `dev`                 | postgres + tigerbeetle + redis + piggybank + core | —                             |
 | `piggybank`           | hub server: core gRPC + auth tasks (tonic-web)              | `:50051` core / `:50052` auth |
 | `core`                | Next.js host shell + BFF                                    | `:3000`                       |
-| `landing`             | Next.js marketing site                                      | `:3001`                       |
 | `db` / `tb` / `redis` | local Postgres / TigerBeetle / Redis                        | `:5432` / `:3033` / `:6379`   |
 
 See [`flake.nix`](../flake.nix) for the apps and dev shell, and per-area READMEs

@@ -7,7 +7,6 @@
 | [`contracts/`](contracts) | gRPC wire contracts (`proto/` → tonic stubs) | Rust · tonic-build · proto3 | — |
 | [`domain/`](domain) | shared domain types (pure, wasm-safe) over `ev::architecture` | Rust | — |
 | [`clients/core/`](clients/core) | host shell + BFF + microfrontend runtime | Next.js 16 · TS · Tailwind | [README](clients/core/README.md) |
-| [`clients/landing/`](clients/landing) | public marketing site | Next.js 16 · FSD · Tailwind · TS | [README](clients/landing/README.md) |
 
 `domain` is the shared source of truth for types — the hub and every service repo
 depend on it, never on each other. `contracts` (vendoring `proto/`) is the single
@@ -22,10 +21,9 @@ no need to enter the dev shell first.
 
 | Command | Brings up | Port |
 | ------- | --------- | ---- |
-| `nix run .#dev` | everything: Postgres + TigerBeetle + Redis + piggybank + core + landing | — |
+| `nix run .#dev` | everything: Postgres + TigerBeetle + Redis + piggybank + core | — |
 | `nix run .#piggybank` | hub server: core gRPC + auth tasks (tonic-web) | `:50051` core · `:50052` auth |
 | `nix run .#core` | Next.js host shell + BFF | 3000 |
-| `nix run .#landing` | Next.js marketing site | 3001 |
 | `nix run .#db` | local Postgres (cluster under `.pg/`, trust auth) | 5432 |
 | `nix run .#tb` | local TigerBeetle (data under `.tb/`, single replica) | 3033 |
 | `nix run .#redis` | local Redis (central auth refresh-token store) | 6379 |
@@ -35,5 +33,5 @@ Ctrl-C tears the whole stack down. Per-area build, test, and layout details live
 in each folder's README — see the table above.
 
 A dev shell with the full toolchain (Rust nightly + `wasm32`, Node, Postgres,
-TigerBeetle, Redis, protobuf, Playwright browsers) is auto-activated by `.envrc` +
+TigerBeetle, Redis, protobuf) is auto-activated by `.envrc` +
 direnv, or via `nix develop`.

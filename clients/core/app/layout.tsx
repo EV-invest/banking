@@ -6,8 +6,8 @@ import { Header } from "@/application/layout/header";
 import { Providers } from "@/application/providers";
 
 export const metadata: Metadata = {
-  title: "EV Fund — Console",
-  description: "Host shell composing the fund's microfrontends.",
+  title: "EV Banking — Console",
+  description: "Host shell composing the bank's microfrontends.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

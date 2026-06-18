@@ -21,7 +21,7 @@
           targets = [ "wasm32-unknown-unknown" ];
         });
         pre-commit-check = pre-commit-hooks.lib.${system}.run (v_flakes.files.preCommit { inherit pkgs; });
-        pname = "ev_fund";
+        pname = "ev_banking";
 
         rs = v_flakes.rs { inherit pkgs rust; };
         github = v_flakes.github {
@@ -57,7 +57,7 @@
         };
         readme = v_flakes.readme-fw {
           inherit pkgs pname;
-          repo = "EV-invest/fund";
+          repo = "EV-invest/banking";
           defaults = true;
           lastSupportedVersion = "nightly-1.92";
           rootDir = ./.;
@@ -204,10 +204,10 @@
 
             ${linkTbClient}
 
-            export DATABASE_URL="''${DATABASE_URL:-postgres://postgres@localhost:5432/ev_fund}"
+            export DATABASE_URL="''${DATABASE_URL:-postgres://postgres@localhost:5432/ev_banking}"
             export GRPC_ADDR="''${GRPC_ADDR:-0.0.0.0:50051}"
             export AUTH_GRPC_ADDR="''${AUTH_GRPC_ADDR:-0.0.0.0:50052}"
-            export RUST_LOG="''${RUST_LOG:-info,piggybank_core=debug,evfund_auth=debug}"
+            export RUST_LOG="''${RUST_LOG:-info,piggybank_core=debug,evbanking_auth=debug}"
             # Central-only refresh-token store; harmless if unused (auth is scaffold).
             export REDIS_URL="''${REDIS_URL:-redis://127.0.0.1:6379}"
             export TIGERBEETLE_ADDRESS="''${TIGERBEETLE_ADDRESS:-127.0.0.1:3033}"
@@ -216,10 +216,10 @@
           '';
         };
 
-        # ── clients (Turborepo: Next.js host + landing) ─────────────────────
+        # ── clients (Turborepo: Next.js host) ───────────────────────────────
         # npm workspaces rooted at the repo; deps install once into the hoisted
         # node_modules (`npm install` also generates/updates the lockfile). The
-        # `core` host BFF reaches the backend over gRPC; `landing` is standalone.
+        # `core` host BFF reaches the backend over gRPC.
         runCore = pkgs.writeShellApplication {
           name = "run-core";
           runtimeInputs = with pkgs; [ nodejs git ];
@@ -228,18 +228,7 @@
             cd "$repo"
             [ -d node_modules/next ] || npm install
             export GRPC_ADDR="''${GRPC_ADDR:-127.0.0.1:50051}"
-            exec npm run dev --workspace @evfund/core
-          '';
-        };
-
-        runLanding = pkgs.writeShellApplication {
-          name = "run-landing";
-          runtimeInputs = with pkgs; [ nodejs git ];
-          text = ''
-            repo="$(git rev-parse --show-toplevel)"
-            cd "$repo"
-            [ -d node_modules/next ] || npm install
-            exec npm run dev --workspace @evfund/landing
+            exec npm run dev --workspace @evbanking/core
           '';
         };
 
@@ -259,7 +248,7 @@
 
         # ── local Postgres ──────────────────────────────────────────────────
         # Project-local dev database under .pg/ (gitignored). First run initdb's a
-        # trust-auth cluster and creates `ev_fund`; later runs just start it.
+        # trust-auth cluster and creates `ev_banking`; later runs just start it.
         runPostgres = pkgs.writeShellApplication {
           name = "run-postgres";
           runtimeInputs = with pkgs; [ postgresql git coreutils gnugrep ];
@@ -268,7 +257,7 @@
             export PGDATA="$repo/.pg/data"
             sockets="$repo/.pg/sockets"
             port="''${PGPORT:-5432}"
-            db="''${PGDATABASE:-ev_fund}"
+            db="''${PGDATABASE:-ev_banking}"
 
             mkdir -p "$sockets"
             if [ ! -s "$PGDATA/PG_VERSION" ]; then
@@ -295,7 +284,7 @@
         # ── local TigerBeetle ───────────────────────────────────────────────
         # Project-local ledger under .tb/ (gitignored). First run formats a
         # single-replica cluster; later runs just start it. Port 3033 keeps the
-        # ledger off the 3000–3001 web range owned by `core`/`landing`.
+        # ledger off the 3000 web range owned by `core`.
         runTigerbeetle = pkgs.writeShellApplication {
           name = "run-tigerbeetle";
           runtimeInputs = [ tigerbeetleBin pkgs.git ];
@@ -318,7 +307,7 @@
         };
 
         # ── full dev orchestrator ───────────────────────────────────────────
-        # `nix run .#dev` → Postgres + TigerBeetle + Redis + piggybank + core + landing.
+        # `nix run .#dev` → Postgres + TigerBeetle + Redis + piggybank + core.
         # Postgres starts first, then the rest. A single trap tears the whole tree
         # down on exit.
         runDev = pkgs.writeShellApplication {
@@ -348,18 +337,15 @@
             ${runPiggybank}/bin/run-piggybank & pids+=($!)
             echo "▶ core      (:3000)"
             ${runCore}/bin/run-core & pids+=($!)
-            echo "▶ landing   (:3001)"
-            ${runLanding}/bin/run-landing & pids+=($!)
 
             wait
           '';
         };
       in
       {
-        # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + piggybank + core + landing)
+        # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + piggybank + core)
         # `nix run .#piggybank` → hub server: core gRPC + auth tasks (needs DB + TB: `.#db`/`.#tb` or `.#dev`)
         # `nix run .#core`      → Next.js host shell + BFF (:3000, needs piggybank on :50051)
-        # `nix run .#landing`   → Next.js marketing site (:3001)
         # `nix run .#db`        → local Postgres only
         # `nix run .#tb`        → local TigerBeetle only
         # `nix run .#redis`     → local Redis (central auth store) only
@@ -367,7 +353,6 @@
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           piggybank = { type = "app"; program = "${runPiggybank}/bin/run-piggybank"; };
           core = { type = "app"; program = "${runCore}/bin/run-core"; };
-          landing = { type = "app"; program = "${runLanding}/bin/run-landing"; };
           db = { type = "app"; program = "${runPostgres}/bin/run-postgres"; };
           tb = { type = "app"; program = "${runTigerbeetle}/bin/run-tigerbeetle"; };
           redis = { type = "app"; program = "${runRedis}/bin/run-redis"; };
@@ -405,19 +390,10 @@
               mold
               postgresql
               tigerbeetleBin
-              playwright-driver.browsers
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 
             env.RUST_BACKTRACE = 1;
             env.RUST_LIB_BACKTRACE = 0;
-
-            # Playwright (clients/landing visual tests): drive the nixpkgs browsers
-            # instead of the npm-downloaded ones (those dynamically link libs absent
-            # on NixOS). The landing `@playwright/test` version MUST match
-            # playwright-driver's or the browser revisions won't line up.
-            env.PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
-            env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-            env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE = "nixos";
           };
       }
     );

@@ -17,12 +17,12 @@ dotenvy = "0.15.7"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 jiff = "0.2"
 ev = { git = "https://github.com/EV-invest/lib.git", default-features = false, features = ["architecture"] }
-# Hub-internal crates. Other service repos depend on `evfund_contracts` (and,
-# transitively, `evfund_auth`) by git, so they get the wire stubs and the shared
+# Hub-internal crates. Other service repos depend on `evbanking_contracts` (and,
+# transitively, `evbanking_auth`) by git, so they get the wire stubs and the shared
 # auth verification flow from one place.
 domain = { path = "domain" }
-evfund_auth = { path = "piggybank/auth" }
-evfund_contracts = { path = "contracts" }
+evbanking_auth = { path = "piggybank/auth" }
+evbanking_contracts = { path = "contracts" }
 jsonwebtoken = "10"
 prost = "0.13"
 sentry = "0.48.2"

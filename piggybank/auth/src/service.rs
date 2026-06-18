@@ -9,7 +9,7 @@
 use std::net::SocketAddr;
 
 use anyhow::Context;
-use evfund_contracts::fund::v1::auth_service_server::{AuthService as AuthServiceRpc, AuthServiceServer};
+use evbanking_contracts::banking::v1::auth_service_server::{AuthService as AuthServiceRpc, AuthServiceServer};
 use tokio::sync::mpsc;
 use tonic::transport::Server;
 

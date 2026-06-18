@@ -1,11 +1,11 @@
 //! `piggybank-core` — the hub server library.
 //!
-//! The central fund's driving adapter is **gRPC** (tonic): the closed, internal
+//! The central bank's driving adapter is **gRPC** (tonic): the closed, internal
 //! surface other services call. There is no HTTP here — browser/client traffic
 //! reaches the hub through the `clients/core` BFF, which proxies HTTP↔gRPC.
 //!
 //! `main` is the composition root for the whole `piggybank` system: it runs the
-//! core gRPC services **and** the [`evfund_auth`] auth service as separate
+//! core gRPC services **and** the [`evbanking_auth`] auth service as separate
 //! in-process tasks. Auth hands core an [`Authorizer`] — a channel to the auth
 //! task — so core authorizes incoming gRPC requests across a task boundary
 //! instead of over the network.
@@ -23,7 +23,7 @@
 
 use std::sync::Arc;
 
-use evfund_auth::Authorizer;
+use evbanking_auth::Authorizer;
 use infrastructure::tigerbeetle::TigerBeetle;
 use sqlx::PgPool;
 

@@ -3,7 +3,7 @@
 //! Loads config, opens the driven infrastructure (Postgres control plane,
 //! TigerBeetle ledger), then runs two in-process tasks that talk over the
 //! [`Authorizer`] channel:
-//!   - the **auth service** ([`evfund_auth::AuthService`]) — issuance gRPC routes
+//!   - the **auth service** ([`evbanking_auth::AuthService`]) — issuance gRPC routes
 //!     + the authorize channel, on `auth_grpc_addr`;
 //!   - the **core** gRPC services (health/users/balance/allocations) on `grpc_addr`,
 //!     authorizing each request via the `Authorizer` core got from auth.
@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use evfund_auth::AuthService;
+use evbanking_auth::AuthService;
 use piggybank_core::{
 	AppState,
 	config::AppConfig,
@@ -73,6 +73,6 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 fn init_tracing() {
 	use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
-	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,piggybank_core=debug,evfund_auth=debug"));
+	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,piggybank_core=debug,evbanking_auth=debug"));
 	tracing_subscriber::registry().with(filter).with(fmt::layer()).with(sentry::integrations::tracing::layer()).init();
 }

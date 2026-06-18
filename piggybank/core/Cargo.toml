@@ -2,7 +2,7 @@
 name = "piggybank-core"
 version = "0.1.0"
 edition = "2024"
-description = "The EV fund hub server — composition root that runs the core gRPC services and the auth service as in-process tasks over Postgres + TigerBeetle."
+description = "The EV banking hub server — composition root that runs the core gRPC services and the auth service as in-process tasks over Postgres + TigerBeetle."
 license = "BlueOak-1.0.0"
 publish = false
 default-run = "piggybank"
@@ -18,8 +18,8 @@ workspace = true
 anyhow.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
-evfund_auth.workspace = true
-evfund_contracts.workspace = true
+evbanking_auth.workspace = true
+evbanking_contracts.workspace = true
 sentry = { workspace = true, features = ["tracing"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres"] }
 tigerbeetle.workspace = true

@@ -1,9 +1,9 @@
 {
-  "name": "@evfund/core",
+  "name": "@evbanking/core",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
-  "description": "Host shell + BFF for the EV fund clients. Composes microfrontends (React and Rust/WASM) as custom elements, and proxies browser HTTP to the hub's tonic gRPC backend.",
+  "description": "Host shell + BFF for the EV banking clients. Composes microfrontends (React and Rust/WASM) as custom elements, and proxies browser HTTP to the hub's tonic gRPC backend.",
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",

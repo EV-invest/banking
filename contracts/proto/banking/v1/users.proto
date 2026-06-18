@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package banking.v1;
+
+// UsersService — investor accounts and their investments.
+//
+// Scaffold: declared to lock the namespace; RPCs land here as the users feature
+// arrives. See docs/ARCHITECTURE.md.
+service UsersService {}
