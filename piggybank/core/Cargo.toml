@@ -18,9 +18,9 @@ workspace = true
 anyhow.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
+ev = { workspace = true, features = ["analytics", "error_monitoring"] }
 evbanking_auth.workspace = true
 evbanking_contracts.workspace = true
-sentry = { workspace = true, features = ["tracing"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres"] }
 tigerbeetle.workspace = true
 tokio = { workspace = true, features = ["full"] }

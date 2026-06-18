@@ -12,13 +12,20 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@evinvest/analytics": "^0.1.0",
+    "@evinvest/error-monitoring": "^0.1.0",
+    "@evinvest/experiments": "^0.1.0",
     "@evinvest/uikit": "^0.1.2",
     "@grpc/grpc-js": "^1.12.5",
     "@grpc/proto-loader": "^0.8.1",
+    "@sentry/nextjs": "^10.58.0",
+    "@sentry/node": "^10.58.0",
+    "@sentry/react": "^10.58.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.453.0",
     "next": "^16.2.7",
     "next-themes": "^0.4.6",
+    "posthog-js": "^1.390.2",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "tailwind-merge": "^3.3.1"
