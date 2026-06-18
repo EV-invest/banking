@@ -405,10 +405,19 @@
               mold
               postgresql
               tigerbeetleBin
+              playwright-driver.browsers
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 
             env.RUST_BACKTRACE = 1;
             env.RUST_LIB_BACKTRACE = 0;
+
+            # Playwright (clients/landing visual tests): drive the nixpkgs browsers
+            # instead of the npm-downloaded ones (those dynamically link libs absent
+            # on NixOS). The landing `@playwright/test` version MUST match
+            # playwright-driver's or the browser revisions won't line up.
+            env.PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+            env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+            env.PLAYWRIGHT_HOST_PLATFORM_OVERRIDE = "nixos";
           };
       }
     );
