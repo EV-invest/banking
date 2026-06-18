@@ -1,12 +1,17 @@
 {
   "name": "ev-fund",
   "private": true,
-  "description": "Root delegator — builds the Dioxus frontend's Tailwind CSS. No app code lives in JS.",
+  "description": "EV fund hub — Turborepo of client apps (clients/*). The Rust hub (domain, contracts, piggybank/{core,auth}) lives alongside in the Cargo workspace.",
+  "workspaces": [
+    "clients/*"
+  ],
   "scripts": {
-    "css": "npx --yes @tailwindcss/cli@^4 -i frontend/input.css -o frontend/public/tailwind.css",
-    "css:watch": "npx --yes @tailwindcss/cli@^4 -i frontend/input.css -o frontend/public/tailwind.css --watch"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "check": "turbo run check"
   },
   "devDependencies": {
-    "tailwindcss": "^4.3.0"
+    "turbo": "^2.5.8"
   }
 }

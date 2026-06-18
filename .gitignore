@@ -76,10 +76,15 @@ venv/
 ## Local TigerBeetle
 .tb/
 .tb-client
-## Node
+## Local Redis
+.redis/
+## Node / Turborepo
 node_modules/
-## Generated frontend CSS
-frontend/public/tailwind.css
+.next/
+.turbo/
+## Env
+.env
+.env.local
 ## LLMs
 AGENTS.md
 CLAUDE.md
