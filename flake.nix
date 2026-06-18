@@ -34,10 +34,15 @@
             ## Local TigerBeetle
             .tb/
             .tb-client
-            ## Node
+            ## Local Redis
+            .redis/
+            ## Node / Turborepo
             node_modules/
-            ## Generated frontend CSS
-            frontend/public/tailwind.css
+            .next/
+            .turbo/
+            ## Env
+            .env
+            .env.local
             ## LLMs
             AGENTS.md
             CLAUDE.md
@@ -172,8 +177,8 @@
 
         # Symlink the TigerBeetle Rust client (with pre-built native assets) so
         # the path dependency in the workspace Cargo.toml resolves. Lives at the
-        # repo root, NOT under backend/: cargo's workspace exclude can never match
-        # a path inside a member's directory.
+        # repo root, NOT under a member dir: cargo's workspace exclude can never
+        # match a path inside a member's directory.
         linkTbClient = ''
           tb_client_dir="$(git rev-parse --show-toplevel)/.tb-client"
           if [ ! -L "$tb_client_dir" ] || [ "$(readlink "$tb_client_dir")" != "${tigerbeetleClient}" ]; then
@@ -182,12 +187,14 @@
           fi
         '';
 
-        # ── backend (Axum HTTP + tonic gRPC) ────────────────────────────────
-        # Migrations run automatically on startup, so a reachable Postgres is the
-        # only prerequisite (`.#db`, or `.#dev` which boots one first). Defaults
-        # mirror backend/.env.example; any value already in the environment wins.
-        runBackend = pkgs.writeShellApplication {
-          name = "run-backend";
+        # ── piggybank (the hub server: core + auth, gRPC only) ──────────────
+        # Runs `piggybank-core`, which spawns the core gRPC services and the auth
+        # service as in-process tasks. A reachable Postgres + TigerBeetle are the
+        # prerequisites (`.#db`/`.#tb`, or `.#dev`). No HTTP: browser traffic
+        # reaches the hub through the `clients/core` BFF. Defaults mirror
+        # piggybank/core/.env.example; any value already in the environment wins.
+        runPiggybank = pkgs.writeShellApplication {
+          name = "run-piggybank";
           runtimeInputs = with pkgs; [ rust pkg-config openssl protobuf git ];
           text = ''
             ${dyldFallback}
@@ -198,37 +205,55 @@
             ${linkTbClient}
 
             export DATABASE_URL="''${DATABASE_URL:-postgres://postgres@localhost:5432/ev_fund}"
-            export BIND_ADDR="''${BIND_ADDR:-0.0.0.0:8080}"
             export GRPC_ADDR="''${GRPC_ADDR:-0.0.0.0:50051}"
-            export RUST_LOG="''${RUST_LOG:-info,backend=debug}"
-            export TIGERBEETLE_ADDRESS="''${TIGERBEETLE_ADDRESS:-127.0.0.1:3001}"
+            export AUTH_GRPC_ADDR="''${AUTH_GRPC_ADDR:-0.0.0.0:50052}"
+            export RUST_LOG="''${RUST_LOG:-info,piggybank_core=debug,evfund_auth=debug}"
+            # Central-only refresh-token store; harmless if unused (auth is scaffold).
+            export REDIS_URL="''${REDIS_URL:-redis://127.0.0.1:6379}"
+            export TIGERBEETLE_ADDRESS="''${TIGERBEETLE_ADDRESS:-127.0.0.1:3033}"
             export TIGERBEETLE_CLUSTER_ID="''${TIGERBEETLE_CLUSTER_ID:-0}"
-            exec cargo run -p backend
+            exec cargo run -p piggybank-core
           '';
         };
 
-        # ── frontend (Dioxus / WASM) ────────────────────────────────────────
-        # Build Tailwind once, keep it rebuilding in the background (the `@source`
-        # scan in frontend/input.css picks up class names from RSX), then serve.
-        # dx defaults to :8080 like the backend, so pin frontend to :3000.
-        runFrontend = pkgs.writeShellApplication {
-          name = "run-frontend";
-          runtimeInputs = with pkgs; [ rust dioxus-cli nodejs git ];
+        # ── clients (Turborepo: Next.js host + landing) ─────────────────────
+        # npm workspaces rooted at the repo; deps install once into the hoisted
+        # node_modules (`npm install` also generates/updates the lockfile). The
+        # `core` host BFF reaches the backend over gRPC; `landing` is standalone.
+        runCore = pkgs.writeShellApplication {
+          name = "run-core";
+          runtimeInputs = with pkgs; [ nodejs git ];
           text = ''
-            ${dyldFallback}
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo"
-            # tailwind v4 resolves `@import "tailwindcss"` from node_modules, so
-            # the package must be installed before the CSS build.
-            if [ ! -d node_modules/tailwindcss ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
-              npm install
-            fi
-            npm run css
-            npm run css:watch & css=$!
-            trap 'kill "$css" 2>/dev/null || true' EXIT INT TERM
-            # `--interactive false`: dx's default full-screen TUI gets corrupted
-            # when it shares stdout with the css watcher or the `.#dev` processes.
-            exec dx serve --package frontend --port "''${FRONTEND_PORT:-3000}" --interactive false
+            [ -d node_modules/next ] || npm install
+            export GRPC_ADDR="''${GRPC_ADDR:-127.0.0.1:50051}"
+            exec npm run dev --workspace @evfund/core
+          '';
+        };
+
+        runLanding = pkgs.writeShellApplication {
+          name = "run-landing";
+          runtimeInputs = with pkgs; [ nodejs git ];
+          text = ''
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo"
+            [ -d node_modules/next ] || npm install
+            exec npm run dev --workspace @evfund/landing
+          '';
+        };
+
+        # ── local Redis ─────────────────────────────────────────────────────
+        # The CENTRAL auth refresh-token store only — never a per-service cache.
+        # Ephemeral dev instance under .redis/ (gitignored).
+        runRedis = pkgs.writeShellApplication {
+          name = "run-redis";
+          runtimeInputs = with pkgs; [ redis git ];
+          text = ''
+            repo="$(git rev-parse --show-toplevel)"
+            mkdir -p "$repo/.redis"
+            echo "Redis ready on 127.0.0.1:''${REDIS_PORT:-6379}"
+            exec redis-server --port "''${REDIS_PORT:-6379}" --dir "$repo/.redis" --save "" --appendonly no
           '';
         };
 
@@ -269,14 +294,15 @@
 
         # ── local TigerBeetle ───────────────────────────────────────────────
         # Project-local ledger under .tb/ (gitignored). First run formats a
-        # single-replica cluster; later runs just start it.
+        # single-replica cluster; later runs just start it. Port 3033 keeps the
+        # ledger off the 3000–3001 web range owned by `core`/`landing`.
         runTigerbeetle = pkgs.writeShellApplication {
           name = "run-tigerbeetle";
           runtimeInputs = [ tigerbeetleBin pkgs.git ];
           text = ''
             repo="$(git rev-parse --show-toplevel)"
             export TB_DATA="$repo/.tb/data"
-            port="''${TBPORT:-3001}"
+            port="''${TBPORT:-3033}"
             cluster_id="''${TBCLUSTER:-0}"
             data_file="$TB_DATA/''${cluster_id}_0.tigerbeetle"
 
@@ -292,9 +318,9 @@
         };
 
         # ── full dev orchestrator ───────────────────────────────────────────
-        # `nix run .#dev` → Postgres + TigerBeetle + backend + frontend, together.
-        # Postgres starts first, then TigerBeetle; backend launches once both
-        # accept connections. A single trap tears the whole tree down on exit.
+        # `nix run .#dev` → Postgres + TigerBeetle + Redis + piggybank + core + landing.
+        # Postgres starts first, then the rest. A single trap tears the whole tree
+        # down on exit.
         runDev = pkgs.writeShellApplication {
           name = "run-dev";
           runtimeInputs = with pkgs; [ postgresql git coreutils ];
@@ -315,28 +341,36 @@
 
             echo "▶ tigerbeetle"
             ${runTigerbeetle}/bin/run-tigerbeetle & pids+=($!)
+            echo "▶ redis"
+            ${runRedis}/bin/run-redis & pids+=($!)
 
-            echo "▶ backend   (:8080 http / :50051 grpc)"
-            ${runBackend}/bin/run-backend & pids+=($!)
-            echo "▶ frontend  (:3000)"
-            ${runFrontend}/bin/run-frontend & pids+=($!)
+            echo "▶ piggybank (:50051 core / :50052 auth)"
+            ${runPiggybank}/bin/run-piggybank & pids+=($!)
+            echo "▶ core      (:3000)"
+            ${runCore}/bin/run-core & pids+=($!)
+            echo "▶ landing   (:3001)"
+            ${runLanding}/bin/run-landing & pids+=($!)
 
             wait
           '';
         };
       in
       {
-        # `nix run .#dev`      → everything (postgres + tigerbeetle + backend + frontend)
-        # `nix run .#backend`  → Axum + tonic API only (needs a DB: `.#db` or `.#dev`)
-        # `nix run .#frontend` → Dioxus app + Tailwind watch only
-        # `nix run .#db`       → local Postgres only
-        # `nix run .#tb`       → local TigerBeetle only
+        # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + piggybank + core + landing)
+        # `nix run .#piggybank` → hub server: core gRPC + auth tasks (needs DB + TB: `.#db`/`.#tb` or `.#dev`)
+        # `nix run .#core`      → Next.js host shell + BFF (:3000, needs piggybank on :50051)
+        # `nix run .#landing`   → Next.js marketing site (:3001)
+        # `nix run .#db`        → local Postgres only
+        # `nix run .#tb`        → local TigerBeetle only
+        # `nix run .#redis`     → local Redis (central auth store) only
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
-          backend = { type = "app"; program = "${runBackend}/bin/run-backend"; };
-          frontend = { type = "app"; program = "${runFrontend}/bin/run-frontend"; };
+          piggybank = { type = "app"; program = "${runPiggybank}/bin/run-piggybank"; };
+          core = { type = "app"; program = "${runCore}/bin/run-core"; };
+          landing = { type = "app"; program = "${runLanding}/bin/run-landing"; };
           db = { type = "app"; program = "${runPostgres}/bin/run-postgres"; };
           tb = { type = "app"; program = "${runTigerbeetle}/bin/run-tigerbeetle"; };
+          redis = { type = "app"; program = "${runRedis}/bin/run-redis"; };
         };
 
         devShells.default =
@@ -357,11 +391,18 @@
                   ${gnused}/bin/sed -i '/docs\.rs/a [<img alt="WebAssembly" src="https://img.shields.io/badge/WebAssembly-654FF0?logo=webassembly&logoColor=white" height="20">](https://webassembly.org)' ./README.md
                 fi
 
+                # readme-fw has no body/content key either — link the architecture
+                # doc once, as its own block after the badges (idempotent).
+                if [ -f ./README.md ] && ! grep -q 'docs/ARCHITECTURE.md' ./README.md; then
+                  ${gnused}/bin/sed -i 's|\(.*webassembly\.org.*\)|\1\n\n> **Architecture** — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).|' ./README.md
+                fi
+
                 ${linkTbClient}
               '';
 
             packages = [
               nodejs
+              redis
               openssl
               pkg-config
               protobuf
