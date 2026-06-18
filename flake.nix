@@ -53,7 +53,7 @@
             warnings.augment = [ "tokei" "code-duplication" ];
             other.augment = [ "loc-badge" ];
           };
-          lfs = false;
+          lfs = true;
         };
         readme = v_flakes.readme-fw {
           inherit pkgs pname;
