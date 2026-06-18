@@ -1,6 +1,6 @@
 # core — host shell + BFF
 
-The root constructor for the fund's clients. Two jobs:
+The root constructor for the bank's clients. Two jobs:
 
 1. **Microfrontend composition.** Every microfrontend (React or Rust/WASM, inline
    widget or whole page) is a self-registering **custom element**. `core` mounts
@@ -24,5 +24,5 @@ the React / Rust-WASM producer recipes.
 
 ```
 nix run .#core      # this app on :3000 (needs the backend on :50051)
-nix run .#dev       # full stack: postgres + tigerbeetle + backend + core + landing
+nix run .#dev       # full stack: postgres + tigerbeetle + backend + core
 ```

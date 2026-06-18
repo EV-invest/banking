@@ -7,7 +7,7 @@
 //! these impls are empty too. They are registered in [`super::serve`] to reserve
 //! the surface; methods land here alongside the proto RPCs, per feature.
 
-use evfund_contracts::fund::v1::{allocations_service_server::AllocationsService, balance_service_server::BalanceService, users_service_server::UsersService};
+use evbanking_contracts::banking::v1::{allocations_service_server::AllocationsService, balance_service_server::BalanceService, users_service_server::UsersService};
 
 use crate::AppState;
 

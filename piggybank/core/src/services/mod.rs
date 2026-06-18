@@ -8,13 +8,13 @@
 //! per request through the same `tracing` subscriber (and Sentry integration).
 //!
 //! The auth *issuance* routes are NOT here — they are served by the auth task
-//! (`evfund_auth`) on its own address. Core authorizes each inbound request via
+//! (`evbanking_auth`) on its own address. Core authorizes each inbound request via
 //! `state.authorizer` (the in-process channel to that task); the async auth layer
 //! attaches at the marked point below.
 
 use std::net::SocketAddr;
 
-use evfund_contracts::fund::v1::{
+use evbanking_contracts::banking::v1::{
 	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, health_service_server::HealthServiceServer, users_service_server::UsersServiceServer,
 };
 use tonic::transport::Server;

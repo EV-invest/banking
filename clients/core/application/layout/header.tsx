@@ -7,7 +7,7 @@ export function Header() {
       <div className="container flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-2 font-serif text-lg">
           <Boxes className="size-5 text-main-accent-t1" />
-          <span>EV Fund</span>
+          <span>EV Banking</span>
         </Link>
         <nav className="flex items-center gap-6 text-sm text-muted-foreground">
           <Link href="/" className="hover:text-foreground">

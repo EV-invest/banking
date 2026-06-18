@@ -1,12 +1,12 @@
 use std::{fs, path::PathBuf};
 
-/// Compile every `proto/fund/v1/*.proto` into Rust with tonic — BOTH client and
+/// Compile every `proto/banking/v1/*.proto` into Rust with tonic — BOTH client and
 /// server stubs. The backend includes the servers; other service repos that
 /// depend on this crate (by git) include the clients. The generated module is
-/// pulled into `src/lib.rs` via `tonic::include_proto!("fund.v1")`.
+/// pulled into `src/lib.rs` via `tonic::include_proto!("banking.v1")`.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let proto_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("proto");
-	let v1 = proto_root.join("fund/v1");
+	let v1 = proto_root.join("banking/v1");
 
 	let mut protos: Vec<PathBuf> = fs::read_dir(&v1)?
 		.filter_map(|entry| entry.ok().map(|entry| entry.path()))

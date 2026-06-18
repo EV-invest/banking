@@ -1,4 +1,4 @@
-use evfund_contracts::fund::v1::{CheckRequest, CheckResponse, health_service_server::HealthService};
+use evbanking_contracts::banking::v1::{CheckRequest, CheckResponse, health_service_server::HealthService};
 use tonic::{Request, Response, Status};
 
 /// Liveness probe for the gRPC surface. Backs the `core` BFF smoke path
