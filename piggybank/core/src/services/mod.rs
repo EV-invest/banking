@@ -14,12 +14,13 @@
 
 use std::net::SocketAddr;
 
+use evbanking_auth::grpc_auth_layer;
 use evbanking_contracts::banking::v1::{
 	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, health_service_server::HealthServiceServer, users_service_server::UsersServiceServer,
 };
 use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
-use tower::ServiceBuilder;
+use tower::{Layer, ServiceBuilder};
 use tower_http::trace::TraceLayer;
 
 use crate::{
@@ -35,18 +36,21 @@ pub mod health;
 
 /// Build the core tonic server and serve it on `addr` until shutdown.
 ///
-/// Authorization: requests are verified via `state.authorizer.authorize(token)`
-/// (a channel round-trip to the auth task). Wire that as an async interceptor /
-/// tower layer at the `.layer(...)` stack below as the auth feature lands.
+/// Authorization: each data service is wrapped in the async auth layer, which
+/// authorizes the request in-process via `state.authorizer` (a channel round-trip
+/// to the auth task — never the network) and injects the verified `Claims` into the
+/// request extensions. `HealthService` is left **unwrapped** so the BFF liveness
+/// probe stays public.
 pub async fn serve(addr: SocketAddr, state: AppState) -> Result<(), tonic::transport::Error> {
+	let auth = grpc_auth_layer(state.authorizer.clone());
 	Server::builder()
 		// grpc-web rides HTTP/1.1; required for the GrpcWebLayer to translate.
 		.accept_http1(true)
 		.layer(ServiceBuilder::new().layer(TraceLayer::new_for_grpc()).layer(GrpcWebLayer::new()).into_inner())
 		.add_service(HealthServiceServer::new(Health))
-		.add_service(UsersServiceServer::new(UsersSvc::new(state.clone())))
-		.add_service(BalanceServiceServer::new(BalanceSvc::new(state.clone())))
-		.add_service(AllocationsServiceServer::new(AllocationsSvc::new(state)))
+		.add_service(auth.layer(UsersServiceServer::new(UsersSvc::new(state.clone()))))
+		.add_service(auth.layer(BalanceServiceServer::new(BalanceSvc::new(state.clone()))))
+		.add_service(auth.layer(AllocationsServiceServer::new(AllocationsSvc::new(state))))
 		.serve(addr)
 		.await
 }

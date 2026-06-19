@@ -19,3 +19,4 @@ pub mod outbox;
 pub mod relay;
 pub mod telemetry;
 pub mod tigerbeetle;
+pub mod users;
