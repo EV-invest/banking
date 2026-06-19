@@ -158,6 +158,7 @@ pub enum AccountCode {
 	BankCustody,
 	UserClaim,
 	ServiceClaim,
+	FeeRevenue,
 }
 
 impl AccountCode {
@@ -168,6 +169,7 @@ impl AccountCode {
 			Self::BankCustody => 11,
 			Self::UserClaim => 20,
 			Self::ServiceClaim => 30,
+			Self::FeeRevenue => 40,
 		}
 	}
 }
@@ -191,6 +193,7 @@ pub enum TransferCode {
 	SeedCapital,
 	Deposit,
 	Withdraw,
+	WithdrawFee,
 	UserAllocate,
 	UserRevoke,
 	ServiceReserve,
@@ -206,6 +209,7 @@ impl TransferCode {
 			Self::SeedCapital => 1,
 			Self::Deposit => 2,
 			Self::Withdraw => 3,
+			Self::WithdrawFee => 4,
 			Self::UserAllocate => 10,
 			Self::UserRevoke => 11,
 			Self::ServiceReserve => 20,
@@ -231,6 +235,8 @@ pub enum LedgerAccountKey {
 	UserClaim(UserId, Network),
 	/// A service's owned funds on a network (credit-normal).
 	ServiceClaim(ServiceId, Network),
+	/// The fund's retained withdrawal-fee revenue on a network (credit-normal claim).
+	FeeRevenue(Network),
 	/// The mocked bank custody account (debit-normal, USD ledger).
 	BankCustody,
 }
@@ -243,6 +249,7 @@ impl LedgerAccountKey {
 			Self::CryptoWallet(net) => format!("wallet:{net}"),
 			Self::UserClaim(user, net) => format!("user:{user}:{net}"),
 			Self::ServiceClaim(service, net) => format!("service:{service}:{net}"),
+			Self::FeeRevenue(net) => format!("fee:{net}"),
 			Self::BankCustody => "bank".to_owned(),
 		}
 	}
@@ -261,6 +268,7 @@ impl LedgerAccountKey {
 			Self::BankCustody => AccountCode::BankCustody,
 			Self::UserClaim(..) => AccountCode::UserClaim,
 			Self::ServiceClaim(..) => AccountCode::ServiceClaim,
+			Self::FeeRevenue(_) => AccountCode::FeeRevenue,
 		}
 	}
 
@@ -268,13 +276,13 @@ impl LedgerAccountKey {
 	pub fn normal(&self) -> Normal {
 		match self {
 			Self::CryptoWallet(_) | Self::BankCustody => Normal::Debit,
-			Self::Fund(_) | Self::UserClaim(..) | Self::ServiceClaim(..) => Normal::Credit,
+			Self::Fund(_) | Self::UserClaim(..) | Self::ServiceClaim(..) | Self::FeeRevenue(_) => Normal::Credit,
 		}
 	}
 
 	pub fn network(&self) -> Option<Network> {
 		match self {
-			Self::Fund(net) | Self::CryptoWallet(net) | Self::UserClaim(_, net) | Self::ServiceClaim(_, net) => Some(*net),
+			Self::Fund(net) | Self::CryptoWallet(net) | Self::UserClaim(_, net) | Self::ServiceClaim(_, net) | Self::FeeRevenue(net) => Some(*net),
 			Self::BankCustody => None,
 		}
 	}

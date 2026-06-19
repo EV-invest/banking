@@ -18,6 +18,7 @@ pub mod auth;
 pub mod balance;
 pub mod money;
 pub mod users;
+pub mod withdrawals;
 
 /// Re-export of the `architecture` feature of the external `ev` crate — the
 /// shared DDD tactical building blocks (`Id`, `Entity`, `AggregateRoot`,
