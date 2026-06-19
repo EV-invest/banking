@@ -1,79 +1,38 @@
-// Server-side session + OAuth-transaction store (the BFF token-handler pattern):
-// the browser only ever holds an opaque session id cookie; the hub's JWTs live
-// here, server-side, and are refreshed transparently. CSRF token is mirrored to a
-// readable cookie for the double-submit check.
+// Server-side session store (the BFF token-handler pattern): the browser only ever
+// holds an opaque session id cookie; the hub's JWTs live here, server-side, and are
+// refreshed transparently. CSRF token is mirrored to a readable cookie for the
+// double-submit check.
 //
 // Storage is an in-process Map — single-instance/dev only (mirrors the hub's
-// in-process refresh store). PRODUCTION: back these with a session store
+// in-process refresh store). PRODUCTION: back this with a session store
 // (SESSION_REDIS_URL), distinct from the auth service's own refresh-rotation Redis.
 
 import type { NextRequest, NextResponse } from "next/server";
 
-import { refresh as grpcRefresh, type TokenResponse } from "@/shared/bff/auth";
-
-import { COOKIES, cookieBase } from "./config";
-
-export interface SessionUser {
-  userId: string;
-  email: string;
-  status: string;
-}
+import type { User } from "@/entities/user/@x/session";
+import { refresh as grpcRefresh, type TokenResponse } from "@/shared/api/auth";
+import { COOKIES, cookieBase } from "@/shared/config/cookies";
+import { randomId } from "@/shared/lib/crypto";
 
 interface Session {
   accessToken: string;
   accessExpiresAt: number;
   refreshToken: string;
   refreshExpiresAt: number;
-  user: SessionUser;
+  user: User;
   csrfToken: string;
 }
 
-interface OAuthTx {
-  state: string;
-  nonce: string;
-  codeVerifier: string;
-  returnTo: string;
-  createdAt: number;
-}
-
 const sessions = new Map<string, Session>();
-const txns = new Map<string, OAuthTx>();
-const OAUTH_TX_TTL_SECS = 600;
 
 function nowSecs(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-function randomId(): string {
-  const buf = new Uint8Array(32);
-  crypto.getRandomValues(buf);
-  return Buffer.from(buf).toString("base64url");
+function principal(tokens: TokenResponse): User {
+  return { userId: tokens.user.user_id, email: tokens.user.email, status: tokens.user.status };
 }
 
-// ── OAuth transaction (login start → callback) ──────────────────────────────
-export function putTx(tx: Omit<OAuthTx, "createdAt">): string {
-  const id = randomId();
-  txns.set(id, { ...tx, createdAt: nowSecs() });
-  return id;
-}
-
-export function takeTx(id: string | undefined): OAuthTx | null {
-  if (!id) return null;
-  const tx = txns.get(id);
-  txns.delete(id);
-  if (!tx || nowSecs() - tx.createdAt > OAUTH_TX_TTL_SECS) return null;
-  return tx;
-}
-
-export function setTxCookie(res: NextResponse, id: string): void {
-  res.cookies.set(COOKIES.oauthTx, id, { ...cookieBase, maxAge: OAUTH_TX_TTL_SECS });
-}
-
-export function clearTxCookie(res: NextResponse): void {
-  res.cookies.set(COOKIES.oauthTx, "", { ...cookieBase, maxAge: 0 });
-}
-
-// ── session ─────────────────────────────────────────────────────────────────
 export function putSession(tokens: TokenResponse): { id: string; csrfToken: string; maxAge: number } {
   const id = randomId();
   const csrfToken = randomId();
@@ -83,7 +42,7 @@ export function putSession(tokens: TokenResponse): { id: string; csrfToken: stri
     accessExpiresAt: Number(tokens.access_expires_at),
     refreshToken: tokens.refresh_token,
     refreshExpiresAt,
-    user: { userId: tokens.user.user_id, email: tokens.user.email, status: tokens.user.status },
+    user: principal(tokens),
     csrfToken,
   });
   return { id, csrfToken, maxAge: Math.max(0, refreshExpiresAt - nowSecs()) };
@@ -105,7 +64,7 @@ export function readSessionId(req: NextRequest): string | undefined {
 }
 
 /** The signed-in user for a session id, without refreshing (cheap guard read). */
-export function currentUser(id: string | undefined): SessionUser | null {
+export function currentUser(id: string | undefined): User | null {
   if (!id) return null;
   const session = sessions.get(id);
   if (!session || session.refreshExpiresAt <= nowSecs()) return null;
@@ -117,7 +76,7 @@ export function currentUser(id: string | undefined): SessionUser | null {
  * (and the refresh token is still good). Returns the user + csrf token, or null if
  * the session is gone/expired (in which case it is dropped).
  */
-export async function ensureFresh(id: string | undefined): Promise<{ user: SessionUser; csrfToken: string } | null> {
+export async function ensureFresh(id: string | undefined): Promise<{ user: User; csrfToken: string } | null> {
   if (!id) return null;
   const session = sessions.get(id);
   if (!session) return null;
@@ -132,7 +91,7 @@ export async function ensureFresh(id: string | undefined): Promise<{ user: Sessi
       session.accessExpiresAt = Number(tokens.access_expires_at);
       session.refreshToken = tokens.refresh_token;
       session.refreshExpiresAt = Number(tokens.refresh_expires_at);
-      session.user = { userId: tokens.user.user_id, email: tokens.user.email, status: tokens.user.status };
+      session.user = principal(tokens);
     } catch {
       sessions.delete(id);
       return null;

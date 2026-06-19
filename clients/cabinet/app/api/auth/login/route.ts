@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-import { AUTH_REDIRECT_URI, GOOGLE_CLIENT_ID, authConfigured } from "@/shared/auth/config";
-import { authorizeUrl, newChallenge, safeReturnTo } from "@/shared/auth/oauth";
-import { putTx, setTxCookie } from "@/shared/auth/session";
+import { AUTH_REDIRECT_URI, GOOGLE_CLIENT_ID, authConfigured } from "@/features/auth/config";
+import { authorizeUrl, newChallenge, safeReturnTo } from "@/features/auth/lib/oauth";
+import { putTx, setTxCookie } from "@/features/auth/model/oauth-tx";
 
 // Start of the OAuth login: mint PKCE/state/nonce, stash the transaction
 // server-side, and redirect the browser to Google's consent screen.

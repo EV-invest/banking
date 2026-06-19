@@ -4,7 +4,8 @@
 // authorize redirect, then calls these server-to-server gRPC routes on the hub's
 // auth task (AUTH_GRPC_ADDR, default :50052) to exchange the Google code for the
 // hub's own tokens, rotate them, and revoke on logout. Loads auth.proto at runtime
-// like shared/bff/grpc.ts — no TS codegen. Import only from route handlers.
+// like ./grpc.ts — no TS codegen. This is transport only; the auth *flow* lives in
+// features/auth and the session it opens in entities/session.
 
 import path from "node:path";
 

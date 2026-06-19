@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { csrfHeader } from "@/shared/auth/csrf-client";
+import { csrfHeader } from "@/features/auth/lib/csrf-client";
 
 interface SessionResponse {
   authenticated: boolean;

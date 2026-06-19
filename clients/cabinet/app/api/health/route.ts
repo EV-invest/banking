@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { checkHealth } from "@/shared/bff/grpc";
+import { checkHealth } from "@/shared/api/grpc";
 
 // BFF smoke endpoint: browser → this handler → hub gRPC HealthService.Check.
 export async function GET() {

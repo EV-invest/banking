@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-import { ensureFresh, readSessionId } from "@/shared/auth/session";
+import { ensureFresh, readSessionId } from "@/entities/session/model/session";
 
 // Who-am-I for the browser: returns the signed-in user (refreshing the hub access
 // token transparently if it expired), or `{ authenticated: false }`. Never returns
