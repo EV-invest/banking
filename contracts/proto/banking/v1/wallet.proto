@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package banking.v1;
+
+// WalletService — a user's own crypto wallet: balances, deposit addresses, and
+// withdrawals across the supported networks (BEP20/TRC20/TON).
+//
+// Every RPC acts on the caller's own access-token `sub`. Balances are read live
+// from the authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT
+// STRINGS (proto3 has no u128; a string is lossless and matches proto-loader's
+// `longs: String`). A withdrawal is a two-phase saga over the ledger (reserve →
+// settle/void); the operator-driven settle/fail RPCs live on BalanceService. The
+// on-chain custody/broadcast and deposit-address derivation sit behind ports (a
+// stub in this scaffold). See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md.
+service WalletService {
+  // The caller's wallet — a per-network balance breakdown and deposit address.
+  rpc GetWallet(GetWalletRequest) returns (Wallet);
+
+  // The caller's deposit address on a network (stable; derived once and reused).
+  rpc GetDepositAddress(GetDepositAddressRequest) returns (DepositAddress);
+
+  // Request an on-chain withdrawal of free balance to an external address. Opens a
+  // two-phase saga: the gross amount (incl. fee) is reserved against the caller's
+  // claim immediately; an operator/watcher later settles it (on confirmations) or
+  // fails it (refund) via BalanceService.
+  rpc RequestWithdrawal(RequestWithdrawalRequest) returns (Withdrawal);
+
+  // The caller's withdrawals, newest first.
+  rpc ListWithdrawals(ListWithdrawalsRequest) returns (WithdrawalList);
+}
+
+message GetWalletRequest {}
+
+// One network's slice of the user's wallet; every figure TigerBeetle-authoritative
+// decimal USDT.
+message WalletNetwork {
+  string network = 1;          // bep20 | trc20 | ton
+  string available = 2;        // free, spendable now (claim posted − reserved)
+  string reserved = 3;         // locked by in-flight withdrawals (pending debits)
+  string allocated = 4;        // staked in fund services (active user allocations)
+  string total = 5;            // available + reserved + allocated
+  string deposit_address = 6;  // where to send USDT on this network (may be empty)
+  string min_withdrawal = 7;   // smallest withdrawable amount (fee + dust floor)
+  string withdrawal_fee = 8;   // flat network fee retained on a withdrawal
+}
+
+message Wallet {
+  repeated WalletNetwork networks = 1;
+}
+
+message GetDepositAddressRequest {
+  string network = 1;  // bep20 | trc20 | ton
+}
+
+message DepositAddress {
+  string network = 1;
+  string address = 2;
+  uint32 min_confirmations = 3;  // confirmations before a deposit is credited
+}
+
+message RequestWithdrawalRequest {
+  string network = 1;  // bep20 | trc20 | ton
+  string address = 2;  // destination on-chain address (validated per network)
+  string amount = 3;   // gross decimal USDT to debit (the fee is taken from this)
+}
+
+message ListWithdrawalsRequest {}
+
+// A user withdrawal aggregate, projected. `state` advances pending → completed
+// (settled on confirmations) | failed (voided, refunded).
+message Withdrawal {
+  string id = 1;
+  string network = 2;     // bep20 | trc20 | ton
+  string address = 3;     // destination address
+  string amount = 4;      // gross debited from the user (decimal USDT)
+  string fee = 5;         // network fee retained (decimal USDT)
+  string net_amount = 6;  // amount − fee, the amount sent on-chain
+  string state = 7;       // pending | completed | failed
+  string tx_ref = 8;      // on-chain reference once settled (empty while pending)
+}
+
+message WithdrawalList {
+  repeated Withdrawal withdrawals = 1;
+}
