@@ -126,6 +126,13 @@ production backing.
 **Browser.** The BFF token-handler pattern: `clients/cabinet` is the OAuth confidential
 client, holds tokens server-side, and gives the browser only a
 `__Host-`/`HttpOnly`/`SameSite` cookie + CSRF defense, scoped to a real apex domain.
+Implemented as `clients/cabinet/app/api/auth/{login,callback,logout,session}`
+(over `clients/cabinet/shared/auth/*`): `login` mints PKCE+state+nonce and redirects
+to Google; `callback` validates `state` against the HttpOnly tx cookie and calls
+`AuthService.Exchange`; the hub's JWTs live in a server-side session (in-process for
+now, `SESSION_REDIS_URL` in production — distinct from the auth refresh Redis), the
+browser holds only the opaque session id + a readable CSRF cookie (double-submit on
+`logout`).
 
 **Inter-service.** mTLS + short-lived service JWTs (same stateless verify path,
 distinct `aud`); graduate to SPIFFE/SPIRE only at platform scale.
