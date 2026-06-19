@@ -29,7 +29,7 @@ mock is a separate USD ledger (`= 2`). Two partitions:
 | Side | Accounts (`code`) | Normal | Non-negative flag |
 | --- | --- | --- | --- |
 | **Custody** (assets) | `wallet:<net>` (10), `bank` (11) | debit (`debits − credits`) | `CreditsMustNotExceedDebits` |
-| **Claims** (equity/liab) | `fund:<net>` (1), `user:<uuid>:<net>` (20), `service:<id>:<net>` (30) | credit (`credits − debits`) | `DebitsMustNotExceedCredits` |
+| **Claims** (equity/liab) | `fund:<net>` (1), `user:<uuid>:<net>` (20), `service:<id>:<net>` (30), `fee:<net>` (40) | credit (`credits − debits`) | `DebitsMustNotExceedCredits` |
 
 A deposit is one balanced transfer **`Dr wallet:<net> / Cr <claim>`** (textbook Dr Cash
 / Cr customer-deposit) — there is no "external world" account. The flags are set **once
@@ -59,6 +59,49 @@ from each sharer's. A `Party::User` in `sharers` may **revoke iff `owner == Pigg
 (User stake + balance read are wired through gRPC; the service reservation/settle/
 transfer flows are modelled and tested in the domain + gateway, gRPC wiring pending.)
 
+## User wallet — deposit & withdraw (`domain::withdrawals`, `WalletService`)
+
+A user's own money lives in their per-network claim (`user:<uuid>:<net>`). The wallet
+surface adds the two chain-facing directions on top of the allocation flows; balances
+are read live (`GetWallet`: per-network `available` = `posted − locked`, `reserved` =
+locked-by-withdrawals, `allocated` = sum of active stakes).
+
+**Deposit (chain → claim).** `GetDepositAddress` hands the user a stable per-(user,
+network) address from the [`DepositAddresses`] port — a stub HD-derivation that caches
+into `user_deposit_addresses`; the real xpub-derivation service is a follow-up.
+Crediting still flows through the admin `RecordDeposit` gate (idempotent by `tx_ref`),
+the stand-in for a per-network chain watcher that credits only after N confirmations.
+
+**Withdraw (claim → chain) — the dangerous direction.** A [`Withdrawal`] is a two-phase
+saga mirroring a service reservation. `RequestWithdrawal` Read-First checks the user's
+**available** balance (`posted − locked`, i.e. excluding funds already reserved by other
+in-flight withdrawals) covers the gross, gates on the account being active (the KYC/
+freeze seam), then records the aggregate `Pending`. The relay reserves **two** pending
+legs (deterministic ids `uuid_v5(withdrawal_id, "withdraw:wallet" | "withdraw:fee")`)
+and asks custody to broadcast:
+
+| event | relay ops |
+| --- | --- |
+| `Requested` | reserve `Dr user / Cr wallet:<net>` (net = gross − fee) · reserve `Dr user / Cr fee:<net>` (fee) · then `Custody::broadcast` the net on-chain |
+| `Settled` (N confs) | **post** both pending legs — net leaves custody, the fee is retained as revenue |
+| `Failed` (never landed) | **void** both pending legs — the user is refunded in full |
+
+`SettleWithdrawal`/`FailWithdrawal` are operator/watcher-driven **admin** RPCs on
+`BalanceService` (the stand-in for the watcher + custody confirmation callback). The
+cardinal rule — **never `Fail`/void once the broadcast may have reached the chain**
+(that double-pays) — is enforced socially at that seam, not by the aggregate. The fee
+leg is omitted when the fee is zero (TB rejects a zero-amount transfer); the policy
+enforces `min_withdrawal > fee` and the net must be representable at the chain's
+precision (no sub-precision dust leaves). The invariant still holds: a withdrawal moves
+`gross` out of the user claim, `net` out of custody, and `fee` into the `fee:<net>`
+claim, so `sum(custody:N)` falls by exactly `net` and `sum(claims:N)` by `net` too.
+
+**Custody is a separate trust domain.** The [`Custody`] port is the hub's only ask of
+the signing service ("broadcast this *already-reserved* withdrawal, idempotently by
+id"); the hub never holds keys. A [`StubCustody`] no-op stands in until the real
+MPC/HSM service exists — the saga, the ledger, and the RPCs are complete and unchanged
+when it lands.
+
 ## Write path (Write-Last, Read-First)
 
 A command opens one Postgres tx (the **only** ACID point), mutates the aggregate under
@@ -81,6 +124,10 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   catches; auto-compensation is a follow-up.
 - Deposits are idempotent by the `deposits.tx_ref` **gate** (`ON CONFLICT DO NOTHING` →
   emit the event only if newly inserted), so a re-record never double-credits.
+- A withdrawal's two pending legs get **withdrawal-derived** ids
+  (`uuid_v5(withdrawal_id, salt)`) so settle/fail recompute the same `pending_id`; its
+  settle/void completions use distinct salts; and `Custody::broadcast` must be
+  idempotent by `withdrawal_id` so an at-least-once relay retry never double-sends.
 - Amounts are **explicit** in every transfer (never TB balancing flags), so a retry
   moves the exact amount frozen into the event.
 
@@ -95,6 +142,9 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `Allocate` | the user | `sub == user`, `is_access` | sufficient claim (TB flag backstop) |
 | `RevokeAllocation` | the user | `sub == user`, `is_access` | owner is the fund ∧ sole user-sharer ∧ active |
 | `ListAllocations` | the user | `sub == user` | — |
+| `GetWallet` / `GetDepositAddress` / `ListWithdrawals` | the user | `sub == user` | — |
+| `RequestWithdrawal` | the user | `sub == user`, `is_access` | active account ∧ available claim ≥ gross (TB flag backstop) |
+| `SettleWithdrawal` / `FailWithdrawal` | admin | `is_admin` + `is_access` | state is `pending` (idempotent) |
 
 ## Reconciliation (seam)
 
@@ -105,8 +155,11 @@ parked outbox row is the first place to look when money didn't move.
 
 ## Tests
 
-`domain` unit tests cover the money math, address parsing, and the revoke rule;
-`piggybank/core/tests/balance_allocations.rs` hits **real** Postgres + TigerBeetle
+`domain` unit tests cover the money math, address parsing, the revoke rule, and the
+withdrawal aggregate's transitions; `piggybank/core/tests/balance_allocations.rs` and
+`piggybank/core/tests/wallet_withdrawals.rs` hit **real** Postgres + TigerBeetle
 (deposit idempotency, allocate/revoke round-trip + rule, over-allocation rejection, the
-non-negative backstop, transfer-id idempotency). It skips when `DATABASE_URL` is unset
-or TB is unreachable. Drive the relay deterministically with `Relay::drain`.
+non-negative backstop, transfer-id idempotency; and the withdrawal reserve→settle with
+fee retained, fail→full refund, min/available/disabled gates, deposit-address
+stability). They skip when `DATABASE_URL` is unset or TB is unreachable. Drive the
+relay deterministically with `Relay::drain`.
