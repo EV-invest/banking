@@ -2,7 +2,7 @@
 // shapes are the proto-derived types from `@/shared/contracts`. Mutations carry the
 // CSRF double-submit header. No tokens are ever seen here — the BFF holds them.
 
-import { csrfHeader } from "@/features/auth/lib/csrf-client";
+import { csrfHeader } from "@/shared/lib/csrf-client";
 import type { DepositAddress, Wallet, Withdrawal, WithdrawalList } from "@/shared/contracts";
 
 async function getJson<T>(url: string): Promise<T> {

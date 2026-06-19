@@ -1,6 +1,7 @@
-// Client-side companion to csrf.ts: read the readable `ev_csrf` cookie and build
-// the double-submit header for mutating BFF requests. Standalone (no server
-// imports); tries both cookie names since the `__Host-` prefix is env-dependent.
+// Browser-side CSRF double-submit helper: read the readable `ev_csrf` cookie and
+// build the header for mutating BFF requests. Standalone (no server imports) so it
+// lives in `shared` — both the auth feature and other slices depend on it without
+// crossing layers. The server counterpart is `features/auth/lib/csrf.ts` (verifyCsrf).
 
 const CSRF_HEADER = "x-ev-csrf";
 
