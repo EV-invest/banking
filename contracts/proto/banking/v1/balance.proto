@@ -18,6 +18,16 @@ service BalanceService {
   // Record a settled on-chain deposit, crediting a party's claim. Idempotent by
   // `tx_ref` — recording the same chain tx twice credits once.
   rpc RecordDeposit(RecordDepositRequest) returns (RecordDepositResponse);
+
+  // Settle a user withdrawal once it has the required on-chain confirmations: posts
+  // the reserved transfers. `tx_ref` is the chain transaction. Stands in for a chain
+  // watcher + custody confirmation callback. Idempotent.
+  rpc SettleWithdrawal(SettleWithdrawalRequest) returns (SettleWithdrawalResponse);
+
+  // Fail a user withdrawal that never reached the chain: voids the reservation,
+  // refunding the user. NEVER call this if the broadcast may have landed on-chain —
+  // that would double-pay. Idempotent.
+  rpc FailWithdrawal(FailWithdrawalRequest) returns (FailWithdrawalResponse);
 }
 
 message GetFundBalanceRequest {}
@@ -55,3 +65,17 @@ message RecordDepositRequest {
 message RecordDepositResponse {
   bool recorded = 1;  // false if `tx_ref` was already recorded (idempotent no-op)
 }
+
+message SettleWithdrawalRequest {
+  string withdrawal_id = 1;
+  string tx_ref = 2;  // the on-chain transaction reference
+}
+
+message SettleWithdrawalResponse {}
+
+message FailWithdrawalRequest {
+  string withdrawal_id = 1;
+  string reason = 2;  // operator note (audit only)
+}
+
+message FailWithdrawalResponse {}
