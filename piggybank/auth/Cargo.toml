@@ -13,8 +13,17 @@ workspace = true
 anyhow.workspace = true
 ev = { workspace = true, features = ["error_monitoring"] }
 evbanking_contracts.workspace = true
+http.workspace = true
 jsonwebtoken.workspace = true
+reqwest.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tonic.workspace = true
+tower.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }

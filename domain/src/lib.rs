@@ -1,3 +1,4 @@
+#![feature(default_field_values)]
 //! Shared domain crate.
 //!
 //! The single source of truth for domain types across the platform. The hub

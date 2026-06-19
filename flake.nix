@@ -344,11 +344,13 @@
       in
       {
         # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + piggybank + cabinet)
-        # `nix run .#piggybank` → hub server: core gRPC + auth tasks (needs DB + TB: `.#db`/`.#tb` or `.#dev`)
+        # `nix run .#piggybank` → hub server: core gRPC + auth tasks (applies DB migrations on boot; needs DB + TB: `.#db`/`.#tb`, or `.#dev`)
         # `nix run .#cabinet`   → Next.js host shell + BFF (:3000, needs piggybank on :50051)
         # `nix run .#db`        → local Postgres only
         # `nix run .#tb`        → local TigerBeetle only
         # `nix run .#redis`     → local Redis (central auth store) only
+        # Author new migrations with the sqlx CLI (in the dev shell):
+        #   sqlx migrate add --source piggybank/core/migrations --sequential <name>
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           piggybank = { type = "app"; program = "${runPiggybank}/bin/run-piggybank"; };
@@ -389,6 +391,7 @@
               rust
               mold
               postgresql
+              sqlx-cli
               tigerbeetleBin
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 
