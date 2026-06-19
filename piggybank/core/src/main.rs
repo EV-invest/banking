@@ -17,10 +17,18 @@ use piggybank_core::{
 	AppState,
 	application::auth_sync,
 	config::AppConfig,
-	infrastructure::{db, tigerbeetle::TigerBeetle, users::PgUsers},
-	ports::UserRepository,
+	infrastructure::{
+		allocations::PgAllocations,
+		db,
+		ledger::{self, TbLedger},
+		relay::Relay,
+		tigerbeetle::TigerBeetle,
+		users::PgUsers,
+	},
+	ports::{AllocationRepository, UserRepository, ledger::Ledger},
 	services,
 };
+use tokio::sync::Notify;
 
 // Sentry must be initialised before the async runtime starts — no #[tokio::main].
 fn main() -> anyhow::Result<()> {
@@ -54,11 +62,24 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	db::migrate(&pool).await.context("failed to apply database migrations")?;
 	let tigerbeetle = Arc::new(TigerBeetle::connect(config.tigerbeetle_cluster_id, &config.tigerbeetle_address).context("failed to connect to TigerBeetle")?);
 
+	// The data-plane money gateway over TigerBeetle (it also holds the pool for the
+	// `tb_accounts` id-map — its own non-transactional concern). Seed the fund's
+	// singleton accounts (a custody wallet + capital claim per network, plus the bank
+	// mock) at boot; idempotent.
+	let ledger: Arc<dyn Ledger> = Arc::new(TbLedger::new(tigerbeetle, pool.clone()));
+	ledger::seed_singletons(ledger.as_ref()).await.context("failed to seed the fund's ledger accounts")?;
+
 	// Product-analytics capture (native PostHog). A `None` key makes capture a
 	// silent no-op, so this is safe to construct unconfigured.
 	let analytics = ev::analytics::Analytics::new(config.posthog_key.clone(), config.posthog_host.clone());
 
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
+	let allocations: Arc<dyn AllocationRepository> = Arc::new(PgAllocations::new(pool.clone()));
+
+	// The single-worker outbox relay moves money in TigerBeetle after each commit
+	// (Write-Last); command handlers nudge it through `relay_notify` for low latency.
+	let relay_notify = Arc::new(Notify::new());
+	let relay = Relay::new(pool.clone(), ledger.clone(), relay_notify.clone());
 
 	// ── auth service + user provisioning (in-process) ──────────────────────────
 	// Auth owns the keys/JWKS and hands core an `Authorizer` (core → auth, verify);
@@ -67,7 +88,16 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	let (provisioner, provision_rx) = provisioner_channel();
 	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).context("failed to build the auth service")?;
 
-	let state = AppState::new(pool, tigerbeetle, authorizer, analytics, users.clone(), Arc::from(config.admin_subjects.clone()));
+	let state = AppState::new(
+		pool,
+		ledger,
+		authorizer,
+		analytics,
+		users.clone(),
+		allocations,
+		relay_notify,
+		Arc::from(config.admin_subjects.clone()),
+	);
 
 	tracing::info!(core = %config.grpc_addr, auth = %config.auth_grpc_addr, "piggybank listening");
 
@@ -78,6 +108,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		result = services::serve(config.grpc_addr, state) => result.context("core gRPC server error")?,
 		result = auth_service.run(config.auth_grpc_addr) => result.context("auth service error")?,
 		() = auth_sync::run_provisioner(provision_rx, users) => {},
+		() = relay.run() => {},
 	}
 	Ok(())
 }

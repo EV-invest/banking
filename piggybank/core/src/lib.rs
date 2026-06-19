@@ -26,9 +26,9 @@ use std::sync::Arc;
 
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
-use infrastructure::tigerbeetle::TigerBeetle;
-use ports::UserRepository;
+use ports::{AllocationRepository, UserRepository, ledger::Ledger};
 use sqlx::PgPool;
+use tokio::sync::Notify;
 
 pub mod application;
 pub mod config;
@@ -38,31 +38,49 @@ pub mod services;
 
 /// Shared, cheaply-cloneable handles injected into the gRPC services. The
 /// Postgres pool is the **control plane** (metadata, id-mapping, event
-/// log/outbox, projections); TigerBeetle is the **data plane** (authoritative
-/// money); the [`Authorizer`] verifies inbound requests via the in-process
-/// channel to the auth task; [`Analytics`] is the product-analytics seam
-/// (native PostHog capture, a no-op until `POSTHOG_KEY` is set) that RPC handlers
-/// capture events through as they land.
+/// log/outbox, projections); the [`Ledger`] gateway is the **data plane**
+/// (authoritative money in TigerBeetle); the [`Authorizer`] verifies inbound
+/// requests via the in-process channel to the auth task; [`Analytics`] is the
+/// product-analytics seam (native PostHog capture, a no-op until `POSTHOG_KEY` is
+/// set). Command handlers `notify` the [`relay_notify`](AppState::relay_notify)
+/// after a commit so the outbox relay moves money promptly.
 #[derive(Clone)]
 pub struct AppState {
 	pub pool: PgPool,
-	pub tigerbeetle: Arc<TigerBeetle>,
+	/// The TigerBeetle money gateway (data plane).
+	pub ledger: Arc<dyn Ledger>,
 	pub authorizer: Authorizer,
 	pub analytics: Analytics,
 	/// The `users` aggregate's driven port (Postgres control plane).
 	pub users: Arc<dyn UserRepository>,
+	/// The `allocations` aggregate's driven port (Postgres control plane).
+	pub allocations: Arc<dyn AllocationRepository>,
+	/// Nudges the outbox relay to dispatch right after a command commits.
+	pub relay_notify: Arc<Notify>,
 	/// User ids permitted to call admin RPCs (config allowlist; see [`config`]).
 	pub admin_subjects: Arc<[String]>,
 }
 
 impl AppState {
-	pub fn new(pool: PgPool, tigerbeetle: Arc<TigerBeetle>, authorizer: Authorizer, analytics: Analytics, users: Arc<dyn UserRepository>, admin_subjects: Arc<[String]>) -> Self {
+	#[allow(clippy::too_many_arguments)]
+	pub fn new(
+		pool: PgPool,
+		ledger: Arc<dyn Ledger>,
+		authorizer: Authorizer,
+		analytics: Analytics,
+		users: Arc<dyn UserRepository>,
+		allocations: Arc<dyn AllocationRepository>,
+		relay_notify: Arc<Notify>,
+		admin_subjects: Arc<[String]>,
+	) -> Self {
 		Self {
 			pool,
-			tigerbeetle,
+			ledger,
 			authorizer,
 			analytics,
 			users,
+			allocations,
+			relay_notify,
 			admin_subjects,
 		}
 	}
