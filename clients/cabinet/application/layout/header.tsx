@@ -1,6 +1,8 @@
 import { Boxes } from "lucide-react";
 import Link from "next/link";
 
+import { UserMenu } from "@/application/layout/user-menu";
+
 export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur">
@@ -16,6 +18,7 @@ export function Header() {
           {/* Page-level microfrontends from other services mount under their own
               path (e.g. /risk), resolved at runtime from the MFE registry. */}
           <span className="opacity-50">Services</span>
+          <UserMenu />
         </nav>
       </div>
     </header>
