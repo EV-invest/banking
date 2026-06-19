@@ -1,3 +1,4 @@
+#![feature(default_field_values)]
 //! `piggybank-core` — the hub server library.
 //!
 //! The central bank's driving adapter is **gRPC** (tonic): the closed, internal
@@ -26,6 +27,7 @@ use std::sync::Arc;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use infrastructure::tigerbeetle::TigerBeetle;
+use ports::UserRepository;
 use sqlx::PgPool;
 
 pub mod application;
@@ -47,15 +49,26 @@ pub struct AppState {
 	pub tigerbeetle: Arc<TigerBeetle>,
 	pub authorizer: Authorizer,
 	pub analytics: Analytics,
+	/// The `users` aggregate's driven port (Postgres control plane).
+	pub users: Arc<dyn UserRepository>,
+	/// User ids permitted to call admin RPCs (config allowlist; see [`config`]).
+	pub admin_subjects: Arc<[String]>,
 }
 
 impl AppState {
-	pub fn new(pool: PgPool, tigerbeetle: Arc<TigerBeetle>, authorizer: Authorizer, analytics: Analytics) -> Self {
+	pub fn new(pool: PgPool, tigerbeetle: Arc<TigerBeetle>, authorizer: Authorizer, analytics: Analytics, users: Arc<dyn UserRepository>, admin_subjects: Arc<[String]>) -> Self {
 		Self {
 			pool,
 			tigerbeetle,
 			authorizer,
 			analytics,
+			users,
+			admin_subjects,
 		}
+	}
+
+	/// Whether `subject` (a token `sub`) is on the admin allowlist.
+	pub fn is_admin(&self, subject: &str) -> bool {
+		self.admin_subjects.iter().any(|s| s == subject)
 	}
 }
