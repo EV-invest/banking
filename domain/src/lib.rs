@@ -16,6 +16,7 @@ pub mod error;
 pub mod allocations;
 pub mod auth;
 pub mod balance;
+pub mod money;
 pub mod users;
 
 /// Re-export of the `architecture` feature of the external `ev` crate — the

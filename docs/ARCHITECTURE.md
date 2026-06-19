@@ -5,9 +5,11 @@ the identities, the contracts, and the client shell; every other service lives i
 its own repo and talks **only to the hub, over gRPC**. Services never talk to each
 other — not directly, not even via a hub round trip.
 
-This repo is a **scaffold**: structure, contracts, and build wiring are in place;
-the domain/application/auth layers are documented placeholders with no business
-logic or DB migrations until a feature explicitly asks.
+This repo began as a **scaffold**; the **balance + allocations money plane** is now
+implemented end to end — the `balance`/`allocations` bounded contexts, the TigerBeetle
+`Ledger` gateway, and the transactional outbox + single-worker saga relay (see
+[`piggybank/core/PATTERNS.md`](../piggybank/core/PATTERNS.md)). The remaining
+domain/application areas stay documented placeholders until a feature explicitly asks.
 
 ## Topology
 
@@ -213,6 +215,17 @@ This matches the `ev::architecture` kernel (`EmitsEvents`/`EventEnvelope`, `Read
 full event-sourcing framework: `cqrs-es`/`postgres-es` require `sqlx 0.8` (we pin
 `0.9`), and a ledger is already an immutable audit log — event-sourcing the same
 facts in Postgres would double-bookkeep.
+
+**Money model.** Value lives in TigerBeetle on one USDT ledger, partitioned into
+**custody** (debit-normal wallets, per network) and **claims** (credit-normal
+`fund`/`user`/`service`), so `sum(custody:N) == sum(claims:N)` holds per network and a
+deposit is a single `Dr wallet / Cr claim` transfer (no external account).
+Non-negativity is enforced by TB account flags; an **allocation** carries one `owner` +
+a `sharers` list, and a user-sharer may revoke only while the fund owns it. Saga moves
+are idempotent by a stable `event_id` (deterministic TB transfer ids; reservations are
+two-phase pending with `timeout = 0`). Full chart of accounts, ownership rules,
+idempotency, and the authorization matrix:
+[`piggybank/core/PATTERNS.md`](../piggybank/core/PATTERNS.md).
 
 ## Run matrix
 
