@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start --port 3000",
     "lint": "eslint .",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "gen:api": "openapi-ts"
   },
   "dependencies": {
     "@evinvest/analytics": "^0.1.0",
@@ -35,6 +36,7 @@
     "@types/node": "^24.7.0",
     "@types/react": "^19.2.1",
     "@types/react-dom": "^19.2.1",
+    "@hey-api/openapi-ts": "^0.98.1",
     "eslint": "^9.18.0",
     "eslint-config-next": "^16.2.7",
     "tailwindcss": "^4.1.14",
