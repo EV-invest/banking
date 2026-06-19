@@ -12,11 +12,13 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use ev::error_monitoring::{self, Config as SentryConfig};
-use evbanking_auth::AuthService;
+use evbanking_auth::{AuthConfig, AuthService, provisioner_channel};
 use piggybank_core::{
 	AppState,
+	application::auth_sync,
 	config::AppConfig,
-	infrastructure::{db, tigerbeetle::TigerBeetle},
+	infrastructure::{db, tigerbeetle::TigerBeetle, users::PgUsers},
+	ports::UserRepository,
 	services,
 };
 
@@ -45,27 +47,37 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// ── driven infrastructure ─────────────────────────────────────────────────
+	// The hub applies pending control-plane migrations on boot (idempotent). New
+	// migration FILES are authored with the sqlx CLI (`sqlx migrate add …`), never
+	// hand-written.
 	let pool = db::connect(&config.database_url).await.context("failed to connect to the database")?;
+	db::migrate(&pool).await.context("failed to apply database migrations")?;
 	let tigerbeetle = Arc::new(TigerBeetle::connect(config.tigerbeetle_cluster_id, &config.tigerbeetle_address).context("failed to connect to TigerBeetle")?);
 
 	// Product-analytics capture (native PostHog). A `None` key makes capture a
 	// silent no-op, so this is safe to construct unconfigured.
 	let analytics = ev::analytics::Analytics::new(config.posthog_key.clone(), config.posthog_host.clone());
 
-	// ── auth service (its own task) ───────────────────────────────────────────
-	// Auth owns the keys/JWKS and hands core an `Authorizer` channel handle.
-	let (auth_service, authorizer) = AuthService::new();
-	let state = AppState::new(pool, tigerbeetle, authorizer, analytics);
+	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
 
-	let auth = tokio::spawn(auth_service.run(config.auth_grpc_addr));
+	// ── auth service + user provisioning (in-process) ──────────────────────────
+	// Auth owns the keys/JWKS and hands core an `Authorizer` (core → auth, verify);
+	// core hands auth a `Provisioner` (auth → core, upsert users) and drains it.
+	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
+	let (provisioner, provision_rx) = provisioner_channel();
+	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).context("failed to build the auth service")?;
 
-	// ── core gRPC (this task) ─────────────────────────────────────────────────
+	let state = AppState::new(pool, tigerbeetle, authorizer, analytics, users.clone(), Arc::from(config.admin_subjects.clone()));
+
 	tracing::info!(core = %config.grpc_addr, auth = %config.auth_grpc_addr, "piggybank listening");
 
-	// Run both; whichever ends first (error or shutdown) tears the process down.
+	// Structured concurrency: the core server, the auth task, and the provisioning
+	// loop run as branches of one `select!` on this task — no detached spawns.
+	// Whichever ends first (an error or shutdown) tears the process down.
 	tokio::select! {
 		result = services::serve(config.grpc_addr, state) => result.context("core gRPC server error")?,
-		result = auth => result.context("auth task failed")?.context("auth service error")?,
+		result = auth_service.run(config.auth_grpc_addr) => result.context("auth service error")?,
+		() = auth_sync::run_provisioner(provision_rx, users) => {},
 	}
 	Ok(())
 }

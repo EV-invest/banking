@@ -4,12 +4,100 @@ package banking.v1;
 
 // AuthService — the hub's token issuance and authorization surface.
 //
-// Issues first-party asymmetric JWTs (after Google OAuth2 sign-in), rotates
-// refresh tokens, and publishes verification keys. Services do NOT call this per
-// request: they verify access tokens locally against cached JWKS via the shared
-// `evbanking_auth` flow (no round trip, no per-service token storage).
+// Issues first-party asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 sign-in,
+// rotates refresh tokens, and publishes verification keys. Services do NOT call
+// this per request to authorize: they verify access tokens locally against the
+// cached JWKS via the shared `evbanking_auth` flow (no round trip, no per-service
+// token storage). They DO call `Jwks` periodically to refresh that cache, since
+// the hub speaks only gRPC (no HTTP `.well-known` endpoint).
 //
-// Scaffold: the service is declared to lock the namespace; RPCs (e.g. Exchange,
-// Refresh, Jwks, Introspect) land here as the auth feature arrives. See
-// docs/ARCHITECTURE.md.
-service AuthService {}
+// The cabinet BFF is the OAuth confidential client. It runs the browser-facing
+// authorize redirect (PKCE + state + nonce) and then calls `Exchange`
+// server-to-server with the Google authorization code; the auth task performs the
+// confidential code→token exchange with Google, validates Google's id_token, and
+// discards it — Google's token is never forwarded inward. See docs/ARCHITECTURE.md.
+service AuthService {
+  // Exchange a Google authorization code (with its PKCE verifier) for the hub's
+  // OWN tokens. Called by the cabinet BFF on the OAuth callback. Provisions the
+  // user on first sign-in (in-process Provisioner channel into core).
+  rpc Exchange(ExchangeRequest) returns (TokenResponse);
+
+  // Rotate a refresh token: returns a fresh access+refresh pair and invalidates
+  // the presented refresh token (rotation + reuse detection in the central store).
+  rpc Refresh(RefreshRequest) returns (TokenResponse);
+
+  // Revoke the presented refresh token's family. With `revoke_all` set, also bumps
+  // the user's `token_version` so every outstanding access token is rejected hub-side.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // Publish the current signing public keys (JWKS). Polled by downstream services'
+  // `evbanking_auth` verifier to refresh its local cache; also consulted on an
+  // unknown-`kid` miss. Carries only public key material.
+  rpc Jwks(JwksRequest) returns (JwksResponse);
+
+  // Reserved for later auth slices, declared here to lock the namespace:
+  //   rpc Introspect(IntrospectRequest) returns (IntrospectResponse);
+  //   rpc MintServiceToken(MintServiceTokenRequest) returns (TokenResponse);
+}
+
+message ExchangeRequest {
+  // The Google authorization code from the OAuth redirect.
+  string auth_code = 1;
+  // The PKCE code verifier the BFF generated for this transaction (S256).
+  string code_verifier = 2;
+  // The exact redirect_uri used in the authorize request (Google requires a match).
+  string redirect_uri = 3;
+  // The nonce the BFF put in the authorize request; matched against Google's id_token.
+  string nonce = 4;
+}
+
+message RefreshRequest {
+  string refresh_token = 1;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+  // When true, bump the user's token_version (coarse "revoke all"), not just this
+  // refresh family.
+  bool revoke_all = 2;
+}
+
+message LogoutResponse {}
+
+// A first-party token pair plus a snapshot of the principal. All expiries are
+// unix SECONDS (matching the JWT `exp` claim); the BFF parses them with
+// proto-loader `longs: String`.
+message TokenResponse {
+  string access_token = 1;
+  int64 access_expires_at = 2;
+  string refresh_token = 3;
+  int64 refresh_expires_at = 4;
+  UserSummary user = 5;
+}
+
+// Minimal principal snapshot returned with a freshly issued token pair, so the BFF
+// can populate a session without a second round trip.
+message UserSummary {
+  // The hub's canonical user id (a UUID) — this is the JWT `sub`, never Google's sub.
+  string user_id = 1;
+  string email = 2;
+  string status = 3;
+  uint64 token_version = 4;
+}
+
+message JwksRequest {}
+
+message JwksResponse {
+  repeated Jwk keys = 1;
+}
+
+// One JSON Web Key. Ed25519 keys are OKP: kty="OKP", crv="Ed25519", x=base64url
+// public key, alg="EdDSA". `kid` is a stable thumbprint of the public key.
+message Jwk {
+  string kid = 1;
+  string kty = 2;
+  string crv = 3;
+  string x = 4;
+  string alg = 5;
+  string use = 6;
+}

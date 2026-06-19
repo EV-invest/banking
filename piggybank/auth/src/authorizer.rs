@@ -50,3 +50,9 @@ impl Authorizer {
 		response.await.map_err(|_| AuthError::Unavailable)?
 	}
 }
+
+impl crate::interceptor::Authenticate for Authorizer {
+	async fn authenticate(&self, token: String) -> Result<Claims, AuthError> {
+		self.authorize(&token).await
+	}
+}

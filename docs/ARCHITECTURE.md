@@ -12,15 +12,15 @@ logic or DB migrations until a feature explicitly asks.
 ## Topology
 
 ```
-   ┌───────────────────────────── banking (this repo) ─────────────────────────────┐
-   │  clients/cabinet (Next.js BFF) ──gRPC──▶  piggybank (one process)              │
+   ┌───────────────────────────── banking (this repo) ────────────────────────────┐
+   │  clients/cabinet (Next.js BFF) ──gRPC──▶  piggybank (one process)            │
    │      ▲  composes <mfe-*>                 ├─ core task  : gRPC services       │
    │      │  custom elements                  │              (balance/users/…)    │
    │                                          └─ auth task  : issuance gRPC       │
    │                                           core ◀─Authorizer channel─ auth    │
    │                                           Postgres (control) · TigerBeetle   │
    │                                           (money) · Redis (central auth)     │
-   └─────────────────────────────────────────────────────────────────────────────┘
+   └──────────────────────────────────────────────────────────────────────────────┘
    browser ─HTTP─▶ clients/cabinet BFF ─gRPC─▶ piggybank core
    other service repos (separate): own logic+allocations ─gRPC (evbanking_contracts)─▶ piggybank;
      verify client tokens locally via evbanking_auth; own microfrontends mount into clients/cabinet.
@@ -38,8 +38,8 @@ piggybank-core    → domain, evbanking_contracts, evbanking_auth
 | Crate                                | Role                                                                                                                                            | wasm-safe |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
 | `domain/`                            | Pure DDD types over `ev::architecture`; the four bounded contexts (`balance`, `users`, `allocations`, `auth`). Source of truth across platform. | **yes**   |
-| `evbanking_contracts` (`contracts/`)    | gRPC wire contracts: tonic client+server stubs from `proto/`. Other repos import it for the client stubs.                                       | no        |
-| `evbanking_auth` (`piggybank/auth/`)    | The auth **service** (issuance gRPC + in-process `Authorizer` channel) **and** the shared verification flow (JWKS verify + interceptor).        | no        |
+| `evbanking_contracts` (`contracts/`) | gRPC wire contracts: tonic client+server stubs from `proto/`. Other repos import it for the client stubs.                                       | no        |
+| `evbanking_auth` (`piggybank/auth/`) | The auth **service** (issuance gRPC + in-process `Authorizer` channel) **and** the shared verification flow (JWKS verify + interceptor).        | no        |
 | `piggybank-core` (`piggybank/core/`) | The hub server: composition root that runs the core gRPC services and the auth service as in-process tasks; data-plane services + infra.        | no        |
 
 `domain` never depends on an adapter, and the wasm-unsafe `evbanking_auth` is never a
@@ -78,28 +78,50 @@ with the hub's own core ↔ auth check done **in-process**, not over the wire.
 
 **Inside the hub (`piggybank`).** `core` and `auth` run as two tasks in one
 process (spawned by `piggybank-core`'s composition root). The `auth` task
-(`evbanking_auth`) owns the signing keys / JWKS / refresh store, serves its **own
-issuance gRPC routes** (`auth_grpc_addr`, e.g. `:50052`) — exchanging a client
-login for the hub's JWT, refresh, JWKS — and hands `core` an [`Authorizer`]: a
-cloneable handle over an in-process channel. `core`'s gRPC interceptor authorizes
-each request by calling `authorizer.authorize(token)`, which round-trips to the
-auth task **across the task boundary, never the network**. Auth gives its instance
-to core; core never holds key material.
+(`evbanking_auth`) owns the signing keys / JWKS / Google client / refresh store,
+serves its **own issuance gRPC routes** (`auth_grpc_addr`, e.g. `:50052` —
+`Exchange`/`Refresh`/`Logout`/`Jwks`), and exchanges two cloneable in-process
+channel handles with `core`, both crossing a task boundary, **never the network**:
+
+- [`Authorizer`] (core → auth): `core` mounts the async [`grpc_auth_layer`] on each
+  data service; the layer calls `authorizer.authorize(token)` to verify a request
+  and inject the `Claims`. Auth holds the keys; core never does.
+- [`Provisioner`] (auth → core): after a verified Google sign-in, `auth` asks
+  `core` to upsert the `users` aggregate (core owns Postgres, the only writer) and
+  returns the hub user id + `token_version` to stamp on the minted token.
 
 **Issuance.** The auth service mints the hub's **own** short-TTL (5–15 min)
-asymmetric JWTs (EdDSA/RS256) after Google OAuth2 (code + PKCE) — it never forwards
-Google's token inward — and publishes JWKS.
+asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 (code + PKCE) — it verifies
+Google's `id_token` locally and **discards it**, never forwarding it inward — with
+`sub` = the hub user id (never Google's `sub`). It publishes verification keys via
+the **`Jwks` gRPC RPC** (the hub speaks only gRPC — there is no HTTP `.well-known`).
+
+**Token separation.** The two **signed JWT** directions carry a `typ`
+(`access`/`service`) and a **distinct `aud`**: client access → `banking-core`,
+inter-service → `banking-services`. A verifier states the issuer, the accepted
+**audience set**, and the accepted **`typ` set**, so http clients and grpc services
+are cryptographically kept apart. **Refresh tokens are not JWTs** — they are opaque,
+rotated, server-side handles (which is what enables reuse detection), so they can't
+hit the data plane at all and carry no `aud`/`typ`.
 
 **External services (separate processes).** They can't share the in-process
-channel, so they verify the hub's JWTs **locally** against cached JWKS via
-`evbanking_auth`'s interceptor + `verify_token`: **no per-request round trip, no
-per-service token storage.** A per-service Redis denylist is an anti-pattern — it
-reintroduces the round trip JWTs exist to avoid. They depend on `evbanking_auth` (the
-flow) and `evbanking_contracts` (the stubs).
+channel, so they build a [`Verifier`] ([`evbanking_auth`]) that caches the hub's
+JWKS (refreshed via the `Jwks` RPC, and on an unknown-`kid` miss) and verify the
+hub's JWTs **locally**: **no per-request round trip, no per-service token storage.**
+A per-service Redis denylist is an anti-pattern — it reintroduces the round trip
+JWTs exist to avoid. They mount the same [`grpc_auth_layer`], authenticate their own
+onward calls with a [`ServiceTokenSource`], and depend on `evbanking_auth` (the
+flow) + `evbanking_contracts` (the stubs). Downstream adoption guide:
+[`piggybank/auth/README.md`](../piggybank/auth/README.md).
 
 **State.** The **only** stateful auth store is one **central** Redis (`REDIS_URL`):
 refresh-token rotation + reuse detection, optional `jti` revocation. A per-user
-`token_version` claim gives coarse "revoke all" without fleet state.
+`token_version` claim gives coarse "revoke all" without fleet state — enforced at
+**refresh** (the auth service re-reads the authoritative version over the
+`Provisioner` channel and refuses to mint), while stateless downstream verifiers
+rely on the short access TTL. _Slice note:_ the refresh store currently runs
+in-process (single-instance/dev), with the central Redis as the documented
+production backing.
 
 **Browser.** The BFF token-handler pattern: `clients/cabinet` is the OAuth confidential
 client, holds tokens server-side, and gives the browser only a
@@ -109,6 +131,11 @@ client, holds tokens server-side, and gives the browser only a
 distinct `aud`); graduate to SPIFFE/SPIRE only at platform scale.
 
 [`Authorizer`]: ../piggybank/auth/src/authorizer.rs
+[`Provisioner`]: ../piggybank/auth/src/provisioner.rs
+[`Verifier`]: ../piggybank/auth/src/verifier.rs
+[`grpc_auth_layer`]: ../piggybank/auth/src/interceptor.rs
+[`ServiceTokenSource`]: ../piggybank/auth/src/service_token.rs
+[`evbanking_auth`]: ../piggybank/auth
 
 ## Microfrontends
 
@@ -182,12 +209,16 @@ facts in Postgres would double-bookkeep.
 
 ## Run matrix
 
-| `nix run .#`          | What                                                        | Port                          |
-| --------------------- | ----------------------------------------------------------- | ----------------------------- |
+| `nix run .#`          | What                                                 | Port                          |
+| --------------------- | ---------------------------------------------------- | ----------------------------- |
 | `dev`                 | postgres + tigerbeetle + redis + piggybank + cabinet | —                             |
-| `piggybank`           | hub server: core gRPC + auth tasks (tonic-web)              | `:50051` core / `:50052` auth |
-| `cabinet`             | Next.js host shell + BFF                                    | `:3000`                       |
-| `db` / `tb` / `redis` | local Postgres / TigerBeetle / Redis                        | `:5432` / `:3033` / `:6379`   |
+| `piggybank`           | hub server: core gRPC + auth tasks (tonic-web)       | `:50051` core / `:50052` auth |
+| `cabinet`             | Next.js host shell + BFF                             | `:3000`                       |
+| `db` / `tb` / `redis` | local Postgres / TigerBeetle / Redis                 | `:5432` / `:3033` / `:6379`   |
+
+Control-plane migrations live in `piggybank/core/migrations/` and are **applied by
+the hub on boot** (idempotent). Author new ones with the sqlx CLI (in the dev shell),
+never by hand: `sqlx migrate add --source piggybank/core/migrations --sequential <name>`.
 
 See [`flake.nix`](../flake.nix) for the apps and dev shell, and per-area READMEs
 (e.g. [`clients/cabinet/README.md`](../clients/cabinet/README.md)) for details.

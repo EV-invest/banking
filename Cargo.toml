@@ -23,7 +23,14 @@ ev = { git = "https://github.com/EV-invest/lib.git", default-features = false, f
 domain = { path = "domain" }
 evbanking_auth = { path = "piggybank/auth" }
 evbanking_contracts = { path = "contracts" }
-jsonwebtoken = "10"
+http = "1"
+# `rust_crypto` selects the pure-Rust provider (ed25519-dalek for our EdDSA tokens,
+# rsa for verifying Google's RS256 id_tokens) — no C/aws-lc-rs toolchain, matching
+# the rustls-only stance.
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+# rustls only (no native-tls), matching how `ev` pulls reqwest — the auth service
+# uses it solely to reach Google's OAuth2 token + certs endpoints.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 prost = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.150"

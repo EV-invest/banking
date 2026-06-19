@@ -1,49 +1,62 @@
 //! The auth service — a separate application run by `core`.
 //!
-//! Owns the signing keys, JWKS, and refresh store; serves the **issuance** gRPC
-//! routes (exchange a Google OAuth2 login for the hub's own JWT, refresh, JWKS)
-//! on its own address; and answers in-process authorize requests from `core` over
-//! the [`Authorizer`] channel. `core` builds it, takes the `Authorizer`, and
-//! spawns [`AuthService::run`] in its own task.
+//! Owns the signing keys, JWKS, Google client, and refresh store; serves the
+//! **issuance** gRPC routes (`Exchange`/`Refresh`/`Logout`/`Jwks`) on its own
+//! address; provisions users in-process over the [`Provisioner`] channel; and
+//! answers `core`'s authorize requests over the [`Authorizer`] channel. `core`
+//! builds it, takes the `Authorizer`, hands it the `Provisioner`, and spawns
+//! [`AuthService::run`] in its own task.
+//!
+//! Unconfigured (no `AUTH_SIGNING_KEY_PEM`) it runs inert: issuance and authorize
+//! both answer [`AuthError::NotConfigured`], so the scaffold still boots locally.
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
-use evbanking_contracts::banking::v1::auth_service_server::{AuthService as AuthServiceRpc, AuthServiceServer};
+use evbanking_contracts::banking::v1::{
+	ExchangeRequest, JwksRequest, JwksResponse, LogoutRequest, LogoutResponse, RefreshRequest, TokenResponse, UserSummary,
+	auth_service_server::{AuthService as AuthServiceRpc, AuthServiceServer},
+};
 use tokio::sync::mpsc;
-use tonic::transport::Server;
+use tonic::{Request, Response, Status, transport::Server};
 
 use crate::{
-	AuthError,
+	AuthError, Claims,
 	authorizer::{AuthorizeRequest, Authorizer},
+	claims::TokenType,
+	config::AuthConfig,
+	google::GoogleOauth,
+	jwks::{JwksCache, VerifyPolicy, verify_token},
+	management::{IssuedRefresh, RefreshStore},
+	provisioner::{ProvisionedUser, Provisioner},
+	signer::{Signer, load_jwks},
 };
 
-/// The auth application. Holds the receive end of the [`Authorizer`] channel;
-/// signing keys / JWKS / refresh store land here as the feature arrives.
+/// The auth application: the authorize-channel receiver plus the issuance engine.
 pub struct AuthService {
-	rx: mpsc::Receiver<AuthorizeRequest>,
+	authorize_rx: mpsc::Receiver<AuthorizeRequest>,
+	grpc: AuthGrpc,
 }
 
 impl AuthService {
-	/// Build the service and the [`Authorizer`] handle to hand to `core`.
-	pub fn new() -> (Self, Authorizer) {
+	/// Build the service from config and the [`Provisioner`] handle (core keeps the
+	/// receiver). Returns the [`Authorizer`] handle for core to authorize requests.
+	pub fn try_new(config: AuthConfig, provisioner: Provisioner) -> anyhow::Result<(Self, Authorizer)> {
 		let (tx, rx) = mpsc::channel(1024);
-		(Self { rx }, Authorizer::new(tx))
+		let grpc = AuthGrpc::build(config, provisioner)?;
+		Ok((Self { authorize_rx: rx, grpc }, Authorizer::new(tx)))
 	}
 
-	/// Run the auth task: serve the issuance gRPC routes ([`AuthGrpc`]) on `addr`
-	/// and answer `core`'s authorize requests over the in-process channel. Whichever
-	/// ends first — a server error or all [`Authorizer`]s being dropped — tears the
-	/// task down.
-	///
-	/// Scaffold: the routes are reserved but empty (no RPCs yet) and verification is
-	/// a placeholder, so the channel loop answers [`AuthError::NotConfigured`] — but
-	/// the surface is real, mirroring how `core` registers its empty services.
-	pub async fn run(mut self, addr: SocketAddr) -> anyhow::Result<()> {
-		let issuance = Server::builder().add_service(AuthServiceServer::new(AuthGrpc)).serve(addr);
-		let authorize = async {
-			while let Some(request) = self.rx.recv().await {
-				let _ = request.respond_to.send(Err(AuthError::NotConfigured));
+	/// Run the auth task: serve issuance gRPC on `addr` and answer core's authorize
+	/// requests over the in-process channel. Whichever ends first tears it down.
+	pub async fn run(self, addr: SocketAddr) -> anyhow::Result<()> {
+		let AuthService { mut authorize_rx, grpc } = self;
+		let authorizer = grpc.clone();
+		let issuance = Server::builder().add_service(AuthServiceServer::new(grpc)).serve(addr);
+		let authorize = async move {
+			while let Some(request) = authorize_rx.recv().await {
+				let result = authorizer.authorize_token(&request.token);
+				let _ = request.respond_to.send(result);
 			}
 		};
 		tokio::select! {
@@ -54,11 +67,142 @@ impl AuthService {
 	}
 }
 
-/// gRPC issuance routes (the proto `AuthService`). Exchanging a client login for
-/// the hub's JWT, refresh, and JWKS land here.
-///
-/// Scaffold: the proto service has no RPCs yet, so the impl is empty.
-#[derive(Default)]
-pub struct AuthGrpc;
+/// The issuance engine, shared cheaply (Arc) between the gRPC server and the
+/// in-process authorize loop.
+#[derive(Clone)]
+pub struct AuthGrpc {
+	engine: Arc<AuthEngine>,
+}
+impl AuthGrpc {
+	fn build(config: AuthConfig, provisioner: Provisioner) -> anyhow::Result<Self> {
+		let (signer, keyring, jwks) = match &config.signing {
+			Some(signing) => {
+				let signer = Signer::try_new(signing, &config).map_err(|e| anyhow::anyhow!("auth signer init failed: {e}"))?;
+				let (keyring, jwks) = load_jwks(signing).map_err(|e| anyhow::anyhow!("auth jwks load failed: {e}"))?;
+				(Some(signer), keyring, jwks)
+			}
+			None => (None, JwksCache::new(), Vec::new()),
+		};
+		let google = config.google.as_ref().map(GoogleOauth::new);
+		let authorize_policy = VerifyPolicy {
+			issuer: config.issuer.clone(),
+			audiences: vec![config.client_audience.clone(), config.service_audience.clone()],
+			allowed_types: vec![TokenType::Access, TokenType::Service],
+		};
+		Ok(Self {
+			engine: Arc::new(AuthEngine {
+				signer,
+				keyring,
+				authorize_policy,
+				google,
+				refresh: RefreshStore::new(),
+				provisioner,
+				jwks,
+				refresh_ttl_secs: config.refresh_ttl_secs,
+			}),
+		})
+	}
 
-impl AuthServiceRpc for AuthGrpc {}
+	/// Verify a data-plane token in-process (called from core's `Authorizer` loop).
+	fn authorize_token(&self, token: &str) -> Result<Claims, AuthError> {
+		let engine = &self.engine;
+		if engine.signer.is_none() || engine.keyring.is_empty() {
+			return Err(AuthError::NotConfigured);
+		}
+		verify_token(token, &engine.keyring, &engine.authorize_policy)
+	}
+}
+
+struct AuthEngine {
+	signer: Option<Signer>,
+	keyring: JwksCache,
+	/// Policy for the hub's in-process authorize path: accepts the audiences the hub
+	/// itself issues for the data plane (client access + inter-service tokens).
+	authorize_policy: VerifyPolicy,
+	google: Option<GoogleOauth>,
+	refresh: RefreshStore,
+	provisioner: Provisioner,
+	jwks: Vec<evbanking_contracts::banking::v1::Jwk>,
+	refresh_ttl_secs: u64,
+}
+
+fn token_response(access_token: String, access_exp: u64, refresh: IssuedRefresh, summary: &ProvisionedUser) -> TokenResponse {
+	TokenResponse {
+		access_token,
+		access_expires_at: access_exp as i64,
+		refresh_token: refresh.token,
+		refresh_expires_at: refresh.expires_at as i64,
+		user: Some(UserSummary {
+			user_id: summary.user_id.clone(),
+			email: summary.email.clone(),
+			status: summary.status.clone(),
+			token_version: summary.token_version,
+		}),
+	}
+}
+
+#[tonic::async_trait]
+impl AuthServiceRpc for AuthGrpc {
+	async fn exchange(&self, request: Request<ExchangeRequest>) -> Result<Response<TokenResponse>, Status> {
+		let engine = &self.engine;
+		let signer = engine.signer.as_ref().ok_or(AuthError::NotConfigured)?;
+		let google = engine.google.as_ref().ok_or(AuthError::NotConfigured)?;
+		let req = request.into_inner();
+
+		let identity = google.exchange_code(&req.auth_code, &req.code_verifier, &req.redirect_uri, &req.nonce).await?;
+		let summary = engine.provisioner.provision(identity.subject, identity.email, identity.email_verified).await?;
+		if summary.is_disabled() {
+			return Err(Status::permission_denied("user is disabled"));
+		}
+
+		let (access_token, access_exp) = signer.mint_access(&summary.user_id, summary.token_version)?;
+		let refresh = engine.refresh.issue(&summary.user_id, summary.token_version, engine.refresh_ttl_secs);
+		Ok(Response::new(token_response(access_token, access_exp, refresh, &summary)))
+	}
+
+	async fn refresh(&self, request: Request<RefreshRequest>) -> Result<Response<TokenResponse>, Status> {
+		let engine = &self.engine;
+		let signer = engine.signer.as_ref().ok_or(AuthError::NotConfigured)?;
+		let req = request.into_inner();
+
+		let rotated = engine.refresh.rotate(&req.refresh_token, engine.refresh_ttl_secs)?;
+		let summary = engine.provisioner.lookup(rotated.user_id.clone()).await?;
+		if summary.is_disabled() {
+			engine.refresh.revoke_user(&summary.user_id);
+			return Err(Status::permission_denied("user is disabled"));
+		}
+		// A "revoke all" since this family was issued bumps the authoritative
+		// token_version in Postgres; refuse to mint and drop the family.
+		if summary.token_version > rotated.token_version_snapshot {
+			engine.refresh.revoke_user(&summary.user_id);
+			return Err(Status::unauthenticated("tokens revoked"));
+		}
+
+		let (access_token, access_exp) = signer.mint_access(&summary.user_id, summary.token_version)?;
+		Ok(Response::new(token_response(access_token, access_exp, rotated.refresh, &summary)))
+	}
+
+	async fn logout(&self, request: Request<LogoutRequest>) -> Result<Response<LogoutResponse>, Status> {
+		let engine = &self.engine;
+		let req = request.into_inner();
+		if req.revoke_all {
+			if let Some(user_id) = engine.refresh.user_of(&req.refresh_token) {
+				// Durable half: bump the authoritative token_version in the control
+				// plane. Best-effort — dropping the refresh families below already ends
+				// every session and access tokens expire within the short TTL, so a
+				// transient control-plane blip must not fail the logout.
+				if let Err(err) = engine.provisioner.revoke_all(user_id.clone()).await {
+					crate::telemetry::report(&err);
+				}
+				engine.refresh.revoke_user(&user_id);
+			}
+		} else {
+			engine.refresh.revoke(&req.refresh_token);
+		}
+		Ok(Response::new(LogoutResponse {}))
+	}
+
+	async fn jwks(&self, _request: Request<JwksRequest>) -> Result<Response<JwksResponse>, Status> {
+		Ok(Response::new(JwksResponse { keys: self.engine.jwks.clone() }))
+	}
+}

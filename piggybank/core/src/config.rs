@@ -27,6 +27,10 @@ pub struct AppConfig {
 	pub tigerbeetle_address: String,
 	/// TigerBeetle cluster id. `0` for single-node dev.
 	pub tigerbeetle_cluster_id: u128,
+	/// Hub user ids (UUIDs) allowed to call admin RPCs (`RevokeTokens`/`DisableUser`).
+	/// A coarse, config-driven allowlist standing in for RBAC until a role slice
+	/// lands; `ADMIN_SUBJECTS` is a comma-separated list (empty ⇒ no admins).
+	pub admin_subjects: Vec<String>,
 }
 
 impl AppConfig {
@@ -50,6 +54,13 @@ impl AppConfig {
 			.unwrap_or_else(|_| "0".to_string())
 			.parse()
 			.context("TIGERBEETLE_CLUSTER_ID must be an integer")?;
+		let admin_subjects = env::var("ADMIN_SUBJECTS")
+			.unwrap_or_default()
+			.split(',')
+			.map(str::trim)
+			.filter(|s| !s.is_empty())
+			.map(str::to_owned)
+			.collect();
 		Ok(Self {
 			database_url,
 			grpc_addr,
@@ -61,6 +72,7 @@ impl AppConfig {
 			app_env,
 			tigerbeetle_address,
 			tigerbeetle_cluster_id,
+			admin_subjects,
 		})
 	}
 }
