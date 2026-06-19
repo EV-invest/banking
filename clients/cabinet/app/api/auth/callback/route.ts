@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-import { AUTH_REDIRECT_URI, COOKIES } from "@/shared/auth/config";
-import { safeReturnTo } from "@/shared/auth/oauth";
-import { clearTxCookie, putSession, setSessionCookies, takeTx } from "@/shared/auth/session";
-import { exchange } from "@/shared/bff/auth";
+import { putSession, setSessionCookies } from "@/entities/session/model/session";
+import { AUTH_REDIRECT_URI } from "@/features/auth/config";
+import { safeReturnTo } from "@/features/auth/lib/oauth";
+import { clearTxCookie, takeTx } from "@/features/auth/model/oauth-tx";
+import { exchange } from "@/shared/api/auth";
 
 // OAuth callback: validate the state against the stored transaction, exchange the
 // code for the hub's tokens (server-to-server), open a session, and redirect home.
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
   // holds it, binding this callback to that user-agent. The `state` must then match
   // the stored tx (defeats response tampering/replay). Together this is the
   // standard OAuth login-CSRF / session-fixation mitigation.
-  const tx = takeTx(req.cookies.get(COOKIES.oauthTx)?.value);
+  const tx = takeTx(req);
   if (!code || !state || !tx || tx.state !== state) return fail("invalid");
 
   try {

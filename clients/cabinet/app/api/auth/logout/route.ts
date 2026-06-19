@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-import { verifyCsrf } from "@/shared/auth/csrf";
-import { clearSessionCookies, dropSession, readSessionId } from "@/shared/auth/session";
-import { logout as grpcLogout } from "@/shared/bff/auth";
+import { verifyCsrf } from "@/features/auth/lib/csrf";
+import { clearSessionCookies, dropSession, readSessionId } from "@/entities/session/model/session";
+import { logout as grpcLogout } from "@/shared/api/auth";
 
 // Sign out: CSRF-checked, drops the server-side session and revokes the refresh
 // family at the hub, then clears the browser cookies.

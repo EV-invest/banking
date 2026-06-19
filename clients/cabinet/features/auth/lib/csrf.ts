@@ -5,7 +5,7 @@
 
 import type { NextRequest } from "next/server";
 
-import { COOKIES } from "./config";
+import { COOKIES } from "@/shared/config/cookies";
 
 export const CSRF_HEADER = "x-ev-csrf";
 
