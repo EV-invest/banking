@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
-use ports::{AllocationRepository, UserRepository, ledger::Ledger};
+use ports::{AllocationRepository, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 
@@ -55,6 +55,10 @@ pub struct AppState {
 	pub users: Arc<dyn UserRepository>,
 	/// The `allocations` aggregate's driven port (Postgres control plane).
 	pub allocations: Arc<dyn AllocationRepository>,
+	/// The `withdrawals` aggregate's driven port (Postgres control plane).
+	pub withdrawals: Arc<dyn WithdrawalRepository>,
+	/// Per-user deposit-address provisioning (stub HD derivation behind a port).
+	pub deposit_addresses: Arc<dyn DepositAddresses>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
 	/// User ids permitted to call admin RPCs (config allowlist; see [`config`]).
@@ -70,6 +74,8 @@ impl AppState {
 		analytics: Analytics,
 		users: Arc<dyn UserRepository>,
 		allocations: Arc<dyn AllocationRepository>,
+		withdrawals: Arc<dyn WithdrawalRepository>,
+		deposit_addresses: Arc<dyn DepositAddresses>,
 		relay_notify: Arc<Notify>,
 		admin_subjects: Arc<[String]>,
 	) -> Self {
@@ -80,6 +86,8 @@ impl AppState {
 			analytics,
 			users,
 			allocations,
+			withdrawals,
+			deposit_addresses,
 			relay_notify,
 			admin_subjects,
 		}

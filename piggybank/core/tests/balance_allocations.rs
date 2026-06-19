@@ -21,6 +21,7 @@ use piggybank_core::{
 	application::{allocations as alloc_app, balance as balance_app},
 	infrastructure::{
 		allocations::PgAllocations,
+		custody::StubCustody,
 		db,
 		ledger::{self, TbLedger},
 		relay::Relay,
@@ -57,7 +58,7 @@ async fn harness() -> Option<Harness> {
 
 	let allocations: Arc<dyn piggybank_core::ports::AllocationRepository> = Arc::new(PgAllocations::new(pool.clone()));
 	let notify = Arc::new(Notify::new());
-	let relay = Relay::new(pool.clone(), ledger.clone(), notify.clone());
+	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	Some(Harness {
 		pool,
 		ledger,

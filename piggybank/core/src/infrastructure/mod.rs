@@ -15,10 +15,13 @@
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
 pub mod allocations;
+pub mod custody;
 pub mod db;
+pub mod deposit_addresses;
 pub mod ledger;
 pub mod outbox;
 pub mod relay;
 pub mod telemetry;
 pub mod tigerbeetle;
 pub mod users;
+pub mod withdrawals;

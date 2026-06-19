@@ -140,6 +140,7 @@ impl Ledger for TbLedger {
 			return Ok(LedgerBalance {
 				posted: Usdt::ZERO,
 				pending: Usdt::ZERO,
+				locked: Usdt::ZERO,
 			});
 		};
 		let accounts = self
@@ -153,25 +154,31 @@ impl Ledger for TbLedger {
 			return Ok(LedgerBalance {
 				posted: Usdt::ZERO,
 				pending: Usdt::ZERO,
+				locked: Usdt::ZERO,
 			});
 		};
-		// Normalize to the account's natural side; by the non-negative flag the
-		// subtraction can't underflow, so a `None` here is a ledger inconsistency.
-		let (posted, pending) = match key.normal() {
+		// Normalize to the account's natural side. `posted` is a real non-negative
+		// invariant (the TB flag guarantees it), so an underflow there is a genuine
+		// ledger inconsistency. `pending` (in-flight inflow) and `locked` (in-flight
+		// outflow reserved against this account) are the two sides of a pending and are
+		// legitimately one-sided, so they saturate to zero rather than error.
+		let (posted, pending, locked) = match key.normal() {
 			Normal::Credit => (
 				account.credits_posted.checked_sub(account.debits_posted),
-				account.credits_pending.checked_sub(account.debits_pending),
+				account.credits_pending.saturating_sub(account.debits_pending),
+				account.debits_pending.saturating_sub(account.credits_pending),
 			),
 			Normal::Debit => (
 				account.debits_posted.checked_sub(account.credits_posted),
-				account.debits_pending.checked_sub(account.credits_pending),
+				account.debits_pending.saturating_sub(account.credits_pending),
+				account.credits_pending.saturating_sub(account.debits_pending),
 			),
 		};
 		let posted = posted.ok_or_else(|| LedgerError::Conflict("balance underflow".into()))?;
-		let pending = pending.ok_or_else(|| LedgerError::Conflict("balance underflow".into()))?;
 		Ok(LedgerBalance {
 			posted: Usdt::from_base_units(posted),
 			pending: Usdt::from_base_units(pending),
+			locked: Usdt::from_base_units(locked),
 		})
 	}
 
@@ -239,6 +246,7 @@ pub async fn seed_singletons(ledger: &dyn Ledger) -> Result<(), LedgerError> {
 	for network in Network::ALL {
 		ledger.ensure_account(&LedgerAccountKey::CryptoWallet(network)).await?;
 		ledger.ensure_account(&LedgerAccountKey::Fund(network)).await?;
+		ledger.ensure_account(&LedgerAccountKey::FeeRevenue(network)).await?;
 	}
 	ledger.ensure_account(&LedgerAccountKey::BankCustody).await?;
 	Ok(())

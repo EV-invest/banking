@@ -17,17 +17,20 @@ use domain::{
 	allocations::{Allocation, AllocationId, AllocationKind},
 	balance::{LedgerAccountKey, Party, ServiceId},
 	error::DomainError,
-	money::{Network, TxRef, Usdt},
+	money::{Network, TxRef, Usdt, WalletAddress},
 	users::UserId,
+	withdrawals::{Withdrawal, WithdrawalId},
 };
 use evbanking_auth::claims_of;
-use evbanking_contracts::banking::v1::{self as pb, allocations_service_server::AllocationsService, balance_service_server::BalanceService, users_service_server::UsersService};
+use evbanking_contracts::banking::v1::{
+	self as pb, allocations_service_server::AllocationsService, balance_service_server::BalanceService, users_service_server::UsersService, wallet_service_server::WalletService,
+};
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
 use crate::{
 	AppState,
-	application::{allocations as alloc_app, balance as balance_app},
+	application::{allocations as alloc_app, balance as balance_app, wallet as wallet_app, withdrawals as withdrawal_app},
 };
 
 /// `users` context — investor account/investment RPCs.
@@ -153,6 +156,26 @@ impl BalanceService for BalanceSvc {
 			.map_err(map_err)?;
 		Ok(Response::new(pb::RecordDepositResponse { recorded }))
 	}
+
+	async fn settle_withdrawal(&self, request: Request<pb::SettleWithdrawalRequest>) -> Result<Response<pb::SettleWithdrawalResponse>, Status> {
+		require_admin(&self.state, &request)?;
+		let req = request.into_inner();
+		let id = parse_withdrawal_id(&req.withdrawal_id)?;
+		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
+		withdrawal_app::settle_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id, tx_ref)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(pb::SettleWithdrawalResponse {}))
+	}
+
+	async fn fail_withdrawal(&self, request: Request<pb::FailWithdrawalRequest>) -> Result<Response<pb::FailWithdrawalResponse>, Status> {
+		require_admin(&self.state, &request)?;
+		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
+		withdrawal_app::fail_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(pb::FailWithdrawalResponse {}))
+	}
 }
 
 /// `allocations` context — capital-allocation RPCs. The user-facing surface acts on
@@ -208,6 +231,72 @@ impl AllocationsService for AllocationsSvc {
 	}
 }
 
+/// `wallet` context — a user's own crypto wallet (balances, deposit addresses,
+/// withdrawals). Every RPC acts on the caller's own access-token `sub`.
+#[derive(Clone)]
+pub struct WalletSvc {
+	pub state: AppState,
+}
+
+impl WalletSvc {
+	pub fn new(state: AppState) -> Self {
+		Self { state }
+	}
+}
+
+#[tonic::async_trait]
+impl WalletService for WalletSvc {
+	async fn get_wallet(&self, request: Request<pb::GetWalletRequest>) -> Result<Response<pb::Wallet>, Status> {
+		let user = caller_id(&request)?;
+		let wallet = wallet_app::get_wallet(self.state.ledger.as_ref(), self.state.allocations.as_ref(), self.state.deposit_addresses.as_ref(), user)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(pb::Wallet {
+			networks: wallet.networks.iter().map(wallet_network_to_proto).collect(),
+		}))
+	}
+
+	async fn get_deposit_address(&self, request: Request<pb::GetDepositAddressRequest>) -> Result<Response<pb::DepositAddress>, Status> {
+		let user = caller_id(&request)?;
+		let network = Network::parse(&request.get_ref().network).map_err(map_err)?;
+		let address = wallet_app::get_deposit_address(self.state.deposit_addresses.as_ref(), user, network).await.map_err(map_err)?;
+		Ok(Response::new(pb::DepositAddress {
+			network: network.as_str().to_owned(),
+			address: address.as_str().to_owned(),
+			min_confirmations: min_confirmations(network),
+		}))
+	}
+
+	async fn request_withdrawal(&self, request: Request<pb::RequestWithdrawalRequest>) -> Result<Response<pb::Withdrawal>, Status> {
+		let user = caller_id(&request)?;
+		let req = request.into_inner();
+		let network = Network::parse(&req.network).map_err(map_err)?;
+		let address = WalletAddress::parse(network, &req.address).map_err(map_err)?;
+		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
+		let withdrawal = withdrawal_app::request_withdrawal(
+			self.state.withdrawals.as_ref(),
+			self.state.ledger.as_ref(),
+			self.state.users.as_ref(),
+			&self.state.relay_notify,
+			user,
+			network,
+			address,
+			amount,
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(withdrawal_to_proto(&withdrawal)))
+	}
+
+	async fn list_withdrawals(&self, request: Request<pb::ListWithdrawalsRequest>) -> Result<Response<pb::WithdrawalList>, Status> {
+		let user = caller_id(&request)?;
+		let withdrawals = withdrawal_app::list_withdrawals(self.state.withdrawals.as_ref(), user).await.map_err(map_err)?;
+		Ok(Response::new(pb::WithdrawalList {
+			withdrawals: withdrawals.iter().map(withdrawal_to_proto).collect(),
+		}))
+	}
+}
+
 /// The authenticated caller's own user id (from the access-token `sub`).
 fn caller_id<T>(request: &Request<T>) -> Result<UserId, Status> {
 	let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
@@ -257,6 +346,46 @@ fn allocation_to_proto(allocation: &Allocation) -> pb::Allocation {
 		service,
 		state: allocation.state().as_str().to_owned(),
 	}
+}
+
+fn wallet_network_to_proto(network: &wallet_app::WalletNetwork) -> pb::WalletNetwork {
+	pb::WalletNetwork {
+		network: network.network.as_str().to_owned(),
+		available: network.available.to_decimal_string(),
+		reserved: network.reserved.to_decimal_string(),
+		allocated: network.allocated.to_decimal_string(),
+		total: network.total.to_decimal_string(),
+		deposit_address: network.deposit_address.as_ref().map(|address| address.as_str().to_owned()).unwrap_or_default(),
+		min_withdrawal: network.min_withdrawal.to_decimal_string(),
+		withdrawal_fee: network.withdrawal_fee.to_decimal_string(),
+	}
+}
+
+fn withdrawal_to_proto(withdrawal: &Withdrawal) -> pb::Withdrawal {
+	pb::Withdrawal {
+		id: withdrawal.id().to_string(),
+		network: withdrawal.network().as_str().to_owned(),
+		address: withdrawal.address().as_str().to_owned(),
+		amount: withdrawal.amount().to_decimal_string(),
+		fee: withdrawal.fee().to_decimal_string(),
+		net_amount: withdrawal.net_amount().to_decimal_string(),
+		state: withdrawal.state().as_str().to_owned(),
+		tx_ref: withdrawal.tx_ref().map(|tx_ref| tx_ref.as_str().to_owned()).unwrap_or_default(),
+	}
+}
+
+/// Confirmations a watcher waits for before crediting/settling on a network
+/// (reorg-safety): BEP20 ~15, TRC20 ~19 (SR rounds), TON a few. Placeholder values.
+fn min_confirmations(network: Network) -> u32 {
+	match network {
+		Network::Bep20 => 15,
+		Network::Trc20 => 19,
+		Network::Ton => 16,
+	}
+}
+
+fn parse_withdrawal_id(raw: &str) -> Result<WithdrawalId, Status> {
+	Uuid::parse_str(raw).map(WithdrawalId::from_raw).map_err(|_| Status::invalid_argument("invalid withdrawal id"))
 }
 
 /// Treat an empty proto string field as an absent optional.
