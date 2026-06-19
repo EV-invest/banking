@@ -12,5 +12,9 @@
 //! [`auth_sync`] is the first use case: it drains the in-process `Provisioner`
 //! channel from the auth task and upserts the [`User`](domain::users::User)
 //! aggregate, keeping the hub identity in sync with the verified Google identity.
+//! [`balance`] and [`allocations`] are the money use cases — each notifies the relay
+//! after its commit so the ledger move follows promptly.
 
+pub mod allocations;
 pub mod auth_sync;
+pub mod balance;

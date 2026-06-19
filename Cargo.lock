@@ -1327,6 +1327,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -3172,6 +3173,7 @@ dependencies = [
  "evbanking_contracts",
  "serde_json",
  "sqlx",
+ "thiserror 2.0.18",
  "tigerbeetle",
  "tokio",
  "tonic",
@@ -4120,6 +4122,12 @@ dependencies = [
  "cpufeatures 0.3.0",
  "digest 0.11.3",
 ]
+
+[[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
 
 [[package]]
 name = "sha2"
@@ -5118,6 +5126,7 @@ dependencies = [
  "getrandom 0.4.2",
  "js-sys",
  "serde_core",
+ "sha1_smol",
  "wasm-bindgen",
 ]
 

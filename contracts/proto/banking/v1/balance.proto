@@ -5,6 +5,53 @@ package banking.v1;
 // BalanceService — the bank's own capital (company money).
 //
 // Reads authoritative balances from the TigerBeetle ledger; metadata and events
-// from Postgres. Scaffold: declared to lock the namespace; RPCs land here as the
-// balance feature arrives. See docs/ARCHITECTURE.md.
-service BalanceService {}
+// from Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a
+// string is lossless and matches proto-loader's `longs: String`). All RPCs are
+// admin-gated (allowlist) at the boundary. See docs/ARCHITECTURE.md.
+service BalanceService {
+  // The fund's balance, per network, read live from TigerBeetle (Read-First).
+  rpc GetFundBalance(GetFundBalanceRequest) returns (FundBalance);
+
+  // Inject the company's own capital on a network (Dr WALLET / Cr FUND).
+  rpc SeedCapital(SeedCapitalRequest) returns (SeedCapitalResponse);
+
+  // Record a settled on-chain deposit, crediting a party's claim. Idempotent by
+  // `tx_ref` — recording the same chain tx twice credits once.
+  rpc RecordDeposit(RecordDepositRequest) returns (RecordDepositResponse);
+}
+
+message GetFundBalanceRequest {}
+
+// One network's slice of the fund's position; all figures TigerBeetle-authoritative
+// decimal USDT strings.
+message NetworkBalance {
+  string network = 1;    // bep20 | trc20 | ton
+  string custody = 2;    // liquid on-chain USDT the fund holds in this wallet
+  string fund_free = 3;  // the fund's own unallocated capital
+  string allocated = 4;  // held for users/services (custody − fund_free)
+}
+
+message FundBalance {
+  repeated NetworkBalance networks = 1;
+}
+
+message SeedCapitalRequest {
+  string network = 1;  // bep20 | trc20 | ton
+  string amount = 2;   // decimal USDT
+}
+
+message SeedCapitalResponse {}
+
+message RecordDepositRequest {
+  string tx_ref = 1;      // the on-chain tx reference — the idempotency key
+  string network = 2;     // bep20 | trc20 | ton
+  string amount = 3;      // decimal USDT (canonical value, network-agnostic)
+  // The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the
+  // user UUID or service id (empty for piggybank, which credits the fund's capital).
+  string party_kind = 4;
+  string party_id = 5;
+}
+
+message RecordDepositResponse {
+  bool recorded = 1;  // false if `tx_ref` was already recorded (idempotent no-op)
+}

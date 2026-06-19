@@ -7,15 +7,15 @@
 
 use async_trait::async_trait;
 use domain::{
-	architecture::{AggregateRoot, DomainEvent, EmitsEvents, Reader, Repository},
+	architecture::{Reader, Repository},
 	auth::AuthSubject,
 	error::DomainError,
-	users::{Email, User, UserEvent, UserId, UserStatus},
+	users::{Email, User, UserId, UserStatus},
 };
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::ports::UserRepository;
+use crate::{infrastructure::outbox, ports::UserRepository};
 
 pub struct PgUsers {
 	pool: PgPool,
@@ -157,18 +157,9 @@ async fn update_email_on(conn: &mut PgConnection, row: UserRow, email: Email, em
 }
 
 /// Drain the aggregate's pending events into the `event_log` on the same connection
-/// (the open transaction), so state and events commit together or not at all.
+/// (the open transaction), so state and events commit together or not at all. User
+/// events are audit-only (`relay = false`) — they move no money, so they never reach
+/// the outbox.
 async fn append_events(conn: &mut PgConnection, user: &mut User) -> Result<(), DomainError> {
-	for event in user.drain_events() {
-		let payload = serde_json::to_string(&event).map_err(|e| DomainError::Repository(e.to_string()))?;
-		sqlx::query("INSERT INTO event_log (aggregate, aggregate_id, kind, payload) VALUES ($1, $2, $3, $4::jsonb)")
-			.bind(User::NAME)
-			.bind(user.id().raw())
-			.bind(UserEvent::KIND)
-			.bind(payload)
-			.execute(&mut *conn)
-			.await
-			.map_err(repo_err)?;
-	}
-	Ok(())
+	outbox::drain_to_outbox(conn, user, false).await
 }

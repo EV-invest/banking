@@ -8,10 +8,16 @@
 //! are written to the event log in the same transaction as the state change (the
 //! ACID point), so callers never juggle a transaction across the port boundary.
 //!
-//! The TigerBeetle `Ledger: Gateway` port lands with the first money-moving slice;
-//! today balances are read inline (one id-map lookup + a live `lookup_accounts`),
-//! so no gateway port is introduced before it earns its keep.
+//! The money plane adds two more ports: [`AllocationRepository`] (the
+//! [`Allocation`](domain::allocations::Allocation) aggregate's atomic, row-locked
+//! persistence) and [`Ledger`] — the TigerBeetle [`Gateway`](domain::architecture::Gateway),
+//! which by construction cannot enrol in a Postgres `UnitOfWork` (money is written
+//! last, in the relay).
 
+pub mod allocations;
+pub mod ledger;
+
+pub use allocations::AllocationRepository;
 use async_trait::async_trait;
 use domain::{
 	architecture::{Reader, Repository},
@@ -19,6 +25,7 @@ use domain::{
 	error::DomainError,
 	users::{Email, User, UserId},
 };
+pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
 
 /// Persistence + read port for the [`User`] aggregate.
 #[async_trait]
