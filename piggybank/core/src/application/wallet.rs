@@ -1,9 +1,12 @@
-//! Wallet query use cases — a user's per-network position and deposit addresses.
+//! Wallet query use cases — a user's unified balance, deposit rails, and per-rail
+//! withdrawal options.
 //!
-//! Read-First: balances come live from TigerBeetle (the authoritative data plane);
-//! the allocated figure is the sum of the user's active stakes (a Postgres
-//! projection). Deposit addresses are provisioned lazily through the
-//! [`DepositAddresses`] port (stub HD derivation) on first read.
+//! The user has **one** network-agnostic claim; the wallet presents it segmented by
+//! lifecycle. Read-First: `available` comes live from TigerBeetle (the authoritative
+//! data plane); `invested` is the sum of active stakes and `pending_withdrawal` the sum
+//! of queued/in-flight withdrawals (Postgres projections). Network re-enters only as a
+//! transaction attribute: a per-rail deposit address and a per-rail withdrawable view
+//! (`instant = min(available, rail liquidity)`, the accept-and-queue degradation hint).
 
 use domain::{
 	allocations::{AllocationKind, AllocationState},
@@ -11,66 +14,118 @@ use domain::{
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
 	users::UserId,
-	withdrawals::WithdrawalPolicy,
+	withdrawals::{WithdrawalPolicy, WithdrawalState},
 };
 
-use crate::ports::{AllocationRepository, DepositAddresses, ledger::Ledger};
+use crate::ports::{AllocationRepository, DepositAddresses, WithdrawalRepository, ledger::Ledger};
 
-/// One network's slice of a user's wallet — every figure non-negative.
-pub struct WalletNetwork {
-	pub network: Network,
+/// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
+/// non-negative; `total = available + invested + pending_withdrawal`.
+pub struct WalletBalance {
 	/// Free, spendable now (claim posted − reserved).
 	pub available: Usdt,
-	/// Locked by in-flight withdrawals (pending claim debits).
-	pub reserved: Usdt,
-	/// Staked in fund services (sum of the user's active allocations on this network).
-	pub allocated: Usdt,
-	/// `available + reserved + allocated` — the user's whole position on this network.
+	/// Staked in fund services (sum of the user's active stakes).
+	pub invested: Usdt,
+	/// Locked by queued/in-flight withdrawals (sum of their gross).
+	pub pending_withdrawal: Usdt,
+	/// `available + invested + pending_withdrawal` — the user's whole position.
 	pub total: Usdt,
-	/// Where to send USDT on this network (provisioned on first read).
-	pub deposit_address: Option<WalletAddress>,
-	/// Smallest gross withdrawal accepted on this network.
+}
+
+/// A deposit rail — where to send USDT (on a given chain) to top up the unified balance.
+pub struct DepositRail {
+	pub network: Network,
+	pub address: Option<WalletAddress>,
+}
+
+/// Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the user's
+/// whole available balance (a request beyond `instant` is accepted and queued until the
+/// rail is topped up); `instant` is the portion that ships without queueing —
+/// `min(available, rail liquidity)`. Note `instant` equals the rail's liquidity exactly
+/// when the user's available exceeds it, so it discloses that rail's liquidity up to the
+/// user's own balance — an inherent cost of the queue hint (bucket/round it below if that
+/// must stay private).
+pub struct NetworkWithdrawable {
+	pub network: Network,
+	pub withdrawable: Usdt,
+	pub instant: Usdt,
 	pub min_withdrawal: Usdt,
-	/// Flat fee retained on a withdrawal on this network.
 	pub withdrawal_fee: Usdt,
 }
 
 pub struct Wallet {
-	pub networks: Vec<WalletNetwork>,
+	pub balance: WalletBalance,
+	pub deposit_addresses: Vec<DepositRail>,
+	pub withdrawable: Vec<NetworkWithdrawable>,
 }
 
-/// The caller's wallet across every network: live balances, the allocated total, and
-/// a deposit address per network.
-pub async fn get_wallet(ledger: &dyn Ledger, allocations: &dyn AllocationRepository, deposit_addresses: &dyn DepositAddresses, user: UserId) -> Result<Wallet, DomainError> {
+/// The caller's wallet: the unified lifecycle balance, a deposit address per rail, and
+/// the per-rail withdrawable view.
+pub async fn get_wallet(
+	ledger: &dyn Ledger,
+	allocations: &dyn AllocationRepository,
+	withdrawals: &dyn WithdrawalRepository,
+	deposit_addresses: &dyn DepositAddresses,
+	user: UserId,
+) -> Result<Wallet, DomainError> {
+	// Layer 1 — the single unified claim.
+	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
+	let available = claim.available();
+
+	// invested = the user's active stakes (network-agnostic projection).
 	let user_allocations = allocations.list_by_user(user).await?;
-	let mut networks = Vec::with_capacity(Network::ALL.len());
+	let invested = user_allocations
+		.iter()
+		.filter(|a| a.state() == AllocationState::Active && matches!(a.kind(), AllocationKind::UserStake { .. }))
+		.try_fold(Usdt::ZERO, |acc, a| acc.checked_add(a.amount()))
+		.ok_or_else(|| DomainError::Repository("invested total overflow".into()))?;
+
+	// pending_withdrawal = the gross of queued/in-flight withdrawals (projection).
+	let user_withdrawals = withdrawals.list_by_user(user).await?;
+	let pending_withdrawal = user_withdrawals
+		.iter()
+		.filter(|w| matches!(w.state(), WithdrawalState::Queued | WithdrawalState::Processing))
+		.try_fold(Usdt::ZERO, |acc, w| acc.checked_add(w.amount()))
+		.ok_or_else(|| DomainError::Repository("pending withdrawal total overflow".into()))?;
+
+	let total = available
+		.checked_add(invested)
+		.and_then(|sum| sum.checked_add(pending_withdrawal))
+		.ok_or_else(|| DomainError::Repository("wallet total overflow".into()))?;
+
+	let balance = WalletBalance {
+		available,
+		invested,
+		pending_withdrawal,
+		total,
+	};
+
+	// Layer 2 — per-rail deposit addresses and withdrawable view.
+	let mut deposit_addresses_out = Vec::with_capacity(Network::ALL.len());
+	let mut withdrawable = Vec::with_capacity(Network::ALL.len());
 	for network in Network::ALL {
-		let balance = ledger.balance(&LedgerAccountKey::UserClaim(user, network)).await?;
-		let available = balance.available();
-		let reserved = balance.locked;
-		// Allocated = the user's active stakes on this network (revoked/other-kind excluded).
-		let allocated = user_allocations
-			.iter()
-			.filter(|a| a.network() == network && a.state() == AllocationState::Active && matches!(a.kind(), AllocationKind::UserStake { .. }))
-			.try_fold(Usdt::ZERO, |acc, a| acc.checked_add(a.amount()))
-			.ok_or_else(|| DomainError::Repository("allocated total overflow".into()))?;
-		let total = available
-			.checked_add(reserved)
-			.and_then(|sum| sum.checked_add(allocated))
-			.ok_or_else(|| DomainError::Repository("wallet total overflow".into()))?;
-		let deposit_address = Some(deposit_addresses.address(user, network).await?);
-		networks.push(WalletNetwork {
+		deposit_addresses_out.push(DepositRail {
 			network,
-			available,
-			reserved,
-			allocated,
-			total,
-			deposit_address,
+			address: Some(deposit_addresses.address(user, network).await?),
+		});
+		// `instant` = min(available, rail liquidity) — "this much ships without queueing".
+		// It reveals the rail's liquidity only up to the user's own balance (see the
+		// NetworkWithdrawable doc); bucket/round here if that disclosure must be avoided.
+		let rail_liquidity = ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted;
+		withdrawable.push(NetworkWithdrawable {
+			network,
+			withdrawable: available,
+			instant: available.min(rail_liquidity),
 			min_withdrawal: WithdrawalPolicy::minimum(network),
 			withdrawal_fee: WithdrawalPolicy::fee(network),
 		});
 	}
-	Ok(Wallet { networks })
+
+	Ok(Wallet {
+		balance,
+		deposit_addresses: deposit_addresses_out,
+		withdrawable,
+	})
 }
 
 /// The caller's deposit address on `network` (stable; derived once and reused).

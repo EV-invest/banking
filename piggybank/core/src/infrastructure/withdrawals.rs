@@ -121,6 +121,26 @@ impl WithdrawalRepository for PgWithdrawals {
 		Ok(())
 	}
 
+	async fn dispatch(&self, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		let row = sqlx::query_as::<_, WithdrawalRow>(SELECT_BY_ID_FOR_UPDATE)
+			.bind(id.raw())
+			.fetch_optional(&mut *tx)
+			.await
+			.map_err(repo_err)?;
+		let mut withdrawal = row
+			.ok_or_else(|| DomainError::NotFound {
+				entity: "withdrawal",
+				id: id.to_string(),
+			})?
+			.into_domain()?;
+		withdrawal.dispatch()?;
+		update_row(&mut tx, &withdrawal).await?;
+		outbox::drain_to_outbox(&mut tx, &mut withdrawal, true).await?;
+		tx.commit().await.map_err(repo_err)?;
+		Ok(withdrawal)
+	}
+
 	async fn settle(&self, id: WithdrawalId, tx_ref: TxRef) -> Result<Withdrawal, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let row = sqlx::query_as::<_, WithdrawalRow>(SELECT_BY_ID_FOR_UPDATE)
@@ -155,6 +175,26 @@ impl WithdrawalRepository for PgWithdrawals {
 			})?
 			.into_domain()?;
 		withdrawal.fail()?;
+		update_row(&mut tx, &withdrawal).await?;
+		outbox::drain_to_outbox(&mut tx, &mut withdrawal, true).await?;
+		tx.commit().await.map_err(repo_err)?;
+		Ok(withdrawal)
+	}
+
+	async fn cancel(&self, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		let row = sqlx::query_as::<_, WithdrawalRow>(SELECT_BY_ID_FOR_UPDATE)
+			.bind(id.raw())
+			.fetch_optional(&mut *tx)
+			.await
+			.map_err(repo_err)?;
+		let mut withdrawal = row
+			.ok_or_else(|| DomainError::NotFound {
+				entity: "withdrawal",
+				id: id.to_string(),
+			})?
+			.into_domain()?;
+		withdrawal.cancel()?;
 		update_row(&mut tx, &withdrawal).await?;
 		outbox::drain_to_outbox(&mut tx, &mut withdrawal, true).await?;
 		tx.commit().await.map_err(repo_err)?;

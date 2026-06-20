@@ -17,19 +17,34 @@ use uuid::Uuid;
 
 use crate::{infrastructure::outbox, ports::ledger::Ledger};
 
-/// Per-network slice of the fund's position — every figure TigerBeetle-authoritative.
-pub struct NetworkBalance {
+/// Per-rail on-chain liquidity (the treasury / Layer 2). TigerBeetle-authoritative.
+pub struct RailLiquidity {
 	pub network: Network,
-	/// Liquid on-chain USDT the fund holds in this network's wallet.
+	/// Liquid on-chain USDT the fund holds in this rail's custody wallet.
 	pub custody: Usdt,
-	/// The fund's own unallocated capital on this network.
-	pub fund_free: Usdt,
-	/// Held for users/services — `custody − fund_free` by the per-network invariant.
-	pub allocated: Usdt,
 }
 
-pub struct FundBalance {
-	pub networks: Vec<NetworkBalance>,
+/// The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
+/// Under the unified-claim model the invariant is **global** — `total_custody` (the
+/// asset side) equals the sum of all claims — so client liabilities are derived as the
+/// remainder beyond the fund's own capital and retained fees.
+pub struct Treasury {
+	/// Layer 2 — per-rail on-chain liquidity (USDT ledger).
+	pub rails: Vec<RailLiquidity>,
+	/// Mocked bank (USD) liquidity — a separate ledger, not 1:1 with USDT (off-ramp FX).
+	pub bank: Usdt,
+	/// Sum of per-rail custody — the asset side of the USDT ledger.
+	pub total_custody: Usdt,
+	/// Layer 1 — the fund's own unallocated capital.
+	pub fund_capital: Usdt,
+	/// Layer 1 — retained withdrawal-fee revenue.
+	pub fee_revenue: Usdt,
+	/// Layer 1 — claims owed to users + services (`total_custody − fund_capital −
+	/// fee_revenue`, by the global `sum(custody) == sum(claims)` invariant).
+	pub held_for_clients: Usdt,
+	/// Of `held_for_clients`, the amount reserved by queued/in-flight withdrawals (the
+	/// clearing account's pending balance).
+	pub reserved_for_withdrawals: Usdt,
 }
 
 /// Seed the company's own capital on `network` (`Dr WALLET / Cr FUND`). Admin-gated
@@ -79,24 +94,33 @@ pub async fn record_deposit(pool: &PgPool, relay: &Notify, tx_ref: TxRef, party:
 	relay.notify_one();
 	Ok(true)
 }
-/// The fund's balance, per network, read live from TigerBeetle (Read-First).
-pub async fn fund_balance(ledger: &dyn Ledger) -> Result<FundBalance, DomainError> {
-	let mut networks = Vec::with_capacity(Network::ALL.len());
+/// The treasury, read live from TigerBeetle (Read-First): per-rail liquidity plus the
+/// claims it backs.
+pub async fn treasury(ledger: &dyn Ledger) -> Result<Treasury, DomainError> {
+	let mut rails = Vec::with_capacity(Network::ALL.len());
+	let mut total_custody = Usdt::ZERO;
 	for network in Network::ALL {
 		let custody = ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted;
-		let fund_free = ledger.balance(&LedgerAccountKey::Fund(network)).await?.posted;
-		// sum(custody:N) == sum(claims:N) by construction, so what is held for
-		// users/services is exactly custody beyond the fund's own free capital.
-		// Saturating: a transient read skew yields 0, never a panic.
-		let allocated = custody.checked_sub(fund_free).unwrap_or(Usdt::ZERO);
-		networks.push(NetworkBalance {
-			network,
-			custody,
-			fund_free,
-			allocated,
-		});
+		total_custody = total_custody.checked_add(custody).ok_or_else(|| DomainError::Repository("custody total overflow".into()))?;
+		rails.push(RailLiquidity { network, custody });
 	}
-	Ok(FundBalance { networks })
+	let bank = ledger.balance(&LedgerAccountKey::BankCustody).await?.posted;
+	let fund_capital = ledger.balance(&LedgerAccountKey::Fund).await?.posted;
+	let fee_revenue = ledger.balance(&LedgerAccountKey::FeeRevenue).await?.posted;
+	let reserved_for_withdrawals = ledger.balance(&LedgerAccountKey::WithdrawalClearing).await?.pending;
+	// Global invariant sum(custody) == sum(claims): client liabilities are the custody
+	// beyond the fund's own capital and retained fees. Saturating — a transient read
+	// skew yields 0, never a panic.
+	let held_for_clients = total_custody.checked_sub(fund_capital).and_then(|r| r.checked_sub(fee_revenue)).unwrap_or(Usdt::ZERO);
+	Ok(Treasury {
+		rails,
+		bank,
+		total_custody,
+		fund_capital,
+		fee_revenue,
+		held_for_clients,
+		reserved_for_withdrawals,
+	})
 }
 fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())

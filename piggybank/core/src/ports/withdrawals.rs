@@ -18,19 +18,31 @@ use domain::{
 
 #[async_trait]
 pub trait WithdrawalRepository: Repository<Aggregate = Withdrawal> + Reader<Aggregate = Withdrawal> {
-	/// Persist a brand-new withdrawal and drain its `Requested` event — the relay
-	/// reserves the net + fee legs against the user's claim — atomically.
+	/// Persist a brand-new withdrawal and drain its events (`Requested`, plus
+	/// `Dispatched` when the rail was liquid at request time) atomically — the relay
+	/// reserves the gross against the user's claim into clearing, then broadcasts.
 	async fn open(&self, withdrawal: &mut Withdrawal) -> Result<(), DomainError>;
 
-	/// Settle a pending withdrawal (it has the required confirmations): apply
+	/// Dispatch a queued withdrawal whose rail now has liquidity (the treasury worker):
+	/// apply [`Withdrawal::dispatch`] under the row lock, persist + drain the
+	/// `Dispatched` event (the relay broadcasts). Idempotent; returns the aggregate.
+	async fn dispatch(&self, id: WithdrawalId) -> Result<Withdrawal, DomainError>;
+
+	/// Settle a processing withdrawal (it has the required confirmations): apply
 	/// [`Withdrawal::settle`] under the row lock, persist + drain the `Settled` event
-	/// (the relay posts the reservations). Idempotent; returns the current aggregate.
+	/// (the relay posts the reservation and moves the net out of custody). Idempotent;
+	/// returns the current aggregate.
 	async fn settle(&self, id: WithdrawalId, tx_ref: TxRef) -> Result<Withdrawal, DomainError>;
 
-	/// Fail a pending withdrawal (it never reached the chain): apply
+	/// Fail a processing withdrawal (it never reached the chain): apply
 	/// [`Withdrawal::fail`] under the row lock, persist + drain the `Failed` event (the
-	/// relay voids the reservations, refunding the user). Idempotent.
+	/// relay voids the reservation, refunding the user). Idempotent.
 	async fn fail(&self, id: WithdrawalId) -> Result<Withdrawal, DomainError>;
+
+	/// Cancel a still-queued withdrawal (user or admin): apply [`Withdrawal::cancel`]
+	/// under the row lock, persist + drain the `Cancelled` event (the relay voids the
+	/// reservation, refunding the user). Always safe — nothing was broadcast. Idempotent.
+	async fn cancel(&self, id: WithdrawalId) -> Result<Withdrawal, DomainError>;
 
 	/// Load a withdrawal by id (no lock; for queries).
 	async fn find_by_id(&self, id: WithdrawalId) -> Result<Option<Withdrawal>, DomainError>;

@@ -8,30 +8,29 @@ use domain::{
 	allocations::{Allocation, AllocationId},
 	balance::{LedgerAccountKey, ServiceId},
 	error::DomainError,
-	money::{Network, Usdt},
+	money::Usdt,
 	users::UserId,
 };
 use tokio::sync::Notify;
 
 use crate::ports::{AllocationRepository, ledger::Ledger};
 
-/// A user directs `amount` of their network claim at `service`. Read-First confirms
-/// the claim covers it (the TB `DebitsMustNotExceedCredits` flag is the backstop),
-/// then records the allocation; the relay moves `USER → SERVICE`.
+/// A user directs `amount` of their (unified) claim at `service`. Read-First confirms
+/// the available balance covers it (the TB `DebitsMustNotExceedCredits` flag is the
+/// backstop), then records the allocation; the relay moves `USER → SERVICE`.
 pub async fn allocate_user_stake(
 	allocations: &dyn AllocationRepository,
 	ledger: &dyn Ledger,
 	relay: &Notify,
 	user: UserId,
 	service: ServiceId,
-	network: Network,
 	amount: Usdt,
 ) -> Result<Allocation, DomainError> {
-	let balance = ledger.balance(&LedgerAccountKey::UserClaim(user, network)).await?;
-	if balance.posted < amount {
+	let balance = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
+	if balance.available() < amount {
 		return Err(DomainError::Validation("insufficient balance to allocate".into()));
 	}
-	let mut allocation = Allocation::open_user_stake(AllocationId::new(), user, service, network, amount)?;
+	let mut allocation = Allocation::open_user_stake(AllocationId::new(), user, service, amount)?;
 	allocations.open(&mut allocation).await?;
 	relay.notify_one();
 	Ok(allocation)

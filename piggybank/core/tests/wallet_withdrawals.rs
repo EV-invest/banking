@@ -15,6 +15,7 @@ use domain::{
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
+	withdrawals::WithdrawalState,
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
@@ -114,8 +115,8 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	let network = Network::Bep20;
-	let claim = LedgerAccountKey::UserClaim(user, network);
-	let fee_account = LedgerAccountKey::FeeRevenue(network);
+	let claim = LedgerAccountKey::UserClaim(user);
+	let fee_account = LedgerAccountKey::FeeRevenue;
 
 	deposit(&h, user, network, "100").await;
 	let fee_before = bal(&h, &fee_account).await.posted;
@@ -150,7 +151,9 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 	let settled = bal(&h, &claim).await;
 	assert_eq!(settled.posted, usdt("50"), "the gross left the user's claim");
 	assert_eq!(settled.locked, Usdt::ZERO, "nothing remains reserved");
-	assert_eq!(bal(&h, &fee_account).await.posted.checked_sub(fee_before).unwrap(), usdt("1"), "the fee was retained");
+	// FeeRevenue is now a network-agnostic singleton shared across (parallel) tests, so
+	// assert this withdrawal credited *at least* its fee — concurrent tests only add more.
+	assert!(bal(&h, &fee_account).await.posted.checked_sub(fee_before).unwrap() >= usdt("1"), "the fee was retained");
 }
 
 #[tokio::test]
@@ -158,7 +161,7 @@ async fn withdraw_fail_voids_and_refunds_in_full() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	let network = Network::Trc20;
-	let claim = LedgerAccountKey::UserClaim(user, network);
+	let claim = LedgerAccountKey::UserClaim(user);
 
 	deposit(&h, user, network, "100").await;
 
@@ -254,6 +257,87 @@ async fn a_disabled_user_cannot_withdraw() {
 	.await
 	.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(_)), "a disabled account is forbidden from withdrawing, got {err:?}");
+}
+
+#[tokio::test]
+async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let claim = LedgerAccountKey::UserClaim(user);
+	// 1e9 USDT dwarfs any liquidity the shared TON rail accumulates across tests, so the
+	// short-rail (queue) path is deterministic regardless of test interleaving.
+	let big = usdt("1000000000");
+
+	// Fund the user's unified claim via BEP20; the TON rail cannot possibly cover 1e9.
+	deposit(&h, user, Network::Bep20, "1000000000").await;
+
+	// Withdraw on TON: the user is solvent but the TON rail is short, so the withdrawal
+	// is accepted and QUEUED (accept-and-queue), not refused.
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&h.notify,
+		user,
+		Network::Ton,
+		destination(Network::Ton),
+		big,
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "a short rail queues, it does not refuse");
+	h.relay.drain().await;
+	assert_eq!(bal(&h, &claim).await.locked, big, "the gross is reserved while queued");
+
+	// The treasury tops up the TON rail past the net; the worker then dispatches it.
+	balance_app::seed_fund_capital(&h.pool, &h.notify, Network::Ton, big).await.unwrap();
+	h.relay.drain().await;
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
+	assert_eq!(dispatched.state(), WithdrawalState::Processing, "a funded rail dispatches");
+	h.relay.drain().await;
+
+	// Settle it — the gross leaves the claim (fresh user, so deterministic).
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	let settled = bal(&h, &claim).await;
+	assert_eq!(settled.posted, Usdt::ZERO, "the gross left the claim after settle");
+	assert_eq!(settled.locked, Usdt::ZERO, "nothing remains reserved");
+}
+
+#[tokio::test]
+async fn a_queued_withdrawal_can_be_cancelled_and_refunds() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let claim = LedgerAccountKey::UserClaim(user);
+	let big = usdt("1000000000");
+	deposit(&h, user, Network::Bep20, "1000000000").await;
+
+	// Withdraw on the TRC20 rail, which cannot cover 1e9 → queued (no test seeds TRC20).
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&h.notify,
+		user,
+		Network::Trc20,
+		destination(Network::Trc20),
+		big,
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+	assert_eq!(bal(&h, &claim).await.locked, big);
+
+	// The user cancels the queued withdrawal — full refund, nothing was broadcast.
+	let cancelled = withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), user).await.unwrap();
+	assert_eq!(cancelled.state(), WithdrawalState::Cancelled);
+	h.relay.drain().await;
+	let refunded = bal(&h, &claim).await;
+	assert_eq!(refunded.locked, Usdt::ZERO, "nothing remains reserved");
+	assert_eq!(refunded.available(), big, "the full balance is spendable again");
 }
 
 #[tokio::test]

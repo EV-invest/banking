@@ -23,6 +23,7 @@ use domain::{
 	allocations::{AllocationEvent, AllocationKind},
 	balance::{LedgerAccountKey, LedgerEvent, TransferCode},
 	money::Usdt,
+	users::UserId,
 	withdrawals::WithdrawalEvent,
 };
 use sqlx::PgPool;
@@ -39,15 +40,21 @@ use crate::{
 };
 
 /// Distinct salts deriving a withdrawal's deterministic TigerBeetle transfer ids from
-/// the (stable) withdrawal id — the two reservation legs, their settle (post)
-/// completions, and their fail (void) completions. A completion references the
-/// matching reservation leg's id as its `pending_id`.
-const WALLET_LEG: &[u8] = b"withdraw:wallet";
-const FEE_LEG: &[u8] = b"withdraw:fee";
-const WALLET_SETTLE: &[u8] = b"withdraw:wallet:settle";
-const FEE_SETTLE: &[u8] = b"withdraw:fee:settle";
-const WALLET_VOID: &[u8] = b"withdraw:wallet:void";
-const FEE_VOID: &[u8] = b"withdraw:fee:void";
+/// the (stable) withdrawal id. The reservation locks the gross against the user's claim
+/// into clearing; settle posts that pending and redistributes the net to the rail's
+/// custody and the fee to fee-revenue; fail/cancel void the pending (refund). A
+/// completion references the reservation's id as its `pending_id`.
+const CLEARING_RESERVE: &[u8] = b"withdraw:clearing";
+const CLEARING_SETTLE: &[u8] = b"withdraw:clearing:settle";
+const WALLET_REDISTRIBUTE: &[u8] = b"withdraw:wallet";
+const FEE_REDISTRIBUTE: &[u8] = b"withdraw:fee";
+const CLEARING_VOID_FAIL: &[u8] = b"withdraw:clearing:void:fail";
+const CLEARING_VOID_CANCEL: &[u8] = b"withdraw:clearing:void:cancel";
+
+/// Bound on consecutive `RetryBounded` attempts before a never-resolving retryable (a
+/// completion whose pending was itself parked, so it can never be found) is parked
+/// rather than wedging the single-worker queue forever.
+const MAX_RETRYABLE_ATTEMPTS: i32 = 25;
 
 /// The relay task: drains the outbox to the ledger + custody. Cloneable handles
 /// (`pool`, `ledger`, `custody`, `notify`) so command handlers can `notify` it to
@@ -106,9 +113,23 @@ impl Relay {
 						advanced = true;
 					}
 					Outcome::Retry(reason) => {
-						warn!(seq = row.seq, "relay: transient failure, retrying from here: {reason}");
+						warn!(seq = row.seq, "relay: transient failure (unbounded), retrying from here: {reason}");
 						let _ = outbox::record_failure(&self.pool, row.seq, &reason).await;
 						return true;
+					}
+					Outcome::RetryBounded(reason) => {
+						let _ = outbox::record_failure(&self.pool, row.seq, &reason).await;
+						// A retryable that can never resolve (a completion whose pending was
+						// itself parked, so it is never found) must not wedge the single-worker
+						// queue forever — park it after a bound so later events keep flowing.
+						if row.attempts + 1 >= MAX_RETRYABLE_ATTEMPTS {
+							error!(seq = row.seq, event_id = %row.event_id, attempts = row.attempts + 1, "relay: parking retryable after bound (wedge guard): {reason}");
+							let _ = outbox::mark_dispatched(&self.pool, row.seq).await;
+							advanced = true;
+						} else {
+							warn!(seq = row.seq, attempts = row.attempts + 1, "relay: retryable, retrying from here: {reason}");
+							return true;
+						}
 					}
 				}
 			}
@@ -123,6 +144,27 @@ impl Relay {
 			Ok(ops) => ops,
 			Err(reason) => return Outcome::Park(format!("unplannable event: {reason}")),
 		};
+		// A withdrawal settle disburses the net out of a rail's custody (`Cr wallet:<net>`,
+		// the rail-liquidity backstop). The relay is single-worker and sequential, so a
+		// Read-First check here guarantees that op cannot fail with InsufficientFunds *after*
+		// the clearing pending has already been posted — which would debit the user with the
+		// gross stranded in clearing and no compensating path. A short rail parks the settle
+		// atomically (nothing applied); a top-up + reconciliation recovers it.
+		for op in &ops {
+			if op.role == "withdraw_disburse" {
+				if let LedgerAction::Post(transfer) = &op.action {
+					match self.ledger.balance(&transfer.credit).await {
+						Ok(balance) if balance.posted < transfer.amount => {
+							return Outcome::Park(format!("rail {} liquidity insufficient at settle", transfer.credit.logical_key()));
+						}
+						Ok(_) => {}
+						Err(LedgerError::Unavailable(err)) => return Outcome::Retry(err),
+						Err(LedgerError::Retryable(err)) => return Outcome::RetryBounded(err),
+						Err(err) => return Outcome::Park(format!("settle rail check: {err}")),
+					}
+				}
+			}
+		}
 		for (leg, op) in ops.iter().enumerate() {
 			let result = match &op.action {
 				LedgerAction::Post(transfer) => self.ledger.post(transfer).await,
@@ -137,7 +179,8 @@ impl Relay {
 						let _ = record_saga_step(&self.pool, row.event_id, leg as i32, op.role, op.transfer_id).await;
 					}
 				}
-				Err(LedgerError::Unavailable(err)) | Err(LedgerError::Retryable(err)) => return Outcome::Retry(err),
+				Err(LedgerError::Unavailable(err)) => return Outcome::Retry(err),
+				Err(LedgerError::Retryable(err)) => return Outcome::RetryBounded(err),
 				Err(LedgerError::InsufficientFunds) => return Outcome::Park("insufficient funds".into()),
 				Err(LedgerError::Conflict(err)) => return Outcome::Park(format!("ledger conflict: {err}")),
 			}
@@ -157,9 +200,13 @@ fn custody_to_ledger(err: CustodyError) -> LedgerError {
 
 enum Outcome {
 	Done,
-	/// Transient — stop and retry from this `seq` (TB/custody unreachable, or a
-	/// pending not yet visible).
+	/// Transient infra outage (TB/custody unreachable) — stop and retry from this `seq`
+	/// **unbounded** (it resolves when the dependency recovers).
 	Retry(String),
+	/// A retryable ledger state (a pending not yet visible) — retry from this `seq`, but
+	/// **bounded**: a pending that can never appear (its reserve was itself parked) must
+	/// not wedge the single-worker queue forever, so park after `MAX_RETRYABLE_ATTEMPTS`.
+	RetryBounded(String),
 	/// Terminal for this event — advance past it with a loud log (a discrepancy
 	/// reconciliation will catch; auto-compensation is a follow-up).
 	Park(String),
@@ -210,7 +257,7 @@ fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> Planned
 			action: LedgerAction::Post(LedgerTransfer {
 				id: event_tid,
 				debit: LedgerAccountKey::CryptoWallet(network),
-				credit: party.claim_key(network),
+				credit: party.claim_key(),
 				amount,
 				code: TransferCode::Deposit,
 				reference,
@@ -222,7 +269,7 @@ fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> Planned
 			action: LedgerAction::Post(LedgerTransfer {
 				id: event_tid,
 				debit: LedgerAccountKey::CryptoWallet(network),
-				credit: LedgerAccountKey::Fund(network),
+				credit: LedgerAccountKey::Fund,
 				amount,
 				code: TransferCode::SeedCapital,
 				reference,
@@ -233,14 +280,14 @@ fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> Planned
 
 fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, reference: u128) -> PlannedOp {
 	match event {
-		AllocationEvent::Opened { amount, network, kind, .. } => match kind {
+		AllocationEvent::Opened { amount, kind, .. } => match kind {
 			AllocationKind::UserStake { user, service } => PlannedOp {
 				role: "allocate",
 				transfer_id: event_tid,
 				action: LedgerAction::Post(LedgerTransfer {
 					id: event_tid,
-					debit: LedgerAccountKey::UserClaim(user, network),
-					credit: LedgerAccountKey::ServiceClaim(service, network),
+					debit: LedgerAccountKey::UserClaim(user),
+					credit: LedgerAccountKey::ServiceClaim(service),
 					amount,
 					code: TransferCode::UserAllocate,
 					reference,
@@ -251,8 +298,8 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 				transfer_id: pending_tid,
 				action: LedgerAction::Reserve(LedgerTransfer {
 					id: pending_tid,
-					debit: LedgerAccountKey::Fund(network),
-					credit: LedgerAccountKey::ServiceClaim(service, network),
+					debit: LedgerAccountKey::Fund,
+					credit: LedgerAccountKey::ServiceClaim(service),
 					amount,
 					code: TransferCode::ServiceReserve,
 					reference,
@@ -263,49 +310,49 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 				transfer_id: event_tid,
 				action: LedgerAction::Post(LedgerTransfer {
 					id: event_tid,
-					debit: LedgerAccountKey::Fund(network),
-					credit: LedgerAccountKey::ServiceClaim(service, network),
+					debit: LedgerAccountKey::Fund,
+					credit: LedgerAccountKey::ServiceClaim(service),
 					amount,
 					code: TransferCode::ServiceTransfer,
 					reference,
 				}),
 			},
 		},
-		AllocationEvent::Revoked { amount, network, user, service, .. } => PlannedOp {
+		AllocationEvent::Revoked { amount, user, service, .. } => PlannedOp {
 			role: "revoke",
 			transfer_id: event_tid,
 			action: LedgerAction::Post(LedgerTransfer {
 				id: event_tid,
-				debit: LedgerAccountKey::ServiceClaim(service, network),
-				credit: LedgerAccountKey::UserClaim(user, network),
+				debit: LedgerAccountKey::ServiceClaim(service),
+				credit: LedgerAccountKey::UserClaim(user),
 				amount,
 				code: TransferCode::UserRevoke,
 				reference,
 			}),
 		},
-		AllocationEvent::Settled { amount, network, service, .. } => PlannedOp {
+		AllocationEvent::Settled { amount, service, .. } => PlannedOp {
 			role: "settle",
 			transfer_id: event_tid,
 			action: LedgerAction::Complete(PendingCompletion {
 				id: event_tid,
 				pending_id: pending_tid,
 				kind: CompletionKind::Post,
-				debit: LedgerAccountKey::Fund(network),
-				credit: LedgerAccountKey::ServiceClaim(service, network),
+				debit: LedgerAccountKey::Fund,
+				credit: LedgerAccountKey::ServiceClaim(service),
 				amount,
 				code: TransferCode::ServiceSettle,
 				reference,
 			}),
 		},
-		AllocationEvent::Cancelled { amount, network, service, .. } => PlannedOp {
+		AllocationEvent::Cancelled { amount, service, .. } => PlannedOp {
 			role: "cancel",
 			transfer_id: event_tid,
 			action: LedgerAction::Complete(PendingCompletion {
 				id: event_tid,
 				pending_id: pending_tid,
 				kind: CompletionKind::Void,
-				debit: LedgerAccountKey::Fund(network),
-				credit: LedgerAccountKey::ServiceClaim(service, network),
+				debit: LedgerAccountKey::Fund,
+				credit: LedgerAccountKey::ServiceClaim(service),
 				amount,
 				code: TransferCode::ServiceCancel,
 				reference,
@@ -314,50 +361,31 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 	}
 }
 
-/// A withdrawal maps to two reserved legs — the on-chain net (`Dr user / Cr wallet`)
-/// and the retained fee (`Dr user / Cr fee`) — plus the custody broadcast on request;
-/// posts on settle and voids (refund) on fail. The fee leg is omitted when the fee is
-/// zero (TB rejects a zero-amount transfer).
+/// A withdrawal's saga in the ledger:
+/// - **Requested** → reserve the gross as a pending `Dr user / Cr clearing` (no rail
+///   touched, so acceptance never depends on rail liquidity).
+/// - **Dispatched** → broadcast the net to custody (idempotent by withdrawal id).
+/// - **Settled** → post the clearing pending, then move net→`wallet:<net>` and (when
+///   non-zero) fee→`fee`. The `Cr wallet:<net>` is where rail liquidity is finally
+///   checked by the non-negative flag.
+/// - **Failed/Cancelled** → void the clearing pending, refunding the user in full.
 fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) -> Vec<PlannedOp> {
 	match event {
-		WithdrawalEvent::Requested {
-			user,
-			network,
-			address,
-			amount,
-			fee,
-			..
-		} => {
+		WithdrawalEvent::Requested { user, amount, .. } => vec![PlannedOp {
+			role: "withdraw_reserve",
+			transfer_id: tid(aggregate_id, CLEARING_RESERVE),
+			action: LedgerAction::Reserve(LedgerTransfer {
+				id: tid(aggregate_id, CLEARING_RESERVE),
+				debit: LedgerAccountKey::UserClaim(user),
+				credit: LedgerAccountKey::WithdrawalClearing,
+				amount,
+				code: TransferCode::Withdraw,
+				reference,
+			}),
+		}],
+		WithdrawalEvent::Dispatched { network, address, amount, fee, .. } => {
 			let net = amount.checked_sub(fee).unwrap_or(Usdt::ZERO);
-			let mut ops = vec![PlannedOp {
-				role: "withdraw_reserve",
-				transfer_id: tid(aggregate_id, WALLET_LEG),
-				action: LedgerAction::Reserve(LedgerTransfer {
-					id: tid(aggregate_id, WALLET_LEG),
-					debit: LedgerAccountKey::UserClaim(user, network),
-					credit: LedgerAccountKey::CryptoWallet(network),
-					amount: net,
-					code: TransferCode::Withdraw,
-					reference,
-				}),
-			}];
-			if !fee.is_zero() {
-				ops.push(PlannedOp {
-					role: "withdraw_fee_reserve",
-					transfer_id: tid(aggregate_id, FEE_LEG),
-					action: LedgerAction::Reserve(LedgerTransfer {
-						id: tid(aggregate_id, FEE_LEG),
-						debit: LedgerAccountKey::UserClaim(user, network),
-						credit: LedgerAccountKey::FeeRevenue(network),
-						amount: fee,
-						code: TransferCode::WithdrawFee,
-						reference,
-					}),
-				});
-			}
-			// Reserve-before-broadcast (Vec order): the funds are locked before custody
-			// is asked to send. Idempotent by withdrawal id on a relay retry.
-			ops.push(PlannedOp {
+			vec![PlannedOp {
 				role: "withdraw_broadcast",
 				transfer_id: 0,
 				action: LedgerAction::Broadcast(BroadcastRequest {
@@ -366,69 +394,49 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 					address,
 					amount: net,
 				}),
-			});
-			ops
+			}]
 		}
 		WithdrawalEvent::Settled { user, network, amount, fee, .. } => {
 			let net = amount.checked_sub(fee).unwrap_or(Usdt::ZERO);
-			let mut ops = vec![PlannedOp {
-				role: "withdraw_settle",
-				transfer_id: tid(aggregate_id, WALLET_SETTLE),
-				action: LedgerAction::Complete(PendingCompletion {
-					id: tid(aggregate_id, WALLET_SETTLE),
-					pending_id: tid(aggregate_id, WALLET_LEG),
-					kind: CompletionKind::Post,
-					debit: LedgerAccountKey::UserClaim(user, network),
-					credit: LedgerAccountKey::CryptoWallet(network),
-					amount: net,
-					code: TransferCode::Withdraw,
-					reference,
-				}),
-			}];
-			if !fee.is_zero() {
-				ops.push(PlannedOp {
-					role: "withdraw_fee_settle",
-					transfer_id: tid(aggregate_id, FEE_SETTLE),
+			// Post the clearing reservation, then disburse: net leaves the rail's custody,
+			// the fee is retained. The Vec order matters — the post must land before the
+			// disbursements debit the now-posted clearing balance.
+			let mut ops = vec![
+				PlannedOp {
+					role: "withdraw_settle",
+					transfer_id: tid(aggregate_id, CLEARING_SETTLE),
 					action: LedgerAction::Complete(PendingCompletion {
-						id: tid(aggregate_id, FEE_SETTLE),
-						pending_id: tid(aggregate_id, FEE_LEG),
+						id: tid(aggregate_id, CLEARING_SETTLE),
+						pending_id: tid(aggregate_id, CLEARING_RESERVE),
 						kind: CompletionKind::Post,
-						debit: LedgerAccountKey::UserClaim(user, network),
-						credit: LedgerAccountKey::FeeRevenue(network),
-						amount: fee,
-						code: TransferCode::WithdrawFee,
+						debit: LedgerAccountKey::UserClaim(user),
+						credit: LedgerAccountKey::WithdrawalClearing,
+						amount,
+						code: TransferCode::Withdraw,
 						reference,
 					}),
-				});
-			}
-			ops
-		}
-		WithdrawalEvent::Failed { user, network, amount, fee, .. } => {
-			let net = amount.checked_sub(fee).unwrap_or(Usdt::ZERO);
-			let mut ops = vec![PlannedOp {
-				role: "withdraw_void",
-				transfer_id: tid(aggregate_id, WALLET_VOID),
-				action: LedgerAction::Complete(PendingCompletion {
-					id: tid(aggregate_id, WALLET_VOID),
-					pending_id: tid(aggregate_id, WALLET_LEG),
-					kind: CompletionKind::Void,
-					debit: LedgerAccountKey::UserClaim(user, network),
-					credit: LedgerAccountKey::CryptoWallet(network),
-					amount: net,
-					code: TransferCode::Withdraw,
-					reference,
-				}),
-			}];
+				},
+				PlannedOp {
+					role: "withdraw_disburse",
+					transfer_id: tid(aggregate_id, WALLET_REDISTRIBUTE),
+					action: LedgerAction::Post(LedgerTransfer {
+						id: tid(aggregate_id, WALLET_REDISTRIBUTE),
+						debit: LedgerAccountKey::WithdrawalClearing,
+						credit: LedgerAccountKey::CryptoWallet(network),
+						amount: net,
+						code: TransferCode::Withdraw,
+						reference,
+					}),
+				},
+			];
 			if !fee.is_zero() {
 				ops.push(PlannedOp {
-					role: "withdraw_fee_void",
-					transfer_id: tid(aggregate_id, FEE_VOID),
-					action: LedgerAction::Complete(PendingCompletion {
-						id: tid(aggregate_id, FEE_VOID),
-						pending_id: tid(aggregate_id, FEE_LEG),
-						kind: CompletionKind::Void,
-						debit: LedgerAccountKey::UserClaim(user, network),
-						credit: LedgerAccountKey::FeeRevenue(network),
+					role: "withdraw_fee",
+					transfer_id: tid(aggregate_id, FEE_REDISTRIBUTE),
+					action: LedgerAction::Post(LedgerTransfer {
+						id: tid(aggregate_id, FEE_REDISTRIBUTE),
+						debit: LedgerAccountKey::WithdrawalClearing,
+						credit: LedgerAccountKey::FeeRevenue,
 						amount: fee,
 						code: TransferCode::WithdrawFee,
 						reference,
@@ -437,6 +445,27 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 			}
 			ops
 		}
+		WithdrawalEvent::Failed { user, amount, .. } => vec![void_clearing(aggregate_id, user, amount, reference, CLEARING_VOID_FAIL)],
+		WithdrawalEvent::Cancelled { user, amount, .. } => vec![void_clearing(aggregate_id, user, amount, reference, CLEARING_VOID_CANCEL)],
+	}
+}
+
+/// Void the clearing reservation (full refund) — shared by fail and cancel, which only
+/// differ by the completion's deterministic id salt (a withdrawal reaches at most one).
+fn void_clearing(aggregate_id: Uuid, user: UserId, amount: Usdt, reference: u128, salt: &[u8]) -> PlannedOp {
+	PlannedOp {
+		role: "withdraw_void",
+		transfer_id: tid(aggregate_id, salt),
+		action: LedgerAction::Complete(PendingCompletion {
+			id: tid(aggregate_id, salt),
+			pending_id: tid(aggregate_id, CLEARING_RESERVE),
+			kind: CompletionKind::Void,
+			debit: LedgerAccountKey::UserClaim(user),
+			credit: LedgerAccountKey::WithdrawalClearing,
+			amount,
+			code: TransferCode::Withdraw,
+			reference,
+		}),
 	}
 }
 

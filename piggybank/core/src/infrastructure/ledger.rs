@@ -238,16 +238,18 @@ impl Ledger for TbLedger {
 	}
 }
 
-/// Ensure the fund's singleton accounts exist at boot: a custody wallet and a fund-
-/// capital claim per network, plus the mocked bank custody. Per-user/-service claim
+/// Ensure the fund's singleton accounts exist at boot: a custody wallet per network
+/// (the per-rail treasury), plus the network-agnostic fund-capital, fee-revenue and
+/// withdrawal-clearing claims and the mocked bank custody. Per-user/-service claim
 /// accounts are created lazily on first transfer.
 pub async fn seed_singletons(ledger: &dyn Ledger) -> Result<(), LedgerError> {
 	use domain::money::Network;
 	for network in Network::ALL {
 		ledger.ensure_account(&LedgerAccountKey::CryptoWallet(network)).await?;
-		ledger.ensure_account(&LedgerAccountKey::Fund(network)).await?;
-		ledger.ensure_account(&LedgerAccountKey::FeeRevenue(network)).await?;
 	}
+	ledger.ensure_account(&LedgerAccountKey::Fund).await?;
+	ledger.ensure_account(&LedgerAccountKey::FeeRevenue).await?;
+	ledger.ensure_account(&LedgerAccountKey::WithdrawalClearing).await?;
 	ledger.ensure_account(&LedgerAccountKey::BankCustody).await?;
 	Ok(())
 }
