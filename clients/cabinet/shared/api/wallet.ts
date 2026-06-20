@@ -23,6 +23,7 @@ interface WalletClient extends grpc.Client {
   GetWallet(req: Record<string, never>, meta: grpc.Metadata, cb: Cb<Wallet>): void;
   GetDepositAddress(req: { network: string }, meta: grpc.Metadata, cb: Cb<DepositAddress>): void;
   RequestWithdrawal(req: { network: string; address: string; amount: string }, meta: grpc.Metadata, cb: Cb<Withdrawal>): void;
+  CancelWithdrawal(req: { withdrawal_id: string }, meta: grpc.Metadata, cb: Cb<Withdrawal>): void;
   ListWithdrawals(req: Record<string, never>, meta: grpc.Metadata, cb: Cb<WithdrawalList>): void;
 }
 
@@ -59,7 +60,7 @@ function call<T>(invoke: (cb: Cb<T>) => void): Promise<T> {
   });
 }
 
-/** The caller's wallet — per-network balances + deposit addresses. */
+/** The caller's wallet — one unified lifecycle balance, deposit rails, per-rail withdraw options. */
 export function getWallet(token: string): Promise<Wallet> {
   return call((cb) => walletClient().GetWallet({}, bearer(token), cb));
 }
@@ -72,6 +73,11 @@ export function getDepositAddress(token: string, network: string): Promise<Depos
 /** Open a withdrawal of free balance to an external address (two-phase saga). */
 export function requestWithdrawal(token: string, body: { network: string; address: string; amount: string }): Promise<Withdrawal> {
   return call((cb) => walletClient().RequestWithdrawal(body, bearer(token), cb));
+}
+
+/** Cancel one of the caller's still-queued withdrawals (refund). */
+export function cancelWithdrawal(token: string, withdrawalId: string): Promise<Withdrawal> {
+  return call((cb) => walletClient().CancelWithdrawal({ withdrawal_id: withdrawalId }, bearer(token), cb));
 }
 
 /** The caller's withdrawals, newest first. */

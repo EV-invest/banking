@@ -34,3 +34,14 @@ export async function submitWithdrawal(body: { network: string; address: string;
   if (!res.ok) throw new Error(data.error ?? `withdrawal failed (${res.status})`);
   return data;
 }
+
+export async function cancelWithdrawal(withdrawalId: string): Promise<Withdrawal> {
+  const res = await fetch("/api/wallet/withdrawals/cancel", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...csrfHeader() },
+    body: JSON.stringify({ withdrawal_id: withdrawalId }),
+  });
+  const data = (await res.json().catch(() => ({}))) as Withdrawal & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `cancel failed (${res.status})`);
+  return data;
+}

@@ -1,23 +1,20 @@
 "use client";
 
-import { ArrowDownToLine, ArrowUpFromLine, Check, Clock, Copy, Loader2, TriangleAlert, Wallet as WalletIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDownToLine, ArrowUpFromLine, Check, Clock, Copy, Loader2, TriangleAlert, Wallet as WalletIcon, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, CardHeader, CardTitle, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@evinvest/uikit";
 
-import { fetchDepositAddress, fetchWallet, fetchWithdrawals, submitWithdrawal } from "@/entities/wallet/api/wallet-client";
-import type { DepositAddress, Wallet, WalletNetwork, Withdrawal } from "@/shared/contracts";
+import { cancelWithdrawal, fetchDepositAddress, fetchWallet, fetchWithdrawals, submitWithdrawal } from "@/entities/wallet/api/wallet-client";
+import type { DepositAddress, NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
-import { formatUsdt, NETWORKS, networkLabel, shortAddress } from "@/views/wallet/lib/format";
+import { formatUsdt, fromBaseUnits, NETWORKS, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
-function sum(wallet: Wallet | null, pick: (n: WalletNetwork) => string | undefined): number {
-  return (wallet?.networks ?? []).reduce((acc, n) => acc + Number(pick(n) ?? 0), 0);
-}
-
-function networkOf(wallet: Wallet | null, network: string): WalletNetwork | undefined {
-  return (wallet?.networks ?? []).find((n) => n.network === network);
+// Per-rail withdraw options for the selected network (fee, min, instant liquidity).
+function withdrawableFor(wallet: Wallet | null, network: string): NetworkWithdrawable | undefined {
+  return (wallet?.withdrawable ?? []).find((w) => w.network === network);
 }
 
 export function WalletView() {
@@ -35,15 +32,14 @@ export function WalletView() {
 
   useEffect(load, [load]);
 
-  const total = useMemo(() => formatUsdt(String(sum(wallet, (n) => n.total))), [wallet]);
-  const available = useMemo(() => formatUsdt(String(sum(wallet, (n) => n.available))), [wallet]);
+  const balance = wallet?.balance;
 
   return (
     <div className="container max-w-5xl space-y-8 py-12">
       <header className="space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">Wallet</p>
         <h1 className="text-3xl font-semibold">Your USDT</h1>
-        <p className="text-sm text-muted-foreground">Balances across BEP20, TRC20 and TON — read live from the ledger.</p>
+        <p className="text-sm text-muted-foreground">One balance — networks are just how you deposit and withdraw.</p>
       </header>
 
       {error && (
@@ -55,27 +51,29 @@ export function WalletView() {
       )}
 
       <Card>
-        <CardContent className="flex flex-wrap items-end justify-between gap-6 pt-6">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total balance</p>
-            {wallet ? <p className="text-4xl font-semibold tabular-nums">{total} USDT</p> : <Skeleton className="h-10 w-48" />}
-            <p className="text-sm text-muted-foreground">{wallet ? `${available} USDT available` : "—"}</p>
+        <CardContent className="space-y-6 pt-6">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Total balance</p>
+              {balance ? <p className="text-4xl font-semibold tabular-nums">{formatUsdt(balance.total)} USDT</p> : <Skeleton className="h-10 w-48" />}
+            </div>
+            <WalletIcon className="size-10 text-main-accent-t1/60" />
           </div>
-          <WalletIcon className="size-10 text-main-accent-t1/60" />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Stat label="Available" value={balance?.available} loading={!balance} emphasis />
+            <Stat label="Invested" value={balance?.invested} loading={!balance} />
+            <Stat label="Pending withdrawal" value={balance?.pending_withdrawal} loading={!balance} />
+          </div>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue="deposit">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="deposit">Deposit</TabsTrigger>
           <TabsTrigger value="withdraw">Withdraw</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="pt-6">
-          <Overview wallet={wallet} />
-        </TabsContent>
         <TabsContent value="deposit" className="pt-6">
           <DepositPanel />
         </TabsContent>
@@ -90,45 +88,17 @@ export function WalletView() {
   );
 }
 
-function Overview({ wallet }: { wallet: Wallet | null }) {
-  if (!wallet) {
-    return (
-      <div className="grid gap-4 sm:grid-cols-3">
-        {NETWORKS.map((n) => (
-          <Skeleton key={n} className="h-40 w-full" />
-        ))}
-      </div>
-    );
-  }
+function Stat({ label, value, loading, emphasis }: { label: string; value: string | undefined; loading?: boolean; emphasis?: boolean }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
-      {NETWORKS.map((network) => {
-        const slice = networkOf(wallet, network);
-        return (
-          <Card key={network}>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between text-base">
-                <span>{networkLabel(network)}</span>
-                <span className="font-mono-tech text-xs text-muted-foreground">USDT</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Stat label="Available" value={slice?.available} emphasis />
-              <Stat label="Reserved" value={slice?.reserved} />
-              <Stat label="Allocated" value={slice?.allocated} />
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-function Stat({ label, value, emphasis }: { label: string; value: string | undefined; emphasis?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className={cn("tabular-nums", emphasis ? "text-lg font-semibold" : "text-sm text-muted-foreground")}>{formatUsdt(value)}</span>
+    <div className="rounded-lg border border-border bg-main-surface p-4">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      {loading ? (
+        <Skeleton className="mt-1 h-7 w-24" />
+      ) : (
+        <p className={cn("tabular-nums", emphasis ? "text-2xl font-semibold" : "text-lg")}>
+          {formatUsdt(value)} <span className="text-xs text-muted-foreground">USDT</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -202,7 +172,7 @@ function DepositPanel() {
               {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">Credited after {address?.min_confirmations ?? "several"} network confirmations.</p>
+          <p className="text-xs text-muted-foreground">Credited to your one balance after {address?.min_confirmations ?? "several"} network confirmations.</p>
         </CardContent>
       </Card>
       <Alert>
@@ -222,9 +192,11 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Withdrawal | null>(null);
 
-  const slice = networkOf(wallet, network);
-  const fee = Number(slice?.withdrawal_fee ?? 0);
-  const youReceive = Math.max(0, Number(amount || 0) - fee);
+  const opts = withdrawableFor(wallet, network);
+  // Exact base-unit math on the USDT strings — no float error on 18-dp amounts.
+  const amountUnits = toBaseUnits(amount);
+  const youReceive = subUsdt(amount, opts?.withdrawal_fee); // decimal string
+  const queuedUnits = amountUnits - toBaseUnits(opts?.instant); // > 0 ⇒ partly queued
 
   const submit = async () => {
     setSubmitting(true);
@@ -243,7 +215,7 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
     }
   };
 
-  const valid = address.trim().length > 0 && Number(amount) > 0;
+  const valid = address.trim().length > 0 && amountUnits > 0n;
 
   return (
     <div className="max-w-xl space-y-5">
@@ -252,9 +224,11 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
       {done && (
         <Alert>
           <Clock className="size-4 text-main-accent-t3" />
-          <AlertTitle>Withdrawal requested</AlertTitle>
+          <AlertTitle>{done.state === "queued" ? "Withdrawal queued" : "Withdrawal submitted"}</AlertTitle>
           <AlertDescription>
-            {formatUsdt(done.net_amount)} USDT is on its way to {shortAddress(done.address)} — it&apos;s pending on-chain confirmation.
+            {done.state === "queued"
+              ? `${formatUsdt(done.net_amount)} USDT to ${shortAddress(done.address)} is queued — it ships once the ${networkLabel(done.network)} rail is topped up.`
+              : `${formatUsdt(done.net_amount)} USDT is on its way to ${shortAddress(done.address)} — pending on-chain confirmation.`}
           </AlertDescription>
         </Alert>
       )}
@@ -276,17 +250,24 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
           <label className="block space-y-1.5">
             <span className="flex items-center justify-between text-sm">
               <span>Amount</span>
-              <button type="button" className="text-xs text-main-accent-t1 hover:underline" onClick={() => setAmount(slice?.available ?? "0")}>
-                Available {formatUsdt(slice?.available)} · Max
+              <button type="button" className="text-xs text-main-accent-t1 hover:underline" onClick={() => setAmount(opts?.withdrawable ?? "0")}>
+                Available {formatUsdt(opts?.withdrawable)} · Max
               </button>
             </span>
             <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" />
           </label>
 
           <div className="space-y-1 rounded-lg border border-border bg-main-surface p-3 text-sm">
-            <Row label="Network fee" value={`${formatUsdt(slice?.withdrawal_fee)} USDT`} />
-            <Row label="You will receive" value={`${formatUsdt(String(youReceive))} USDT`} strong />
-            <p className="pt-1 text-xs text-muted-foreground">Minimum withdrawal {formatUsdt(slice?.min_withdrawal)} USDT.</p>
+            <Row label="Network fee" value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} />
+            <Row label="You will receive" value={`${formatUsdt(youReceive)} USDT`} strong />
+            {queuedUnits > 0n && amountUnits > 0n && (
+              <p className="pt-1 text-xs text-main-accent-t3">
+                ~{formatUsdt(fromBaseUnits(queuedUnits))} USDT exceeds instant {networkLabel(network)} liquidity and will be queued until the rail is topped up.
+              </p>
+            )}
+            <p className="pt-1 text-xs text-muted-foreground">
+              Minimum {formatUsdt(opts?.min_withdrawal)} USDT · instant on {networkLabel(network)}: {formatUsdt(opts?.instant)} USDT.
+            </p>
           </div>
 
           <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={!valid || submitting} onClick={submit}>
@@ -309,25 +290,42 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-main-accent-t3/15 text-main-accent-t3",
+  queued: "bg-main-accent-t3/15 text-main-accent-t3",
+  processing: "bg-main-accent-t1/15 text-main-accent-t1",
   completed: "bg-main-accent-t2/15 text-main-accent-t2",
   failed: "bg-main-accent-t4/15 text-main-accent-t4",
+  cancelled: "bg-muted text-muted-foreground",
 };
 
 function StatusPill({ state }: { state: string | undefined }) {
-  const key = state ?? "pending";
+  const key = state ?? "queued";
   return <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLES[key] ?? "bg-muted text-muted-foreground")}>{key}</span>;
 }
 
 function ActivityPanel() {
   const [items, setItems] = useState<Withdrawal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     fetchWithdrawals()
       .then((list) => setItems(list.withdrawals ?? []))
       .catch((e: Error) => setError(e.message));
   }, []);
+
+  useEffect(load, [load]);
+
+  const cancel = async (id: string) => {
+    setBusy(id);
+    try {
+      await cancelWithdrawal(id);
+      load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!items) return <Skeleton className="h-40 w-full" />;
@@ -344,20 +342,31 @@ function ActivityPanel() {
   return (
     <Card>
       <CardContent className="divide-y divide-border p-0">
-        {items.map((w) => (
-          <div key={w.id} className="flex items-center justify-between gap-4 px-4 py-3">
-            <div className="min-w-0 space-y-0.5">
-              <p className="text-sm">
-                <span className="font-medium">{formatUsdt(w.amount)} USDT</span> <span className="text-muted-foreground">to {shortAddress(w.address)}</span>
-              </p>
-              <p className="font-mono-tech text-xs text-muted-foreground">
-                {networkLabel(w.network)}
-                {w.tx_ref ? ` · ${shortAddress(w.tx_ref)}` : ""}
-              </p>
+        {items.map((w) => {
+          const id = w.id ?? "";
+          return (
+            <div key={id} className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0 space-y-0.5">
+                <p className="text-sm">
+                  <span className="font-medium">{formatUsdt(w.amount)} USDT</span> <span className="text-muted-foreground">to {shortAddress(w.address)}</span>
+                </p>
+                <p className="font-mono-tech text-xs text-muted-foreground">
+                  {networkLabel(w.network)}
+                  {w.tx_ref ? ` · ${shortAddress(w.tx_ref)}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusPill state={w.state} />
+                {w.state === "queued" && (
+                  <Button type="button" variant="outline" size="sm" disabled={busy === id} onClick={() => cancel(id)}>
+                    {busy === id ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+                    Cancel
+                  </Button>
+                )}
+              </div>
             </div>
-            <StatusPill state={w.state} />
-          </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );
