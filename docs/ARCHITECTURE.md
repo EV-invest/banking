@@ -216,16 +216,19 @@ full event-sourcing framework: `cqrs-es`/`postgres-es` require `sqlx 0.8` (we pi
 `0.9`), and a ledger is already an immutable audit log — event-sourcing the same
 facts in Postgres would double-bookkeep.
 
-**Money model.** Value lives in TigerBeetle on one USDT ledger, partitioned into
-**custody** (debit-normal wallets, per network) and **claims** (credit-normal
-`fund`/`user`/`service`), so `sum(custody:N) == sum(claims:N)` holds per network and a
-deposit is a single `Dr wallet / Cr claim` transfer (no external account).
-Non-negativity is enforced by TB account flags; an **allocation** carries one `owner` +
-a `sharers` list, and a user-sharer may revoke only while the fund owns it. Saga moves
-are idempotent by a stable `event_id` (deterministic TB transfer ids; reservations are
-two-phase pending with `timeout = 0`). Full chart of accounts, ownership rules,
-idempotency, and the authorization matrix:
-[`piggybank/core/PATTERNS.md`](../piggybank/core/PATTERNS.md).
+**Money model.** Value lives in TigerBeetle on one USDT ledger, in **two layers**:
+**treasury/custody** (debit-normal wallets, **per rail**) and **claims** (credit-normal
+`fund`/`user`/`service`/`fee`/`clearing`, **network-agnostic** — one fungible balance per
+party). The invariant is **global**: `sum(custody) == sum(claims)`; a deposit is a single
+`Dr wallet:<net> / Cr claim` transfer (no external account). Network lives only at the
+custody + transaction edges. Per-rail liquidity is a treasury concern: a withdrawal on a
+short rail is **accepted and queued** (reserved against a `clearing` account, decoupled
+from any rail) until the treasury tops the rail up. Non-negativity is enforced by TB
+account flags; an **allocation** carries one `owner` + a `sharers` list, and a user-sharer
+may revoke only while the fund owns it. Saga moves are idempotent by a stable `event_id`
+(deterministic TB transfer ids; reservations are two-phase pending with `timeout = 0`).
+Full chart of accounts, ownership rules, the queued-withdrawal saga, idempotency, and the
+authorization matrix: [`piggybank/core/PATTERNS.md`](../piggybank/core/PATTERNS.md).
 
 ## Run matrix
 
