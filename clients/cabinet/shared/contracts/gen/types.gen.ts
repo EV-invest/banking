@@ -15,21 +15,18 @@ export type BankingV1AllocateRequest = {
      */
     service?: string;
     /**
-     * network
-     *
-     * bep20 | trc20 | ton
-     */
-    network?: string;
-    /**
      * amount
      *
-     * decimal USDT
+     * decimal USDT (from the unified, network-agnostic balance)
      */
     amount?: string;
 };
 
 /**
  * Allocation
+ *
+ * An allocation is network-agnostic — it is a claim against the unified balance, not a
+ * per-rail stake.
  */
 export type BankingV1Allocation = {
     /**
@@ -42,12 +39,6 @@ export type BankingV1Allocation = {
      * decimal USDT
      */
     amount?: string;
-    /**
-     * network
-     *
-     * bep20 | trc20 | ton
-     */
-    network?: string;
     /**
      * owner_kind
      *
@@ -90,6 +81,50 @@ export type BankingV1AllocationList = {
      * allocations
      */
     allocations?: Array<BankingV1Allocation>;
+};
+
+/**
+ * Balance
+ *
+ * The user's single, network-agnostic balance, segmented by lifecycle. Every figure is
+ * a TigerBeetle-authoritative decimal USDT string; total = available + invested +
+ * pending_withdrawal.
+ */
+export type BankingV1Balance = {
+    /**
+     * available
+     *
+     * free, spendable now
+     */
+    available?: string;
+    /**
+     * invested
+     *
+     * staked in fund services (active allocations)
+     */
+    invested?: string;
+    /**
+     * pending_withdrawal
+     *
+     * locked by queued/in-flight withdrawals
+     */
+    pending_withdrawal?: string;
+    /**
+     * total
+     *
+     * available + invested + pending_withdrawal
+     */
+    total?: string;
+};
+
+/**
+ * CancelWithdrawalRequest
+ */
+export type BankingV1CancelWithdrawalRequest = {
+    /**
+     * withdrawal_id
+     */
+    withdrawal_id?: string;
 };
 
 /**
@@ -147,6 +182,23 @@ export type BankingV1DisableUserResponse = {
 };
 
 /**
+ * DispatchWithdrawalRequest
+ */
+export type BankingV1DispatchWithdrawalRequest = {
+    /**
+     * withdrawal_id
+     */
+    withdrawal_id?: string;
+};
+
+/**
+ * DispatchWithdrawalResponse
+ */
+export type BankingV1DispatchWithdrawalResponse = {
+    [key: string]: never;
+};
+
+/**
  * ExchangeRequest
  */
 export type BankingV1ExchangeRequest = {
@@ -200,16 +252,6 @@ export type BankingV1FailWithdrawalResponse = {
 };
 
 /**
- * FundBalance
- */
-export type BankingV1FundBalance = {
-    /**
-     * networks
-     */
-    networks?: Array<BankingV1NetworkBalance>;
-};
-
-/**
  * GetDepositAddressRequest
  */
 export type BankingV1GetDepositAddressRequest = {
@@ -222,16 +264,16 @@ export type BankingV1GetDepositAddressRequest = {
 };
 
 /**
- * GetFundBalanceRequest
+ * GetMeRequest
  */
-export type BankingV1GetFundBalanceRequest = {
+export type BankingV1GetMeRequest = {
     [key: string]: never;
 };
 
 /**
- * GetMeRequest
+ * GetTreasuryRequest
  */
-export type BankingV1GetMeRequest = {
+export type BankingV1GetTreasuryRequest = {
     [key: string]: never;
 };
 
@@ -338,12 +380,51 @@ export type BankingV1LogoutResponse = {
 };
 
 /**
- * NetworkBalance
+ * NetworkWithdrawable
  *
- * One network's slice of the fund's position; all figures TigerBeetle-authoritative
- * decimal USDT strings.
+ * Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole
+ * available balance (a request beyond `instant` is accepted and queued); `instant` is
+ * the portion that ships without queueing = min(available, rail liquidity).
  */
-export type BankingV1NetworkBalance = {
+export type BankingV1NetworkWithdrawable = {
+    /**
+     * network
+     *
+     * bep20 | trc20 | ton
+     */
+    network?: string;
+    /**
+     * withdrawable
+     *
+     * max requestable on this rail (= available)
+     */
+    withdrawable?: string;
+    /**
+     * instant
+     *
+     * ships now without queueing
+     */
+    instant?: string;
+    /**
+     * min_withdrawal
+     *
+     * smallest gross withdrawal accepted
+     */
+    min_withdrawal?: string;
+    /**
+     * withdrawal_fee
+     *
+     * flat network fee retained on a withdrawal
+     */
+    withdrawal_fee?: string;
+};
+
+/**
+ * RailLiquidity
+ *
+ * Per-rail on-chain liquidity (the treasury / Layer 2).
+ */
+export type BankingV1RailLiquidity = {
     /**
      * network
      *
@@ -353,21 +434,9 @@ export type BankingV1NetworkBalance = {
     /**
      * custody
      *
-     * liquid on-chain USDT the fund holds in this wallet
+     * liquid on-chain USDT held in this rail's custody wallet
      */
     custody?: string;
-    /**
-     * fund_free
-     *
-     * the fund's own unallocated capital
-     */
-    fund_free?: string;
-    /**
-     * allocated
-     *
-     * held for users/services (custody − fund_free)
-     */
-    allocated?: string;
 };
 
 /**
@@ -383,7 +452,7 @@ export type BankingV1RecordDepositRequest = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | trc20 | ton — the rail it arrived on
      */
     network?: string;
     /**
@@ -434,7 +503,7 @@ export type BankingV1RequestWithdrawalRequest = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | trc20 | ton — the rail to ship on
      */
     network?: string;
     /**
@@ -488,7 +557,7 @@ export type BankingV1SeedCapitalRequest = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | trc20 | ton — the rail the capital lands on
      */
     network?: string;
     /**
@@ -574,6 +643,59 @@ export type BankingV1TokenResponse = {
      * user
      */
     user?: BankingV1UserSummary;
+};
+
+/**
+ * Treasury
+ *
+ * The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
+ * Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset
+ * side) equals the sum of all claims — so client liabilities are the remainder beyond
+ * the fund's own capital and retained fees.
+ */
+export type BankingV1Treasury = {
+    /**
+     * rails
+     *
+     * per-rail on-chain liquidity (USDT)
+     */
+    rails?: Array<BankingV1RailLiquidity>;
+    /**
+     * bank
+     *
+     * mocked USD liquidity (separate ledger; off-ramp FX)
+     */
+    bank?: string;
+    /**
+     * total_custody
+     *
+     * sum of rail custody — the asset side
+     */
+    total_custody?: string;
+    /**
+     * fund_capital
+     *
+     * the fund's own unallocated capital
+     */
+    fund_capital?: string;
+    /**
+     * fee_revenue
+     *
+     * retained withdrawal-fee revenue
+     */
+    fee_revenue?: string;
+    /**
+     * held_for_clients
+     *
+     * claims owed to users + services
+     */
+    held_for_clients?: string;
+    /**
+     * reserved_for_withdrawals
+     *
+     * of held_for_clients, locked by in-flight withdrawals
+     */
+    reserved_for_withdrawals?: string;
 };
 
 /**
@@ -666,73 +788,29 @@ export type BankingV1UserSummary = {
  */
 export type BankingV1Wallet = {
     /**
-     * networks
+     * balance
      */
-    networks?: Array<BankingV1WalletNetwork>;
-};
-
-/**
- * WalletNetwork
- *
- * One network's slice of the user's wallet; every figure TigerBeetle-authoritative
- * decimal USDT.
- */
-export type BankingV1WalletNetwork = {
+    balance?: BankingV1Balance;
     /**
-     * network
+     * deposit_addresses
      *
-     * bep20 | trc20 | ton
+     * a rail to top up on (per network)
      */
-    network?: string;
+    deposit_addresses?: Array<BankingV1DepositAddress>;
     /**
-     * available
+     * withdrawable
      *
-     * free, spendable now (claim posted − reserved)
+     * per-rail withdraw options
      */
-    available?: string;
-    /**
-     * reserved
-     *
-     * locked by in-flight withdrawals (pending debits)
-     */
-    reserved?: string;
-    /**
-     * allocated
-     *
-     * staked in fund services (active user allocations)
-     */
-    allocated?: string;
-    /**
-     * total
-     *
-     * available + reserved + allocated
-     */
-    total?: string;
-    /**
-     * deposit_address
-     *
-     * where to send USDT on this network (may be empty)
-     */
-    deposit_address?: string;
-    /**
-     * min_withdrawal
-     *
-     * smallest withdrawable amount (fee + dust floor)
-     */
-    min_withdrawal?: string;
-    /**
-     * withdrawal_fee
-     *
-     * flat network fee retained on a withdrawal
-     */
-    withdrawal_fee?: string;
+    withdrawable?: Array<BankingV1NetworkWithdrawable>;
 };
 
 /**
  * Withdrawal
  *
- * A user withdrawal aggregate, projected. `state` advances pending → completed
- * (settled on confirmations) | failed (voided, refunded).
+ * A user withdrawal aggregate, projected. `state` advances queued → processing →
+ * completed (settled on confirmations) | failed (voided, refunded); a queued one may
+ * also be cancelled (voided, refunded).
  */
 export type BankingV1Withdrawal = {
     /**
@@ -772,13 +850,13 @@ export type BankingV1Withdrawal = {
     /**
      * state
      *
-     * pending | completed | failed
+     * queued | processing | completed | failed | cancelled
      */
     state?: string;
     /**
      * tx_ref
      *
-     * on-chain reference once settled (empty while pending)
+     * on-chain reference once settled (empty otherwise)
      */
     tx_ref?: string;
 };
@@ -1054,6 +1132,35 @@ export type BankingV1AuthServiceRefreshResponses = {
 
 export type BankingV1AuthServiceRefreshResponse = BankingV1AuthServiceRefreshResponses[keyof BankingV1AuthServiceRefreshResponses];
 
+export type BankingV1BalanceServiceDispatchWithdrawalData = {
+    body: BankingV1DispatchWithdrawalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/DispatchWithdrawal';
+};
+
+export type BankingV1BalanceServiceDispatchWithdrawalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceDispatchWithdrawalError = BankingV1BalanceServiceDispatchWithdrawalErrors[keyof BankingV1BalanceServiceDispatchWithdrawalErrors];
+
+export type BankingV1BalanceServiceDispatchWithdrawalResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1DispatchWithdrawalResponse;
+};
+
+export type BankingV1BalanceServiceDispatchWithdrawalResponse = BankingV1BalanceServiceDispatchWithdrawalResponses[keyof BankingV1BalanceServiceDispatchWithdrawalResponses];
+
 export type BankingV1BalanceServiceFailWithdrawalData = {
     body: BankingV1FailWithdrawalRequest;
     headers: {
@@ -1083,34 +1190,34 @@ export type BankingV1BalanceServiceFailWithdrawalResponses = {
 
 export type BankingV1BalanceServiceFailWithdrawalResponse = BankingV1BalanceServiceFailWithdrawalResponses[keyof BankingV1BalanceServiceFailWithdrawalResponses];
 
-export type BankingV1BalanceServiceGetFundBalanceData = {
-    body: BankingV1GetFundBalanceRequest;
+export type BankingV1BalanceServiceGetTreasuryData = {
+    body: BankingV1GetTreasuryRequest;
     headers: {
         'Connect-Protocol-Version': ConnectProtocolVersion;
         'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
     };
     path?: never;
     query?: never;
-    url: '/banking.v1.BalanceService/GetFundBalance';
+    url: '/banking.v1.BalanceService/GetTreasury';
 };
 
-export type BankingV1BalanceServiceGetFundBalanceErrors = {
+export type BankingV1BalanceServiceGetTreasuryErrors = {
     /**
      * Error
      */
     default: ConnectError;
 };
 
-export type BankingV1BalanceServiceGetFundBalanceError = BankingV1BalanceServiceGetFundBalanceErrors[keyof BankingV1BalanceServiceGetFundBalanceErrors];
+export type BankingV1BalanceServiceGetTreasuryError = BankingV1BalanceServiceGetTreasuryErrors[keyof BankingV1BalanceServiceGetTreasuryErrors];
 
-export type BankingV1BalanceServiceGetFundBalanceResponses = {
+export type BankingV1BalanceServiceGetTreasuryResponses = {
     /**
      * Success
      */
-    200: BankingV1FundBalance;
+    200: BankingV1Treasury;
 };
 
-export type BankingV1BalanceServiceGetFundBalanceResponse = BankingV1BalanceServiceGetFundBalanceResponses[keyof BankingV1BalanceServiceGetFundBalanceResponses];
+export type BankingV1BalanceServiceGetTreasuryResponse = BankingV1BalanceServiceGetTreasuryResponses[keyof BankingV1BalanceServiceGetTreasuryResponses];
 
 export type BankingV1BalanceServiceRecordDepositData = {
     body: BankingV1RecordDepositRequest;
@@ -1343,6 +1450,35 @@ export type BankingV1UsersServiceRevokeTokensResponses = {
 };
 
 export type BankingV1UsersServiceRevokeTokensResponse = BankingV1UsersServiceRevokeTokensResponses[keyof BankingV1UsersServiceRevokeTokensResponses];
+
+export type BankingV1WalletServiceCancelWithdrawalData = {
+    body: BankingV1CancelWithdrawalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.WalletService/CancelWithdrawal';
+};
+
+export type BankingV1WalletServiceCancelWithdrawalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1WalletServiceCancelWithdrawalError = BankingV1WalletServiceCancelWithdrawalErrors[keyof BankingV1WalletServiceCancelWithdrawalErrors];
+
+export type BankingV1WalletServiceCancelWithdrawalResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Withdrawal;
+};
+
+export type BankingV1WalletServiceCancelWithdrawalResponse = BankingV1WalletServiceCancelWithdrawalResponses[keyof BankingV1WalletServiceCancelWithdrawalResponses];
 
 export type BankingV1WalletServiceGetDepositAddressData = {
     body: BankingV1GetDepositAddressRequest;
