@@ -4,16 +4,21 @@
 //! TigerBeetle (the data plane); this context is the **pure, wasm-safe** model of
 //! the chart of accounts and the parties — no I/O, no `tigerbeetle` types leak in.
 //!
-//! - **Custody** (debit-normal): where value physically is — a crypto wallet per
-//!   [`Network`], plus a mocked bank account. Assets the fund holds.
-//! - **Claims** (credit-normal): whose value it is — the fund's own capital
-//!   (`Fund`), a user's claim (`UserClaim`), a service's funds (`ServiceClaim`).
+//! - **Custody / treasury** (debit-normal): where value physically is — a crypto
+//!   wallet per [`Network`] (the per-rail liquidity), plus a mocked bank account.
+//!   Assets the fund holds. This is the **only** layer where network lives.
+//! - **Claims** (credit-normal, **network-agnostic**): whose value it is — the
+//!   fund's own capital (`Fund`), a user's claim (`UserClaim`), a service's funds
+//!   (`ServiceClaim`), retained fees (`FeeRevenue`), and queued-withdrawal funds
+//!   (`WithdrawalClearing`). USDT is one fungible pool, so a user has ONE claim, not
+//!   one per chain.
 //!
-//! Every account is **per-network** (except the bank mock). That is the load-
-//! bearing safety property: a TRC20 claim is backed by TRC20 custody, so a chain-
-//! specific withdrawal is always backed and `sum(custody:N) == sum(claims:N)` holds
-//! per network. A deposit is one balanced transfer `Dr WALLET:<net> / Cr <claim>`
-//! (textbook Dr Cash / Cr customer-deposit); there is no "external world" account.
+//! Two layers, one invariant: **`sum(custody) == sum(claims)`** globally on the USDT
+//! ledger. Per-rail backing is a *treasury* concern (a withdrawal on a short rail is
+//! queued, not refused), not a ledger one — which is why the invariant is global, not
+//! per-network. A deposit is one balanced transfer `Dr WALLET:<net> / Cr <claim>`
+//! (textbook Dr Cash / Cr customer-deposit); network rides on the transaction, never
+//! on the claim. There is no "external world" account.
 
 use ev::architecture::{DomainEvent, Id};
 use serde::{Deserialize, Serialize};
@@ -103,14 +108,14 @@ impl Party {
 		matches!(self, Self::Piggybank)
 	}
 
-	/// The credit-normal claim account that holds this party's value on `network`
+	/// The network-agnostic, credit-normal claim account that holds this party's value
 	/// (the fund's own capital for `Piggybank`). The relay credits/debits this when
-	/// moving the party's money.
-	pub fn claim_key(&self, network: Network) -> LedgerAccountKey {
+	/// moving the party's money; network rides on the custody side of the transfer.
+	pub fn claim_key(&self) -> LedgerAccountKey {
 		match self {
-			Self::Piggybank => LedgerAccountKey::Fund(network),
-			Self::User(user) => LedgerAccountKey::UserClaim(*user, network),
-			Self::Service(service) => LedgerAccountKey::ServiceClaim(service.clone(), network),
+			Self::Piggybank => LedgerAccountKey::Fund,
+			Self::User(user) => LedgerAccountKey::UserClaim(*user),
+			Self::Service(service) => LedgerAccountKey::ServiceClaim(service.clone()),
 		}
 	}
 }
@@ -124,7 +129,7 @@ pub enum LedgerEvent {
 	/// Value arrived from outside (an on-chain deposit) and was credited to a party.
 	/// Ledger: `Dr WALLET:<net> / Cr <party claim>`.
 	Deposited { party: Party, network: Network, amount: Usdt },
-	/// The company injected its own capital. Ledger: `Dr WALLET:<net> / Cr FUND:<net>`.
+	/// The company injected its own capital. Ledger: `Dr WALLET:<net> / Cr FUND`.
 	CapitalSeeded { network: Network, amount: Usdt },
 }
 
@@ -159,6 +164,7 @@ pub enum AccountCode {
 	UserClaim,
 	ServiceClaim,
 	FeeRevenue,
+	WithdrawalClearing,
 }
 
 impl AccountCode {
@@ -170,6 +176,7 @@ impl AccountCode {
 			Self::UserClaim => 20,
 			Self::ServiceClaim => 30,
 			Self::FeeRevenue => 40,
+			Self::WithdrawalClearing => 50,
 		}
 	}
 }
@@ -227,16 +234,21 @@ impl TransferCode {
 /// time: `ledger`, `code`, and the non-negative flag (all immutable in TB once set).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LedgerAccountKey {
-	/// The fund's own unrestricted capital on a network (credit-normal claim).
-	Fund(Network),
-	/// The fund's on-chain custody wallet for a network (debit-normal asset).
+	/// The fund's own unrestricted capital (credit-normal, network-agnostic claim).
+	Fund,
+	/// The fund's on-chain custody wallet for a rail (debit-normal asset). The only
+	/// network-bearing account — per-rail liquidity (the treasury layer).
 	CryptoWallet(Network),
-	/// A user's claim on a network (credit-normal).
-	UserClaim(UserId, Network),
-	/// A service's owned funds on a network (credit-normal).
-	ServiceClaim(ServiceId, Network),
-	/// The fund's retained withdrawal-fee revenue on a network (credit-normal claim).
-	FeeRevenue(Network),
+	/// A user's single, network-agnostic claim (credit-normal). One account per user.
+	UserClaim(UserId),
+	/// A service's owned funds (credit-normal, network-agnostic).
+	ServiceClaim(ServiceId),
+	/// The fund's retained withdrawal-fee revenue (credit-normal, network-agnostic).
+	FeeRevenue,
+	/// Funds reserved for queued/in-flight withdrawals, not yet sent on-chain
+	/// (credit-normal, network-agnostic). Decoupled from any rail, so a withdrawal can
+	/// be accepted and queued even when the chosen rail is short on liquidity.
+	WithdrawalClearing,
 	/// The mocked bank custody account (debit-normal, USD ledger).
 	BankCustody,
 }
@@ -245,11 +257,12 @@ impl LedgerAccountKey {
 	/// Stable string key for the `tb_accounts` id-map (and the idempotent create).
 	pub fn logical_key(&self) -> String {
 		match self {
-			Self::Fund(net) => format!("fund:{net}"),
+			Self::Fund => "fund".to_owned(),
 			Self::CryptoWallet(net) => format!("wallet:{net}"),
-			Self::UserClaim(user, net) => format!("user:{user}:{net}"),
-			Self::ServiceClaim(service, net) => format!("service:{service}:{net}"),
-			Self::FeeRevenue(net) => format!("fee:{net}"),
+			Self::UserClaim(user) => format!("user:{user}"),
+			Self::ServiceClaim(service) => format!("service:{service}"),
+			Self::FeeRevenue => "fee".to_owned(),
+			Self::WithdrawalClearing => "clearing".to_owned(),
 			Self::BankCustody => "bank".to_owned(),
 		}
 	}
@@ -263,12 +276,13 @@ impl LedgerAccountKey {
 
 	pub fn account_code(&self) -> AccountCode {
 		match self {
-			Self::Fund(_) => AccountCode::Fund,
+			Self::Fund => AccountCode::Fund,
 			Self::CryptoWallet(_) => AccountCode::CryptoWallet,
 			Self::BankCustody => AccountCode::BankCustody,
-			Self::UserClaim(..) => AccountCode::UserClaim,
-			Self::ServiceClaim(..) => AccountCode::ServiceClaim,
-			Self::FeeRevenue(_) => AccountCode::FeeRevenue,
+			Self::UserClaim(_) => AccountCode::UserClaim,
+			Self::ServiceClaim(_) => AccountCode::ServiceClaim,
+			Self::FeeRevenue => AccountCode::FeeRevenue,
+			Self::WithdrawalClearing => AccountCode::WithdrawalClearing,
 		}
 	}
 
@@ -276,14 +290,14 @@ impl LedgerAccountKey {
 	pub fn normal(&self) -> Normal {
 		match self {
 			Self::CryptoWallet(_) | Self::BankCustody => Normal::Debit,
-			Self::Fund(_) | Self::UserClaim(..) | Self::ServiceClaim(..) | Self::FeeRevenue(_) => Normal::Credit,
+			Self::Fund | Self::UserClaim(_) | Self::ServiceClaim(_) | Self::FeeRevenue | Self::WithdrawalClearing => Normal::Credit,
 		}
 	}
 
 	pub fn network(&self) -> Option<Network> {
 		match self {
-			Self::Fund(net) | Self::CryptoWallet(net) | Self::UserClaim(_, net) | Self::ServiceClaim(_, net) | Self::FeeRevenue(net) => Some(*net),
-			Self::BankCustody => None,
+			Self::CryptoWallet(net) => Some(*net),
+			_ => None,
 		}
 	}
 }
@@ -320,11 +334,15 @@ mod tests {
 	#[test]
 	fn account_keys_and_sides() {
 		let uid = UserId::from_raw(uuid::Uuid::nil());
-		assert_eq!(LedgerAccountKey::UserClaim(uid, Network::Trc20).logical_key(), "user:00000000-0000-0000-0000-000000000000:trc20");
+		assert_eq!(LedgerAccountKey::UserClaim(uid).logical_key(), "user:00000000-0000-0000-0000-000000000000");
 		assert_eq!(LedgerAccountKey::CryptoWallet(Network::Bep20).logical_key(), "wallet:bep20");
-		assert_eq!(LedgerAccountKey::Fund(Network::Ton).normal(), Normal::Credit);
+		assert_eq!(LedgerAccountKey::FeeRevenue.logical_key(), "fee");
+		assert_eq!(LedgerAccountKey::WithdrawalClearing.logical_key(), "clearing");
+		assert_eq!(LedgerAccountKey::Fund.normal(), Normal::Credit);
 		assert_eq!(LedgerAccountKey::CryptoWallet(Network::Ton).normal(), Normal::Debit);
+		assert_eq!(LedgerAccountKey::UserClaim(uid).network(), None);
+		assert_eq!(LedgerAccountKey::CryptoWallet(Network::Ton).network(), Some(Network::Ton));
 		assert_eq!(LedgerAccountKey::BankCustody.ledger(), Ledger::UsdMock);
-		assert_eq!(LedgerAccountKey::Fund(Network::Bep20).ledger(), Ledger::Usdt);
+		assert_eq!(LedgerAccountKey::Fund.ledger(), Ledger::Usdt);
 	}
 }
