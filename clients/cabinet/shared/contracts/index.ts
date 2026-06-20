@@ -9,17 +9,19 @@
 
 export type {
   BankingV1Wallet as Wallet,
-  BankingV1WalletNetwork as WalletNetwork,
+  BankingV1Balance as Balance,
+  BankingV1NetworkWithdrawable as NetworkWithdrawable,
   BankingV1DepositAddress as DepositAddress,
   BankingV1Withdrawal as Withdrawal,
   BankingV1WithdrawalList as WithdrawalList,
   BankingV1RequestWithdrawalRequest as RequestWithdrawalRequest,
+  BankingV1CancelWithdrawalRequest as CancelWithdrawalRequest,
   BankingV1Allocation as Allocation,
   BankingV1AllocationList as AllocationList,
   BankingV1AllocateRequest as AllocateRequest,
   BankingV1Sharer as Sharer,
   BankingV1UserProfile as UserProfile,
   BankingV1UserBalanceResponse as UserBalanceResponse,
-  BankingV1FundBalance as FundBalance,
-  BankingV1NetworkBalance as NetworkBalance,
+  BankingV1Treasury as Treasury,
+  BankingV1RailLiquidity as RailLiquidity,
 } from "./gen";
