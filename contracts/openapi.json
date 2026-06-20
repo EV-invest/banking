@@ -415,13 +415,72 @@
         }
       }
     },
+    "/banking.v1.BalanceService/DispatchWithdrawal": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "DispatchWithdrawal",
+        "description": "Dispatch a queued withdrawal to custody once its rail has liquidity (the treasury\n worker). Stands in for an automated rebalance/top-up trigger. Idempotent.",
+        "operationId": "banking.v1.BalanceService.DispatchWithdrawal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.DispatchWithdrawalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.DispatchWithdrawalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/FailWithdrawal": {
       "post": {
         "tags": [
           "banking.v1.BalanceService"
         ],
         "summary": "FailWithdrawal",
-        "description": "Fail a user withdrawal that never reached the chain: voids the reservation,\n refunding the user. NEVER call this if the broadcast may have landed on-chain —\n that would double-pay. Idempotent.",
+        "description": "Fail a processing user withdrawal that never reached the chain: voids the\n reservation, refunding the user. NEVER call this if the broadcast may have landed\n on-chain — that would double-pay. Idempotent.",
         "operationId": "banking.v1.BalanceService.FailWithdrawal",
         "parameters": [
           {
@@ -474,14 +533,14 @@
         }
       }
     },
-    "/banking.v1.BalanceService/GetFundBalance": {
+    "/banking.v1.BalanceService/GetTreasury": {
       "post": {
         "tags": [
           "banking.v1.BalanceService"
         ],
-        "summary": "GetFundBalance",
-        "description": "The fund's balance, per network, read live from TigerBeetle (Read-First).",
-        "operationId": "banking.v1.BalanceService.GetFundBalance",
+        "summary": "GetTreasury",
+        "description": "The treasury: per-rail on-chain liquidity (Layer 2) and the claims it backs\n (Layer 1), read live from TigerBeetle (Read-First).",
+        "operationId": "banking.v1.BalanceService.GetTreasury",
         "parameters": [
           {
             "name": "Connect-Protocol-Version",
@@ -503,7 +562,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/banking.v1.GetFundBalanceRequest"
+                "$ref": "#/components/schemas/banking.v1.GetTreasuryRequest"
               }
             }
           },
@@ -525,7 +584,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/banking.v1.FundBalance"
+                  "$ref": "#/components/schemas/banking.v1.Treasury"
                 }
               }
             }
@@ -598,7 +657,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "SeedCapital",
-        "description": "Inject the company's own capital on a network (Dr WALLET / Cr FUND).",
+        "description": "Inject the company's own capital onto a rail (Dr WALLET / Cr FUND).",
         "operationId": "banking.v1.BalanceService.SeedCapital",
         "parameters": [
           {
@@ -657,7 +716,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "SettleWithdrawal",
-        "description": "Settle a user withdrawal once it has the required on-chain confirmations: posts\n the reserved transfers. `tx_ref` is the chain transaction. Stands in for a chain\n watcher + custody confirmation callback. Idempotent.",
+        "description": "Settle a user withdrawal once it has the required on-chain confirmations: posts the\n reservation and moves the net out of custody. `tx_ref` is the chain transaction.\n Stands in for a chain watcher + custody confirmation callback. Idempotent.",
         "operationId": "banking.v1.BalanceService.SettleWithdrawal",
         "parameters": [
           {
@@ -1004,6 +1063,65 @@
         }
       }
     },
+    "/banking.v1.WalletService/CancelWithdrawal": {
+      "post": {
+        "tags": [
+          "banking.v1.WalletService"
+        ],
+        "summary": "CancelWithdrawal",
+        "description": "Cancel one of the caller's still-queued withdrawals (refund). Rejected once the\n withdrawal is processing (a broadcast may have landed).",
+        "operationId": "banking.v1.WalletService.CancelWithdrawal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CancelWithdrawalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Withdrawal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.WalletService/GetDepositAddress": {
       "post": {
         "tags": [
@@ -1069,7 +1187,7 @@
           "banking.v1.WalletService"
         ],
         "summary": "GetWallet",
-        "description": "The caller's wallet — a per-network balance breakdown and deposit address.",
+        "description": "The caller's wallet — the unified lifecycle balance, deposit addresses, and the\n per-rail withdrawable view.",
         "operationId": "banking.v1.WalletService.GetWallet",
         "parameters": [
           {
@@ -1187,7 +1305,7 @@
           "banking.v1.WalletService"
         ],
         "summary": "RequestWithdrawal",
-        "description": "Request an on-chain withdrawal of free balance to an external address. Opens a\n two-phase saga: the gross amount (incl. fee) is reserved against the caller's\n claim immediately; an operator/watcher later settles it (on confirmations) or\n fails it (refund) via BalanceService.",
+        "description": "Request an on-chain withdrawal of free balance to an external address. Accepted\n (and reserved) as long as the unified balance covers it; it ships immediately when\n the chosen rail is liquid, otherwise it is queued until the treasury tops it up.",
         "operationId": "banking.v1.WalletService.RequestWithdrawal",
         "parameters": [
           {
@@ -1251,15 +1369,10 @@
             "title": "service",
             "description": "the service/strategy to allocate to"
           },
-          "network": {
-            "type": "string",
-            "title": "network",
-            "description": "bep20 | trc20 | ton"
-          },
           "amount": {
             "type": "string",
             "title": "amount",
-            "description": "decimal USDT"
+            "description": "decimal USDT (from the unified, network-agnostic balance)"
           }
         },
         "title": "AllocateRequest",
@@ -1276,11 +1389,6 @@
             "type": "string",
             "title": "amount",
             "description": "decimal USDT"
-          },
-          "network": {
-            "type": "string",
-            "title": "network",
-            "description": "bep20 | trc20 | ton"
           },
           "owner_kind": {
             "type": "string",
@@ -1315,7 +1423,8 @@
           }
         },
         "title": "Allocation",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "An allocation is network-agnostic — it is a claim against the unified balance, not a\n per-rail stake."
       },
       "banking.v1.AllocationList": {
         "type": "object",
@@ -1329,6 +1438,45 @@
           }
         },
         "title": "AllocationList",
+        "additionalProperties": false
+      },
+      "banking.v1.Balance": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "string",
+            "title": "available",
+            "description": "free, spendable now"
+          },
+          "invested": {
+            "type": "string",
+            "title": "invested",
+            "description": "staked in fund services (active allocations)"
+          },
+          "pending_withdrawal": {
+            "type": "string",
+            "title": "pending_withdrawal",
+            "description": "locked by queued/in-flight withdrawals"
+          },
+          "total": {
+            "type": "string",
+            "title": "total",
+            "description": "available + invested + pending_withdrawal"
+          }
+        },
+        "title": "Balance",
+        "additionalProperties": false,
+        "description": "The user's single, network-agnostic balance, segmented by lifecycle. Every figure is\n a TigerBeetle-authoritative decimal USDT string; total = available + invested +\n pending_withdrawal."
+      },
+      "banking.v1.CancelWithdrawalRequest": {
+        "type": "object",
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "title": "withdrawal_id"
+          }
+        },
+        "title": "CancelWithdrawalRequest",
         "additionalProperties": false
       },
       "banking.v1.CheckRequest": {
@@ -1383,6 +1531,22 @@
         "title": "DisableUserResponse",
         "additionalProperties": false
       },
+      "banking.v1.DispatchWithdrawalRequest": {
+        "type": "object",
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "title": "withdrawal_id"
+          }
+        },
+        "title": "DispatchWithdrawalRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.DispatchWithdrawalResponse": {
+        "type": "object",
+        "title": "DispatchWithdrawalResponse",
+        "additionalProperties": false
+      },
       "banking.v1.ExchangeRequest": {
         "type": "object",
         "properties": {
@@ -1431,20 +1595,6 @@
         "title": "FailWithdrawalResponse",
         "additionalProperties": false
       },
-      "banking.v1.FundBalance": {
-        "type": "object",
-        "properties": {
-          "networks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/banking.v1.NetworkBalance"
-            },
-            "title": "networks"
-          }
-        },
-        "title": "FundBalance",
-        "additionalProperties": false
-      },
       "banking.v1.GetDepositAddressRequest": {
         "type": "object",
         "properties": {
@@ -1457,14 +1607,14 @@
         "title": "GetDepositAddressRequest",
         "additionalProperties": false
       },
-      "banking.v1.GetFundBalanceRequest": {
-        "type": "object",
-        "title": "GetFundBalanceRequest",
-        "additionalProperties": false
-      },
       "banking.v1.GetMeRequest": {
         "type": "object",
         "title": "GetMeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetTreasuryRequest": {
+        "type": "object",
+        "title": "GetTreasuryRequest",
         "additionalProperties": false
       },
       "banking.v1.GetUserBalanceRequest": {
@@ -1559,7 +1709,40 @@
         "title": "LogoutResponse",
         "additionalProperties": false
       },
-      "banking.v1.NetworkBalance": {
+      "banking.v1.NetworkWithdrawable": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton"
+          },
+          "withdrawable": {
+            "type": "string",
+            "title": "withdrawable",
+            "description": "max requestable on this rail (= available)"
+          },
+          "instant": {
+            "type": "string",
+            "title": "instant",
+            "description": "ships now without queueing"
+          },
+          "min_withdrawal": {
+            "type": "string",
+            "title": "min_withdrawal",
+            "description": "smallest gross withdrawal accepted"
+          },
+          "withdrawal_fee": {
+            "type": "string",
+            "title": "withdrawal_fee",
+            "description": "flat network fee retained on a withdrawal"
+          }
+        },
+        "title": "NetworkWithdrawable",
+        "additionalProperties": false,
+        "description": "Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole\n available balance (a request beyond `instant` is accepted and queued); `instant` is\n the portion that ships without queueing = min(available, rail liquidity)."
+      },
+      "banking.v1.RailLiquidity": {
         "type": "object",
         "properties": {
           "network": {
@@ -1570,22 +1753,12 @@
           "custody": {
             "type": "string",
             "title": "custody",
-            "description": "liquid on-chain USDT the fund holds in this wallet"
-          },
-          "fund_free": {
-            "type": "string",
-            "title": "fund_free",
-            "description": "the fund's own unallocated capital"
-          },
-          "allocated": {
-            "type": "string",
-            "title": "allocated",
-            "description": "held for users/services (custody − fund_free)"
+            "description": "liquid on-chain USDT held in this rail's custody wallet"
           }
         },
-        "title": "NetworkBalance",
+        "title": "RailLiquidity",
         "additionalProperties": false,
-        "description": "One network's slice of the fund's position; all figures TigerBeetle-authoritative\n decimal USDT strings."
+        "description": "Per-rail on-chain liquidity (the treasury / Layer 2)."
       },
       "banking.v1.RecordDepositRequest": {
         "type": "object",
@@ -1598,7 +1771,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | trc20 | ton — the rail it arrived on"
           },
           "amount": {
             "type": "string",
@@ -1647,7 +1820,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | trc20 | ton — the rail to ship on"
           },
           "address": {
             "type": "string",
@@ -1706,7 +1879,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | trc20 | ton — the rail the capital lands on"
           },
           "amount": {
             "type": "string",
@@ -1794,6 +1967,52 @@
         "title": "TokenResponse",
         "additionalProperties": false,
         "description": "A first-party token pair plus a snapshot of the principal. All expiries are\n unix SECONDS (matching the JWT `exp` claim); the BFF parses them with\n proto-loader `longs: String`."
+      },
+      "banking.v1.Treasury": {
+        "type": "object",
+        "properties": {
+          "rails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.RailLiquidity"
+            },
+            "title": "rails",
+            "description": "per-rail on-chain liquidity (USDT)"
+          },
+          "bank": {
+            "type": "string",
+            "title": "bank",
+            "description": "mocked USD liquidity (separate ledger; off-ramp FX)"
+          },
+          "total_custody": {
+            "type": "string",
+            "title": "total_custody",
+            "description": "sum of rail custody — the asset side"
+          },
+          "fund_capital": {
+            "type": "string",
+            "title": "fund_capital",
+            "description": "the fund's own unallocated capital"
+          },
+          "fee_revenue": {
+            "type": "string",
+            "title": "fee_revenue",
+            "description": "retained withdrawal-fee revenue"
+          },
+          "held_for_clients": {
+            "type": "string",
+            "title": "held_for_clients",
+            "description": "claims owed to users + services"
+          },
+          "reserved_for_withdrawals": {
+            "type": "string",
+            "title": "reserved_for_withdrawals",
+            "description": "of held_for_clients, locked by in-flight withdrawals"
+          }
+        },
+        "title": "Treasury",
+        "additionalProperties": false,
+        "description": "The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).\n Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset\n side) equals the sum of all claims — so client liabilities are the remainder beyond\n the fund's own capital and retained fees."
       },
       "banking.v1.UserBalanceResponse": {
         "type": "object",
@@ -1886,64 +2105,29 @@
       "banking.v1.Wallet": {
         "type": "object",
         "properties": {
-          "networks": {
+          "balance": {
+            "title": "balance",
+            "$ref": "#/components/schemas/banking.v1.Balance"
+          },
+          "deposit_addresses": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/banking.v1.WalletNetwork"
+              "$ref": "#/components/schemas/banking.v1.DepositAddress"
             },
-            "title": "networks"
+            "title": "deposit_addresses",
+            "description": "a rail to top up on (per network)"
+          },
+          "withdrawable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.NetworkWithdrawable"
+            },
+            "title": "withdrawable",
+            "description": "per-rail withdraw options"
           }
         },
         "title": "Wallet",
         "additionalProperties": false
-      },
-      "banking.v1.WalletNetwork": {
-        "type": "object",
-        "properties": {
-          "network": {
-            "type": "string",
-            "title": "network",
-            "description": "bep20 | trc20 | ton"
-          },
-          "available": {
-            "type": "string",
-            "title": "available",
-            "description": "free, spendable now (claim posted − reserved)"
-          },
-          "reserved": {
-            "type": "string",
-            "title": "reserved",
-            "description": "locked by in-flight withdrawals (pending debits)"
-          },
-          "allocated": {
-            "type": "string",
-            "title": "allocated",
-            "description": "staked in fund services (active user allocations)"
-          },
-          "total": {
-            "type": "string",
-            "title": "total",
-            "description": "available + reserved + allocated"
-          },
-          "deposit_address": {
-            "type": "string",
-            "title": "deposit_address",
-            "description": "where to send USDT on this network (may be empty)"
-          },
-          "min_withdrawal": {
-            "type": "string",
-            "title": "min_withdrawal",
-            "description": "smallest withdrawable amount (fee + dust floor)"
-          },
-          "withdrawal_fee": {
-            "type": "string",
-            "title": "withdrawal_fee",
-            "description": "flat network fee retained on a withdrawal"
-          }
-        },
-        "title": "WalletNetwork",
-        "additionalProperties": false,
-        "description": "One network's slice of the user's wallet; every figure TigerBeetle-authoritative\n decimal USDT."
       },
       "banking.v1.Withdrawal": {
         "type": "object",
@@ -1980,17 +2164,17 @@
           "state": {
             "type": "string",
             "title": "state",
-            "description": "pending | completed | failed"
+            "description": "queued | processing | completed | failed | cancelled"
           },
           "tx_ref": {
             "type": "string",
             "title": "tx_ref",
-            "description": "on-chain reference once settled (empty while pending)"
+            "description": "on-chain reference once settled (empty otherwise)"
           }
         },
         "title": "Withdrawal",
         "additionalProperties": false,
-        "description": "A user withdrawal aggregate, projected. `state` advances pending → completed\n (settled on confirmations) | failed (voided, refunded)."
+        "description": "A user withdrawal aggregate, projected. `state` advances queued → processing →\n completed (settled on confirmations) | failed (voided, refunded); a queued one may\n also be cancelled (voided, refunded)."
       },
       "banking.v1.WithdrawalList": {
         "type": "object",
@@ -2109,7 +2293,7 @@
     },
     {
       "name": "banking.v1.BalanceService",
-      "description": "BalanceService — the bank's own capital (company money).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events\n from Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a\n string is lossless and matches proto-loader's `longs: String`). All RPCs are\n admin-gated (allowlist) at the boundary. See docs/ARCHITECTURE.md."
+      "description": "BalanceService — the bank's treasury and company capital (operator surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md."
     },
     {
       "name": "banking.v1.HealthService",
@@ -2121,7 +2305,7 @@
     },
     {
       "name": "banking.v1.WalletService",
-      "description": "WalletService — a user's own crypto wallet: balances, deposit addresses, and\n withdrawals across the supported networks (BEP20/TRC20/TON).\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live\n from the authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT\n STRINGS (proto3 has no u128; a string is lossless and matches proto-loader's\n `longs: String`). A withdrawal is a two-phase saga over the ledger (reserve →\n settle/void); the operator-driven settle/fail RPCs live on BalanceService. The\n on-chain custody/broadcast and deposit-address derivation sit behind ports (a\n stub in this scaffold). See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
+      "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
     }
   ]
 }

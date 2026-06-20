@@ -2,51 +2,63 @@ syntax = "proto3";
 
 package banking.v1;
 
-// BalanceService — the bank's own capital (company money).
+// BalanceService — the bank's treasury and company capital (operator surface).
 //
-// Reads authoritative balances from the TigerBeetle ledger; metadata and events
-// from Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a
-// string is lossless and matches proto-loader's `longs: String`). All RPCs are
-// admin-gated (allowlist) at the boundary. See docs/ARCHITECTURE.md.
+// Reads authoritative balances from the TigerBeetle ledger; metadata and events from
+// Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is
+// lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated
+// (allowlist) at the boundary. See docs/ARCHITECTURE.md.
 service BalanceService {
-  // The fund's balance, per network, read live from TigerBeetle (Read-First).
-  rpc GetFundBalance(GetFundBalanceRequest) returns (FundBalance);
+  // The treasury: per-rail on-chain liquidity (Layer 2) and the claims it backs
+  // (Layer 1), read live from TigerBeetle (Read-First).
+  rpc GetTreasury(GetTreasuryRequest) returns (Treasury);
 
-  // Inject the company's own capital on a network (Dr WALLET / Cr FUND).
+  // Inject the company's own capital onto a rail (Dr WALLET / Cr FUND).
   rpc SeedCapital(SeedCapitalRequest) returns (SeedCapitalResponse);
 
   // Record a settled on-chain deposit, crediting a party's claim. Idempotent by
   // `tx_ref` — recording the same chain tx twice credits once.
   rpc RecordDeposit(RecordDepositRequest) returns (RecordDepositResponse);
 
-  // Settle a user withdrawal once it has the required on-chain confirmations: posts
-  // the reserved transfers. `tx_ref` is the chain transaction. Stands in for a chain
-  // watcher + custody confirmation callback. Idempotent.
+  // Dispatch a queued withdrawal to custody once its rail has liquidity (the treasury
+  // worker). Stands in for an automated rebalance/top-up trigger. Idempotent.
+  rpc DispatchWithdrawal(DispatchWithdrawalRequest) returns (DispatchWithdrawalResponse);
+
+  // Settle a user withdrawal once it has the required on-chain confirmations: posts the
+  // reservation and moves the net out of custody. `tx_ref` is the chain transaction.
+  // Stands in for a chain watcher + custody confirmation callback. Idempotent.
   rpc SettleWithdrawal(SettleWithdrawalRequest) returns (SettleWithdrawalResponse);
 
-  // Fail a user withdrawal that never reached the chain: voids the reservation,
-  // refunding the user. NEVER call this if the broadcast may have landed on-chain —
-  // that would double-pay. Idempotent.
+  // Fail a processing user withdrawal that never reached the chain: voids the
+  // reservation, refunding the user. NEVER call this if the broadcast may have landed
+  // on-chain — that would double-pay. Idempotent.
   rpc FailWithdrawal(FailWithdrawalRequest) returns (FailWithdrawalResponse);
 }
 
-message GetFundBalanceRequest {}
+message GetTreasuryRequest {}
 
-// One network's slice of the fund's position; all figures TigerBeetle-authoritative
-// decimal USDT strings.
-message NetworkBalance {
-  string network = 1;    // bep20 | trc20 | ton
-  string custody = 2;    // liquid on-chain USDT the fund holds in this wallet
-  string fund_free = 3;  // the fund's own unallocated capital
-  string allocated = 4;  // held for users/services (custody − fund_free)
+// Per-rail on-chain liquidity (the treasury / Layer 2).
+message RailLiquidity {
+  string network = 1;  // bep20 | trc20 | ton
+  string custody = 2;  // liquid on-chain USDT held in this rail's custody wallet
 }
 
-message FundBalance {
-  repeated NetworkBalance networks = 1;
+// The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
+// Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset
+// side) equals the sum of all claims — so client liabilities are the remainder beyond
+// the fund's own capital and retained fees.
+message Treasury {
+  repeated RailLiquidity rails = 1;     // per-rail on-chain liquidity (USDT)
+  string bank = 2;                      // mocked USD liquidity (separate ledger; off-ramp FX)
+  string total_custody = 3;             // sum of rail custody — the asset side
+  string fund_capital = 4;              // the fund's own unallocated capital
+  string fee_revenue = 5;               // retained withdrawal-fee revenue
+  string held_for_clients = 6;          // claims owed to users + services
+  string reserved_for_withdrawals = 7;  // of held_for_clients, locked by in-flight withdrawals
 }
 
 message SeedCapitalRequest {
-  string network = 1;  // bep20 | trc20 | ton
+  string network = 1;  // bep20 | trc20 | ton — the rail the capital lands on
   string amount = 2;   // decimal USDT
 }
 
@@ -54,7 +66,7 @@ message SeedCapitalResponse {}
 
 message RecordDepositRequest {
   string tx_ref = 1;      // the on-chain tx reference — the idempotency key
-  string network = 2;     // bep20 | trc20 | ton
+  string network = 2;     // bep20 | trc20 | ton — the rail it arrived on
   string amount = 3;      // decimal USDT (canonical value, network-agnostic)
   // The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the
   // user UUID or service id (empty for piggybank, which credits the fund's capital).
@@ -65,6 +77,12 @@ message RecordDepositRequest {
 message RecordDepositResponse {
   bool recorded = 1;  // false if `tx_ref` was already recorded (idempotent no-op)
 }
+
+message DispatchWithdrawalRequest {
+  string withdrawal_id = 1;
+}
+
+message DispatchWithdrawalResponse {}
 
 message SettleWithdrawalRequest {
   string withdrawal_id = 1;
