@@ -61,23 +61,17 @@ impl UsersService for UsersSvc {
 
 	async fn get_balance(&self, request: Request<pb::GetUserBalanceRequest>) -> Result<Response<pb::UserBalanceResponse>, Status> {
 		let id = caller_id(&request)?;
-		// The user's balance is the sum of their per-network claims, read live from
-		// TigerBeetle (Read-First). Each claim is credit-normal, so non-negative.
-		let mut amount = Usdt::ZERO;
-		let mut pending = Usdt::ZERO;
-		for network in Network::ALL {
-			let balance = self
-				.state
-				.ledger
-				.balance(&LedgerAccountKey::UserClaim(id, network))
-				.await
-				.map_err(|_| Status::unavailable("ledger unavailable"))?;
-			amount = amount.checked_add(balance.posted).ok_or_else(|| Status::internal("balance overflow"))?;
-			pending = pending.checked_add(balance.pending).ok_or_else(|| Status::internal("balance overflow"))?;
-		}
+		// The user's single unified claim, read live from TigerBeetle (Read-First);
+		// credit-normal, so non-negative.
+		let balance = self
+			.state
+			.ledger
+			.balance(&LedgerAccountKey::UserClaim(id))
+			.await
+			.map_err(|_| Status::unavailable("ledger unavailable"))?;
 		Ok(Response::new(pb::UserBalanceResponse {
-			amount: amount.to_decimal_string(),
-			pending: pending.to_decimal_string(),
+			amount: balance.posted.to_decimal_string(),
+			pending: balance.pending.to_decimal_string(),
 			authoritative: true,
 			as_of: unix_now(),
 		}))
@@ -116,20 +110,24 @@ impl BalanceSvc {
 
 #[tonic::async_trait]
 impl BalanceService for BalanceSvc {
-	async fn get_fund_balance(&self, request: Request<pb::GetFundBalanceRequest>) -> Result<Response<pb::FundBalance>, Status> {
+	async fn get_treasury(&self, request: Request<pb::GetTreasuryRequest>) -> Result<Response<pb::Treasury>, Status> {
 		require_admin(&self.state, &request)?;
-		let balance = balance_app::fund_balance(self.state.ledger.as_ref()).await.map_err(map_err)?;
-		Ok(Response::new(pb::FundBalance {
-			networks: balance
-				.networks
+		let t = balance_app::treasury(self.state.ledger.as_ref()).await.map_err(map_err)?;
+		Ok(Response::new(pb::Treasury {
+			rails: t
+				.rails
 				.into_iter()
-				.map(|n| pb::NetworkBalance {
-					network: n.network.as_str().to_owned(),
-					custody: n.custody.to_decimal_string(),
-					fund_free: n.fund_free.to_decimal_string(),
-					allocated: n.allocated.to_decimal_string(),
+				.map(|r| pb::RailLiquidity {
+					network: r.network.as_str().to_owned(),
+					custody: r.custody.to_decimal_string(),
 				})
 				.collect(),
+			bank: t.bank.to_decimal_string(),
+			total_custody: t.total_custody.to_decimal_string(),
+			fund_capital: t.fund_capital.to_decimal_string(),
+			fee_revenue: t.fee_revenue.to_decimal_string(),
+			held_for_clients: t.held_for_clients.to_decimal_string(),
+			reserved_for_withdrawals: t.reserved_for_withdrawals.to_decimal_string(),
 		}))
 	}
 
@@ -155,6 +153,15 @@ impl BalanceService for BalanceSvc {
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(pb::RecordDepositResponse { recorded }))
+	}
+
+	async fn dispatch_withdrawal(&self, request: Request<pb::DispatchWithdrawalRequest>) -> Result<Response<pb::DispatchWithdrawalResponse>, Status> {
+		require_admin(&self.state, &request)?;
+		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
+		withdrawal_app::dispatch_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(pb::DispatchWithdrawalResponse {}))
 	}
 
 	async fn settle_withdrawal(&self, request: Request<pb::SettleWithdrawalRequest>) -> Result<Response<pb::SettleWithdrawalResponse>, Status> {
@@ -197,19 +204,10 @@ impl AllocationsService for AllocationsSvc {
 		let user = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let network = Network::parse(&req.network).map_err(map_err)?;
 		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
-		let allocation = alloc_app::allocate_user_stake(
-			self.state.allocations.as_ref(),
-			self.state.ledger.as_ref(),
-			&self.state.relay_notify,
-			user,
-			service,
-			network,
-			amount,
-		)
-		.await
-		.map_err(map_err)?;
+		let allocation = alloc_app::allocate_user_stake(self.state.allocations.as_ref(), self.state.ledger.as_ref(), &self.state.relay_notify, user, service, amount)
+			.await
+			.map_err(map_err)?;
 		Ok(Response::new(allocation_to_proto(&allocation)))
 	}
 
@@ -248,11 +246,24 @@ impl WalletSvc {
 impl WalletService for WalletSvc {
 	async fn get_wallet(&self, request: Request<pb::GetWalletRequest>) -> Result<Response<pb::Wallet>, Status> {
 		let user = caller_id(&request)?;
-		let wallet = wallet_app::get_wallet(self.state.ledger.as_ref(), self.state.allocations.as_ref(), self.state.deposit_addresses.as_ref(), user)
-			.await
-			.map_err(map_err)?;
+		let wallet = wallet_app::get_wallet(
+			self.state.ledger.as_ref(),
+			self.state.allocations.as_ref(),
+			self.state.withdrawals.as_ref(),
+			self.state.deposit_addresses.as_ref(),
+			user,
+		)
+		.await
+		.map_err(map_err)?;
 		Ok(Response::new(pb::Wallet {
-			networks: wallet.networks.iter().map(wallet_network_to_proto).collect(),
+			balance: Some(pb::Balance {
+				available: wallet.balance.available.to_decimal_string(),
+				invested: wallet.balance.invested.to_decimal_string(),
+				pending_withdrawal: wallet.balance.pending_withdrawal.to_decimal_string(),
+				total: wallet.balance.total.to_decimal_string(),
+			}),
+			deposit_addresses: wallet.deposit_addresses.iter().map(deposit_rail_to_proto).collect(),
+			withdrawable: wallet.withdrawable.iter().map(withdrawable_to_proto).collect(),
 		}))
 	}
 
@@ -285,6 +296,15 @@ impl WalletService for WalletSvc {
 		)
 		.await
 		.map_err(map_err)?;
+		Ok(Response::new(withdrawal_to_proto(&withdrawal)))
+	}
+
+	async fn cancel_withdrawal(&self, request: Request<pb::CancelWithdrawalRequest>) -> Result<Response<pb::Withdrawal>, Status> {
+		let user = caller_id(&request)?;
+		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
+		let withdrawal = withdrawal_app::cancel_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id, user)
+			.await
+			.map_err(map_err)?;
 		Ok(Response::new(withdrawal_to_proto(&withdrawal)))
 	}
 
@@ -331,7 +351,6 @@ fn allocation_to_proto(allocation: &Allocation) -> pb::Allocation {
 	pb::Allocation {
 		id: allocation.id().to_string(),
 		amount: allocation.amount().to_decimal_string(),
-		network: allocation.network().as_str().to_owned(),
 		owner_kind: allocation.owner().kind_str().to_owned(),
 		owner_id: allocation.owner().id_str().unwrap_or_default(),
 		sharers: allocation
@@ -348,16 +367,21 @@ fn allocation_to_proto(allocation: &Allocation) -> pb::Allocation {
 	}
 }
 
-fn wallet_network_to_proto(network: &wallet_app::WalletNetwork) -> pb::WalletNetwork {
-	pb::WalletNetwork {
-		network: network.network.as_str().to_owned(),
-		available: network.available.to_decimal_string(),
-		reserved: network.reserved.to_decimal_string(),
-		allocated: network.allocated.to_decimal_string(),
-		total: network.total.to_decimal_string(),
-		deposit_address: network.deposit_address.as_ref().map(|address| address.as_str().to_owned()).unwrap_or_default(),
-		min_withdrawal: network.min_withdrawal.to_decimal_string(),
-		withdrawal_fee: network.withdrawal_fee.to_decimal_string(),
+fn deposit_rail_to_proto(rail: &wallet_app::DepositRail) -> pb::DepositAddress {
+	pb::DepositAddress {
+		network: rail.network.as_str().to_owned(),
+		address: rail.address.as_ref().map(|address| address.as_str().to_owned()).unwrap_or_default(),
+		min_confirmations: min_confirmations(rail.network),
+	}
+}
+
+fn withdrawable_to_proto(rail: &wallet_app::NetworkWithdrawable) -> pb::NetworkWithdrawable {
+	pb::NetworkWithdrawable {
+		network: rail.network.as_str().to_owned(),
+		withdrawable: rail.withdrawable.to_decimal_string(),
+		instant: rail.instant.to_decimal_string(),
+		min_withdrawal: rail.min_withdrawal.to_decimal_string(),
+		withdrawal_fee: rail.withdrawal_fee.to_decimal_string(),
 	}
 }
 

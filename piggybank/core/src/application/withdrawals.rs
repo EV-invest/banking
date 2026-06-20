@@ -1,13 +1,17 @@
-//! Withdrawal use cases — request (user), settle/fail (operator), list (user).
+//! Withdrawal use cases — request + cancel (user), dispatch/settle/fail (operator),
+//! list (user).
 //!
-//! `request_withdrawal` is a command: it gates on the user being active (the KYC/
-//! freeze seam), confirms the **available** claim (posted − already-reserved) covers
-//! the gross amount Read-First (the TB non-negative flag is the backstop), records the
-//! aggregate, and notifies the relay to reserve the money. `settle`/`fail` are the
-//! operator/watcher-driven completions (admin-gated at the boundary) standing in for a
-//! chain watcher + custody confirmation callback. The cardinal rule — fail (void) only
-//! when the broadcast certainly did not land — is enforced socially at this seam, not
-//! by the aggregate.
+//! `request_withdrawal` is a command with a **two-part Read-First**: it gates on the
+//! user being active (the KYC/freeze seam), confirms the **available** unified claim
+//! (posted − already-reserved) covers the gross (user solvency; the TB non-negative
+//! flag is the backstop), then checks the **chosen rail's liquidity** (treasury) — if
+//! the rail can cover the net it dispatches immediately, otherwise the withdrawal is
+//! accepted and left `Queued` for the treasury worker (`dispatch_withdrawal`) to send
+//! once the rail is topped up. `settle`/`fail` are the operator/watcher-driven
+//! completions (admin-gated at the boundary), standing in for a chain watcher + custody
+//! confirmation callback; `cancel` (user) refunds a still-queued withdrawal. The
+//! cardinal rule — fail (void) only when the broadcast certainly did not land — is why
+//! `fail` is only legal once `Processing`, while a `Queued` one is always safe to cancel.
 
 use domain::{
 	balance::LedgerAccountKey,
@@ -44,26 +48,58 @@ pub async fn request_withdrawal(
 	let fee = WithdrawalPolicy::fee(network);
 	// Validate the request shape (minimum, fee coverage, no on-chain dust, address net).
 	let mut withdrawal = Withdrawal::request(WithdrawalId::new(), user, network, address, amount, fee)?;
-	// Read-First: the spendable balance (posted minus what's already reserved by other
-	// in-flight withdrawals) must cover the gross. TB's flag is the hard backstop.
-	let balance = ledger.balance(&LedgerAccountKey::UserClaim(user, network)).await?;
-	if balance.available() < amount {
+	// Read-First #1 — user solvency: the spendable unified claim (posted minus what's
+	// already reserved by other in-flight withdrawals) must cover the gross. TB's flag
+	// is the hard backstop.
+	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
+	if claim.available() < amount {
 		return Err(DomainError::Validation("insufficient available balance to withdraw".into()));
+	}
+	// Read-First #2 — rail liquidity (treasury): if the chosen rail can cover the net
+	// now, dispatch to custody immediately; otherwise accept and leave it queued for the
+	// treasury worker to dispatch once the rail is topped up (accept-and-queue).
+	let rail_liquidity = ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted;
+	if rail_liquidity >= withdrawal.net_amount() {
+		withdrawal.dispatch()?;
 	}
 	withdrawals.open(&mut withdrawal).await?;
 	relay.notify_one();
 	Ok(withdrawal)
 }
 
+/// Dispatch a queued withdrawal to custody (treasury worker / admin): the chosen rail
+/// now has liquidity, so the relay broadcasts. Idempotent.
+pub async fn dispatch_withdrawal(withdrawals: &dyn WithdrawalRepository, relay: &Notify, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+	let withdrawal = withdrawals.dispatch(id).await?;
+	relay.notify_one();
+	Ok(withdrawal)
+}
+
+/// Cancel a still-queued withdrawal (the calling user): voids the reservation,
+/// refunding in full. Ownership is checked here; the aggregate refuses to cancel once
+/// the withdrawal is processing (a broadcast may have landed).
+pub async fn cancel_withdrawal(withdrawals: &dyn WithdrawalRepository, relay: &Notify, id: WithdrawalId, user: UserId) -> Result<Withdrawal, DomainError> {
+	let existing = withdrawals.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
+		entity: "withdrawal",
+		id: id.to_string(),
+	})?;
+	if existing.user() != user {
+		return Err(DomainError::Forbidden("not your withdrawal".into()));
+	}
+	let withdrawal = withdrawals.cancel(id).await?;
+	relay.notify_one();
+	Ok(withdrawal)
+}
+
 /// Settle a confirmed withdrawal (operator/watcher): records the chain `tx_ref` and
-/// posts the reservations. Idempotent.
+/// posts the reservation, moving the net out of custody. Idempotent.
 pub async fn settle_withdrawal(withdrawals: &dyn WithdrawalRepository, relay: &Notify, id: WithdrawalId, tx_ref: TxRef) -> Result<Withdrawal, DomainError> {
 	let withdrawal = withdrawals.settle(id, tx_ref).await?;
 	relay.notify_one();
 	Ok(withdrawal)
 }
 
-/// Fail an unsettled withdrawal (operator/watcher): voids the reservation, refunding
+/// Fail a processing withdrawal (operator/watcher): voids the reservation, refunding
 /// the user. Only safe when the broadcast certainly did not reach the chain.
 pub async fn fail_withdrawal(withdrawals: &dyn WithdrawalRepository, relay: &Notify, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
 	let withdrawal = withdrawals.fail(id).await?;

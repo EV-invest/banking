@@ -89,7 +89,7 @@ async fn deposit_credits_once_and_is_idempotent_by_tx_ref() {
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let network = Network::Trc20;
-	let key = LedgerAccountKey::UserClaim(user, network);
+	let key = LedgerAccountKey::UserClaim(user);
 	let tx_ref = unique_tx_ref();
 
 	assert!(claim(&h, &key).await.is_zero());
@@ -120,10 +120,10 @@ async fn deposit_credits_a_claim_backed_by_custody() {
 		.unwrap();
 	h.relay.drain().await;
 
-	// The user's claim is isolated (random user); the custody wallet is a shared
-	// singleton, so assert the direction of the per-network invariant that holds
-	// regardless of concurrent deposits: custody always backs the claims it funds.
-	let user_claim = claim(&h, &LedgerAccountKey::UserClaim(user, network)).await;
+	// The user's unified claim is isolated (random user); the rail's custody wallet is a
+	// shared singleton. Assert the direction that holds regardless of concurrent
+	// deposits: the rail that funded this claim backs it (global sum custody >= claims).
+	let user_claim = claim(&h, &LedgerAccountKey::UserClaim(user)).await;
 	assert_eq!(user_claim, usdt("250"), "the deposit credited the user's claim");
 	assert!(claim(&h, &wallet).await >= user_claim, "custody backs the claim (sum custody >= claims)");
 }
@@ -134,15 +134,15 @@ async fn allocate_and_revoke_round_trip_with_the_rule() {
 	let user = UserId::new();
 	let network = Network::Bep20;
 	let service = unique_service();
-	let user_key = LedgerAccountKey::UserClaim(user, network);
-	let service_key = LedgerAccountKey::ServiceClaim(service.clone(), network);
+	let user_key = LedgerAccountKey::UserClaim(user);
+	let service_key = LedgerAccountKey::ServiceClaim(service.clone());
 
 	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
 
-	let allocation = alloc_app::allocate_user_stake(h.allocations.as_ref(), h.ledger.as_ref(), &h.notify, user, service.clone(), network, usdt("60"))
+	let allocation = alloc_app::allocate_user_stake(h.allocations.as_ref(), h.ledger.as_ref(), &h.notify, user, service.clone(), usdt("60"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -179,7 +179,7 @@ async fn over_allocation_is_rejected_read_first() {
 	h.relay.drain().await;
 
 	// 50 > 10 — the Read-First sufficiency check rejects before any intent is written.
-	let err = alloc_app::allocate_user_stake(h.allocations.as_ref(), h.ledger.as_ref(), &h.notify, user, unique_service(), network, usdt("50"))
+	let err = alloc_app::allocate_user_stake(h.allocations.as_ref(), h.ledger.as_ref(), &h.notify, user, unique_service(), usdt("50"))
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(_)), "insufficient funds is a validation error, got {err:?}");
@@ -199,8 +199,8 @@ async fn non_negative_flag_is_the_ledger_backstop() {
 	// DebitsMustNotExceedCredits flag rejects it as InsufficientFunds.
 	let transfer = LedgerTransfer {
 		id: Uuid::new_v4().as_u128(),
-		debit: LedgerAccountKey::UserClaim(user, network),
-		credit: LedgerAccountKey::ServiceClaim(unique_service(), network),
+		debit: LedgerAccountKey::UserClaim(user),
+		credit: LedgerAccountKey::ServiceClaim(unique_service()),
 		amount: usdt("50"),
 		code: TransferCode::UserAllocate,
 		reference: 0,
@@ -222,8 +222,8 @@ async fn transfer_id_is_idempotent_no_double_move() {
 
 	let transfer = LedgerTransfer {
 		id: Uuid::new_v4().as_u128(),
-		debit: LedgerAccountKey::UserClaim(user, network),
-		credit: LedgerAccountKey::ServiceClaim(service.clone(), network),
+		debit: LedgerAccountKey::UserClaim(user),
+		credit: LedgerAccountKey::ServiceClaim(service.clone()),
 		amount: usdt("30"),
 		code: TransferCode::UserAllocate,
 		reference: 0,
@@ -232,6 +232,6 @@ async fn transfer_id_is_idempotent_no_double_move() {
 	h.ledger.post(&transfer).await.unwrap();
 	h.ledger.post(&transfer).await.unwrap();
 
-	assert_eq!(claim(&h, &LedgerAccountKey::ServiceClaim(service, network)).await, usdt("30"), "no double move");
-	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(user, network)).await, usdt("70"));
+	assert_eq!(claim(&h, &LedgerAccountKey::ServiceClaim(service)).await, usdt("30"), "no double move");
+	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(user)).await, usdt("70"));
 }
