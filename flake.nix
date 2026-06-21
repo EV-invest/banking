@@ -236,6 +236,18 @@
 
             ${linkTbClient}
 
+            # Load the hub's local config (signing key, Google OAuth creds, …) the way
+            # dotenvy would — but from piggybank/core/.env, since we run from the repo
+            # root (dotenvy only checks ./.env). `set -a` exports each assignment;
+            # already-set env vars are not overwritten by `.env`, and the defaults
+            # below still fill anything the file leaves unset.
+            set -a
+            if [ -f piggybank/core/.env ]; then
+              # shellcheck disable=SC1091
+              . piggybank/core/.env
+            fi
+            set +a
+
             export DATABASE_URL="''${DATABASE_URL:-postgres://postgres@localhost:5432/ev_banking}"
             export GRPC_ADDR="''${GRPC_ADDR:-0.0.0.0:50051}"
             export AUTH_GRPC_ADDR="''${AUTH_GRPC_ADDR:-0.0.0.0:50052}"
