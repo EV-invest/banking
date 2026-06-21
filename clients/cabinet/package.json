@@ -13,10 +13,10 @@
     "gen:api": "openapi-ts"
   },
   "dependencies": {
-    "@evinvest/analytics": "^0.1.0",
+    "@evinvest/analytics": "^0.1.2",
     "@evinvest/error-monitoring": "^0.1.0",
     "@evinvest/experiments": "^0.1.0",
-    "@evinvest/uikit": "^0.1.2",
+    "@evinvest/uikit": "^0.3.0",
     "@grpc/grpc-js": "^1.12.5",
     "@grpc/proto-loader": "^0.8.1",
     "@sentry/nextjs": "^10.58.0",
@@ -29,6 +29,7 @@
     "posthog-js": "^1.390.2",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "react-qr-code": "^2.2.0",
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
