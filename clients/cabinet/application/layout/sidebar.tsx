@@ -102,7 +102,9 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 // Account chip bound to the BFF session. Behind the auth gate this is always a real user;
 // a dropped/stale session (cookie present, server-side session gone) bounces to /login.
 function AccountChip() {
+  const pathname = usePathname();
   const [email, setEmail] = useState<string | null | undefined>(undefined);
+  const onProfile = pathname.startsWith("/profile");
 
   useEffect(() => {
     let active = true;
@@ -133,15 +135,21 @@ function AccountChip() {
   }
 
   return (
-    <div className="flex items-center gap-[10px] border-t border-border pt-[14px]">
-      <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initialsOf(email)}</span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold text-main-mist">{displayName(email)}</p>
-        <p className="flex items-center gap-[5px] text-[11px] font-medium text-main-accent-t1">
-          <BadgeCheck className="size-3" /> Verified
-        </p>
-      </div>
-      <button type="button" onClick={signOut} aria-label="Sign out" className="text-muted-foreground transition-colors hover:text-foreground">
+    <div className="flex items-center gap-2 border-t border-border pt-[14px]">
+      <Link
+        href="/profile"
+        aria-current={onProfile ? "page" : undefined}
+        className={cn("flex min-w-0 flex-1 items-center gap-[10px] rounded-lg px-1.5 py-1 transition-colors hover:bg-foreground/[0.04]", onProfile && "bg-main-surface")}
+      >
+        <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initialsOf(email)}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold text-main-mist">{displayName(email)}</p>
+          <p className="flex items-center gap-[5px] text-[11px] font-medium text-main-accent-t1">
+            <BadgeCheck className="size-3" /> Verified
+          </p>
+        </div>
+      </Link>
+      <button type="button" onClick={signOut} aria-label="Sign out" className="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
         <LogOut className="size-4" />
       </button>
     </div>
