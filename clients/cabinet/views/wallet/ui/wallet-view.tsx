@@ -8,9 +8,13 @@ import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, CardHea
 import { cancelWithdrawal, fetchDepositAddress, fetchWallet, fetchWithdrawals, submitWithdrawal } from "@/entities/wallet/api/wallet-client";
 import type { DepositAddress, NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { DepositQr } from "@/views/wallet/ui/deposit-qr";
 import { formatUsdt, fromBaseUnits, NETWORKS, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+// Clearly-visible active tab. The uikit default active state is `bg-background` — invisible
+// on this dark theme — so the current selection reads at a glance: teal tint + teal label.
+const TAB_TRIGGER = "data-[state=active]:bg-main-accent-t1/15 data-[state=active]:text-main-accent-t1 data-[state=active]:font-semibold data-[state=active]:shadow-none";
 
 // Per-rail withdraw options for the selected network (fee, min, instant liquidity).
 function withdrawableFor(wallet: Wallet | null, network: string): NetworkWithdrawable | undefined {
@@ -35,10 +39,10 @@ export function WalletView() {
   const balance = wallet?.balance;
 
   return (
-    <div className="container max-w-5xl space-y-8 py-12">
+    <div className="space-y-8 px-8 pb-10 pt-6">
       <header className="space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">Wallet</p>
-        <h1 className="text-3xl font-semibold">Your USDT</h1>
+        <h1 className="font-sans text-2xl font-semibold text-foreground">Your USDT</h1>
         <p className="text-sm text-muted-foreground">One balance — networks are just how you deposit and withdraw.</p>
       </header>
 
@@ -51,7 +55,7 @@ export function WalletView() {
       )}
 
       <Card>
-        <CardContent className="space-y-6 pt-6">
+        <CardContent className="space-y-6">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Total balance</p>
@@ -69,9 +73,15 @@ export function WalletView() {
 
       <Tabs defaultValue="deposit">
         <TabsList>
-          <TabsTrigger value="deposit">Deposit</TabsTrigger>
-          <TabsTrigger value="withdraw">Withdraw</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="deposit" className={TAB_TRIGGER}>
+            Deposit
+          </TabsTrigger>
+          <TabsTrigger value="withdraw" className={TAB_TRIGGER}>
+            Withdraw
+          </TabsTrigger>
+          <TabsTrigger value="activity" className={TAB_TRIGGER}>
+            Activity
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="deposit" className="pt-6">
@@ -161,7 +171,7 @@ function DepositPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex aspect-square w-40 items-center justify-center rounded-lg border border-border bg-main-surface text-xs text-muted-foreground">QR</div>
+          <div className="flex justify-center">{address ? <DepositQr value={address.address ?? ""} /> : <Skeleton className="size-44 rounded-2xl" />}</div>
           <div className="flex items-center gap-2">
             {address ? (
               <code className="flex-1 break-all rounded-md border border-border bg-main-surface px-3 py-2 text-sm">{address.address}</code>
@@ -241,7 +251,7 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
       )}
 
       <Card>
-        <CardContent className="space-y-4 pt-6">
+        <CardContent className="space-y-4">
           <label className="block space-y-1.5">
             <span className="text-sm">Destination address</span>
             <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder={`${networkLabel(network)} address`} spellCheck={false} />
