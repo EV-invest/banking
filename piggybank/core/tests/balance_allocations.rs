@@ -14,16 +14,17 @@ use std::sync::Arc;
 use domain::{
 	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
 	error::DomainError,
-	money::{Network, Shares, TxRef, Usdt},
+	money::{Nav, Network, Shares, TxRef, Usdt},
 	users::UserId,
 };
 use piggybank_core::{
-	application::{allocations as alloc_app, balance as balance_app},
+	application::{allocations as alloc_app, balance as balance_app, funds as funds_app},
 	infrastructure::{
 		allocations::PgAllocations,
 		custody::StubCustody,
 		db,
 		ledger::{self, TbLedger},
+		nav::PgNav,
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
 	},
@@ -293,4 +294,51 @@ async fn share_ledger_mints_burns_and_rejects_over_redeem() {
 	h.ledger.post(&burn).await.unwrap();
 	assert_eq!(units(&h, &user_shares).await, shares("60"), "the user's units dropped by the burn");
 	assert_eq!(units(&h, &outstanding).await, shares("60"), "supply dropped in lockstep");
+}
+
+#[tokio::test]
+async fn fund_valuation_derives_nav_and_guards_fat_finger() {
+	let Some(h) = harness().await else { return };
+	let nav_repo = PgNav::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+
+	// No mark yet → the current NAV is the bootstrap seed (1.0).
+	assert_eq!(funds_app::current_nav(&nav_repo, &service).await.unwrap(), Nav::SEED);
+	// Posting AUM with zero units outstanding is rejected — NAV is undefined.
+	assert!(
+		funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("100"), "op", false)
+			.await
+			.is_err()
+	);
+
+	// Mint 100 units so SharesOutstanding(service) = 100, then NAV can be derived.
+	let mint = LedgerTransfer {
+		id: Uuid::new_v4().as_u128(),
+		debit: LedgerAccountKey::UserShares(service.clone(), user),
+		credit: LedgerAccountKey::SharesOutstanding(service.clone()),
+		amount: shares("100").base_units(),
+		code: TransferCode::ShareMint,
+		reference: 0,
+	};
+	h.ledger.post(&mint).await.unwrap();
+
+	// AUM 150 over 100 units → NAV 1.5, and it becomes the current price.
+	let v = funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("150"), "op", false)
+		.await
+		.unwrap();
+	assert_eq!(v.nav, Nav::parse_decimal("1.5").unwrap());
+	assert_eq!(funds_app::current_nav(&nav_repo, &service).await.unwrap(), Nav::parse_decimal("1.5").unwrap());
+
+	// A 10x fat-finger (AUM 1500 → NAV 15, +900%) is rejected without override…
+	assert!(
+		funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", false)
+			.await
+			.is_err()
+	);
+	// …and accepted with it.
+	let forced = funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", true)
+		.await
+		.unwrap();
+	assert_eq!(forced.nav, Nav::parse_decimal("15").unwrap());
 }

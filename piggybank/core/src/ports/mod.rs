@@ -18,6 +18,7 @@ pub mod allocations;
 pub mod custody;
 pub mod deposit_addresses;
 pub mod ledger;
+pub mod nav;
 pub mod withdrawals;
 
 pub use allocations::AllocationRepository;
@@ -31,6 +32,7 @@ use domain::{
 	users::{Email, User, UserId},
 };
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
+pub use nav::{NavRepository, Valuation};
 pub use withdrawals::WithdrawalRepository;
 
 /// Persistence + read port for the [`User`] aggregate.
