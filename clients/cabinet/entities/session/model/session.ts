@@ -71,10 +71,34 @@ export function currentUser(id: string | undefined): User | null {
   return session.user;
 }
 
+// Coalesces concurrent refreshes per session: a page load fires several BFF calls at once
+// and the hub's refresh token is single-use (rotating). Without this, the first call rotates
+// the token and the rest fail with a now-stale token and drop the session — logging out a
+// valid user. Single-flighting means one rotation per session; everyone awaits its result.
+const refreshing = new Map<string, Promise<boolean>>();
+
+async function refreshSession(id: string, refreshToken: string): Promise<boolean> {
+  try {
+    const tokens = await grpcRefresh(refreshToken);
+    const session = sessions.get(id);
+    if (!session) return false;
+    session.accessToken = tokens.access_token;
+    session.accessExpiresAt = Number(tokens.access_expires_at);
+    session.refreshToken = tokens.refresh_token;
+    session.refreshExpiresAt = Number(tokens.refresh_expires_at);
+    session.user = principal(tokens);
+    return true;
+  } catch {
+    sessions.delete(id);
+    return false;
+  }
+}
+
 /**
  * Ensure the session's access token is valid, rotating via the hub if it expired
  * (and the refresh token is still good). Returns the user + csrf token, or null if
- * the session is gone/expired (in which case it is dropped).
+ * the session is gone/expired (in which case it is dropped). Concurrent callers for the
+ * same session share a single rotation (see {@link refreshing}).
  */
 export async function ensureFresh(id: string | undefined): Promise<{ user: User; csrfToken: string } | null> {
   if (!id) return null;
@@ -85,17 +109,15 @@ export async function ensureFresh(id: string | undefined): Promise<{ user: User;
     return null;
   }
   if (session.accessExpiresAt <= nowSecs() + 30) {
-    try {
-      const tokens = await grpcRefresh(session.refreshToken);
-      session.accessToken = tokens.access_token;
-      session.accessExpiresAt = Number(tokens.access_expires_at);
-      session.refreshToken = tokens.refresh_token;
-      session.refreshExpiresAt = Number(tokens.refresh_expires_at);
-      session.user = principal(tokens);
-    } catch {
-      sessions.delete(id);
-      return null;
+    let pending = refreshing.get(id);
+    if (!pending) {
+      pending = refreshSession(id, session.refreshToken).finally(() => refreshing.delete(id));
+      refreshing.set(id, pending);
     }
+    if (!(await pending)) return null;
+    const refreshed = sessions.get(id);
+    if (!refreshed) return null;
+    return { user: refreshed.user, csrfToken: refreshed.csrfToken };
   }
   return { user: session.user, csrfToken: session.csrfToken };
 }

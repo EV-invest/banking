@@ -36,7 +36,10 @@ export async function GET(req: NextRequest) {
     setSessionCookies(res, id, csrfToken, maxAge);
     clearTxCookie(res);
     return res;
-  } catch {
+  } catch (e) {
+    // Surface the hub's gRPC status (e.g. NotConfigured / google token endpoint
+    // returned 400 / nonce mismatch) server-side — the user only sees `?error=exchange`.
+    console.error("[auth/callback] token exchange failed:", (e as { code?: number; details?: string; message?: string }).details ?? (e as Error).message ?? e);
     return fail("exchange");
   }
 }
