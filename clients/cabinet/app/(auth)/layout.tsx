@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
-// Chrome-light wrapper for the auth screens: centers the card in the viewport
-// (below the shared header from the root layout).
+// Full-bleed wrapper for the unauthenticated surfaces. Each view owns its own framing —
+// login is an edge-to-edge two-panel, logged-out centers a card. No app shell here; the
+// sidebar belongs to the signed-in `(app)` route group.
 export default function AuthLayout({ children }: { children: ReactNode }) {
-  return <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-6 py-16">{children}</div>;
+  return <div className="min-h-screen bg-background">{children}</div>;
 }
