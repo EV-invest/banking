@@ -70,8 +70,8 @@ impl UsersService for UsersSvc {
 			.await
 			.map_err(|_| Status::unavailable("ledger unavailable"))?;
 		Ok(Response::new(pb::UserBalanceResponse {
-			amount: balance.posted.to_decimal_string(),
-			pending: balance.pending.to_decimal_string(),
+			amount: Usdt::from_base_units(balance.posted).to_decimal_string(),
+			pending: Usdt::from_base_units(balance.pending).to_decimal_string(),
 			authoritative: true,
 			as_of: unix_now(),
 		}))

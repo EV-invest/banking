@@ -27,7 +27,7 @@ pub async fn allocate_user_stake(
 	amount: Usdt,
 ) -> Result<Allocation, DomainError> {
 	let balance = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
-	if balance.available() < amount {
+	if Usdt::from_base_units(balance.available()) < amount {
 		return Err(DomainError::Validation("insufficient balance to allocate".into()));
 	}
 	let mut allocation = Allocation::open_user_stake(AllocationId::new(), user, service, amount)?;

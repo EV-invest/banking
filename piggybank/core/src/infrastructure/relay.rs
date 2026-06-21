@@ -151,17 +151,17 @@ impl Relay {
 		// gross stranded in clearing and no compensating path. A short rail parks the settle
 		// atomically (nothing applied); a top-up + reconciliation recovers it.
 		for op in &ops {
-			if op.role == "withdraw_disburse" {
-				if let LedgerAction::Post(transfer) = &op.action {
-					match self.ledger.balance(&transfer.credit).await {
-						Ok(balance) if balance.posted < transfer.amount => {
-							return Outcome::Park(format!("rail {} liquidity insufficient at settle", transfer.credit.logical_key()));
-						}
-						Ok(_) => {}
-						Err(LedgerError::Unavailable(err)) => return Outcome::Retry(err),
-						Err(LedgerError::Retryable(err)) => return Outcome::RetryBounded(err),
-						Err(err) => return Outcome::Park(format!("settle rail check: {err}")),
+			if op.role == "withdraw_disburse"
+				&& let LedgerAction::Post(transfer) = &op.action
+			{
+				match self.ledger.balance(&transfer.credit).await {
+					Ok(balance) if balance.posted < transfer.amount => {
+						return Outcome::Park(format!("rail {} liquidity insufficient at settle", transfer.credit.logical_key()));
 					}
+					Ok(_) => {}
+					Err(LedgerError::Unavailable(err)) => return Outcome::Retry(err),
+					Err(LedgerError::Retryable(err)) => return Outcome::RetryBounded(err),
+					Err(err) => return Outcome::Park(format!("settle rail check: {err}")),
 				}
 			}
 		}
@@ -258,7 +258,7 @@ fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> Planned
 				id: event_tid,
 				debit: LedgerAccountKey::CryptoWallet(network),
 				credit: party.claim_key(),
-				amount,
+				amount: amount.base_units(),
 				code: TransferCode::Deposit,
 				reference,
 			}),
@@ -270,7 +270,7 @@ fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> Planned
 				id: event_tid,
 				debit: LedgerAccountKey::CryptoWallet(network),
 				credit: LedgerAccountKey::Fund,
-				amount,
+				amount: amount.base_units(),
 				code: TransferCode::SeedCapital,
 				reference,
 			}),
@@ -288,7 +288,7 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 					id: event_tid,
 					debit: LedgerAccountKey::UserClaim(user),
 					credit: LedgerAccountKey::ServiceClaim(service),
-					amount,
+					amount: amount.base_units(),
 					code: TransferCode::UserAllocate,
 					reference,
 				}),
@@ -300,7 +300,7 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 					id: pending_tid,
 					debit: LedgerAccountKey::Fund,
 					credit: LedgerAccountKey::ServiceClaim(service),
-					amount,
+					amount: amount.base_units(),
 					code: TransferCode::ServiceReserve,
 					reference,
 				}),
@@ -312,7 +312,7 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 					id: event_tid,
 					debit: LedgerAccountKey::Fund,
 					credit: LedgerAccountKey::ServiceClaim(service),
-					amount,
+					amount: amount.base_units(),
 					code: TransferCode::ServiceTransfer,
 					reference,
 				}),
@@ -325,7 +325,7 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 				id: event_tid,
 				debit: LedgerAccountKey::ServiceClaim(service),
 				credit: LedgerAccountKey::UserClaim(user),
-				amount,
+				amount: amount.base_units(),
 				code: TransferCode::UserRevoke,
 				reference,
 			}),
@@ -339,7 +339,7 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 				kind: CompletionKind::Post,
 				debit: LedgerAccountKey::Fund,
 				credit: LedgerAccountKey::ServiceClaim(service),
-				amount,
+				amount: amount.base_units(),
 				code: TransferCode::ServiceSettle,
 				reference,
 			}),
@@ -353,7 +353,7 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 				kind: CompletionKind::Void,
 				debit: LedgerAccountKey::Fund,
 				credit: LedgerAccountKey::ServiceClaim(service),
-				amount,
+				amount: amount.base_units(),
 				code: TransferCode::ServiceCancel,
 				reference,
 			}),
@@ -378,7 +378,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 				id: tid(aggregate_id, CLEARING_RESERVE),
 				debit: LedgerAccountKey::UserClaim(user),
 				credit: LedgerAccountKey::WithdrawalClearing,
-				amount,
+				amount: amount.base_units(),
 				code: TransferCode::Withdraw,
 				reference,
 			}),
@@ -411,7 +411,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 						kind: CompletionKind::Post,
 						debit: LedgerAccountKey::UserClaim(user),
 						credit: LedgerAccountKey::WithdrawalClearing,
-						amount,
+						amount: amount.base_units(),
 						code: TransferCode::Withdraw,
 						reference,
 					}),
@@ -423,7 +423,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 						id: tid(aggregate_id, WALLET_REDISTRIBUTE),
 						debit: LedgerAccountKey::WithdrawalClearing,
 						credit: LedgerAccountKey::CryptoWallet(network),
-						amount: net,
+						amount: net.base_units(),
 						code: TransferCode::Withdraw,
 						reference,
 					}),
@@ -437,7 +437,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 						id: tid(aggregate_id, FEE_REDISTRIBUTE),
 						debit: LedgerAccountKey::WithdrawalClearing,
 						credit: LedgerAccountKey::FeeRevenue,
-						amount: fee,
+						amount: fee.base_units(),
 						code: TransferCode::WithdrawFee,
 						reference,
 					}),
@@ -462,7 +462,7 @@ fn void_clearing(aggregate_id: Uuid, user: UserId, amount: Usdt, reference: u128
 			kind: CompletionKind::Void,
 			debit: LedgerAccountKey::UserClaim(user),
 			credit: LedgerAccountKey::WithdrawalClearing,
-			amount,
+			amount: amount.base_units(),
 			code: TransferCode::Withdraw,
 			reference,
 		}),

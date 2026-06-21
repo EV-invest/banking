@@ -14,7 +14,7 @@ use std::sync::Arc;
 use domain::{
 	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
 	error::DomainError,
-	money::{Network, TxRef, Usdt},
+	money::{Network, Shares, TxRef, Usdt},
 	users::UserId,
 };
 use piggybank_core::{
@@ -81,7 +81,15 @@ fn unique_tx_ref() -> TxRef {
 }
 
 async fn claim(h: &Harness, key: &LedgerAccountKey) -> Usdt {
-	h.ledger.balance(key).await.unwrap().posted
+	Usdt::from_base_units(h.ledger.balance(key).await.unwrap().posted)
+}
+
+fn shares(decimal: &str) -> Shares {
+	Shares::parse_decimal(decimal).unwrap()
+}
+
+async fn units(h: &Harness, key: &LedgerAccountKey) -> Shares {
+	Shares::from_base_units(h.ledger.balance(key).await.unwrap().posted)
 }
 
 #[tokio::test]
@@ -201,7 +209,7 @@ async fn non_negative_flag_is_the_ledger_backstop() {
 		id: Uuid::new_v4().as_u128(),
 		debit: LedgerAccountKey::UserClaim(user),
 		credit: LedgerAccountKey::ServiceClaim(unique_service()),
-		amount: usdt("50"),
+		amount: usdt("50").base_units(),
 		code: TransferCode::UserAllocate,
 		reference: 0,
 	};
@@ -224,7 +232,7 @@ async fn transfer_id_is_idempotent_no_double_move() {
 		id: Uuid::new_v4().as_u128(),
 		debit: LedgerAccountKey::UserClaim(user),
 		credit: LedgerAccountKey::ServiceClaim(service.clone()),
-		amount: usdt("30"),
+		amount: usdt("30").base_units(),
 		code: TransferCode::UserAllocate,
 		reference: 0,
 	};
@@ -234,4 +242,55 @@ async fn transfer_id_is_idempotent_no_double_move() {
 
 	assert_eq!(claim(&h, &LedgerAccountKey::ServiceClaim(service)).await, usdt("30"), "no double move");
 	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(user)).await, usdt("70"));
+}
+
+#[tokio::test]
+async fn share_ledger_mints_burns_and_rejects_over_redeem() {
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let service = unique_service();
+	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
+	let outstanding = LedgerAccountKey::SharesOutstanding(service.clone());
+
+	// Mint 100 units on the Share ledger: Dr UserShares / Cr SharesOutstanding.
+	let mint = LedgerTransfer {
+		id: Uuid::new_v4().as_u128(),
+		debit: user_shares.clone(),
+		credit: outstanding.clone(),
+		amount: shares("100").base_units(),
+		code: TransferCode::ShareMint,
+		reference: 0,
+	};
+	h.ledger.post(&mint).await.unwrap();
+	// Per-service invariant: SharesOutstanding == sum(UserShares). This (user, service) is
+	// fresh, so both equal the minted amount exactly.
+	assert_eq!(units(&h, &user_shares).await, shares("100"), "the user holds the minted units");
+	assert_eq!(units(&h, &outstanding).await, shares("100"), "supply equals the user's holding");
+
+	// Over-redeem: a *pending* burn of 150 (Dr SharesOutstanding / Cr UserShares) exceeds
+	// the 100 minted — TigerBeetle rejects it atomically via the non-negative flag, even as
+	// a reservation. The TB flag, not a row-lock, is the money backstop.
+	let over_burn = LedgerTransfer {
+		id: Uuid::new_v4().as_u128(),
+		debit: outstanding.clone(),
+		credit: user_shares.clone(),
+		amount: shares("150").base_units(),
+		code: TransferCode::ShareBurn,
+		reference: 0,
+	};
+	let err = h.ledger.reserve(&over_burn).await.unwrap_err();
+	assert!(matches!(err, LedgerError::InsufficientFunds), "TB rejects the over-redeem reserve, got {err:?}");
+
+	// A burn within the holding posts and reduces both sides equally — the invariant holds.
+	let burn = LedgerTransfer {
+		id: Uuid::new_v4().as_u128(),
+		debit: outstanding.clone(),
+		credit: user_shares.clone(),
+		amount: shares("40").base_units(),
+		code: TransferCode::ShareBurn,
+		reference: 0,
+	};
+	h.ledger.post(&burn).await.unwrap();
+	assert_eq!(units(&h, &user_shares).await, shares("60"), "the user's units dropped by the burn");
+	assert_eq!(units(&h, &outstanding).await, shares("60"), "supply dropped in lockstep");
 }
