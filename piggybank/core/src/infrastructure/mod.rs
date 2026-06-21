@@ -21,6 +21,7 @@ pub mod deposit_addresses;
 pub mod ledger;
 pub mod nav;
 pub mod outbox;
+pub mod redemptions;
 pub mod relay;
 pub mod subscriptions;
 pub mod telemetry;

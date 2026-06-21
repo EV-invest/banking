@@ -15,6 +15,7 @@ use domain::{
 	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
 	error::DomainError,
 	money::{Nav, Network, Shares, TxRef, Usdt},
+	redemptions::RedemptionState,
 	users::UserId,
 };
 use piggybank_core::{
@@ -25,6 +26,7 @@ use piggybank_core::{
 		db,
 		ledger::{self, TbLedger},
 		nav::PgNav,
+		redemptions::PgRedemptions,
 		relay::Relay,
 		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
@@ -92,6 +94,10 @@ fn shares(decimal: &str) -> Shares {
 
 async fn units(h: &Harness, key: &LedgerAccountKey) -> Shares {
 	Shares::from_base_units(h.ledger.balance(key).await.unwrap().posted)
+}
+
+async fn units_available(h: &Harness, key: &LedgerAccountKey) -> Shares {
+	Shares::from_base_units(h.ledger.balance(key).await.unwrap().available())
 }
 
 fn now_unix() -> i64 {
@@ -405,4 +411,157 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 			.await
 			.is_err()
 	);
+}
+
+#[tokio::test]
+async fn redeem_when_fund_is_liquid_auto_completes() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let now = now_unix();
+	let user_claim = LedgerAccountKey::UserClaim(user);
+	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
+	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
+	let outstanding = LedgerAccountKey::SharesOutstanding(service.clone());
+
+	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	// Redeem 40 units at the seed NAV (1.0) → 40 cash. The fund claim (100) covers it, so
+	// it auto-settles in one request (a separate settle command, not a co-emitted event).
+	let r = funds_app::request_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("40"), now)
+		.await
+		.unwrap();
+	assert_eq!(r.state(), RedemptionState::Completed, "a liquid redemption settles immediately");
+	h.relay.drain().await;
+
+	assert_eq!(units(&h, &user_shares).await, shares("60"), "units burned");
+	assert_eq!(units(&h, &outstanding).await, shares("60"), "supply dropped with the burn");
+	assert_eq!(claim(&h, &service_claim).await, usdt("60"), "cash left the fund pool");
+	assert_eq!(claim(&h, &user_claim).await, usdt("40"), "cash credited to the user");
+}
+
+/// Set a user up holding 100 units in a fund marked up to NAV 2 — so a full redemption
+/// values to 200 cash while the fund claim holds only 100 — then request it, returning the
+/// queued redemption id. Shared by the short-fund tests.
+async fn queued_short_redemption(
+	h: &Harness,
+	subs: &PgSubscriptions,
+	reds: &PgRedemptions,
+	nav_repo: &PgNav,
+	user: UserId,
+	service: &ServiceId,
+	now: i64,
+) -> domain::redemptions::RedemptionId {
+	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	funds_app::subscribe(subs, h.ledger.as_ref(), nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	// Mark up to NAV 2 (AUM 200 over 100 units) — a +100% move, so the operator forces it.
+	funds_app::post_fund_valuation(nav_repo, h.ledger.as_ref(), service.clone(), usdt("200"), "op", true)
+		.await
+		.unwrap();
+	let r = funds_app::request_redemption(reds, h.ledger.as_ref(), nav_repo, &h.notify, user, service.clone(), shares("100"), now)
+		.await
+		.unwrap();
+	assert_eq!(r.state(), RedemptionState::Queued, "a short fund queues the redemption");
+	h.relay.drain().await;
+	r.id()
+}
+
+#[tokio::test]
+async fn redeem_on_a_short_fund_queues_then_settles_with_profit() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let now = now_unix();
+	let user_claim = LedgerAccountKey::UserClaim(user);
+	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
+	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
+
+	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now).await;
+	// Units are reserved (locked), not burned; no cash paid while queued.
+	assert_eq!(units(&h, &user_shares).await, shares("100"), "units still posted (reserved, not burned)");
+	assert_eq!(units_available(&h, &user_shares).await, Shares::ZERO, "units locked by the reservation");
+	assert_eq!(claim(&h, &user_claim).await, Usdt::ZERO, "no cash paid while queued");
+
+	// The fund realizes profit: a deposit credits the service claim up to 200.
+	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	assert_eq!(claim(&h, &service_claim).await, usdt("200"), "the fund topped up");
+
+	// Operator settles — priced at the settle-time NAV (2) and paid in full.
+	let settled = funds_app::settle_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, id, now).await.unwrap();
+	assert_eq!(settled.state(), RedemptionState::Completed);
+	h.relay.drain().await;
+
+	assert_eq!(units(&h, &user_shares).await, Shares::ZERO, "all units burned at settle");
+	assert_eq!(claim(&h, &service_claim).await, Usdt::ZERO, "the fund paid out");
+	assert_eq!(claim(&h, &user_claim).await, usdt("200"), "100 in, 200 out — NAV doubled, profit realized");
+}
+
+#[tokio::test]
+async fn settling_a_short_fund_parks_without_burning_or_paying() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let now = now_unix();
+	let user_claim = LedgerAccountKey::UserClaim(user);
+	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
+	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
+
+	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now).await;
+
+	// Settle while the fund is STILL short (100 < 200) — the relay's payout pre-check parks
+	// the whole event. Burn-first ordering means nothing is applied: no half-burn, no cash.
+	funds_app::settle_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, id, now).await.unwrap();
+	h.relay.drain().await;
+	assert_eq!(units(&h, &user_shares).await, shares("100"), "units NOT burned (settle parked)");
+	assert_eq!(claim(&h, &user_claim).await, Usdt::ZERO, "no cash paid (settle parked)");
+	assert_eq!(claim(&h, &service_claim).await, usdt("100"), "the fund claim is untouched");
+}
+
+#[tokio::test]
+async fn cancelling_a_queued_redemption_returns_the_units() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let now = now_unix();
+	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
+
+	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now).await;
+
+	// A non-owner cannot cancel.
+	assert!(funds_app::cancel_redemption(&reds, &h.notify, id, UserId::new()).await.is_err(), "only the owner may cancel");
+
+	// The owner cancels — the relay voids the burn, releasing the locked units.
+	let cancelled = funds_app::cancel_redemption(&reds, &h.notify, id, user).await.unwrap();
+	assert_eq!(cancelled.state(), RedemptionState::Cancelled);
+	h.relay.drain().await;
+	assert_eq!(units(&h, &user_shares).await, shares("100"), "units still held");
+	assert_eq!(units_available(&h, &user_shares).await, shares("100"), "the reservation lock was released");
 }

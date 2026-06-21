@@ -19,6 +19,7 @@ pub mod custody;
 pub mod deposit_addresses;
 pub mod ledger;
 pub mod nav;
+pub mod redemptions;
 pub mod subscriptions;
 pub mod withdrawals;
 
@@ -34,6 +35,7 @@ use domain::{
 };
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
 pub use nav::{NavRepository, Valuation};
+pub use redemptions::RedemptionRepository;
 pub use subscriptions::SubscriptionRepository;
 pub use withdrawals::WithdrawalRepository;
 
