@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
-use ports::{AllocationRepository, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger};
+use ports::{DepositAddresses, FundPositionReader, NavRepository, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 
@@ -53,10 +53,16 @@ pub struct AppState {
 	pub analytics: Analytics,
 	/// The `users` aggregate's driven port (Postgres control plane).
 	pub users: Arc<dyn UserRepository>,
-	/// The `allocations` aggregate's driven port (Postgres control plane).
-	pub allocations: Arc<dyn AllocationRepository>,
 	/// The `withdrawals` aggregate's driven port (Postgres control plane).
 	pub withdrawals: Arc<dyn WithdrawalRepository>,
+	/// The `subscriptions` aggregate's driven port (mint records + position cost basis).
+	pub subscriptions: Arc<dyn SubscriptionRepository>,
+	/// The `redemptions` aggregate's driven port (the accept-and-queue saga).
+	pub redemptions: Arc<dyn RedemptionRepository>,
+	/// Fund valuation marks → the derived NAV (the operator-posted AUM history).
+	pub nav: Arc<dyn NavRepository>,
+	/// The per-investor fund-position projection (cost basis, high-water mark).
+	pub positions: Arc<dyn FundPositionReader>,
 	/// Per-user deposit-address provisioning (stub HD derivation behind a port).
 	pub deposit_addresses: Arc<dyn DepositAddresses>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
@@ -73,8 +79,11 @@ impl AppState {
 		authorizer: Authorizer,
 		analytics: Analytics,
 		users: Arc<dyn UserRepository>,
-		allocations: Arc<dyn AllocationRepository>,
 		withdrawals: Arc<dyn WithdrawalRepository>,
+		subscriptions: Arc<dyn SubscriptionRepository>,
+		redemptions: Arc<dyn RedemptionRepository>,
+		nav: Arc<dyn NavRepository>,
+		positions: Arc<dyn FundPositionReader>,
 		deposit_addresses: Arc<dyn DepositAddresses>,
 		relay_notify: Arc<Notify>,
 		admin_subjects: Arc<[String]>,
@@ -85,8 +94,11 @@ impl AppState {
 			authorizer,
 			analytics,
 			users,
-			allocations,
 			withdrawals,
+			subscriptions,
+			redemptions,
+			nav,
+			positions,
 			deposit_addresses,
 			relay_notify,
 			admin_subjects,

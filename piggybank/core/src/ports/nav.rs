@@ -15,19 +15,6 @@ use domain::{
 };
 use uuid::Uuid;
 
-/// One operator valuation mark for a fund. NAV is derived (`aum / units_outstanding`)
-/// and frozen until the next mark; `posted_at_unix` is the age seam for the staleness
-/// guard, `posted_by` the operator subject (the trust seam).
-#[derive(Debug, Clone)]
-pub struct Valuation {
-	pub service: ServiceId,
-	pub aum: Usdt,
-	pub units_outstanding: Shares,
-	pub nav: Nav,
-	pub posted_by: String,
-	pub posted_at_unix: i64,
-}
-
 #[async_trait]
 pub trait NavRepository: Send + Sync {
 	/// The latest mark for `service`, or `None` if the fund has never been valued.
@@ -39,4 +26,16 @@ pub trait NavRepository: Send + Sync {
 
 	/// All marks for `service`, newest first (admin/UI history).
 	async fn history(&self, service: &ServiceId) -> Result<Vec<Valuation>, DomainError>;
+}
+/// One operator valuation mark for a fund. NAV is derived (`aum / units_outstanding`)
+/// and frozen until the next mark; `posted_at_unix` is the age seam for the staleness
+/// guard, `posted_by` the operator subject (the trust seam).
+#[derive(Debug, Clone)]
+pub struct Valuation {
+	pub service: ServiceId,
+	pub aum: Usdt,
+	pub units_outstanding: Shares,
+	pub nav: Nav,
+	pub posted_by: String,
+	pub posted_at_unix: i64,
 }

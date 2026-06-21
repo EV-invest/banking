@@ -20,7 +20,6 @@
 use std::{sync::Arc, time::Duration};
 
 use domain::{
-	allocations::{AllocationEvent, AllocationKind},
 	balance::{LedgerAccountKey, LedgerEvent, TransferCode},
 	money::Usdt,
 	redemptions::RedemptionEvent,
@@ -261,10 +260,6 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 			let event: LedgerEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
 			Ok(vec![plan_balance(event, event_tid, reference)])
 		}
-		"allocations" => {
-			let event: AllocationEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
-			Ok(vec![plan_allocation(event, event_tid, pending_transfer_id(row.aggregate_id), reference)])
-		}
 		"withdrawals" => {
 			let event: WithdrawalEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
 			Ok(plan_withdrawal(event, row.aggregate_id, reference))
@@ -305,89 +300,6 @@ fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> Planned
 				credit: LedgerAccountKey::Fund,
 				amount: amount.base_units(),
 				code: TransferCode::SeedCapital,
-				reference,
-			}),
-		},
-	}
-}
-
-fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, reference: u128) -> PlannedOp {
-	match event {
-		AllocationEvent::Opened { amount, kind, .. } => match kind {
-			AllocationKind::UserStake { user, service } => PlannedOp {
-				role: "allocate",
-				transfer_id: event_tid,
-				action: LedgerAction::Post(LedgerTransfer {
-					id: event_tid,
-					debit: LedgerAccountKey::UserClaim(user),
-					credit: LedgerAccountKey::ServiceClaim(service),
-					amount: amount.base_units(),
-					code: TransferCode::UserAllocate,
-					reference,
-				}),
-			},
-			AllocationKind::ServiceReservation { service } => PlannedOp {
-				role: "reserve",
-				transfer_id: pending_tid,
-				action: LedgerAction::Reserve(LedgerTransfer {
-					id: pending_tid,
-					debit: LedgerAccountKey::Fund,
-					credit: LedgerAccountKey::ServiceClaim(service),
-					amount: amount.base_units(),
-					code: TransferCode::ServiceReserve,
-					reference,
-				}),
-			},
-			AllocationKind::ServiceHolding { service } => PlannedOp {
-				role: "transfer",
-				transfer_id: event_tid,
-				action: LedgerAction::Post(LedgerTransfer {
-					id: event_tid,
-					debit: LedgerAccountKey::Fund,
-					credit: LedgerAccountKey::ServiceClaim(service),
-					amount: amount.base_units(),
-					code: TransferCode::ServiceTransfer,
-					reference,
-				}),
-			},
-		},
-		AllocationEvent::Revoked { amount, user, service, .. } => PlannedOp {
-			role: "revoke",
-			transfer_id: event_tid,
-			action: LedgerAction::Post(LedgerTransfer {
-				id: event_tid,
-				debit: LedgerAccountKey::ServiceClaim(service),
-				credit: LedgerAccountKey::UserClaim(user),
-				amount: amount.base_units(),
-				code: TransferCode::UserRevoke,
-				reference,
-			}),
-		},
-		AllocationEvent::Settled { amount, service, .. } => PlannedOp {
-			role: "settle",
-			transfer_id: event_tid,
-			action: LedgerAction::Complete(PendingCompletion {
-				id: event_tid,
-				pending_id: pending_tid,
-				kind: CompletionKind::Post,
-				debit: LedgerAccountKey::Fund,
-				credit: LedgerAccountKey::ServiceClaim(service),
-				amount: amount.base_units(),
-				code: TransferCode::ServiceSettle,
-				reference,
-			}),
-		},
-		AllocationEvent::Cancelled { amount, service, .. } => PlannedOp {
-			role: "cancel",
-			transfer_id: event_tid,
-			action: LedgerAction::Complete(PendingCompletion {
-				id: event_tid,
-				pending_id: pending_tid,
-				kind: CompletionKind::Void,
-				debit: LedgerAccountKey::Fund,
-				credit: LedgerAccountKey::ServiceClaim(service),
-				amount: amount.base_units(),
-				code: TransferCode::ServiceCancel,
 				reference,
 			}),
 		},
@@ -609,12 +521,6 @@ fn void_clearing(aggregate_id: Uuid, user: UserId, amount: Usdt, reference: u128
 			reference,
 		}),
 	}
-}
-
-/// The stable id of a reservation's pending transfer — derived from the allocation
-/// id (not the event id) so the later settle/cancel can recompute it as `pending_id`.
-fn pending_transfer_id(aggregate_id: Uuid) -> u128 {
-	Uuid::new_v5(&aggregate_id, b"reserve").as_u128()
 }
 
 /// A deterministic TigerBeetle transfer id for one leg/phase of a withdrawal, derived

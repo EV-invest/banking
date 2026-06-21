@@ -2,183 +2,6 @@
   "openapi": "3.1.0",
   "info": {},
   "paths": {
-    "/banking.v1.AllocationsService/Allocate": {
-      "post": {
-        "tags": [
-          "banking.v1.AllocationsService"
-        ],
-        "summary": "Allocate",
-        "description": "The calling user directs part of their balance at a fund service/strategy.",
-        "operationId": "banking.v1.AllocationsService.Allocate",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/banking.v1.AllocateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/banking.v1.Allocation"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/banking.v1.AllocationsService/ListAllocations": {
-      "post": {
-        "tags": [
-          "banking.v1.AllocationsService"
-        ],
-        "summary": "ListAllocations",
-        "description": "The calling user's allocations, newest first.",
-        "operationId": "banking.v1.AllocationsService.ListAllocations",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/banking.v1.ListAllocationsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/banking.v1.AllocationList"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/banking.v1.AllocationsService/RevokeAllocation": {
-      "post": {
-        "tags": [
-          "banking.v1.AllocationsService"
-        ],
-        "summary": "RevokeAllocation",
-        "description": "The calling user revokes their own stake — permitted only while the fund owns\n the allocation (the domain rule). Idempotent.",
-        "operationId": "banking.v1.AllocationsService.RevokeAllocation",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/banking.v1.RevokeAllocationRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/banking.v1.Allocation"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/banking.v1.AuthService/Exchange": {
       "post": {
         "tags": [
@@ -474,6 +297,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/FailRedemption": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "FailRedemption",
+        "description": "Fail a queued fund redemption (operator): voids the reserved burn, returning the\n user's units. Idempotent.",
+        "operationId": "banking.v1.BalanceService.FailRedemption",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.FailRedemptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Redemption"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/FailWithdrawal": {
       "post": {
         "tags": [
@@ -585,6 +467,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.Treasury"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/PostFundValuation": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "PostFundValuation",
+        "description": "Post a fund's total AUM; NAV is derived = AUM / units_outstanding (units read live\n from TigerBeetle). Rejects zero units and, unless `override` is set, a NAV move\n beyond the safety threshold vs the last mark (the fat-finger guard on the trust seam).",
+        "operationId": "banking.v1.BalanceService.PostFundValuation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.PostFundValuationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FundNav"
                 }
               }
             }
@@ -710,6 +651,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/SettleRedemption": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "SettleRedemption",
+        "description": "Settle a queued fund redemption once the fund's claim is liquid (the treasury\n worker): prices at the settle-time NAV and pays the cash. Idempotent.",
+        "operationId": "banking.v1.BalanceService.SettleRedemption",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SettleRedemptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Redemption"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/SettleWithdrawal": {
       "post": {
         "tags": [
@@ -762,6 +762,419 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.SettleWithdrawalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FundsService/CancelRedemption": {
+      "post": {
+        "tags": [
+          "banking.v1.FundsService"
+        ],
+        "summary": "CancelRedemption",
+        "description": "Cancel a still-queued redemption (returns the reserved units).",
+        "operationId": "banking.v1.FundsService.CancelRedemption",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CancelRedemptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Redemption"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FundsService/GetFundNav": {
+      "post": {
+        "tags": [
+          "banking.v1.FundsService"
+        ],
+        "summary": "GetFundNav",
+        "description": "The current NAV (price per share) for a fund, plus freshness.",
+        "operationId": "banking.v1.FundsService.GetFundNav",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetFundNavRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FundNav"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FundsService/GetPosition": {
+      "post": {
+        "tags": [
+          "banking.v1.FundsService"
+        ],
+        "summary": "GetPosition",
+        "description": "The caller's position in one fund (units, NAV, value, cost basis, P\u0026L).",
+        "operationId": "banking.v1.FundsService.GetPosition",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetPositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Position"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FundsService/ListPositions": {
+      "post": {
+        "tags": [
+          "banking.v1.FundsService"
+        ],
+        "summary": "ListPositions",
+        "description": "All of the caller's fund positions.",
+        "operationId": "banking.v1.FundsService.ListPositions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListPositionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.PositionList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FundsService/ListRedemptions": {
+      "post": {
+        "tags": [
+          "banking.v1.FundsService"
+        ],
+        "summary": "ListRedemptions",
+        "description": "The caller's redemptions for the fund surface (newest first).",
+        "operationId": "banking.v1.FundsService.ListRedemptions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListRedemptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RedemptionList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FundsService/Redeem": {
+      "post": {
+        "tags": [
+          "banking.v1.FundsService"
+        ],
+        "summary": "Redeem",
+        "description": "Redeem `units` of a fund back to cash (accept-and-queue; settle-time priced).",
+        "operationId": "banking.v1.FundsService.Redeem",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RedeemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Redemption"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FundsService/Subscribe": {
+      "post": {
+        "tags": [
+          "banking.v1.FundsService"
+        ],
+        "summary": "Subscribe",
+        "description": "Subscribe `amount` of free balance into a fund, minting units at the current NAV.\n Returns the mint receipt; the holding updates once the relay applies it.",
+        "operationId": "banking.v1.FundsService.Subscribe",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SubscribeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Subscription"
                 }
               }
             }
@@ -1361,85 +1774,6 @@
   },
   "components": {
     "schemas": {
-      "banking.v1.AllocateRequest": {
-        "type": "object",
-        "properties": {
-          "service": {
-            "type": "string",
-            "title": "service",
-            "description": "the service/strategy to allocate to"
-          },
-          "amount": {
-            "type": "string",
-            "title": "amount",
-            "description": "decimal USDT (from the unified, network-agnostic balance)"
-          }
-        },
-        "title": "AllocateRequest",
-        "additionalProperties": false
-      },
-      "banking.v1.Allocation": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "id"
-          },
-          "amount": {
-            "type": "string",
-            "title": "amount",
-            "description": "decimal USDT"
-          },
-          "owner_kind": {
-            "type": "string",
-            "title": "owner_kind",
-            "description": "piggybank | user | service"
-          },
-          "owner_id": {
-            "type": "string",
-            "title": "owner_id"
-          },
-          "sharers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/banking.v1.Sharer"
-            },
-            "title": "sharers"
-          },
-          "kind": {
-            "type": "string",
-            "title": "kind",
-            "description": "user_stake | service_reservation | service_holding"
-          },
-          "service": {
-            "type": "string",
-            "title": "service",
-            "description": "the service the allocation involves"
-          },
-          "state": {
-            "type": "string",
-            "title": "state",
-            "description": "pending | active | revoked | cancelled"
-          }
-        },
-        "title": "Allocation",
-        "additionalProperties": false,
-        "description": "An allocation is network-agnostic — it is a claim against the unified balance, not a\n per-rail stake."
-      },
-      "banking.v1.AllocationList": {
-        "type": "object",
-        "properties": {
-          "allocations": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/banking.v1.Allocation"
-            },
-            "title": "allocations"
-          }
-        },
-        "title": "AllocationList",
-        "additionalProperties": false
-      },
       "banking.v1.Balance": {
         "type": "object",
         "properties": {
@@ -1467,6 +1801,17 @@
         "title": "Balance",
         "additionalProperties": false,
         "description": "The user's single, network-agnostic balance, segmented by lifecycle. Every figure is\n a TigerBeetle-authoritative decimal USDT string; total = available + invested +\n pending_withdrawal."
+      },
+      "banking.v1.CancelRedemptionRequest": {
+        "type": "object",
+        "properties": {
+          "redemption_id": {
+            "type": "string",
+            "title": "redemption_id"
+          }
+        },
+        "title": "CancelRedemptionRequest",
+        "additionalProperties": false
       },
       "banking.v1.CancelWithdrawalRequest": {
         "type": "object",
@@ -1574,6 +1919,17 @@
         "title": "ExchangeRequest",
         "additionalProperties": false
       },
+      "banking.v1.FailRedemptionRequest": {
+        "type": "object",
+        "properties": {
+          "redemption_id": {
+            "type": "string",
+            "title": "redemption_id"
+          }
+        },
+        "title": "FailRedemptionRequest",
+        "additionalProperties": false
+      },
       "banking.v1.FailWithdrawalRequest": {
         "type": "object",
         "properties": {
@@ -1595,6 +1951,46 @@
         "title": "FailWithdrawalResponse",
         "additionalProperties": false
       },
+      "banking.v1.FundNav": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav",
+            "description": "decimal USDT per share"
+          },
+          "aum": {
+            "type": "string",
+            "title": "aum",
+            "description": "last posted AUM (decimal USDT; empty if seed)"
+          },
+          "units_outstanding": {
+            "type": "string",
+            "title": "units_outstanding",
+            "description": "decimal units in circulation"
+          },
+          "posted_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "posted_at",
+            "format": "int64",
+            "description": "unix seconds of the mark (0 = seed)"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "stale"
+          }
+        },
+        "title": "FundNav",
+        "additionalProperties": false,
+        "description": "The current price of a fund's share, derived (AUM / units_outstanding) and frozen\n between operator marks. `posted_at` is 0 when the fund has never been marked (seed\n NAV 1.0); `stale` is true when the latest mark is older than the dealing window."
+      },
       "banking.v1.GetDepositAddressRequest": {
         "type": "object",
         "properties": {
@@ -1607,9 +2003,31 @@
         "title": "GetDepositAddressRequest",
         "additionalProperties": false
       },
+      "banking.v1.GetFundNavRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "GetFundNavRequest",
+        "additionalProperties": false
+      },
       "banking.v1.GetMeRequest": {
         "type": "object",
         "title": "GetMeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetPositionRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "GetPositionRequest",
         "additionalProperties": false
       },
       "banking.v1.GetTreasuryRequest": {
@@ -1678,9 +2096,14 @@
         "title": "JwksResponse",
         "additionalProperties": false
       },
-      "banking.v1.ListAllocationsRequest": {
+      "banking.v1.ListPositionsRequest": {
         "type": "object",
-        "title": "ListAllocationsRequest",
+        "title": "ListPositionsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListRedemptionsRequest": {
+        "type": "object",
+        "title": "ListRedemptionsRequest",
         "additionalProperties": false
       },
       "banking.v1.ListWithdrawalsRequest": {
@@ -1741,6 +2164,88 @@
         "title": "NetworkWithdrawable",
         "additionalProperties": false,
         "description": "Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole\n available balance (a request beyond `instant` is accepted and queued); `instant` is\n the portion that ships without queueing = min(available, rail liquidity)."
+      },
+      "banking.v1.Position": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "units held (decimal)"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav",
+            "description": "current NAV per share (decimal USDT)"
+          },
+          "value": {
+            "type": "string",
+            "title": "value",
+            "description": "units × nav (decimal USDT)"
+          },
+          "cost_basis": {
+            "type": "string",
+            "title": "cost_basis",
+            "description": "net cash invested, average cost (decimal USDT)"
+          },
+          "pnl": {
+            "type": "string",
+            "title": "pnl",
+            "description": "value − cost_basis (signed decimal USDT)"
+          },
+          "nav_as_of": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "nav_as_of",
+            "format": "int64",
+            "description": "unix seconds of the NAV mark (0 = seed NAV)"
+          }
+        },
+        "title": "Position",
+        "additionalProperties": false,
+        "description": "A user's holding in one fund. `value = units × nav`; `pnl = value − cost_basis`\n (a signed decimal — losses are negative). `nav_as_of` is the unix-seconds timestamp\n of the NAV mark used (0 when the fund is on the bootstrap seed NAV)."
+      },
+      "banking.v1.PositionList": {
+        "type": "object",
+        "properties": {
+          "positions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Position"
+            },
+            "title": "positions"
+          }
+        },
+        "title": "PositionList",
+        "additionalProperties": false
+      },
+      "banking.v1.PostFundValuationRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "the fund/service id"
+          },
+          "aum": {
+            "type": "string",
+            "title": "aum",
+            "description": "decimal USDT — the fund's total assets under management"
+          },
+          "override": {
+            "type": "boolean",
+            "title": "override",
+            "description": "bypass the NAV-move safety guard (operator confirmed)"
+          }
+        },
+        "title": "PostFundValuationRequest",
+        "additionalProperties": false
       },
       "banking.v1.RailLiquidity": {
         "type": "object",
@@ -1803,6 +2308,71 @@
         "title": "RecordDepositResponse",
         "additionalProperties": false
       },
+      "banking.v1.RedeemRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "the fund/service id"
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "decimal units to redeem"
+          }
+        },
+        "title": "RedeemRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.Redemption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "units": {
+            "type": "string",
+            "title": "units"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav",
+            "description": "settle NAV (empty until settled)"
+          },
+          "cash": {
+            "type": "string",
+            "title": "cash",
+            "description": "cash paid out (empty until settled)"
+          },
+          "state": {
+            "type": "string",
+            "title": "state"
+          }
+        },
+        "title": "Redemption",
+        "additionalProperties": false,
+        "description": "A redemption in the accept-and-queue saga. `units` are fixed at request; `nav`/`cash`\n are empty until settle (settle-time pricing). State ∈ {queued, completed, failed,\n cancelled}."
+      },
+      "banking.v1.RedemptionList": {
+        "type": "object",
+        "properties": {
+          "redemptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Redemption"
+            },
+            "title": "redemptions"
+          }
+        },
+        "title": "RedemptionList",
+        "additionalProperties": false
+      },
       "banking.v1.RefreshRequest": {
         "type": "object",
         "properties": {
@@ -1834,17 +2404,6 @@
           }
         },
         "title": "RequestWithdrawalRequest",
-        "additionalProperties": false
-      },
-      "banking.v1.RevokeAllocationRequest": {
-        "type": "object",
-        "properties": {
-          "allocation_id": {
-            "type": "string",
-            "title": "allocation_id"
-          }
-        },
-        "title": "RevokeAllocationRequest",
         "additionalProperties": false
       },
       "banking.v1.RevokeTokensRequest": {
@@ -1895,6 +2454,17 @@
         "title": "SeedCapitalResponse",
         "additionalProperties": false
       },
+      "banking.v1.SettleRedemptionRequest": {
+        "type": "object",
+        "properties": {
+          "redemption_id": {
+            "type": "string",
+            "title": "redemption_id"
+          }
+        },
+        "title": "SettleRedemptionRequest",
+        "additionalProperties": false
+      },
       "banking.v1.SettleWithdrawalRequest": {
         "type": "object",
         "properties": {
@@ -1916,21 +2486,50 @@
         "title": "SettleWithdrawalResponse",
         "additionalProperties": false
       },
-      "banking.v1.Sharer": {
+      "banking.v1.SubscribeRequest": {
         "type": "object",
         "properties": {
-          "kind": {
+          "service": {
             "type": "string",
-            "title": "kind"
+            "title": "service",
+            "description": "the fund/service id"
           },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "decimal USDT to subscribe (cash in)"
+          }
+        },
+        "title": "SubscribeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.Subscription": {
+        "type": "object",
+        "properties": {
           "id": {
             "type": "string",
             "title": "id"
+          },
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "cash": {
+            "type": "string",
+            "title": "cash"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav"
+          },
+          "units": {
+            "type": "string",
+            "title": "units"
           }
         },
-        "title": "Sharer",
+        "title": "Subscription",
         "additionalProperties": false,
-        "description": "A party in an allocation's owner/sharer roles. `kind` ∈ {piggybank, user,\n service}; `id` is the user UUID or service id (empty for piggybank)."
+        "description": "The receipt for one subscription (mint): `cash` of the user's balance bought `units`\n at `nav`. The position itself is read via GetPosition once the relay has applied it."
       },
       "banking.v1.TokenResponse": {
         "type": "object",
@@ -2284,12 +2883,12 @@
   "security": [],
   "tags": [
     {
-      "name": "banking.v1.AllocationsService",
-      "description": "AllocationsService — distribution of company and user capital inside the bank and\n across external services.\n\n An allocation has one owner (the \"owned\" party) and a sharers list (the \"shared\"\n list); a user-sharer may revoke only while the fund (piggybank) owns it. Moves are\n cross-boundary sagas over TigerBeetle two-phase transfers. Amounts are decimal\n USDT strings. The user-facing RPCs here act on the caller's own access-token\n `sub`; service-side reservation/settlement RPCs land in a follow-up. See\n docs/ARCHITECTURE.md."
-    },
-    {
       "name": "banking.v1.AuthService",
       "description": "AuthService — the hub's token issuance and authorization surface.\n\n Issues first-party asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 sign-in,\n rotates refresh tokens, and publishes verification keys. Services do NOT call\n this per request to authorize: they verify access tokens locally against the\n cached JWKS via the shared `evbanking_auth` flow (no round trip, no per-service\n token storage). They DO call `Jwks` periodically to refresh that cache, since\n the hub speaks only gRPC (no HTTP `.well-known` endpoint).\n\n The cabinet BFF is the OAuth confidential client. It runs the browser-facing\n authorize redirect (PKCE + state + nonce) and then calls `Exchange`\n server-to-server with the Google authorization code; the auth task performs the\n confidential code→token exchange with Google, validates Google's id_token, and\n discards it — Google's token is never forwarded inward. See docs/ARCHITECTURE.md."
+    },
+    {
+      "name": "banking.v1.FundsService",
+      "description": "FundsService — a user's investment in funds via the service currency (units/shares).\n\n Subscribing buys units at the current NAV; a holding's value is units × NAV, so\n profit comes from NAV rising, not from extra units. Redeeming is accept-and-queue:\n units are reserved immediately and the cash is priced + paid at settle (settle-time\n NAV). Every amount/unit/price is a decimal STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). Self-service RPCs act on the\n caller's own access-token `sub`. See docs/ARCHITECTURE.md."
     },
     {
       "name": "banking.v1.BalanceService",

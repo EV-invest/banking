@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 
 use evbanking_auth::grpc_auth_layer;
 use evbanking_contracts::banking::v1::{
-	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, health_service_server::HealthServiceServer, users_service_server::UsersServiceServer,
+	balance_service_server::BalanceServiceServer, funds_service_server::FundsServiceServer, health_service_server::HealthServiceServer, users_service_server::UsersServiceServer,
 	wallet_service_server::WalletServiceServer,
 };
 use tonic::transport::Server;
@@ -27,7 +27,7 @@ use tower_http::trace::TraceLayer;
 use crate::{
 	AppState,
 	services::{
-		context::{AllocationsSvc, BalanceSvc, UsersSvc, WalletSvc},
+		context::{BalanceSvc, FundsSvc, UsersSvc, WalletSvc},
 		health::Health,
 	},
 };
@@ -51,8 +51,8 @@ pub async fn serve(addr: SocketAddr, state: AppState) -> Result<(), tonic::trans
 		.add_service(HealthServiceServer::new(Health))
 		.add_service(auth.layer(UsersServiceServer::new(UsersSvc::new(state.clone()))))
 		.add_service(auth.layer(BalanceServiceServer::new(BalanceSvc::new(state.clone()))))
-		.add_service(auth.layer(AllocationsServiceServer::new(AllocationsSvc::new(state.clone()))))
-			.add_service(auth.layer(WalletServiceServer::new(WalletSvc::new(state))))
+		.add_service(auth.layer(FundsServiceServer::new(FundsSvc::new(state.clone()))))
+		.add_service(auth.layer(WalletServiceServer::new(WalletSvc::new(state))))
 		.serve(addr)
 		.await
 }

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package banking.v1;
 
+import "banking/v1/funds.proto";
+
 // BalanceService — the bank's treasury and company capital (operator surface).
 //
 // Reads authoritative balances from the TigerBeetle ledger; metadata and events from
@@ -33,6 +35,19 @@ service BalanceService {
   // reservation, refunding the user. NEVER call this if the broadcast may have landed
   // on-chain — that would double-pay. Idempotent.
   rpc FailWithdrawal(FailWithdrawalRequest) returns (FailWithdrawalResponse);
+
+  // Post a fund's total AUM; NAV is derived = AUM / units_outstanding (units read live
+  // from TigerBeetle). Rejects zero units and, unless `override` is set, a NAV move
+  // beyond the safety threshold vs the last mark (the fat-finger guard on the trust seam).
+  rpc PostFundValuation(PostFundValuationRequest) returns (FundNav);
+
+  // Settle a queued fund redemption once the fund's claim is liquid (the treasury
+  // worker): prices at the settle-time NAV and pays the cash. Idempotent.
+  rpc SettleRedemption(SettleRedemptionRequest) returns (Redemption);
+
+  // Fail a queued fund redemption (operator): voids the reserved burn, returning the
+  // user's units. Idempotent.
+  rpc FailRedemption(FailRedemptionRequest) returns (Redemption);
 }
 
 message GetTreasuryRequest {}
@@ -97,3 +112,17 @@ message FailWithdrawalRequest {
 }
 
 message FailWithdrawalResponse {}
+
+message PostFundValuationRequest {
+  string service = 1;   // the fund/service id
+  string aum = 2;       // decimal USDT — the fund's total assets under management
+  bool override = 3;    // bypass the NAV-move safety guard (operator confirmed)
+}
+
+message SettleRedemptionRequest {
+  string redemption_id = 1;
+}
+
+message FailRedemptionRequest {
+  string redemption_id = 1;
+}
