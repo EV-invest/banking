@@ -13,7 +13,6 @@
 
 pub mod error;
 
-pub mod allocations;
 pub mod auth;
 pub mod balance;
 pub mod money;

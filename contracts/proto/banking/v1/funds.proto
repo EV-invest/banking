@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package banking.v1;
+
+// FundsService — a user's investment in funds via the service currency (units/shares).
+//
+// Subscribing buys units at the current NAV; a holding's value is units × NAV, so
+// profit comes from NAV rising, not from extra units. Redeeming is accept-and-queue:
+// units are reserved immediately and the cash is priced + paid at settle (settle-time
+// NAV). Every amount/unit/price is a decimal STRING (proto3 has no u128; a string is
+// lossless and matches proto-loader's `longs: String`). Self-service RPCs act on the
+// caller's own access-token `sub`. See docs/ARCHITECTURE.md.
+service FundsService {
+  // Subscribe `amount` of free balance into a fund, minting units at the current NAV.
+  // Returns the mint receipt; the holding updates once the relay applies it.
+  rpc Subscribe(SubscribeRequest) returns (Subscription);
+
+  // Redeem `units` of a fund back to cash (accept-and-queue; settle-time priced).
+  rpc Redeem(RedeemRequest) returns (Redemption);
+
+  // Cancel a still-queued redemption (returns the reserved units).
+  rpc CancelRedemption(CancelRedemptionRequest) returns (Redemption);
+
+  // The caller's position in one fund (units, NAV, value, cost basis, P&L).
+  rpc GetPosition(GetPositionRequest) returns (Position);
+
+  // All of the caller's fund positions.
+  rpc ListPositions(ListPositionsRequest) returns (PositionList);
+
+  // The caller's redemptions for the fund surface (newest first).
+  rpc ListRedemptions(ListRedemptionsRequest) returns (RedemptionList);
+
+  // The current NAV (price per share) for a fund, plus freshness.
+  rpc GetFundNav(GetFundNavRequest) returns (FundNav);
+}
+
+message SubscribeRequest {
+  string service = 1;  // the fund/service id
+  string amount = 2;   // decimal USDT to subscribe (cash in)
+}
+
+message RedeemRequest {
+  string service = 1;  // the fund/service id
+  string units = 2;    // decimal units to redeem
+}
+
+message CancelRedemptionRequest {
+  string redemption_id = 1;
+}
+
+message GetPositionRequest {
+  string service = 1;
+}
+
+message ListPositionsRequest {}
+
+message ListRedemptionsRequest {}
+
+message GetFundNavRequest {
+  string service = 1;
+}
+
+// A user's holding in one fund. `value = units × nav`; `pnl = value − cost_basis`
+// (a signed decimal — losses are negative). `nav_as_of` is the unix-seconds timestamp
+// of the NAV mark used (0 when the fund is on the bootstrap seed NAV).
+message Position {
+  string service = 1;
+  string units = 2;       // units held (decimal)
+  string nav = 3;         // current NAV per share (decimal USDT)
+  string value = 4;       // units × nav (decimal USDT)
+  string cost_basis = 5;  // net cash invested, average cost (decimal USDT)
+  string pnl = 6;         // value − cost_basis (signed decimal USDT)
+  int64 nav_as_of = 7;    // unix seconds of the NAV mark (0 = seed NAV)
+}
+
+message PositionList {
+  repeated Position positions = 1;
+}
+
+// The receipt for one subscription (mint): `cash` of the user's balance bought `units`
+// at `nav`. The position itself is read via GetPosition once the relay has applied it.
+message Subscription {
+  string id = 1;
+  string service = 2;
+  string cash = 3;
+  string nav = 4;
+  string units = 5;
+}
+
+// A redemption in the accept-and-queue saga. `units` are fixed at request; `nav`/`cash`
+// are empty until settle (settle-time pricing). State ∈ {queued, completed, failed,
+// cancelled}.
+message Redemption {
+  string id = 1;
+  string service = 2;
+  string units = 3;
+  string nav = 4;    // settle NAV (empty until settled)
+  string cash = 5;   // cash paid out (empty until settled)
+  string state = 6;
+}
+
+message RedemptionList {
+  repeated Redemption redemptions = 1;
+}
+
+// The current price of a fund's share, derived (AUM / units_outstanding) and frozen
+// between operator marks. `posted_at` is 0 when the fund has never been marked (seed
+// NAV 1.0); `stale` is true when the latest mark is older than the dealing window.
+message FundNav {
+  string service = 1;
+  string nav = 2;                // decimal USDT per share
+  string aum = 3;                // last posted AUM (decimal USDT; empty if seed)
+  string units_outstanding = 4;  // decimal units in circulation
+  int64 posted_at = 5;           // unix seconds of the mark (0 = seed)
+  bool stale = 6;
+}

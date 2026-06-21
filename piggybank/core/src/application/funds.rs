@@ -19,10 +19,35 @@ use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::ports::{
-	RedemptionRepository, SubscriptionRepository,
+	FundPositionReader, RedemptionRepository, SubscriptionRepository,
 	ledger::Ledger,
 	nav::{NavRepository, Valuation},
 };
+
+/// A user's position in one fund, assembled from the live unit balance (TigerBeetle),
+/// the current NAV, and the cost-basis projection. `value = units × nav`; P&L is
+/// `value − cost_basis` (computed at the wire boundary, where a signed value is natural).
+pub struct PositionView {
+	pub service: ServiceId,
+	pub units: Shares,
+	pub nav: Nav,
+	pub value: Usdt,
+	pub cost_basis: Usdt,
+	/// Unix seconds of the NAV mark used (0 when on the bootstrap seed NAV).
+	pub nav_as_of: i64,
+}
+
+/// A fund's current price and freshness for display.
+pub struct FundNavView {
+	pub service: ServiceId,
+	pub nav: Nav,
+	/// The last posted AUM, or `None` when the fund is still on the seed NAV.
+	pub aum: Option<Usdt>,
+	pub units_outstanding: Shares,
+	/// Unix seconds of the latest mark (0 = never marked / seed).
+	pub posted_at: i64,
+	pub stale: bool,
+}
 
 /// A derived NAV that jumps more than this (percent) from the previous mark is rejected
 /// unless the operator passes an override — the fat-finger guard on the AUM trust seam.
@@ -166,6 +191,66 @@ pub async fn fail_redemption(redemptions: &dyn RedemptionRepository, relay: &Not
 /// A user's redemptions (projection), newest first.
 pub async fn list_redemptions(redemptions: &dyn RedemptionRepository, user: UserId) -> Result<Vec<Redemption>, DomainError> {
 	redemptions.list_by_user(user).await
+}
+
+/// The caller's position in one fund: live units × current NAV, with the cost basis for
+/// P&L. A fund never subscribed to reports zero units at the seed NAV.
+pub async fn get_position(positions: &dyn FundPositionReader, ledger: &dyn Ledger, nav: &dyn NavRepository, user: UserId, service: ServiceId) -> Result<PositionView, DomainError> {
+	let cost_basis = positions.find(user, &service).await?.map(|p| p.cost_basis).unwrap_or(Usdt::ZERO);
+	build_position_view(ledger, nav, user, service, cost_basis).await
+}
+
+/// All of the caller's fund positions with a non-zero unit balance.
+pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Ledger, nav: &dyn NavRepository, user: UserId) -> Result<Vec<PositionView>, DomainError> {
+	let mut out = Vec::new();
+	for position in positions.list(user).await? {
+		let view = build_position_view(ledger, nav, user, position.service, position.cost_basis).await?;
+		if !view.units.is_zero() {
+			out.push(view);
+		}
+	}
+	Ok(out)
+}
+
+/// Assemble a position view: read the live unit balance and the current NAV, value it.
+async fn build_position_view(ledger: &dyn Ledger, nav: &dyn NavRepository, user: UserId, service: ServiceId, cost_basis: Usdt) -> Result<PositionView, DomainError> {
+	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?.posted);
+	let (price, nav_as_of) = match nav.current(&service).await? {
+		Some(v) => (v.nav, v.posted_at_unix),
+		None => (Nav::SEED, 0),
+	};
+	let value = price.value(units)?;
+	Ok(PositionView {
+		service,
+		units,
+		nav: price,
+		value,
+		cost_basis,
+		nav_as_of,
+	})
+}
+
+/// The current NAV + freshness for a fund (the seed NAV when never marked).
+pub async fn fund_nav_view(nav: &dyn NavRepository, ledger: &dyn Ledger, service: ServiceId, now_unix: i64) -> Result<FundNavView, DomainError> {
+	let units_outstanding = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
+	Ok(match nav.current(&service).await? {
+		Some(v) => FundNavView {
+			service,
+			nav: v.nav,
+			aum: Some(v.aum),
+			units_outstanding,
+			posted_at: v.posted_at_unix,
+			stale: now_unix.saturating_sub(v.posted_at_unix) > MAX_NAV_AGE_SECS,
+		},
+		None => FundNavView {
+			service,
+			nav: Nav::SEED,
+			aum: None,
+			units_outstanding,
+			posted_at: 0,
+			stale: false,
+		},
+	})
 }
 
 /// Operator posts a fund's total AUM; NAV is derived (`AUM / units_outstanding`, read

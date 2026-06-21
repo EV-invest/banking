@@ -9,22 +9,21 @@
 //! (`instant = min(available, rail liquidity)`, the accept-and-queue degradation hint).
 
 use domain::{
-	allocations::{AllocationKind, AllocationState},
 	balance::LedgerAccountKey,
 	error::DomainError,
-	money::{Network, Usdt, WalletAddress},
+	money::{Nav, Network, Shares, Usdt, WalletAddress},
 	users::UserId,
 	withdrawals::{WithdrawalPolicy, WithdrawalState},
 };
 
-use crate::ports::{AllocationRepository, DepositAddresses, WithdrawalRepository, ledger::Ledger};
+use crate::ports::{DepositAddresses, FundPositionReader, NavRepository, WithdrawalRepository, ledger::Ledger};
 
 /// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
 /// non-negative; `total = available + invested + pending_withdrawal`.
 pub struct WalletBalance {
 	/// Free, spendable now (claim posted − reserved).
 	pub available: Usdt,
-	/// Staked in fund services (sum of the user's active stakes).
+	/// Held in fund units, valued at the current NAV (`Σ units × NAV`).
 	pub invested: Usdt,
 	/// Locked by queued/in-flight withdrawals (sum of their gross).
 	pub pending_withdrawal: Usdt,
@@ -63,7 +62,8 @@ pub struct Wallet {
 /// the per-rail withdrawable view.
 pub async fn get_wallet(
 	ledger: &dyn Ledger,
-	allocations: &dyn AllocationRepository,
+	positions: &dyn FundPositionReader,
+	nav: &dyn NavRepository,
 	withdrawals: &dyn WithdrawalRepository,
 	deposit_addresses: &dyn DepositAddresses,
 	user: UserId,
@@ -73,13 +73,17 @@ pub async fn get_wallet(
 	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
 	let available = Usdt::from_base_units(claim.available());
 
-	// invested = the user's active stakes (network-agnostic projection).
-	let user_allocations = allocations.list_by_user(user).await?;
-	let invested = user_allocations
-		.iter()
-		.filter(|a| a.state() == AllocationState::Active && matches!(a.kind(), AllocationKind::UserStake { .. }))
-		.try_fold(Usdt::ZERO, |acc, a| acc.checked_add(a.amount()))
-		.ok_or_else(|| DomainError::Repository("invested total overflow".into()))?;
+	// invested = the value of the user's fund positions: live units × current NAV.
+	let mut invested = Usdt::ZERO;
+	for position in positions.list(user).await? {
+		let held = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(position.service.clone(), user)).await?.posted);
+		if held.is_zero() {
+			continue;
+		}
+		let price = nav.current(&position.service).await?.map(|v| v.nav).unwrap_or(Nav::SEED);
+		let value = price.value(held)?;
+		invested = invested.checked_add(value).ok_or_else(|| DomainError::Repository("invested total overflow".into()))?;
+	}
 
 	// pending_withdrawal = the gross of queued/in-flight withdrawals (projection).
 	let user_withdrawals = withdrawals.list_by_user(user).await?;

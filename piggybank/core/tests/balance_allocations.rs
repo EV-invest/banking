@@ -13,15 +13,13 @@ use std::sync::Arc;
 
 use domain::{
 	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
-	error::DomainError,
 	money::{Nav, Network, Shares, TxRef, Usdt},
 	redemptions::RedemptionState,
 	users::UserId,
 };
 use piggybank_core::{
-	application::{allocations as alloc_app, balance as balance_app, funds as funds_app},
+	application::{balance as balance_app, funds as funds_app},
 	infrastructure::{
-		allocations::PgAllocations,
 		custody::StubCustody,
 		db,
 		ledger::{self, TbLedger},
@@ -40,7 +38,6 @@ use uuid::Uuid;
 struct Harness {
 	pool: PgPool,
 	ledger: Arc<dyn Ledger>,
-	allocations: Arc<dyn piggybank_core::ports::AllocationRepository>,
 	relay: Relay,
 	notify: Arc<Notify>,
 }
@@ -60,16 +57,9 @@ async fn harness() -> Option<Harness> {
 		return None;
 	}
 
-	let allocations: Arc<dyn piggybank_core::ports::AllocationRepository> = Arc::new(PgAllocations::new(pool.clone()));
 	let notify = Arc::new(Notify::new());
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
-	Some(Harness {
-		pool,
-		ledger,
-		allocations,
-		relay,
-		notify,
-	})
+	Some(Harness { pool, ledger, relay, notify })
 }
 
 fn usdt(decimal: &str) -> Usdt {
@@ -147,63 +137,6 @@ async fn deposit_credits_a_claim_backed_by_custody() {
 	let user_claim = claim(&h, &LedgerAccountKey::UserClaim(user)).await;
 	assert_eq!(user_claim, usdt("250"), "the deposit credited the user's claim");
 	assert!(claim(&h, &wallet).await >= user_claim, "custody backs the claim (sum custody >= claims)");
-}
-
-#[tokio::test]
-async fn allocate_and_revoke_round_trip_with_the_rule() {
-	let Some(h) = harness().await else { return };
-	let user = UserId::new();
-	let network = Network::Bep20;
-	let service = unique_service();
-	let user_key = LedgerAccountKey::UserClaim(user);
-	let service_key = LedgerAccountKey::ServiceClaim(service.clone());
-
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
-		.await
-		.unwrap();
-	h.relay.drain().await;
-
-	let allocation = alloc_app::allocate_user_stake(h.allocations.as_ref(), h.ledger.as_ref(), &h.notify, user, service.clone(), usdt("60"))
-		.await
-		.unwrap();
-	h.relay.drain().await;
-	assert_eq!(claim(&h, &user_key).await, usdt("40"), "the user's free claim dropped");
-	assert_eq!(claim(&h, &service_key).await, usdt("60"), "the service pool grew");
-
-	// Another user may not revoke this stake (owner is the fund, but they aren't the
-	// sole sharer) — the domain rule, enforced under the row lock.
-	let intruder = UserId::new();
-	let denied = alloc_app::revoke_user_stake(h.allocations.as_ref(), &h.notify, allocation.id(), intruder).await.unwrap_err();
-	assert!(matches!(denied, DomainError::Forbidden(_)), "a non-owner is forbidden, got {denied:?}");
-	assert_eq!(claim(&h, &user_key).await, usdt("40"), "the denied revoke moved nothing");
-
-	// The staking user revokes — the claim is returned.
-	alloc_app::revoke_user_stake(h.allocations.as_ref(), &h.notify, allocation.id(), user).await.unwrap();
-	h.relay.drain().await;
-	assert_eq!(claim(&h, &user_key).await, usdt("100"), "the stake came back");
-	assert_eq!(claim(&h, &service_key).await, Usdt::ZERO, "the service pool emptied");
-
-	// Revoking again is idempotent — no error, no further movement.
-	alloc_app::revoke_user_stake(h.allocations.as_ref(), &h.notify, allocation.id(), user).await.unwrap();
-	h.relay.drain().await;
-	assert_eq!(claim(&h, &user_key).await, usdt("100"), "double-revoke is a no-op");
-}
-
-#[tokio::test]
-async fn over_allocation_is_rejected_read_first() {
-	let Some(h) = harness().await else { return };
-	let user = UserId::new();
-	let network = Network::Trc20;
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("10"))
-		.await
-		.unwrap();
-	h.relay.drain().await;
-
-	// 50 > 10 — the Read-First sufficiency check rejects before any intent is written.
-	let err = alloc_app::allocate_user_stake(h.allocations.as_ref(), h.ledger.as_ref(), &h.notify, user, unique_service(), usdt("50"))
-		.await
-		.unwrap_err();
-	assert!(matches!(err, DomainError::Validation(_)), "insufficient funds is a validation error, got {err:?}");
 }
 
 #[tokio::test]
