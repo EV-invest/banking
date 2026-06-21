@@ -29,7 +29,7 @@ use piggybank_core::{
 		users::PgUsers,
 		withdrawals::PgWithdrawals,
 	},
-	ports::{DepositAddresses, LedgerBalance, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -99,8 +99,28 @@ async fn active_user(h: &Harness) -> UserId {
 	h.users.provision(subject, email, true).await.unwrap().id()
 }
 
-async fn bal(h: &Harness, key: &LedgerAccountKey) -> LedgerBalance {
-	h.ledger.balance(key).await.unwrap()
+/// A `Usdt`-typed view of a ledger balance for assertions (the ledger port speaks raw
+/// base units; the cash ledger's unit is 18-dp USDT).
+struct Bal {
+	posted: Usdt,
+	#[allow(dead_code)]
+	pending: Usdt,
+	locked: Usdt,
+}
+
+impl Bal {
+	fn available(&self) -> Usdt {
+		self.posted.checked_sub(self.locked).unwrap_or(Usdt::ZERO)
+	}
+}
+
+async fn bal(h: &Harness, key: &LedgerAccountKey) -> Bal {
+	let b = h.ledger.balance(key).await.unwrap();
+	Bal {
+		posted: Usdt::from_base_units(b.posted),
+		pending: Usdt::from_base_units(b.pending),
+		locked: Usdt::from_base_units(b.locked),
+	}
 }
 
 async fn deposit(h: &Harness, user: UserId, network: Network, amount: &str) {

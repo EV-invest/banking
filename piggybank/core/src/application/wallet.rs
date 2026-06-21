@@ -68,9 +68,10 @@ pub async fn get_wallet(
 	deposit_addresses: &dyn DepositAddresses,
 	user: UserId,
 ) -> Result<Wallet, DomainError> {
-	// Layer 1 — the single unified claim.
+	// Layer 1 — the single unified claim. The ledger speaks raw base units; wrap into
+	// the typed `Usdt` at this boundary.
 	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
-	let available = claim.available();
+	let available = Usdt::from_base_units(claim.available());
 
 	// invested = the user's active stakes (network-agnostic projection).
 	let user_allocations = allocations.list_by_user(user).await?;
@@ -111,7 +112,7 @@ pub async fn get_wallet(
 		// `instant` = min(available, rail liquidity) — "this much ships without queueing".
 		// It reveals the rail's liquidity only up to the user's own balance (see the
 		// NetworkWithdrawable doc); bucket/round here if that disclosure must be avoided.
-		let rail_liquidity = ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted;
+		let rail_liquidity = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
 		withdrawable.push(NetworkWithdrawable {
 			network,
 			withdrawable: available,

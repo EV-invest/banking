@@ -100,14 +100,14 @@ pub async fn treasury(ledger: &dyn Ledger) -> Result<Treasury, DomainError> {
 	let mut rails = Vec::with_capacity(Network::ALL.len());
 	let mut total_custody = Usdt::ZERO;
 	for network in Network::ALL {
-		let custody = ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted;
+		let custody = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
 		total_custody = total_custody.checked_add(custody).ok_or_else(|| DomainError::Repository("custody total overflow".into()))?;
 		rails.push(RailLiquidity { network, custody });
 	}
-	let bank = ledger.balance(&LedgerAccountKey::BankCustody).await?.posted;
-	let fund_capital = ledger.balance(&LedgerAccountKey::Fund).await?.posted;
-	let fee_revenue = ledger.balance(&LedgerAccountKey::FeeRevenue).await?.posted;
-	let reserved_for_withdrawals = ledger.balance(&LedgerAccountKey::WithdrawalClearing).await?.pending;
+	let bank = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::BankCustody).await?.posted);
+	let fund_capital = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::Fund).await?.posted);
+	let fee_revenue = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::FeeRevenue).await?.posted);
+	let reserved_for_withdrawals = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::WithdrawalClearing).await?.pending);
 	// Global invariant sum(custody) == sum(claims): client liabilities are the custody
 	// beyond the fund's own capital and retained fees. Saturating — a transient read
 	// skew yields 0, never a panic.

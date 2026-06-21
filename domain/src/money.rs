@@ -19,6 +19,8 @@ use crate::error::DomainError;
 /// `10^-18` USDT, so amounts are exact (no floating point ever touches money).
 pub const CANONICAL_DECIMALS: u32 = 18;
 const BASE58_ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+/// `10^18` — the canonical fixed-point scale shared by [`Usdt`], [`Shares`], and [`Nav`].
+const SCALE: u128 = 10u128.pow(CANONICAL_DECIMALS);
 /// The chains the fund custodies USDT on. The on-chain decimal scale differs per
 /// chain, which is the whole reason [`Usdt`] normalizes to a canonical unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -228,63 +230,6 @@ impl core::fmt::Display for Usdt {
 	}
 }
 
-/// `10^18` — the canonical fixed-point scale shared by [`Usdt`], [`Shares`], and [`Nav`].
-const SCALE: u128 = 10u128.pow(CANONICAL_DECIMALS);
-
-/// Full 256-bit product of two `u128`s as `(hi, lo)`. The NAV math multiplies an
-/// 18-dp amount by `10^18` before dividing, which overflows `u128` for any amount
-/// above ~340 USDT — so the intermediate product must be 256-bit, never `u128`.
-const fn widening_mul(a: u128, b: u128) -> (u128, u128) {
-	let mask = u64::MAX as u128;
-	let (a_lo, a_hi) = (a & mask, a >> 64);
-	let (b_lo, b_hi) = (b & mask, b >> 64);
-	let p0 = a_lo * b_lo;
-	let p1 = a_lo * b_hi;
-	let p2 = a_hi * b_lo;
-	let p3 = a_hi * b_hi;
-	let mut lo = p0;
-	let mut hi = p3;
-	let (s1, c1) = lo.overflowing_add(p1 << 64);
-	lo = s1;
-	hi += (p1 >> 64) + c1 as u128;
-	let (s2, c2) = lo.overflowing_add(p2 << 64);
-	lo = s2;
-	hi += (p2 >> 64) + c2 as u128;
-	(hi, lo)
-}
-
-/// Floor of `(a * b) / denom` with a 256-bit intermediate, via binary long division.
-/// `None` on `denom == 0` or when the quotient would exceed `u128::MAX` (`hi >= denom`).
-/// Money math is rare, so the O(128) loop is irrelevant; correctness is the point.
-fn mul_div_floor(a: u128, b: u128, denom: u128) -> Option<u128> {
-	if denom == 0 {
-		return None;
-	}
-	if let Some(prod) = a.checked_mul(b) {
-		return Some(prod / denom);
-	}
-	let (hi, lo) = widening_mul(a, b);
-	if hi >= denom {
-		return None;
-	}
-	let mut rem = hi;
-	let mut quo = 0u128;
-	let mut bit: u32 = 128;
-	while bit > 0 {
-		bit -= 1;
-		let carry_in = (lo >> bit) & 1;
-		let top = rem >> 127;
-		let shifted = (rem << 1) | carry_in;
-		if top == 1 || shifted >= denom {
-			quo |= 1u128 << bit;
-			rem = shifted.wrapping_sub(denom);
-		} else {
-			rem = shifted;
-		}
-	}
-	Some(quo)
-}
-
 /// A fund-unit (share) count in canonical 18-decimal base units — the **service
 /// currency**. A holder's cash value is `units × NAV`, never the unit count itself,
 /// so profit shows up as a rising [`Nav`], not as more units. Lives on its own
@@ -384,40 +329,6 @@ impl Nav {
 	}
 }
 
-/// Parse a human/wire decimal string into 18-dp base units (shared by [`Shares`] and
-/// [`Nav`]; mirrors [`Usdt::parse_decimal`]).
-fn parse_fixed_point(raw: &str) -> Result<u128, DomainError> {
-	Usdt::parse_decimal(raw).map(Usdt::base_units)
-}
-
-/// Render 18-dp base units as a trimmed decimal string (shared by [`Shares`]/[`Nav`]).
-fn render_fixed_point(units: u128) -> String {
-	Usdt::from_base_units(units).to_decimal_string()
-}
-
-macro_rules! impl_fixed_point_serde {
-	($ty:ty) => {
-		impl Serialize for $ty {
-			fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-				serializer.serialize_str(&self.0.to_string())
-			}
-		}
-		impl<'de> Deserialize<'de> for $ty {
-			fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-				let raw = String::deserialize(deserializer)?;
-				raw.parse::<u128>().map(Self).map_err(serde::de::Error::custom)
-			}
-		}
-		impl core::fmt::Display for $ty {
-			fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-				f.write_str(&self.to_decimal_string())
-			}
-		}
-	};
-}
-impl_fixed_point_serde!(Shares);
-impl_fixed_point_serde!(Nav);
-
 /// A validated on-chain wallet address, tagged by its [`Network`]. Parse-don't-
 /// validate: structural per-chain checks on construction (format + alphabet), so a
 /// malformed address can't reach the custody layer. Full checksum verification is
@@ -474,6 +385,94 @@ impl TxRef {
 		&self.0
 	}
 }
+
+/// Full 256-bit product of two `u128`s as `(hi, lo)`. The NAV math multiplies an
+/// 18-dp amount by `10^18` before dividing, which overflows `u128` for any amount
+/// above ~340 USDT — so the intermediate product must be 256-bit, never `u128`.
+const fn widening_mul(a: u128, b: u128) -> (u128, u128) {
+	let mask = u64::MAX as u128;
+	let (a_lo, a_hi) = (a & mask, a >> 64);
+	let (b_lo, b_hi) = (b & mask, b >> 64);
+	let p0 = a_lo * b_lo;
+	let p1 = a_lo * b_hi;
+	let p2 = a_hi * b_lo;
+	let p3 = a_hi * b_hi;
+	let mut lo = p0;
+	let mut hi = p3;
+	let (s1, c1) = lo.overflowing_add(p1 << 64);
+	lo = s1;
+	hi += (p1 >> 64) + c1 as u128;
+	let (s2, c2) = lo.overflowing_add(p2 << 64);
+	lo = s2;
+	hi += (p2 >> 64) + c2 as u128;
+	(hi, lo)
+}
+
+/// Floor of `(a * b) / denom` with a 256-bit intermediate, via binary long division.
+/// `None` on `denom == 0` or when the quotient would exceed `u128::MAX` (`hi >= denom`).
+/// Money math is rare, so the O(128) loop is irrelevant; correctness is the point.
+fn mul_div_floor(a: u128, b: u128, denom: u128) -> Option<u128> {
+	if denom == 0 {
+		return None;
+	}
+	if let Some(prod) = a.checked_mul(b) {
+		return Some(prod / denom);
+	}
+	let (hi, lo) = widening_mul(a, b);
+	if hi >= denom {
+		return None;
+	}
+	let mut rem = hi;
+	let mut quo = 0u128;
+	let mut bit: u32 = 128;
+	while bit > 0 {
+		bit -= 1;
+		let carry_in = (lo >> bit) & 1;
+		let top = rem >> 127;
+		let shifted = (rem << 1) | carry_in;
+		if top == 1 || shifted >= denom {
+			quo |= 1u128 << bit;
+			rem = shifted.wrapping_sub(denom);
+		} else {
+			rem = shifted;
+		}
+	}
+	Some(quo)
+}
+
+/// Parse a human/wire decimal string into 18-dp base units (shared by [`Shares`] and
+/// [`Nav`]; mirrors [`Usdt::parse_decimal`]).
+fn parse_fixed_point(raw: &str) -> Result<u128, DomainError> {
+	Usdt::parse_decimal(raw).map(Usdt::base_units)
+}
+
+/// Render 18-dp base units as a trimmed decimal string (shared by [`Shares`]/[`Nav`]).
+fn render_fixed_point(units: u128) -> String {
+	Usdt::from_base_units(units).to_decimal_string()
+}
+
+macro_rules! impl_fixed_point_serde {
+	($ty:ty) => {
+		impl Serialize for $ty {
+			fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+				serializer.serialize_str(&self.0.to_string())
+			}
+		}
+		impl<'de> Deserialize<'de> for $ty {
+			fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+				let raw = String::deserialize(deserializer)?;
+				raw.parse::<u128>().map(Self).map_err(serde::de::Error::custom)
+			}
+		}
+		impl core::fmt::Display for $ty {
+			fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+				f.write_str(&self.to_decimal_string())
+			}
+		}
+	};
+}
+impl_fixed_point_serde!(Shares);
+impl_fixed_point_serde!(Nav);
 
 fn is_ton_friendly(value: &str) -> bool {
 	value.len() == 48 && value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')

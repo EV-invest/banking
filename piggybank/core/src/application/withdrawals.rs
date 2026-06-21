@@ -52,13 +52,13 @@ pub async fn request_withdrawal(
 	// already reserved by other in-flight withdrawals) must cover the gross. TB's flag
 	// is the hard backstop.
 	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
-	if claim.available() < amount {
+	if Usdt::from_base_units(claim.available()) < amount {
 		return Err(DomainError::Validation("insufficient available balance to withdraw".into()));
 	}
 	// Read-First #2 — rail liquidity (treasury): if the chosen rail can cover the net
 	// now, dispatch to custody immediately; otherwise accept and leave it queued for the
 	// treasury worker to dispatch once the rail is topped up (accept-and-queue).
-	let rail_liquidity = ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted;
+	let rail_liquidity = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
 	if rail_liquidity >= withdrawal.net_amount() {
 		withdrawal.dispatch()?;
 	}

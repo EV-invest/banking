@@ -15,7 +15,6 @@ use async_trait::async_trait;
 use domain::{
 	architecture::Gateway,
 	balance::{LedgerAccountKey, Normal},
-	money::Usdt,
 };
 use sqlx::PgPool;
 use tigerbeetle as tb;
@@ -137,11 +136,7 @@ impl Ledger for TbLedger {
 	async fn balance(&self, key: &LedgerAccountKey) -> Result<LedgerBalance, LedgerError> {
 		let Some(id) = self.resolve_id(&key.logical_key()).await? else {
 			// No id-map row ⇒ the account was never touched ⇒ balance is zero.
-			return Ok(LedgerBalance {
-				posted: Usdt::ZERO,
-				pending: Usdt::ZERO,
-				locked: Usdt::ZERO,
-			});
+			return Ok(LedgerBalance { posted: 0, pending: 0, locked: 0 });
 		};
 		let accounts = self
 			.tb
@@ -151,11 +146,7 @@ impl Ledger for TbLedger {
 			.await
 			.map_err(|e| LedgerError::Unavailable(format!("lookup_accounts: {e:?}")))?;
 		let Some(account) = accounts.first() else {
-			return Ok(LedgerBalance {
-				posted: Usdt::ZERO,
-				pending: Usdt::ZERO,
-				locked: Usdt::ZERO,
-			});
+			return Ok(LedgerBalance { posted: 0, pending: 0, locked: 0 });
 		};
 		// Normalize to the account's natural side. `posted` is a real non-negative
 		// invariant (the TB flag guarantees it), so an underflow there is a genuine
@@ -175,11 +166,7 @@ impl Ledger for TbLedger {
 			),
 		};
 		let posted = posted.ok_or_else(|| LedgerError::Conflict("balance underflow".into()))?;
-		Ok(LedgerBalance {
-			posted: Usdt::from_base_units(posted),
-			pending: Usdt::from_base_units(pending),
-			locked: Usdt::from_base_units(locked),
-		})
+		Ok(LedgerBalance { posted, pending, locked })
 	}
 
 	async fn post(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError> {
@@ -188,7 +175,7 @@ impl Ledger for TbLedger {
 			id: transfer.id,
 			debit_account_id: debit_id,
 			credit_account_id: credit_id,
-			amount: transfer.amount.base_units(),
+			amount: transfer.amount,
 			ledger: transfer.debit.ledger().id(),
 			code: transfer.code.code(),
 			user_data_128: transfer.reference,
@@ -203,7 +190,7 @@ impl Ledger for TbLedger {
 			id: transfer.id,
 			debit_account_id: debit_id,
 			credit_account_id: credit_id,
-			amount: transfer.amount.base_units(),
+			amount: transfer.amount,
 			ledger: transfer.debit.ledger().id(),
 			code: transfer.code.code(),
 			user_data_128: transfer.reference,
@@ -219,7 +206,7 @@ impl Ledger for TbLedger {
 		let (debit_id, credit_id) = self.ensure_pair(&completion.debit, &completion.credit).await?;
 		let (flags, amount) = match completion.kind {
 			// Post the full reserved amount; void ignores amount (TB requires 0).
-			CompletionKind::Post => (tb::TransferFlags::PostPendingTransfer, completion.amount.base_units()),
+			CompletionKind::Post => (tb::TransferFlags::PostPendingTransfer, completion.amount),
 			CompletionKind::Void => (tb::TransferFlags::VoidPendingTransfer, 0),
 		};
 		let row = tb::Transfer {
