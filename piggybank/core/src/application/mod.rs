@@ -18,5 +18,6 @@
 pub mod allocations;
 pub mod auth_sync;
 pub mod balance;
+pub mod funds;
 pub mod wallet;
 pub mod withdrawals;

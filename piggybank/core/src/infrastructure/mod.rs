@@ -19,6 +19,7 @@ pub mod custody;
 pub mod db;
 pub mod deposit_addresses;
 pub mod ledger;
+pub mod nav;
 pub mod outbox;
 pub mod relay;
 pub mod telemetry;
