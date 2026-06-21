@@ -1,14 +1,6 @@
-import { Settings } from "lucide-react";
+import { SettingsView } from "@/views/settings/ui/settings-view";
 
-import { PagePlaceholder } from "@/application/layout/page-placeholder";
-
+// The investor settings surface; identity is fetched client-side via the BFF session.
 export default function SettingsPage() {
-  return (
-    <PagePlaceholder
-      eyebrow="Settings"
-      title="Settings"
-      blurb="Account, security, notifications and preferences — the full settings surface from the design is the next screen to build out."
-      icon={<Settings className="size-6" />}
-    />
-  );
+  return <SettingsView />;
 }
