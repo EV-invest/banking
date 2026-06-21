@@ -137,13 +137,18 @@ impl DomainEvent for LedgerEvent {
 	const KIND: &'static str = "balance";
 }
 
-/// A unit of value in TigerBeetle (`ledger`). Only same-ledger accounts transact.
+/// A unit of value in TigerBeetle (`ledger`). Only same-ledger accounts transact, so
+/// a fund-unit transfer can never touch a cash account — the two planes can't imbalance
+/// each other (a stray cross-ledger pairing is a hard TB error, never a silent leak).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ledger {
 	/// Canonical 18-dp USDT value ledger.
 	Usdt,
 	/// Mocked bank (USD) ledger — the real-money seam.
 	UsdMock,
+	/// Fund units (shares) — the **service currency**. Units float; their cash value is
+	/// `units × NAV`, priced off this ledger, not held on it.
+	Share,
 }
 
 impl Ledger {
@@ -151,6 +156,7 @@ impl Ledger {
 		match self {
 			Self::Usdt => 1,
 			Self::UsdMock => 2,
+			Self::Share => 3,
 		}
 	}
 }
@@ -165,6 +171,8 @@ pub enum AccountCode {
 	ServiceClaim,
 	FeeRevenue,
 	WithdrawalClearing,
+	UserShares,
+	SharesOutstanding,
 }
 
 impl AccountCode {
@@ -177,6 +185,8 @@ impl AccountCode {
 			Self::ServiceClaim => 30,
 			Self::FeeRevenue => 40,
 			Self::WithdrawalClearing => 50,
+			Self::UserShares => 60,
+			Self::SharesOutstanding => 61,
 		}
 	}
 }
@@ -208,6 +218,10 @@ pub enum TransferCode {
 	ServiceCancel,
 	ServiceTransfer,
 	Bridge,
+	Subscribe,
+	Redeem,
+	ShareMint,
+	ShareBurn,
 }
 
 impl TransferCode {
@@ -224,6 +238,10 @@ impl TransferCode {
 			Self::ServiceCancel => 22,
 			Self::ServiceTransfer => 23,
 			Self::Bridge => 30,
+			Self::Subscribe => 40,
+			Self::Redeem => 41,
+			Self::ShareMint => 42,
+			Self::ShareBurn => 43,
 		}
 	}
 }
@@ -251,6 +269,14 @@ pub enum LedgerAccountKey {
 	WithdrawalClearing,
 	/// The mocked bank custody account (debit-normal, USD ledger).
 	BankCustody,
+	/// A user's unit holding in a fund (debit-normal, Share ledger). One per
+	/// `(service, user)`. Its `credits_must_not_exceed_debits` flag is what makes a
+	/// burn (a credit, including a *pending* reserve) that exceeds the user's minted
+	/// units (its debits) rejected atomically by TigerBeetle — the over-redeem backstop.
+	UserShares(ServiceId, UserId),
+	/// A fund's total units in circulation (credit-normal, Share ledger). One per
+	/// service. `SharesOutstanding(svc) == Σ_user UserShares(svc, user)` by construction.
+	SharesOutstanding(ServiceId),
 }
 
 impl LedgerAccountKey {
@@ -264,12 +290,15 @@ impl LedgerAccountKey {
 			Self::FeeRevenue => "fee".to_owned(),
 			Self::WithdrawalClearing => "clearing".to_owned(),
 			Self::BankCustody => "bank".to_owned(),
+			Self::UserShares(service, user) => format!("shares:{service}:{user}"),
+			Self::SharesOutstanding(service) => format!("shares_outstanding:{service}"),
 		}
 	}
 
 	pub fn ledger(&self) -> Ledger {
 		match self {
 			Self::BankCustody => Ledger::UsdMock,
+			Self::UserShares(..) | Self::SharesOutstanding(_) => Ledger::Share,
 			_ => Ledger::Usdt,
 		}
 	}
@@ -283,14 +312,17 @@ impl LedgerAccountKey {
 			Self::ServiceClaim(_) => AccountCode::ServiceClaim,
 			Self::FeeRevenue => AccountCode::FeeRevenue,
 			Self::WithdrawalClearing => AccountCode::WithdrawalClearing,
+			Self::UserShares(..) => AccountCode::UserShares,
+			Self::SharesOutstanding(_) => AccountCode::SharesOutstanding,
 		}
 	}
 
-	/// Custody (wallet/bank) is debit-normal; every claim is credit-normal.
+	/// Custody (wallet/bank) and a user's unit holding are debit-normal; every claim
+	/// and the units-outstanding contra are credit-normal.
 	pub fn normal(&self) -> Normal {
 		match self {
-			Self::CryptoWallet(_) | Self::BankCustody => Normal::Debit,
-			Self::Fund | Self::UserClaim(_) | Self::ServiceClaim(_) | Self::FeeRevenue | Self::WithdrawalClearing => Normal::Credit,
+			Self::CryptoWallet(_) | Self::BankCustody | Self::UserShares(..) => Normal::Debit,
+			Self::Fund | Self::UserClaim(_) | Self::ServiceClaim(_) | Self::FeeRevenue | Self::WithdrawalClearing | Self::SharesOutstanding(_) => Normal::Credit,
 		}
 	}
 
@@ -344,5 +376,23 @@ mod tests {
 		assert_eq!(LedgerAccountKey::CryptoWallet(Network::Ton).network(), Some(Network::Ton));
 		assert_eq!(LedgerAccountKey::BankCustody.ledger(), Ledger::UsdMock);
 		assert_eq!(LedgerAccountKey::Fund.ledger(), Ledger::Usdt);
+	}
+
+	#[test]
+	fn share_keys_live_on_the_share_ledger_with_the_right_sides() {
+		let uid = UserId::from_raw(uuid::Uuid::nil());
+		let svc = ServiceId::parse("trading").unwrap();
+		let user_shares = LedgerAccountKey::UserShares(svc.clone(), uid);
+		let outstanding = LedgerAccountKey::SharesOutstanding(svc.clone());
+		// Both share accounts MUST be on the Share ledger — a stray Usdt pairing would be
+		// a hard TB cross-ledger error, so this guards the units plane from the cash plane.
+		assert_eq!(user_shares.ledger(), Ledger::Share);
+		assert_eq!(outstanding.ledger(), Ledger::Share);
+		// The user's holding is debit-normal (the over-redeem backstop); supply is credit-normal.
+		assert_eq!(user_shares.normal(), Normal::Debit);
+		assert_eq!(outstanding.normal(), Normal::Credit);
+		assert_eq!(user_shares.logical_key(), "shares:trading:00000000-0000-0000-0000-000000000000");
+		assert_eq!(outstanding.logical_key(), "shares_outstanding:trading");
+		assert_eq!(user_shares.network(), None);
 	}
 }

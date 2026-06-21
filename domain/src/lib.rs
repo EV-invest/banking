@@ -17,6 +17,8 @@ pub mod allocations;
 pub mod auth;
 pub mod balance;
 pub mod money;
+pub mod redemptions;
+pub mod subscriptions;
 pub mod users;
 pub mod withdrawals;
 
