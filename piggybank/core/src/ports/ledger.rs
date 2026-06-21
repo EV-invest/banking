@@ -19,7 +19,6 @@ use domain::{
 	architecture::Gateway,
 	balance::{LedgerAccountKey, TransferCode},
 	error::DomainError,
-	money::Usdt,
 };
 use thiserror::Error;
 
@@ -80,38 +79,42 @@ impl From<LedgerError> for DomainError {
 	}
 }
 
-/// An account's live balance, normalized to its natural side (every field `>= 0`).
-/// Zero when the account doesn't exist yet.
+/// An account's live balance in **raw base units**, normalized to its natural side
+/// (every field `>= 0`). The unit is the account's ledger's (18-dp USDT for the cash
+/// ledger, 18-dp shares for the Share ledger) — the gateway is currency-agnostic, so
+/// callers wrap into the typed `Usdt`/`Shares` at the boundary. Zero when the account
+/// doesn't exist yet.
 #[derive(Debug, Clone, Copy)]
 pub struct LedgerBalance {
 	/// The settled balance on the natural side (`credits − debits` for a claim).
-	pub posted: Usdt,
+	pub posted: u128,
 	/// In-flight INFLOW on the natural side (pending credits for a claim) awaiting
 	/// settlement — zero for the common one-sided pending.
-	pub pending: Usdt,
+	pub pending: u128,
 	/// In-flight OUTFLOW reserved against this account (pending debits on a claim):
 	/// the amount locked by an unsettled withdrawal or reservation. Subtract from
 	/// `posted` for the spendable balance ([`LedgerBalance::available`]).
-	pub locked: Usdt,
+	pub locked: u128,
 }
 
 impl LedgerBalance {
 	/// The settled balance not already reserved by an in-flight pending — what a new
 	/// command may actually spend (Read-First). Saturating, so never negative.
-	pub fn available(self) -> Usdt {
-		self.posted.checked_sub(self.locked).unwrap_or(Usdt::ZERO)
+	pub fn available(self) -> u128 {
+		self.posted.saturating_sub(self.locked)
 	}
 }
 
 /// A posted or to-be-pending transfer. `id` is caller-assigned and deterministic;
-/// `reference` is stamped into `user_data_128` (the allocation/deposit id) for
+/// `amount` is in the ledger's base units (`Usdt`/`Shares` converted via `base_units()`
+/// by the relay); `reference` is stamped into `user_data_128` (the aggregate id) for
 /// reconciliation.
 #[derive(Debug, Clone)]
 pub struct LedgerTransfer {
 	pub id: u128,
 	pub debit: LedgerAccountKey,
 	pub credit: LedgerAccountKey,
-	pub amount: Usdt,
+	pub amount: u128,
 	pub code: TransferCode,
 	pub reference: u128,
 }
@@ -134,7 +137,7 @@ pub struct PendingCompletion {
 	pub kind: CompletionKind,
 	pub debit: LedgerAccountKey,
 	pub credit: LedgerAccountKey,
-	pub amount: Usdt,
+	pub amount: u128,
 	pub code: TransferCode,
 	pub reference: u128,
 }

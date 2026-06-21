@@ -18,17 +18,20 @@ use piggybank_core::{
 	application::auth_sync,
 	config::AppConfig,
 	infrastructure::{
-		allocations::PgAllocations,
 		custody::StubCustody,
 		db,
 		deposit_addresses::StubDepositAddresses,
 		ledger::{self, TbLedger},
+		nav::PgNav,
+		positions::PgFundPositions,
+		redemptions::PgRedemptions,
 		relay::Relay,
+		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
 		users::PgUsers,
 		withdrawals::PgWithdrawals,
 	},
-	ports::{AllocationRepository, Custody, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{Custody, DepositAddresses, FundPositionReader, NavRepository, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
 	services,
 };
 use tokio::sync::Notify;
@@ -77,8 +80,11 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	let analytics = ev::analytics::Analytics::new(config.posthog_key.clone(), config.posthog_host.clone());
 
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
-	let allocations: Arc<dyn AllocationRepository> = Arc::new(PgAllocations::new(pool.clone()));
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
+	let subscriptions: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(pool.clone()));
+	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
+	let nav: Arc<dyn NavRepository> = Arc::new(PgNav::new(pool.clone()));
+	let positions: Arc<dyn FundPositionReader> = Arc::new(PgFundPositions::new(pool.clone()));
 	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(StubDepositAddresses::new(pool.clone()));
 
 	// The single-worker outbox relay moves money in TigerBeetle after each commit
@@ -102,8 +108,11 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		authorizer,
 		analytics,
 		users.clone(),
-		allocations,
 		withdrawals,
+		subscriptions,
+		redemptions,
+		nav,
+		positions,
 		deposit_addresses,
 		relay_notify,
 		Arc::from(config.admin_subjects.clone()),

@@ -61,7 +61,7 @@ export function WalletView() {
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <Stat label="Available" value={balance?.available} loading={!balance} emphasis />
-            <Stat label="Invested" value={balance?.invested} loading={!balance} />
+            <Stat label="Invested" value={balance?.invested} loading={!balance} hint="Held in fund units, valued at the current NAV." />
             <Stat label="Pending withdrawal" value={balance?.pending_withdrawal} loading={!balance} />
           </div>
         </CardContent>
@@ -88,9 +88,9 @@ export function WalletView() {
   );
 }
 
-function Stat({ label, value, loading, emphasis }: { label: string; value: string | undefined; loading?: boolean; emphasis?: boolean }) {
+function Stat({ label, value, loading, emphasis, hint }: { label: string; value: string | undefined; loading?: boolean; emphasis?: boolean; hint?: string }) {
   return (
-    <div className="rounded-lg border border-border bg-main-surface p-4">
+    <div className="rounded-lg border border-border bg-main-surface p-4" title={hint}>
       <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       {loading ? (
         <Skeleton className="mt-1 h-7 w-24" />

@@ -1,4 +1,4 @@
-# Money plane — balance & allocations
+# Money plane — balance, fund shares & withdrawals
 
 How the fund ("piggybank") stores and accounts for its money. Cross-cutting context
 is in [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md); this file is the per-area
@@ -36,6 +36,10 @@ A deposit is one balanced transfer **`Dr wallet:<net> / Cr <claim>`** (textbook 
 at account create** (immutable in TB) and are the last-line backstop against an
 over-spent claim or negative custody.
 
+A **third ledger** holds the **service currency** — fund units (`Ledger::Share`, `= 3`),
+see [Fund shares](#fund-shares--the-service-currency). It is independent: a unit transfer
+can never touch a cash account, so the two planes can't imbalance each other.
+
 **Two layers, network only at the edges (load-bearing).** USDT is one fungible pool, so a
 user/service/fund/fee has **one** claim, not one per chain — network lives **only** in the
 treasury (`wallet:<net>`) and on deposit/withdrawal *transactions*. The invariant is
@@ -48,27 +52,62 @@ any rail so acceptance never depends on rail liquidity. *(This supersedes the or
 per-network `sum(custody:N)==sum(claims:N)` model: claims were unified once a single
 fungible balance — not three — became the product requirement.)*
 
-## Ownership model (`domain::allocations::Allocation`)
+## Fund shares — the service currency (`domain::subscriptions`, `domain::redemptions`, `FundsService`)
 
-An allocation has exactly one **`owner`** (the "owned" party) and a **`sharers`** list
-(the "shared" list); the same allocation is *owned* from the owner's side, *shared*
-from each sharer's. A `Party::User` in `sharers` may **revoke iff `owner == Piggybank`**
-(the [`UserRevocable`] specification); a service-sharer never can.
+A client invests by **subscribing** cash into a fund (a `ServiceId`) and receiving
+**units** of the service currency, priced at **NAV per share**. A holding's value is
+`units × NAV`, so profit comes from a rising NAV, **not** from extra units (standard
+NAV/unit accounting). This **replaced** the old flat per-service "allocation" stake.
 
-| Flow | owner | sharers | ledger |
-| --- | --- | --- | --- |
-| user stake | Piggybank | [User] | `Dr user / Cr service` |
-| service reservation | Piggybank | [Service] | **pending** `Dr fund / Cr service` |
-| settled / instant transfer | Service | [Piggybank] | posted `Dr fund / Cr service` |
+**Units ledger (`Ledger::Share`, `= 3`).** `UserShares(service, user)` (60, debit-normal,
+`shares:<svc>:<uuid>`) is a holder's units; `SharesOutstanding(service)` (61, credit-normal,
+`shares_outstanding:<svc>`) is the fund's units in circulation. Per-service invariant
+`SharesOutstanding(svc) == Σ_user UserShares(svc, user)`, by construction. **Mint**
+`Dr UserShares / Cr SharesOutstanding`; **burn** `Dr SharesOutstanding / Cr UserShares`.
+A burn that exceeds the holder's minted units is rejected **by TigerBeetle's flag — even as
+a pending reserve** (this is the over-redeem backstop; the PG row-lock only serializes).
+`Shares`/`Nav` are 18-dp `u128` newtypes; `Shares::from_cash`/`Nav::value`/`Nav::from_aum`
+use an overflow-safe 128×128→256 `mul_div` (a naïve `u128` mul overflows at ~340 USDT).
 
-(User stake + balance read are wired through gRPC; the service reservation/settle/
-transfer flows are modelled and tested in the domain + gateway, gRPC wiring pending.)
+**NAV is derived, not posted.** An operator posts a fund's **AUM**; the handler reads
+`units_outstanding` live from TB and stores `NAV = AUM / units_outstanding` in
+`fund_valuations` (append-only marks; the latest is the price, **frozen** between marks).
+The first subscription bootstraps at **seed NAV 1.0**. Dealing on a frozen mark is
+*backward pricing* — guarded by a **staleness** check (`MAX_NAV_AGE_SECS`); the AUM post is
+guarded by a **move** check (`MAX_NAV_MOVE_PCT`, override-able) because the AUM input is the
+most dangerous seam ("trusted" ≠ "safe"). NAV is a price, never a TB balance. There is
+**no cross-ledger invariant** tying units to USDT — units float; cash stays exact.
+
+**Subscribe (cash → units, synchronous).** Read-First on the unified claim + a fresh NAV;
+the relay posts two legs, **cash-first**: `Dr user / Cr service` (the cash pools in the
+fund), then mint `Dr UserShares / Cr SharesOutstanding`. Cash-first means an insufficient
+claim parks before any units mint — never units without cash.
+
+**Redeem (units → cash, accept-and-queue, settle-time priced).** Units are reserved now;
+the cash is **priced and paid at settle** (settle-time NAV, so a queue that drains after a
+NAV drop doesn't overpay the redeemer). States `Queued → Completed | Cancelled | Failed`.
+
+| event | → state | relay ops |
+| --- | --- | --- |
+| `Requested` | `Queued` | reserve a **pending burn** `Dr SharesOutstanding / Cr UserShares` (locks the units) |
+| `Settled` | `Completed` | **burn-first**: post the pending burn, then pay `Dr service / Cr user` (`units × settle-NAV`) |
+| `Failed` / `Cancelled` | `Failed`/`Cancelled` | **void** the pending burn — units returned |
+
+`request_redemption` settles immediately (via a **separate** command — never co-emitting
+`Requested`+`Settled`, which would race the reserve) when the fund claim covers the payout,
+else leaves it `Queued` for the operator `SettleRedemption` after the fund tops up (a
+deposit to its `service:<id>` claim). The settle pre-check guards the **payout's debit**
+(`service` claim `available()`); ordering is **burn-first** so a short fund parks before any
+leg, and a raced over-redeem (parked reserve) fails the burn-post **before** any cash leaves
+— neither half-applies. Cost basis (average cost) is tracked in `fund_positions` for P&L; a
+per-investor `high_water_mark` column is reserved (no fee is charged in v1).
 
 ## User wallet — deposit & withdraw (`domain::withdrawals`, `WalletService`)
 
 A user's money is **one** network-agnostic claim (`user:<uuid>`). `GetWallet` presents it
-segmented by lifecycle — `available` (`posted − locked`), `invested` (sum of active
-stakes), `pending_withdrawal` (sum of queued/in-flight withdrawals), `total` — plus a
+segmented by lifecycle — `available` (`posted − locked`), `invested` (the value of the
+user's fund positions, `Σ units × current NAV`), `pending_withdrawal` (sum of
+queued/in-flight withdrawals), `total` — plus a
 per-rail deposit address and a per-rail **withdrawable** view (`instant = min(available,
 rail liquidity)`, the accept-and-queue hint — it discloses a rail's liquidity only up to
 the user's own balance; bucket/round it if that must stay private).
@@ -172,14 +211,17 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | RPC | Who | Boundary | In-tx invariant |
 | --- | --- | --- | --- |
 | `GetTreasury` / `SeedCapital` / `RecordDeposit` | admin | `is_admin` + `is_access` | `tx_ref` gate |
-| `Allocate` | the user | `sub == user`, `is_access` | sufficient available claim (TB flag backstop) |
-| `RevokeAllocation` | the user | `sub == user`, `is_access` | owner is the fund ∧ sole user-sharer ∧ active |
-| `ListAllocations` | the user | `sub == user` | — |
+| `Subscribe` | the user | `sub == user`, `is_access` | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
+| `Redeem` | the user | `sub == user`, `is_access` | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
+| `CancelRedemption` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
+| `GetPosition` / `ListPositions` / `ListRedemptions` / `GetFundNav` | the user | `sub == user` | — |
 | `GetWallet` / `GetDepositAddress` / `ListWithdrawals` | the user | `sub == user` | — |
 | `RequestWithdrawal` | the user | `sub == user`, `is_access` | active account ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `DispatchWithdrawal` | admin (treasury) | `is_admin` + `is_access` | state is `queued` (idempotent) |
 | `SettleWithdrawal` / `FailWithdrawal` | admin | `is_admin` + `is_access` | state is `processing` (idempotent) |
+| `PostFundValuation` | admin | `is_admin` + `is_access` | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
+| `SettleRedemption` / `FailRedemption` | admin (treasury) | `is_admin` + `is_access` | state is `queued` (idempotent) |
 
 ## Reconciliation (seam)
 
@@ -192,12 +234,15 @@ didn't move.
 
 ## Tests
 
-`domain` unit tests cover the money math, address parsing, the revoke rule, and the
-withdrawal aggregate's transitions; `piggybank/core/tests/balance_allocations.rs` and
+`domain` unit tests cover the money + NAV math (incl. the `mul_div` overflow bound and the
+share-key ledger sides), the subscription/redemption aggregates, and the withdrawal
+transitions; `piggybank/core/tests/balance_allocations.rs` and
 `piggybank/core/tests/wallet_withdrawals.rs` hit **real** Postgres + TigerBeetle
-(deposit idempotency, allocate/revoke round-trip + rule, over-allocation rejection, the
-non-negative backstop, transfer-id idempotency; and the withdrawal reserve→settle with
-fee retained, fail→full refund, **short-rail queue → dispatch → settle**, **queued cancel
-→ refund**, min/available/disabled gates, deposit-address stability). They skip when
-`DATABASE_URL` is unset or TB is unreachable. Drive the relay deterministically with
-`Relay::drain`.
+(deposit idempotency, the non-negative backstop, transfer-id idempotency; the Share-ledger
+mint/burn + **over-redeem reject by the TB flag**; NAV derivation + the fat-finger guard;
+subscribe minting at seed + fractional NAV pricing + staleness/Read-First; redeem
+**auto-settle when liquid**, **short fund → queue → top-up → settle at settle-NAV (profit)**,
+**short settle parks without burning or paying**, cancel returns the units; and the
+withdrawal reserve→settle with fee, fail→refund, short-rail queue→dispatch→settle, queued
+cancel→refund). They skip when `DATABASE_URL` is unset or TB is unreachable. Drive the relay
+deterministically with `Relay::drain`.

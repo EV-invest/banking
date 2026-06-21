@@ -14,13 +14,15 @@
 //! which by construction cannot enrol in a Postgres `UnitOfWork` (money is written
 //! last, in the relay).
 
-pub mod allocations;
 pub mod custody;
 pub mod deposit_addresses;
 pub mod ledger;
+pub mod nav;
+pub mod positions;
+pub mod redemptions;
+pub mod subscriptions;
 pub mod withdrawals;
 
-pub use allocations::AllocationRepository;
 use async_trait::async_trait;
 pub use custody::{BroadcastRequest, Custody, CustodyError};
 pub use deposit_addresses::DepositAddresses;
@@ -31,6 +33,10 @@ use domain::{
 	users::{Email, User, UserId},
 };
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
+pub use nav::{NavRepository, Valuation};
+pub use positions::{FundPosition, FundPositionReader};
+pub use redemptions::RedemptionRepository;
+pub use subscriptions::SubscriptionRepository;
 pub use withdrawals::WithdrawalRepository;
 
 /// Persistence + read port for the [`User`] aggregate.

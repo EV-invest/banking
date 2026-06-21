@@ -14,13 +14,16 @@
 //! - [`telemetry`] — the observability adapter: the one seam that hands errors to
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
-pub mod allocations;
 pub mod custody;
 pub mod db;
 pub mod deposit_addresses;
 pub mod ledger;
+pub mod nav;
 pub mod outbox;
+pub mod positions;
+pub mod redemptions;
 pub mod relay;
+pub mod subscriptions;
 pub mod telemetry;
 pub mod tigerbeetle;
 pub mod users;
