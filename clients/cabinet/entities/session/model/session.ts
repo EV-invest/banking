@@ -100,6 +100,18 @@ export async function ensureFresh(id: string | undefined): Promise<{ user: User;
   return { user: session.user, csrfToken: session.csrfToken };
 }
 
+/**
+ * The fresh hub access token for a session — **server-only**, for BFF→hub gRPC calls
+ * that act on the user's behalf. Rotates the token first (via {@link ensureFresh}),
+ * so the returned token is valid; null if the session is gone/expired. Never expose
+ * this to the browser.
+ */
+export async function accessTokenFor(id: string | undefined): Promise<string | null> {
+  const fresh = await ensureFresh(id);
+  if (!fresh || !id) return null;
+  return sessions.get(id)?.accessToken ?? null;
+}
+
 /** Forget a session, returning its refresh token so the caller can revoke it at the hub. */
 export function dropSession(id: string | undefined): string | null {
   if (!id) return null;

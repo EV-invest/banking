@@ -80,12 +80,27 @@ impl From<LedgerError> for DomainError {
 	}
 }
 
-/// An account's live balance, normalized to its natural side (so both fields are
-/// `>= 0` by the non-negative invariant). Zero when the account doesn't exist yet.
+/// An account's live balance, normalized to its natural side (every field `>= 0`).
+/// Zero when the account doesn't exist yet.
 #[derive(Debug, Clone, Copy)]
 pub struct LedgerBalance {
+	/// The settled balance on the natural side (`credits − debits` for a claim).
 	pub posted: Usdt,
+	/// In-flight INFLOW on the natural side (pending credits for a claim) awaiting
+	/// settlement — zero for the common one-sided pending.
 	pub pending: Usdt,
+	/// In-flight OUTFLOW reserved against this account (pending debits on a claim):
+	/// the amount locked by an unsettled withdrawal or reservation. Subtract from
+	/// `posted` for the spendable balance ([`LedgerBalance::available`]).
+	pub locked: Usdt,
+}
+
+impl LedgerBalance {
+	/// The settled balance not already reserved by an in-flight pending — what a new
+	/// command may actually spend (Read-First). Saturating, so never negative.
+	pub fn available(self) -> Usdt {
+		self.posted.checked_sub(self.locked).unwrap_or(Usdt::ZERO)
+	}
 }
 
 /// A posted or to-be-pending transfer. `id` is caller-assigned and deterministic;

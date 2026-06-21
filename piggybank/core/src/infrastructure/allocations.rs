@@ -13,7 +13,7 @@ use domain::{
 	architecture::{Reader, Repository},
 	balance::Party,
 	error::DomainError,
-	money::{Network, Usdt},
+	money::Usdt,
 	users::UserId,
 };
 use sqlx::{PgConnection, PgPool};
@@ -21,10 +21,9 @@ use uuid::Uuid;
 
 use crate::{infrastructure::outbox, ports::AllocationRepository};
 
-const SELECT_BY_ID: &str = "SELECT id, amount, network, owner_kind, owner_id, sharers::text AS sharers, kind::text AS kind, state FROM allocations WHERE id = $1";
-const SELECT_BY_ID_FOR_UPDATE: &str = "SELECT id, amount, network, owner_kind, owner_id, sharers::text AS sharers, kind::text AS kind, state FROM allocations WHERE id = $1 FOR UPDATE";
-const SELECT_BY_USER: &str =
-	"SELECT id, amount, network, owner_kind, owner_id, sharers::text AS sharers, kind::text AS kind, state FROM allocations WHERE user_id = $1 ORDER BY created_at DESC";
+const SELECT_BY_ID: &str = "SELECT id, amount, owner_kind, owner_id, sharers::text AS sharers, kind::text AS kind, state FROM allocations WHERE id = $1";
+const SELECT_BY_ID_FOR_UPDATE: &str = "SELECT id, amount, owner_kind, owner_id, sharers::text AS sharers, kind::text AS kind, state FROM allocations WHERE id = $1 FOR UPDATE";
+const SELECT_BY_USER: &str = "SELECT id, amount, owner_kind, owner_id, sharers::text AS sharers, kind::text AS kind, state FROM allocations WHERE user_id = $1 ORDER BY created_at DESC";
 pub struct PgAllocations {
 	pool: PgPool,
 }
@@ -50,7 +49,6 @@ impl Reader for PgAllocations {
 struct AllocationRow {
 	id: Uuid,
 	amount: String,
-	network: String,
 	owner_kind: String,
 	owner_id: Option<String>,
 	sharers: String,
@@ -66,7 +64,6 @@ impl AllocationRow {
 		Ok(Allocation::rehydrate(
 			AllocationId::from_raw(self.id),
 			amount,
-			Network::parse(&self.network)?,
 			Party::from_parts(&self.owner_kind, self.owner_id.as_deref())?,
 			sharers,
 			kind,
@@ -95,22 +92,19 @@ async fn upsert_row(conn: &mut PgConnection, allocation: &Allocation, insert: bo
 	let kind = serde_json::to_string(allocation.kind()).map_err(|e| DomainError::Repository(e.to_string()))?;
 	let amount = allocation.amount().base_units().to_string();
 	if insert {
-		sqlx::query(
-			"INSERT INTO allocations (id, amount, network, owner_kind, owner_id, sharers, kind, user_id, service_id, state) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10)",
-		)
-		.bind(allocation.id().raw())
-		.bind(amount)
-		.bind(allocation.network().as_str())
-		.bind(allocation.owner().kind_str())
-		.bind(allocation.owner().id_str())
-		.bind(sharers)
-		.bind(kind)
-		.bind(user_id)
-		.bind(service_id)
-		.bind(allocation.state().as_str())
-		.execute(&mut *conn)
-		.await
-		.map_err(repo_err)?;
+		sqlx::query("INSERT INTO allocations (id, amount, owner_kind, owner_id, sharers, kind, user_id, service_id, state) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9)")
+			.bind(allocation.id().raw())
+			.bind(amount)
+			.bind(allocation.owner().kind_str())
+			.bind(allocation.owner().id_str())
+			.bind(sharers)
+			.bind(kind)
+			.bind(user_id)
+			.bind(service_id)
+			.bind(allocation.state().as_str())
+			.execute(&mut *conn)
+			.await
+			.map_err(repo_err)?;
 	} else {
 		let result =
 			sqlx::query("UPDATE allocations SET state = $2, owner_kind = $3, owner_id = $4, sharers = $5::jsonb, kind = $6::jsonb, service_id = $7, updated_at = now() WHERE id = $1")

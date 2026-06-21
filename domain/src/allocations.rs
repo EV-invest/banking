@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
 	balance::{Party, ServiceId},
 	error::DomainError,
-	money::{Network, Usdt},
+	money::Usdt,
 	users::UserId,
 };
 
@@ -93,7 +93,6 @@ impl AllocationState {
 pub struct Allocation {
 	id: AllocationId,
 	amount: Usdt,
-	network: Network,
 	owner: Party,
 	sharers: Vec<Party>,
 	kind: AllocationKind,
@@ -102,13 +101,12 @@ pub struct Allocation {
 }
 
 impl Allocation {
-	/// A user directs `amount` of their (network `network`) claim at a service.
-	/// `owner = Piggybank`, `sharers = [User]`, `Active`. Raises `Opened`.
-	pub fn open_user_stake(id: AllocationId, user: UserId, service: ServiceId, network: Network, amount: Usdt) -> Result<Self, DomainError> {
+	/// A user directs `amount` of their claim at a service. `owner = Piggybank`,
+	/// `sharers = [User]`, `Active`. Raises `Opened`.
+	pub fn open_user_stake(id: AllocationId, user: UserId, service: ServiceId, amount: Usdt) -> Result<Self, DomainError> {
 		Self::open(
 			id,
 			amount,
-			network,
 			Party::Piggybank,
 			vec![Party::User(user)],
 			AllocationKind::UserStake { user, service },
@@ -118,11 +116,10 @@ impl Allocation {
 
 	/// A service reserves `amount` of fund capital and locks it. `owner = Piggybank`,
 	/// `sharers = [Service]`, `Pending`. Raises `Opened`. (Follow-up wiring.)
-	pub fn open_service_reservation(id: AllocationId, service: ServiceId, network: Network, amount: Usdt) -> Result<Self, DomainError> {
+	pub fn open_service_reservation(id: AllocationId, service: ServiceId, amount: Usdt) -> Result<Self, DomainError> {
 		Self::open(
 			id,
 			amount,
-			network,
 			Party::Piggybank,
 			vec![Party::Service(service.clone())],
 			AllocationKind::ServiceReservation { service },
@@ -133,11 +130,10 @@ impl Allocation {
 	/// An instant transfer of `amount` of fund capital to a service, which then owns
 	/// it. `owner = Service`, `sharers = [Piggybank]`, `Active`. Raises `Opened`.
 	/// (Follow-up wiring.)
-	pub fn open_service_transfer(id: AllocationId, service: ServiceId, network: Network, amount: Usdt) -> Result<Self, DomainError> {
+	pub fn open_service_transfer(id: AllocationId, service: ServiceId, amount: Usdt) -> Result<Self, DomainError> {
 		Self::open(
 			id,
 			amount,
-			network,
 			Party::Service(service.clone()),
 			vec![Party::Piggybank],
 			AllocationKind::ServiceHolding { service },
@@ -145,14 +141,13 @@ impl Allocation {
 		)
 	}
 
-	fn open(id: AllocationId, amount: Usdt, network: Network, owner: Party, sharers: Vec<Party>, kind: AllocationKind, state: AllocationState) -> Result<Self, DomainError> {
+	fn open(id: AllocationId, amount: Usdt, owner: Party, sharers: Vec<Party>, kind: AllocationKind, state: AllocationState) -> Result<Self, DomainError> {
 		if amount.is_zero() {
 			return Err(DomainError::Validation("allocation amount must be positive".into()));
 		}
 		let mut allocation = Self {
 			id,
 			amount,
-			network,
 			owner: owner.clone(),
 			sharers: sharers.clone(),
 			kind: kind.clone(),
@@ -162,7 +157,6 @@ impl Allocation {
 		allocation.pending.push(AllocationEvent::Opened {
 			allocation_id: id,
 			amount,
-			network,
 			owner,
 			sharers,
 			kind,
@@ -171,11 +165,10 @@ impl Allocation {
 	}
 
 	/// Reconstitute from the store. Raises no events.
-	pub fn rehydrate(id: AllocationId, amount: Usdt, network: Network, owner: Party, sharers: Vec<Party>, kind: AllocationKind, state: AllocationState) -> Self {
+	pub fn rehydrate(id: AllocationId, amount: Usdt, owner: Party, sharers: Vec<Party>, kind: AllocationKind, state: AllocationState) -> Self {
 		Self {
 			id,
 			amount,
-			network,
 			owner,
 			sharers,
 			kind,
@@ -210,7 +203,6 @@ impl Allocation {
 		self.pending.push(AllocationEvent::Revoked {
 			allocation_id: self.id,
 			amount: self.amount,
-			network: self.network,
 			user,
 			service,
 		});
@@ -234,7 +226,6 @@ impl Allocation {
 		self.pending.push(AllocationEvent::Settled {
 			allocation_id: self.id,
 			amount: self.amount,
-			network: self.network,
 			service,
 		});
 		Ok(())
@@ -254,7 +245,6 @@ impl Allocation {
 		self.pending.push(AllocationEvent::Cancelled {
 			allocation_id: self.id,
 			amount: self.amount,
-			network: self.network,
 			service,
 		});
 		Ok(())
@@ -266,10 +256,6 @@ impl Allocation {
 
 	pub fn amount(&self) -> Usdt {
 		self.amount
-	}
-
-	pub fn network(&self) -> Network {
-		self.network
 	}
 
 	pub fn owner(&self) -> &Party {
@@ -307,15 +293,14 @@ impl AggregateRoot for Allocation {
 pub struct UserRevocable(pub UserId);
 
 /// Facts raised by the [`Allocation`] aggregate. Each carries the saga-relevant data
-/// (amount, network, parties) so the relay maps an event to a ledger operation with
-/// no extra read. Internally tagged so the stored JSON is self-describing.
+/// (amount, parties) so the relay maps an event to a ledger operation with no extra
+/// read. Internally tagged so the stored JSON is self-describing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AllocationEvent {
 	Opened {
 		allocation_id: AllocationId,
 		amount: Usdt,
-		network: Network,
 		owner: Party,
 		sharers: Vec<Party>,
 		kind: AllocationKind,
@@ -323,20 +308,17 @@ pub enum AllocationEvent {
 	Revoked {
 		allocation_id: AllocationId,
 		amount: Usdt,
-		network: Network,
 		user: UserId,
 		service: ServiceId,
 	},
 	Settled {
 		allocation_id: AllocationId,
 		amount: Usdt,
-		network: Network,
 		service: ServiceId,
 	},
 	Cancelled {
 		allocation_id: AllocationId,
 		amount: Usdt,
-		network: Network,
 		service: ServiceId,
 	},
 }
@@ -388,7 +370,7 @@ mod tests {
 
 	#[test]
 	fn open_user_stake_sets_roles_and_emits_opened() {
-		let mut a = Allocation::open_user_stake(AllocationId::new(), user(), svc(), Network::Trc20, amount()).unwrap();
+		let mut a = Allocation::open_user_stake(AllocationId::new(), user(), svc(), amount()).unwrap();
 		assert_eq!(*a.owner(), Party::Piggybank);
 		assert_eq!(a.state(), AllocationState::Active);
 		let events = a.drain_events();
@@ -399,13 +381,13 @@ mod tests {
 
 	#[test]
 	fn zero_amount_is_rejected() {
-		assert!(Allocation::open_user_stake(AllocationId::new(), user(), svc(), Network::Ton, Usdt::ZERO).is_err());
+		assert!(Allocation::open_user_stake(AllocationId::new(), user(), svc(), Usdt::ZERO).is_err());
 	}
 
 	#[test]
 	fn the_staking_user_may_revoke() {
 		let u = user();
-		let mut a = Allocation::open_user_stake(AllocationId::new(), u, svc(), Network::Bep20, amount()).unwrap();
+		let mut a = Allocation::open_user_stake(AllocationId::new(), u, svc(), amount()).unwrap();
 		a.drain_events();
 		a.revoke_by_user(u).unwrap();
 		assert_eq!(a.state(), AllocationState::Revoked);
@@ -415,7 +397,7 @@ mod tests {
 
 	#[test]
 	fn another_user_may_not_revoke() {
-		let mut a = Allocation::open_user_stake(AllocationId::new(), user(), svc(), Network::Bep20, amount()).unwrap();
+		let mut a = Allocation::open_user_stake(AllocationId::new(), user(), svc(), amount()).unwrap();
 		a.drain_events();
 		let err = a.revoke_by_user(user()).unwrap_err();
 		assert!(matches!(err, DomainError::Forbidden(_)));
@@ -425,7 +407,7 @@ mod tests {
 	#[test]
 	fn revoke_is_idempotent() {
 		let u = user();
-		let mut a = Allocation::open_user_stake(AllocationId::new(), u, svc(), Network::Trc20, amount()).unwrap();
+		let mut a = Allocation::open_user_stake(AllocationId::new(), u, svc(), amount()).unwrap();
 		a.drain_events();
 		a.revoke_by_user(u).unwrap();
 		a.drain_events();
@@ -438,13 +420,13 @@ mod tests {
 	fn a_service_sharer_is_not_user_revocable() {
 		// A reservation is owned by Piggybank but shared with a Service — no user can
 		// revoke it (and it isn't Active, but the policy must fail regardless).
-		let a = Allocation::open_service_reservation(AllocationId::new(), svc(), Network::Bep20, amount()).unwrap();
+		let a = Allocation::open_service_reservation(AllocationId::new(), svc(), amount()).unwrap();
 		assert!(!UserRevocable(user()).holds(&a));
 	}
 
 	#[test]
 	fn reservation_settles_into_a_service_holding() {
-		let mut a = Allocation::open_service_reservation(AllocationId::new(), svc(), Network::Bep20, amount()).unwrap();
+		let mut a = Allocation::open_service_reservation(AllocationId::new(), svc(), amount()).unwrap();
 		a.drain_events();
 		assert_eq!(a.state(), AllocationState::Pending);
 		a.settle().unwrap();
@@ -459,7 +441,7 @@ mod tests {
 
 	#[test]
 	fn reservation_cancels_back_to_fund() {
-		let mut a = Allocation::open_service_reservation(AllocationId::new(), svc(), Network::Ton, amount()).unwrap();
+		let mut a = Allocation::open_service_reservation(AllocationId::new(), svc(), amount()).unwrap();
 		a.drain_events();
 		a.cancel().unwrap();
 		assert_eq!(a.state(), AllocationState::Cancelled);
@@ -468,10 +450,10 @@ mod tests {
 
 	#[test]
 	fn event_round_trips_through_json() {
-		let mut a = Allocation::open_user_stake(AllocationId::new(), user(), svc(), Network::Trc20, amount()).unwrap();
+		let mut a = Allocation::open_user_stake(AllocationId::new(), user(), svc(), amount()).unwrap();
 		let event = a.drain_events().pop().unwrap();
 		let json = serde_json::to_string(&event).unwrap();
 		let back: AllocationEvent = serde_json::from_str(&json).unwrap();
-		assert!(matches!(back, AllocationEvent::Opened { network: Network::Trc20, .. }));
+		assert!(matches!(back, AllocationEvent::Opened { .. }));
 	}
 }

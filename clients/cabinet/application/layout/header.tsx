@@ -15,6 +15,9 @@ export function Header() {
           <Link href="/" className="hover:text-foreground">
             Home
           </Link>
+          <Link href="/wallet" className="hover:text-foreground">
+            Wallet
+          </Link>
           {/* Page-level microfrontends from other services mount under their own
               path (e.g. /risk), resolved at runtime from the MFE registry. */}
           <span className="opacity-50">Services</span>

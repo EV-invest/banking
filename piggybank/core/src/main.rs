@@ -19,13 +19,16 @@ use piggybank_core::{
 	config::AppConfig,
 	infrastructure::{
 		allocations::PgAllocations,
+		custody::StubCustody,
 		db,
+		deposit_addresses::StubDepositAddresses,
 		ledger::{self, TbLedger},
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
 		users::PgUsers,
+		withdrawals::PgWithdrawals,
 	},
-	ports::{AllocationRepository, UserRepository, ledger::Ledger},
+	ports::{AllocationRepository, Custody, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
 	services,
 };
 use tokio::sync::Notify;
@@ -75,11 +78,16 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
 	let allocations: Arc<dyn AllocationRepository> = Arc::new(PgAllocations::new(pool.clone()));
+	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
+	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(StubDepositAddresses::new(pool.clone()));
 
 	// The single-worker outbox relay moves money in TigerBeetle after each commit
 	// (Write-Last); command handlers nudge it through `relay_notify` for low latency.
+	// Custody is a separate trust domain — a stub stands in until the real signing
+	// service exists; the relay broadcasts a withdrawal's on-chain leg through it.
 	let relay_notify = Arc::new(Notify::new());
-	let relay = Relay::new(pool.clone(), ledger.clone(), relay_notify.clone());
+	let custody: Arc<dyn Custody> = Arc::new(StubCustody);
+	let relay = Relay::new(pool.clone(), ledger.clone(), custody, relay_notify.clone());
 
 	// ── auth service + user provisioning (in-process) ──────────────────────────
 	// Auth owns the keys/JWKS and hands core an `Authorizer` (core → auth, verify);
@@ -95,6 +103,8 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		analytics,
 		users.clone(),
 		allocations,
+		withdrawals,
+		deposit_addresses,
 		relay_notify,
 		Arc::from(config.admin_subjects.clone()),
 	);

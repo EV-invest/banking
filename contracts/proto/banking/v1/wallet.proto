@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package banking.v1;
+
+// WalletService — a user's own crypto wallet: one unified USDT balance, deposit
+// addresses, and withdrawals. Networks (BEP20/TRC20/TON) are a transaction attribute
+// (where you deposit / where a withdrawal ships), never a balance dimension — the user
+// holds a single fungible USDT balance, segmented by lifecycle.
+//
+// Every RPC acts on the caller's own access-token `sub`. Balances are read live from the
+// authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS
+// (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).
+// A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even
+// when the chosen rail is short on liquidity and queued until the treasury tops it up.
+// The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody
+// broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).
+// See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md.
+service WalletService {
+  // The caller's wallet — the unified lifecycle balance, deposit addresses, and the
+  // per-rail withdrawable view.
+  rpc GetWallet(GetWalletRequest) returns (Wallet);
+
+  // The caller's deposit address on a network (stable; derived once and reused).
+  rpc GetDepositAddress(GetDepositAddressRequest) returns (DepositAddress);
+
+  // Request an on-chain withdrawal of free balance to an external address. Accepted
+  // (and reserved) as long as the unified balance covers it; it ships immediately when
+  // the chosen rail is liquid, otherwise it is queued until the treasury tops it up.
+  rpc RequestWithdrawal(RequestWithdrawalRequest) returns (Withdrawal);
+
+  // Cancel one of the caller's still-queued withdrawals (refund). Rejected once the
+  // withdrawal is processing (a broadcast may have landed).
+  rpc CancelWithdrawal(CancelWithdrawalRequest) returns (Withdrawal);
+
+  // The caller's withdrawals, newest first.
+  rpc ListWithdrawals(ListWithdrawalsRequest) returns (WithdrawalList);
+}
+
+message GetWalletRequest {}
+
+// The user's single, network-agnostic balance, segmented by lifecycle. Every figure is
+// a TigerBeetle-authoritative decimal USDT string; total = available + invested +
+// pending_withdrawal.
+message Balance {
+  string available = 1;           // free, spendable now
+  string invested = 2;            // staked in fund services (active allocations)
+  string pending_withdrawal = 3;  // locked by queued/in-flight withdrawals
+  string total = 4;               // available + invested + pending_withdrawal
+}
+
+// Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole
+// available balance (a request beyond `instant` is accepted and queued); `instant` is
+// the portion that ships without queueing = min(available, rail liquidity).
+message NetworkWithdrawable {
+  string network = 1;          // bep20 | trc20 | ton
+  string withdrawable = 2;     // max requestable on this rail (= available)
+  string instant = 3;          // ships now without queueing
+  string min_withdrawal = 4;   // smallest gross withdrawal accepted
+  string withdrawal_fee = 5;   // flat network fee retained on a withdrawal
+}
+
+message Wallet {
+  Balance balance = 1;
+  repeated DepositAddress deposit_addresses = 2;  // a rail to top up on (per network)
+  repeated NetworkWithdrawable withdrawable = 3;  // per-rail withdraw options
+}
+
+message GetDepositAddressRequest {
+  string network = 1;  // bep20 | trc20 | ton
+}
+
+message DepositAddress {
+  string network = 1;
+  string address = 2;
+  uint32 min_confirmations = 3;  // confirmations before a deposit is credited
+}
+
+message RequestWithdrawalRequest {
+  string network = 1;  // bep20 | trc20 | ton — the rail to ship on
+  string address = 2;  // destination on-chain address (validated per network)
+  string amount = 3;   // gross decimal USDT to debit (the fee is taken from this)
+}
+
+message CancelWithdrawalRequest {
+  string withdrawal_id = 1;
+}
+
+message ListWithdrawalsRequest {}
+
+// A user withdrawal aggregate, projected. `state` advances queued → processing →
+// completed (settled on confirmations) | failed (voided, refunded); a queued one may
+// also be cancelled (voided, refunded).
+message Withdrawal {
+  string id = 1;
+  string network = 2;     // bep20 | trc20 | ton
+  string address = 3;     // destination address
+  string amount = 4;      // gross debited from the user (decimal USDT)
+  string fee = 5;         // network fee retained (decimal USDT)
+  string net_amount = 6;  // amount − fee, the amount sent on-chain
+  string state = 7;       // queued | processing | completed | failed | cancelled
+  string tx_ref = 8;      // on-chain reference once settled (empty otherwise)
+}
+
+message WithdrawalList {
+  repeated Withdrawal withdrawals = 1;
+}

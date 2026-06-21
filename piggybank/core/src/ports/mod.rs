@@ -15,10 +15,15 @@
 //! last, in the relay).
 
 pub mod allocations;
+pub mod custody;
+pub mod deposit_addresses;
 pub mod ledger;
+pub mod withdrawals;
 
 pub use allocations::AllocationRepository;
 use async_trait::async_trait;
+pub use custody::{BroadcastRequest, Custody, CustodyError};
+pub use deposit_addresses::DepositAddresses;
 use domain::{
 	architecture::{Reader, Repository},
 	auth::AuthSubject,
@@ -26,6 +31,7 @@ use domain::{
 	users::{Email, User, UserId},
 };
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
+pub use withdrawals::WithdrawalRepository;
 
 /// Persistence + read port for the [`User`] aggregate.
 #[async_trait]
