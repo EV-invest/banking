@@ -16,7 +16,7 @@ async-trait = "0.1.89"
 dotenvy = "0.15.7"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 jiff = "0.2"
-ev = { git = "https://github.com/EV-invest/lib.git", default-features = false, features = ["architecture"] }
+ev = { version = "0.2.1", package = "ev_lib", default-features = false, features = ["architecture"] }
 # Hub-internal crates. Other service repos depend on `evbanking_contracts` (and,
 # transitively, `evbanking_auth`) by git, so they get the wire stubs and the shared
 # auth verification flow from one place.
