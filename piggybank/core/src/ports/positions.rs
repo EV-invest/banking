@@ -14,6 +14,14 @@ use domain::{
 	users::UserId,
 };
 
+#[async_trait]
+pub trait FundPositionReader: Send + Sync {
+	/// The caller's position projection for one fund, or `None` if they have none.
+	async fn find(&self, user: UserId, service: &ServiceId) -> Result<Option<FundPosition>, DomainError>;
+
+	/// All of the caller's position projections.
+	async fn list(&self, user: UserId) -> Result<Vec<FundPosition>, DomainError>;
+}
 /// A per-(user, service) position projection.
 #[derive(Debug, Clone)]
 pub struct FundPosition {
@@ -22,13 +30,4 @@ pub struct FundPosition {
 	pub cost_basis: Usdt,
 	/// The highest NAV the investor has subscribed at — reserved for a performance fee.
 	pub high_water_mark: Nav,
-}
-
-#[async_trait]
-pub trait FundPositionReader: Send + Sync {
-	/// The caller's position projection for one fund, or `None` if they have none.
-	async fn find(&self, user: UserId, service: &ServiceId) -> Result<Option<FundPosition>, DomainError>;
-
-	/// All of the caller's position projections.
-	async fn list(&self, user: UserId) -> Result<Vec<FundPosition>, DomainError>;
 }

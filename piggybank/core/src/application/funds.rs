@@ -24,6 +24,12 @@ use crate::ports::{
 	nav::{NavRepository, Valuation},
 };
 
+/// A derived NAV that jumps more than this (percent) from the previous mark is rejected
+/// unless the operator passes an override — the fat-finger guard on the AUM trust seam.
+pub const MAX_NAV_MOVE_PCT: u128 = 50;
+/// A mark older than this (seconds) is stale; subscribe/redeem refuse to deal on it
+/// rather than price off a drifted NAV (the backward-pricing arbitrage guard). 24h for v1.
+pub const MAX_NAV_AGE_SECS: i64 = 24 * 60 * 60;
 /// A user's position in one fund, assembled from the live unit balance (TigerBeetle),
 /// the current NAV, and the cost-basis projection. `value = units × nav`; P&L is
 /// `value − cost_basis` (computed at the wire boundary, where a signed value is natural).
@@ -48,13 +54,6 @@ pub struct FundNavView {
 	pub posted_at: i64,
 	pub stale: bool,
 }
-
-/// A derived NAV that jumps more than this (percent) from the previous mark is rejected
-/// unless the operator passes an override — the fat-finger guard on the AUM trust seam.
-pub const MAX_NAV_MOVE_PCT: u128 = 50;
-/// A mark older than this (seconds) is stale; subscribe/redeem refuse to deal on it
-/// rather than price off a drifted NAV (the backward-pricing arbitrage guard). 24h for v1.
-pub const MAX_NAV_AGE_SECS: i64 = 24 * 60 * 60;
 
 /// The current NAV for `service`: the latest mark, or the bootstrap seed (1.0) when the
 /// fund has no units yet (the first subscription mints at seed, establishing units).
@@ -212,24 +211,6 @@ pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Led
 	Ok(out)
 }
 
-/// Assemble a position view: read the live unit balance and the current NAV, value it.
-async fn build_position_view(ledger: &dyn Ledger, nav: &dyn NavRepository, user: UserId, service: ServiceId, cost_basis: Usdt) -> Result<PositionView, DomainError> {
-	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?.posted);
-	let (price, nav_as_of) = match nav.current(&service).await? {
-		Some(v) => (v.nav, v.posted_at_unix),
-		None => (Nav::SEED, 0),
-	};
-	let value = price.value(units)?;
-	Ok(PositionView {
-		service,
-		units,
-		nav: price,
-		value,
-		cost_basis,
-		nav_as_of,
-	})
-}
-
 /// The current NAV + freshness for a fund (the seed NAV when never marked).
 pub async fn fund_nav_view(nav: &dyn NavRepository, ledger: &dyn Ledger, service: ServiceId, now_unix: i64) -> Result<FundNavView, DomainError> {
 	let units_outstanding = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
@@ -252,7 +233,6 @@ pub async fn fund_nav_view(nav: &dyn NavRepository, ledger: &dyn Ledger, service
 		},
 	})
 }
-
 /// Operator posts a fund's total AUM; NAV is derived (`AUM / units_outstanding`, read
 /// live from TigerBeetle). Rejects zero units (NAV undefined) and — unless `force` — a
 /// move beyond [`MAX_NAV_MOVE_PCT`] vs the last mark. Records the mark (with `posted_by`)
@@ -279,6 +259,23 @@ pub async fn post_fund_valuation(nav: &dyn NavRepository, ledger: &dyn Ledger, s
 		nav: derived,
 		posted_by: posted_by.to_owned(),
 		posted_at_unix,
+	})
+}
+/// Assemble a position view: read the live unit balance and the current NAV, value it.
+async fn build_position_view(ledger: &dyn Ledger, nav: &dyn NavRepository, user: UserId, service: ServiceId, cost_basis: Usdt) -> Result<PositionView, DomainError> {
+	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?.posted);
+	let (price, nav_as_of) = match nav.current(&service).await? {
+		Some(v) => (v.nav, v.posted_at_unix),
+		None => (Nav::SEED, 0),
+	};
+	let value = price.value(units)?;
+	Ok(PositionView {
+		service,
+		units,
+		nav: price,
+		value,
+		cost_basis,
+		nav_as_of,
 	})
 }
 
