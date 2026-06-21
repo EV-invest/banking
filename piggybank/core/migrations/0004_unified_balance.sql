@@ -1,0 +1,13 @@
+-- Unified-balance redesign: claims become network-agnostic.
+--
+-- A user/service/fund/fee now has ONE claim, not one per chain — USDT is a single
+-- fungible pool. An allocation is therefore a claim against the unified balance, not a
+-- per-rail stake, so it no longer carries a network. Network survives only in the
+-- custody/treasury layer (wallet:<net>) and on deposit/withdrawal transactions
+-- (deposits.network, withdrawals.network, user_deposit_addresses.network, fund_wallets).
+--
+-- tb_accounts.network is left nullable: claim rows now resolve to network-agnostic
+-- logical keys (user:<uuid>, fund, service:<id>, fee, clearing) and store NULL there,
+-- while wallet:<net> rows keep their network. No backfill — TB accounts are minted
+-- lazily, and any pre-existing per-network claim rows simply go unused.
+ALTER TABLE allocations DROP COLUMN network;

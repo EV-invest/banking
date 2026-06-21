@@ -25,8 +25,7 @@ service AllocationsService {
 
 message AllocateRequest {
   string service = 1;  // the service/strategy to allocate to
-  string network = 2;  // bep20 | trc20 | ton
-  string amount = 3;   // decimal USDT
+  string amount = 2;   // decimal USDT (from the unified, network-agnostic balance)
 }
 
 message RevokeAllocationRequest {
@@ -42,16 +41,17 @@ message Sharer {
   string id = 2;
 }
 
+// An allocation is network-agnostic — it is a claim against the unified balance, not a
+// per-rail stake.
 message Allocation {
   string id = 1;
   string amount = 2;       // decimal USDT
-  string network = 3;      // bep20 | trc20 | ton
-  string owner_kind = 4;   // piggybank | user | service
-  string owner_id = 5;
-  repeated Sharer sharers = 6;
-  string kind = 7;         // user_stake | service_reservation | service_holding
-  string service = 8;      // the service the allocation involves
-  string state = 9;        // pending | active | revoked | cancelled
+  string owner_kind = 3;   // piggybank | user | service
+  string owner_id = 4;
+  repeated Sharer sharers = 5;
+  string kind = 6;         // user_stake | service_reservation | service_holding
+  string service = 7;      // the service the allocation involves
+  string state = 8;        // pending | active | revoked | cancelled
 }
 
 message AllocationList {

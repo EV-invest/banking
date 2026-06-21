@@ -187,6 +187,38 @@
           fi
         '';
 
+        # ── proto → OpenAPI → TS codegen plugin ─────────────────────────────
+        # protoc-gen-connect-openapi as a pinned release binary (same approach as the
+        # tigerbeetle/zig binaries above) — offline and supply-chain-pinned. It turns
+        # the gRPC protos into an OpenAPI doc; @hey-api/openapi-ts then emits the
+        # cabinet's TypeScript types. The proto stays the single wire source of truth.
+        protocGenConnectOpenapi =
+          let
+            version = "0.25.7";
+            dist = {
+              x86_64-linux = { file = "protoc-gen-connect-openapi_${version}_linux_amd64.tar.gz"; hash = "sha256-3eqIe0Mt9Ucaxn72FncmtGpPM3rw7sT1+ImY+sX7bMI="; };
+              aarch64-linux = { file = "protoc-gen-connect-openapi_${version}_linux_arm64.tar.gz"; hash = "sha256-1yKaOsZZdOAkIQUiyzkg52T930COJstQHrQUBuUU1uw="; };
+              x86_64-darwin = { file = "protoc-gen-connect-openapi_${version}_darwin_all.tar.gz"; hash = "sha256-cXyGw8oDRkV7PkxfaVlrKLKy7GvwR0mAAcAr+tjln1I="; };
+              aarch64-darwin = { file = "protoc-gen-connect-openapi_${version}_darwin_all.tar.gz"; hash = "sha256-cXyGw8oDRkV7PkxfaVlrKLKy7GvwR0mAAcAr+tjln1I="; };
+            }.${system};
+          in
+          pkgs.stdenvNoCC.mkDerivation {
+            pname = "protoc-gen-connect-openapi";
+            inherit version;
+            src = pkgs.fetchurl {
+              url = "https://github.com/sudorandom/protoc-gen-connect-openapi/releases/download/v${version}/${dist.file}";
+              inherit (dist) hash;
+            };
+            sourceRoot = ".";
+            dontConfigure = true;
+            dontBuild = true;
+            dontFixup = true;
+            installPhase = ''
+              mkdir -p $out/bin
+              install -m755 protoc-gen-connect-openapi $out/bin/
+            '';
+          };
+
         # ── piggybank (the hub server: core + auth, gRPC only) ──────────────
         # Runs `piggybank-core`, which spawns the core gRPC services and the auth
         # service as in-process tasks. A reachable Postgres + TigerBeetle are the
@@ -229,6 +261,28 @@
             [ -d node_modules/next ] || npm install
             export GRPC_ADDR="''${GRPC_ADDR:-127.0.0.1:50051}"
             exec npm run dev --workspace @evbanking/cabinet
+          '';
+        };
+
+        # ── contracts codegen (proto → OpenAPI → cabinet TS types) ──────────
+        # `nix run .#gen-api` regenerates `contracts/openapi.json` from the protos and
+        # the cabinet's `shared/contracts/gen` types from that. Run it after editing a
+        # proto; the outputs are committed so the app builds without the toolchain.
+        runGenApi = pkgs.writeShellApplication {
+          name = "run-gen-api";
+          runtimeInputs = with pkgs; [ protobuf protocGenConnectOpenapi nodejs git ];
+          text = ''
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo"
+            echo "▶ proto → contracts/openapi.json"
+            protoc -I contracts/proto \
+              --connect-openapi_out=contracts \
+              --connect-openapi_opt=format=json,path=openapi.json,with-proto-names \
+              contracts/proto/banking/v1/*.proto
+            echo "▶ openapi.json → cabinet TypeScript types"
+            [ -d node_modules ] || npm install
+            npm run gen:api --workspace @evbanking/cabinet
+            echo "✓ regenerated contracts/openapi.json + clients/cabinet/shared/contracts/gen"
           '';
         };
 
@@ -349,6 +403,7 @@
         # `nix run .#db`        → local Postgres only
         # `nix run .#tb`        → local TigerBeetle only
         # `nix run .#redis`     → local Redis (central auth store) only
+        # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
         # Author new migrations with the sqlx CLI (in the dev shell):
         #   sqlx migrate add --source piggybank/core/migrations --sequential <name>
         apps = {
@@ -358,6 +413,7 @@
           db = { type = "app"; program = "${runPostgres}/bin/run-postgres"; };
           tb = { type = "app"; program = "${runTigerbeetle}/bin/run-tigerbeetle"; };
           redis = { type = "app"; program = "${runRedis}/bin/run-redis"; };
+          gen-api = { type = "app"; program = "${runGenApi}/bin/run-gen-api"; };
         };
 
         devShells.default =
@@ -393,6 +449,7 @@
               postgresql
               sqlx-cli
               tigerbeetleBin
+              protocGenConnectOpenapi
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 
             env.RUST_BACKTRACE = 1;

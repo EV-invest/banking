@@ -1,0 +1,2311 @@
+{
+  "openapi": "3.1.0",
+  "info": {},
+  "paths": {
+    "/banking.v1.AllocationsService/Allocate": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "Allocate",
+        "description": "The calling user directs part of their balance at a fund service/strategy.",
+        "operationId": "banking.v1.AllocationsService.Allocate",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.AllocateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/ListAllocations": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "ListAllocations",
+        "description": "The calling user's allocations, newest first.",
+        "operationId": "banking.v1.AllocationsService.ListAllocations",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListAllocationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.AllocationList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/RevokeAllocation": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "RevokeAllocation",
+        "description": "The calling user revokes their own stake — permitted only while the fund owns\n the allocation (the domain rule). Idempotent.",
+        "operationId": "banking.v1.AllocationsService.RevokeAllocation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RevokeAllocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AuthService/Exchange": {
+      "post": {
+        "tags": [
+          "banking.v1.AuthService"
+        ],
+        "summary": "Exchange",
+        "description": "Exchange a Google authorization code (with its PKCE verifier) for the hub's\n OWN tokens. Called by the cabinet BFF on the OAuth callback. Provisions the\n user on first sign-in (in-process Provisioner channel into core).",
+        "operationId": "banking.v1.AuthService.Exchange",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.TokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AuthService/Jwks": {
+      "post": {
+        "tags": [
+          "banking.v1.AuthService"
+        ],
+        "summary": "Jwks",
+        "description": "Publish the current signing public keys (JWKS). Polled by downstream services'\n `evbanking_auth` verifier to refresh its local cache; also consulted on an\n unknown-`kid` miss. Carries only public key material.",
+        "operationId": "banking.v1.AuthService.Jwks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.JwksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.JwksResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AuthService/Logout": {
+      "post": {
+        "tags": [
+          "banking.v1.AuthService"
+        ],
+        "summary": "Logout",
+        "description": "Revoke the presented refresh token's family. With `revoke_all` set, also bumps\n the user's `token_version` so every outstanding access token is rejected hub-side.",
+        "operationId": "banking.v1.AuthService.Logout",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.LogoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.LogoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AuthService/Refresh": {
+      "post": {
+        "tags": [
+          "banking.v1.AuthService"
+        ],
+        "summary": "Refresh",
+        "description": "Rotate a refresh token: returns a fresh access+refresh pair and invalidates\n the presented refresh token (rotation + reuse detection in the central store).",
+        "operationId": "banking.v1.AuthService.Refresh",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.TokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/DispatchWithdrawal": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "DispatchWithdrawal",
+        "description": "Dispatch a queued withdrawal to custody once its rail has liquidity (the treasury\n worker). Stands in for an automated rebalance/top-up trigger. Idempotent.",
+        "operationId": "banking.v1.BalanceService.DispatchWithdrawal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.DispatchWithdrawalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.DispatchWithdrawalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/FailWithdrawal": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "FailWithdrawal",
+        "description": "Fail a processing user withdrawal that never reached the chain: voids the\n reservation, refunding the user. NEVER call this if the broadcast may have landed\n on-chain — that would double-pay. Idempotent.",
+        "operationId": "banking.v1.BalanceService.FailWithdrawal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.FailWithdrawalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FailWithdrawalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/GetTreasury": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "GetTreasury",
+        "description": "The treasury: per-rail on-chain liquidity (Layer 2) and the claims it backs\n (Layer 1), read live from TigerBeetle (Read-First).",
+        "operationId": "banking.v1.BalanceService.GetTreasury",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetTreasuryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Treasury"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/RecordDeposit": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "RecordDeposit",
+        "description": "Record a settled on-chain deposit, crediting a party's claim. Idempotent by\n `tx_ref` — recording the same chain tx twice credits once.",
+        "operationId": "banking.v1.BalanceService.RecordDeposit",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RecordDepositRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RecordDepositResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/SeedCapital": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "SeedCapital",
+        "description": "Inject the company's own capital onto a rail (Dr WALLET / Cr FUND).",
+        "operationId": "banking.v1.BalanceService.SeedCapital",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SeedCapitalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.SeedCapitalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/SettleWithdrawal": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "SettleWithdrawal",
+        "description": "Settle a user withdrawal once it has the required on-chain confirmations: posts the\n reservation and moves the net out of custody. `tx_ref` is the chain transaction.\n Stands in for a chain watcher + custody confirmation callback. Idempotent.",
+        "operationId": "banking.v1.BalanceService.SettleWithdrawal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SettleWithdrawalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.SettleWithdrawalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.HealthService/Check": {
+      "post": {
+        "tags": [
+          "banking.v1.HealthService"
+        ],
+        "summary": "Check",
+        "operationId": "banking.v1.HealthService.Check",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.CheckResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.UsersService/DisableUser": {
+      "post": {
+        "tags": [
+          "banking.v1.UsersService"
+        ],
+        "summary": "DisableUser",
+        "description": "Admin (allowlist): disable a user, freezing future sign-in/refresh without\n deleting the record.",
+        "operationId": "banking.v1.UsersService.DisableUser",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.DisableUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.DisableUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.UsersService/GetBalance": {
+      "post": {
+        "tags": [
+          "banking.v1.UsersService"
+        ],
+        "summary": "GetBalance",
+        "description": "The calling user's live balance, read straight from TigerBeetle (Read-First).\n No Postgres-stored amount exists; the response is authoritative as of `as_of`.",
+        "operationId": "banking.v1.UsersService.GetBalance",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetUserBalanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UserBalanceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.UsersService/GetMe": {
+      "post": {
+        "tags": [
+          "banking.v1.UsersService"
+        ],
+        "summary": "GetMe",
+        "description": "The calling user's own identity (resolved from the access-token `sub`).",
+        "operationId": "banking.v1.UsersService.GetMe",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetMeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UserProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.UsersService/RevokeTokens": {
+      "post": {
+        "tags": [
+          "banking.v1.UsersService"
+        ],
+        "summary": "RevokeTokens",
+        "description": "Admin (allowlist): bump a user's token_version so all their outstanding access\n tokens are rejected hub-side. The token-revocation control surface.",
+        "operationId": "banking.v1.UsersService.RevokeTokens",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RevokeTokensRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RevokeTokensResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.WalletService/CancelWithdrawal": {
+      "post": {
+        "tags": [
+          "banking.v1.WalletService"
+        ],
+        "summary": "CancelWithdrawal",
+        "description": "Cancel one of the caller's still-queued withdrawals (refund). Rejected once the\n withdrawal is processing (a broadcast may have landed).",
+        "operationId": "banking.v1.WalletService.CancelWithdrawal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CancelWithdrawalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Withdrawal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.WalletService/GetDepositAddress": {
+      "post": {
+        "tags": [
+          "banking.v1.WalletService"
+        ],
+        "summary": "GetDepositAddress",
+        "description": "The caller's deposit address on a network (stable; derived once and reused).",
+        "operationId": "banking.v1.WalletService.GetDepositAddress",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetDepositAddressRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.DepositAddress"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.WalletService/GetWallet": {
+      "post": {
+        "tags": [
+          "banking.v1.WalletService"
+        ],
+        "summary": "GetWallet",
+        "description": "The caller's wallet — the unified lifecycle balance, deposit addresses, and the\n per-rail withdrawable view.",
+        "operationId": "banking.v1.WalletService.GetWallet",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetWalletRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Wallet"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.WalletService/ListWithdrawals": {
+      "post": {
+        "tags": [
+          "banking.v1.WalletService"
+        ],
+        "summary": "ListWithdrawals",
+        "description": "The caller's withdrawals, newest first.",
+        "operationId": "banking.v1.WalletService.ListWithdrawals",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListWithdrawalsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.WithdrawalList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.WalletService/RequestWithdrawal": {
+      "post": {
+        "tags": [
+          "banking.v1.WalletService"
+        ],
+        "summary": "RequestWithdrawal",
+        "description": "Request an on-chain withdrawal of free balance to an external address. Accepted\n (and reserved) as long as the unified balance covers it; it ships immediately when\n the chosen rail is liquid, otherwise it is queued until the treasury tops it up.",
+        "operationId": "banking.v1.WalletService.RequestWithdrawal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RequestWithdrawalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Withdrawal"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "banking.v1.AllocateRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "the service/strategy to allocate to"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "decimal USDT (from the unified, network-agnostic balance)"
+          }
+        },
+        "title": "AllocateRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.Allocation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "decimal USDT"
+          },
+          "owner_kind": {
+            "type": "string",
+            "title": "owner_kind",
+            "description": "piggybank | user | service"
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "owner_id"
+          },
+          "sharers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Sharer"
+            },
+            "title": "sharers"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "user_stake | service_reservation | service_holding"
+          },
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "the service the allocation involves"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "pending | active | revoked | cancelled"
+          }
+        },
+        "title": "Allocation",
+        "additionalProperties": false,
+        "description": "An allocation is network-agnostic — it is a claim against the unified balance, not a\n per-rail stake."
+      },
+      "banking.v1.AllocationList": {
+        "type": "object",
+        "properties": {
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Allocation"
+            },
+            "title": "allocations"
+          }
+        },
+        "title": "AllocationList",
+        "additionalProperties": false
+      },
+      "banking.v1.Balance": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "string",
+            "title": "available",
+            "description": "free, spendable now"
+          },
+          "invested": {
+            "type": "string",
+            "title": "invested",
+            "description": "staked in fund services (active allocations)"
+          },
+          "pending_withdrawal": {
+            "type": "string",
+            "title": "pending_withdrawal",
+            "description": "locked by queued/in-flight withdrawals"
+          },
+          "total": {
+            "type": "string",
+            "title": "total",
+            "description": "available + invested + pending_withdrawal"
+          }
+        },
+        "title": "Balance",
+        "additionalProperties": false,
+        "description": "The user's single, network-agnostic balance, segmented by lifecycle. Every figure is\n a TigerBeetle-authoritative decimal USDT string; total = available + invested +\n pending_withdrawal."
+      },
+      "banking.v1.CancelWithdrawalRequest": {
+        "type": "object",
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "title": "withdrawal_id"
+          }
+        },
+        "title": "CancelWithdrawalRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.CheckRequest": {
+        "type": "object",
+        "title": "CheckRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.CheckResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "status"
+          }
+        },
+        "title": "CheckResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.DepositAddress": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network"
+          },
+          "address": {
+            "type": "string",
+            "title": "address"
+          },
+          "min_confirmations": {
+            "type": "integer",
+            "title": "min_confirmations",
+            "description": "confirmations before a deposit is credited"
+          }
+        },
+        "title": "DepositAddress",
+        "additionalProperties": false
+      },
+      "banking.v1.DisableUserRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          }
+        },
+        "title": "DisableUserRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.DisableUserResponse": {
+        "type": "object",
+        "title": "DisableUserResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.DispatchWithdrawalRequest": {
+        "type": "object",
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "title": "withdrawal_id"
+          }
+        },
+        "title": "DispatchWithdrawalRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.DispatchWithdrawalResponse": {
+        "type": "object",
+        "title": "DispatchWithdrawalResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.ExchangeRequest": {
+        "type": "object",
+        "properties": {
+          "auth_code": {
+            "type": "string",
+            "title": "auth_code",
+            "description": "The Google authorization code from the OAuth redirect."
+          },
+          "code_verifier": {
+            "type": "string",
+            "title": "code_verifier",
+            "description": "The PKCE code verifier the BFF generated for this transaction (S256)."
+          },
+          "redirect_uri": {
+            "type": "string",
+            "title": "redirect_uri",
+            "description": "The exact redirect_uri used in the authorize request (Google requires a match)."
+          },
+          "nonce": {
+            "type": "string",
+            "title": "nonce",
+            "description": "The nonce the BFF put in the authorize request; matched against Google's id_token."
+          }
+        },
+        "title": "ExchangeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.FailWithdrawalRequest": {
+        "type": "object",
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "title": "withdrawal_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "operator note (audit only)"
+          }
+        },
+        "title": "FailWithdrawalRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.FailWithdrawalResponse": {
+        "type": "object",
+        "title": "FailWithdrawalResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.GetDepositAddressRequest": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton"
+          }
+        },
+        "title": "GetDepositAddressRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetMeRequest": {
+        "type": "object",
+        "title": "GetMeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetTreasuryRequest": {
+        "type": "object",
+        "title": "GetTreasuryRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetUserBalanceRequest": {
+        "type": "object",
+        "title": "GetUserBalanceRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetWalletRequest": {
+        "type": "object",
+        "title": "GetWalletRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.Jwk": {
+        "type": "object",
+        "properties": {
+          "kid": {
+            "type": "string",
+            "title": "kid"
+          },
+          "kty": {
+            "type": "string",
+            "title": "kty"
+          },
+          "crv": {
+            "type": "string",
+            "title": "crv"
+          },
+          "x": {
+            "type": "string",
+            "title": "x"
+          },
+          "alg": {
+            "type": "string",
+            "title": "alg"
+          },
+          "use": {
+            "type": "string",
+            "title": "use"
+          }
+        },
+        "title": "Jwk",
+        "additionalProperties": false,
+        "description": "One JSON Web Key. Ed25519 keys are OKP: kty=\"OKP\", crv=\"Ed25519\", x=base64url\n public key, alg=\"EdDSA\". `kid` is a stable thumbprint of the public key."
+      },
+      "banking.v1.JwksRequest": {
+        "type": "object",
+        "title": "JwksRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.JwksResponse": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Jwk"
+            },
+            "title": "keys"
+          }
+        },
+        "title": "JwksResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.ListAllocationsRequest": {
+        "type": "object",
+        "title": "ListAllocationsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListWithdrawalsRequest": {
+        "type": "object",
+        "title": "ListWithdrawalsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.LogoutRequest": {
+        "type": "object",
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token"
+          },
+          "revoke_all": {
+            "type": "boolean",
+            "title": "revoke_all",
+            "description": "When true, bump the user's token_version (coarse \"revoke all\"), not just this\n refresh family."
+          }
+        },
+        "title": "LogoutRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.LogoutResponse": {
+        "type": "object",
+        "title": "LogoutResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.NetworkWithdrawable": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton"
+          },
+          "withdrawable": {
+            "type": "string",
+            "title": "withdrawable",
+            "description": "max requestable on this rail (= available)"
+          },
+          "instant": {
+            "type": "string",
+            "title": "instant",
+            "description": "ships now without queueing"
+          },
+          "min_withdrawal": {
+            "type": "string",
+            "title": "min_withdrawal",
+            "description": "smallest gross withdrawal accepted"
+          },
+          "withdrawal_fee": {
+            "type": "string",
+            "title": "withdrawal_fee",
+            "description": "flat network fee retained on a withdrawal"
+          }
+        },
+        "title": "NetworkWithdrawable",
+        "additionalProperties": false,
+        "description": "Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole\n available balance (a request beyond `instant` is accepted and queued); `instant` is\n the portion that ships without queueing = min(available, rail liquidity)."
+      },
+      "banking.v1.RailLiquidity": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton"
+          },
+          "custody": {
+            "type": "string",
+            "title": "custody",
+            "description": "liquid on-chain USDT held in this rail's custody wallet"
+          }
+        },
+        "title": "RailLiquidity",
+        "additionalProperties": false,
+        "description": "Per-rail on-chain liquidity (the treasury / Layer 2)."
+      },
+      "banking.v1.RecordDepositRequest": {
+        "type": "object",
+        "properties": {
+          "tx_ref": {
+            "type": "string",
+            "title": "tx_ref",
+            "description": "the on-chain tx reference — the idempotency key"
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton — the rail it arrived on"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "decimal USDT (canonical value, network-agnostic)"
+          },
+          "party_kind": {
+            "type": "string",
+            "title": "party_kind",
+            "description": "The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the\n user UUID or service id (empty for piggybank, which credits the fund's capital)."
+          },
+          "party_id": {
+            "type": "string",
+            "title": "party_id"
+          }
+        },
+        "title": "RecordDepositRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.RecordDepositResponse": {
+        "type": "object",
+        "properties": {
+          "recorded": {
+            "type": "boolean",
+            "title": "recorded",
+            "description": "false if `tx_ref` was already recorded (idempotent no-op)"
+          }
+        },
+        "title": "RecordDepositResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.RefreshRequest": {
+        "type": "object",
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token"
+          }
+        },
+        "title": "RefreshRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.RequestWithdrawalRequest": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton — the rail to ship on"
+          },
+          "address": {
+            "type": "string",
+            "title": "address",
+            "description": "destination on-chain address (validated per network)"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "gross decimal USDT to debit (the fee is taken from this)"
+          }
+        },
+        "title": "RequestWithdrawalRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.RevokeAllocationRequest": {
+        "type": "object",
+        "properties": {
+          "allocation_id": {
+            "type": "string",
+            "title": "allocation_id"
+          }
+        },
+        "title": "RevokeAllocationRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.RevokeTokensRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          }
+        },
+        "title": "RevokeTokensRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.RevokeTokensResponse": {
+        "type": "object",
+        "properties": {
+          "token_version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "token_version",
+            "format": "int64"
+          }
+        },
+        "title": "RevokeTokensResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.SeedCapitalRequest": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton — the rail the capital lands on"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "decimal USDT"
+          }
+        },
+        "title": "SeedCapitalRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SeedCapitalResponse": {
+        "type": "object",
+        "title": "SeedCapitalResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.SettleWithdrawalRequest": {
+        "type": "object",
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "title": "withdrawal_id"
+          },
+          "tx_ref": {
+            "type": "string",
+            "title": "tx_ref",
+            "description": "the on-chain transaction reference"
+          }
+        },
+        "title": "SettleWithdrawalRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SettleWithdrawalResponse": {
+        "type": "object",
+        "title": "SettleWithdrawalResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.Sharer": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind"
+          },
+          "id": {
+            "type": "string",
+            "title": "id"
+          }
+        },
+        "title": "Sharer",
+        "additionalProperties": false,
+        "description": "A party in an allocation's owner/sharer roles. `kind` ∈ {piggybank, user,\n service}; `id` is the user UUID or service id (empty for piggybank)."
+      },
+      "banking.v1.TokenResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "access_token"
+          },
+          "access_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "access_expires_at",
+            "format": "int64"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token"
+          },
+          "refresh_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "refresh_expires_at",
+            "format": "int64"
+          },
+          "user": {
+            "title": "user",
+            "$ref": "#/components/schemas/banking.v1.UserSummary"
+          }
+        },
+        "title": "TokenResponse",
+        "additionalProperties": false,
+        "description": "A first-party token pair plus a snapshot of the principal. All expiries are\n unix SECONDS (matching the JWT `exp` claim); the BFF parses them with\n proto-loader `longs: String`."
+      },
+      "banking.v1.Treasury": {
+        "type": "object",
+        "properties": {
+          "rails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.RailLiquidity"
+            },
+            "title": "rails",
+            "description": "per-rail on-chain liquidity (USDT)"
+          },
+          "bank": {
+            "type": "string",
+            "title": "bank",
+            "description": "mocked USD liquidity (separate ledger; off-ramp FX)"
+          },
+          "total_custody": {
+            "type": "string",
+            "title": "total_custody",
+            "description": "sum of rail custody — the asset side"
+          },
+          "fund_capital": {
+            "type": "string",
+            "title": "fund_capital",
+            "description": "the fund's own unallocated capital"
+          },
+          "fee_revenue": {
+            "type": "string",
+            "title": "fee_revenue",
+            "description": "retained withdrawal-fee revenue"
+          },
+          "held_for_clients": {
+            "type": "string",
+            "title": "held_for_clients",
+            "description": "claims owed to users + services"
+          },
+          "reserved_for_withdrawals": {
+            "type": "string",
+            "title": "reserved_for_withdrawals",
+            "description": "of held_for_clients, locked by in-flight withdrawals"
+          }
+        },
+        "title": "Treasury",
+        "additionalProperties": false,
+        "description": "The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).\n Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset\n side) equals the sum of all claims — so client liabilities are the remainder beyond\n the fund's own capital and retained fees."
+      },
+      "banking.v1.UserBalanceResponse": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string",
+            "title": "amount"
+          },
+          "pending": {
+            "type": "string",
+            "title": "pending"
+          },
+          "authoritative": {
+            "type": "boolean",
+            "title": "authoritative"
+          },
+          "as_of": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "as_of",
+            "format": "int64"
+          }
+        },
+        "title": "UserBalanceResponse",
+        "additionalProperties": false,
+        "description": "A live ledger balance for a user. `amount` and `pending` are u128 minor-unit\n decimal STRINGS (proto3 has no u128; a string is lossless and matches\n proto-loader's `longs: String`). An investor account is credit-normal, so\n `amount` = posted credits − posted debits is non-negative by invariant.\n `authoritative` is true when read directly from TigerBeetle; `as_of` is unix\n seconds. The `authoritative`/`as_of` pair is the forward-compat seam for a future\n read projection — a projection may later return `authoritative=false` rows with\n no breaking proto change. (Named for the users surface; the company-money\n `BalanceService` owns its own balance messages.)"
+      },
+      "banking.v1.UserProfile": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "email_verified": {
+            "type": "boolean",
+            "title": "email_verified"
+          },
+          "status": {
+            "type": "string",
+            "title": "status"
+          },
+          "token_version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "token_version",
+            "format": "int64"
+          }
+        },
+        "title": "UserProfile",
+        "additionalProperties": false
+      },
+      "banking.v1.UserSummary": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "The hub's canonical user id (a UUID) — this is the JWT `sub`, never Google's sub."
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "status": {
+            "type": "string",
+            "title": "status"
+          },
+          "token_version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "token_version",
+            "format": "int64"
+          }
+        },
+        "title": "UserSummary",
+        "additionalProperties": false,
+        "description": "Minimal principal snapshot returned with a freshly issued token pair, so the BFF\n can populate a session without a second round trip."
+      },
+      "banking.v1.Wallet": {
+        "type": "object",
+        "properties": {
+          "balance": {
+            "title": "balance",
+            "$ref": "#/components/schemas/banking.v1.Balance"
+          },
+          "deposit_addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.DepositAddress"
+            },
+            "title": "deposit_addresses",
+            "description": "a rail to top up on (per network)"
+          },
+          "withdrawable": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.NetworkWithdrawable"
+            },
+            "title": "withdrawable",
+            "description": "per-rail withdraw options"
+          }
+        },
+        "title": "Wallet",
+        "additionalProperties": false
+      },
+      "banking.v1.Withdrawal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton"
+          },
+          "address": {
+            "type": "string",
+            "title": "address",
+            "description": "destination address"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "gross debited from the user (decimal USDT)"
+          },
+          "fee": {
+            "type": "string",
+            "title": "fee",
+            "description": "network fee retained (decimal USDT)"
+          },
+          "net_amount": {
+            "type": "string",
+            "title": "net_amount",
+            "description": "amount − fee, the amount sent on-chain"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "queued | processing | completed | failed | cancelled"
+          },
+          "tx_ref": {
+            "type": "string",
+            "title": "tx_ref",
+            "description": "on-chain reference once settled (empty otherwise)"
+          }
+        },
+        "title": "Withdrawal",
+        "additionalProperties": false,
+        "description": "A user withdrawal aggregate, projected. `state` advances queued → processing →\n completed (settled on confirmations) | failed (voided, refunded); a queued one may\n also be cancelled (voided, refunded)."
+      },
+      "banking.v1.WithdrawalList": {
+        "type": "object",
+        "properties": {
+          "withdrawals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Withdrawal"
+            },
+            "title": "withdrawals"
+          }
+        },
+        "title": "WithdrawalList",
+        "additionalProperties": false
+      },
+      "connect-protocol-version": {
+        "type": "number",
+        "title": "Connect-Protocol-Version",
+        "enum": [
+          1
+        ],
+        "description": "Define the version of the Connect protocol",
+        "const": 1
+      },
+      "connect-timeout-header": {
+        "type": "number",
+        "title": "Connect-Timeout-Ms",
+        "description": "Define the timeout, in ms"
+      },
+      "connect.error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "examples": [
+              "not_found"
+            ],
+            "enum": [
+              "canceled",
+              "unknown",
+              "invalid_argument",
+              "deadline_exceeded",
+              "not_found",
+              "already_exists",
+              "permission_denied",
+              "resource_exhausted",
+              "failed_precondition",
+              "aborted",
+              "out_of_range",
+              "unimplemented",
+              "internal",
+              "unavailable",
+              "data_loss",
+              "unauthenticated"
+            ],
+            "description": "The status code, which should be an enum value of [google.rpc.Code][google.rpc.Code]."
+          },
+          "message": {
+            "type": "string",
+            "description": "A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the [google.rpc.Status.details][google.rpc.Status.details] field, or localized by the client."
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/connect.error_details.Any"
+            },
+            "description": "A list of messages that carry the error details. There is no limit on the number of messages."
+          }
+        },
+        "title": "Connect Error",
+        "additionalProperties": true,
+        "description": "Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation"
+      },
+      "connect.error_details.Any": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "A URL that acts as a globally unique identifier for the type of the serialized message. For example: `type.googleapis.com/google.rpc.ErrorInfo`. This is used to determine the schema of the data in the `value` field and is the discriminator for the `debug` field."
+          },
+          "value": {
+            "type": "string",
+            "format": "binary",
+            "description": "The Protobuf message, serialized as bytes and base64-encoded. The specific message type is identified by the `type` field."
+          },
+          "debug": {
+            "oneOf": [
+              {
+                "type": "object",
+                "title": "Any",
+                "additionalProperties": true,
+                "description": "Detailed error information."
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "title": "Debug",
+            "description": "Deserialized error detail payload. The 'type' field indicates the schema. This field is for easier debugging and should not be relied upon for application logic."
+          }
+        },
+        "additionalProperties": true,
+        "description": "Contains an arbitrary serialized message along with a @type that describes the type of the serialized message, with an additional debug field for ConnectRPC error details."
+      }
+    }
+  },
+  "security": [],
+  "tags": [
+    {
+      "name": "banking.v1.AllocationsService",
+      "description": "AllocationsService — distribution of company and user capital inside the bank and\n across external services.\n\n An allocation has one owner (the \"owned\" party) and a sharers list (the \"shared\"\n list); a user-sharer may revoke only while the fund (piggybank) owns it. Moves are\n cross-boundary sagas over TigerBeetle two-phase transfers. Amounts are decimal\n USDT strings. The user-facing RPCs here act on the caller's own access-token\n `sub`; service-side reservation/settlement RPCs land in a follow-up. See\n docs/ARCHITECTURE.md."
+    },
+    {
+      "name": "banking.v1.AuthService",
+      "description": "AuthService — the hub's token issuance and authorization surface.\n\n Issues first-party asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 sign-in,\n rotates refresh tokens, and publishes verification keys. Services do NOT call\n this per request to authorize: they verify access tokens locally against the\n cached JWKS via the shared `evbanking_auth` flow (no round trip, no per-service\n token storage). They DO call `Jwks` periodically to refresh that cache, since\n the hub speaks only gRPC (no HTTP `.well-known` endpoint).\n\n The cabinet BFF is the OAuth confidential client. It runs the browser-facing\n authorize redirect (PKCE + state + nonce) and then calls `Exchange`\n server-to-server with the Google authorization code; the auth task performs the\n confidential code→token exchange with Google, validates Google's id_token, and\n discards it — Google's token is never forwarded inward. See docs/ARCHITECTURE.md."
+    },
+    {
+      "name": "banking.v1.BalanceService",
+      "description": "BalanceService — the bank's treasury and company capital (operator surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md."
+    },
+    {
+      "name": "banking.v1.HealthService",
+      "description": "Liveness probe for the hub's gRPC surface. Used by the `cabinet` BFF smoke path\n (browser -\u003e BFF -\u003e gRPC) and by service health checks."
+    },
+    {
+      "name": "banking.v1.UsersService",
+      "description": "UsersService — investor accounts and their investments.\n\n Identity metadata is the Postgres control plane; money is read live from the\n authoritative TigerBeetle ledger and is NEVER re-bookkept in Postgres. Every\n RPC is authorized from the verified access-token Claims injected by core's\n inbound auth layer; self-service RPCs act on the caller's own `sub`, admin RPCs\n are gated by the hub's admin allowlist (config). See docs/ARCHITECTURE.md."
+    },
+    {
+      "name": "banking.v1.WalletService",
+      "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
+    }
+  ]
+}
