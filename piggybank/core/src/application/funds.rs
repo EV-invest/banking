@@ -11,10 +11,14 @@ use domain::{
 	balance::{LedgerAccountKey, ServiceId},
 	error::DomainError,
 	money::{Nav, Shares, Usdt},
+	subscriptions::{Subscription, SubscriptionId},
+	users::UserId,
 };
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::ports::{
+	SubscriptionRepository,
 	ledger::Ledger,
 	nav::{NavRepository, Valuation},
 };
@@ -47,6 +51,34 @@ pub async fn dealing_nav(nav: &dyn NavRepository, service: &ServiceId, now_unix:
 	}
 }
 
+/// A user subscribes `cash` of their free balance into `service`, minting
+/// `floor(cash / NAV)` units at the current (fresh) NAV. Read-First confirms the
+/// spendable unified claim covers the cash (TigerBeetle's flag is the backstop); the
+/// staleness guard refuses to deal on a drifted mark. The relay then posts the cash move
+/// (`Dr UserClaim / Cr ServiceClaim`) and the unit mint (`Dr UserShares / Cr
+/// SharesOutstanding`) — cash-leg first, so an insufficient claim parks before any mint.
+#[allow(clippy::too_many_arguments)]
+pub async fn subscribe(
+	subscriptions: &dyn SubscriptionRepository,
+	ledger: &dyn Ledger,
+	nav: &dyn NavRepository,
+	relay: &Notify,
+	user: UserId,
+	service: ServiceId,
+	cash: Usdt,
+	now_unix: i64,
+) -> Result<Subscription, DomainError> {
+	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
+	if Usdt::from_base_units(claim.available()) < cash {
+		return Err(DomainError::Validation("insufficient available balance to subscribe".into()));
+	}
+	let price = dealing_nav(nav, &service, now_unix).await?;
+	let mut subscription = Subscription::open(SubscriptionId::new(), user, service, cash, price)?;
+	subscriptions.open(&mut subscription).await?;
+	relay.notify_one();
+	Ok(subscription)
+}
+
 /// Operator posts a fund's total AUM; NAV is derived (`AUM / units_outstanding`, read
 /// live from TigerBeetle). Rejects zero units (NAV undefined) and — unless `force` — a
 /// move beyond [`MAX_NAV_MOVE_PCT`] vs the last mark. Records the mark (with `posted_by`)
@@ -60,8 +92,8 @@ pub async fn post_fund_valuation(nav: &dyn NavRepository, ledger: &dyn Ledger, s
 		&& nav_move_exceeds(prev.nav, derived, MAX_NAV_MOVE_PCT)
 	{
 		return Err(DomainError::Validation(format!(
-			"nav move {} → {} exceeds {}% — pass override to confirm",
-			prev.nav, derived, MAX_NAV_MOVE_PCT
+			"nav move {} → {derived} exceeds {MAX_NAV_MOVE_PCT}% — pass override to confirm",
+			prev.nav
 		)));
 	}
 	let id = Uuid::new_v4();

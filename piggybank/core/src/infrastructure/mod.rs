@@ -22,6 +22,7 @@ pub mod ledger;
 pub mod nav;
 pub mod outbox;
 pub mod relay;
+pub mod subscriptions;
 pub mod telemetry;
 pub mod tigerbeetle;
 pub mod users;
