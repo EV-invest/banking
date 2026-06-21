@@ -1,0 +1,46 @@
+//! Persistence + read port for the [`Redemption`] aggregate.
+//!
+//! Mirrors [`WithdrawalRepository`](super::WithdrawalRepository): each command is
+//! internally atomic and row-locked — load `FOR UPDATE`, apply the aggregate command
+//! inside the lock, then persist the transition with the drained events. The relay
+//! reserves the pending burn, then (at settle) posts the cash payout and the burn
+//! (Write-Last). `settle` also reduces the user's `fund_positions` cost basis
+//! proportionally (average cost) for P&L — hence it takes the pre-burn units held.
+
+use async_trait::async_trait;
+use domain::{
+	architecture::{Reader, Repository},
+	error::DomainError,
+	money::{Nav, Shares},
+	redemptions::{Redemption, RedemptionId},
+	users::UserId,
+};
+
+#[async_trait]
+pub trait RedemptionRepository: Repository<Aggregate = Redemption> + Reader<Aggregate = Redemption> {
+	/// Persist a brand-new redemption (`Queued`) + its `Requested` event — the relay
+	/// reserves a pending burn of the units. Takes a `FOR UPDATE` lock on the user's
+	/// `fund_positions` row to serialize concurrent requests at the Postgres layer
+	/// (TigerBeetle's non-negative flag is the actual over-redeem backstop).
+	async fn open(&self, redemption: &mut Redemption) -> Result<(), DomainError>;
+
+	/// Settle a queued redemption at the settle-time `nav`: apply [`Redemption::settle`]
+	/// under the row lock, persist + drain the `Settled` event (the relay pays the cash
+	/// and posts the burn), and reduce the position's cost basis proportionally
+	/// (`units_held` is the holding before the burn). Idempotent; returns the aggregate.
+	async fn settle(&self, id: RedemptionId, nav: Nav, units_held: Shares) -> Result<Redemption, DomainError>;
+
+	/// Fail a queued redemption (operator): apply [`Redemption::fail`] under the lock,
+	/// persist + drain the `Failed` event (the relay voids the burn, returning the units).
+	async fn fail(&self, id: RedemptionId) -> Result<Redemption, DomainError>;
+
+	/// Cancel a queued redemption (user): apply [`Redemption::cancel`] under the lock,
+	/// persist + drain the `Cancelled` event (the relay voids the burn). Idempotent.
+	async fn cancel(&self, id: RedemptionId) -> Result<Redemption, DomainError>;
+
+	/// Load a redemption by id (no lock; for queries).
+	async fn find_by_id(&self, id: RedemptionId) -> Result<Option<Redemption>, DomainError>;
+
+	/// A user's redemptions (projection), newest first.
+	async fn list_by_user(&self, user: UserId) -> Result<Vec<Redemption>, DomainError>;
+}
