@@ -26,6 +26,7 @@ use piggybank_core::{
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		relay::Relay,
+		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
 	},
 	ports::ledger::{Ledger, LedgerError, LedgerTransfer},
@@ -91,6 +92,11 @@ fn shares(decimal: &str) -> Shares {
 
 async fn units(h: &Harness, key: &LedgerAccountKey) -> Shares {
 	Shares::from_base_units(h.ledger.balance(key).await.unwrap().posted)
+}
+
+fn now_unix() -> i64 {
+	use std::time::{SystemTime, UNIX_EPOCH};
+	SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
 #[tokio::test]
@@ -341,4 +347,62 @@ async fn fund_valuation_derives_nav_and_guards_fat_finger() {
 		.await
 		.unwrap();
 	assert_eq!(forced.nav, Nav::parse_decimal("15").unwrap());
+}
+
+#[tokio::test]
+async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let now = now_unix();
+	let user_claim = LedgerAccountKey::UserClaim(user);
+	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
+	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
+	let outstanding = LedgerAccountKey::SharesOutstanding(service.clone());
+
+	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("400"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	// First subscription mints at the seed NAV (1.0): 200 cash → 200 units.
+	funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("200"), now)
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	assert_eq!(claim(&h, &user_claim).await, usdt("200"), "cash left the user's claim");
+	assert_eq!(claim(&h, &service_claim).await, usdt("200"), "cash entered the fund pool");
+	assert_eq!(units(&h, &user_shares).await, shares("200"), "units minted to the user");
+	assert_eq!(units(&h, &outstanding).await, shares("200"), "supply grew with the mint");
+
+	// Operator marks the fund up to NAV 2.0 (AUM 400 over 200 units).
+	funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", false)
+		.await
+		.unwrap();
+
+	// A second subscription prices at NAV 2.0: 100 cash → 50 units (fractional pricing).
+	funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	assert_eq!(units(&h, &user_shares).await, shares("250"), "50 more units at NAV 2");
+	assert_eq!(claim(&h, &user_claim).await, usdt("100"), "cash dropped by the second subscription");
+
+	// Dealing on a stale mark (now far past the last valuation) is refused — the user has
+	// the balance, so this isolates the staleness guard.
+	let stale_now = now + funds_app::MAX_NAV_AGE_SECS + 100;
+	assert!(
+		funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("50"), stale_now)
+			.await
+			.is_err()
+	);
+
+	// Subscribing beyond the available balance is rejected Read-First.
+	assert!(
+		funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("1000"), now)
+			.await
+			.is_err()
+	);
 }

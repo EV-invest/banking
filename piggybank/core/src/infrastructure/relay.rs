@@ -23,6 +23,7 @@ use domain::{
 	allocations::{AllocationEvent, AllocationKind},
 	balance::{LedgerAccountKey, LedgerEvent, TransferCode},
 	money::Usdt,
+	subscriptions::SubscriptionEvent,
 	users::UserId,
 	withdrawals::WithdrawalEvent,
 };
@@ -50,6 +51,13 @@ const WALLET_REDISTRIBUTE: &[u8] = b"withdraw:wallet";
 const FEE_REDISTRIBUTE: &[u8] = b"withdraw:fee";
 const CLEARING_VOID_FAIL: &[u8] = b"withdraw:clearing:void:fail";
 const CLEARING_VOID_CANCEL: &[u8] = b"withdraw:clearing:void:cancel";
+
+/// Salts for a subscription's two posted legs (one event → two transfers, so they can't
+/// share the event id): the cash move `Dr user / Cr service` and the unit mint
+/// `Dr user-shares / Cr shares-outstanding`. Cash-leg first, so an insufficient claim
+/// parks before any units are minted.
+const SUBSCRIBE_CASH: &[u8] = b"subscribe:cash";
+const SUBSCRIBE_MINT: &[u8] = b"subscribe:mint";
 
 /// Bound on consecutive `RetryBounded` attempts before a never-resolving retryable (a
 /// completion whose pending was itself parked, so it can never be found) is parked
@@ -244,6 +252,10 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 			let event: WithdrawalEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
 			Ok(plan_withdrawal(event, row.aggregate_id, reference))
 		}
+		"subscriptions" => {
+			let event: SubscriptionEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
+			Ok(plan_subscription(event, row.aggregate_id, reference))
+		}
 		// A non-money event reached the outbox (shouldn't happen) — a benign no-op.
 		_ => Ok(Vec::new()),
 	}
@@ -359,6 +371,41 @@ fn plan_allocation(event: AllocationEvent, event_tid: u128, pending_tid: u128, r
 			}),
 		},
 	}
+}
+
+/// A subscription mints fund units in two posted legs, **cash-leg first**: move the cash
+/// into the fund pool (`Dr user / Cr service`), then mint the units (`Dr user-shares /
+/// Cr shares-outstanding`). The mint never fails (it only moves between two share
+/// accounts whose supply we control), and an insufficient claim parks the cash leg before
+/// the mint runs — so the relay can never strand minted units without the cash behind them.
+fn plan_subscription(event: SubscriptionEvent, aggregate_id: Uuid, reference: u128) -> Vec<PlannedOp> {
+	let SubscriptionEvent::Subscribed { user, service, cash, units, .. } = event;
+	vec![
+		PlannedOp {
+			role: "subscribe_cash",
+			transfer_id: tid(aggregate_id, SUBSCRIBE_CASH),
+			action: LedgerAction::Post(LedgerTransfer {
+				id: tid(aggregate_id, SUBSCRIBE_CASH),
+				debit: LedgerAccountKey::UserClaim(user),
+				credit: LedgerAccountKey::ServiceClaim(service.clone()),
+				amount: cash.base_units(),
+				code: TransferCode::Subscribe,
+				reference,
+			}),
+		},
+		PlannedOp {
+			role: "subscribe_mint",
+			transfer_id: tid(aggregate_id, SUBSCRIBE_MINT),
+			action: LedgerAction::Post(LedgerTransfer {
+				id: tid(aggregate_id, SUBSCRIBE_MINT),
+				debit: LedgerAccountKey::UserShares(service.clone(), user),
+				credit: LedgerAccountKey::SharesOutstanding(service),
+				amount: units.base_units(),
+				code: TransferCode::ShareMint,
+				reference,
+			}),
+		},
+	]
 }
 
 /// A withdrawal's saga in the ledger:
