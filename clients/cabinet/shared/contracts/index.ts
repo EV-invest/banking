@@ -30,4 +30,8 @@ export type {
   BankingV1Redemption as Redemption,
   BankingV1RedemptionList as RedemptionList,
   BankingV1CancelRedemptionRequest as CancelRedemptionRequest,
+  // Profile + sessions.
+  BankingV1UpdateProfileRequest as UpdateProfileRequest,
+  BankingV1Session as Session,
+  BankingV1ListSessionsResponse as SessionList,
 } from "./gen";
