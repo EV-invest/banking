@@ -120,6 +120,65 @@
         }
       }
     },
+    "/banking.v1.AuthService/ListSessions": {
+      "post": {
+        "tags": [
+          "banking.v1.AuthService"
+        ],
+        "summary": "ListSessions",
+        "description": "List the caller's active sessions (refresh-token families). Identity is proven by\n the presented refresh token (the BFF holds it server-side); the family that owns\n that token is flagged `current`.",
+        "operationId": "banking.v1.AuthService.ListSessions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListSessionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.ListSessionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.AuthService/Logout": {
       "post": {
         "tags": [
@@ -231,6 +290,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.TokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AuthService/RevokeSession": {
+      "post": {
+        "tags": [
+          "banking.v1.AuthService"
+        ],
+        "summary": "RevokeSession",
+        "description": "Revoke one of the caller's sessions by id (must belong to the same user). Revoking\n the current session is allowed (acts like a sign-out of this device).",
+        "operationId": "banking.v1.AuthService.RevokeSession",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RevokeSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RevokeSessionResponse"
                 }
               }
             }
@@ -1476,6 +1594,65 @@
         }
       }
     },
+    "/banking.v1.UsersService/UpdateProfile": {
+      "post": {
+        "tags": [
+          "banking.v1.UsersService"
+        ],
+        "summary": "UpdateProfile",
+        "description": "Update the caller's own editable profile fields (full-replace of the set in\n UpdateProfileRequest). Identity/auth fields (email, status) are not editable here.",
+        "operationId": "banking.v1.UsersService.UpdateProfile",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.UpdateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UserProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.WalletService/CancelWithdrawal": {
       "post": {
         "tags": [
@@ -1914,6 +2091,15 @@
             "type": "string",
             "title": "nonce",
             "description": "The nonce the BFF put in the authorize request; matched against Google's id_token."
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "user_agent",
+            "description": "Device metadata captured by the BFF at sign-in, stored on the refresh-token family\n for the \"sessions \u0026 devices\" surface. Best-effort, free-form."
+          },
+          "ip": {
+            "type": "string",
+            "title": "ip"
           }
         },
         "title": "ExchangeRequest",
@@ -2104,6 +2290,32 @@
       "banking.v1.ListRedemptionsRequest": {
         "type": "object",
         "title": "ListRedemptionsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListSessionsRequest": {
+        "type": "object",
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token",
+            "description": "The caller's current refresh token: proves identity and flags the current session."
+          }
+        },
+        "title": "ListSessionsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListSessionsResponse": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Session"
+            },
+            "title": "sessions"
+          }
+        },
+        "title": "ListSessionsResponse",
         "additionalProperties": false
       },
       "banking.v1.ListWithdrawalsRequest": {
@@ -2406,6 +2618,28 @@
         "title": "RequestWithdrawalRequest",
         "additionalProperties": false
       },
+      "banking.v1.RevokeSessionRequest": {
+        "type": "object",
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token",
+            "description": "The caller's current refresh token (proves identity)."
+          },
+          "session_id": {
+            "type": "string",
+            "title": "session_id",
+            "description": "The session id to revoke (must belong to the same user)."
+          }
+        },
+        "title": "RevokeSessionRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.RevokeSessionResponse": {
+        "type": "object",
+        "title": "RevokeSessionResponse",
+        "additionalProperties": false
+      },
       "banking.v1.RevokeTokensRequest": {
         "type": "object",
         "properties": {
@@ -2453,6 +2687,47 @@
         "type": "object",
         "title": "SeedCapitalResponse",
         "additionalProperties": false
+      },
+      "banking.v1.Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "user_agent"
+          },
+          "ip": {
+            "type": "string",
+            "title": "ip"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "last_seen": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "last_seen",
+            "format": "int64"
+          },
+          "current": {
+            "type": "boolean",
+            "title": "current",
+            "description": "True for the family that owns the refresh token presented on the listing call."
+          }
+        },
+        "title": "Session",
+        "additionalProperties": false,
+        "description": "One active session = one refresh-token family. Timestamps are unix SECONDS."
       },
       "banking.v1.SettleRedemptionRequest": {
         "type": "object",
@@ -2613,6 +2888,54 @@
         "additionalProperties": false,
         "description": "The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).\n Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset\n side) equals the sum of all claims — so client liabilities are the remainder beyond\n the fund's own capital and retained fees."
       },
+      "banking.v1.UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "legal_name": {
+            "type": "string",
+            "title": "legal_name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "preferred_name"
+          },
+          "phone": {
+            "type": "string",
+            "title": "phone"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "title": "date_of_birth"
+          },
+          "nationality": {
+            "type": "string",
+            "title": "nationality"
+          },
+          "tax_residence": {
+            "type": "string",
+            "title": "tax_residence"
+          },
+          "residential_address": {
+            "type": "string",
+            "title": "residential_address"
+          },
+          "language": {
+            "type": "string",
+            "title": "language"
+          },
+          "base_currency": {
+            "type": "string",
+            "title": "base_currency"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "timezone"
+          }
+        },
+        "title": "UpdateProfileRequest",
+        "additionalProperties": false,
+        "description": "The caller's editable profile, full-replace. Same 10 fields as the editable part of\n UserProfile; an empty string clears the field."
+      },
       "banking.v1.UserBalanceResponse": {
         "type": "object",
         "properties": {
@@ -2667,6 +2990,47 @@
             ],
             "title": "token_version",
             "format": "int64"
+          },
+          "legal_name": {
+            "type": "string",
+            "title": "legal_name",
+            "description": "Editable profile fields (control plane; empty until the user sets them). email and\n status above stay read-only — email is the IdP's, status is admin-managed."
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "preferred_name"
+          },
+          "phone": {
+            "type": "string",
+            "title": "phone"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "title": "date_of_birth"
+          },
+          "nationality": {
+            "type": "string",
+            "title": "nationality"
+          },
+          "tax_residence": {
+            "type": "string",
+            "title": "tax_residence"
+          },
+          "residential_address": {
+            "type": "string",
+            "title": "residential_address"
+          },
+          "language": {
+            "type": "string",
+            "title": "language"
+          },
+          "base_currency": {
+            "type": "string",
+            "title": "base_currency"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "timezone"
           }
         },
         "title": "UserProfile",

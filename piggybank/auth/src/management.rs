@@ -30,6 +30,14 @@ pub struct RotatedRefresh {
 	pub token_version_snapshot: u64,
 	pub refresh: IssuedRefresh,
 }
+/// A read-only view of one active refresh family for the "sessions & devices" surface.
+pub struct SessionView {
+	pub id: String,
+	pub user_agent: String,
+	pub ip: String,
+	pub created_at: u64,
+	pub last_seen: u64,
+}
 /// In-process refresh-token family table (see module docs for the production note).
 #[derive(Default)]
 pub struct RefreshStore {
@@ -41,18 +49,24 @@ impl RefreshStore {
 	}
 
 	/// Open a new refresh family for a user and return its first handle.
-	pub fn issue(&self, user_id: &str, token_version: u64, ttl_secs: u64) -> IssuedRefresh {
+	pub fn issue(&self, user_id: &str, token_version: u64, ttl_secs: u64, user_agent: String, ip: String) -> IssuedRefresh {
 		let family = uuid::Uuid::new_v4().to_string();
 		let secret = uuid::Uuid::new_v4().to_string();
-		let expires_at = get_current_timestamp() + ttl_secs;
+		let now = get_current_timestamp();
+		let expires_at = now + ttl_secs;
 		self.families.lock().unwrap_or_else(|e| e.into_inner()).insert(
 			family.clone(),
 			Family {
+				id: uuid::Uuid::new_v4().to_string(),
 				user_id: user_id.to_owned(),
 				current: secret.clone(),
 				prev: None,
 				token_version,
 				expires_at,
+				user_agent,
+				ip,
+				created_at: now,
+				last_seen: now,
 			},
 		);
 		IssuedRefresh {
@@ -75,9 +89,11 @@ impl RefreshStore {
 
 		if fam.current == secret {
 			let new_secret = uuid::Uuid::new_v4().to_string();
-			let expires_at = get_current_timestamp() + ttl_secs;
+			let now = get_current_timestamp();
+			let expires_at = now + ttl_secs;
 			fam.prev = Some(std::mem::replace(&mut fam.current, new_secret.clone()));
 			fam.expires_at = expires_at;
+			fam.last_seen = now;
 			Ok(RotatedRefresh {
 				user_id: fam.user_id.clone(),
 				token_version_snapshot: fam.token_version,
@@ -112,9 +128,46 @@ impl RefreshStore {
 	pub fn revoke_user(&self, user_id: &str) {
 		self.families.lock().unwrap_or_else(|e| e.into_inner()).retain(|_, f| f.user_id != user_id);
 	}
+
+	/// A view of the user's active (non-expired) refresh families — one per session.
+	pub fn list_for_user(&self, user_id: &str) -> Vec<SessionView> {
+		let now = get_current_timestamp();
+		self.families
+			.lock()
+			.unwrap_or_else(|e| e.into_inner())
+			.values()
+			.filter(|f| f.user_id == user_id && now < f.expires_at)
+			.map(|f| SessionView {
+				id: f.id.clone(),
+				user_agent: f.user_agent.clone(),
+				ip: f.ip.clone(),
+				created_at: f.created_at,
+				last_seen: f.last_seen,
+			})
+			.collect()
+	}
+
+	/// Revoke the family with this session `id`, only if it belongs to `user_id`
+	/// (guards cross-user revocation). Returns whether a family was removed.
+	pub fn revoke_by_id(&self, user_id: &str, id: &str) -> bool {
+		let mut map = self.families.lock().unwrap_or_else(|e| e.into_inner());
+		let Some(key) = map.iter().find(|(_, f)| f.id == id && f.user_id == user_id).map(|(k, _)| k.clone()) else {
+			return false;
+		};
+		map.remove(&key).is_some()
+	}
+
+	/// The session id of the family that owns this refresh handle, if it still exists.
+	pub fn family_id_of(&self, refresh_token: &str) -> Option<String> {
+		let family = refresh_token.split_once('.')?.0;
+		self.families.lock().unwrap_or_else(|e| e.into_inner()).get(family).map(|f| f.id.clone())
+	}
 }
 
 struct Family {
+	/// Stable session id, preserved across rotations (the token handle changes,
+	/// this does not), so the "sessions & devices" surface can address a session.
+	id: String,
 	user_id: String,
 	current: String,
 	prev: Option<String>,
@@ -122,16 +175,24 @@ struct Family {
 	/// bumps the authoritative version in Postgres) is detected on the next refresh.
 	token_version: u64,
 	expires_at: u64,
+	user_agent: String,
+	ip: String,
+	created_at: u64,
+	last_seen: u64,
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
+	fn issue(store: &RefreshStore, user_id: &str) -> IssuedRefresh {
+		store.issue(user_id, 0, 3600, String::new(), String::new())
+	}
+
 	#[test]
 	fn rotate_then_reuse_revokes_family() {
 		let store = RefreshStore::new();
-		let issued = store.issue("user-1", 0, 3600);
+		let issued = issue(&store, "user-1");
 		let rotated = store.rotate(&issued.token, 3600).unwrap();
 		assert_eq!(rotated.user_id, "user-1");
 		// The original (now rotated-out) secret is a reuse → family revoked.
@@ -143,10 +204,39 @@ mod tests {
 	#[test]
 	fn revoke_user_drops_all_families() {
 		let store = RefreshStore::new();
-		let a = store.issue("user-1", 0, 3600);
-		let b = store.issue("user-1", 0, 3600);
+		let a = issue(&store, "user-1");
+		let b = issue(&store, "user-1");
 		store.revoke_user("user-1");
 		assert!(store.rotate(&a.token, 3600).is_err());
 		assert!(store.rotate(&b.token, 3600).is_err());
+	}
+
+	#[test]
+	fn session_id_is_stable_across_rotation() {
+		let store = RefreshStore::new();
+		let issued = store.issue("user-1", 0, 3600, "agent".into(), "1.2.3.4".into());
+		let id = store.family_id_of(&issued.token).unwrap();
+		let rotated = store.rotate(&issued.token, 3600).unwrap();
+		assert_eq!(store.family_id_of(&rotated.refresh.token).as_deref(), Some(id.as_str()));
+		let sessions = store.list_for_user("user-1");
+		assert_eq!(sessions.len(), 1);
+		assert_eq!(sessions[0].id, id);
+		assert_eq!(sessions[0].user_agent, "agent");
+		assert!(sessions[0].last_seen >= sessions[0].created_at);
+	}
+
+	#[test]
+	fn revoke_by_id_guards_cross_user() {
+		let store = RefreshStore::new();
+		let mine = store.issue("user-1", 0, 3600, String::new(), String::new());
+		let id = store.family_id_of(&mine.token).unwrap();
+		// A different user cannot revoke it.
+		assert!(!store.revoke_by_id("user-2", &id));
+		assert!(store.rotate(&mine.token, 3600).is_ok());
+		// The owner can; a second attempt is a no-op.
+		let id = store.family_id_of(&mine.token).unwrap();
+		assert!(store.revoke_by_id("user-1", &id));
+		assert!(!store.revoke_by_id("user-1", &id));
+		assert!(store.list_for_user("user-1").is_empty());
 	}
 }

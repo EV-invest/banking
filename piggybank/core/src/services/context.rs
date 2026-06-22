@@ -19,7 +19,7 @@ use domain::{
 	money::{Network, Shares, TxRef, Usdt, WalletAddress},
 	redemptions::{Redemption, RedemptionId},
 	subscriptions::Subscription,
-	users::UserId,
+	users::{ProfileFields, User, UserId},
 	withdrawals::{Withdrawal, WithdrawalId},
 };
 use evbanking_auth::claims_of;
@@ -51,13 +51,27 @@ impl UsersService for UsersSvc {
 	async fn get_me(&self, request: Request<pb::GetMeRequest>) -> Result<Response<pb::UserProfile>, Status> {
 		let id = caller_id(&request)?;
 		let user = self.state.users.find_by_id(id).await.map_err(map_err)?.ok_or_else(|| Status::not_found("user"))?;
-		Ok(Response::new(pb::UserProfile {
-			user_id: user.id().to_string(),
-			email: user.email().as_str().to_owned(),
-			email_verified: user.email_verified(),
-			status: user.status().as_str().to_owned(),
-			token_version: user.token_version(),
-		}))
+		Ok(Response::new(user_to_proto(&user)))
+	}
+
+	async fn update_profile(&self, request: Request<pb::UpdateProfileRequest>) -> Result<Response<pb::UserProfile>, Status> {
+		let id = caller_id(&request)?;
+		let req = request.into_inner();
+		let mut user = self.state.users.find_by_id(id).await.map_err(map_err)?.ok_or_else(|| Status::not_found("user"))?;
+		user.update_profile(ProfileFields {
+			legal_name: optional(&req.legal_name).map(str::to_owned),
+			preferred_name: optional(&req.preferred_name).map(str::to_owned),
+			phone: optional(&req.phone).map(str::to_owned),
+			date_of_birth: optional(&req.date_of_birth).map(str::to_owned),
+			nationality: optional(&req.nationality).map(str::to_owned),
+			tax_residence: optional(&req.tax_residence).map(str::to_owned),
+			residential_address: optional(&req.residential_address).map(str::to_owned),
+			language: optional(&req.language).map(str::to_owned),
+			base_currency: optional(&req.base_currency).map(str::to_owned),
+			timezone: optional(&req.timezone).map(str::to_owned),
+		});
+		self.state.users.save(&mut user).await.map_err(map_err)?;
+		Ok(Response::new(user_to_proto(&user)))
 	}
 
 	async fn get_balance(&self, request: Request<pb::GetUserBalanceRequest>) -> Result<Response<pb::UserBalanceResponse>, Status> {
@@ -444,6 +458,26 @@ fn parse_user_id(raw: &str) -> Result<UserId, Status> {
 
 fn parse_redemption_id(raw: &str) -> Result<RedemptionId, Status> {
 	Uuid::parse_str(raw).map(RedemptionId::from_raw).map_err(|_| Status::invalid_argument("invalid redemption id"))
+}
+
+fn user_to_proto(user: &User) -> pb::UserProfile {
+	pb::UserProfile {
+		user_id: user.id().to_string(),
+		email: user.email().as_str().to_owned(),
+		email_verified: user.email_verified(),
+		status: user.status().as_str().to_owned(),
+		token_version: user.token_version(),
+		legal_name: user.legal_name().unwrap_or_default().to_owned(),
+		preferred_name: user.preferred_name().unwrap_or_default().to_owned(),
+		phone: user.phone().unwrap_or_default().to_owned(),
+		date_of_birth: user.date_of_birth().unwrap_or_default().to_owned(),
+		nationality: user.nationality().unwrap_or_default().to_owned(),
+		tax_residence: user.tax_residence().unwrap_or_default().to_owned(),
+		residential_address: user.residential_address().unwrap_or_default().to_owned(),
+		language: user.language().unwrap_or_default().to_owned(),
+		base_currency: user.base_currency().unwrap_or_default().to_owned(),
+		timezone: user.timezone().unwrap_or_default().to_owned(),
+	}
 }
 
 fn subscription_to_proto(subscription: &Subscription) -> pb::Subscription {

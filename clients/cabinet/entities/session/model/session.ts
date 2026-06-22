@@ -134,6 +134,19 @@ export async function accessTokenFor(id: string | undefined): Promise<string | n
   return sessions.get(id)?.accessToken ?? null;
 }
 
+/**
+ * The session's current refresh token — **server-only**, used to prove identity to the
+ * auth service's session RPCs (ListSessions/RevokeSession). The refresh token names the
+ * caller's user + current device family. Null if the session is gone/expired. Never
+ * expose this to the browser.
+ */
+export function refreshTokenFor(id: string | undefined): string | null {
+  if (!id) return null;
+  const session = sessions.get(id);
+  if (!session || session.refreshExpiresAt <= nowSecs()) return null;
+  return session.refreshToken;
+}
+
 /** Forget a session, returning its refresh token so the caller can revoke it at the hub. */
 export function dropSession(id: string | undefined): string | null {
   if (!id) return null;
