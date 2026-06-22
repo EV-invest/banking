@@ -80,6 +80,23 @@ impl UserStatus {
 	}
 }
 
+/// The caller's editable profile fields (the full-replace set). All optional —
+/// `None`/an empty value clears the field. Identity/auth fields (email, status) are
+/// deliberately absent: they are not user-editable here.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileFields {
+	pub legal_name: Option<String>,
+	pub preferred_name: Option<String>,
+	pub phone: Option<String>,
+	pub date_of_birth: Option<String>,
+	pub nationality: Option<String>,
+	pub tax_residence: Option<String>,
+	pub residential_address: Option<String>,
+	pub language: Option<String>,
+	pub base_currency: Option<String>,
+	pub timezone: Option<String>,
+}
+
 /// The investor identity aggregate. Construct it with [`User::provision`] (first
 /// sign-in, raises [`UserEvent::Provisioned`]) or [`User::rehydrate`] (load from
 /// the store, no events). Mutating transitions accumulate [`UserEvent`]s drained
@@ -92,6 +109,7 @@ pub struct User {
 	email_verified: bool,
 	status: UserStatus,
 	token_version: u64,
+	profile: ProfileFields,
 	pending: Vec<UserEvent>,
 }
 
@@ -106,6 +124,7 @@ impl User {
 			email_verified,
 			status: UserStatus::Active,
 			token_version: 0,
+			profile: ProfileFields::default(),
 			pending: Vec::new(),
 		};
 		user.pending.push(UserEvent::Provisioned {
@@ -117,8 +136,10 @@ impl User {
 		user
 	}
 
-	/// Reconstitute an existing user from the store. Raises no events.
-	pub fn rehydrate(id: UserId, auth_subject: AuthSubject, email: Email, email_verified: bool, status: UserStatus, token_version: u64) -> Self {
+	/// Reconstitute an existing user from the store, including the editable profile.
+	/// Raises no events.
+	#[allow(clippy::too_many_arguments)]
+	pub fn rehydrate(id: UserId, auth_subject: AuthSubject, email: Email, email_verified: bool, status: UserStatus, token_version: u64, profile: ProfileFields) -> Self {
 		Self {
 			id,
 			auth_subject,
@@ -126,6 +147,7 @@ impl User {
 			email_verified,
 			status,
 			token_version,
+			profile,
 			pending: Vec::new(),
 		}
 	}
@@ -139,6 +161,14 @@ impl User {
 		self.email = email.clone();
 		self.email_verified = email_verified;
 		self.pending.push(UserEvent::EmailChanged { user_id: self.id, email });
+	}
+
+	/// Full-replace the editable profile fields and raise [`UserEvent::ProfileUpdated`].
+	/// The event is raised unconditionally on every call (no value diffing) — these are
+	/// explicit user edits, so an audit fact per save is the desired behaviour.
+	pub fn update_profile(&mut self, fields: ProfileFields) {
+		self.profile = fields;
+		self.pending.push(UserEvent::ProfileUpdated { user_id: self.id });
 	}
 
 	/// Bump `token_version`, invalidating every outstanding token for this user
@@ -189,6 +219,46 @@ impl User {
 	pub fn token_version(&self) -> u64 {
 		self.token_version
 	}
+
+	pub fn legal_name(&self) -> Option<&str> {
+		self.profile.legal_name.as_deref()
+	}
+
+	pub fn preferred_name(&self) -> Option<&str> {
+		self.profile.preferred_name.as_deref()
+	}
+
+	pub fn phone(&self) -> Option<&str> {
+		self.profile.phone.as_deref()
+	}
+
+	pub fn date_of_birth(&self) -> Option<&str> {
+		self.profile.date_of_birth.as_deref()
+	}
+
+	pub fn nationality(&self) -> Option<&str> {
+		self.profile.nationality.as_deref()
+	}
+
+	pub fn tax_residence(&self) -> Option<&str> {
+		self.profile.tax_residence.as_deref()
+	}
+
+	pub fn residential_address(&self) -> Option<&str> {
+		self.profile.residential_address.as_deref()
+	}
+
+	pub fn language(&self) -> Option<&str> {
+		self.profile.language.as_deref()
+	}
+
+	pub fn base_currency(&self) -> Option<&str> {
+		self.profile.base_currency.as_deref()
+	}
+
+	pub fn timezone(&self) -> Option<&str> {
+		self.profile.timezone.as_deref()
+	}
 }
 
 impl Entity for User {
@@ -217,6 +287,9 @@ pub enum UserEvent {
 	EmailChanged {
 		user_id: UserId,
 		email: Email,
+	},
+	ProfileUpdated {
+		user_id: UserId,
 	},
 	TokensRevoked {
 		user_id: UserId,
@@ -289,6 +362,37 @@ mod tests {
 		user.disable();
 		assert_eq!(user.drain_events().len(), 1);
 		assert!(!user.is_active());
+	}
+
+	#[test]
+	fn update_profile_emits_event_and_getters_reflect_values() {
+		let mut user = fixture();
+		user.drain_events();
+		user.update_profile(ProfileFields {
+			legal_name: Some("Ada Lovelace".into()),
+			preferred_name: Some("Ada".into()),
+			phone: Some("+10000000000".into()),
+			date_of_birth: Some("1815-12-10".into()),
+			nationality: Some("GB".into()),
+			tax_residence: Some("GB".into()),
+			residential_address: Some("12 Analytical Engine St".into()),
+			language: Some("en".into()),
+			base_currency: Some("USDT".into()),
+			timezone: Some("Europe/London".into()),
+		});
+		let events = user.drain_events();
+		assert_eq!(events.len(), 1);
+		assert!(matches!(events[0], UserEvent::ProfileUpdated { .. }));
+		assert_eq!(user.legal_name(), Some("Ada Lovelace"));
+		assert_eq!(user.preferred_name(), Some("Ada"));
+		assert_eq!(user.phone(), Some("+10000000000"));
+		assert_eq!(user.date_of_birth(), Some("1815-12-10"));
+		assert_eq!(user.nationality(), Some("GB"));
+		assert_eq!(user.tax_residence(), Some("GB"));
+		assert_eq!(user.residential_address(), Some("12 Analytical Engine St"));
+		assert_eq!(user.language(), Some("en"));
+		assert_eq!(user.base_currency(), Some("USDT"));
+		assert_eq!(user.timezone(), Some("Europe/London"));
 	}
 
 	#[test]
