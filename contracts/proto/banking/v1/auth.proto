@@ -30,6 +30,15 @@ service AuthService {
   // the user's `token_version` so every outstanding access token is rejected hub-side.
   rpc Logout(LogoutRequest) returns (LogoutResponse);
 
+  // List the caller's active sessions (refresh-token families). Identity is proven by
+  // the presented refresh token (the BFF holds it server-side); the family that owns
+  // that token is flagged `current`.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+
+  // Revoke one of the caller's sessions by id (must belong to the same user). Revoking
+  // the current session is allowed (acts like a sign-out of this device).
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+
   // Publish the current signing public keys (JWKS). Polled by downstream services'
   // `evbanking_auth` verifier to refresh its local cache; also consulted on an
   // unknown-`kid` miss. Carries only public key material.
@@ -49,6 +58,10 @@ message ExchangeRequest {
   string redirect_uri = 3;
   // The nonce the BFF put in the authorize request; matched against Google's id_token.
   string nonce = 4;
+  // Device metadata captured by the BFF at sign-in, stored on the refresh-token family
+  // for the "sessions & devices" surface. Best-effort, free-form.
+  string user_agent = 5;
+  string ip = 6;
 }
 
 message RefreshRequest {
@@ -63,6 +76,35 @@ message LogoutRequest {
 }
 
 message LogoutResponse {}
+
+// One active session = one refresh-token family. Timestamps are unix SECONDS.
+message Session {
+  string id = 1;
+  string user_agent = 2;
+  string ip = 3;
+  int64 created_at = 4;
+  int64 last_seen = 5;
+  // True for the family that owns the refresh token presented on the listing call.
+  bool current = 6;
+}
+
+message ListSessionsRequest {
+  // The caller's current refresh token: proves identity and flags the current session.
+  string refresh_token = 1;
+}
+
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message RevokeSessionRequest {
+  // The caller's current refresh token (proves identity).
+  string refresh_token = 1;
+  // The session id to revoke (must belong to the same user).
+  string session_id = 2;
+}
+
+message RevokeSessionResponse {}
 
 // A first-party token pair plus a snapshot of the principal. All expiries are
 // unix SECONDS (matching the JWT `exp` claim); the BFF parses them with

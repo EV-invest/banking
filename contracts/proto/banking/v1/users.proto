@@ -13,6 +13,10 @@ service UsersService {
   // The calling user's own identity (resolved from the access-token `sub`).
   rpc GetMe(GetMeRequest) returns (UserProfile);
 
+  // Update the caller's own editable profile fields (full-replace of the set in
+  // UpdateProfileRequest). Identity/auth fields (email, status) are not editable here.
+  rpc UpdateProfile(UpdateProfileRequest) returns (UserProfile);
+
   // The calling user's live balance, read straight from TigerBeetle (Read-First).
   // No Postgres-stored amount exists; the response is authoritative as of `as_of`.
   rpc GetBalance(GetUserBalanceRequest) returns (UserBalanceResponse);
@@ -34,6 +38,33 @@ message UserProfile {
   bool email_verified = 3;
   string status = 4;
   uint64 token_version = 5;
+  // Editable profile fields (control plane; empty until the user sets them). email and
+  // status above stay read-only — email is the IdP's, status is admin-managed.
+  string legal_name = 6;
+  string preferred_name = 7;
+  string phone = 8;
+  string date_of_birth = 9;
+  string nationality = 10;
+  string tax_residence = 11;
+  string residential_address = 12;
+  string language = 13;
+  string base_currency = 14;
+  string timezone = 15;
+}
+
+// The caller's editable profile, full-replace. Same 10 fields as the editable part of
+// UserProfile; an empty string clears the field.
+message UpdateProfileRequest {
+  string legal_name = 1;
+  string preferred_name = 2;
+  string phone = 3;
+  string date_of_birth = 4;
+  string nationality = 5;
+  string tax_residence = 6;
+  string residential_address = 7;
+  string language = 8;
+  string base_currency = 9;
+  string timezone = 10;
 }
 
 message GetUserBalanceRequest {}
