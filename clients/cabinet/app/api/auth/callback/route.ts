@@ -30,7 +30,11 @@ export async function GET(req: NextRequest) {
   if (!code || !state || !tx || tx.state !== state) return fail("invalid");
 
   try {
-    const tokens = await exchange({ auth_code: code, code_verifier: tx.codeVerifier, redirect_uri: AUTH_REDIRECT_URI, nonce: tx.nonce });
+    // Device metadata for the "sessions & devices" surface — stored on the new
+    // refresh-token family at the hub. Best-effort; behind a proxy use the forwarded IP.
+    const userAgent = req.headers.get("user-agent") ?? "";
+    const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0]?.trim() || (req.headers.get("x-real-ip") ?? "");
+    const tokens = await exchange({ auth_code: code, code_verifier: tx.codeVerifier, redirect_uri: AUTH_REDIRECT_URI, nonce: tx.nonce, user_agent: userAgent, ip });
     const { id, csrfToken, maxAge } = putSession(tokens);
     const res = NextResponse.redirect(new URL(safeReturnTo(tx.returnTo), origin));
     setSessionCookies(res, id, csrfToken, maxAge);

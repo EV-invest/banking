@@ -12,6 +12,8 @@ import path from "node:path";
 import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 
+import type { SessionList } from "@/shared/contracts";
+
 const AUTH_GRPC_ADDR = process.env.AUTH_GRPC_ADDR ?? "127.0.0.1:50052";
 const PROTO_DIR = process.env.GRPC_PROTO_DIR ?? path.join(process.cwd(), "..", "..", "contracts", "proto");
 
@@ -25,9 +27,11 @@ export interface TokenResponse {
 }
 
 interface AuthClient extends grpc.Client {
-  Exchange(req: { auth_code: string; code_verifier: string; redirect_uri: string; nonce: string }, cb: Callback<TokenResponse>): void;
+  Exchange(req: { auth_code: string; code_verifier: string; redirect_uri: string; nonce: string; user_agent: string; ip: string }, cb: Callback<TokenResponse>): void;
   Refresh(req: { refresh_token: string }, cb: Callback<TokenResponse>): void;
   Logout(req: { refresh_token: string; revoke_all: boolean }, cb: Callback<Record<string, never>>): void;
+  ListSessions(req: { refresh_token: string }, cb: Callback<SessionList>): void;
+  RevokeSession(req: { refresh_token: string; session_id: string }, cb: Callback<Record<string, never>>): void;
 }
 
 type Callback<T> = (err: grpc.ServiceError | null, res: T) => void;
@@ -60,8 +64,9 @@ function call<T>(invoke: (cb: Callback<T>) => void): Promise<T> {
   });
 }
 
-/** Exchange a Google authorization code (with its PKCE verifier) for hub tokens. */
-export function exchange(req: { auth_code: string; code_verifier: string; redirect_uri: string; nonce: string }): Promise<TokenResponse> {
+/** Exchange a Google authorization code (with its PKCE verifier) for hub tokens. The
+ *  device metadata is stored on the new refresh-token family for the sessions surface. */
+export function exchange(req: { auth_code: string; code_verifier: string; redirect_uri: string; nonce: string; user_agent: string; ip: string }): Promise<TokenResponse> {
   return call((cb) => authClient().Exchange(req, cb));
 }
 
@@ -73,4 +78,15 @@ export function refresh(refresh_token: string): Promise<TokenResponse> {
 /** Revoke a refresh family (and, with revokeAll, the user's token_version). */
 export function logout(refresh_token: string, revokeAll = false): Promise<void> {
   return call<Record<string, never>>((cb) => authClient().Logout({ refresh_token, revoke_all: revokeAll }, cb)).then(() => undefined);
+}
+
+/** List the caller's active sessions — proven by their current refresh token; the family
+ *  that owns that token is flagged `current`. */
+export function listSessions(refresh_token: string): Promise<SessionList> {
+  return call<SessionList>((cb) => authClient().ListSessions({ refresh_token }, cb));
+}
+
+/** Revoke one of the caller's sessions by id (must belong to the same user). */
+export function revokeSession(refresh_token: string, session_id: string): Promise<void> {
+  return call<Record<string, never>>((cb) => authClient().RevokeSession({ refresh_token, session_id }, cb)).then(() => undefined);
 }

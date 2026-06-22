@@ -157,6 +157,17 @@ export type BankingV1ExchangeRequest = {
      * The nonce the BFF put in the authorize request; matched against Google's id_token.
      */
     nonce?: string;
+    /**
+     * user_agent
+     *
+     * Device metadata captured by the BFF at sign-in, stored on the refresh-token family
+     * for the "sessions & devices" surface. Best-effort, free-form.
+     */
+    user_agent?: string;
+    /**
+     * ip
+     */
+    ip?: string;
 };
 
 /**
@@ -356,6 +367,28 @@ export type BankingV1ListPositionsRequest = {
  */
 export type BankingV1ListRedemptionsRequest = {
     [key: string]: never;
+};
+
+/**
+ * ListSessionsRequest
+ */
+export type BankingV1ListSessionsRequest = {
+    /**
+     * refresh_token
+     *
+     * The caller's current refresh token: proves identity and flags the current session.
+     */
+    refresh_token?: string;
+};
+
+/**
+ * ListSessionsResponse
+ */
+export type BankingV1ListSessionsResponse = {
+    /**
+     * sessions
+     */
+    sessions?: Array<BankingV1Session>;
 };
 
 /**
@@ -681,6 +714,31 @@ export type BankingV1RequestWithdrawalRequest = {
 };
 
 /**
+ * RevokeSessionRequest
+ */
+export type BankingV1RevokeSessionRequest = {
+    /**
+     * refresh_token
+     *
+     * The caller's current refresh token (proves identity).
+     */
+    refresh_token?: string;
+    /**
+     * session_id
+     *
+     * The session id to revoke (must belong to the same user).
+     */
+    session_id?: string;
+};
+
+/**
+ * RevokeSessionResponse
+ */
+export type BankingV1RevokeSessionResponse = {
+    [key: string]: never;
+};
+
+/**
  * RevokeTokensRequest
  */
 export type BankingV1RevokeTokensRequest = {
@@ -723,6 +781,40 @@ export type BankingV1SeedCapitalRequest = {
  */
 export type BankingV1SeedCapitalResponse = {
     [key: string]: never;
+};
+
+/**
+ * Session
+ *
+ * One active session = one refresh-token family. Timestamps are unix SECONDS.
+ */
+export type BankingV1Session = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * user_agent
+     */
+    user_agent?: string;
+    /**
+     * ip
+     */
+    ip?: string;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * last_seen
+     */
+    last_seen?: number | string;
+    /**
+     * current
+     *
+     * True for the family that owns the refresh token presented on the listing call.
+     */
+    current?: boolean;
 };
 
 /**
@@ -889,6 +981,55 @@ export type BankingV1Treasury = {
 };
 
 /**
+ * UpdateProfileRequest
+ *
+ * The caller's editable profile, full-replace. Same 10 fields as the editable part of
+ * UserProfile; an empty string clears the field.
+ */
+export type BankingV1UpdateProfileRequest = {
+    /**
+     * legal_name
+     */
+    legal_name?: string;
+    /**
+     * preferred_name
+     */
+    preferred_name?: string;
+    /**
+     * phone
+     */
+    phone?: string;
+    /**
+     * date_of_birth
+     */
+    date_of_birth?: string;
+    /**
+     * nationality
+     */
+    nationality?: string;
+    /**
+     * tax_residence
+     */
+    tax_residence?: string;
+    /**
+     * residential_address
+     */
+    residential_address?: string;
+    /**
+     * language
+     */
+    language?: string;
+    /**
+     * base_currency
+     */
+    base_currency?: string;
+    /**
+     * timezone
+     */
+    timezone?: string;
+};
+
+/**
  * UserBalanceResponse
  *
  * A live ledger balance for a user. `amount` and `pending` are u128 minor-unit
@@ -944,6 +1085,49 @@ export type BankingV1UserProfile = {
      * token_version
      */
     token_version?: number | string;
+    /**
+     * legal_name
+     *
+     * Editable profile fields (control plane; empty until the user sets them). email and
+     * status above stay read-only — email is the IdP's, status is admin-managed.
+     */
+    legal_name?: string;
+    /**
+     * preferred_name
+     */
+    preferred_name?: string;
+    /**
+     * phone
+     */
+    phone?: string;
+    /**
+     * date_of_birth
+     */
+    date_of_birth?: string;
+    /**
+     * nationality
+     */
+    nationality?: string;
+    /**
+     * tax_residence
+     */
+    tax_residence?: string;
+    /**
+     * residential_address
+     */
+    residential_address?: string;
+    /**
+     * language
+     */
+    language?: string;
+    /**
+     * base_currency
+     */
+    base_currency?: string;
+    /**
+     * timezone
+     */
+    timezone?: string;
 };
 
 /**
@@ -1177,6 +1361,35 @@ export type BankingV1AuthServiceJwksResponses = {
 
 export type BankingV1AuthServiceJwksResponse = BankingV1AuthServiceJwksResponses[keyof BankingV1AuthServiceJwksResponses];
 
+export type BankingV1AuthServiceListSessionsData = {
+    body: BankingV1ListSessionsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AuthService/ListSessions';
+};
+
+export type BankingV1AuthServiceListSessionsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AuthServiceListSessionsError = BankingV1AuthServiceListSessionsErrors[keyof BankingV1AuthServiceListSessionsErrors];
+
+export type BankingV1AuthServiceListSessionsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1ListSessionsResponse;
+};
+
+export type BankingV1AuthServiceListSessionsResponse = BankingV1AuthServiceListSessionsResponses[keyof BankingV1AuthServiceListSessionsResponses];
+
 export type BankingV1AuthServiceLogoutData = {
     body: BankingV1LogoutRequest;
     headers: {
@@ -1234,6 +1447,35 @@ export type BankingV1AuthServiceRefreshResponses = {
 };
 
 export type BankingV1AuthServiceRefreshResponse = BankingV1AuthServiceRefreshResponses[keyof BankingV1AuthServiceRefreshResponses];
+
+export type BankingV1AuthServiceRevokeSessionData = {
+    body: BankingV1RevokeSessionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AuthService/RevokeSession';
+};
+
+export type BankingV1AuthServiceRevokeSessionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AuthServiceRevokeSessionError = BankingV1AuthServiceRevokeSessionErrors[keyof BankingV1AuthServiceRevokeSessionErrors];
+
+export type BankingV1AuthServiceRevokeSessionResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1RevokeSessionResponse;
+};
+
+export type BankingV1AuthServiceRevokeSessionResponse = BankingV1AuthServiceRevokeSessionResponses[keyof BankingV1AuthServiceRevokeSessionResponses];
 
 export type BankingV1BalanceServiceDispatchWithdrawalData = {
     body: BankingV1DispatchWithdrawalRequest;
@@ -1843,6 +2085,35 @@ export type BankingV1UsersServiceRevokeTokensResponses = {
 };
 
 export type BankingV1UsersServiceRevokeTokensResponse = BankingV1UsersServiceRevokeTokensResponses[keyof BankingV1UsersServiceRevokeTokensResponses];
+
+export type BankingV1UsersServiceUpdateProfileData = {
+    body: BankingV1UpdateProfileRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.UsersService/UpdateProfile';
+};
+
+export type BankingV1UsersServiceUpdateProfileErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1UsersServiceUpdateProfileError = BankingV1UsersServiceUpdateProfileErrors[keyof BankingV1UsersServiceUpdateProfileErrors];
+
+export type BankingV1UsersServiceUpdateProfileResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1UserProfile;
+};
+
+export type BankingV1UsersServiceUpdateProfileResponse = BankingV1UsersServiceUpdateProfileResponses[keyof BankingV1UsersServiceUpdateProfileResponses];
 
 export type BankingV1WalletServiceCancelWithdrawalData = {
     body: BankingV1CancelWithdrawalRequest;

@@ -14,7 +14,8 @@ use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
 use evbanking_contracts::banking::v1::{
-	ExchangeRequest, JwksRequest, JwksResponse, LogoutRequest, LogoutResponse, RefreshRequest, TokenResponse, UserSummary,
+	ExchangeRequest, JwksRequest, JwksResponse, ListSessionsRequest, ListSessionsResponse, LogoutRequest, LogoutResponse, RefreshRequest, RevokeSessionRequest, RevokeSessionResponse,
+	Session, TokenResponse, UserSummary,
 	auth_service_server::{AuthService as AuthServiceRpc, AuthServiceServer},
 };
 use tokio::sync::mpsc;
@@ -156,7 +157,7 @@ impl AuthServiceRpc for AuthGrpc {
 		}
 
 		let (access_token, access_exp) = signer.mint_access(&summary.user_id, summary.token_version)?;
-		let refresh = engine.refresh.issue(&summary.user_id, summary.token_version, engine.refresh_ttl_secs);
+		let refresh = engine.refresh.issue(&summary.user_id, summary.token_version, engine.refresh_ttl_secs, req.user_agent, req.ip);
 		Ok(Response::new(token_response(access_token, access_exp, refresh, &summary)))
 	}
 
@@ -200,6 +201,39 @@ impl AuthServiceRpc for AuthGrpc {
 			engine.refresh.revoke(&req.refresh_token);
 		}
 		Ok(Response::new(LogoutResponse {}))
+	}
+
+	async fn list_sessions(&self, request: Request<ListSessionsRequest>) -> Result<Response<ListSessionsResponse>, Status> {
+		let engine = &self.engine;
+		let req = request.into_inner();
+		let Some(user_id) = engine.refresh.user_of(&req.refresh_token) else {
+			return Err(AuthError::InvalidToken.into());
+		};
+		let current_id = engine.refresh.family_id_of(&req.refresh_token);
+		let sessions = engine
+			.refresh
+			.list_for_user(&user_id)
+			.into_iter()
+			.map(|s| Session {
+				current: current_id.as_deref() == Some(s.id.as_str()),
+				id: s.id,
+				user_agent: s.user_agent,
+				ip: s.ip,
+				created_at: s.created_at as i64,
+				last_seen: s.last_seen as i64,
+			})
+			.collect();
+		Ok(Response::new(ListSessionsResponse { sessions }))
+	}
+
+	async fn revoke_session(&self, request: Request<RevokeSessionRequest>) -> Result<Response<RevokeSessionResponse>, Status> {
+		let engine = &self.engine;
+		let req = request.into_inner();
+		let Some(user_id) = engine.refresh.user_of(&req.refresh_token) else {
+			return Err(AuthError::InvalidToken.into());
+		};
+		engine.refresh.revoke_by_id(&user_id, &req.session_id);
+		Ok(Response::new(RevokeSessionResponse {}))
 	}
 
 	async fn jwks(&self, _request: Request<JwksRequest>) -> Result<Response<JwksResponse>, Status> {
