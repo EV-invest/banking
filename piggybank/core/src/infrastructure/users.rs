@@ -10,7 +10,7 @@ use domain::{
 	architecture::{Reader, Repository},
 	auth::AuthSubject,
 	error::DomainError,
-	users::{Email, User, UserId, UserStatus},
+	users::{Email, ProfileFields, User, UserId, UserStatus},
 };
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
@@ -43,6 +43,16 @@ struct UserRow {
 	email_verified: bool,
 	status: String,
 	token_version: i64,
+	legal_name: Option<String>,
+	preferred_name: Option<String>,
+	phone: Option<String>,
+	date_of_birth: Option<String>,
+	nationality: Option<String>,
+	tax_residence: Option<String>,
+	residential_address: Option<String>,
+	language: Option<String>,
+	base_currency: Option<String>,
+	timezone: Option<String>,
 }
 
 impl UserRow {
@@ -54,8 +64,31 @@ impl UserRow {
 			self.email_verified,
 			UserStatus::parse(&self.status)?,
 			self.token_version as u64,
+			ProfileFields {
+				legal_name: self.legal_name,
+				preferred_name: self.preferred_name,
+				phone: self.phone,
+				date_of_birth: self.date_of_birth,
+				nationality: self.nationality,
+				tax_residence: self.tax_residence,
+				residential_address: self.residential_address,
+				language: self.language,
+				base_currency: self.base_currency,
+				timezone: self.timezone,
+			},
 		))
 	}
+}
+
+/// The full column projection for the three [`UserRow`] reads. sqlx 0.9 requires a
+/// `&'static str` query, so each `SELECT` splices this literal in via `concat!` rather
+/// than a runtime `format!` — keep this list in sync with [`UserRow`].
+macro_rules! user_columns {
+	() => {
+		"id, auth_subject, email, email_verified, status, token_version, \
+		legal_name, preferred_name, phone, date_of_birth, nationality, tax_residence, \
+		residential_address, language, base_currency, timezone"
+	};
 }
 
 fn repo_err(err: sqlx::Error) -> DomainError {
@@ -65,7 +98,7 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 #[async_trait]
 impl UserRepository for PgUsers {
 	async fn find_by_id(&self, id: UserId) -> Result<Option<User>, DomainError> {
-		let row = sqlx::query_as::<_, UserRow>("SELECT id, auth_subject, email, email_verified, status, token_version FROM users WHERE id = $1")
+		let row = sqlx::query_as::<_, UserRow>(concat!("SELECT ", user_columns!(), " FROM users WHERE id = $1"))
 			.bind(id.raw())
 			.fetch_optional(&self.pool)
 			.await
@@ -76,7 +109,7 @@ impl UserRepository for PgUsers {
 	async fn provision(&self, subject: AuthSubject, email: Email, email_verified: bool) -> Result<User, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 
-		let existing = sqlx::query_as::<_, UserRow>("SELECT id, auth_subject, email, email_verified, status, token_version FROM users WHERE auth_subject = $1 FOR UPDATE")
+		let existing = sqlx::query_as::<_, UserRow>(concat!("SELECT ", user_columns!(), " FROM users WHERE auth_subject = $1 FOR UPDATE"))
 			.bind(subject.as_str())
 			.fetch_optional(&mut *tx)
 			.await
@@ -107,7 +140,7 @@ impl UserRepository for PgUsers {
 				match inserted {
 					Some(_) => candidate,
 					None => {
-						let row = sqlx::query_as::<_, UserRow>("SELECT id, auth_subject, email, email_verified, status, token_version FROM users WHERE auth_subject = $1 FOR UPDATE")
+						let row = sqlx::query_as::<_, UserRow>(concat!("SELECT ", user_columns!(), " FROM users WHERE auth_subject = $1 FOR UPDATE"))
 							.bind(subject.as_str())
 							.fetch_one(&mut *tx)
 							.await
@@ -125,15 +158,30 @@ impl UserRepository for PgUsers {
 
 	async fn save(&self, user: &mut User) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		sqlx::query("UPDATE users SET email = $2, email_verified = $3, status = $4, token_version = $5, updated_at = now() WHERE id = $1")
-			.bind(user.id().raw())
-			.bind(user.email().as_str())
-			.bind(user.email_verified())
-			.bind(user.status().as_str())
-			.bind(user.token_version() as i64)
-			.execute(&mut *tx)
-			.await
-			.map_err(repo_err)?;
+		sqlx::query(
+			"UPDATE users SET email = $2, email_verified = $3, status = $4, token_version = $5, \
+			legal_name = $6, preferred_name = $7, phone = $8, date_of_birth = $9, nationality = $10, \
+			tax_residence = $11, residential_address = $12, language = $13, base_currency = $14, \
+			timezone = $15, updated_at = now() WHERE id = $1",
+		)
+		.bind(user.id().raw())
+		.bind(user.email().as_str())
+		.bind(user.email_verified())
+		.bind(user.status().as_str())
+		.bind(user.token_version() as i64)
+		.bind(user.legal_name())
+		.bind(user.preferred_name())
+		.bind(user.phone())
+		.bind(user.date_of_birth())
+		.bind(user.nationality())
+		.bind(user.tax_residence())
+		.bind(user.residential_address())
+		.bind(user.language())
+		.bind(user.base_currency())
+		.bind(user.timezone())
+		.execute(&mut *tx)
+		.await
+		.map_err(repo_err)?;
 		append_events(&mut tx, user).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(())
