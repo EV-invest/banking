@@ -2,8 +2,8 @@
 //!
 //! Every RPC is authorized from the verified [`Claims`](evbanking_auth::Claims)
 //! injected by core's inbound auth layer. Self-service RPCs act on the caller's own
-//! `sub` ([`caller_id`]); admin RPCs are gated by the hub's allowlist
-//! ([`require_admin`]). The stateful money rules (e.g. who may revoke an allocation)
+//! `sub` (`caller_id`); admin RPCs are gated by the hub's allowlist
+//! (`require_admin`). The stateful money rules (e.g. who may revoke an allocation)
 //! live in the aggregate, applied under a row lock — the boundary here only does the
 //! cheap "are you this principal?" check (defense in depth).
 //!

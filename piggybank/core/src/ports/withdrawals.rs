@@ -1,6 +1,6 @@
 //! Persistence + read port for the [`Withdrawal`] aggregate.
 //!
-//! Mirrors [`AllocationRepository`](super::AllocationRepository): each command is
+//! Mirrors [`RedemptionRepository`](super::RedemptionRepository): each command is
 //! internally atomic and row-locked — load `FOR UPDATE`, apply the aggregate command
 //! inside the lock (the aggregate is the single authority on a transition's
 //! validity), then persist the transition together with the drained events
