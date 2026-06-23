@@ -19,9 +19,9 @@ pub struct AuthorizeRequest {
 }
 
 /// Cloneable handle `core` holds to authorize gRPC requests in-process — no
-/// network hop, no per-service key material. Obtained from [`AuthService::new`].
+/// network hop, no per-service key material. Obtained from [`AuthService::try_new`].
 ///
-/// [`AuthService::new`]: crate::service::AuthService::new
+/// [`AuthService::try_new`]: crate::service::AuthService::try_new
 #[derive(Clone)]
 pub struct Authorizer {
 	tx: mpsc::Sender<AuthorizeRequest>,
@@ -33,8 +33,9 @@ impl Authorizer {
 	}
 
 	/// Verify a bearer token by asking the auth task over the channel and awaiting
-	/// its verdict. The channel plumbing is real; the auth task's verification is
-	/// a scaffold placeholder (currently answers [`AuthError::NotConfigured`]).
+	/// its verdict. The auth task runs a real [`verify_token`](crate::jwks::verify_token)
+	/// against the keyring when signing is configured, and only answers
+	/// [`AuthError::NotConfigured`] when no signing key is set (dev/CI).
 	pub async fn authorize(&self, token: &str) -> Result<Claims, AuthError> {
 		let (respond_to, response) = oneshot::channel();
 		// A closed channel (send) or a dropped responder (recv) means the auth task

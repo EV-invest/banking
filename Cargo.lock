@@ -1590,7 +1590,6 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
- "tracing",
  "uuid",
 ]
 
@@ -3351,7 +3350,6 @@ name = "piggybank-signer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "chacha20poly1305",
  "domain",
  "dotenvy",
@@ -3360,7 +3358,6 @@ dependencies = [
  "getrandom 0.2.17",
  "hex",
  "k256",
- "prost",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",

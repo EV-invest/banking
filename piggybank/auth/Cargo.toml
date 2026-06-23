@@ -22,7 +22,6 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "sync"] }
 tonic.workspace = true
 tower.workspace = true
-tracing.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
