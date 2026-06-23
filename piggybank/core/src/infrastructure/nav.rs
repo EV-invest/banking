@@ -55,18 +55,6 @@ impl NavRepository for PgNav {
 		.map_err(repo_err)?;
 		Ok(posted_at_unix)
 	}
-
-	async fn history(&self, service: &ServiceId) -> Result<Vec<Valuation>, DomainError> {
-		let rows = sqlx::query(
-			"SELECT aum, units_outstanding, nav, posted_by, EXTRACT(EPOCH FROM posted_at)::bigint AS posted_at_unix \
-			 FROM fund_valuations WHERE service = $1 ORDER BY posted_at DESC",
-		)
-		.bind(service.as_str())
-		.fetch_all(&self.pool)
-		.await
-		.map_err(repo_err)?;
-		rows.iter().map(|row| valuation_from_row(service, row)).collect()
-	}
 }
 
 fn valuation_from_row(service: &ServiceId, row: &sqlx::postgres::PgRow) -> Result<Valuation, DomainError> {

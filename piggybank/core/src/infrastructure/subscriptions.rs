@@ -9,18 +9,12 @@
 use async_trait::async_trait;
 use domain::{
 	architecture::{Reader, Repository},
-	balance::ServiceId,
 	error::DomainError,
-	money::{Nav, Shares, Usdt},
-	subscriptions::{Subscription, SubscriptionId},
-	users::UserId,
+	subscriptions::Subscription,
 };
 use sqlx::{PgConnection, PgPool};
-use uuid::Uuid;
 
 use crate::{infrastructure::outbox, ports::SubscriptionRepository};
-
-const SELECT_BY_USER: &str = "SELECT id, user_id, service, cash, nav, units FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC";
 
 pub struct PgSubscriptions {
 	pool: PgPool,
@@ -38,33 +32,6 @@ impl Repository for PgSubscriptions {
 
 impl Reader for PgSubscriptions {
 	type Aggregate = Subscription;
-}
-
-#[derive(sqlx::FromRow)]
-struct SubscriptionRow {
-	id: Uuid,
-	user_id: Uuid,
-	service: String,
-	cash: String,
-	nav: String,
-	units: String,
-}
-
-impl SubscriptionRow {
-	fn into_domain(self) -> Result<Subscription, DomainError> {
-		Ok(Subscription::rehydrate(
-			SubscriptionId::from_raw(self.id),
-			UserId::from_raw(self.user_id),
-			ServiceId::parse(&self.service)?,
-			Usdt::from_base_units(parse_units(&self.cash, "subscription cash")?),
-			Nav::from_base_units(parse_units(&self.nav, "subscription nav")?),
-			Shares::from_base_units(parse_units(&self.units, "subscription units")?),
-		))
-	}
-}
-
-fn parse_units(raw: &str, what: &str) -> Result<u128, DomainError> {
-	raw.parse::<u128>().map_err(|_| DomainError::Repository(format!("malformed {what}")))
 }
 
 fn repo_err(err: sqlx::Error) -> DomainError {
@@ -115,14 +82,5 @@ impl SubscriptionRepository for PgSubscriptions {
 		outbox::drain_to_outbox(&mut tx, subscription, true).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(())
-	}
-
-	async fn list_by_user(&self, user: UserId) -> Result<Vec<Subscription>, DomainError> {
-		let rows = sqlx::query_as::<_, SubscriptionRow>(SELECT_BY_USER)
-			.bind(user.raw())
-			.fetch_all(&self.pool)
-			.await
-			.map_err(repo_err)?;
-		rows.into_iter().map(SubscriptionRow::into_domain).collect()
 	}
 }

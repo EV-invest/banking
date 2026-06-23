@@ -55,12 +55,6 @@ pub struct FundNavView {
 	pub stale: bool,
 }
 
-/// The current NAV for `service`: the latest mark, or the bootstrap seed (1.0) when the
-/// fund has no units yet (the first subscription mints at seed, establishing units).
-pub async fn current_nav(nav: &dyn NavRepository, service: &ServiceId) -> Result<Nav, DomainError> {
-	Ok(nav.current(service).await?.map(|v| v.nav).unwrap_or(Nav::SEED))
-}
-
 /// The current NAV plus whether it is fresh enough to deal on (`now − posted_at ≤
 /// MAX_NAV_AGE_SECS`). A fund with no mark yet uses the seed NAV and is always fresh
 /// (nothing to be stale against). Subscribe/redeem call this before pricing.
