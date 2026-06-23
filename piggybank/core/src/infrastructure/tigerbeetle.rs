@@ -1,9 +1,10 @@
 //! TigerBeetle connection.
 //!
 //! Holds a single connected `tb::Client` — internally synchronised and safe to
-//! share across tasks, so it lives behind an `Arc` in [`AppState`]. Scaffold: no
-//! account/transfer mapping yet; reach `client()` to issue raw ledger ops, or
-//! wrap it in a domain `Ledger` gateway as the ledger feature lands.
+//! share across tasks, so it lives behind an `Arc` in [`AppState`]. This module is
+//! just the connected client handle; the domain `Ledger` gateway over it is
+//! `TbLedger` (in [`ledger`](super::ledger)), which owns the account/transfer
+//! mapping. Reach `client()` only for raw ledger ops.
 //!
 //! [`AppState`]: crate::AppState
 

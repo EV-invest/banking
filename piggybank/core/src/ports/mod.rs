@@ -1,6 +1,6 @@
 //! Driven ports — the outbound interfaces the application depends on, implemented
 //! by `infrastructure`. The hexagonal "domain/port" layer over the generic DDD
-//! building blocks in [`domain::architecture`](domain::architecture).
+//! building blocks in [`domain::architecture`].
 //!
 //! [`UserRepository`] is the first leaf port: it ties the [`User`] aggregate to its
 //! Postgres persistence and the narrow read side ([`Reader`]). Methods are
@@ -8,11 +8,11 @@
 //! are written to the event log in the same transaction as the state change (the
 //! ACID point), so callers never juggle a transaction across the port boundary.
 //!
-//! The money plane adds two more ports: [`AllocationRepository`] (the
-//! [`Allocation`](domain::allocations::Allocation) aggregate's atomic, row-locked
-//! persistence) and [`Ledger`] — the TigerBeetle [`Gateway`](domain::architecture::Gateway),
-//! which by construction cannot enrol in a Postgres `UnitOfWork` (money is written
-//! last, in the relay).
+//! The money plane adds the fund-currency ports — [`SubscriptionRepository`],
+//! [`RedemptionRepository`], [`WithdrawalRepository`], and [`NavRepository`] — each
+//! the aggregate's atomic, row-locked persistence, plus [`Ledger`], the TigerBeetle
+//! [`Gateway`](domain::architecture::Gateway), which by construction cannot enrol in
+//! a Postgres `UnitOfWork` (money is written last, in the relay).
 
 pub mod custody;
 pub mod deposit_addresses;

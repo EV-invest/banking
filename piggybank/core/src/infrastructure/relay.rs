@@ -1,6 +1,6 @@
 //! Outbox relay — the saga dispatcher.
 //!
-//! A single worker drains undispatched [`outbox`](super::outbox) rows in strict
+//! A single worker drains undispatched [`outbox`] rows in strict
 //! `seq` order and applies each to TigerBeetle (and, for withdrawals, the custody
 //! service) **after** the control-plane commit (Write-Last). Delivery is
 //! at-least-once, so every op is idempotent: ledger transfer ids are deterministic

@@ -2,7 +2,7 @@
 name = "evbanking_contracts"
 version = "0.1.0"
 edition = "2024"
-description = "gRPC wire contracts for the EV banking hub — generated tonic client+server stubs, re-exporting the shared auth flow. The dependency other service repos import (by git)."
+description = "gRPC wire contracts for the EV banking hub — generated tonic client+server stubs. The dependency other service repos import by git, alongside evbanking_auth for the verify flow."
 license = "BlueOak-1.0.0"
 publish = false
 

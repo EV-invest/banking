@@ -2,10 +2,10 @@
 //!
 //! Loads config, opens the driven infrastructure (Postgres control plane,
 //! TigerBeetle ledger), then runs two in-process tasks that talk over the
-//! [`Authorizer`] channel:
+//! [`Authorizer`](evbanking_auth::Authorizer) channel:
 //!   - the **auth service** ([`evbanking_auth::AuthService`]) — issuance gRPC routes
 //!     + the authorize channel, on `auth_grpc_addr`;
-//!   - the **core** gRPC services (health/users/balance/allocations) on `grpc_addr`,
+//!   - the **core** gRPC services (health/users/balance/funds/wallet) on `grpc_addr`,
 //!     authorizing each request via the `Authorizer` core got from auth.
 
 use std::sync::Arc;
