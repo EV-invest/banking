@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use domain::{
 	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party},
@@ -22,7 +23,6 @@ use piggybank_core::{
 	infrastructure::{
 		custody::StubCustody,
 		db,
-		deposit_addresses::StubDepositAddresses,
 		ledger::{self, TbLedger},
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
@@ -34,6 +34,10 @@ use piggybank_core::{
 use sqlx::PgPool;
 use tokio::sync::Notify;
 use uuid::Uuid;
+
+// Address alphabets for the test-only deposit-address stub (defined at the bottom).
+const BASE58: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const BASE64URL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 struct Harness {
 	pool: PgPool,
@@ -369,5 +373,107 @@ async fn deposit_address_is_stable_per_user_and_network() {
 		let second = h.deposit_addresses.address(user, network).await.unwrap();
 		assert_eq!(first, second, "the cached deposit address is stable across reads");
 		assert_eq!(first.network(), network, "the address is for the requested network");
+	}
+}
+
+// ── Test-only deposit-address stub ──────────────────────────────────────────────
+// Stands in for HD derivation from the fund's xpub so the saga runs without the
+// separate signer process. It deterministically derives a *structurally valid* (not
+// spendable) per-(user, network) address and caches it. Production wires the
+// signer-backed `SignerDepositAddresses`; this double lives only here.
+
+struct StubDepositAddresses {
+	pool: PgPool,
+}
+
+impl StubDepositAddresses {
+	fn new(pool: PgPool) -> Self {
+		Self { pool }
+	}
+}
+
+#[async_trait]
+impl DepositAddresses for StubDepositAddresses {
+	async fn address(&self, user: UserId, network: Network) -> Result<WalletAddress, DomainError> {
+		if let Some(existing) = sqlx::query_scalar::<_, String>("SELECT address FROM user_deposit_addresses WHERE user_id = $1 AND network = $2")
+			.bind(user.raw())
+			.bind(network.as_str())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?
+		{
+			return WalletAddress::parse(network, &existing);
+		}
+		let derived = derive_address(user, network);
+		sqlx::query("INSERT INTO user_deposit_addresses (user_id, network, address) VALUES ($1, $2, $3) ON CONFLICT (user_id, network) DO NOTHING")
+			.bind(user.raw())
+			.bind(network.as_str())
+			.bind(derived.as_str())
+			.execute(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		Ok(derived)
+	}
+}
+
+/// Deterministic per-(user, network) material via chained UUID v5 (stable across
+/// runs/platforms — SHA-1 with fixed namespaces, no RNG).
+fn derive_bytes(seed: &str, n: usize) -> Vec<u8> {
+	let mut out = Vec::with_capacity(n);
+	let mut acc = Uuid::new_v5(&Uuid::NAMESPACE_OID, seed.as_bytes());
+	while out.len() < n {
+		out.extend_from_slice(acc.as_bytes());
+		acc = Uuid::new_v5(&acc, seed.as_bytes());
+	}
+	out.truncate(n);
+	out
+}
+
+/// A structurally valid address for `network` from the derived bytes — each byte mapped
+/// onto the chain's alphabet so [`WalletAddress::parse`] always accepts it.
+fn derive_address(user: UserId, network: Network) -> WalletAddress {
+	let seed = format!("{user}:{network}");
+	let address = match network {
+		Network::Bep20 => {
+			let bytes = derive_bytes(&seed, 20);
+			let mut s = String::from("0x");
+			for byte in bytes {
+				s.push_str(&format!("{byte:02x}"));
+			}
+			s
+		}
+		Network::Trc20 => {
+			let bytes = derive_bytes(&seed, 33);
+			let mut s = String::from("T");
+			for byte in bytes {
+				s.push(BASE58[byte as usize % BASE58.len()] as char);
+			}
+			s
+		}
+		Network::Ton => {
+			let bytes = derive_bytes(&seed, 48);
+			let mut s = String::with_capacity(48);
+			for byte in bytes {
+				s.push(BASE64URL[byte as usize % BASE64URL.len()] as char);
+			}
+			s
+		}
+	};
+	WalletAddress::parse(network, &address).expect("derived stub address is structurally valid by construction")
+}
+
+fn repo_err(err: sqlx::Error) -> DomainError {
+	DomainError::Repository(err.to_string())
+}
+
+#[test]
+fn derived_addresses_are_valid_and_stable() {
+	let user = UserId::new();
+	for network in Network::ALL {
+		let a = derive_address(user, network);
+		let b = derive_address(user, network);
+		assert_eq!(a, b, "derivation must be deterministic");
+		assert_eq!(a.network(), network);
+		assert!(WalletAddress::parse(network, a.as_str()).is_ok());
 	}
 }
