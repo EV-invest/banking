@@ -11,7 +11,6 @@ use domain::{
 	architecture::{Reader, Repository},
 	error::DomainError,
 	subscriptions::Subscription,
-	users::UserId,
 };
 
 #[async_trait]
@@ -19,7 +18,4 @@ pub trait SubscriptionRepository: Repository<Aggregate = Subscription> + Reader<
 	/// Persist a brand-new subscription, drain its `Subscribed` event, and upsert the
 	/// user's `fund_positions` cost basis / high-water mark — atomically.
 	async fn open(&self, subscription: &mut Subscription) -> Result<(), DomainError>;
-
-	/// A user's subscriptions (projection), newest first.
-	async fn list_by_user(&self, user: UserId) -> Result<Vec<Subscription>, DomainError>;
 }

@@ -23,9 +23,6 @@ pub trait NavRepository: Send + Sync {
 	/// Append a new mark — `id` is caller-minted, `posted_at` is DB-stamped. Returns the
 	/// stamped `posted_at` (unix seconds) so the caller can report the recorded mark.
 	async fn record(&self, id: Uuid, service: &ServiceId, aum: Usdt, units_outstanding: Shares, nav: Nav, posted_by: &str) -> Result<i64, DomainError>;
-
-	/// All marks for `service`, newest first (admin/UI history).
-	async fn history(&self, service: &ServiceId) -> Result<Vec<Valuation>, DomainError>;
 }
 /// One operator valuation mark for a fund. NAV is derived (`aum / units_outstanding`)
 /// and frozen until the next mark; `posted_at_unix` is the age seam for the staleness

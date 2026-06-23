@@ -29,7 +29,10 @@ use piggybank_core::{
 		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
 	},
-	ports::ledger::{Ledger, LedgerError, LedgerTransfer},
+	ports::{
+		ledger::{Ledger, LedgerError, LedgerTransfer},
+		nav::NavRepository,
+	},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -249,7 +252,7 @@ async fn fund_valuation_derives_nav_and_guards_fat_finger() {
 	let service = unique_service();
 
 	// No mark yet → the current NAV is the bootstrap seed (1.0).
-	assert_eq!(funds_app::current_nav(&nav_repo, &service).await.unwrap(), Nav::SEED);
+	assert_eq!(nav_repo.current(&service).await.unwrap().map(|v| v.nav).unwrap_or(Nav::SEED), Nav::SEED);
 	// Posting AUM with zero units outstanding is rejected — NAV is undefined.
 	assert!(
 		funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("100"), "op", false)
@@ -273,7 +276,7 @@ async fn fund_valuation_derives_nav_and_guards_fat_finger() {
 		.await
 		.unwrap();
 	assert_eq!(v.nav, Nav::parse_decimal("1.5").unwrap());
-	assert_eq!(funds_app::current_nav(&nav_repo, &service).await.unwrap(), Nav::parse_decimal("1.5").unwrap());
+	assert_eq!(nav_repo.current(&service).await.unwrap().map(|v| v.nav).unwrap_or(Nav::SEED), Nav::parse_decimal("1.5").unwrap());
 
 	// A 10x fat-finger (AUM 1500 → NAV 15, +900%) is rejected without override…
 	assert!(
