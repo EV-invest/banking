@@ -23,11 +23,9 @@ k256 = { version = "0.13", features = ["ecdsa"] }
 zeroize = "1"
 
 anyhow.workspace = true
-async-trait.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
 evbanking_contracts.workspace = true
-prost.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "migrate"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
