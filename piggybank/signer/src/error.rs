@@ -7,8 +7,6 @@ use crate::key_vault::VaultError;
 /// tampered blob, or an AAD mismatch.
 #[derive(Debug, thiserror::Error)]
 pub enum SignerError {
-	#[error("invalid argument: {0}")]
-	Validation(String),
 	#[error("vault error")]
 	Crypto(#[from] VaultError),
 	#[error("repository error: {0}")]
@@ -26,7 +24,6 @@ impl From<SignerError> for Status {
 	/// collapse to a generic `internal` (the secret-bearing detail never ships).
 	fn from(err: SignerError) -> Self {
 		match err {
-			SignerError::Validation(msg) => Status::new(Code::InvalidArgument, msg),
 			SignerError::Crypto(_) | SignerError::Repository(_) => Status::new(Code::Internal, "internal error"),
 		}
 	}
