@@ -31,6 +31,10 @@ pub struct AppConfig {
 	/// A coarse, config-driven allowlist standing in for RBAC until a role slice
 	/// lands; `ADMIN_SUBJECTS` is a comma-separated list (empty ⇒ no admins).
 	pub admin_subjects: Vec<String>,
+	/// Endpoint of the separate-process signer (the key vault), for deposit-address
+	/// provisioning over the `signer.v1` gRPC seam. The hub connects lazily, so this
+	/// only needs to resolve by the time the first address is provisioned.
+	pub signer_grpc_addr: String,
 }
 
 impl AppConfig {
@@ -61,6 +65,7 @@ impl AppConfig {
 			.filter(|s| !s.is_empty())
 			.map(str::to_owned)
 			.collect();
+		let signer_grpc_addr = env::var("SIGNER_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50053".to_string());
 		Ok(Self {
 			database_url,
 			grpc_addr,
@@ -73,6 +78,7 @@ impl AppConfig {
 			tigerbeetle_address,
 			tigerbeetle_cluster_id,
 			admin_subjects,
+			signer_grpc_addr,
 		})
 	}
 }

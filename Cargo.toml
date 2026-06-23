@@ -1,9 +1,10 @@
 cargo-features = ["codegen-backend"]
 
 [workspace]
-# `piggybank/` is the central backend: `core` (the hub server + composition root)
-# and `auth` (the auth service + shared verification lib) are sibling crates.
-members = ["piggybank/core", "piggybank/auth", "domain", "contracts"]
+# `piggybank/` is the central backend: `core` (the hub server + composition root),
+# `auth` (the auth service + shared verification lib), and `signer` (the separate-
+# process key vault that holds chain private keys at rest) are sibling crates.
+members = ["piggybank/core", "piggybank/auth", "piggybank/signer", "domain", "contracts"]
 # `.tb-client` must live at the repo root, NOT inside a member dir: cargo's
 # exclude check is `!explicit_member && excluded`, and member matching is
 # prefix-based — anything under a member dir can never be excluded.
