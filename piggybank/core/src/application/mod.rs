@@ -1,6 +1,6 @@
 //! Application layer — use cases, split CQRS-style.
 //!
-//! - **Command handlers** (write side) open one [`UnitOfWork`] (a single Postgres
+//! - **Command handlers** (write side) open one [`UnitOfWork`](domain::architecture::UnitOfWork) (a single Postgres
 //!   transaction), mutate aggregates, and drain their `EmitsEvents` into the
 //!   event log in that same transaction. Money is moved in TigerBeetle **after**
 //!   the Postgres commit (Write-Last), via the outbox relay/sagas (a later slice).
@@ -12,8 +12,8 @@
 //! [`auth_sync`] is the first use case: it drains the in-process `Provisioner`
 //! channel from the auth task and upserts the [`User`](domain::users::User)
 //! aggregate, keeping the hub identity in sync with the verified Google identity.
-//! [`balance`] and [`allocations`] are the money use cases — each notifies the relay
-//! after its commit so the ledger move follows promptly.
+//! [`balance`], [`funds`], and [`withdrawals`] are the money use cases — each notifies
+//! the relay after its commit so the ledger move follows promptly.
 
 pub mod auth_sync;
 pub mod balance;

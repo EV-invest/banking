@@ -1,6 +1,6 @@
 //! Postgres adapter for the [`WithdrawalRepository`] port.
 //!
-//! Mirrors [`PgAllocations`](super::allocations::PgAllocations): the command methods
+//! Mirrors [`PgRedemptions`](super::redemptions::PgRedemptions): the command methods
 //! are atomic and **row-locked** — load `FOR UPDATE`, apply the aggregate command
 //! inside the lock (the aggregate is the single authority on a transition's validity),
 //! then persist the new state together with the drained events (event_log + outbox)

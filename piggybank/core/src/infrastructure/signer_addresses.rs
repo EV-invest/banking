@@ -1,7 +1,6 @@
 //! Signer-backed deposit-address adapter — the production [`DepositAddresses`].
 //!
-//! Replaces the [`StubDepositAddresses`](super::deposit_addresses::StubDepositAddresses)
-//! derivation with real provisioning: on first use for a `(user, network)` it asks the
+//! On first use for a `(user, network)` it asks the
 //! separate-process **signer** to generate the curve keypair, seal the private key, and
 //! return the public address. The hub never sees the key — only the address, which it
 //! caches in `user_deposit_addresses` exactly as before. Subsequent reads hit that cache

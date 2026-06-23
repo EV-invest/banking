@@ -11,10 +11,6 @@ pub struct AppConfig {
 	pub grpc_addr: SocketAddr,
 	/// Auth service gRPC listener address (token issuance routes for clients).
 	pub auth_grpc_addr: SocketAddr,
-	/// Redis URL for the **central** auth service only — refresh-token rotation
-	/// and optional revocation state. NOT a per-service dependency: services
-	/// verify access tokens statelessly against cached JWKS. `None` disables it.
-	pub redis_url: Option<String>,
 	pub sentry_dsn: Option<String>,
 	/// PostHog project key for native product-analytics capture. `None` disables
 	/// capture (a silent no-op), so the same code runs unconfigured (local, CI).
@@ -48,7 +44,6 @@ impl AppConfig {
 			.unwrap_or_else(|_| "0.0.0.0:50052".to_string())
 			.parse()
 			.context("AUTH_GRPC_ADDR must be a valid socket address, e.g. 0.0.0.0:50052")?;
-		let redis_url = env::var("REDIS_URL").ok().filter(|s| !s.is_empty());
 		let sentry_dsn = env::var("SENTRY_DSN").ok().filter(|s| !s.is_empty());
 		let posthog_key = env::var("POSTHOG_KEY").ok().filter(|s| !s.is_empty());
 		let posthog_host = env::var("POSTHOG_HOST").ok().filter(|s| !s.is_empty());
@@ -70,7 +65,6 @@ impl AppConfig {
 			database_url,
 			grpc_addr,
 			auth_grpc_addr,
-			redis_url,
 			sentry_dsn,
 			posthog_key,
 			posthog_host,
