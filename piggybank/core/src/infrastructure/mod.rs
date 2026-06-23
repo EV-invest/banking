@@ -5,8 +5,9 @@
 //! - [`tigerbeetle`] — the connected TigerBeetle client.
 //! - [`ledger`] — the **data plane** `Ledger` [`Gateway`](domain::architecture::Gateway)
 //!   over TigerBeetle (the chart of accounts, transfers, two-phase saga ops).
-//! - [`users`] / [`allocations`] — Postgres repositories for the `User` and
-//!   `Allocation` aggregates (atomic state + drained events).
+//! - [`users`] — Postgres repository for the `User` aggregate;
+//!   [`subscriptions`] / [`redemptions`] / [`withdrawals`] — repositories for the
+//!   money-plane aggregates (atomic state + drained events).
 //! - [`outbox`] — the transactional outbox written inside the same transaction as
 //!   the state change, plus its drain side.
 //! - [`relay`] — the single-worker saga dispatcher that drains the outbox and
@@ -16,7 +17,6 @@
 
 pub mod custody;
 pub mod db;
-pub mod deposit_addresses;
 pub mod ledger;
 pub mod nav;
 pub mod outbox;
