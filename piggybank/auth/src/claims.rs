@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 /// can never stand in for an inter-service `Service` token (or vice versa) — even
 /// before `aud` is checked. A verifier states the `typ`s it accepts in its
 /// [`VerifyPolicy`](crate::jwks::VerifyPolicy). (Refresh tokens are **not** JWTs —
-/// they are opaque, rotated, server-side handles owned by
-/// [`management`](crate::management) — so they have no `typ`.)
+/// they are opaque, rotated, server-side handles owned by the `management`
+/// module — so they have no `typ`.)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TokenType {

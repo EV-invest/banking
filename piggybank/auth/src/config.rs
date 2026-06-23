@@ -14,7 +14,7 @@ use crate::claims::TokenType;
 
 /// Configuration for the auth **service** (the token-issuing side). Construct with
 /// [`AuthConfig::from_env`] in the composition root and hand to
-/// [`AuthService::new`](crate::service::AuthService::new).
+/// [`AuthService::try_new`](crate::service::AuthService::try_new).
 #[derive(Clone, Debug)]
 pub struct AuthConfig {
 	/// Issuer (`iss`) stamped on every minted token and required by verifiers.

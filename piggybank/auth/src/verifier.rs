@@ -73,7 +73,7 @@ impl Verifier {
 
 	/// Verify a bearer token, refreshing the JWKS once if the `kid` is unknown
 	/// (a key rotation) before giving up. The refresh is throttled + single-flighted,
-	/// so a forged-`kid` flood costs at most one RPC per [`MIN_REFRESH_INTERVAL`].
+	/// so a forged-`kid` flood costs at most one RPC per `MIN_REFRESH_INTERVAL`.
 	pub async fn verify(&self, token: &str) -> Result<Claims, AuthError> {
 		let first = {
 			let cache = self.inner.cache.read().await;

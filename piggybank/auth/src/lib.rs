@@ -35,16 +35,19 @@
 pub mod authorizer;
 pub mod claims;
 pub mod config;
-pub mod google;
 pub mod interceptor;
 pub mod jwks;
-pub mod management;
 pub mod provisioner;
 pub mod service;
 pub mod service_token;
-pub mod signer;
 pub mod telemetry;
 pub mod verifier;
+
+// Issuance internals — host-only (used by `service` via `crate::`), not part of the
+// verify-side surface downstream service repos import, so kept private.
+mod google;
+mod management;
+mod signer;
 
 pub use authorizer::Authorizer;
 pub use claims::{Claims, TokenType};
