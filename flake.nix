@@ -256,7 +256,43 @@
             export REDIS_URL="''${REDIS_URL:-redis://127.0.0.1:6379}"
             export TIGERBEETLE_ADDRESS="''${TIGERBEETLE_ADDRESS:-127.0.0.1:3033}"
             export TIGERBEETLE_CLUSTER_ID="''${TIGERBEETLE_CLUSTER_ID:-0}"
+            export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-http://127.0.0.1:50053}"
             exec cargo run -p piggybank-core
+          '';
+        };
+
+        # ── signer (the separate-process key vault) ─────────────────────────
+        # Runs `piggybank-signer`: generates chain keypairs, stores the private keys
+        # encrypted at rest in its OWN database, and serves key provisioning over gRPC.
+        # A reachable Postgres is the only prerequisite (`.#db`, or `.#dev`). Defaults
+        # mirror piggybank/signer/.env.example; any value already set wins.
+        runSigner = pkgs.writeShellApplication {
+          name = "run-signer";
+          runtimeInputs = with pkgs; [ rust pkg-config openssl protobuf git ];
+          text = ''
+            ${dyldFallback}
+            ${protocEnv}
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo"
+
+            ${linkTbClient}
+
+            set -a
+            if [ -f piggybank/signer/.env ]; then
+              # shellcheck disable=SC1091
+              . piggybank/signer/.env
+            fi
+            set +a
+
+            export SIGNER_DATABASE_URL="''${SIGNER_DATABASE_URL:-postgres://postgres@localhost:5432/ev_banking_signer}"
+            export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-0.0.0.0:50053}"
+            # Dev-only KEK: ephemeral per boot when unset, so no key bytes live in the
+            # repo. Production MUST inject a STABLE 32-byte KEK from a secrets store/KMS
+            # (a rotating KEK can't open previously-sealed keys). Set WALLET_KEK in
+            # piggybank/signer/.env to keep sealed keys openable across restarts.
+            export WALLET_KEK="''${WALLET_KEK:-$(openssl rand -hex 32)}"
+            export RUST_LOG="''${RUST_LOG:-info,piggybank_signer=debug}"
+            exec cargo run -p piggybank-signer
           '';
         };
 
@@ -314,7 +350,8 @@
 
         # ── local Postgres ──────────────────────────────────────────────────
         # Project-local dev database under .pg/ (gitignored). First run initdb's a
-        # trust-auth cluster and creates `ev_banking`; later runs just start it.
+        # trust-auth cluster and creates the databases (`ev_banking` for the hub and
+        # `ev_banking_signer` for the signer's wallet_secrets); later runs just start it.
         runPostgres = pkgs.writeShellApplication {
           name = "run-postgres";
           runtimeInputs = with pkgs; [ postgresql git coreutils gnugrep ];
@@ -323,7 +360,7 @@
             export PGDATA="$repo/.pg/data"
             sockets="$repo/.pg/sockets"
             port="''${PGPORT:-5432}"
-            db="''${PGDATABASE:-ev_banking}"
+            dbs="''${PGDATABASES:-ev_banking ev_banking_signer}"
 
             mkdir -p "$sockets"
             if [ ! -s "$PGDATA/PG_VERSION" ]; then
@@ -334,13 +371,15 @@
 
             (
               until pg_isready --host="$sockets" --port="$port" --quiet; do sleep 0.2; done
-              if ! psql --host="$sockets" --port="$port" --username=postgres --dbname=postgres \
-                     --tuples-only --no-align \
-                     --command "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
-                createdb --host="$sockets" --port="$port" --username=postgres "$db"
-                echo "created database '$db'"
-              fi
-              echo "postgres ready on 127.0.0.1:$port (db '$db', user 'postgres', trust auth)"
+              for db in $dbs; do
+                if ! psql --host="$sockets" --port="$port" --username=postgres --dbname=postgres \
+                       --tuples-only --no-align \
+                       --command "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
+                  createdb --host="$sockets" --port="$port" --username=postgres "$db"
+                  echo "created database '$db'"
+                fi
+              done
+              echo "postgres ready on 127.0.0.1:$port (databases: $dbs, user 'postgres', trust auth)"
             ) &
 
             exec postgres -D "$PGDATA" -k "$sockets" -h 127.0.0.1 -p "$port"
@@ -373,7 +412,7 @@
         };
 
         # ── full dev orchestrator ───────────────────────────────────────────
-        # `nix run .#dev` → Postgres + TigerBeetle + Redis + piggybank + cabinet.
+        # `nix run .#dev` → Postgres + TigerBeetle + Redis + signer + piggybank + cabinet.
         # Postgres starts first, then the rest. A single trap tears the whole tree
         # down on exit.
         runDev = pkgs.writeShellApplication {
@@ -399,6 +438,8 @@
             echo "▶ redis"
             ${runRedis}/bin/run-redis & pids+=($!)
 
+            echo "▶ signer    (:50053)"
+            ${runSigner}/bin/run-signer & pids+=($!)
             echo "▶ piggybank (:50051 core / :50052 auth)"
             ${runPiggybank}/bin/run-piggybank & pids+=($!)
             echo "▶ cabinet   (:3000)"
@@ -409,10 +450,11 @@
         };
       in
       {
-        # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + piggybank + cabinet)
-        # `nix run .#piggybank` → hub server: core gRPC + auth tasks (applies DB migrations on boot; needs DB + TB: `.#db`/`.#tb`, or `.#dev`)
+        # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + signer + piggybank + cabinet)
+        # `nix run .#piggybank` → hub server: core gRPC + auth tasks (applies DB migrations on boot; needs DB + TB + signer: `.#db`/`.#tb`/`.#signer`, or `.#dev`)
+        # `nix run .#signer`    → key vault: generates+seals chain keys (applies its own DB migrations on boot; needs DB: `.#db`, or `.#dev`)
         # `nix run .#cabinet`   → Next.js host shell + BFF (:3000, needs piggybank on :50051)
-        # `nix run .#db`        → local Postgres only
+        # `nix run .#db`        → local Postgres only (creates ev_banking + ev_banking_signer)
         # `nix run .#tb`        → local TigerBeetle only
         # `nix run .#redis`     → local Redis (central auth store) only
         # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
@@ -421,6 +463,7 @@
         apps = {
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           piggybank = { type = "app"; program = "${runPiggybank}/bin/run-piggybank"; };
+          signer = { type = "app"; program = "${runSigner}/bin/run-signer"; };
           cabinet = { type = "app"; program = "${runCabinet}/bin/run-cabinet"; };
           db = { type = "app"; program = "${runPostgres}/bin/run-postgres"; };
           tb = { type = "app"; program = "${runTigerbeetle}/bin/run-tigerbeetle"; };
