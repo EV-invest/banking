@@ -13,6 +13,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use ev::error_monitoring::{self, Config as SentryConfig};
 use evbanking_auth::{AuthConfig, AuthService, provisioner_channel};
+use evbanking_contracts::signer::v1::signer_service_client::SignerServiceClient;
 use piggybank_core::{
 	AppState,
 	application::auth_sync,
@@ -20,12 +21,12 @@ use piggybank_core::{
 	infrastructure::{
 		custody::StubCustody,
 		db,
-		deposit_addresses::StubDepositAddresses,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
 		redemptions::PgRedemptions,
 		relay::Relay,
+		signer_addresses::SignerDepositAddresses,
 		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
 		users::PgUsers,
@@ -35,6 +36,7 @@ use piggybank_core::{
 	services,
 };
 use tokio::sync::Notify;
+use tonic::transport::Endpoint;
 
 // Sentry must be initialised before the async runtime starts — no #[tokio::main].
 fn main() -> anyhow::Result<()> {
@@ -85,7 +87,15 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
 	let nav: Arc<dyn NavRepository> = Arc::new(PgNav::new(pool.clone()));
 	let positions: Arc<dyn FundPositionReader> = Arc::new(PgFundPositions::new(pool.clone()));
-	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(StubDepositAddresses::new(pool.clone()));
+
+	// Deposit addresses are provisioned by the separate-process signer (it mints + seals
+	// the keypair and returns the address; the hub never holds the key). Connect lazily so
+	// the hub boots even if the signer starts after it — the first provision call is when
+	// the signer must be reachable. Cached addresses are served from Postgres without it.
+	let signer_channel = Endpoint::from_shared(config.signer_grpc_addr.clone())
+		.context("SIGNER_GRPC_ADDR must be a valid URL, e.g. http://127.0.0.1:50053")?
+		.connect_lazy();
+	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(signer_channel)));
 
 	// The single-worker outbox relay moves money in TigerBeetle after each commit
 	// (Write-Last); command handlers nudge it through `relay_notify` for low latency.
