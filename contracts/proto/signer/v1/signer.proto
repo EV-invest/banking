@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+// The signer service contract — INTERNAL hub↔signer wire, deliberately kept in its
+// own package (not `banking.v1`) so it stays out of the cabinet-facing OpenAPI/TS
+// generation (`nix run .#gen-api` only reads `proto/banking/v1`). The signer is a
+// separate trust domain: it holds the encrypted chain private keys; the hub never
+// does. For now it exposes only key provisioning — signing/broadcast is a later
+// feature that adds an RPC here.
+package signer.v1;
+
+service SignerService {
+  // Provision the caller-user's key-backed deposit address on a network: generate
+  // the curve keypair, seal the private key at rest, return the public address.
+  // Idempotent per (user_id, network) — a repeat returns the existing address.
+  rpc ProvisionAddress(ProvisionAddressRequest) returns (ProvisionAddressResponse);
+}
+
+message ProvisionAddressRequest {
+  string user_id = 1; // UUID
+  string network = 2; // "bep20" | "trc20" | "ton"
+}
+
+message ProvisionAddressResponse {
+  string address = 1;
+}

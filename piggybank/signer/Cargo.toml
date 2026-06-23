@@ -1,0 +1,40 @@
+[package]
+name = "piggybank-signer"
+version = "0.1.0"
+edition = "2024"
+description = "The EV banking signer — a separate-process key vault that generates chain keypairs, stores the private keys encrypted at rest (envelope/XChaCha20-Poly1305), and serves key provisioning over gRPC. The hub never holds the KEK or a plaintext key."
+license = "BlueOak-1.0.0"
+publish = false
+default-run = "signer"
+
+[[bin]]
+name = "signer"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+chacha20poly1305 = "0.10"
+ed25519-dalek = "2"
+getrandom = "0.2"
+hex = "0.4"
+k256 = { version = "0.13", features = ["ecdsa"] }
+zeroize = "1"
+
+anyhow.workspace = true
+async-trait.workspace = true
+domain.workspace = true
+dotenvy.workspace = true
+evbanking_contracts.workspace = true
+prost.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "migrate"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tonic.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+uuid = { workspace = true, features = ["v4"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

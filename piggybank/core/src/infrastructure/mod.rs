@@ -23,6 +23,7 @@ pub mod outbox;
 pub mod positions;
 pub mod redemptions;
 pub mod relay;
+pub mod signer_addresses;
 pub mod subscriptions;
 pub mod telemetry;
 pub mod tigerbeetle;
