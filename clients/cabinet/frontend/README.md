@@ -1,23 +1,24 @@
-# cabinet — host shell + BFF
+# cabinet frontend — host shell
 
-The root constructor for the bank's clients. Two jobs:
+The Next.js host shell for the bank's cabinet. Two jobs:
 
 1. **Microfrontend composition.** Every microfrontend (React or Rust/WASM, inline
-   widget or whole page) is a self-registering **custom element**. `cabinet` mounts
+   widget or whole page) is a self-registering **custom element**. The host mounts
    them with [`<RemoteElement>`](./shared/mfe/RemoteElement.tsx), resolving each by
-   logical name from the [registry](./mfe-registry.json) (served at
-   `/api/mfe-registry`). Remotes deploy independently — change the registry, not
-   `cabinet`. Light DOM only (Tailwind v4 tokens break in shadow DOM).
+   logical name from the [registry](./mfe-registry.json) (read here server-side for
+   page routes, and served to the browser at `/api/mfe-registry` by the backend).
+   Remotes deploy independently — change the registry, not the host. Light DOM only
+   (Tailwind v4 tokens break in shadow DOM).
    - Inline widget: render `<RemoteElement>` anywhere in a page.
    - Whole page: the catch-all route `app/(mfe)/[service]/[[...slug]]` mounts a page MFE.
 
-2. **BFF.** Server-side route handlers proxy browser HTTP to the hub's tonic gRPC
-   backend ([shared/bff/grpc.ts](./shared/bff/grpc.ts)). The BFF reads
-   `contracts/proto` at runtime with `@grpc/proto-loader` — no TS codegen; `tonic`
-   + `tonic-build` generate the Rust side. Smoke path: `GET /api/health` →
-   `HealthService.Check`.
+2. **BFF proxy.** The BFF itself is a separate Rust service
+   ([`../backend`](../backend)). This app keeps calling same-origin `/api/*`;
+   [`next.config.ts`](./next.config.ts) rewrites those to the backend
+   (`CABINET_BACKEND_URL`), so the `__Host-`/HttpOnly session cookie + CSRF model
+   stays same-origin. The browser never holds a token.
 
-See [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) for the full contract and
+See [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) for the full contract and
 the React / Rust-WASM producer recipes.
 
 ## Observability
@@ -44,6 +45,7 @@ See [`.env.example`](./.env.example) for the full env surface.
 ## Dev
 
 ```
-nix run .#cabinet      # this app on :3000 (needs the backend on :50051)
-nix run .#dev       # full stack: postgres + tigerbeetle + backend + cabinet
+nix run .#cabinet           # this app on :3000 (proxies /api/* → cabinet backend on :4000)
+nix run .#cabinet-backend   # the BFF on :4000 (needs piggybank on :50051)
+nix run .#dev               # full stack: postgres + tigerbeetle + redis + signer + piggybank + cabinet-backend + cabinet
 ```

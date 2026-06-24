@@ -3,7 +3,7 @@
 //!
 //! The central bank's driving adapter is **gRPC** (tonic): the closed, internal
 //! surface other services call. There is no HTTP here — browser/client traffic
-//! reaches the hub through the `clients/cabinet` BFF, which proxies HTTP↔gRPC.
+//! reaches the hub through the `clients/cabinet/backend` BFF, which proxies HTTP↔gRPC.
 //!
 //! `main` is the composition root for the whole `piggybank` system: it runs the
 //! core gRPC services **and** the [`evbanking_auth`] auth service as separate
