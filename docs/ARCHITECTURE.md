@@ -254,6 +254,33 @@ full event-sourcing framework: `cqrs-es`/`postgres-es` require `sqlx 0.8` (we pi
 `0.9`), and a ledger is already an immutable audit log — event-sourcing the same
 facts in Postgres would double-bookkeep.
 
+**Cross-plane events (envelope convention).** The one documented coupling between the
+planes is concierge's `UserLifecycleEvent` (`concierge/v1/events.proto`): concierge's
+outbox emits it on an identity change, the banking money plane consumes it to gate or
+freeze money ops (a `SUSPENDED` user or `SESSIONS_REVOKED` bump must stop downstream
+authorization). It rides the **same** at-least-once / idempotent-consumer model as the
+internal outbox, so the envelope carries the keys that model needs: an **`event_id`**
+(the concierge outbox row key — the dedupe key the consumer upserts by) and a per-user
+strictly-increasing **`sequence`** (the order key — apply only if it exceeds the last
+stored, so a redelivered or skew-reordered stale `REINSTATED` can't un-freeze a user a
+later `SUSPENDED` already froze; `event_id` dedupes, `sequence` orders). The payload is
+self-contained so the bridge stays **one-way with no callback**: `auth_subject` (the
+shared correlation key — the provider/Google `sub` both planes provision against; the
+event's `user_id` is concierge's own canonical id, opaque to banking, so the consumer
+resolves a CREATED to a local `UserId` through `auth_subject`, never by parsing the
+foreign `user_id`), `email` + `email_verified` (to materialize a user from CREATED), and
+`token_version` (the new floor a `token_version` gate stores).
+
+**Hard ordering rule — money-plane token-trust MUST NOT ship before the lifecycle
+consumer.** Today the money plane only trusts banking-minted tokens (its own issuer /
+`banking-core` audience / `token_version`), so a concierge identity can never authorize
+on the money plane. If a future change lets banking trust concierge tokens directly, the
+money plane would authorize on an identity it has no way to learn was suspended,
+KYC-downgraded, or sessions-revoked — there is no token_version visibility across the
+seam, only this event. So the banking-side `UserLifecycleEvent` consumer (mapping
+`auth_subject` → banking `UserId` and setting a freeze / KYC gate on the money aggregate)
+is a **hard prerequisite** for any cross-plane token-trust: it must land **first**.
+
 **Money model.** Cash lives in TigerBeetle on one USDT ledger, in **two layers**:
 **treasury/custody** (debit-normal wallets, **per rail**) and **claims** (credit-normal
 `fund`/`user`/`service`/`fee`/`clearing`, **network-agnostic** — one fungible balance per
