@@ -4,7 +4,9 @@ cargo-features = ["codegen-backend"]
 # `piggybank/` is the central backend: `core` (the hub server + composition root),
 # `auth` (the auth service + shared verification lib), and `signer` (the separate-
 # process key vault that holds chain private keys at rest) are sibling crates.
-members = ["piggybank/core", "piggybank/auth", "piggybank/signer", "domain", "contracts"]
+# `clients/cabinet/backend` is the cabinet's BFF — a standalone HTTP service that
+# orchestrates the money plane (this repo) and the concierge identity plane.
+members = ["piggybank/core", "piggybank/auth", "piggybank/signer", "domain", "contracts", "clients/cabinet/backend"]
 # `.tb-client` must live at the repo root, NOT inside a member dir: cargo's
 # exclude check is `!explicit_member && excluded`, and member matching is
 # prefix-based — anything under a member dir can never be excluded.
@@ -14,7 +16,12 @@ resolver = "3"
 [workspace.dependencies]
 anyhow = "1.0.102"
 async-trait = "0.1.89"
+# Browser-facing HTTP for the cabinet BFF (the rest of the workspace is gRPC-only).
+axum = "0.8"
+axum-extra = "0.10"
+base64 = "0.22"
 dotenvy = "0.15.7"
+form_urlencoded = "1"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 jiff = "0.2"
 ev = { version = "0.2.1", package = "ev_lib", default-features = false, features = ["architecture"] }
@@ -24,6 +31,10 @@ ev = { version = "0.2.1", package = "ev_lib", default-features = false, features
 domain = { path = "domain" }
 evbanking_auth = { path = "piggybank/auth" }
 evbanking_contracts = { path = "contracts" }
+# The concierge identity plane's wire contracts, pulled in by git like any downstream
+# consumer. Only the cabinet backend depends on it — it is the one orchestrator that
+# spans both planes. Pinned to a rev for reproducibility (Cargo.lock pins it too).
+evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "a058513e1ffd490ae951613361fb875aa43bf168" }
 http = "1"
 # `rust_crypto` selects the pure-Rust provider (ed25519-dalek for our EdDSA tokens,
 # rsa for verifying Google's RS256 id_tokens) — no C/aws-lc-rs toolchain, matching
@@ -35,6 +46,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 prost = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.150"
+sha2 = "0.10"
 sqlx = "0.9.0"
 thiserror = "2.0.18"
 # via the symlink (kept current by the flake shellHook), not the canonicalized store path - hardcoding the hash goes stale on every tigerbeetle derivation rebuild

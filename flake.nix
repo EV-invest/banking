@@ -296,10 +296,43 @@
           '';
         };
 
+        # ── cabinet backend (the BFF) ───────────────────────────────────────
+        # Runs `cabinet-backend`: the cabinet's stateless HTTP BFF. It holds the session
+        # + runs the OAuth flow and proxies the browser's /api/* to the piggybank money
+        # plane (:50051) and the concierge identity plane (:50061 — run from the sibling
+        # `concierge` repo). `linkTbClient` is required only so the Cargo workspace (which
+        # contains the TB-using piggybank crates) resolves; the BFF itself never uses TB.
+        # Defaults mirror clients/cabinet/backend/.env.example; any value already set wins.
+        runCabinetBackend = pkgs.writeShellApplication {
+          name = "run-cabinet-backend";
+          runtimeInputs = with pkgs; [ rust pkg-config openssl protobuf git ];
+          text = ''
+            ${dyldFallback}
+            ${protocEnv}
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo"
+
+            ${linkTbClient}
+
+            set -a
+            if [ -f clients/cabinet/backend/.env ]; then
+              # shellcheck disable=SC1091
+              . clients/cabinet/backend/.env
+            fi
+            set +a
+
+            export CABINET_BACKEND_BIND="''${CABINET_BACKEND_BIND:-0.0.0.0:4000}"
+            export PIGGYBANK_GRPC_ADDR="''${PIGGYBANK_GRPC_ADDR:-http://127.0.0.1:50051}"
+            export CONCIERGE_GRPC_ADDR="''${CONCIERGE_GRPC_ADDR:-http://127.0.0.1:50061}"
+            export RUST_LOG="''${RUST_LOG:-info,cabinet_backend=debug}"
+            exec cargo run -p cabinet-backend
+          '';
+        };
+
         # ── clients (Turborepo: Next.js host) ───────────────────────────────
         # npm workspaces rooted at the repo; deps install once into the hoisted
-        # node_modules (`npm install` also generates/updates the lockfile). The
-        # `cabinet` host BFF reaches the backend over gRPC.
+        # node_modules (`npm install` also generates/updates the lockfile). The `cabinet`
+        # frontend proxies /api/* to the cabinet backend (BFF) over HTTP (same-origin).
         runCabinet = pkgs.writeShellApplication {
           name = "run-cabinet";
           runtimeInputs = with pkgs; [ nodejs git ];
@@ -307,7 +340,7 @@
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo"
             [ -d node_modules/next ] || npm install
-            export GRPC_ADDR="''${GRPC_ADDR:-127.0.0.1:50051}"
+            export CABINET_BACKEND_URL="''${CABINET_BACKEND_URL:-http://127.0.0.1:4000}"
             exec npm run dev --workspace @evbanking/cabinet
           '';
         };
@@ -412,9 +445,10 @@
         };
 
         # ── full dev orchestrator ───────────────────────────────────────────
-        # `nix run .#dev` → Postgres + TigerBeetle + Redis + signer + piggybank + cabinet.
-        # Postgres starts first, then the rest. A single trap tears the whole tree
-        # down on exit.
+        # `nix run .#dev` → Postgres + TigerBeetle + Redis + signer + piggybank +
+        # cabinet-backend + cabinet. Postgres starts first, then the rest. A single trap
+        # tears the whole tree down on exit. (Concierge, the identity plane, lives in its
+        # own repo — start it there for the auth/profile/session flows.)
         runDev = pkgs.writeShellApplication {
           name = "run-dev";
           runtimeInputs = with pkgs; [ postgresql git coreutils ];
@@ -442,6 +476,8 @@
             ${runSigner}/bin/run-signer & pids+=($!)
             echo "▶ piggybank (:50051 core / :50052 auth)"
             ${runPiggybank}/bin/run-piggybank & pids+=($!)
+            echo "▶ cabinet-backend (:4000, BFF)"
+            ${runCabinetBackend}/bin/run-cabinet-backend & pids+=($!)
             echo "▶ cabinet   (:3000)"
             ${runCabinet}/bin/run-cabinet & pids+=($!)
 
@@ -450,11 +486,12 @@
         };
       in
       {
-        # `nix run .#dev`       → everything (postgres + tigerbeetle + redis + signer + piggybank + cabinet)
-        # `nix run .#piggybank` → hub server: core gRPC + auth tasks (applies DB migrations on boot; needs DB + TB + signer: `.#db`/`.#tb`/`.#signer`, or `.#dev`)
-        # `nix run .#signer`    → key vault: generates+seals chain keys (applies its own DB migrations on boot; needs DB: `.#db`, or `.#dev`)
-        # `nix run .#cabinet`   → Next.js host shell + BFF (:3000, needs piggybank on :50051)
-        # `nix run .#db`        → local Postgres only (creates ev_banking + ev_banking_signer)
+        # `nix run .#dev`            → everything (postgres + tigerbeetle + redis + signer + piggybank + cabinet-backend + cabinet)
+        # `nix run .#piggybank`      → hub server: core gRPC + auth tasks (applies DB migrations on boot; needs DB + TB + signer: `.#db`/`.#tb`/`.#signer`, or `.#dev`)
+        # `nix run .#signer`         → key vault: generates+seals chain keys (applies its own DB migrations on boot; needs DB: `.#db`, or `.#dev`)
+        # `nix run .#cabinet-backend`→ cabinet BFF (:4000; needs piggybank on :50051; identity flows need concierge on :50061 from its own repo)
+        # `nix run .#cabinet`        → Next.js host shell (:3000, proxies /api/* to the cabinet backend on :4000)
+        # `nix run .#db`             → local Postgres only (creates ev_banking + ev_banking_signer)
         # `nix run .#tb`        → local TigerBeetle only
         # `nix run .#redis`     → local Redis (central auth store) only
         # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
@@ -464,6 +501,7 @@
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           piggybank = { type = "app"; program = "${runPiggybank}/bin/run-piggybank"; };
           signer = { type = "app"; program = "${runSigner}/bin/run-signer"; };
+          cabinet-backend = { type = "app"; program = "${runCabinetBackend}/bin/run-cabinet-backend"; };
           cabinet = { type = "app"; program = "${runCabinet}/bin/run-cabinet"; };
           db = { type = "app"; program = "${runPostgres}/bin/run-postgres"; };
           tb = { type = "app"; program = "${runTigerbeetle}/bin/run-tigerbeetle"; };
