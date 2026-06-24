@@ -22,4 +22,9 @@ message ProvisionAddressRequest {
 
 message ProvisionAddressResponse {
   string address = 1;
+  // "placeholder" | "derived". Until real pubkey→address encoding ships the signer
+  // returns a placeholder (structurally valid, bound to the key, but NOT its on-chain
+  // image). The hub tags the cached row with this so a placeholder is NEVER served as a
+  // fundable deposit destination — the rail is presented as unavailable instead.
+  string address_kind = 2;
 }

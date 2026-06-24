@@ -15,7 +15,10 @@ use domain::{
 
 #[async_trait]
 pub trait DepositAddresses: Send + Sync {
-	/// The user's deposit address on `network`, derived once and reused (stable across
-	/// calls so a user always sees the same address).
-	async fn address(&self, user: UserId, network: Network) -> Result<WalletAddress, DomainError>;
+	/// The user's **fundable** deposit address on `network`, derived once and reused
+	/// (stable across calls so a user always sees the same address). `None` means no
+	/// fundable address exists yet — the underlying address is still a placeholder (not
+	/// the on-chain image of the key), so the rail is presented as unavailable rather than
+	/// surfacing an address that cannot receive funds.
+	async fn address(&self, user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError>;
 }

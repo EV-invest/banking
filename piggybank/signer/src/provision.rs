@@ -21,11 +21,28 @@ const KEY_VERSION: i32 = 1;
 const BASE58: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const BASE64URL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
+/// Address-kind tags the signer reports to the hub. Real pubkey→address encoding is a
+/// deferred feature, so today every address is a [`KIND_PLACEHOLDER`]; [`KIND_DERIVED`]
+/// is the value the signer will report once it computes the true on-chain image. The hub
+/// uses this to refuse to serve a placeholder as a fundable deposit destination.
+pub const KIND_PLACEHOLDER: &str = "placeholder";
+pub const KIND_DERIVED: &str = "derived";
+
+/// A provisioned (or re-read) deposit address plus the [`KIND_PLACEHOLDER`]/
+/// [`KIND_DERIVED`] tag the hub needs to decide whether the rail is fundable.
+pub struct ProvisionedAddress {
+	pub address: String,
+	pub kind: &'static str,
+}
+
 /// Provision (or return the existing) key-backed deposit address for `(user, network)`.
 /// Idempotent: a second call returns the first call's address without minting a new key.
-pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, network: Network) -> Result<String, SignerError> {
+pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, network: Network) -> Result<ProvisionedAddress, SignerError> {
+	// The stored address is whatever was minted before. Until real encoding ships that is
+	// always a placeholder, so the re-read path reports the same kind the mint path does;
+	// this single point flips to [`KIND_DERIVED`] (and persists the kind) when it lands.
 	if let Some(address) = secrets.find_address(user_id, network).await? {
-		return Ok(address);
+		return Ok(ProvisionedAddress { address, kind: KIND_PLACEHOLDER });
 	}
 
 	let generated = generate(network);
@@ -50,10 +67,11 @@ pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, ne
 
 	// Re-read the canonical row: ours, or a concurrent racer's whose insert won (ours
 	// was then a no-op and its sealed key was dropped/zeroized unused).
-	secrets
+	let address = secrets
 		.find_address(user_id, network)
 		.await?
-		.ok_or_else(|| SignerError::Repository("wallet_secrets row missing immediately after insert".into()))
+		.ok_or_else(|| SignerError::Repository("wallet_secrets row missing immediately after insert".into()))?;
+	Ok(ProvisionedAddress { address, kind: KIND_PLACEHOLDER })
 }
 
 struct Generated {

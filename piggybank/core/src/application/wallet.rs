@@ -109,9 +109,11 @@ pub async fn get_wallet(
 	let mut deposit_addresses_out = Vec::with_capacity(Network::ALL.len());
 	let mut withdrawable = Vec::with_capacity(Network::ALL.len());
 	for network in Network::ALL {
+		// `None` ⇒ no fundable address yet (still a placeholder): the rail is presented as
+		// unavailable, never with an address that cannot actually receive funds.
 		deposit_addresses_out.push(DepositRail {
 			network,
-			address: Some(deposit_addresses.address(user, network).await?),
+			address: deposit_addresses.address(user, network).await?,
 		});
 		// `instant` = min(available, rail liquidity) — "this much ships without queueing".
 		// It reveals the rail's liquidity only up to the user's own balance (see the
@@ -133,7 +135,8 @@ pub async fn get_wallet(
 	})
 }
 
-/// The caller's deposit address on `network` (stable; derived once and reused).
-pub async fn get_deposit_address(deposit_addresses: &dyn DepositAddresses, user: UserId, network: Network) -> Result<WalletAddress, DomainError> {
+/// The caller's deposit address on `network` (stable; derived once and reused). `None`
+/// while the address is still a placeholder — the rail is not yet fundable.
+pub async fn get_deposit_address(deposit_addresses: &dyn DepositAddresses, user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
 	deposit_addresses.address(user, network).await
 }

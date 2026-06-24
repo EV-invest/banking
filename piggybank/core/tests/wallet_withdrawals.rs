@@ -369,8 +369,8 @@ async fn deposit_address_is_stable_per_user_and_network() {
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	for network in Network::ALL {
-		let first = h.deposit_addresses.address(user, network).await.unwrap();
-		let second = h.deposit_addresses.address(user, network).await.unwrap();
+		let first = h.deposit_addresses.address(user, network).await.unwrap().expect("stub yields a fundable address");
+		let second = h.deposit_addresses.address(user, network).await.unwrap().expect("stub yields a fundable address");
 		assert_eq!(first, second, "the cached deposit address is stable across reads");
 		assert_eq!(first.network(), network, "the address is for the requested network");
 	}
@@ -394,7 +394,9 @@ impl StubDepositAddresses {
 
 #[async_trait]
 impl DepositAddresses for StubDepositAddresses {
-	async fn address(&self, user: UserId, network: Network) -> Result<WalletAddress, DomainError> {
+	async fn address(&self, user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
+		// The stub stands in for a working derivation, so it caches a `derived` (fundable)
+		// address — the placeholder-gating path is exercised by the signer-adapter tests.
 		if let Some(existing) = sqlx::query_scalar::<_, String>("SELECT address FROM user_deposit_addresses WHERE user_id = $1 AND network = $2")
 			.bind(user.raw())
 			.bind(network.as_str())
@@ -402,17 +404,17 @@ impl DepositAddresses for StubDepositAddresses {
 			.await
 			.map_err(repo_err)?
 		{
-			return WalletAddress::parse(network, &existing);
+			return Ok(Some(WalletAddress::parse(network, &existing)?));
 		}
 		let derived = derive_address(user, network);
-		sqlx::query("INSERT INTO user_deposit_addresses (user_id, network, address) VALUES ($1, $2, $3) ON CONFLICT (user_id, network) DO NOTHING")
+		sqlx::query("INSERT INTO user_deposit_addresses (user_id, network, address, address_kind) VALUES ($1, $2, $3, 'derived') ON CONFLICT (user_id, network) DO NOTHING")
 			.bind(user.raw())
 			.bind(network.as_str())
 			.bind(derived.as_str())
 			.execute(&self.pool)
 			.await
 			.map_err(repo_err)?;
-		Ok(derived)
+		Ok(Some(derived))
 	}
 }
 

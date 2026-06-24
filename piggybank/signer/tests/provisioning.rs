@@ -51,12 +51,17 @@ async fn provisions_seals_and_round_trips_each_network() {
 	for network in Network::ALL {
 		let user = Uuid::new_v4();
 
-		let address = provision::provision(&vault, &secrets, user, network).await.expect("provision");
-		assert!(!address.is_empty());
+		let provisioned = provision::provision(&vault, &secrets, user, network).await.expect("provision");
+		assert!(!provisioned.address.is_empty());
+		// Until real encoding ships every minted address is a placeholder, so the signer
+		// fails closed: it labels it rather than claiming it is a fundable address.
+		assert_eq!(provisioned.kind, provision::KIND_PLACEHOLDER, "{network} address is a placeholder until real derivation lands");
+		let address = provisioned.address;
 
 		// Idempotent: a second call returns the same address and mints no new key.
 		let again = provision::provision(&vault, &secrets, user, network).await.expect("re-provision");
-		assert_eq!(address, again, "{network} provisioning must be idempotent");
+		assert_eq!(address, again.address, "{network} provisioning must be idempotent");
+		assert_eq!(again.kind, provision::KIND_PLACEHOLDER, "{network} re-read reports the stored kind");
 
 		// Read the sealed row + the stored (watch-only) public key.
 		let sealed = secrets.find_sealed(user, network).await.expect("query").expect("row exists");

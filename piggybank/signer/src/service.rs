@@ -31,7 +31,12 @@ impl SignerService for Signer {
 		let req = request.into_inner();
 		let user_id = Uuid::parse_str(&req.user_id).map_err(|_| Status::invalid_argument("user_id must be a UUID"))?;
 		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
-		let address = provision::provision(&self.vault, &self.secrets, user_id, network).await?;
-		Ok(Response::new(ProvisionAddressResponse { address }))
+		// The kind tag makes the signer fail closed: it never claims a placeholder is a
+		// fundable address — it labels it, and the hub refuses to serve it as one.
+		let provisioned = provision::provision(&self.vault, &self.secrets, user_id, network).await?;
+		Ok(Response::new(ProvisionAddressResponse {
+			address: provisioned.address,
+			address_kind: provisioned.kind.to_owned(),
+		}))
 	}
 }

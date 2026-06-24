@@ -389,9 +389,11 @@ impl WalletService for WalletSvc {
 		let user = caller_id(&request)?;
 		let network = Network::parse(&request.get_ref().network).map_err(map_err)?;
 		let address = wallet_app::get_deposit_address(self.state.deposit_addresses.as_ref(), user, network).await.map_err(map_err)?;
+		// An empty `address` marks the rail unavailable: there is no fundable address yet
+		// (the underlying address is still a placeholder, never served as fundable).
 		Ok(Response::new(pb::DepositAddress {
 			network: network.as_str().to_owned(),
-			address: address.as_str().to_owned(),
+			address: address.map(|a| a.as_str().to_owned()).unwrap_or_default(),
 			min_confirmations: min_confirmations(network),
 		}))
 	}
