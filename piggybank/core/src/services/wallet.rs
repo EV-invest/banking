@@ -1,0 +1,139 @@
+//! `wallet` context — a user's own crypto wallet (balances, deposit addresses,
+//! withdrawals). Every RPC acts on the caller's own access-token `sub`.
+//!
+//! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
+//! type we don't control, so the large-err lint does not apply in this module.
+#![allow(clippy::result_large_err)]
+
+use domain::{
+	money::{Network, Usdt, WalletAddress},
+	withdrawals::Withdrawal,
+};
+use evbanking_contracts::banking::v1::{self as pb, wallet_service_server::WalletService};
+use tonic::{Request, Response, Status};
+
+use crate::{
+	AppState,
+	application::{wallet as wallet_app, withdrawals as withdrawal_app},
+	services::support::{caller_id, map_err, parse_withdrawal_id},
+};
+
+#[derive(Clone)]
+pub struct WalletSvc {
+	pub state: AppState,
+}
+
+impl WalletSvc {
+	pub fn new(state: AppState) -> Self {
+		Self { state }
+	}
+}
+
+#[tonic::async_trait]
+impl WalletService for WalletSvc {
+	async fn get_wallet(&self, request: Request<pb::GetWalletRequest>) -> Result<Response<pb::Wallet>, Status> {
+		let user = caller_id(&request)?;
+		let wallet = wallet_app::get_wallet(
+			self.state.ledger.as_ref(),
+			self.state.positions.as_ref(),
+			self.state.nav.as_ref(),
+			self.state.withdrawals.as_ref(),
+			self.state.deposit_addresses.as_ref(),
+			user,
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(pb::Wallet {
+			balance: Some(pb::Balance {
+				available: wallet.balance.available.to_decimal_string(),
+				invested: wallet.balance.invested.to_decimal_string(),
+				pending_withdrawal: wallet.balance.pending_withdrawal.to_decimal_string(),
+				total: wallet.balance.total.to_decimal_string(),
+			}),
+			deposit_addresses: wallet.deposit_addresses.iter().map(deposit_rail_to_proto).collect(),
+			withdrawable: wallet.withdrawable.iter().map(withdrawable_to_proto).collect(),
+		}))
+	}
+
+	async fn get_deposit_address(&self, request: Request<pb::GetDepositAddressRequest>) -> Result<Response<pb::DepositAddress>, Status> {
+		let user = caller_id(&request)?;
+		let network = Network::parse(&request.get_ref().network).map_err(map_err)?;
+		let address = wallet_app::get_deposit_address(self.state.deposit_addresses.as_ref(), user, network).await.map_err(map_err)?;
+		// An empty `address` marks the rail unavailable: there is no fundable address yet
+		// (the underlying address is still a placeholder, never served as fundable).
+		Ok(Response::new(pb::DepositAddress {
+			network: network.as_str().to_owned(),
+			address: address.map(|a| a.as_str().to_owned()).unwrap_or_default(),
+			min_confirmations: network.min_confirmations(),
+		}))
+	}
+
+	async fn request_withdrawal(&self, request: Request<pb::RequestWithdrawalRequest>) -> Result<Response<pb::Withdrawal>, Status> {
+		let user = caller_id(&request)?;
+		let req = request.into_inner();
+		let network = Network::parse(&req.network).map_err(map_err)?;
+		let address = WalletAddress::parse(network, &req.address).map_err(map_err)?;
+		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
+		let withdrawal = withdrawal_app::request_withdrawal(
+			self.state.withdrawals.as_ref(),
+			self.state.ledger.as_ref(),
+			self.state.users.as_ref(),
+			&self.state.relay_notify,
+			user,
+			network,
+			address,
+			amount,
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(withdrawal_to_proto(&withdrawal)))
+	}
+
+	async fn cancel_withdrawal(&self, request: Request<pb::CancelWithdrawalRequest>) -> Result<Response<pb::Withdrawal>, Status> {
+		let user = caller_id(&request)?;
+		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
+		let withdrawal = withdrawal_app::cancel_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id, user)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(withdrawal_to_proto(&withdrawal)))
+	}
+
+	async fn list_withdrawals(&self, request: Request<pb::ListWithdrawalsRequest>) -> Result<Response<pb::WithdrawalList>, Status> {
+		let user = caller_id(&request)?;
+		let withdrawals = withdrawal_app::list_withdrawals(self.state.withdrawals.as_ref(), user).await.map_err(map_err)?;
+		Ok(Response::new(pb::WithdrawalList {
+			withdrawals: withdrawals.iter().map(withdrawal_to_proto).collect(),
+		}))
+	}
+}
+
+fn deposit_rail_to_proto(rail: &wallet_app::DepositRail) -> pb::DepositAddress {
+	pb::DepositAddress {
+		network: rail.network.as_str().to_owned(),
+		address: rail.address.as_ref().map(|address| address.as_str().to_owned()).unwrap_or_default(),
+		min_confirmations: rail.network.min_confirmations(),
+	}
+}
+
+fn withdrawable_to_proto(rail: &wallet_app::NetworkWithdrawable) -> pb::NetworkWithdrawable {
+	pb::NetworkWithdrawable {
+		network: rail.network.as_str().to_owned(),
+		withdrawable: rail.withdrawable.to_decimal_string(),
+		instant: rail.instant.to_decimal_string(),
+		min_withdrawal: rail.min_withdrawal.to_decimal_string(),
+		withdrawal_fee: rail.withdrawal_fee.to_decimal_string(),
+	}
+}
+
+fn withdrawal_to_proto(withdrawal: &Withdrawal) -> pb::Withdrawal {
+	pb::Withdrawal {
+		id: withdrawal.id().to_string(),
+		network: withdrawal.network().as_str().to_owned(),
+		address: withdrawal.address().as_str().to_owned(),
+		amount: withdrawal.amount().to_decimal_string(),
+		fee: withdrawal.fee().to_decimal_string(),
+		net_amount: withdrawal.net_amount().to_decimal_string(),
+		state: withdrawal.state().as_str().to_owned(),
+		tx_ref: withdrawal.tx_ref().map(|tx_ref| tx_ref.as_str().to_owned()).unwrap_or_default(),
+	}
+}

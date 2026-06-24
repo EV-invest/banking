@@ -26,14 +26,15 @@ use tower_http::trace::TraceLayer;
 
 use crate::{
 	AppState,
-	services::{
-		context::{BalanceSvc, FundsSvc, UsersSvc, WalletSvc},
-		health::Health,
-	},
+	services::{balance::BalanceSvc, funds::FundsSvc, health::Health, users::UsersSvc, wallet::WalletSvc},
 };
 
-pub mod context;
+pub mod balance;
+pub mod funds;
 pub mod health;
+mod support;
+pub mod users;
+pub mod wallet;
 
 /// Build the core tonic server and serve it on `addr` until `shutdown` fires.
 ///

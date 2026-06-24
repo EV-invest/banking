@@ -52,6 +52,19 @@ impl Network {
 		10u128.pow(CANONICAL_DECIMALS - self.onchain_decimals())
 	}
 
+	/// Confirmations a watcher waits for before crediting/settling on this network
+	/// (reorg-safety): BEP20 ~15, TRC20 ~19 (SR rounds), TON a few. **Placeholder
+	/// values** — a per-network ubiquitous-language fact, sibling to
+	/// [`WithdrawalPolicy`](crate::withdrawals::WithdrawalPolicy), kept here so every
+	/// `domain`-dependent consumer reuses one source rather than duplicating constants.
+	pub const fn min_confirmations(self) -> u32 {
+		match self {
+			Self::Bep20 => 15,
+			Self::Trc20 => 19,
+			Self::Ton => 16,
+		}
+	}
+
 	pub const fn as_str(self) -> &'static str {
 		match self {
 			Self::Bep20 => "bep20",
@@ -557,6 +570,15 @@ mod tests {
 			assert_eq!(Network::parse(net.as_str()).unwrap(), net);
 		}
 		assert!(Network::parse("eth").is_err());
+	}
+
+	#[test]
+	fn min_confirmations_are_defined_per_network() {
+		assert_eq!(Network::Bep20.min_confirmations(), 15);
+		assert_eq!(Network::Trc20.min_confirmations(), 19);
+		assert_eq!(Network::Ton.min_confirmations(), 16);
+		// Every supported rail has a positive reorg-safety threshold.
+		assert!(Network::ALL.iter().all(|net| net.min_confirmations() > 0));
 	}
 
 	#[test]
