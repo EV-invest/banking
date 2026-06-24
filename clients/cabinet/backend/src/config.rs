@@ -25,6 +25,11 @@ pub struct Config {
 	pub cookie_secure: bool,
 	/// Path to the microfrontend registry served at `/api/mfe-registry`.
 	pub mfe_registry_path: String,
+	/// Cross-origin MFE bundle origins allowed beyond same-origin (relative) URLs.
+	/// Mirrors the frontend CSP allow-list (`MFE_ALLOWED_ORIGINS`); the registry is
+	/// validated against it before being served, so a poisoned entry never reaches the
+	/// browser. Same-origin (relative) `scriptUrl`s need no entry.
+	pub mfe_allowed_origins: Vec<String>,
 	pub app_env: String,
 	pub sentry_dsn: Option<String>,
 	pub posthog_key: Option<String>,
@@ -54,6 +59,9 @@ impl Config {
 			auth_redirect_uri: std::env::var("AUTH_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/api/auth/callback".to_string()),
 			cookie_secure,
 			mfe_registry_path: std::env::var("MFE_REGISTRY_PATH").unwrap_or_else(|_| "clients/cabinet/frontend/mfe-registry.json".to_string()),
+			mfe_allowed_origins: opt("MFE_ALLOWED_ORIGINS")
+				.map(|v| v.split([' ', ',', '\t', '\n']).filter(|s| !s.is_empty()).map(str::to_string).collect())
+				.unwrap_or_default(),
 			app_env,
 			sentry_dsn: opt("SENTRY_DSN"),
 			posthog_key: opt("POSTHOG_KEY"),

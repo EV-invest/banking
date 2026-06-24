@@ -10,6 +10,13 @@ export interface MfeEntry {
   tag: string;
   /** URL of the remote's self-registering ESM bundle (its own origin/CDN). */
   scriptUrl: string;
+  /**
+   * Subresource-Integrity hash for the bundle (e.g. "sha384-…"), delivered
+   * atomically with `scriptUrl` so a swapped bundle fails to load. Required for
+   * cross-origin remotes; optional for same-origin (relative) bundles served by
+   * the cabinet itself, which the origin allow-list already constrains.
+   */
+  integrity?: string;
   /** Whether the remote is an inline widget or owns a whole route. */
   kind: MfeKind;
 }

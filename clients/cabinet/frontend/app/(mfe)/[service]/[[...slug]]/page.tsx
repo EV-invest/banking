@@ -27,6 +27,7 @@ export default async function MfePage({ params }: { params: Promise<{ service: s
     <RemoteElement
       tag={entry.tag}
       scriptUrl={entry.scriptUrl}
+      integrity={entry.integrity}
       className="block min-h-[60vh]"
       fallback={<div className="container py-24 text-muted-foreground">Loading {entry.name}…</div>}
     />

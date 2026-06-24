@@ -8,11 +8,12 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import type { MfeEntry } from "./types";
+import { parseRegistry } from "./validate";
 
 export async function loadRegistry(): Promise<MfeEntry[]> {
   const file = path.join(process.cwd(), "mfe-registry.json");
   const raw = await fs.readFile(file, "utf8");
-  return JSON.parse(raw) as MfeEntry[];
+  return parseRegistry(JSON.parse(raw));
 }
 
 export async function findMfe(name: string): Promise<MfeEntry | undefined> {
