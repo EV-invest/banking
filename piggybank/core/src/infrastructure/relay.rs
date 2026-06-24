@@ -540,3 +540,39 @@ async fn record_saga_step(pool: &PgPool, event_id: Uuid, leg: i32, role: &str, t
 		.await?;
 	Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+	use domain::{
+		balance::ServiceId,
+		money::{Nav, Shares, Usdt},
+	};
+
+	use super::*;
+
+	// Guards the redemption settle leg order documented on the aggregate and PATTERNS:
+	// burn-first (post the pending burn), payout-second. A `payout-first` regression
+	// would let a raced over-redeem pay cash before a valid burn — a double-spend path.
+	#[test]
+	fn settled_redemption_burns_before_it_pays() {
+		let aggregate_id = Uuid::new_v4();
+		let user = UserId::new();
+		let service = ServiceId::parse("trading").unwrap();
+		let event = RedemptionEvent::Settled {
+			redemption_id: domain::redemptions::RedemptionId::new(),
+			user,
+			service,
+			units: Shares::parse_decimal("100").unwrap(),
+			nav: Nav::parse_decimal("1.5").unwrap(),
+			cash: Usdt::parse_decimal("150").unwrap(),
+		};
+
+		let ops = plan_redemption(event, aggregate_id, aggregate_id.as_u128());
+
+		assert_eq!(ops.len(), 2);
+		assert_eq!(ops[0].role, "redeem_burn");
+		assert!(matches!(ops[0].action, LedgerAction::Complete(PendingCompletion { kind: CompletionKind::Post, .. })));
+		assert_eq!(ops[1].role, "redeem_payout");
+		assert!(matches!(ops[1].action, LedgerAction::Post(_)));
+	}
+}

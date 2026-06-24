@@ -81,9 +81,11 @@ CREATE TABLE deposits (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- (5) saga_steps: the deterministic TigerBeetle transfer id each relay event leg
--- maps to, persisted so a retry RECOMPUTES AND VERIFIES the same id instead of
--- trusting the derivation. `(event_id, leg)` is the natural key.
+-- (5) saga_steps: a pure audit/forensics table recording the deterministic
+-- TigerBeetle transfer id each relay event leg mapped to (write-only — the relay
+-- inserts after a successful leg and never reads it back). Idempotency rests on the
+-- determinism of `tid()` plus TigerBeetle's `Exists`, not on this row.
+-- `(event_id, leg)` is the natural key.
 CREATE TABLE saga_steps (
     event_id       UUID NOT NULL,
     leg            INTEGER NOT NULL,

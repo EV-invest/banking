@@ -1,9 +1,13 @@
 //! Application layer — use cases, split CQRS-style.
 //!
-//! - **Command handlers** (write side) open one [`UnitOfWork`](domain::architecture::UnitOfWork) (a single Postgres
-//!   transaction), mutate aggregates, and drain their `EmitsEvents` into the
-//!   event log in that same transaction. Money is moved in TigerBeetle **after**
-//!   the Postgres commit (Write-Last), via the outbox relay/sagas (a later slice).
+//! - **Command handlers** (write side) build an aggregate and hand it to a single
+//!   repository method; that method is its own atomic unit (see [`crate::ports`]) —
+//!   it opens the Postgres transaction, mutates the aggregate, and drains its
+//!   `EmitsEvents` into the event log in that same transaction. Money is moved in
+//!   TigerBeetle **after** the Postgres commit (Write-Last), via the outbox
+//!   relay/sagas. The transaction boundary lives in the adapter, not here: there is
+//!   no application-layer `UnitOfWork`, because cross-boundary moves are TB sagas
+//!   (money written last), never multi-aggregate Postgres transactions.
 //! - **Query handlers** (read side) depend only on the narrow `Reader` ports and
 //!   read Postgres projections; authoritative balances come from TigerBeetle.
 //!

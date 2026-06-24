@@ -16,7 +16,7 @@
 //!   after a NAV drop doesn't overpay the redeeming holder at the others' expense.
 //!
 //! Pure and wasm-safe: ids minted by the application layer, no clock, no I/O. The relay
-//! maps each event to ledger ops (payout-first, burn-second); that lives in the adapter.
+//! maps each event to ledger ops (burn-first, payout-second); that lives in the adapter.
 
 use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
@@ -129,8 +129,8 @@ impl Redemption {
 
 	/// Settle a queued redemption at the **settle-time** `nav`: prices
 	/// `cash = units × nav` and pays it out. Idempotent if already completed; only a
-	/// queued redemption can be settled. Raises `Settled` (relay: payout first, then
-	/// post the pending burn).
+	/// queued redemption can be settled. Raises `Settled` (relay: post the pending burn
+	/// first, then pay the cash).
 	pub fn settle(&mut self, nav: Nav) -> Result<(), DomainError> {
 		if self.state == RedemptionState::Completed {
 			return Ok(());
@@ -248,8 +248,10 @@ pub enum RedemptionEvent {
 		service: ServiceId,
 		units: Shares,
 	},
-	/// Priced + paid (relay: payout `Dr ServiceClaim / Cr UserClaim` for `cash`, then
-	/// post the pending burn). Burn-second, so a short fund parks before any units burn.
+	/// Priced + paid (relay: post the pending burn first, then payout `Dr ServiceClaim /
+	/// Cr UserClaim` for `cash`). Burn-first means a raced over-redeem fails the burn-post
+	/// before any cash leaves; the relay's Read-First settle pre-check on the service claim
+	/// parks a short fund before either leg.
 	Settled {
 		redemption_id: RedemptionId,
 		user: UserId,

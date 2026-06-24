@@ -208,9 +208,13 @@ Two consistency boundaries, never joined in one transaction:
 - **Postgres = control plane** — metadata, the UUID↔u128 id-mapping, the domain
   event log + transactional outbox, and CQRS read projections.
 
-**Write path (Write-Last, Read-First).** A command opens one `PgUnitOfWork`
-(single Postgres transaction), mutates aggregates, and drains their `EmitsEvents`
-into the event log + `outbox` in that same transaction (the only ACID point).
+**Write path (Write-Last, Read-First).** A command hands its aggregate to a single
+repository method, and that method is its own atomic unit: it opens one Postgres
+transaction, mutates the aggregate, and drains its `EmitsEvents` into the event log
++ `outbox` in that same transaction (the only ACID point). The transaction boundary
+lives in the adapter — there is no application-layer unit-of-work, because
+cross-boundary moves are TB sagas (money written last), never multi-aggregate
+Postgres transactions.
 The [outbox relay](../piggybank/core/src/infrastructure/relay.rs) then publishes events to
 projections and issues TigerBeetle transfers — money written **last**, after the
 Postgres commit; existence checks read TigerBeetle **first**. Cross-boundary moves

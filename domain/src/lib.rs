@@ -23,6 +23,6 @@ pub mod withdrawals;
 
 /// Re-export of the `architecture` feature of the external `ev` crate — the
 /// shared DDD tactical building blocks (`Id`, `Entity`, `AggregateRoot`,
-/// `Repository`, `Gateway`, `UnitOfWork`, …) — so consumers reach them via
+/// `Repository`, `Gateway`, …) — so consumers reach them via
 /// `domain::architecture::…` without depending on `ev` directly.
 pub use ev::architecture;
