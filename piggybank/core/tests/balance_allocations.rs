@@ -12,24 +12,30 @@
 use std::sync::Arc;
 
 use domain::{
+	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
-	money::{Nav, Network, Shares, TxRef, Usdt},
+	money::{Nav, Network, Shares, TxRef, Usdt, WalletAddress},
 	redemptions::RedemptionState,
-	users::UserId,
+	subscriptions::{Subscription, SubscriptionId},
+	users::{Email, UserId},
 };
 use piggybank_core::{
-	application::{balance as balance_app, funds as funds_app},
+	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
 	infrastructure::{
 		custody::StubCustody,
 		db,
 		ledger::{self, TbLedger},
 		nav::PgNav,
+		positions::PgFundPositions,
 		redemptions::PgRedemptions,
 		relay::Relay,
 		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
+		users::PgUsers,
+		withdrawals::PgWithdrawals,
 	},
 	ports::{
+		FundPositionReader, SubscriptionRepository, UserRepository,
 		ledger::{Ledger, LedgerError, LedgerTransfer},
 		nav::NavRepository,
 	},
@@ -96,6 +102,29 @@ async fn units_available(h: &Harness, key: &LedgerAccountKey) -> Shares {
 fn now_unix() -> i64 {
 	use std::time::{SystemTime, UNIX_EPOCH};
 	SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
+}
+
+/// Provision a fresh active user — the withdrawal path's Read-First requires one, and a real
+/// row keeps the cross-flow tests faithful to production.
+async fn active_user(users: &PgUsers) -> UserId {
+	let subject = AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
+	let email = Email::parse(&format!("u{}@example.com", Uuid::new_v4().simple())).unwrap();
+	users.provision(subject, email, true).await.unwrap().id()
+}
+
+/// The user's cost-basis projection for a fund (None when no `fund_positions` row exists).
+async fn cost_basis(positions: &PgFundPositions, user: UserId, service: &ServiceId) -> Option<Usdt> {
+	positions.find(user, service).await.unwrap().map(|p| p.cost_basis)
+}
+
+/// A structurally valid destination address for a withdrawal (distinct from the user's own).
+fn destination(network: Network) -> WalletAddress {
+	let raw = match network {
+		Network::Bep20 => "0x52908400098527886E0F7030069857D2E4169EE7",
+		Network::Trc20 => "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",
+		Network::Ton => "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N",
+	};
+	WalletAddress::parse(network, raw).unwrap()
 }
 
 #[tokio::test]
@@ -500,4 +529,113 @@ async fn cancelling_a_queued_redemption_returns_the_units() {
 	h.relay.drain().await;
 	assert_eq!(units(&h, &user_shares).await, shares("100"), "units still held");
 	assert_eq!(units_available(&h, &user_shares).await, shares("100"), "the reservation lock was released");
+}
+
+// BANK-MONEY-1: the cost-basis projection is now written by the relay AFTER the cash leg
+// posts, never on the synchronous `open` path. So a subscription whose cash leg parks
+// (insufficient claim) leaves NO `fund_positions` row — no phantom basis without units/cash.
+// The `open` repo is called directly to bypass the application Read-First and force the relay
+// to face an over-subscription, the exact race the fix guards.
+#[tokio::test]
+async fn a_parked_subscribe_cash_leg_leaves_no_cost_basis() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let positions = PgFundPositions::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let user_claim = LedgerAccountKey::UserClaim(user);
+
+	// Fund only 50, then commit a 100-cash subscription straight through the repo (skipping the
+	// application solvency check) so the relay's cash leg `Dr user / Cr service` overdraws.
+	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("50"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	let mut subscription = Subscription::open(SubscriptionId::new(), user, service.clone(), usdt("100"), Nav::SEED).unwrap();
+	subs.open(&mut subscription).await.unwrap();
+	h.relay.drain().await;
+
+	// TB's flag parked the cash leg: no cash moved, no units minted, and — the fix — no basis.
+	assert_eq!(claim(&h, &user_claim).await, usdt("50"), "the cash never left the claim (cash leg parked)");
+	assert_eq!(units(&h, &LedgerAccountKey::UserShares(service.clone(), user)).await, Shares::ZERO, "no units minted");
+	assert!(cost_basis(&positions, user, &service).await.is_none(), "a parked subscribe must leave no phantom cost_basis");
+}
+
+// BANK-ARCH-02: a concurrent withdraw + subscribe on the same UserClaim must serialize on the
+// shared per-user lock so the system never ends in a silently-divergent state. With 100
+// deposited, an 80-gross withdrawal and an 80-cash subscription cannot both apply (160 > 100):
+// the shared lock orders the two `open` commits, and the relay (single-worker, seq-ordered)
+// then applies the first reservation while the second hits TB's non-negative flag and PARKS —
+// a recoverable terminal, not a silent over-commit. The combined fix guarantees the only
+// observable end state is consistent: exactly one 80-spend posts, the claim never goes
+// negative, and — the BANK-MONEY-1 half — the subscribe leaves cost_basis ONLY when its cash
+// leg actually posted (never a phantom basis behind a parked cash leg).
+#[tokio::test]
+async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
+	let Some(h) = harness().await else { return };
+	let users = PgUsers::new(h.pool.clone());
+	let subs: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(h.pool.clone()));
+	let withdrawals: Arc<dyn piggybank_core::ports::WithdrawalRepository> = Arc::new(PgWithdrawals::new(h.pool.clone()));
+	let users_dyn: Arc<dyn UserRepository> = Arc::new(PgUsers::new(h.pool.clone()));
+	let nav_repo = PgNav::new(h.pool.clone());
+	let positions = PgFundPositions::new(h.pool.clone());
+	let user = active_user(&users).await;
+	let service = unique_service();
+	let now = now_unix();
+	let user_claim = LedgerAccountKey::UserClaim(user);
+	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
+	let network = Network::Bep20;
+
+	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	// Fire both at once; the shared `users` advisory lock inside each `open` serializes the two
+	// commits so they can never interleave a half-applied write.
+	let sub_fut = funds_app::subscribe(subs.as_ref(), h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("80"), now);
+	let wd_fut = withdrawal_app::request_withdrawal(
+		withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		users_dyn.as_ref(),
+		&h.notify,
+		user,
+		network,
+		destination(network),
+		usdt("80"),
+	);
+	let (sub_res, wd_res) = tokio::join!(sub_fut, wd_fut);
+
+	// At least one must succeed (100 covers a single 80-spend); the relay then applies the
+	// serialized reservations and parks the over-commit.
+	assert!(sub_res.is_ok() || wd_res.is_ok(), "at least one request must succeed (the claim covers 80)");
+	h.relay.drain().await;
+
+	// Exactly one 80-spend landed — the other parked, never half-applied — so the claim shows
+	// 20 spendable regardless of which won the relay race, and never goes negative (TB's flag).
+	// `cash_in` is the cash a *winning* subscribe moved into the fund (zero if it parked): the
+	// user's posted balance dropped only by a cash leg that actually moved (a withdrawal reserve
+	// only locks, leaving posted at 100).
+	let bal = h.ledger.balance(&user_claim).await.unwrap();
+	let cash_in = claim(&h, &service_claim).await;
+	assert_eq!(
+		Usdt::from_base_units(bal.available()),
+		usdt("20"),
+		"exactly one 80-spend applied; the over-commit parked, nothing stranded"
+	);
+	assert_eq!(
+		Usdt::from_base_units(bal.posted),
+		usdt("100").checked_sub(cash_in).unwrap(),
+		"posted dropped only by a cash leg that actually moved"
+	);
+
+	// The BANK-MONEY-1 invariant under contention: cost_basis is present IFF the subscribe's
+	// cash leg posted (the fund's `service` claim holds the 80). A parked subscribe leaves no
+	// phantom basis.
+	let basis = cost_basis(&positions, user, &service).await;
+	assert_eq!(basis.is_some(), !cash_in.is_zero(), "cost_basis exists iff the subscribe cash leg posted — never a phantom");
+	if let Some(b) = basis {
+		assert_eq!(b, cash_in, "the recorded basis matches the cash that actually entered the fund");
+	}
 }

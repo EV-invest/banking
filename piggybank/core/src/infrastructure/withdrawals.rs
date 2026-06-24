@@ -115,6 +115,11 @@ async fn update_row(conn: &mut PgConnection, withdrawal: &Withdrawal) -> Result<
 impl WithdrawalRepository for PgWithdrawals {
 	async fn open(&self, withdrawal: &mut Withdrawal) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		// Serialize every flow that spends this user's unified claim (withdraw + subscribe)
+		// on one shared lock target (see [`outbox::lock_user`]) so a concurrent withdraw +
+		// subscribe can't both pass the optimistic Read-First and both park a reserve (TB's
+		// flag is the money backstop; this lock keeps the PG projection from diverging).
+		outbox::lock_user(&mut tx, withdrawal.user().raw()).await?;
 		insert_row(&mut tx, withdrawal).await?;
 		outbox::drain_to_outbox(&mut tx, withdrawal, true).await?;
 		tx.commit().await.map_err(repo_err)?;

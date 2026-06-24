@@ -81,7 +81,15 @@ most dangerous seam ("trusted" ≠ "safe"). NAV is a price, never a TB balance. 
 **Subscribe (cash → units, synchronous).** Read-First on the unified claim + a fresh NAV;
 the relay posts two legs, **cash-first**: `Dr user / Cr service` (the cash pools in the
 fund), then mint `Dr UserShares / Cr SharesOutstanding`. Cash-first means an insufficient
-claim parks before any units mint — never units without cash.
+claim parks before any units mint — never units without cash. The `fund_positions`
+**cost-basis projection is written by the relay**, after the cash leg posts — *not* on the
+synchronous `open` path. Were it written at `open` (as it once was), a cash leg that later
+parks (a raced over-subscribe) would strand a **phantom position**: cost basis with no units
+and no cash debited, fabricating a P&L loss. Writing it relay-side, after the leg lands,
+keeps the projection from ever leading the ledger. The relay's add is `cost_basis += cash`,
+made idempotent under at-least-once delivery by a per-event `saga_steps` marker (`leg = 100`,
+`role = 'subscribe_position'`) committed in the same transaction as the add — a redelivery
+re-applies the TB legs (`Exists`) but the marker gates the relative add to exactly once.
 
 **Redeem (units → cash, accept-and-queue, settle-time priced).** Units are reserved now;
 the cash is **priced and paid at settle** (settle-time NAV, so a queue that drains after a
@@ -207,6 +215,19 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   reserve vs the gross of in-flight withdrawals) catches the mismatch; the
   [`reaper`](src/infrastructure/reaper.rs) auto-cancels the abandoned `queued` row. A real
   custody broadcast of such a withdrawal must still be refused.
+- **Cross-flow claim contention (shared per-user lock).** Withdraw and subscribe both spend
+  the **same** `UserClaim`, yet live in different tables — so a per-table `FOR UPDATE` (the
+  redemptions' `fund_positions` lock) does **not** serialize a withdraw against a subscribe.
+  Both `PgWithdrawals::open` and `PgSubscriptions::open` therefore take one **shared** lock
+  first: `pg_advisory_xact_lock` keyed on the user id ([`outbox::lock_user`]), held to commit.
+  This serializes the two `open` transactions on a single target (an advisory lock needs no
+  `users` row and no FK, so it engages unconditionally). It shrinks but does not erase the
+  optimistic-Read-First window: the reservation is applied by the relay **after** commit, so a
+  fully race-free read-and-reserve would need a PG-side reserved counter (a deliberate
+  follow-up). What the lock + relay **do** guarantee today is no silent divergence — a raced
+  over-commit parks (TB's non-negative flag), recoverable via reconciliation, and the
+  combined fix never leaves a phantom: a parked subscribe writes **no** cost_basis (see
+  Subscribe, above), and a parked withdrawal reserve leaves nothing reserved (above).
 
 ## Authorization (defense in depth)
 

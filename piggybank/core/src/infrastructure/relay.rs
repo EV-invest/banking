@@ -90,6 +90,9 @@ const MAX_RETRYABLE_ATTEMPTS: i32 = 25;
 /// two cohorts drain concurrently across a deploy that mixed old and new keys.
 const OUTBOX_LOCK_KEY: i64 = 0x4556_424b_4f42_585f_u64 as i64;
 
+/// Salt deriving the subscription projection marker's id, distinct from any TB transfer salt
+/// so the `saga_steps.tb_transfer_id` unique constraint never aliases a real transfer.
+const SUBSCRIBE_POSITION: &[u8] = b"subscribe:position";
 /// The relay task: drains the outbox to the ledger + custody. Cloneable handles
 /// (`pool`, `ledger`, `custody`, `notify`) so command handlers can `notify` it to
 /// dispatch promptly.
@@ -308,8 +311,53 @@ impl Relay {
 					},
 			}
 		}
+		// A subscription's cost-basis projection is written **here**, after both ledger legs
+		// post — never on the synchronous open path, where a later parked cash-leg would leave
+		// a phantom `fund_positions` row (basis without units or cash). The upsert is idempotent
+		// under at-least-once delivery: a per-event `saga_steps` marker gates the relative add,
+		// applied in the same transaction so a redelivery never double-counts the basis.
+		if row.kind == "subscriptions"
+			&& let Err(err) = project_subscription(&self.pool, row).await
+		{
+			return Outcome::Retry(format!("subscribe cost-basis projection: {err}"));
+		}
 		Outcome::Done
 	}
+}
+
+/// Apply a settled subscription's cost-basis projection (`fund_positions.cost_basis +=
+/// cash`, high-water mark = max) idempotently: a synthetic `saga_steps` leg keys the apply to
+/// the event, so the relative add lands at most once even on a redelivery. The upsert runs in
+/// the same transaction as that marker insert — both commit or neither does.
+async fn project_subscription(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error> {
+	const PROJECTION_LEG: i32 = 100;
+	let SubscriptionEvent::Subscribed { user, service, cash, nav, .. } = serde_json::from_str(&row.payload).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+	let marker_id = tid(row.aggregate_id, SUBSCRIBE_POSITION);
+	let mut tx = pool.begin().await?;
+	let marked = sqlx::query("INSERT INTO saga_steps (event_id, leg, role, tb_transfer_id) VALUES ($1, $2, 'subscribe_position', $3) ON CONFLICT (event_id, leg) DO NOTHING")
+		.bind(row.event_id)
+		.bind(PROJECTION_LEG)
+		.bind(&marker_id.to_be_bytes()[..])
+		.execute(&mut *tx)
+		.await?
+		.rows_affected();
+	if marked == 1 {
+		sqlx::query(
+			"INSERT INTO fund_positions (user_id, service, cost_basis, high_water_mark) VALUES ($1, $2, $3, $4) \
+			 ON CONFLICT (user_id, service) DO UPDATE SET \
+			 cost_basis = (fund_positions.cost_basis::numeric + EXCLUDED.cost_basis::numeric)::text, \
+			 high_water_mark = GREATEST(fund_positions.high_water_mark::numeric, EXCLUDED.high_water_mark::numeric)::text, \
+			 updated_at = now()",
+		)
+		.bind(user.raw())
+		.bind(service.as_str())
+		.bind(cash.base_units().to_string())
+		.bind(nav.base_units().to_string())
+		.execute(&mut *tx)
+		.await?;
+	}
+	tx.commit().await?;
+	Ok(())
 }
 
 /// Custody failures fold into the existing ledger outcomes: an outage is transient

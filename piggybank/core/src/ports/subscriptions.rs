@@ -1,10 +1,11 @@
 //! Persistence + read port for the [`Subscription`] aggregate.
 //!
 //! A subscription is an immutable mint record, so the write side is a single `open`
-//! (no state transitions). `open` also bumps the user's `fund_positions` projection
-//! (cost basis + high-water mark) in the **same** transaction as the subscription row
-//! and its `Subscribed` event, so the relay then posts the cash move + unit mint
-//! (Write-Last).
+//! (no state transitions). `open` takes the shared per-user claim lock, writes the
+//! subscription row, and drains its `Subscribed` event — all in one transaction. The
+//! relay then posts the cash move + unit mint (Write-Last) and, only after the cash leg
+//! lands, the `fund_positions` cost-basis projection — so a parked cash leg can never
+//! strand a phantom basis.
 
 use async_trait::async_trait;
 use domain::{

@@ -1,10 +1,12 @@
 //! Postgres adapter for the [`SubscriptionRepository`] port.
 //!
-//! `open` writes the immutable subscription row, drains its `Subscribed` event to the
-//! outbox, and upserts the per-investor `fund_positions` projection (cost basis +=
-//! cash, high-water mark = max(hwm, nav)) — all in one transaction. Cost basis is the
+//! `open` takes the shared per-user claim lock, writes the immutable subscription row, and
+//! drains its `Subscribed` event to the outbox — all in one transaction. The per-investor
+//! `fund_positions` cost-basis projection is **not** written here: the relay applies it only
+//! after the cash leg posts (see [`super::relay::project_subscription`]), so a parked cash
+//! leg can never strand a phantom position (basis without units or cash). Cost basis is the
 //! average-cost net cash in, used for P&L; the high-water mark is reserved for a future
-//! performance fee. The relay then posts the cash move and the unit mint.
+//! performance fee. The relay posts the cash move and the unit mint, then the projection.
 
 use async_trait::async_trait;
 use domain::{
@@ -52,33 +54,14 @@ async fn insert_row(conn: &mut PgConnection, subscription: &Subscription) -> Res
 	Ok(())
 }
 
-/// Upsert the per-investor position projection: cost basis accumulates the cash in
-/// (average cost), the high-water mark tracks the highest NAV subscribed at. Integer
-/// base-unit strings are summed via NUMERIC so arbitrary magnitudes stay exact.
-async fn upsert_position(conn: &mut PgConnection, subscription: &Subscription) -> Result<(), DomainError> {
-	sqlx::query(
-		"INSERT INTO fund_positions (user_id, service, cost_basis, high_water_mark) VALUES ($1, $2, $3, $4) \
-		 ON CONFLICT (user_id, service) DO UPDATE SET \
-		 cost_basis = (fund_positions.cost_basis::numeric + EXCLUDED.cost_basis::numeric)::text, \
-		 high_water_mark = GREATEST(fund_positions.high_water_mark::numeric, EXCLUDED.high_water_mark::numeric)::text, \
-		 updated_at = now()",
-	)
-	.bind(subscription.user().raw())
-	.bind(subscription.service().as_str())
-	.bind(subscription.cash().base_units().to_string())
-	.bind(subscription.nav().base_units().to_string())
-	.execute(&mut *conn)
-	.await
-	.map_err(repo_err)?;
-	Ok(())
-}
-
 #[async_trait]
 impl SubscriptionRepository for PgSubscriptions {
 	async fn open(&self, subscription: &mut Subscription) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		// Same shared per-user lock the withdrawal path takes — both spend this user's unified
+		// claim, so they must serialize on one target (see [`outbox::lock_user`]).
+		outbox::lock_user(&mut tx, subscription.user().raw()).await?;
 		insert_row(&mut tx, subscription).await?;
-		upsert_position(&mut tx, subscription).await?;
 		outbox::drain_to_outbox(&mut tx, subscription, true).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(())

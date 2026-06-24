@@ -15,6 +15,25 @@ use domain::{
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
+/// Take the per-user write lock — a transaction-scoped `pg_advisory_xact_lock` keyed on the
+/// user id — inside an open command transaction, held until commit. Every flow that spends a
+/// user's unified `UserClaim` (withdraw, subscribe) takes this *same* target before its
+/// Read-First so the optimistic solvency checks serialize across flows: without it a
+/// concurrent withdraw + subscribe on one claim both read the same stale `available()`, both
+/// commit `Queued`, and the second reserve then parks in the relay, silently diverging PG
+/// from TB. (Redemptions serialize on their `fund_positions` row instead — a different
+/// account, the units, not the claim.) An advisory lock (over a `users`-row `FOR UPDATE`)
+/// engages even before the user row is materialized and needs no FK, so the serialization is
+/// unconditional. TigerBeetle's non-negative flag remains the actual money backstop.
+pub async fn lock_user(conn: &mut PgConnection, user_id: Uuid) -> Result<(), DomainError> {
+	sqlx::query("SELECT pg_advisory_xact_lock($1)")
+		.bind(advisory_key(user_id))
+		.execute(&mut *conn)
+		.await
+		.map_err(repo_err)?;
+	Ok(())
+}
+
 /// Insert one event into the `event_log` (always) and the `outbox` (when `relay`),
 /// under a caller-supplied `event_id` so the two rows share the idempotency key.
 /// Used directly for standalone ledger facts (deposits/seeding) that have no
@@ -139,6 +158,14 @@ pub async fn parked_rows(pool: &PgPool) -> Result<Vec<ParkedRow>, sqlx::Error> {
 	.fetch_all(pool)
 	.await
 }
+/// Fold a user UUID into the `bigint` advisory-lock key space. XOR-ing the two 64-bit halves
+/// keeps the full 128 bits of entropy in play (a single half would ignore the other), so two
+/// distinct users practically never share a key and serialize against each other.
+fn advisory_key(user_id: Uuid) -> i64 {
+	let (hi, lo) = user_id.as_u64_pair();
+	(hi ^ lo) as i64
+}
+
 fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())
 }
