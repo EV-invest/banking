@@ -85,7 +85,8 @@ async fn placeholder_is_not_served_as_fundable_then_backfilled() {
 	let derived = Arc::new(AtomicBool::new(false));
 	let server = Server::builder().add_service(SignerServiceServer::new(FakeSigner { derived: derived.clone() })).serve(addr);
 	let channel = Endpoint::from_shared(format!("http://{addr}")).expect("endpoint").connect_lazy();
-	let addresses = SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(channel));
+	// The fake signer mounts no auth layer, so no service token is attached here.
+	let addresses = SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(channel), None);
 
 	tokio::select! {
 		result = server => result.expect("serve fake signer"),

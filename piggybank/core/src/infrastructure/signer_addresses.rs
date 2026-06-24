@@ -23,9 +23,10 @@ use domain::{
 	money::{Network, WalletAddress},
 	users::UserId,
 };
+use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
-use tonic::transport::Channel;
+use tonic::{Request, transport::Channel};
 
 use crate::ports::deposit_addresses::DepositAddresses;
 
@@ -34,24 +35,33 @@ const KIND_DERIVED: &str = "derived";
 pub struct SignerDepositAddresses {
 	pool: PgPool,
 	client: SignerServiceClient<Channel>,
+	/// Authenticates the hub's onward calls to the now-authenticated signer seam with a
+	/// `typ=service` token (`aud=banking-services`). `None` in unconfigured dev/CI: the
+	/// signer then rejects the call, but the address path is unreachable there anyway
+	/// (no auth ⇒ no client can request an address in the first place).
+	service_token: Option<ServiceTokenSource>,
 }
 
 impl SignerDepositAddresses {
-	pub fn new(pool: PgPool, client: SignerServiceClient<Channel>) -> Self {
-		Self { pool, client }
+	pub fn new(pool: PgPool, client: SignerServiceClient<Channel>, service_token: Option<ServiceTokenSource>) -> Self {
+		Self { pool, client, service_token }
 	}
 
 	/// Ask the signer to (idempotently) provision the address and cache it with its kind.
 	/// An existing row is backfilled in place — so a cached placeholder is upgraded to the
 	/// real `derived` address the moment the signer can compute it, never left stale.
 	async fn provision_and_cache(&self, user: UserId, network: Network) -> Result<(WalletAddress, bool), DomainError> {
+		let mut request = Request::new(ProvisionAddressRequest {
+			user_id: user.raw().to_string(),
+			network: network.as_str().to_owned(),
+		});
+		if let Some(token) = &self.service_token {
+			request = token.authorize(request);
+		}
 		let response = self
 			.client
 			.clone()
-			.provision_address(ProvisionAddressRequest {
-				user_id: user.raw().to_string(),
-				network: network.as_str().to_owned(),
-			})
+			.provision_address(request)
 			.await
 			.map_err(|status| DomainError::Repository(format!("signer provision failed: {}", status.message())))?
 			.into_inner();

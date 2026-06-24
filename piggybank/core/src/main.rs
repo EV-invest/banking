@@ -12,7 +12,7 @@ use std::{future::Future, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use ev::error_monitoring::{self, Config as SentryConfig};
-use evbanking_auth::{AuthConfig, AuthService, provisioner_channel};
+use evbanking_auth::{AuthConfig, AuthService, ServiceTokenSource, provisioner_channel};
 use evbanking_contracts::signer::v1::signer_service_client::SignerServiceClient;
 use piggybank_core::{
 	AppState,
@@ -39,7 +39,7 @@ use piggybank_core::{
 };
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
-use tonic::transport::Endpoint;
+use tonic::transport::{Certificate, ClientTlsConfig, Endpoint, Identity};
 
 // Sentry must be initialised before the async runtime starts — no #[tokio::main].
 fn main() -> anyhow::Result<()> {
@@ -97,14 +97,23 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// the keypair and returns the address; the hub never holds the key). Connect lazily so
 	// the hub boots even if the signer starts after it — the first provision call is when
 	// the signer must be reachable. Cached addresses are served from Postgres without it.
-	let signer_channel = Endpoint::from_shared(config.signer_grpc_addr.clone())
+	let mut signer_endpoint = Endpoint::from_shared(config.signer_grpc_addr.clone())
 		.context("SIGNER_GRPC_ADDR must be a valid URL, e.g. http://127.0.0.1:50053")?
 		// Explicit deadlines so a half-open/stalled signer surfaces as a bounded error
 		// (mapped to a retryable provisioning failure) instead of hanging the request.
 		.connect_timeout(Duration::from_secs(3))
-		.timeout(Duration::from_secs(10))
-		.connect_lazy();
-	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(signer_channel)));
+		.timeout(Duration::from_secs(10));
+	// An `https://` signer target is off-host (a distinct trust domain on the network):
+	// require TLS on the seam so provisioning — and later, signing — never traverses it in
+	// cleartext. Loopback `http://` is the single documented single-host exception.
+	if config.signer_grpc_addr.starts_with("https://") {
+		signer_endpoint = signer_endpoint.tls_config(signer_client_tls()?).context("failed to configure signer TLS")?;
+	}
+	let signer_channel = signer_endpoint.connect_lazy();
+	// Authenticate the hub's onward calls to the signer with a service token (out-of-band
+	// `SERVICE_TOKEN` until the `MintServiceToken` RPC lands). `None` in unconfigured dev/CI.
+	let service_token = ServiceTokenSource::from_env();
+	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(signer_channel), service_token));
 
 	// The single-worker outbox relay moves money in TigerBeetle after each commit
 	// (Write-Last); command handlers nudge it through `relay_notify` for low latency.
@@ -238,6 +247,31 @@ async fn await_signal(shutdown: CancellationToken) {
 	}
 	tracing::info!("shutdown signal received — draining");
 	shutdown.cancel();
+}
+
+/// TLS for the hub's client side of an off-host signer seam. Trust anchors come from a
+/// pinned CA (`SIGNER_TLS_CA_PEM_FILE`) when set — the private-CA / mTLS case the
+/// architecture targets — else the public webpki roots. A client identity
+/// (`SIGNER_TLS_CLIENT_CERT_PEM_FILE` + `…KEY…`) presents the hub's certificate for mTLS.
+fn signer_client_tls() -> anyhow::Result<ClientTlsConfig> {
+	use std::env;
+
+	let mut tls = match env::var("SIGNER_TLS_CA_PEM_FILE").ok().filter(|s| !s.is_empty()) {
+		Some(ca_file) => {
+			let ca = std::fs::read_to_string(&ca_file).with_context(|| format!("failed to read SIGNER_TLS_CA_PEM_FILE at {ca_file}"))?;
+			ClientTlsConfig::new().ca_certificate(Certificate::from_pem(ca))
+		}
+		None => ClientTlsConfig::new().with_enabled_roots(),
+	};
+	if let (Some(cert_file), Some(key_file)) = (
+		env::var("SIGNER_TLS_CLIENT_CERT_PEM_FILE").ok().filter(|s| !s.is_empty()),
+		env::var("SIGNER_TLS_CLIENT_KEY_PEM_FILE").ok().filter(|s| !s.is_empty()),
+	) {
+		let cert = std::fs::read_to_string(&cert_file).with_context(|| format!("failed to read SIGNER_TLS_CLIENT_CERT_PEM_FILE at {cert_file}"))?;
+		let key = std::fs::read_to_string(&key_file).with_context(|| format!("failed to read SIGNER_TLS_CLIENT_KEY_PEM_FILE at {key_file}"))?;
+		tls = tls.identity(Identity::from_pem(cert, key));
+	}
+	Ok(tls)
 }
 
 fn init_tracing() {

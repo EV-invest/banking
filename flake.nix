@@ -285,7 +285,11 @@
             set +a
 
             export SIGNER_DATABASE_URL="''${SIGNER_DATABASE_URL:-postgres://postgres@localhost:5432/ev_banking_signer}"
-            export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-0.0.0.0:50053}"
+            # Loopback by default: the seam is authenticated (service JWT) but a wider bind
+            # also requires TLS (SIGNER_TLS_*). The hub↔signer seam is single-host in dev.
+            export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-127.0.0.1:50053}"
+            # The signer verifies the hub's service token against the auth service's JWKS.
+            export AUTH_JWKS_GRPC_ENDPOINT="''${AUTH_JWKS_GRPC_ENDPOINT:-http://127.0.0.1:50052}"
             # Dev-only KEK: ephemeral per boot when unset, so no key bytes live in the
             # repo. Production MUST inject a STABLE 32-byte KEK from a secrets store/KMS
             # (a rotating KEK can't open previously-sealed keys). Set WALLET_KEK in

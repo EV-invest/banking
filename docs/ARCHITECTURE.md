@@ -31,16 +31,20 @@ stay documented placeholders until a feature explicitly asks.
      verify client tokens locally via evbanking_auth; own microfrontends mount into the cabinet.
 ```
 
-**Network segmentation (deployment requirement).** None of the banking listeners
-authenticate the network path between them — the BFF's only request-auth is the
-session cookie, and the core/auth gRPC seams and the signer key vault trust any caller
-that can route to them. Every listener therefore **defaults to loopback**
-(`127.0.0.1`): the BFF (`CABINET_BACKEND_BIND`), the hub's `GRPC_ADDR`/`AUTH_GRPC_ADDR`,
-and the signer's `SIGNER_GRPC_ADDR`. A wider bind (`0.0.0.0`) is an explicit opt-in and
-is only safe **behind an upstream firewall / network ACL** that exposes the BFF solely
-through the same-origin reverse proxy and keeps the core, auth, and signer seams off any
-public interface — the signer (encrypted private keys) most of all. Do not widen a bind
-without that segmentation in place.
+**Network segmentation (deployment requirement).** The core/auth gRPC seams do not yet
+authenticate the network path between them — the BFF's only request-auth is the session
+cookie, and the core/auth listeners trust any caller that can route to them. The
+**hub↔signer seam IS authenticated**: the signer mounts the shared verify layer and
+accepts only the hub's service token (`aud=banking-services`, `typ=service`), and requires
+TLS (mTLS recommended via `SIGNER_TLS_*`) whenever its bind/target is non-loopback —
+network reachability is not its trust boundary. Every listener still **defaults to
+loopback** (`127.0.0.1`): the BFF (`CABINET_BACKEND_BIND`), the hub's
+`GRPC_ADDR`/`AUTH_GRPC_ADDR`, and the signer's `SIGNER_GRPC_ADDR`. A wider bind (`0.0.0.0`)
+is an explicit opt-in and is only safe **behind an upstream firewall / network ACL** that
+exposes the BFF solely through the same-origin reverse proxy and keeps the core and auth
+seams off any public interface — the signer (encrypted private keys) most of all, and a
+non-loopback signer additionally refuses to start without TLS. Do not widen a bind without
+that segmentation in place.
 
 ## Cargo workspace (crate graph)
 

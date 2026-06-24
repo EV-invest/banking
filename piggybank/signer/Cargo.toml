@@ -25,14 +25,18 @@ zeroize = "1"
 anyhow.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
+evbanking_auth.workspace = true
 evbanking_contracts.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "migrate"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
-tonic.workspace = true
+tonic = { workspace = true, features = ["tls-ring"] }
+tower.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
+jsonwebtoken.workspace = true
+serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
