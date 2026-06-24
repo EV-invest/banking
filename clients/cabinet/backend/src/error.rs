@@ -57,6 +57,12 @@ fn http_status_for(code: Code) -> StatusCode {
 		Code::AlreadyExists => StatusCode::CONFLICT,
 		Code::FailedPrecondition => StatusCode::PRECONDITION_FAILED,
 		Code::ResourceExhausted => StatusCode::TOO_MANY_REQUESTS,
+		// The hub emits Unavailable on ledger/repository failure (context.rs:86,605) — a
+		// transient-retryable condition, distinct from a broken upstream protocol (502).
+		Code::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+		Code::DeadlineExceeded => StatusCode::GATEWAY_TIMEOUT,
+		Code::Unimplemented => StatusCode::NOT_IMPLEMENTED,
+		// Unknown/Internal/DataLoss stay 502 — a genuine upstream protocol failure.
 		_ => StatusCode::BAD_GATEWAY,
 	}
 }
@@ -128,7 +134,29 @@ mod tests {
 	#[tokio::test]
 	async fn unavailable_transport_error_is_withheld() {
 		let (status, message) = render(ApiError::Grpc(Status::unavailable("tcp connect error: 127.0.0.1:50051"))).await;
-		assert_eq!(status, StatusCode::BAD_GATEWAY);
+		assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
 		assert_eq!(message, "request failed");
+	}
+
+	#[test]
+	fn grpc_codes_map_to_their_http_status() {
+		let cases = [
+			(Code::Unauthenticated, StatusCode::UNAUTHORIZED),
+			(Code::PermissionDenied, StatusCode::FORBIDDEN),
+			(Code::InvalidArgument, StatusCode::BAD_REQUEST),
+			(Code::NotFound, StatusCode::NOT_FOUND),
+			(Code::AlreadyExists, StatusCode::CONFLICT),
+			(Code::FailedPrecondition, StatusCode::PRECONDITION_FAILED),
+			(Code::ResourceExhausted, StatusCode::TOO_MANY_REQUESTS),
+			(Code::Unavailable, StatusCode::SERVICE_UNAVAILABLE),
+			(Code::DeadlineExceeded, StatusCode::GATEWAY_TIMEOUT),
+			(Code::Unimplemented, StatusCode::NOT_IMPLEMENTED),
+			(Code::Unknown, StatusCode::BAD_GATEWAY),
+			(Code::Internal, StatusCode::BAD_GATEWAY),
+			(Code::DataLoss, StatusCode::BAD_GATEWAY),
+		];
+		for (code, expected) in cases {
+			assert_eq!(http_status_for(code), expected, "{code:?}");
+		}
 	}
 }
