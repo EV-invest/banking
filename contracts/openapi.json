@@ -1947,6 +1947,596 @@
           }
         }
       }
+    },
+    "/concierge.v1.AuthService/Exchange": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "Exchange",
+        "description": "Exchange a Google authorization code (with its PKCE verifier) for concierge's\n OWN tokens. Called by the cabinet BFF on the OAuth callback. Provisions the\n user on first sign-in in the directory module.",
+        "operationId": "concierge.v1.AuthService.Exchange",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.TokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.AuthService/Jwks": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "Jwks",
+        "description": "Publish the current signing public keys (JWKS). Polled by downstream services'\n `evconcierge_auth` verifier to refresh its local cache; also consulted on an\n unknown-`kid` miss. Carries only public key material.",
+        "operationId": "concierge.v1.AuthService.Jwks",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.JwksRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.JwksResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.AuthService/ListSessions": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "ListSessions",
+        "description": "List the caller's active sessions (refresh-token families). Identity is proven by\n the presented refresh token (the BFF holds it server-side); the family that owns\n that token is flagged `current`.",
+        "operationId": "concierge.v1.AuthService.ListSessions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ListSessionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.ListSessionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.AuthService/Logout": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "Logout",
+        "description": "Revoke the presented refresh token's family. With `revoke_all` set, also bumps\n the user's `token_version` so every outstanding access token is rejected.",
+        "operationId": "concierge.v1.AuthService.Logout",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.LogoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.LogoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.AuthService/Refresh": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "Refresh",
+        "description": "Rotate a refresh token: returns a fresh access+refresh pair and invalidates\n the presented refresh token (rotation + reuse detection in the central store).",
+        "operationId": "concierge.v1.AuthService.Refresh",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.TokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.AuthService/RevokeSession": {
+      "post": {
+        "tags": [
+          "concierge.v1.AuthService"
+        ],
+        "summary": "RevokeSession",
+        "description": "Revoke one of the caller's sessions by id (must belong to the same user). Revoking\n the current session is allowed (acts like a sign-out of this device).",
+        "operationId": "concierge.v1.AuthService.RevokeSession",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.RevokeSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.RevokeSessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/DisableUser": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "DisableUser",
+        "description": "Admin (allowlist): disable a user, freezing future sign-in/refresh without\n deleting the record.",
+        "operationId": "concierge.v1.UserDirectory.DisableUser",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.DisableUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.DisableUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/GetMe": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "GetMe",
+        "description": "The calling user's own identity (resolved from the access-token `sub`).",
+        "operationId": "concierge.v1.UserDirectory.GetMe",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.GetMeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/RevokeTokens": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "RevokeTokens",
+        "description": "Admin (allowlist): bump a user's token_version so all their outstanding access\n tokens are rejected. The token-revocation control surface.",
+        "operationId": "concierge.v1.UserDirectory.RevokeTokens",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.RevokeTokensRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.RevokeTokensResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/UpdateProfile": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "UpdateProfile",
+        "description": "Update the caller's own editable profile fields (full-replace of the set in\n UpdateProfileRequest). Identity/auth fields (email, status) are not editable here.",
+        "operationId": "concierge.v1.UserDirectory.UpdateProfile",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.UpdateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProfile"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3153,6 +3743,446 @@
         "title": "WithdrawalList",
         "additionalProperties": false
       },
+      "concierge.v1.DisableUserRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          }
+        },
+        "title": "DisableUserRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.DisableUserResponse": {
+        "type": "object",
+        "title": "DisableUserResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.ExchangeRequest": {
+        "type": "object",
+        "properties": {
+          "auth_code": {
+            "type": "string",
+            "title": "auth_code",
+            "description": "The Google authorization code from the OAuth redirect."
+          },
+          "code_verifier": {
+            "type": "string",
+            "title": "code_verifier",
+            "description": "The PKCE code verifier the BFF generated for this transaction (S256)."
+          },
+          "redirect_uri": {
+            "type": "string",
+            "title": "redirect_uri",
+            "description": "The exact redirect_uri used in the authorize request (Google requires a match)."
+          },
+          "nonce": {
+            "type": "string",
+            "title": "nonce",
+            "description": "The nonce the BFF put in the authorize request; matched against Google's id_token."
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "user_agent",
+            "description": "Device metadata captured by the BFF at sign-in, stored on the refresh-token family\n for the \"sessions \u0026 devices\" surface. Best-effort, free-form."
+          },
+          "ip": {
+            "type": "string",
+            "title": "ip"
+          }
+        },
+        "title": "ExchangeRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.GetMeRequest": {
+        "type": "object",
+        "title": "GetMeRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.Jwk": {
+        "type": "object",
+        "properties": {
+          "kid": {
+            "type": "string",
+            "title": "kid"
+          },
+          "kty": {
+            "type": "string",
+            "title": "kty"
+          },
+          "crv": {
+            "type": "string",
+            "title": "crv"
+          },
+          "x": {
+            "type": "string",
+            "title": "x"
+          },
+          "alg": {
+            "type": "string",
+            "title": "alg"
+          },
+          "use": {
+            "type": "string",
+            "title": "use"
+          }
+        },
+        "title": "Jwk",
+        "additionalProperties": false,
+        "description": "One JSON Web Key. Ed25519 keys are OKP: kty=\"OKP\", crv=\"Ed25519\", x=base64url\n public key, alg=\"EdDSA\". `kid` is a stable thumbprint of the public key."
+      },
+      "concierge.v1.JwksRequest": {
+        "type": "object",
+        "title": "JwksRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.JwksResponse": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.Jwk"
+            },
+            "title": "keys"
+          }
+        },
+        "title": "JwksResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListSessionsRequest": {
+        "type": "object",
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token",
+            "description": "The caller's current refresh token: proves identity and flags the current session."
+          }
+        },
+        "title": "ListSessionsRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListSessionsResponse": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.Session"
+            },
+            "title": "sessions"
+          }
+        },
+        "title": "ListSessionsResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.LogoutRequest": {
+        "type": "object",
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token"
+          },
+          "revoke_all": {
+            "type": "boolean",
+            "title": "revoke_all",
+            "description": "When true, bump the user's token_version (coarse \"revoke all\"), not just this\n refresh family."
+          }
+        },
+        "title": "LogoutRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.LogoutResponse": {
+        "type": "object",
+        "title": "LogoutResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.RefreshRequest": {
+        "type": "object",
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token"
+          }
+        },
+        "title": "RefreshRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.RevokeSessionRequest": {
+        "type": "object",
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token",
+            "description": "The caller's current refresh token (proves identity)."
+          },
+          "session_id": {
+            "type": "string",
+            "title": "session_id",
+            "description": "The session id to revoke (must belong to the same user)."
+          }
+        },
+        "title": "RevokeSessionRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.RevokeSessionResponse": {
+        "type": "object",
+        "title": "RevokeSessionResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.RevokeTokensRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          }
+        },
+        "title": "RevokeTokensRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.RevokeTokensResponse": {
+        "type": "object",
+        "properties": {
+          "token_version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "token_version",
+            "format": "int64"
+          }
+        },
+        "title": "RevokeTokensResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "user_agent"
+          },
+          "ip": {
+            "type": "string",
+            "title": "ip"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "last_seen": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "last_seen",
+            "format": "int64"
+          },
+          "current": {
+            "type": "boolean",
+            "title": "current",
+            "description": "True for the family that owns the refresh token presented on the listing call."
+          }
+        },
+        "title": "Session",
+        "additionalProperties": false,
+        "description": "One active session = one refresh-token family. Timestamps are unix SECONDS."
+      },
+      "concierge.v1.TokenResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "access_token"
+          },
+          "access_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "access_expires_at",
+            "format": "int64"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "refresh_token"
+          },
+          "refresh_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "refresh_expires_at",
+            "format": "int64"
+          },
+          "user": {
+            "title": "user",
+            "$ref": "#/components/schemas/concierge.v1.UserSummary"
+          }
+        },
+        "title": "TokenResponse",
+        "additionalProperties": false,
+        "description": "A first-party token pair plus a snapshot of the principal. All expiries are\n unix SECONDS (matching the JWT `exp` claim); the BFF parses them with\n proto-loader `longs: String`."
+      },
+      "concierge.v1.UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "legal_name": {
+            "type": "string",
+            "title": "legal_name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "preferred_name"
+          },
+          "phone": {
+            "type": "string",
+            "title": "phone"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "title": "date_of_birth"
+          },
+          "nationality": {
+            "type": "string",
+            "title": "nationality"
+          },
+          "tax_residence": {
+            "type": "string",
+            "title": "tax_residence"
+          },
+          "residential_address": {
+            "type": "string",
+            "title": "residential_address"
+          },
+          "language": {
+            "type": "string",
+            "title": "language"
+          },
+          "base_currency": {
+            "type": "string",
+            "title": "base_currency"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "timezone"
+          }
+        },
+        "title": "UpdateProfileRequest",
+        "additionalProperties": false,
+        "description": "The caller's editable profile, full-replace. Same 10 fields as the editable part of\n UserProfile; an empty string clears the field."
+      },
+      "concierge.v1.UserProfile": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "email_verified": {
+            "type": "boolean",
+            "title": "email_verified"
+          },
+          "status": {
+            "type": "string",
+            "title": "status"
+          },
+          "token_version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "token_version",
+            "format": "int64"
+          },
+          "legal_name": {
+            "type": "string",
+            "title": "legal_name",
+            "description": "Editable profile fields (control plane; empty until the user sets them). email and\n status above stay read-only — email is the IdP's, status is admin-managed."
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "preferred_name"
+          },
+          "phone": {
+            "type": "string",
+            "title": "phone"
+          },
+          "date_of_birth": {
+            "type": "string",
+            "title": "date_of_birth"
+          },
+          "nationality": {
+            "type": "string",
+            "title": "nationality"
+          },
+          "tax_residence": {
+            "type": "string",
+            "title": "tax_residence"
+          },
+          "residential_address": {
+            "type": "string",
+            "title": "residential_address"
+          },
+          "language": {
+            "type": "string",
+            "title": "language"
+          },
+          "base_currency": {
+            "type": "string",
+            "title": "base_currency"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "timezone"
+          }
+        },
+        "title": "UserProfile",
+        "additionalProperties": false
+      },
+      "concierge.v1.UserSummary": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "The concierge canonical user id (a UUID) — this is the JWT `sub`, never Google's sub."
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "status": {
+            "type": "string",
+            "title": "status"
+          },
+          "token_version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "token_version",
+            "format": "int64"
+          }
+        },
+        "title": "UserSummary",
+        "additionalProperties": false,
+        "description": "Minimal principal snapshot returned with a freshly issued token pair, so the BFF\n can populate a session without a second round trip."
+      },
       "connect-protocol-version": {
         "type": "number",
         "title": "Connect-Protocol-Version",
@@ -3269,6 +4299,14 @@
     {
       "name": "banking.v1.WalletService",
       "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
+    },
+    {
+      "name": "concierge.v1.UserDirectory",
+      "description": "UserDirectory — the authoritative user/identity control plane.\n\n Owns investor accounts and their profile metadata. This is the identity plane:\n money lives in the separate banking plane and is NEVER mirrored here. Every RPC\n is authorized from the verified access-token Claims injected by the inbound auth\n layer; self-service RPCs act on the caller's own `sub`, admin RPCs are gated by\n the admin allowlist (config)."
+    },
+    {
+      "name": "concierge.v1.AuthService",
+      "description": "AuthService — the concierge plane's token issuance and authorization surface.\n\n Issues first-party asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 sign-in,\n rotates refresh tokens, and publishes verification keys. Services do NOT call\n this per request to authorize: they verify access tokens locally against the\n cached JWKS via the shared `evconcierge_auth` flow (no round trip, no\n per-service token storage). They DO call `Jwks` periodically to refresh that\n cache, since concierge speaks only gRPC (no HTTP `.well-known` endpoint).\n\n The cabinet BFF is the OAuth confidential client. It runs the browser-facing\n authorize redirect (PKCE + state + nonce) and then calls `Exchange`\n server-to-server with the Google authorization code; the auth module performs\n the confidential code→token exchange with Google, validates Google's id_token,\n and discards it — Google's token is never forwarded inward."
     }
   ]
 }

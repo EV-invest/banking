@@ -35,3 +35,6 @@ tonic.workspace = true
 tower-http = { workspace = true, features = ["timeout", "trace"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+prost.workspace = true

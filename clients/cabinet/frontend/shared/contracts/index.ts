@@ -6,6 +6,12 @@
 // `@hey-api/openapi-ts` emits `./gen` from that (`npm run gen:api`, or the flake
 // `nix run .#gen-api`). Field names are snake_case to match the BFF's `keepCase`
 // proto-loader shape, and every field is optional (proto3 JSON semantics).
+//
+// Money types come from banking's own proto (`BankingV1*`). The identity surface
+// (profile + sessions) is served by the concierge plane, so those types come from
+// concierge's OWN proto (`ConciergeV1*`) — the actual source of that wire data —
+// rather than banking's byte-identical copy, so a concierge-side field change is
+// surfaced by `gen-api` instead of going silently stale.
 
 export type {
   BankingV1Wallet as Wallet,
@@ -16,7 +22,6 @@ export type {
   BankingV1WithdrawalList as WithdrawalList,
   BankingV1RequestWithdrawalRequest as RequestWithdrawalRequest,
   BankingV1CancelWithdrawalRequest as CancelWithdrawalRequest,
-  BankingV1UserProfile as UserProfile,
   BankingV1UserBalanceResponse as UserBalanceResponse,
   BankingV1Treasury as Treasury,
   BankingV1RailLiquidity as RailLiquidity,
@@ -30,8 +35,12 @@ export type {
   BankingV1Redemption as Redemption,
   BankingV1RedemptionList as RedemptionList,
   BankingV1CancelRedemptionRequest as CancelRedemptionRequest,
-  // Profile + sessions.
-  BankingV1UpdateProfileRequest as UpdateProfileRequest,
-  BankingV1Session as Session,
-  BankingV1ListSessionsResponse as SessionList,
+} from "./gen";
+
+// Identity surface — owned by the concierge plane.
+export type {
+  ConciergeV1UserProfile as UserProfile,
+  ConciergeV1UpdateProfileRequest as UpdateProfileRequest,
+  ConciergeV1Session as Session,
+  ConciergeV1ListSessionsResponse as SessionList,
 } from "./gen";

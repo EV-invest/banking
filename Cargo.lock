@@ -486,6 +486,7 @@ dependencies = [
  "evconcierge_contracts",
  "form_urlencoded",
  "getrandom 0.3.4",
+ "prost",
  "serde",
  "serde_json",
  "sha2 0.10.9",

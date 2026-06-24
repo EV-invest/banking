@@ -359,3 +359,37 @@ impl From<bk::FundNav> for FundNav {
 		}
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use serde_json::json;
+
+	use super::SessionInfo;
+	use crate::session::User;
+
+	// `/api/auth/session` is the only endpoint with a camelCase principal (`userId`), and
+	// `user` is omitted entirely when anonymous. The browser's who-am-I (sidebar) depends on
+	// exactly this shape, so pin it.
+	#[test]
+	fn session_authenticated_shape() {
+		let user = User {
+			user_id: "u-1".into(),
+			email: "a@b.c".into(),
+			status: "active".into(),
+		};
+		let got = serde_json::to_value(SessionInfo::authenticated(user)).unwrap();
+		assert_eq!(
+			got,
+			json!({
+				"authenticated": true,
+				"user": { "userId": "u-1", "email": "a@b.c", "status": "active" }
+			})
+		);
+	}
+
+	#[test]
+	fn session_anonymous_omits_user() {
+		let got = serde_json::to_value(SessionInfo::anonymous()).unwrap();
+		assert_eq!(got, json!({ "authenticated": false }));
+	}
+}

@@ -349,22 +349,45 @@
         # `nix run .#gen-api` regenerates `contracts/openapi.json` from the protos and
         # the cabinet's `shared/contracts/gen` types from that. Run it after editing a
         # proto; the outputs are committed so the app builds without the toolchain.
+        #
+        # The cabinet's identity surface (profile + sessions) is served by the concierge
+        # plane, so its TS types come from concierge's OWN proto — not banking's copy —
+        # sourced from the pinned `evconcierge_contracts` git dep that the BFF already
+        # compiles against (resolved via `cargo metadata`, so it tracks Cargo.lock's pin).
+        # Both protos feed one merged OpenAPI doc; service FQNs keep paths/schemas
+        # namespaced (`banking.v1.*` vs `concierge.v1.*`), so the gen emits both
+        # `BankingV1*` and `ConciergeV1*` types with no collision.
         runGenApi = pkgs.writeShellApplication {
           name = "run-gen-api";
-          runtimeInputs = with pkgs; [ protobuf protocGenConnectOpenapi nodejs git ];
+          runtimeInputs = with pkgs; [ protobuf protocGenConnectOpenapi nodejs git cargo jq ];
           text = ''
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo"
-            echo "▶ proto → contracts/openapi.json"
-            protoc -I contracts/proto \
+            cc_dir="$(dirname "$(cargo metadata --format-version 1 --manifest-path contracts/Cargo.toml \
+              | jq -r '.packages[] | select(.name=="evconcierge_contracts") | .manifest_path')")"
+            echo "▶ proto (banking + concierge identity) → contracts/openapi.json"
+            protoc -I contracts/proto -I "$cc_dir/proto" \
               --connect-openapi_out=contracts \
               --connect-openapi_opt=format=json,path=openapi.json,with-proto-names \
-              contracts/proto/banking/v1/*.proto
+              contracts/proto/banking/v1/*.proto \
+              "$cc_dir/proto/concierge/v1/directory.proto" \
+              "$cc_dir/proto/concierge/v1/auth.proto"
             echo "▶ openapi.json → cabinet TypeScript types"
             [ -d node_modules ] || npm install
             npm run gen:api --workspace @evbanking/cabinet
             echo "✓ regenerated contracts/openapi.json + clients/cabinet/shared/contracts/gen"
           '';
+        };
+
+        # ── cross-repo concierge pin guard ──────────────────────────────────
+        # `nix run .#concierge-pin-check` — assert the pinned `evconcierge_contracts`
+        # rev (the identity wire contract banking compiles and re-aliases its cabinet
+        # TS from) is an ancestor of concierge origin/main with matching proto bytes.
+        # CI entry point for the contract-parity guard; needs network to the remote.
+        runConciergePinCheck = pkgs.writeShellApplication {
+          name = "run-concierge-pin-check";
+          runtimeInputs = with pkgs; [ git gnused coreutils gnugrep ];
+          text = ''exec bash "$(git rev-parse --show-toplevel)/contracts/concierge-pin-check.sh"'';
         };
 
         # ── local Redis ─────────────────────────────────────────────────────
@@ -495,6 +518,7 @@
         # `nix run .#tb`        → local TigerBeetle only
         # `nix run .#redis`     → local Redis (central auth store) only
         # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
+        # `nix run .#concierge-pin-check` → assert the concierge contract pin is an ancestor of origin/main + bytes match
         # Author new migrations with the sqlx CLI (in the dev shell):
         #   sqlx migrate add --source piggybank/core/migrations --sequential <name>
         apps = {
@@ -507,6 +531,7 @@
           tb = { type = "app"; program = "${runTigerbeetle}/bin/run-tigerbeetle"; };
           redis = { type = "app"; program = "${runRedis}/bin/run-redis"; };
           gen-api = { type = "app"; program = "${runGenApi}/bin/run-gen-api"; };
+          concierge-pin-check = { type = "app"; program = "${runConciergePinCheck}/bin/run-concierge-pin-check"; };
         };
 
         devShells.default =

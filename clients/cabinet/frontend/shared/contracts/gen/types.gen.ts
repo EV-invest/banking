@@ -1246,6 +1246,431 @@ export type BankingV1WithdrawalList = {
 };
 
 /**
+ * DisableUserRequest
+ */
+export type ConciergeV1DisableUserRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+};
+
+/**
+ * DisableUserResponse
+ */
+export type ConciergeV1DisableUserResponse = {
+    [key: string]: never;
+};
+
+/**
+ * ExchangeRequest
+ */
+export type ConciergeV1ExchangeRequest = {
+    /**
+     * auth_code
+     *
+     * The Google authorization code from the OAuth redirect.
+     */
+    auth_code?: string;
+    /**
+     * code_verifier
+     *
+     * The PKCE code verifier the BFF generated for this transaction (S256).
+     */
+    code_verifier?: string;
+    /**
+     * redirect_uri
+     *
+     * The exact redirect_uri used in the authorize request (Google requires a match).
+     */
+    redirect_uri?: string;
+    /**
+     * nonce
+     *
+     * The nonce the BFF put in the authorize request; matched against Google's id_token.
+     */
+    nonce?: string;
+    /**
+     * user_agent
+     *
+     * Device metadata captured by the BFF at sign-in, stored on the refresh-token family
+     * for the "sessions & devices" surface. Best-effort, free-form.
+     */
+    user_agent?: string;
+    /**
+     * ip
+     */
+    ip?: string;
+};
+
+/**
+ * GetMeRequest
+ */
+export type ConciergeV1GetMeRequest = {
+    [key: string]: never;
+};
+
+/**
+ * Jwk
+ *
+ * One JSON Web Key. Ed25519 keys are OKP: kty="OKP", crv="Ed25519", x=base64url
+ * public key, alg="EdDSA". `kid` is a stable thumbprint of the public key.
+ */
+export type ConciergeV1Jwk = {
+    /**
+     * kid
+     */
+    kid?: string;
+    /**
+     * kty
+     */
+    kty?: string;
+    /**
+     * crv
+     */
+    crv?: string;
+    /**
+     * x
+     */
+    x?: string;
+    /**
+     * alg
+     */
+    alg?: string;
+    /**
+     * use
+     */
+    use?: string;
+};
+
+/**
+ * JwksRequest
+ */
+export type ConciergeV1JwksRequest = {
+    [key: string]: never;
+};
+
+/**
+ * JwksResponse
+ */
+export type ConciergeV1JwksResponse = {
+    /**
+     * keys
+     */
+    keys?: Array<ConciergeV1Jwk>;
+};
+
+/**
+ * ListSessionsRequest
+ */
+export type ConciergeV1ListSessionsRequest = {
+    /**
+     * refresh_token
+     *
+     * The caller's current refresh token: proves identity and flags the current session.
+     */
+    refresh_token?: string;
+};
+
+/**
+ * ListSessionsResponse
+ */
+export type ConciergeV1ListSessionsResponse = {
+    /**
+     * sessions
+     */
+    sessions?: Array<ConciergeV1Session>;
+};
+
+/**
+ * LogoutRequest
+ */
+export type ConciergeV1LogoutRequest = {
+    /**
+     * refresh_token
+     */
+    refresh_token?: string;
+    /**
+     * revoke_all
+     *
+     * When true, bump the user's token_version (coarse "revoke all"), not just this
+     * refresh family.
+     */
+    revoke_all?: boolean;
+};
+
+/**
+ * LogoutResponse
+ */
+export type ConciergeV1LogoutResponse = {
+    [key: string]: never;
+};
+
+/**
+ * RefreshRequest
+ */
+export type ConciergeV1RefreshRequest = {
+    /**
+     * refresh_token
+     */
+    refresh_token?: string;
+};
+
+/**
+ * RevokeSessionRequest
+ */
+export type ConciergeV1RevokeSessionRequest = {
+    /**
+     * refresh_token
+     *
+     * The caller's current refresh token (proves identity).
+     */
+    refresh_token?: string;
+    /**
+     * session_id
+     *
+     * The session id to revoke (must belong to the same user).
+     */
+    session_id?: string;
+};
+
+/**
+ * RevokeSessionResponse
+ */
+export type ConciergeV1RevokeSessionResponse = {
+    [key: string]: never;
+};
+
+/**
+ * RevokeTokensRequest
+ */
+export type ConciergeV1RevokeTokensRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+};
+
+/**
+ * RevokeTokensResponse
+ */
+export type ConciergeV1RevokeTokensResponse = {
+    /**
+     * token_version
+     */
+    token_version?: number | string;
+};
+
+/**
+ * Session
+ *
+ * One active session = one refresh-token family. Timestamps are unix SECONDS.
+ */
+export type ConciergeV1Session = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * user_agent
+     */
+    user_agent?: string;
+    /**
+     * ip
+     */
+    ip?: string;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * last_seen
+     */
+    last_seen?: number | string;
+    /**
+     * current
+     *
+     * True for the family that owns the refresh token presented on the listing call.
+     */
+    current?: boolean;
+};
+
+/**
+ * TokenResponse
+ *
+ * A first-party token pair plus a snapshot of the principal. All expiries are
+ * unix SECONDS (matching the JWT `exp` claim); the BFF parses them with
+ * proto-loader `longs: String`.
+ */
+export type ConciergeV1TokenResponse = {
+    /**
+     * access_token
+     */
+    access_token?: string;
+    /**
+     * access_expires_at
+     */
+    access_expires_at?: number | string;
+    /**
+     * refresh_token
+     */
+    refresh_token?: string;
+    /**
+     * refresh_expires_at
+     */
+    refresh_expires_at?: number | string;
+    /**
+     * user
+     */
+    user?: ConciergeV1UserSummary;
+};
+
+/**
+ * UpdateProfileRequest
+ *
+ * The caller's editable profile, full-replace. Same 10 fields as the editable part of
+ * UserProfile; an empty string clears the field.
+ */
+export type ConciergeV1UpdateProfileRequest = {
+    /**
+     * legal_name
+     */
+    legal_name?: string;
+    /**
+     * preferred_name
+     */
+    preferred_name?: string;
+    /**
+     * phone
+     */
+    phone?: string;
+    /**
+     * date_of_birth
+     */
+    date_of_birth?: string;
+    /**
+     * nationality
+     */
+    nationality?: string;
+    /**
+     * tax_residence
+     */
+    tax_residence?: string;
+    /**
+     * residential_address
+     */
+    residential_address?: string;
+    /**
+     * language
+     */
+    language?: string;
+    /**
+     * base_currency
+     */
+    base_currency?: string;
+    /**
+     * timezone
+     */
+    timezone?: string;
+};
+
+/**
+ * UserProfile
+ */
+export type ConciergeV1UserProfile = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * email_verified
+     */
+    email_verified?: boolean;
+    /**
+     * status
+     */
+    status?: string;
+    /**
+     * token_version
+     */
+    token_version?: number | string;
+    /**
+     * legal_name
+     *
+     * Editable profile fields (control plane; empty until the user sets them). email and
+     * status above stay read-only — email is the IdP's, status is admin-managed.
+     */
+    legal_name?: string;
+    /**
+     * preferred_name
+     */
+    preferred_name?: string;
+    /**
+     * phone
+     */
+    phone?: string;
+    /**
+     * date_of_birth
+     */
+    date_of_birth?: string;
+    /**
+     * nationality
+     */
+    nationality?: string;
+    /**
+     * tax_residence
+     */
+    tax_residence?: string;
+    /**
+     * residential_address
+     */
+    residential_address?: string;
+    /**
+     * language
+     */
+    language?: string;
+    /**
+     * base_currency
+     */
+    base_currency?: string;
+    /**
+     * timezone
+     */
+    timezone?: string;
+};
+
+/**
+ * UserSummary
+ *
+ * Minimal principal snapshot returned with a freshly issued token pair, so the BFF
+ * can populate a session without a second round trip.
+ */
+export type ConciergeV1UserSummary = {
+    /**
+     * user_id
+     *
+     * The concierge canonical user id (a UUID) — this is the JWT `sub`, never Google's sub.
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * status
+     */
+    status?: string;
+    /**
+     * token_version
+     */
+    token_version?: number | string;
+};
+
+/**
  * Connect-Protocol-Version
  *
  * Define the version of the Connect protocol
@@ -2259,3 +2684,293 @@ export type BankingV1WalletServiceRequestWithdrawalResponses = {
 };
 
 export type BankingV1WalletServiceRequestWithdrawalResponse = BankingV1WalletServiceRequestWithdrawalResponses[keyof BankingV1WalletServiceRequestWithdrawalResponses];
+
+export type ConciergeV1AuthServiceExchangeData = {
+    body: ConciergeV1ExchangeRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.AuthService/Exchange';
+};
+
+export type ConciergeV1AuthServiceExchangeErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1AuthServiceExchangeError = ConciergeV1AuthServiceExchangeErrors[keyof ConciergeV1AuthServiceExchangeErrors];
+
+export type ConciergeV1AuthServiceExchangeResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1TokenResponse;
+};
+
+export type ConciergeV1AuthServiceExchangeResponse = ConciergeV1AuthServiceExchangeResponses[keyof ConciergeV1AuthServiceExchangeResponses];
+
+export type ConciergeV1AuthServiceJwksData = {
+    body: ConciergeV1JwksRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.AuthService/Jwks';
+};
+
+export type ConciergeV1AuthServiceJwksErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1AuthServiceJwksError = ConciergeV1AuthServiceJwksErrors[keyof ConciergeV1AuthServiceJwksErrors];
+
+export type ConciergeV1AuthServiceJwksResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1JwksResponse;
+};
+
+export type ConciergeV1AuthServiceJwksResponse = ConciergeV1AuthServiceJwksResponses[keyof ConciergeV1AuthServiceJwksResponses];
+
+export type ConciergeV1AuthServiceListSessionsData = {
+    body: ConciergeV1ListSessionsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.AuthService/ListSessions';
+};
+
+export type ConciergeV1AuthServiceListSessionsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1AuthServiceListSessionsError = ConciergeV1AuthServiceListSessionsErrors[keyof ConciergeV1AuthServiceListSessionsErrors];
+
+export type ConciergeV1AuthServiceListSessionsResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1ListSessionsResponse;
+};
+
+export type ConciergeV1AuthServiceListSessionsResponse = ConciergeV1AuthServiceListSessionsResponses[keyof ConciergeV1AuthServiceListSessionsResponses];
+
+export type ConciergeV1AuthServiceLogoutData = {
+    body: ConciergeV1LogoutRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.AuthService/Logout';
+};
+
+export type ConciergeV1AuthServiceLogoutErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1AuthServiceLogoutError = ConciergeV1AuthServiceLogoutErrors[keyof ConciergeV1AuthServiceLogoutErrors];
+
+export type ConciergeV1AuthServiceLogoutResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1LogoutResponse;
+};
+
+export type ConciergeV1AuthServiceLogoutResponse = ConciergeV1AuthServiceLogoutResponses[keyof ConciergeV1AuthServiceLogoutResponses];
+
+export type ConciergeV1AuthServiceRefreshData = {
+    body: ConciergeV1RefreshRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.AuthService/Refresh';
+};
+
+export type ConciergeV1AuthServiceRefreshErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1AuthServiceRefreshError = ConciergeV1AuthServiceRefreshErrors[keyof ConciergeV1AuthServiceRefreshErrors];
+
+export type ConciergeV1AuthServiceRefreshResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1TokenResponse;
+};
+
+export type ConciergeV1AuthServiceRefreshResponse = ConciergeV1AuthServiceRefreshResponses[keyof ConciergeV1AuthServiceRefreshResponses];
+
+export type ConciergeV1AuthServiceRevokeSessionData = {
+    body: ConciergeV1RevokeSessionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.AuthService/RevokeSession';
+};
+
+export type ConciergeV1AuthServiceRevokeSessionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1AuthServiceRevokeSessionError = ConciergeV1AuthServiceRevokeSessionErrors[keyof ConciergeV1AuthServiceRevokeSessionErrors];
+
+export type ConciergeV1AuthServiceRevokeSessionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1RevokeSessionResponse;
+};
+
+export type ConciergeV1AuthServiceRevokeSessionResponse = ConciergeV1AuthServiceRevokeSessionResponses[keyof ConciergeV1AuthServiceRevokeSessionResponses];
+
+export type ConciergeV1UserDirectoryDisableUserData = {
+    body: ConciergeV1DisableUserRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/DisableUser';
+};
+
+export type ConciergeV1UserDirectoryDisableUserErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryDisableUserError = ConciergeV1UserDirectoryDisableUserErrors[keyof ConciergeV1UserDirectoryDisableUserErrors];
+
+export type ConciergeV1UserDirectoryDisableUserResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1DisableUserResponse;
+};
+
+export type ConciergeV1UserDirectoryDisableUserResponse = ConciergeV1UserDirectoryDisableUserResponses[keyof ConciergeV1UserDirectoryDisableUserResponses];
+
+export type ConciergeV1UserDirectoryGetMeData = {
+    body: ConciergeV1GetMeRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/GetMe';
+};
+
+export type ConciergeV1UserDirectoryGetMeErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryGetMeError = ConciergeV1UserDirectoryGetMeErrors[keyof ConciergeV1UserDirectoryGetMeErrors];
+
+export type ConciergeV1UserDirectoryGetMeResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProfile;
+};
+
+export type ConciergeV1UserDirectoryGetMeResponse = ConciergeV1UserDirectoryGetMeResponses[keyof ConciergeV1UserDirectoryGetMeResponses];
+
+export type ConciergeV1UserDirectoryRevokeTokensData = {
+    body: ConciergeV1RevokeTokensRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/RevokeTokens';
+};
+
+export type ConciergeV1UserDirectoryRevokeTokensErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryRevokeTokensError = ConciergeV1UserDirectoryRevokeTokensErrors[keyof ConciergeV1UserDirectoryRevokeTokensErrors];
+
+export type ConciergeV1UserDirectoryRevokeTokensResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1RevokeTokensResponse;
+};
+
+export type ConciergeV1UserDirectoryRevokeTokensResponse = ConciergeV1UserDirectoryRevokeTokensResponses[keyof ConciergeV1UserDirectoryRevokeTokensResponses];
+
+export type ConciergeV1UserDirectoryUpdateProfileData = {
+    body: ConciergeV1UpdateProfileRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/UpdateProfile';
+};
+
+export type ConciergeV1UserDirectoryUpdateProfileErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryUpdateProfileError = ConciergeV1UserDirectoryUpdateProfileErrors[keyof ConciergeV1UserDirectoryUpdateProfileErrors];
+
+export type ConciergeV1UserDirectoryUpdateProfileResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProfile;
+};
+
+export type ConciergeV1UserDirectoryUpdateProfileResponse = ConciergeV1UserDirectoryUpdateProfileResponses[keyof ConciergeV1UserDirectoryUpdateProfileResponses];
