@@ -172,6 +172,10 @@ impl AuthServiceRpc for AuthGrpc {
 		let req = request.into_inner();
 
 		let identity = google.exchange_code(&req.auth_code, &req.code_verifier, &req.redirect_uri, &req.nonce).await?;
+		// Policy: an unverified Google email may sign in (the account is keyed by the
+		// stable `sub`, and `email_verified` is persisted and surfaced end-to-end so
+		// nothing is silently trusted), but `User::change_email` never downgrades an
+		// already-verified stored email to an unverified one.
 		let summary = engine.provisioner.provision(identity.subject, identity.email, identity.email_verified).await?;
 		if summary.is_disabled() {
 			return Err(Status::permission_denied("user is disabled"));

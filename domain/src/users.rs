@@ -154,7 +154,15 @@ impl User {
 
 	/// Update the email (and its verified flag) to the IdP's current value. No-op
 	/// (and no event) when unchanged, so a routine sign-in does not churn events.
+	///
+	/// An already-verified stored email is never overwritten by an unverified one: a
+	/// principal whose IdP `sub` later carries an unverified (or attacker-influenced)
+	/// email must not be able to downgrade the account's verified address. The verified
+	/// value stands until the IdP again asserts a verified email.
 	pub fn change_email(&mut self, email: Email, email_verified: bool) {
+		if self.email_verified && !email_verified {
+			return;
+		}
 		if self.email == email && self.email_verified == email_verified {
 			return;
 		}
@@ -343,6 +351,28 @@ mod tests {
 		user.drain_events();
 		user.change_email(Email::parse("ada@example.com").unwrap(), true);
 		assert!(user.drain_events().is_empty());
+	}
+
+	#[test]
+	fn verified_email_is_not_overwritten_by_unverified() {
+		let mut user = fixture();
+		assert!(user.email_verified());
+		user.drain_events();
+		user.change_email(Email::parse("attacker@example.com").unwrap(), false);
+		assert_eq!(user.email().as_str(), "ada@example.com");
+		assert!(user.email_verified());
+		assert!(user.drain_events().is_empty());
+	}
+
+	#[test]
+	fn unverified_email_can_be_promoted_to_verified() {
+		let mut user = User::provision(UserId::new(), AuthSubject::parse("g-9").unwrap(), Email::parse("pending@example.com").unwrap(), false);
+		user.drain_events();
+		user.change_email(Email::parse("pending@example.com").unwrap(), true);
+		assert!(user.email_verified());
+		let events = user.drain_events();
+		assert_eq!(events.len(), 1);
+		assert!(matches!(events[0], UserEvent::EmailChanged { .. }));
 	}
 
 	#[test]
