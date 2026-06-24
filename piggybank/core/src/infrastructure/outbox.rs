@@ -158,6 +158,29 @@ pub async fn parked_rows(pool: &PgPool) -> Result<Vec<ParkedRow>, sqlx::Error> {
 	.fetch_all(pool)
 	.await
 }
+/// The relay's pipeline depth, for the readiness probe: how many rows the relay has parked
+/// (`parked_at IS NOT NULL` — the canonical parked predicate, NOT `last_error IS NOT NULL`,
+/// which also matches a transiently-retried-but-still-live row), how many are still
+/// undispatched (`dispatched_at IS NULL AND parked_at IS NULL`, the drain predicate), and the
+/// age in seconds of the oldest such row (a wedged relay shows a growing backlog age). One
+/// round-trip; both counts ride the partial indexes.
+#[derive(sqlx::FromRow)]
+pub struct PipelineDepth {
+	pub parked: i64,
+	pub backlog: i64,
+	pub oldest_backlog_age_secs: i64,
+}
+pub async fn pipeline_depth(pool: &PgPool) -> Result<PipelineDepth, sqlx::Error> {
+	sqlx::query_as::<_, PipelineDepth>(
+		"SELECT \
+		   COUNT(*) FILTER (WHERE parked_at IS NOT NULL) AS parked, \
+		   COUNT(*) FILTER (WHERE dispatched_at IS NULL AND parked_at IS NULL) AS backlog, \
+		   COALESCE(EXTRACT(EPOCH FROM now() - MIN(occurred_at) FILTER (WHERE dispatched_at IS NULL AND parked_at IS NULL)), 0)::bigint AS oldest_backlog_age_secs \
+		 FROM outbox",
+	)
+	.fetch_one(pool)
+	.await
+}
 /// Fold a user UUID into the `bigint` advisory-lock key space. XOR-ing the two 64-bit halves
 /// keeps the full 128 bits of entropy in play (a single half would ignore the other), so two
 /// distinct users practically never share a key and serialize against each other.

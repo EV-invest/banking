@@ -2,14 +2,36 @@ syntax = "proto3";
 
 package banking.v1;
 
-// Liveness probe for the hub's gRPC surface. Used by the `cabinet` BFF smoke path
-// (browser -> BFF -> gRPC) and by service health checks.
+// Health surface for the hub's gRPC service plane.
+//
+//   Check     — liveness: is the process up? Trivial, unauthenticated; backs the
+//               `cabinet` BFF smoke path (browser -> BFF -> gRPC) and service checks.
+//   Readiness — can this instance actually move money? Pings Postgres + TigerBeetle
+//               and inspects the outbox (parked rows / dispatch backlog). An
+//               orchestrator/LB drains an instance that is up but not ready instead of
+//               routing money-moving traffic to it.
 service HealthService {
   rpc Check(CheckRequest) returns (CheckResponse);
+  rpc Readiness(ReadinessRequest) returns (ReadinessResponse);
 }
 
 message CheckRequest {}
 
 message CheckResponse {
   string status = 1;
+}
+
+message ReadinessRequest {}
+
+// `ready` is the gate the orchestrator acts on; the rest are diagnostics so a
+// not-ready response says *why* without scraping logs. `parked_rows` are outbox
+// events the relay could not apply (need operator intervention); `backlog` is the
+// count of undispatched rows and the age of the oldest, surfacing a wedged relay.
+message ReadinessResponse {
+  bool ready = 1;
+  bool db_ok = 2;
+  bool ledger_ok = 3;
+  uint64 parked_rows = 4;
+  uint64 backlog = 5;
+  uint64 oldest_backlog_age_secs = 6;
 }

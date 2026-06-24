@@ -1358,6 +1358,64 @@
         }
       }
     },
+    "/banking.v1.HealthService/Readiness": {
+      "post": {
+        "tags": [
+          "banking.v1.HealthService"
+        ],
+        "summary": "Readiness",
+        "operationId": "banking.v1.HealthService.Readiness",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ReadinessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.ReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.UsersService/DisableUser": {
       "post": {
         "tags": [
@@ -3067,6 +3125,55 @@
         "additionalProperties": false,
         "description": "Per-rail on-chain liquidity (the treasury / Layer 2)."
       },
+      "banking.v1.ReadinessRequest": {
+        "type": "object",
+        "title": "ReadinessRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ReadinessResponse": {
+        "type": "object",
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "title": "ready"
+          },
+          "db_ok": {
+            "type": "boolean",
+            "title": "db_ok"
+          },
+          "ledger_ok": {
+            "type": "boolean",
+            "title": "ledger_ok"
+          },
+          "parked_rows": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "parked_rows",
+            "format": "int64"
+          },
+          "backlog": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "backlog",
+            "format": "int64"
+          },
+          "oldest_backlog_age_secs": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "oldest_backlog_age_secs",
+            "format": "int64"
+          }
+        },
+        "title": "ReadinessResponse",
+        "additionalProperties": false,
+        "description": "`ready` is the gate the orchestrator acts on; the rest are diagnostics so a\n not-ready response says *why* without scraping logs. `parked_rows` are outbox\n events the relay could not apply (need operator intervention); `backlog` is the\n count of undispatched rows and the age of the oldest, surfacing a wedged relay."
+      },
       "banking.v1.RecordDepositRequest": {
         "type": "object",
         "properties": {
@@ -4290,7 +4397,7 @@
     },
     {
       "name": "banking.v1.HealthService",
-      "description": "Liveness probe for the hub's gRPC surface. Used by the `cabinet` BFF smoke path\n (browser -\u003e BFF -\u003e gRPC) and by service health checks."
+      "description": "Health surface for the hub's gRPC service plane.\n\n   Check     — liveness: is the process up? Trivial, unauthenticated; backs the\n               `cabinet` BFF smoke path (browser -\u003e BFF -\u003e gRPC) and service checks.\n   Readiness — can this instance actually move money? Pings Postgres + TigerBeetle\n               and inspects the outbox (parked rows / dispatch backlog). An\n               orchestrator/LB drains an instance that is up but not ready instead of\n               routing money-moving traffic to it."
     },
     {
       "name": "banking.v1.UsersService",

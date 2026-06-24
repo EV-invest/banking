@@ -47,15 +47,17 @@ pub mod wallet;
 /// request extensions. These are user-facing services, so the layer is pinned to the
 /// **client** token class — `aud=banking-core`, `typ=access` only — rejecting an
 /// inter-service token at the verifier (a `TokenClass::Service` layer is reserved for
-/// future inter-service surfaces). `HealthService` is left **unwrapped** so the BFF
-/// liveness probe stays public.
+/// future inter-service surfaces). `HealthService` is left **unwrapped** so its liveness
+/// (`Check`) and readiness (`Readiness`) probes stay public for the BFF and any
+/// orchestrator/LB — they are infrastructure probes, not data services.
 pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Output = ()>) -> Result<(), tonic::transport::Error> {
 	let auth = grpc_auth_layer(state.authorizer.for_class(TokenClass::Client));
+	let health = Health::new(state.pool.clone(), state.ledger.clone());
 	Server::builder()
 		// grpc-web rides HTTP/1.1; required for the GrpcWebLayer to translate.
 		.accept_http1(true)
 		.layer(ServiceBuilder::new().layer(TraceLayer::new_for_grpc()).layer(GrpcWebLayer::new()).into_inner())
-		.add_service(HealthServiceServer::new(Health))
+		.add_service(HealthServiceServer::new(health))
 		.add_service(auth.layer(UsersServiceServer::new(UsersSvc::new(state.clone()))))
 		.add_service(auth.layer(BalanceServiceServer::new(BalanceSvc::new(state.clone()))))
 		.add_service(auth.layer(FundsServiceServer::new(FundsSvc::new(state.clone()))))

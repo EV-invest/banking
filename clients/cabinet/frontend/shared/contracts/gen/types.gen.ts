@@ -567,6 +567,48 @@ export type BankingV1RailLiquidity = {
 };
 
 /**
+ * ReadinessRequest
+ */
+export type BankingV1ReadinessRequest = {
+    [key: string]: never;
+};
+
+/**
+ * ReadinessResponse
+ *
+ * `ready` is the gate the orchestrator acts on; the rest are diagnostics so a
+ * not-ready response says *why* without scraping logs. `parked_rows` are outbox
+ * events the relay could not apply (need operator intervention); `backlog` is the
+ * count of undispatched rows and the age of the oldest, surfacing a wedged relay.
+ */
+export type BankingV1ReadinessResponse = {
+    /**
+     * ready
+     */
+    ready?: boolean;
+    /**
+     * db_ok
+     */
+    db_ok?: boolean;
+    /**
+     * ledger_ok
+     */
+    ledger_ok?: boolean;
+    /**
+     * parked_rows
+     */
+    parked_rows?: number | string;
+    /**
+     * backlog
+     */
+    backlog?: number | string;
+    /**
+     * oldest_backlog_age_secs
+     */
+    oldest_backlog_age_secs?: number | string;
+};
+
+/**
  * RecordDepositRequest
  */
 export type BankingV1RecordDepositRequest = {
@@ -2394,6 +2436,35 @@ export type BankingV1HealthServiceCheckResponses = {
 };
 
 export type BankingV1HealthServiceCheckResponse = BankingV1HealthServiceCheckResponses[keyof BankingV1HealthServiceCheckResponses];
+
+export type BankingV1HealthServiceReadinessData = {
+    body: BankingV1ReadinessRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.HealthService/Readiness';
+};
+
+export type BankingV1HealthServiceReadinessErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1HealthServiceReadinessError = BankingV1HealthServiceReadinessErrors[keyof BankingV1HealthServiceReadinessErrors];
+
+export type BankingV1HealthServiceReadinessResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1ReadinessResponse;
+};
+
+export type BankingV1HealthServiceReadinessResponse = BankingV1HealthServiceReadinessResponses[keyof BankingV1HealthServiceReadinessResponses];
 
 export type BankingV1UsersServiceDisableUserData = {
     body: BankingV1DisableUserRequest;
