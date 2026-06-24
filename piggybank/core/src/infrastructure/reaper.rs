@@ -26,6 +26,7 @@ use std::{sync::Arc, time::Duration};
 use domain::{redemptions::RedemptionId, withdrawals::WithdrawalId};
 use sqlx::PgPool;
 use tokio::sync::Notify;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -78,13 +79,16 @@ impl Reaper {
 		self
 	}
 
-	pub async fn run(self) {
+	pub async fn run(self, shutdown: CancellationToken) {
 		info!("reaper: sweeping abandoned sagas every {SWEEP_INTERVAL:?} (max age {:?})", self.max_age);
 		loop {
 			if let Err(err) = self.sweep().await {
 				warn!("reaper: sweep failed (will retry): {err}");
 			}
-			tokio::time::sleep(SWEEP_INTERVAL).await;
+			tokio::select! {
+				() = shutdown.cancelled() => return,
+				() = tokio::time::sleep(SWEEP_INTERVAL) => {},
+			}
 		}
 	}
 

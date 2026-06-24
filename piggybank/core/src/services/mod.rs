@@ -12,7 +12,7 @@
 //! `state.authorizer` (the in-process channel to that task); the async auth layer
 //! attaches at the marked point below.
 
-use std::net::SocketAddr;
+use std::{future::Future, net::SocketAddr};
 
 use evbanking_auth::{TokenClass, grpc_auth_layer};
 use evbanking_contracts::banking::v1::{
@@ -35,7 +35,10 @@ use crate::{
 pub mod context;
 pub mod health;
 
-/// Build the core tonic server and serve it on `addr` until shutdown.
+/// Build the core tonic server and serve it on `addr` until `shutdown` fires.
+///
+/// `serve_with_shutdown` drains in-flight requests on the shutdown signal rather than
+/// aborting them, so a deploy/restart returns them cleanly instead of erroring the BFF.
 ///
 /// Authorization: each data service is wrapped in the async auth layer, which
 /// authorizes the request in-process via `state.authorizer` (a channel round-trip
@@ -45,7 +48,7 @@ pub mod health;
 /// inter-service token at the verifier (a `TokenClass::Service` layer is reserved for
 /// future inter-service surfaces). `HealthService` is left **unwrapped** so the BFF
 /// liveness probe stays public.
-pub async fn serve(addr: SocketAddr, state: AppState) -> Result<(), tonic::transport::Error> {
+pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Output = ()>) -> Result<(), tonic::transport::Error> {
 	let auth = grpc_auth_layer(state.authorizer.for_class(TokenClass::Client));
 	Server::builder()
 		// grpc-web rides HTTP/1.1; required for the GrpcWebLayer to translate.
@@ -56,6 +59,6 @@ pub async fn serve(addr: SocketAddr, state: AppState) -> Result<(), tonic::trans
 		.add_service(auth.layer(BalanceServiceServer::new(BalanceSvc::new(state.clone()))))
 		.add_service(auth.layer(FundsServiceServer::new(FundsSvc::new(state.clone()))))
 		.add_service(auth.layer(WalletServiceServer::new(WalletSvc::new(state))))
-		.serve(addr)
+		.serve_with_shutdown(addr, shutdown)
 		.await
 }

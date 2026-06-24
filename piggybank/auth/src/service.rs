@@ -10,7 +10,7 @@
 //! Unconfigured (no `AUTH_SIGNING_KEY_PEM`) it runs inert: issuance and authorize
 //! both answer [`AuthError::NotConfigured`], so the scaffold still boots locally.
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{future::Future, net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
 use evbanking_contracts::banking::v1::{
@@ -49,11 +49,12 @@ impl AuthService {
 	}
 
 	/// Run the auth task: serve issuance gRPC on `addr` and answer core's authorize
-	/// requests over the in-process channel. Whichever ends first tears it down.
-	pub async fn run(self, addr: SocketAddr) -> anyhow::Result<()> {
+	/// requests over the in-process channel until `shutdown` fires (graceful: tonic
+	/// drains in-flight issuance requests) or the channel closes.
+	pub async fn run(self, addr: SocketAddr, shutdown: impl Future<Output = ()> + Send) -> anyhow::Result<()> {
 		let AuthService { mut authorize_rx, grpc } = self;
 		let authorizer = grpc.clone();
-		let issuance = Server::builder().add_service(AuthServiceServer::new(grpc)).serve(addr);
+		let issuance = Server::builder().add_service(AuthServiceServer::new(grpc)).serve_with_shutdown(addr, shutdown);
 		let authorize = async move {
 			while let Some(request) = authorize_rx.recv().await {
 				let result = authorizer.authorize_token(&request.token, request.class);

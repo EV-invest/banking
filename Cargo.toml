@@ -55,6 +55,9 @@ thiserror = "2.0.18"
 tigerbeetle = { path = ".tb-client" }
 time = "0.3"
 tokio = "1.52.3"
+# CancellationToken for cooperative graceful shutdown (signal → drain → exit). No
+# default features — `sync::CancellationToken` is unconditional.
+tokio-util = { version = "0.7.18", default-features = false }
 tonic = "0.13"
 tonic-build = "0.13"
 tonic-web = "0.13"

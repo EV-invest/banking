@@ -8,7 +8,7 @@
 //!   - the **core** gRPC services (health/users/balance/funds/wallet) on `grpc_addr`,
 //!     authorizing each request via the `Authorizer` core got from auth.
 
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use ev::error_monitoring::{self, Config as SentryConfig};
@@ -38,6 +38,7 @@ use piggybank_core::{
 	services,
 };
 use tokio::sync::Notify;
+use tokio_util::sync::CancellationToken;
 use tonic::transport::Endpoint;
 
 // Sentry must be initialised before the async runtime starts — no #[tokio::main].
@@ -150,18 +151,93 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 
 	tracing::info!(core = %config.grpc_addr, auth = %config.auth_grpc_addr, "piggybank listening");
 
-	// Structured concurrency: the core server, the auth task, and the provisioning
-	// loop run as branches of one `select!` on this task — no detached spawns.
-	// Whichever ends first (an error or shutdown) tears the process down.
-	tokio::select! {
-		result = services::serve(config.grpc_addr, state) => result.context("core gRPC server error")?,
-		result = auth_service.run(config.auth_grpc_addr) => result.context("auth service error")?,
-		() = auth_sync::run_provisioner(provision_rx, users) => {},
-		() = relay.run() => {},
-		() = reconciliation.run() => {},
-		() = reaper.run() => {},
+	// Graceful shutdown, structured (no detached spawns): the core server, the auth task,
+	// the provisioning loop, and the recovery jobs run as branches of one `join!` on this
+	// task. ctrl_c / SIGTERM cancel a shared token; the gRPC servers `serve_with_shutdown`
+	// on it (draining in-flight requests) and the relay finishes its current drain iteration
+	// before exiting (already crash-safe between rows). Each branch *also* cancels the token
+	// when it returns on its own (a signal, an error), and every branch exits once the token
+	// is cancelled — so the first to finish triggers the rest to wind down on their own terms
+	// rather than being aborted mid-work, and `join!` waits for them all.
+	let shutdown = CancellationToken::new();
+	let (signal, core, auth, provisioner, relay_done, reconciliation_done, reaper_done) = tokio::join!(
+		await_signal(shutdown.clone()),
+		branch(&shutdown, "core gRPC server", services::serve(config.grpc_addr, state, shutdown.clone().cancelled_owned())),
+		branch(&shutdown, "auth service", auth_service.run(config.auth_grpc_addr, shutdown.clone().cancelled_owned())),
+		branch(&shutdown, "provisioner", infallible(auth_sync::run_provisioner(provision_rx, users))),
+		branch(&shutdown, "relay", infallible(relay.run(shutdown.clone()))),
+		branch(&shutdown, "reconciliation", infallible(reconciliation.run(shutdown.clone()))),
+		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
+	);
+	let () = signal;
+	// The first error (if any) becomes the process result; a clean shutdown is `Ok`.
+	core.and(auth).and(provisioner).and(relay_done).and(reconciliation_done).and(reaper_done)
+}
+
+/// Run one composition-root branch to completion, mapping any error to `anyhow`, then cancel
+/// the shared token so its peers start their graceful wind-down. It never returns early on a
+/// peer's cancellation — the branch's own future owns its draining (the gRPC servers via
+/// `serve_with_shutdown`, the loops via the token) — so `join!` over all branches drains them.
+async fn branch<E: std::fmt::Display>(shutdown: &CancellationToken, name: &str, fut: impl Future<Output = Result<(), E>>) -> anyhow::Result<()> {
+	let result = fut.await.map_err(|err| anyhow::anyhow!("{name} error: {err}"));
+	if let Err(err) = &result {
+		tracing::error!("{err}");
 	}
+	shutdown.cancel();
+	result
+}
+
+/// Adapt an infallible loop task (`-> ()`) to the `Result` shape [`branch`] expects.
+async fn infallible(fut: impl Future<Output = ()>) -> Result<(), std::convert::Infallible> {
+	fut.await;
 	Ok(())
+}
+
+/// Resolve on the first of `SIGINT` (ctrl_c), `SIGTERM`, or a peer cancelling `shutdown`,
+/// then cancel the token. Racing the token keeps this a structured `join!` branch — it never
+/// outlives the others. On non-Unix only ctrl_c exists; a failed handler registration is
+/// logged and this branch idles on the token (the process can still be force-killed) rather
+/// than tearing down at boot.
+async fn await_signal(shutdown: CancellationToken) {
+	#[cfg(unix)]
+	{
+		use tokio::signal::unix::{SignalKind, signal};
+		match signal(SignalKind::terminate()) {
+			Ok(mut term) => {
+				tokio::select! {
+					biased;
+					() = shutdown.cancelled() => return,
+					result = tokio::signal::ctrl_c() => {
+						if let Err(err) = result {
+							tracing::error!("failed to listen for ctrl_c: {err}");
+							shutdown.cancelled().await;
+							return;
+						}
+					},
+					_ = term.recv() => {},
+				}
+			}
+			Err(err) => {
+				tracing::error!("failed to install SIGTERM handler: {err}");
+				shutdown.cancelled().await;
+				return;
+			}
+		}
+	}
+	#[cfg(not(unix))]
+	tokio::select! {
+		biased;
+		() = shutdown.cancelled() => return,
+		result = tokio::signal::ctrl_c() => {
+			if let Err(err) = result {
+				tracing::error!("failed to listen for ctrl_c: {err}");
+				shutdown.cancelled().await;
+				return;
+			}
+		},
+	}
+	tracing::info!("shutdown signal received — draining");
+	shutdown.cancel();
 }
 
 fn init_tracing() {

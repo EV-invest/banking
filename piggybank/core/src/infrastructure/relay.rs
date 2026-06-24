@@ -36,6 +36,7 @@ use domain::{
 };
 use sqlx::{PgPool, pool::PoolConnection, postgres::Postgres};
 use tokio::sync::Notify;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -104,24 +105,42 @@ impl Relay {
 		Self { pool, ledger, custody, notify }
 	}
 
-	/// Run forever. First take the singleton outbox lock on a dedicated connection
-	/// (blocking until acquired — a second instance idles here, owning nothing), then
-	/// drain the backlog and wait for a nudge or a poll-fallback. The held connection
-	/// keeps the session-level lock for the process's lifetime; dropping it (process
-	/// exit) releases it so a standby can take over.
-	pub async fn run(self) {
-		let mut lock = match self.acquire_outbox_lock().await {
-			Ok(lock) => lock,
-			Err(err) => {
-				error!("relay: could not acquire the outbox lock, not draining: {err}");
-				return;
-			}
+	/// Run until `shutdown` is cancelled. First take the singleton outbox lock on a
+	/// dedicated connection (blocking until acquired — a second instance idles here, owning
+	/// nothing), then drain the backlog and wait for a nudge or a poll-fallback. The held
+	/// connection keeps the session-level lock for the process's lifetime; dropping it
+	/// (process exit) releases it so a standby can take over.
+	///
+	/// Graceful shutdown is cooperative: cancellation is only observed at the wait point
+	/// *between* drains and during the lock wait, never mid-`drain`. Each `drain` iteration
+	/// runs to completion before exit (it is already crash-safe to stop between rows), so an
+	/// in-flight dispatch is never torn down partway — a deploy/restart leaves the outbox in
+	/// the same clean state a graceful drain does.
+	pub async fn run(self, shutdown: CancellationToken) {
+		let mut lock = tokio::select! {
+			biased;
+			() = shutdown.cancelled() => return,
+			lock = self.acquire_outbox_lock() => match lock {
+				Ok(lock) => lock,
+				Err(err) => {
+					error!("relay: could not acquire the outbox lock, not draining: {err}");
+					return;
+				}
+			},
 		};
 		info!("relay: acquired the outbox lock — draining as the singleton worker");
 		loop {
 			let backoff = self.drain().await;
+			if shutdown.is_cancelled() {
+				info!("relay: shutdown requested — drain iteration complete, stopping");
+				return;
+			}
 			let wait = if backoff { Duration::from_secs(2) } else { Duration::from_millis(500) };
 			tokio::select! {
+				() = shutdown.cancelled() => {
+					info!("relay: shutdown requested — stopping");
+					return;
+				},
 				() = self.notify.notified() => {},
 				() = tokio::time::sleep(wait) => {},
 			}

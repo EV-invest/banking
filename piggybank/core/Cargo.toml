@@ -27,6 +27,7 @@ sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres"
 thiserror.workspace = true
 tigerbeetle.workspace = true
 tokio = { workspace = true, features = ["full"] }
+tokio-util.workspace = true
 tonic.workspace = true
 tonic-web.workspace = true
 tower.workspace = true
@@ -38,4 +39,5 @@ uuid = { workspace = true, features = ["v4", "v5"] }
 [dev-dependencies]
 domain.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+tokio-util.workspace = true
 uuid = { workspace = true, features = ["v4"] }

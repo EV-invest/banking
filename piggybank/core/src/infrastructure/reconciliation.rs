@@ -19,11 +19,11 @@
 //! It is **read-only** and idempotent, so running it on every standby is harmless; it is
 //! wired as one `select!` branch of the composition root next to the relay.
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use domain::balance::LedgerAccountKey;
 use sqlx::PgPool;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
 use crate::{infrastructure::outbox, ports::ledger::Ledger};
@@ -63,13 +63,16 @@ impl Reconciliation {
 		Self { pool, ledger }
 	}
 
-	pub async fn run(self) {
+	pub async fn run(self, shutdown: CancellationToken) {
 		info!("reconciliation: starting PG-vs-TB scan every {SCAN_INTERVAL:?}");
 		loop {
 			if let Err(err) = self.scan().await {
 				warn!("reconciliation: scan failed (will retry): {err}");
 			}
-			tokio::time::sleep(SCAN_INTERVAL).await;
+			tokio::select! {
+				() = shutdown.cancelled() => return,
+				() = tokio::time::sleep(SCAN_INTERVAL) => {},
+			}
 		}
 	}
 
