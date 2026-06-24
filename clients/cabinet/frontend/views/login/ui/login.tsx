@@ -1,5 +1,5 @@
 import { Logo } from "@/application/layout/logo";
-import { safeReturnTo } from "@/features/auth/lib/oauth";
+import { safeReturnTo } from "@/features/auth/lib/return-to";
 
 const ERRORS: Record<string, string> = {
   denied: "Sign-in was cancelled.",
