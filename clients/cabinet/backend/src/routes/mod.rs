@@ -13,6 +13,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::CookieJar;
 use serde_json::Value;
+use subtle::ConstantTimeEq;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 
 use crate::{error::ApiError, state::AppState};
@@ -68,7 +69,7 @@ pub async fn require_token(state: &AppState, jar: &CookieJar) -> Result<String, 
 pub fn verify_csrf(state: &AppState, jar: &CookieJar, headers: &HeaderMap) -> bool {
 	let cookie = jar.get(&state.cookies.csrf).map(|c| c.value().to_string());
 	let header = headers.get("x-ev-csrf").and_then(|v| v.to_str().ok());
-	matches!((cookie, header), (Some(c), Some(h)) if !c.is_empty() && c == h)
+	matches!((cookie.as_deref(), header), (Some(c), Some(h)) if !c.is_empty() && ct_str_eq(c, h))
 }
 
 /// Parse a request body leniently (a malformed/empty body becomes `{}`), matching the
@@ -76,13 +77,29 @@ pub fn verify_csrf(state: &AppState, jar: &CookieJar, headers: &HeaderMap) -> bo
 pub fn parse_body(body: &Bytes) -> Value {
 	serde_json::from_slice(body).unwrap_or_else(|_| Value::Object(Default::default()))
 }
-
 /// A required string field: `None` when missing OR empty (matches the TS `!body?.field`).
 pub fn required(v: &Value, key: &str) -> Option<String> {
 	v.get(key).and_then(|x| x.as_str()).map(str::to_string).filter(|s| !s.is_empty())
 }
-
 /// An editable string field: missing ⇒ `""` (full-replace semantics; empty clears).
 pub fn editable(v: &Value, key: &str) -> String {
 	v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
+}
+/// Constant-time string equality (after a length check, which only reveals length) as
+/// defense-in-depth, matching the constant-time discipline used for secret comparisons.
+fn ct_str_eq(a: &str, b: &str) -> bool {
+	a.len() == b.len() && a.as_bytes().ct_eq(b.as_bytes()).into()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn ct_str_eq_matches_plain_equality() {
+		assert!(ct_str_eq("a3f9c0d1-token", "a3f9c0d1-token"));
+		assert!(!ct_str_eq("a3f9c0d1-token", "a3f9c0d1-toked"));
+		assert!(!ct_str_eq("short", "longer-value"));
+		assert!(ct_str_eq("", ""));
+	}
 }

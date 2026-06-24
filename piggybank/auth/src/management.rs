@@ -15,6 +15,7 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use jsonwebtoken::get_current_timestamp;
+use subtle::ConstantTimeEq;
 
 use crate::AuthError;
 
@@ -102,7 +103,7 @@ impl RefreshStore {
 			return Err(AuthError::InvalidToken);
 		}
 
-		if fam.current == secret {
+		if ct_eq(&fam.current, secret) {
 			let new_secret = uuid::Uuid::new_v4().to_string();
 			let expires_at = now + bounds.ttl_secs;
 			fam.prev = Some(std::mem::replace(&mut fam.current, new_secret.clone()));
@@ -116,7 +117,7 @@ impl RefreshStore {
 					expires_at,
 				},
 			})
-		} else if fam.prev.as_deref() == Some(secret) {
+		} else if fam.prev.as_deref().is_some_and(|prev| ct_eq(prev, secret)) {
 			// Reuse of a rotated-out secret — treat the family as compromised.
 			map.remove(family);
 			Err(AuthError::InvalidToken)
@@ -188,6 +189,13 @@ impl RefreshStore {
 		fam.last_seen -= secs;
 		fam.absolute_expires_at -= secs;
 	}
+}
+
+/// Constant-time string equality for refresh secrets: an early length check (which
+/// only reveals length, never a guessed value) then a byte-wise `ConstantTimeEq` that
+/// does not short-circuit on the first differing byte.
+fn ct_eq(a: &str, b: &str) -> bool {
+	a.len() == b.len() && a.as_bytes().ct_eq(b.as_bytes()).into()
 }
 
 struct Family {

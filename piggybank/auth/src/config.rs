@@ -73,7 +73,11 @@ impl AuthConfig {
 }
 
 /// The hub's own signing key plus the public JWKS it publishes and verifies against.
-#[derive(Clone, Debug)]
+///
+/// `Debug` is hand-written to redact the private key: the derived impl would print
+/// the PKCS#8 PEM, so any future `tracing::debug!(?config)` or panic message that
+/// captured the config would leak the token-signing key into logs/Sentry.
+#[derive(Clone)]
 pub struct SigningConfig {
 	/// Ed25519 private key, PKCS#8 PEM (`AUTH_SIGNING_KEY_PEM`).
 	pub signing_key_pem: String,
@@ -85,11 +89,28 @@ pub struct SigningConfig {
 	pub jwks_json: String,
 }
 
-/// Google OAuth2 confidential-client credentials.
-#[derive(Clone, Debug)]
+impl std::fmt::Debug for SigningConfig {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("SigningConfig")
+			.field("signing_key_pem", &"<redacted>")
+			.field("kid", &self.kid)
+			.field("jwks_json", &self.jwks_json)
+			.finish()
+	}
+}
+
+/// Google OAuth2 confidential-client credentials. `Debug` is hand-written so the
+/// confidential client secret is never printed (same footgun as [`SigningConfig`]).
+#[derive(Clone)]
 pub struct GoogleConfig {
 	pub client_id: String,
 	pub client_secret: String,
+}
+
+impl std::fmt::Debug for GoogleConfig {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("GoogleConfig").field("client_id", &self.client_id).field("client_secret", &"<redacted>").finish()
+	}
 }
 
 /// Configuration a **downstream service** uses to build a [`Verifier`](crate::verifier::Verifier).
@@ -126,4 +147,34 @@ fn parse_secs(key: &str, default: u64) -> anyhow::Result<u64> {
 
 fn split_csv(raw: &str) -> Vec<String> {
 	raw.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn signing_config_debug_redacts_private_key() {
+		let cfg = SigningConfig {
+			signing_key_pem: "-----BEGIN PRIVATE KEY-----\nSUPERSECRETKEYMATERIAL\n-----END PRIVATE KEY-----".to_string(),
+			kid: "kid-1".to_string(),
+			jwks_json: r#"{"keys":[]}"#.to_string(),
+		};
+		let rendered = format!("{cfg:?}");
+		assert!(!rendered.contains("SUPERSECRETKEYMATERIAL"), "Debug leaked the signing key: {rendered}");
+		assert!(rendered.contains("<redacted>"));
+		assert!(rendered.contains("kid-1"));
+	}
+
+	#[test]
+	fn google_config_debug_redacts_client_secret() {
+		let cfg = GoogleConfig {
+			client_id: "client-123".to_string(),
+			client_secret: "GOCSPX-SUPERSECRET".to_string(),
+		};
+		let rendered = format!("{cfg:?}");
+		assert!(!rendered.contains("GOCSPX-SUPERSECRET"), "Debug leaked the client secret: {rendered}");
+		assert!(rendered.contains("<redacted>"));
+		assert!(rendered.contains("client-123"));
+	}
 }

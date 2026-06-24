@@ -37,6 +37,16 @@ impl ApiError {
 	}
 }
 
+/// Codes the hub uses for client-correctable conditions, whose `message()` is safe to
+/// relay verbatim to the browser. Everything else (Internal/Unknown/Unavailable/DataLoss
+/// and transport errors) is replaced with a generic string so internal detail never leaks.
+fn client_safe(code: Code) -> bool {
+	matches!(
+		code,
+		Code::InvalidArgument | Code::FailedPrecondition | Code::AlreadyExists | Code::NotFound | Code::PermissionDenied | Code::ResourceExhausted
+	)
+}
+
 /// gRPC status code → HTTP status (mirrors `httpStatusFor` in the old TS BFF).
 fn http_status_for(code: Code) -> StatusCode {
 	match code {
@@ -45,6 +55,8 @@ fn http_status_for(code: Code) -> StatusCode {
 		Code::InvalidArgument => StatusCode::BAD_REQUEST,
 		Code::NotFound => StatusCode::NOT_FOUND,
 		Code::AlreadyExists => StatusCode::CONFLICT,
+		Code::FailedPrecondition => StatusCode::PRECONDITION_FAILED,
+		Code::ResourceExhausted => StatusCode::TOO_MANY_REQUESTS,
 		_ => StatusCode::BAD_GATEWAY,
 	}
 }
@@ -65,11 +77,58 @@ impl IntoResponse for ApiError {
 			ApiError::Internal(m) => (StatusCode::BAD_GATEWAY, m),
 			ApiError::ReadFailed { code, message } => (http_status_for(code), message),
 			ApiError::Grpc(s) => {
-				// The hub's client-safe error detail (e.g. "insufficient available balance").
-				let detail = if s.message().is_empty() { "request failed".to_string() } else { s.message().to_string() };
+				// Only codes the hub uses to express client-correctable conditions carry their
+				// `message()` through to the browser; the rest (Internal/Unknown/Unavailable/
+				// DataLoss/transport errors) could embed DB/path/dependency detail, so they get
+				// a fixed generic string and the real detail is logged server-side. The gate is
+				// on the gRPC code alone — a read and a mutation with the same code leak the same.
+				let detail = if client_safe(s.code()) {
+					if s.message().is_empty() { "request failed".to_string() } else { s.message().to_string() }
+				} else {
+					tracing::warn!(code = ?s.code(), message = %s.message(), "upstream error withheld from client");
+					"request failed".to_string()
+				};
 				(http_status_for(s.code()), detail)
 			}
 		};
 		(status, Json(json!({ "error": message }))).into_response()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use axum::body::to_bytes;
+
+	use super::*;
+
+	async fn render(err: ApiError) -> (StatusCode, String) {
+		let resp = err.into_response();
+		let status = resp.status();
+		let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+		let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+		(status, body["error"].as_str().unwrap().to_string())
+	}
+
+	#[tokio::test]
+	async fn internal_status_is_replaced_with_generic_message() {
+		let leak = "sqlx: connection refused at postgres://hub:hunter2@10.0.0.5/bank";
+		let (status, message) = render(ApiError::Grpc(Status::internal(leak))).await;
+		assert_eq!(status, StatusCode::BAD_GATEWAY);
+		assert_eq!(message, "request failed");
+		assert!(!message.contains("postgres"));
+	}
+
+	#[tokio::test]
+	async fn client_safe_status_message_passes_through() {
+		let (status, message) = render(ApiError::Grpc(Status::invalid_argument("insufficient available balance"))).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST);
+		assert_eq!(message, "insufficient available balance");
+	}
+
+	#[tokio::test]
+	async fn unavailable_transport_error_is_withheld() {
+		let (status, message) = render(ApiError::Grpc(Status::unavailable("tcp connect error: 127.0.0.1:50051"))).await;
+		assert_eq!(status, StatusCode::BAD_GATEWAY);
+		assert_eq!(message, "request failed");
 	}
 }

@@ -48,6 +48,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.150"
 sha2 = "0.10"
 sqlx = "0.9.0"
+# Constant-time equality for secret/CSRF comparisons (already in the lockfile transitively).
+subtle = "2.6"
 thiserror = "2.0.18"
 # via the symlink (kept current by the flake shellHook), not the canonicalized store path - hardcoding the hash goes stale on every tigerbeetle derivation rebuild
 tigerbeetle = { path = ".tb-client" }
