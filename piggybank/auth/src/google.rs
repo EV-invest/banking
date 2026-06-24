@@ -35,16 +35,6 @@ pub struct GoogleIdentity {
 	pub email_verified: bool,
 }
 
-/// Google's signing keys (by `kid`) with the freshness window from the last fetch.
-#[derive(Default)]
-struct CertCache {
-	keys: HashMap<String, DecodingKey>,
-	/// When the cached keys may next be refreshed: the later of the response's
-	/// `Cache-Control: max-age` expiry and [`MIN_CERTS_REFRESH`]. `None` until the
-	/// first fetch.
-	refresh_after: Option<Instant>,
-}
-
 /// A configured Google OAuth2 client.
 pub struct GoogleOauth {
 	client_id: String,
@@ -166,6 +156,16 @@ impl GoogleOauth {
 	}
 }
 
+/// Google's signing keys (by `kid`) with the freshness window from the last fetch.
+#[derive(Default)]
+struct CertCache {
+	keys: HashMap<String, DecodingKey>,
+	/// When the cached keys may next be refreshed: the later of the response's
+	/// `Cache-Control: max-age` expiry and [`MIN_CERTS_REFRESH`]. `None` until the
+	/// first fetch.
+	refresh_after: Option<Instant>,
+}
+
 /// Parse the `max-age` directive from a `Cache-Control` response header, returning
 /// zero when absent or unparseable (so freshness then falls back to [`MIN_CERTS_REFRESH`]).
 fn max_age_of(headers: &reqwest::header::HeaderMap) -> Duration {
@@ -198,7 +198,10 @@ mod tests {
 	use std::{
 		io::{Read, Write},
 		net::TcpListener,
-		sync::atomic::{AtomicUsize, Ordering},
+		sync::{
+			Mutex,
+			atomic::{AtomicUsize, Ordering},
+		},
 	};
 
 	use super::*;
@@ -230,9 +233,8 @@ mod tests {
 				HITS.fetch_add(1, Ordering::SeqCst);
 				let body = r#"{"keys":[]}"#;
 				let resp = format!(
-					"HTTP/1.1 200 OK\r\nCache-Control: max-age=3600\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-					body.len(),
-					body
+					"HTTP/1.1 200 OK\r\nCache-Control: max-age=3600\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+					body.len()
 				);
 				let _ = stream.write_all(resp.as_bytes());
 			}
