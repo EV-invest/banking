@@ -177,6 +177,43 @@ mod tests {
 		assert!(verify_token(&token, &cache, &policy("banking-core", vec![TokenType::Service])).is_err());
 	}
 
+	// FB-22 / BANK-ARCH-01, CROSS-1, BANK-COMM-5: the money plane must reject a token minted
+	// by the concierge identity plane — distinct issuer AND audience — so the cabinet BFF
+	// cannot move money with an identity token. The BFF holds two token pairs precisely
+	// because this verification fails; the money-plane trust direction is exchange-based
+	// (a banking-aud token), never "trust concierge's issuer". See docs/ARCHITECTURE.md.
+	#[test]
+	fn concierge_issued_token_is_rejected_by_the_money_plane() {
+		let mut cfg = config();
+		cfg.issuer = "https://auth.concierge.ev".into();
+		cfg.client_audience = "concierge".into();
+		let signing = cfg.signing.clone().unwrap();
+		let concierge_signer = Signer::try_new(&signing, &cfg).unwrap();
+		let (cache, _) = load_jwks(&signing).unwrap();
+
+		let (concierge_token, _) = concierge_signer.mint_access("user-123", 1).unwrap();
+
+		// The money plane verifies under the banking issuer + banking-core audience.
+		let money_policy = VerifyPolicy {
+			issuer: "https://auth.banking.ev".into(),
+			audiences: vec!["banking-core".into(), "banking-services".into()],
+			allowed_types: vec![TokenType::Access, TokenType::Service],
+		};
+		assert!(
+			verify_token(&concierge_token, &cache, &money_policy).is_err(),
+			"a concierge-issued identity token must NOT authorize the money plane"
+		);
+
+		// And the same token verifies fine under its OWN (concierge) policy — proving the
+		// rejection above is the cross-plane boundary, not a malformed token.
+		let concierge_policy = VerifyPolicy {
+			issuer: "https://auth.concierge.ev".into(),
+			audiences: vec!["concierge".into()],
+			allowed_types: vec![TokenType::Access],
+		};
+		assert!(verify_token(&concierge_token, &cache, &concierge_policy).is_ok());
+	}
+
 	#[test]
 	fn service_token_is_distinct_from_an_access_token() {
 		let cfg = config();

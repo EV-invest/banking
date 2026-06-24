@@ -160,6 +160,22 @@ in a server-side session (in-process for now, `SESSION_REDIS_URL` in production 
 the auth refresh Redis), the browser holds only the opaque session id + a readable CSRF cookie
 (double-submit on mutations).
 
+**Cross-plane token-trust (the BFF holds two token pairs).** The cabinet spans both planes,
+which sign tokens under **separate** issuers and **distinct `aud`** (concierge `aud=concierge`
+vs. banking `aud=banking-core`). So the BFF keeps a token pair **per plane** in its session:
+the concierge pair authorizes identity RPCs (`UserDirectory`), the banking pair authorizes
+money RPCs (`WalletService`/`FundsService`). It forwards each plane its **own** token and never
+forwards one plane's token to the other — a leaked identity token therefore cannot move money.
+The trust direction is **exchange-based**: the banking `aud=banking-core` token is minted by the
+**banking** plane (a narrow concierge→banking token-exchange, or a banking issuance route the BFF
+calls), so each plane stays the sole authority for its own audience. We explicitly **reject** the
+alternative of making piggybank trust concierge's issuer/JWKS for the money plane: a single
+identity token would then authorize money movement, collapsing the blast-radius isolation the
+two-plane split exists to provide (and see the hard ordering rule below). Until that exchange
+seam is built, the BFF mints no banking token, so the money routes surface `NotConfigured`
+rather than forwarding the wrong-plane token — `session.rs` keeps the banking slot separate and
+`require_money_token` (`routes/mod.rs`) gates on it.
+
 **Inter-service.** mTLS + short-lived service JWTs (same stateless verify path,
 distinct `aud`); graduate to SPIFFE/SPIRE only at platform scale.
 

@@ -16,7 +16,7 @@ use serde_json::Value;
 use subtle::ConstantTimeEq;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 
-use crate::{error::ApiError, state::AppState};
+use crate::{error::ApiError, session::MoneyToken, state::AppState};
 
 /// Outer per-request deadline: a handler that is still awaiting an upstream plane past
 /// this bound is aborted and the response becomes a 408, so a wedged plane can never hold
@@ -59,10 +59,26 @@ pub fn session_id(state: &AppState, jar: &CookieJar) -> Option<String> {
 	jar.get(&state.cookies.session).map(|c| c.value().to_string())
 }
 
-/// The fresh access token for an authenticated request, or `Unauthenticated`.
+/// The fresh **concierge** identity-plane access token for an authenticated request, or
+/// `Unauthenticated`. Money RPCs must NOT use this — see [`require_money_token`].
 pub async fn require_token(state: &AppState, jar: &CookieJar) -> Result<String, ApiError> {
 	let id = session_id(state, jar).ok_or(ApiError::Unauthenticated)?;
 	state.sessions.access_token(&id, &state.grpc).await.ok_or(ApiError::Unauthenticated)
+}
+
+/// The fresh **banking** (`aud=banking-core`) access token for a money-plane RPC. The two
+/// planes are cryptographically separated, so the BFF forwards the banking token here and
+/// the concierge token to identity — never one plane's token to the other. Until the
+/// concierge→banking token-exchange seam is built no banking token is minted, so this
+/// surfaces `NotConfigured` (503) rather than forwarding the wrong-plane token, which the
+/// money verifier would reject on issuer/audience.
+pub async fn require_money_token(state: &AppState, jar: &CookieJar) -> Result<String, ApiError> {
+	let id = session_id(state, jar).ok_or(ApiError::Unauthenticated)?;
+	match state.sessions.money_token(&id, &state.grpc).await {
+		MoneyToken::Token(token) => Ok(token),
+		MoneyToken::NotIssued => Err(ApiError::NotConfigured),
+		MoneyToken::NoSession => Err(ApiError::Unauthenticated),
+	}
 }
 
 /// CSRF double-submit: the `x-ev-csrf` header must equal the readable `ev_csrf` cookie.

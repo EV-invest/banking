@@ -40,6 +40,17 @@ runner on `:50061`, started from the sibling `concierge` repo. Config defaults l
 > proxy. Widen the bind (`0.0.0.0`) only behind an upstream firewall that keeps `/api/*` off
 > any public interface — see [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md).
 
+> **Two token pairs (cross-plane trust).** The BFF spans both planes, which sign tokens under
+> separate issuers and distinct `aud` (concierge `aud=concierge`, banking `aud=banking-core`).
+> The session holds a token pair **per plane**: the concierge pair authorizes identity RPCs, a
+> separate banking pair authorizes money RPCs. The BFF forwards each plane its **own** token and
+> never the other plane's — so a leaked identity token cannot move money. The banking token is
+> **exchange-based** (minted by the banking plane via a concierge→banking exchange / banking
+> issuance route), NOT piggybank trusting concierge's issuer — see
+> [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md).
+>
 > **Note:** end-to-end login depends on concierge's `AuthService`/`UserDirectory` being
-> implemented (currently scaffold stubs) and on piggybank trusting concierge-issued access
-> tokens for the money plane. The routing/wiring here is complete and forward-ready.
+> implemented (currently scaffold stubs) and on the concierge→banking token-exchange seam that
+> mints the money-plane (`aud=banking-core`) token. Until that seam exists no banking token is
+> minted, so the money routes surface `NotConfigured` (503) rather than forwarding the identity
+> token; the identity routes and the routing/wiring here are complete and forward-ready.

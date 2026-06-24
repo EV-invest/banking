@@ -56,6 +56,7 @@ impl SessionStore {
 			access_expires_at: tokens.access_expires_at,
 			refresh_token: tokens.refresh_token,
 			refresh_expires_at,
+			banking_access_token: String::new(),
 			user: tokens.user.map(User::from).unwrap_or_default(),
 			csrf_token: csrf.clone(),
 		};
@@ -103,10 +104,31 @@ impl SessionStore {
 		}
 	}
 
-	/// The fresh concierge access token for BFF→plane calls (rotates first). `None` if gone.
+	/// The fresh concierge access token for identity-plane calls (rotates first). `None` if gone.
+	///
+	/// This is the concierge `aud=concierge` token; it authorizes only the identity plane and
+	/// MUST NOT be forwarded to the money plane — see [`money_token`](Self::money_token).
 	pub async fn access_token(&self, id: &str, grpc: &Grpc) -> Option<String> {
 		self.ensure_fresh(id, grpc).await?;
 		self.sessions.lock().await.get(id).map(|s| s.access_token.clone())
+	}
+
+	/// The fresh banking `aud=banking-core` token for money-plane calls. Distinct from the
+	/// concierge identity token: the two planes are cryptographically separated (distinct
+	/// issuer + `aud`), so a leaked identity token cannot move money. Returns `MoneyToken`,
+	/// which is `NotIssued` until the concierge→banking token-exchange seam is built — the
+	/// money routes surface that as `NotConfigured` rather than forwarding the wrong-plane
+	/// token (which the money verifier would reject on issuer/audience anyway).
+	pub async fn money_token(&self, id: &str, grpc: &Grpc) -> MoneyToken {
+		if self.ensure_fresh(id, grpc).await.is_none() {
+			return MoneyToken::NoSession;
+		}
+		let banking = self.sessions.lock().await.get(id).map(|s| s.banking_access_token.clone());
+		match banking {
+			Some(token) if !token.is_empty() => MoneyToken::Token(token),
+			Some(_) => MoneyToken::NotIssued,
+			None => MoneyToken::NoSession,
+		}
 	}
 
 	/// The session's refresh token — proves identity to concierge's session RPCs. `None` if expired.
@@ -123,12 +145,84 @@ impl SessionStore {
 	}
 }
 
+/// The resolution of a money-plane token for a request. The money plane has its own issuer
+/// and `aud=banking-core`, so the concierge identity token never authorizes it; until the
+/// concierge→banking token-exchange seam exists, `NotIssued` is the steady state.
+pub enum MoneyToken {
+	/// A live banking `aud=banking-core` token to forward to the money plane.
+	Token(String),
+	/// A live session, but no banking token has been minted (the exchange seam is unbuilt).
+	NotIssued,
+	/// No live session (expired or gone).
+	NoSession,
+}
+
 #[derive(Clone)]
 struct Session {
 	access_token: String,
 	access_expires_at: i64,
 	refresh_token: String,
 	refresh_expires_at: i64,
+	/// The separate banking-plane (`aud=banking-core`) access token for money RPCs. Empty until
+	/// the concierge→banking token-exchange seam is built; never derived from the concierge token.
+	/// Its own rotation/expiry machinery lands with that seam (kept off the concierge refresh path).
+	banking_access_token: String,
 	user: User,
 	csrf_token: String,
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// A lazy `Grpc` to a black-hole address: a far-future session never refreshes, so no RPC
+	/// is made and the channel stays unused — the seam test exercises pure token resolution.
+	fn grpc() -> Grpc {
+		Grpc::connect_lazy("http://127.0.0.1:1", "http://127.0.0.1:1").expect("lazy channels")
+	}
+
+	fn fresh_concierge_tokens() -> cc::TokenResponse {
+		cc::TokenResponse {
+			access_token: "concierge-access".into(),
+			access_expires_at: now_secs() + 3600,
+			refresh_token: "concierge-refresh".into(),
+			refresh_expires_at: now_secs() + 86_400,
+			user: Some(cc::UserSummary {
+				user_id: "u-1".into(),
+				email: "a@b.c".into(),
+				status: "active".into(),
+				token_version: 1,
+			}),
+		}
+	}
+
+	// FB-22 / BANK-ARCH-01, CROSS-1, BANK-COMM-5: the BFF holds two token pairs. The identity
+	// path serves the concierge token; the money path serves the SEPARATE banking pair — and
+	// never the concierge token. Until the concierge→banking exchange seam exists, the banking
+	// pair is empty, so a money RPC resolves to `NotIssued` (the route surfaces NotConfigured)
+	// rather than forwarding the identity token to the money plane.
+	#[tokio::test]
+	async fn money_path_never_serves_the_concierge_identity_token() {
+		let store = SessionStore::new();
+		let (id, _csrf, _max_age) = store.put(fresh_concierge_tokens()).await;
+		let grpc = grpc();
+
+		let identity = store.access_token(&id, &grpc).await.expect("a live session yields the concierge token");
+		assert_eq!(identity, "concierge-access", "identity RPCs carry the concierge access token");
+
+		match store.money_token(&id, &grpc).await {
+			MoneyToken::NotIssued => {}
+			MoneyToken::Token(t) => panic!("money path must not reuse the identity token, got {t:?}"),
+			MoneyToken::NoSession => panic!("the session is live; expected NotIssued, not NoSession"),
+		}
+	}
+
+	#[tokio::test]
+	async fn money_token_reports_no_session_when_the_session_is_gone() {
+		let store = SessionStore::new();
+		match store.money_token("nonexistent", &grpc()).await {
+			MoneyToken::NoSession => {}
+			_ => panic!("a missing session must resolve to NoSession"),
+		}
+	}
 }
