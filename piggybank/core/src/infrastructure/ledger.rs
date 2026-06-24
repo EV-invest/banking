@@ -55,31 +55,62 @@ impl TbLedger {
 		row.map(|bytes| u128_from_be(&bytes)).transpose()
 	}
 
+	/// Resolve the id of an *existing* mapped key and assert its persisted derivation
+	/// (`ledger`/`code`/`flags`) still matches what `key` derives today. TB flags are
+	/// immutable on first create, so a drifted derivation would make every later create
+	/// for this key a conflict that parks silently — this turns that latent runtime
+	/// foot-gun into a loud, deterministic [`LedgerError::Conflict`] surfaced on the
+	/// first touch after the change.
+	async fn resolve_and_verify(&self, key: &LedgerAccountKey, logical_key: &str) -> Result<Option<u128>, LedgerError> {
+		let row = sqlx::query_as::<_, (Vec<u8>, i32, i32, i32)>("SELECT tb_account_id, ledger, code, flags FROM tb_accounts WHERE logical_key = $1")
+			.bind(logical_key)
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(|e| LedgerError::Unavailable(format!("account map read: {e}")))?;
+		let Some((bytes, ledger, code, flags)) = row else {
+			return Ok(None);
+		};
+		let stored = (ledger, code, flags);
+		let derived = (key.ledger().id() as i32, key.account_code().code() as i32, account_flags(key.normal()).bits() as i32);
+		if stored != derived {
+			return Err(LedgerError::Conflict(format!(
+				"ledger derivation drift for {logical_key}: stored (ledger,code,flags)={stored:?} != derived {derived:?}"
+			)));
+		}
+		u128_from_be(&bytes).map(Some)
+	}
+
 	/// Resolve the account id for `key`, minting and recording a fresh `u128` on
 	/// first use. Idempotent and race-safe (`ON CONFLICT DO NOTHING` + re-read),
-	/// mirroring [`PgUsers::provision`](crate::infrastructure::users).
+	/// mirroring [`PgUsers::provision`](crate::infrastructure::users). For an existing
+	/// row it also asserts the persisted derivation has not drifted (see
+	/// [`resolve_and_verify`](Self::resolve_and_verify)).
 	async fn resolve_or_allocate(&self, key: &LedgerAccountKey) -> Result<u128, LedgerError> {
 		let logical_key = key.logical_key();
-		if let Some(id) = self.resolve_id(&logical_key).await? {
+		if let Some(id) = self.resolve_and_verify(key, &logical_key).await? {
 			return Ok(id);
 		}
 		let fresh = Uuid::new_v4().as_u128();
 		let bytes = fresh.to_be_bytes();
 		let inserted = sqlx::query_scalar::<_, Vec<u8>>(
-			"INSERT INTO tb_accounts (logical_key, tb_account_id, ledger, code, network) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (logical_key) DO NOTHING RETURNING tb_account_id",
+			"INSERT INTO tb_accounts (logical_key, tb_account_id, ledger, code, network, flags) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (logical_key) DO NOTHING RETURNING tb_account_id",
 		)
 		.bind(&logical_key)
 		.bind(&bytes[..])
 		.bind(key.ledger().id() as i32)
 		.bind(key.account_code().code() as i32)
 		.bind(key.network().map(|n| n.as_str()))
+		.bind(account_flags(key.normal()).bits() as i32)
 		.fetch_optional(&self.pool)
 		.await
 		.map_err(|e| LedgerError::Unavailable(format!("account map insert: {e}")))?;
 		match inserted {
 			Some(bytes) => u128_from_be(&bytes),
 			// Lost the race — another writer inserted the same logical key first.
-			None => self.resolve_id(&logical_key).await?.ok_or_else(|| LedgerError::Unavailable("account map race".into())),
+			None => self
+				.resolve_and_verify(key, &logical_key)
+				.await?
+				.ok_or_else(|| LedgerError::Unavailable("account map race".into())),
 		}
 	}
 
