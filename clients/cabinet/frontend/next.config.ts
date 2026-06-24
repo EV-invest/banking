@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { staticSecurityHeaders } from "./shared/config/security";
+
 // The BFF now lives in a separate Rust service (`clients/cabinet/backend`). The browser
 // keeps calling same-origin `/api/*`; Next proxies those to the backend so the
 // `__Host-`/HttpOnly session cookie + CSRF model stays same-origin. In production the
@@ -10,6 +12,11 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${BACKEND}/api/:path*` }];
+  },
+  // Request-invariant hardening on every response. The nonce-bearing CSP itself
+  // is set per-request in proxy.ts; see shared/config/security.ts.
+  async headers() {
+    return [{ source: "/:path*", headers: staticSecurityHeaders() }];
   },
 };
 

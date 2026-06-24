@@ -10,6 +10,7 @@
     "start": "next start --port 3000",
     "lint": "eslint .",
     "check": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types 'shared/**/*.test.ts'",
     "gen:api": "openapi-ts"
   },
   "dependencies": {

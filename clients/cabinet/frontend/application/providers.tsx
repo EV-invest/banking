@@ -7,12 +7,13 @@ import type { ReactNode } from "react";
 
 // Client observability providers wrap the tree. Both read their config from
 // NEXT_PUBLIC_* env at runtime and no-op when unset (no DSN / no key), so the
-// same tree renders unconfigured in local dev and CI.
-export function Providers({ children }: { children: ReactNode }) {
+// same tree renders unconfigured in local dev and CI. `nonce` is the per-request
+// CSP nonce (from the root layout) so next-themes' inline script stays allowed.
+export function Providers({ children, nonce }: { children: ReactNode; nonce?: string }) {
   return (
     <ErrorMonitoringProvider>
       <PostHogProvider>
-        <ThemeProvider attribute="class" forcedTheme="dark" enableSystem={false}>
+        <ThemeProvider attribute="class" forcedTheme="dark" enableSystem={false} nonce={nonce}>
           {children}
         </ThemeProvider>
       </PostHogProvider>
