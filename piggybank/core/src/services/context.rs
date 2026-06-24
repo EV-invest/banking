@@ -436,8 +436,15 @@ impl WalletService for WalletSvc {
 }
 
 /// The authenticated caller's own user id (from the access-token `sub`).
+///
+/// Self-service RPCs act *as a user*, so only a `typ=access` token qualifies — a
+/// `typ=service` token (an inter-service principal) is rejected here, matching the
+/// authz matrix, independent of whether its `sub` happens to parse as a UUID.
 fn caller_id<T>(request: &Request<T>) -> Result<UserId, Status> {
 	let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
+	if !claims.is_access() {
+		return Err(Status::permission_denied("access token required"));
+	}
 	parse_user_id(&claims.sub)
 }
 

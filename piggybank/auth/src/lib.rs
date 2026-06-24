@@ -49,7 +49,7 @@ mod google;
 mod management;
 mod signer;
 
-pub use authorizer::Authorizer;
+pub use authorizer::{Authorizer, TokenClass};
 pub use claims::{Claims, TokenType};
 pub use config::{AuthConfig, GoogleConfig, SigningConfig, VerifierConfig};
 pub use interceptor::{AuthLayer, Authenticate, claims_of, grpc_auth_layer};

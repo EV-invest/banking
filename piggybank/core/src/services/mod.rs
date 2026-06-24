@@ -14,7 +14,7 @@
 
 use std::net::SocketAddr;
 
-use evbanking_auth::grpc_auth_layer;
+use evbanking_auth::{TokenClass, grpc_auth_layer};
 use evbanking_contracts::banking::v1::{
 	balance_service_server::BalanceServiceServer, funds_service_server::FundsServiceServer, health_service_server::HealthServiceServer, users_service_server::UsersServiceServer,
 	wallet_service_server::WalletServiceServer,
@@ -40,10 +40,13 @@ pub mod health;
 /// Authorization: each data service is wrapped in the async auth layer, which
 /// authorizes the request in-process via `state.authorizer` (a channel round-trip
 /// to the auth task — never the network) and injects the verified `Claims` into the
-/// request extensions. `HealthService` is left **unwrapped** so the BFF liveness
-/// probe stays public.
+/// request extensions. These are user-facing services, so the layer is pinned to the
+/// **client** token class — `aud=banking-core`, `typ=access` only — rejecting an
+/// inter-service token at the verifier (a `TokenClass::Service` layer is reserved for
+/// future inter-service surfaces). `HealthService` is left **unwrapped** so the BFF
+/// liveness probe stays public.
 pub async fn serve(addr: SocketAddr, state: AppState) -> Result<(), tonic::transport::Error> {
-	let auth = grpc_auth_layer(state.authorizer.clone());
+	let auth = grpc_auth_layer(state.authorizer.for_class(TokenClass::Client));
 	Server::builder()
 		// grpc-web rides HTTP/1.1; required for the GrpcWebLayer to translate.
 		.accept_http1(true)

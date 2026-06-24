@@ -23,7 +23,7 @@ use tonic::{Request, Response, Status, transport::Server};
 
 use crate::{
 	AuthError, Claims,
-	authorizer::{AuthorizeRequest, Authorizer},
+	authorizer::{AuthorizeRequest, Authorizer, TokenClass},
 	claims::TokenType,
 	config::AuthConfig,
 	google::GoogleOauth,
@@ -56,7 +56,7 @@ impl AuthService {
 		let issuance = Server::builder().add_service(AuthServiceServer::new(grpc)).serve(addr);
 		let authorize = async move {
 			while let Some(request) = authorize_rx.recv().await {
-				let result = authorizer.authorize_token(&request.token);
+				let result = authorizer.authorize_token(&request.token, request.class);
 				let _ = request.respond_to.send(result);
 			}
 		};
@@ -85,16 +85,22 @@ impl AuthGrpc {
 			None => (None, JwksCache::new(), Vec::new()),
 		};
 		let google = config.google.as_ref().map(GoogleOauth::new);
-		let authorize_policy = VerifyPolicy {
+		let client_policy = VerifyPolicy {
 			issuer: config.issuer.clone(),
-			audiences: vec![config.client_audience.clone(), config.service_audience.clone()],
-			allowed_types: vec![TokenType::Access, TokenType::Service],
+			audiences: vec![config.client_audience.clone()],
+			allowed_types: vec![TokenType::Access],
+		};
+		let service_policy = VerifyPolicy {
+			issuer: config.issuer.clone(),
+			audiences: vec![config.service_audience.clone()],
+			allowed_types: vec![TokenType::Service],
 		};
 		Ok(Self {
 			engine: Arc::new(AuthEngine {
 				signer,
 				keyring,
-				authorize_policy,
+				client_policy,
+				service_policy,
 				google,
 				refresh: RefreshStore::new(),
 				provisioner,
@@ -104,22 +110,33 @@ impl AuthGrpc {
 		})
 	}
 
-	/// Verify a data-plane token in-process (called from core's `Authorizer` loop).
-	fn authorize_token(&self, token: &str) -> Result<Claims, AuthError> {
+	/// Verify a data-plane token in-process (called from core's `Authorizer` loop)
+	/// against the policy for the mounting layer's [`TokenClass`] — the same
+	/// cryptographic `aud`+`typ` separation downstream services pin, so a service
+	/// token is rejected at the verifier on user-facing services rather than relying
+	/// on `caller_id`'s incidental UUID parse.
+	fn authorize_token(&self, token: &str, class: TokenClass) -> Result<Claims, AuthError> {
 		let engine = &self.engine;
 		if engine.signer.is_none() || engine.keyring.is_empty() {
 			return Err(AuthError::NotConfigured);
 		}
-		verify_token(token, &engine.keyring, &engine.authorize_policy)
+		let policy = match class {
+			TokenClass::Client => &engine.client_policy,
+			TokenClass::Service => &engine.service_policy,
+		};
+		verify_token(token, &engine.keyring, policy)
 	}
 }
 
 struct AuthEngine {
 	signer: Option<Signer>,
 	keyring: JwksCache,
-	/// Policy for the hub's in-process authorize path: accepts the audiences the hub
-	/// itself issues for the data plane (client access + inter-service tokens).
-	authorize_policy: VerifyPolicy,
+	/// In-process authorize policy for user-facing data services: pins the client
+	/// audience and `typ=access` only, so an inter-service token is rejected here.
+	client_policy: VerifyPolicy,
+	/// In-process authorize policy reserved for genuinely inter-service surfaces:
+	/// pins the service audience and `typ=service` only.
+	service_policy: VerifyPolicy,
 	google: Option<GoogleOauth>,
 	refresh: RefreshStore,
 	provisioner: Provisioner,
@@ -238,5 +255,55 @@ impl AuthServiceRpc for AuthGrpc {
 
 	async fn jwks(&self, _request: Request<JwksRequest>) -> Result<Response<JwksResponse>, Status> {
 		Ok(Response::new(JwksResponse { keys: self.engine.jwks.clone() }))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::{config::SigningConfig, provisioner::provisioner_channel};
+
+	// Same throwaway Ed25519 keypair as the signer tests.
+	const TEST_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKolOSMXwE+tafZkX+jkKYJbmJ066f4E12wAwTIkKps6\n-----END PRIVATE KEY-----\n";
+	const TEST_JWK_X: &str = "Z6BCmq9-_wo9d7co5CDW84Wn0sAC3BA0XWK2AOstpV4";
+
+	fn configured_grpc() -> AuthGrpc {
+		let config = AuthConfig {
+			issuer: "https://auth.test".into(),
+			client_audience: "banking-core".into(),
+			service_audience: "banking-services".into(),
+			access_ttl_secs: 900,
+			refresh_ttl_secs: 3600,
+			service_ttl_secs: 300,
+			signing: Some(SigningConfig {
+				signing_key_pem: TEST_PEM.into(),
+				kid: "test-kid".into(),
+				jwks_json: format!(r#"{{"keys":[{{"kty":"OKP","crv":"Ed25519","x":"{TEST_JWK_X}","kid":"test-kid","alg":"EdDSA","use":"sig"}}]}}"#),
+			}),
+			google: None,
+		};
+		let (provisioner, _rx) = provisioner_channel();
+		AuthGrpc::build(config, provisioner).unwrap()
+	}
+
+	// The hub's mounted authorize path — not just the verify policy in isolation —
+	// keeps the two principal classes apart: a `mint_service` token is rejected on the
+	// client (user-facing) layer, and a client access token is rejected on the
+	// service layer.
+	#[test]
+	fn authorize_token_separates_client_and_service_classes() {
+		let grpc = configured_grpc();
+		let signer = grpc.engine.signer.as_ref().unwrap();
+
+		let (access, _) = signer.mint_access("00000000-0000-0000-0000-000000000001", 0).unwrap();
+		let (service, _) = signer.mint_service("allocations").unwrap();
+
+		let client_claims = grpc.authorize_token(&access, TokenClass::Client).unwrap();
+		assert!(client_claims.is_access());
+		assert!(grpc.authorize_token(&service, TokenClass::Client).is_err());
+
+		let service_claims = grpc.authorize_token(&service, TokenClass::Service).unwrap();
+		assert_eq!(service_claims.typ, TokenType::Service);
+		assert!(grpc.authorize_token(&access, TokenClass::Service).is_err());
 	}
 }
