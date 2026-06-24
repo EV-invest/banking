@@ -543,10 +543,14 @@
               sqlx-cli
               tigerbeetleBin
               protocGenConnectOpenapi
+              sccache
             ] ++ pre-commit-check.enabledPackages ++ combined.enabledPackages;
 
             env.RUST_BACKTRACE = 1;
             env.RUST_LIB_BACKTRACE = 0;
+            # shared compile cache across builds; incremental off (sccache requires it)
+            env.RUSTC_WRAPPER = "sccache";
+            env.CARGO_INCREMENTAL = "0";
           };
       }
     );
