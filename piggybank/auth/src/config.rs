@@ -12,6 +12,15 @@ use anyhow::Context;
 
 use crate::claims::TokenType;
 
+/// This plane's identity token, asserted to appear in every configured issuer and
+/// audience at boot. The two planes read the SAME `AUTH_*` env-var names and are kept
+/// disjoint only by their default strings; if banking is ever launched from a shared
+/// environment that overrides those defaults to concierge values, a concierge token
+/// would be byte-for-byte valid here. This boot check refuses such a config so the
+/// collision can never fail open. Defense-in-depth — the two planes MUST never share
+/// an `AUTH_*` environment in the first place.
+const PLANE: &str = "banking";
+
 /// Configuration for the auth **service** (the token-issuing side). Construct with
 /// [`AuthConfig::from_env`] in the composition root and hand to
 /// [`AuthService::try_new`](crate::service::AuthService::try_new).
@@ -57,7 +66,7 @@ impl AuthConfig {
 			(Some(client_id), Some(client_secret)) => Some(GoogleConfig { client_id, client_secret }),
 			_ => None,
 		};
-		Ok(Self {
+		let config = Self {
 			issuer: env::var("AUTH_ISSUER").unwrap_or_else(|_| "https://auth.banking.ev".to_string()),
 			client_audience: env::var("AUTH_CLIENT_AUDIENCE").unwrap_or_else(|_| "banking-core".to_string()),
 			service_audience: env::var("AUTH_SERVICE_AUDIENCE").unwrap_or_else(|_| "banking-services".to_string()),
@@ -68,7 +77,19 @@ impl AuthConfig {
 			service_ttl_secs: parse_secs("AUTH_SERVICE_TTL_SECS", 300)?,
 			signing,
 			google,
-		})
+		};
+		config.assert_plane()?;
+		Ok(config)
+	}
+
+	/// Refuse an issuing config whose issuer or either audience does not carry this
+	/// plane's identity — so banking can never mint (or verify) under concierge's
+	/// issuer/audience even if launched from a shared environment that overrides the
+	/// per-binary defaults.
+	pub fn assert_plane(&self) -> anyhow::Result<()> {
+		assert_plane("AUTH_ISSUER", &self.issuer)?;
+		assert_plane("AUTH_CLIENT_AUDIENCE", &self.client_audience)?;
+		assert_plane("AUTH_SERVICE_AUDIENCE", &self.service_audience)
 	}
 }
 
@@ -88,17 +109,6 @@ pub struct SigningConfig {
 	/// `kid` and any retired-but-still-valid keys (make-before-break rotation).
 	pub jwks_json: String,
 }
-
-impl std::fmt::Debug for SigningConfig {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("SigningConfig")
-			.field("signing_key_pem", &"<redacted>")
-			.field("kid", &self.kid)
-			.field("jwks_json", &self.jwks_json)
-			.finish()
-	}
-}
-
 /// Google OAuth2 confidential-client credentials. `Debug` is hand-written so the
 /// confidential client secret is never printed (same footgun as [`SigningConfig`]).
 #[derive(Clone)]
@@ -106,13 +116,6 @@ pub struct GoogleConfig {
 	pub client_id: String,
 	pub client_secret: String,
 }
-
-impl std::fmt::Debug for GoogleConfig {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("GoogleConfig").field("client_id", &self.client_id).field("client_secret", &"<redacted>").finish()
-	}
-}
-
 /// Configuration a **downstream service** uses to build a [`Verifier`](crate::verifier::Verifier).
 #[derive(Clone, Debug)]
 pub struct VerifierConfig {
@@ -126,15 +129,53 @@ pub struct VerifierConfig {
 	/// gRPC address of the hub auth service, dialed to refresh the JWKS cache.
 	pub jwks_grpc_endpoint: String,
 }
-
 impl VerifierConfig {
 	pub fn from_env() -> anyhow::Result<Self> {
-		Ok(Self {
+		let config = Self {
 			issuer: env::var("AUTH_ISSUER").unwrap_or_else(|_| "https://auth.banking.ev".to_string()),
 			audiences: split_csv(&env::var("AUTH_CLIENT_AUDIENCE").unwrap_or_else(|_| "banking-core".to_string())),
 			allowed_types: vec![TokenType::Access],
 			jwks_grpc_endpoint: env::var("AUTH_JWKS_GRPC_ENDPOINT").context("AUTH_JWKS_GRPC_ENDPOINT must be set for a downstream verifier")?,
-		})
+		};
+		config.assert_plane()?;
+		Ok(config)
+	}
+
+	/// Refuse a verifier whose expected issuer or any accepted audience does not carry
+	/// this plane's identity — so a downstream banking service can never be pointed at
+	/// concierge's issuer/audience and accept concierge tokens. Callers that build a
+	/// [`VerifierConfig`] by hand (not via [`from_env`](Self::from_env)) MUST invoke this
+	/// at boot to get the same guard.
+	pub fn assert_plane(&self) -> anyhow::Result<()> {
+		assert_plane("issuer", &self.issuer)?;
+		for audience in &self.audiences {
+			assert_plane("audience", audience)?;
+		}
+		Ok(())
+	}
+}
+
+fn assert_plane(field: &str, value: &str) -> anyhow::Result<()> {
+	anyhow::ensure!(
+		value.contains(PLANE),
+		"auth config {field} {value:?} does not carry this plane's identity ({PLANE:?}) — refusing to start with a cross-plane (or shared-environment) auth config"
+	);
+	Ok(())
+}
+
+impl std::fmt::Debug for SigningConfig {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("SigningConfig")
+			.field("signing_key_pem", &"<redacted>")
+			.field("kid", &self.kid)
+			.field("jwks_json", &self.jwks_json)
+			.finish()
+	}
+}
+
+impl std::fmt::Debug for GoogleConfig {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("GoogleConfig").field("client_id", &self.client_id).field("client_secret", &"<redacted>").finish()
 	}
 }
 
@@ -151,6 +192,8 @@ fn split_csv(raw: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+	use std::sync::Mutex;
+
 	use super::*;
 
 	#[test]
@@ -176,5 +219,75 @@ mod tests {
 		assert!(!rendered.contains("GOCSPX-SUPERSECRET"), "Debug leaked the client secret: {rendered}");
 		assert!(rendered.contains("<redacted>"));
 		assert!(rendered.contains("client-123"));
+	}
+
+	fn issuing(issuer: &str, client_audience: &str, service_audience: &str) -> AuthConfig {
+		AuthConfig {
+			issuer: issuer.into(),
+			client_audience: client_audience.into(),
+			service_audience: service_audience.into(),
+			access_ttl_secs: 900,
+			refresh_ttl_secs: 2_592_000,
+			max_session_secs: 7_776_000,
+			idle_timeout_secs: 0,
+			service_ttl_secs: 300,
+			signing: None,
+			google: None,
+		}
+	}
+
+	#[test]
+	fn default_banking_config_passes_plane_check() {
+		issuing("https://auth.banking.ev", "banking-core", "banking-services")
+			.assert_plane()
+			.expect("banking defaults carry the plane identity");
+	}
+
+	#[test]
+	fn concierge_issuer_is_rejected() {
+		let err = issuing("https://auth.concierge.ev", "banking-core", "banking-services")
+			.assert_plane()
+			.expect_err("a concierge issuer must be refused");
+		assert!(err.to_string().contains("AUTH_ISSUER"), "error should name the offending field: {err}");
+	}
+
+	#[test]
+	fn concierge_audience_is_rejected() {
+		assert!(
+			issuing("https://auth.banking.ev", "concierge", "banking-services").assert_plane().is_err(),
+			"a concierge client audience must be refused"
+		);
+		assert!(
+			issuing("https://auth.banking.ev", "banking-core", "concierge-services").assert_plane().is_err(),
+			"a concierge service audience must be refused"
+		);
+	}
+
+	#[test]
+	fn verifier_rejects_cross_plane_audience() {
+		let cfg = VerifierConfig {
+			issuer: "https://auth.banking.ev".into(),
+			audiences: vec!["concierge".into()],
+			allowed_types: vec![TokenType::Access],
+			jwks_grpc_endpoint: "http://127.0.0.1:50052".into(),
+		};
+		assert!(cfg.assert_plane().is_err(), "a verifier pointed at a concierge audience must be refused");
+	}
+
+	// Drives the real boot path: a concierge-prefixed issuer in the environment must fail
+	// `from_env` at startup. Serialized via a mutex + env restore because it mutates the
+	// process environment (unsafe in edition 2024) shared by all tests in this binary.
+	#[test]
+	fn from_env_rejects_concierge_issuer_at_boot() {
+		static ENV_GUARD: Mutex<()> = Mutex::new(());
+		let _guard = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+		let prior = env::var("AUTH_ISSUER").ok();
+		unsafe { env::set_var("AUTH_ISSUER", "https://auth.concierge.ev") };
+		let result = AuthConfig::from_env();
+		match prior {
+			Some(v) => unsafe { env::set_var("AUTH_ISSUER", v) },
+			None => unsafe { env::remove_var("AUTH_ISSUER") },
+		}
+		assert!(result.is_err(), "from_env must reject a concierge issuer for the banking plane");
 	}
 }

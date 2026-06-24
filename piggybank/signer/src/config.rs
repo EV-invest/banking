@@ -50,6 +50,7 @@ impl SignerConfig {
 			allowed_types: vec![TokenType::Service],
 			jwks_grpc_endpoint: env::var("AUTH_JWKS_GRPC_ENDPOINT").context("AUTH_JWKS_GRPC_ENDPOINT must be set so the signer can verify the hub's service token")?,
 		};
+		verifier.assert_plane()?;
 
 		let tls = load_tls()?;
 		// Fail closed: a non-loopback bind in cleartext would expose the seam off-host, so

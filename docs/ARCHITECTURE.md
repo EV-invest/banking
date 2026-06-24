@@ -130,6 +130,17 @@ are cryptographically kept apart. **Refresh tokens are not JWTs** — they are o
 rotated, server-side handles (which is what enables reuse detection), so they can't
 hit the data plane at all and carry no `aud`/`typ`.
 
+**Per-plane env namespacing.** Both planes read the same `AUTH_*` env-var names
+(`AUTH_ISSUER`, `AUTH_CLIENT_AUDIENCE`, `AUTH_SERVICE_AUDIENCE`, `AUTH_SIGNING_*`,
+`AUTH_JWKS_*`); they are kept disjoint only by their default strings (banking
+`*.banking.*`, concierge `*.concierge.*`). The two planes therefore **MUST never share
+an `AUTH_*` environment** (one `.env` / ConfigMap / CI matrix) — overriding both to the
+same issuer + audience + signing key would make one plane's token byte-for-byte valid
+on the other, silently collapsing the audience separation. As defense-in-depth each
+binary asserts at boot (in `evbanking_auth`/`evconcierge_auth`'s `*Config::from_env`)
+that its configured issuer and audiences carry its own plane's identity, and **refuses
+to start** otherwise — so banking rejects an `iss`/`aud` that isn't `*banking*`.
+
 **External services (separate processes).** They can't share the in-process
 channel, so they build a [`Verifier`] ([`evbanking_auth`]) that caches the hub's
 JWKS (refreshed via the `Jwks` RPC, and on an unknown-`kid` miss) and verify the
