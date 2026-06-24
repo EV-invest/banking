@@ -2,9 +2,12 @@
 //!
 //! Mirrors [`PgWithdrawals`](super::withdrawals::PgWithdrawals): row-locked commands
 //! that apply the aggregate transition and drain its events in one transaction. `open`
-//! also takes a `FOR UPDATE` lock on the user's `fund_positions` row to serialize
-//! concurrent requests; `settle` reduces that position's cost basis proportionally to
-//! the redeemed fraction (average cost) for P&L.
+//! takes a `FOR UPDATE` lock on the user's `fund_positions` row to serialize concurrent
+//! requests; `settle` re-takes that lock and reduces the position's cost basis
+//! proportionally to the redeemed fraction (average cost) for P&L — dividing by the
+//! position's own projection-tracked `units` (decremented in the same locked tx), NOT a
+//! TigerBeetle balance that lags the async burn, so concurrent settles compound
+//! deterministically.
 
 use async_trait::async_trait;
 use domain::{
@@ -123,23 +126,23 @@ async fn load_for_update(conn: &mut PgConnection, id: RedemptionId) -> Result<Re
 	.into_domain()
 }
 
-/// Reduce a position's average-cost basis by the redeemed fraction
-/// (`cost_basis × remaining / units_held`, truncated). A no-op if the position row is
-/// absent (a holding minted outside subscribe, e.g. a test).
-async fn reduce_cost_basis(conn: &mut PgConnection, redemption: &Redemption, units_held: Shares) -> Result<(), DomainError> {
-	let held = units_held.base_units();
-	if held == 0 {
-		return Ok(());
-	}
-	let remaining = held.saturating_sub(redemption.units().base_units());
+/// Reduce a position's average-cost basis by the redeemed fraction and decrement its
+/// tracked units — in one statement, under the row lock the caller already holds, so the
+/// ratio's denominator is the position's *own* `units` (not a relay-lagging TB balance) and
+/// back-to-back settles compound: `cost_basis ← trunc(cost_basis × (units − redeemed) /
+/// units)` then `units ← units − redeemed`. A no-op if the position row is absent (a holding
+/// minted outside subscribe, e.g. a test) or already at zero units (nothing left to reduce).
+async fn reduce_cost_basis(conn: &mut PgConnection, redemption: &Redemption) -> Result<(), DomainError> {
 	sqlx::query(
-		"UPDATE fund_positions SET cost_basis = trunc(cost_basis::numeric * $3::numeric / $4::numeric)::text, updated_at = now() \
-		 WHERE user_id = $1 AND service = $2",
+		"UPDATE fund_positions SET \
+		 cost_basis = trunc(cost_basis::numeric * GREATEST(units::numeric - $3::numeric, 0) / units::numeric)::text, \
+		 units = GREATEST(units::numeric - $3::numeric, 0)::text, \
+		 updated_at = now() \
+		 WHERE user_id = $1 AND service = $2 AND units::numeric > 0",
 	)
 	.bind(redemption.user().raw())
 	.bind(redemption.service().as_str())
-	.bind(remaining.to_string())
-	.bind(held.to_string())
+	.bind(redemption.units().base_units().to_string())
 	.execute(&mut *conn)
 	.await
 	.map_err(repo_err)?;
@@ -163,12 +166,21 @@ impl RedemptionRepository for PgRedemptions {
 		Ok(())
 	}
 
-	async fn settle(&self, id: RedemptionId, nav: Nav, units_held: Shares) -> Result<Redemption, DomainError> {
+	async fn settle(&self, id: RedemptionId, nav: Nav) -> Result<Redemption, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let mut redemption = load_for_update(&mut tx, id).await?;
 		redemption.settle(nav)?;
+		// Lock this position's row so the proportional reduction (and its units decrement)
+		// serializes against concurrent settles on the same (user, service) — they compound
+		// rather than each dividing by the same pre-settle units.
+		sqlx::query("SELECT 1 FROM fund_positions WHERE user_id = $1 AND service = $2 FOR UPDATE")
+			.bind(redemption.user().raw())
+			.bind(redemption.service().as_str())
+			.fetch_optional(&mut *tx)
+			.await
+			.map_err(repo_err)?;
 		update_row(&mut tx, &redemption).await?;
-		reduce_cost_basis(&mut tx, &redemption, units_held).await?;
+		reduce_cost_basis(&mut tx, &redemption).await?;
 		outbox::drain_to_outbox(&mut tx, &mut redemption, true).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(redemption)

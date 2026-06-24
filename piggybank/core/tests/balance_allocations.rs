@@ -117,6 +117,18 @@ async fn cost_basis(positions: &PgFundPositions, user: UserId, service: &Service
 	positions.find(user, service).await.unwrap().map(|p| p.cost_basis)
 }
 
+/// The projection-tracked remaining units for a fund — the cost-basis reduction's
+/// denominator, read straight from the column (the read port does not surface it).
+async fn tracked_units(pool: &PgPool, user: UserId, service: &ServiceId) -> Option<Shares> {
+	let raw: Option<String> = sqlx::query_scalar("SELECT units FROM fund_positions WHERE user_id = $1 AND service = $2")
+		.bind(user.raw())
+		.bind(service.as_str())
+		.fetch_optional(pool)
+		.await
+		.unwrap();
+	raw.map(|s| Shares::from_base_units(s.parse().unwrap()))
+}
+
 /// A structurally valid destination address for a withdrawal (distinct from the user's own).
 fn destination(network: Network) -> WalletAddress {
 	let raw = match network {
@@ -474,7 +486,7 @@ async fn redeem_on_a_short_fund_queues_then_settles_with_profit() {
 	assert_eq!(claim(&h, &service_claim).await, usdt("200"), "the fund topped up");
 
 	// Operator settles — priced at the settle-time NAV (2) and paid in full.
-	let settled = funds_app::settle_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, id, now).await.unwrap();
+	let settled = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, id, now).await.unwrap();
 	assert_eq!(settled.state(), RedemptionState::Completed);
 	h.relay.drain().await;
 
@@ -500,7 +512,7 @@ async fn settling_a_short_fund_parks_without_burning_or_paying() {
 
 	// Settle while the fund is STILL short (100 < 200) — the relay's payout pre-check parks
 	// the whole event. Burn-first ordering means nothing is applied: no half-burn, no cash.
-	funds_app::settle_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, id, now).await.unwrap();
+	funds_app::settle_redemption(&reds, &nav_repo, &h.notify, id, now).await.unwrap();
 	h.relay.drain().await;
 	assert_eq!(units(&h, &user_shares).await, shares("100"), "units NOT burned (settle parked)");
 	assert_eq!(claim(&h, &user_claim).await, Usdt::ZERO, "no cash paid (settle parked)");
@@ -638,4 +650,79 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 	if let Some(b) = basis {
 		assert_eq!(b, cash_in, "the recorded basis matches the cash that actually entered the fund");
 	}
+}
+
+// BANK-MONEY-3: two queued redemptions on ONE position settling back-to-back must reduce the
+// average-cost basis by COMPOUNDING fractions, not each dividing by the same pre-burn units.
+// The old code read units_held live from TB (`holding.posted`), which lags the async burn, so
+// every settle divided by the gross 100 → an under-reduced (inflated) basis. The fix divides
+// by the position's own projection-tracked units (decremented under the settle lock). Subscribe
+// 100 @ NAV 1 → basis 100, units 100. Mark NAV to 4 so each 30-unit redemption (120 cash > the
+// 100 fund claim) QUEUES; top the fund up, then settle both. Sequential-correct:
+//   settle 30: basis = trunc(100 × 70/100) = 70, units 70
+//   settle 30: basis = trunc(70  × 40/70 ) = 40, units 40
+// The relay-lagging bug would compute 70 then trunc(70 × 70/100) = 49 — over-stated by 9.
+#[tokio::test]
+async fn back_to_back_settles_compound_the_cost_basis_reduction() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let positions = PgFundPositions::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let now = now_unix();
+
+	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("100")), "basis seeded by the subscribe");
+	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("100")), "units tracked on the projection");
+
+	// Mark NAV to 4 (AUM 400 / 100 units, a forced +300% move) so each 30-unit redemption prices
+	// to 120 cash — above the fund's 100 claim — and stays Queued (no auto-settle).
+	funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", true)
+		.await
+		.unwrap();
+	let r1 = funds_app::request_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
+		.await
+		.unwrap();
+	let r2 = funds_app::request_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
+		.await
+		.unwrap();
+	assert_eq!(r1.state(), RedemptionState::Queued, "short fund queues the first redemption");
+	assert_eq!(r2.state(), RedemptionState::Queued, "short fund queues the second redemption");
+	h.relay.drain().await;
+
+	// Top the fund up so both settles' payouts clear the relay pre-check (2 × 120 = 240).
+	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("140"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	// Settle both back-to-back — the under-reduction bug surfaces on the SECOND settle.
+	funds_app::settle_redemption(&reds, &nav_repo, &h.notify, r1.id(), now).await.unwrap();
+	funds_app::settle_redemption(&reds, &nav_repo, &h.notify, r2.id(), now).await.unwrap();
+	h.relay.drain().await;
+
+	assert_eq!(
+		cost_basis(&positions, user, &service).await,
+		Some(usdt("40")),
+		"compounded reduction (100→70→40), not the relay-lagging 49"
+	);
+	assert_eq!(
+		tracked_units(&h.pool, user, &service).await,
+		Some(shares("40")),
+		"tracked units decremented per settle (100→70→40)"
+	);
+	assert_eq!(
+		units(&h, &LedgerAccountKey::UserShares(service.clone(), user)).await,
+		shares("40"),
+		"TB holding agrees: 60 units burned"
+	);
 }

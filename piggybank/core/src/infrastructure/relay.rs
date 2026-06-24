@@ -326,12 +326,17 @@ impl Relay {
 }
 
 /// Apply a settled subscription's cost-basis projection (`fund_positions.cost_basis +=
-/// cash`, high-water mark = max) idempotently: a synthetic `saga_steps` leg keys the apply to
-/// the event, so the relative add lands at most once even on a redelivery. The upsert runs in
-/// the same transaction as that marker insert — both commit or neither does.
+/// cash`, `units += minted units`, high-water mark = max) idempotently: a synthetic
+/// `saga_steps` leg keys the apply to the event, so the relative add lands at most once even
+/// on a redelivery. The upsert runs in the same transaction as that marker insert — both
+/// commit or neither does. The projection-tracked `units` is the denominator the redemption
+/// settle reduces the cost basis against (see [`super::redemptions::reduce_cost_basis`]),
+/// kept off TB so it never lags the async burn.
 async fn project_subscription(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error> {
 	const PROJECTION_LEG: i32 = 100;
-	let SubscriptionEvent::Subscribed { user, service, cash, nav, .. } = serde_json::from_str(&row.payload).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+	let SubscriptionEvent::Subscribed {
+		user, service, cash, nav, units, ..
+	} = serde_json::from_str(&row.payload).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
 	let marker_id = tid(row.aggregate_id, SUBSCRIBE_POSITION);
 	let mut tx = pool.begin().await?;
 	let marked = sqlx::query("INSERT INTO saga_steps (event_id, leg, role, tb_transfer_id) VALUES ($1, $2, 'subscribe_position', $3) ON CONFLICT (event_id, leg) DO NOTHING")
@@ -343,15 +348,17 @@ async fn project_subscription(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx
 		.rows_affected();
 	if marked == 1 {
 		sqlx::query(
-			"INSERT INTO fund_positions (user_id, service, cost_basis, high_water_mark) VALUES ($1, $2, $3, $4) \
+			"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
 			 ON CONFLICT (user_id, service) DO UPDATE SET \
 			 cost_basis = (fund_positions.cost_basis::numeric + EXCLUDED.cost_basis::numeric)::text, \
+			 units = (fund_positions.units::numeric + EXCLUDED.units::numeric)::text, \
 			 high_water_mark = GREATEST(fund_positions.high_water_mark::numeric, EXCLUDED.high_water_mark::numeric)::text, \
 			 updated_at = now()",
 		)
 		.bind(user.raw())
 		.bind(service.as_str())
 		.bind(cash.base_units().to_string())
+		.bind(units.base_units().to_string())
 		.bind(nav.base_units().to_string())
 		.execute(&mut *tx)
 		.await?;

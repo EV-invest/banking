@@ -1,0 +1,14 @@
+-- 0010: track remaining units on the fund_positions projection.
+--
+-- The average-cost basis reduction at redemption settle was computed from a units-held
+-- count read live from TigerBeetle (`holding.posted`) in the application layer — but the
+-- unit burn is posted asynchronously by the relay AFTER the settle tx commits (money
+-- written last). So even fully serialized, back-to-back settles on one position each
+-- divided the cost basis by the SAME pre-burn denominator, under-reducing the basis
+-- (overstating remaining basis / understating realized gains) with no self-correction.
+--
+-- Carry the remaining units on the projection instead: incremented on the subscribe mint
+-- (the relay, once the cash leg posts) and decremented inside the locked settle tx, so the
+-- proportional reduction divides by the position's own tracked units and concurrent
+-- settles compound deterministically — never touching the relay-lagging TB balance.
+ALTER TABLE fund_positions ADD COLUMN units TEXT NOT NULL DEFAULT '0' CHECK (units ~ '^[0-9]+$');

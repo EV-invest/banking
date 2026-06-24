@@ -130,7 +130,7 @@ pub async fn request_redemption(
 	// the payout; else leave it queued for the treasury worker.
 	let fund = ledger.balance(&LedgerAccountKey::ServiceClaim(service)).await?;
 	if Usdt::from_base_units(fund.available()) >= cash_out {
-		return settle_redemption(redemptions, ledger, nav, relay, redemption.id(), now_unix).await;
+		return settle_redemption(redemptions, nav, relay, redemption.id(), now_unix).await;
 	}
 	Ok(redemption)
 }
@@ -138,23 +138,16 @@ pub async fn request_redemption(
 /// Settle a queued redemption (the auto follow-on, or an operator once the fund is
 /// liquid): prices the cash at the **settle-time** NAV (`units × NAV`) and pays it. The
 /// relay posts the burn then the payout, guarded by a Read-First check on the fund claim.
-pub async fn settle_redemption(
-	redemptions: &dyn RedemptionRepository,
-	ledger: &dyn Ledger,
-	nav: &dyn NavRepository,
-	relay: &Notify,
-	id: RedemptionId,
-	now_unix: i64,
-) -> Result<Redemption, DomainError> {
+/// The cost-basis reduction divides by the position's own projection-tracked units inside
+/// the locked settle tx — not a live TB holding, which lags the async burn — so back-to-back
+/// settles compound deterministically (BANK-MONEY-3).
+pub async fn settle_redemption(redemptions: &dyn RedemptionRepository, nav: &dyn NavRepository, relay: &Notify, id: RedemptionId, now_unix: i64) -> Result<Redemption, DomainError> {
 	let existing = redemptions.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "redemption",
 		id: id.to_string(),
 	})?;
 	let price = dealing_nav(nav, existing.service(), now_unix).await?;
-	// The holding before the burn posts — for the proportional cost-basis reduction.
-	let holding = ledger.balance(&LedgerAccountKey::UserShares(existing.service().clone(), existing.user())).await?;
-	let units_held = Shares::from_base_units(holding.posted);
-	let redemption = redemptions.settle(id, price, units_held).await?;
+	let redemption = redemptions.settle(id, price).await?;
 	relay.notify_one();
 	Ok(redemption)
 }

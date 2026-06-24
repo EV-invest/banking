@@ -133,16 +133,9 @@ impl BalanceService for BalanceSvc {
 	async fn settle_redemption(&self, request: Request<pb::SettleRedemptionRequest>) -> Result<Response<pb::Redemption>, Status> {
 		require_admin(&self.state, &request)?;
 		let id = parse_redemption_id(&request.get_ref().redemption_id)?;
-		let redemption = funds_app::settle_redemption(
-			self.state.redemptions.as_ref(),
-			self.state.ledger.as_ref(),
-			self.state.nav.as_ref(),
-			&self.state.relay_notify,
-			id,
-			unix_now(),
-		)
-		.await
-		.map_err(map_err)?;
+		let redemption = funds_app::settle_redemption(self.state.redemptions.as_ref(), self.state.nav.as_ref(), &self.state.relay_notify, id, unix_now())
+			.await
+			.map_err(map_err)?;
 		Ok(Response::new(redemption_to_proto(&redemption)))
 	}
 

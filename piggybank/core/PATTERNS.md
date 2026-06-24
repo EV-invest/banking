@@ -107,8 +107,16 @@ else leaves it `Queued` for the operator `SettleRedemption` after the fund tops 
 deposit to its `service:<id>` claim). The settle pre-check guards the **payout's debit**
 (`service` claim `available()`); ordering is **burn-first** so a short fund parks before any
 leg, and a raced over-redeem (parked reserve) fails the burn-post **before** any cash leaves
-— neither half-applies. Cost basis (average cost) is tracked in `fund_positions` for P&L; a
-per-investor `high_water_mark` column is reserved (no fee is charged in v1).
+— neither half-applies. Cost basis (average cost) is tracked in `fund_positions` for P&L,
+alongside the position's **remaining units** (set on the subscribe mint, decremented per
+settle). At settle the basis is reduced *proportionally* — `cost_basis ← cost_basis ×
+(units − redeemed) / units` — dividing by those **projection-tracked** units under the
+`fund_positions` row lock (re-taken inside `settle`, not just `open`), **never** a live
+TigerBeetle holding: the unit burn is posted by the relay *after* the settle tx commits, so a
+TB read lags it and back-to-back settles would each divide by the same gross pre-burn balance
+(under-reducing the basis). Tracking units on the projection makes concurrent/back-to-back
+settles compound deterministically. A per-investor `high_water_mark` column is reserved (no
+fee is charged in v1).
 
 ## User wallet — deposit & withdraw (`domain::withdrawals`, `WalletService`)
 
