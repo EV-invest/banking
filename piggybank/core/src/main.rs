@@ -8,7 +8,7 @@
 //!   - the **core** gRPC services (health/users/balance/funds/wallet) on `grpc_addr`,
 //!     authorizing each request via the `Authorizer` core got from auth.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use ev::error_monitoring::{self, Config as SentryConfig};
@@ -94,6 +94,10 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// the signer must be reachable. Cached addresses are served from Postgres without it.
 	let signer_channel = Endpoint::from_shared(config.signer_grpc_addr.clone())
 		.context("SIGNER_GRPC_ADDR must be a valid URL, e.g. http://127.0.0.1:50053")?
+		// Explicit deadlines so a half-open/stalled signer surfaces as a bounded error
+		// (mapped to a retryable provisioning failure) instead of hanging the request.
+		.connect_timeout(Duration::from_secs(3))
+		.timeout(Duration::from_secs(10))
 		.connect_lazy();
 	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(signer_channel)));
 

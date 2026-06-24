@@ -9,7 +9,7 @@
 //! map is the adapter's own concern, read/written outside any command transaction —
 //! which is exactly why [`Ledger`] is a `Gateway` (it can't join a `UnitOfWork`).
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use domain::{
@@ -24,6 +24,14 @@ use crate::{
 	infrastructure::tigerbeetle::TigerBeetle,
 	ports::ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
 };
+
+/// Application-level deadline on a single TigerBeetle call. The TB client surfaces a
+/// *closed* connection, but a replica that accepts the connection yet stalls has no
+/// in-band failure — without this bound it would block the relay's single drain loop at an
+/// `.await` forever, wedging all money movement. Elapsing maps to [`LedgerError::Unavailable`],
+/// which the relay treats as an unbounded retry — safe because every transfer id is
+/// deterministic, so a re-submit after recovery returns `Exists`.
+const TB_CALL_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The TigerBeetle-backed [`Ledger`]. Holds the shared TB client and a Postgres pool
 /// for the `tb_accounts` id-map only (never an amount).
@@ -93,12 +101,13 @@ impl TbLedger {
 	}
 
 	async fn create_accounts(&self, accounts: &[tb::Account]) -> Result<(), LedgerError> {
-		let results = self
+		let call = self
 			.tb
 			.client()
 			.create_accounts(accounts)
-			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?
-			.await
+			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
+		let results = deadline("create_accounts", call)
+			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("create_accounts: {e:?}")))?;
 		for result in results {
 			match result.status {
@@ -111,12 +120,13 @@ impl TbLedger {
 	}
 
 	async fn create_transfers(&self, transfers: &[tb::Transfer]) -> Result<(), LedgerError> {
-		let results = self
+		let call = self
 			.tb
 			.client()
 			.create_transfers(transfers)
-			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?
-			.await
+			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
+		let results = deadline("create_transfers", call)
+			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("create_transfers: {e:?}")))?;
 		for result in results {
 			map_transfer_status(result.status)?;
@@ -138,12 +148,13 @@ impl Ledger for TbLedger {
 			// No id-map row ⇒ the account was never touched ⇒ balance is zero.
 			return Ok(LedgerBalance { posted: 0, pending: 0, locked: 0 });
 		};
-		let accounts = self
+		let call = self
 			.tb
 			.client()
 			.lookup_accounts(&[id])
-			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?
-			.await
+			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
+		let accounts = deadline("lookup_accounts", call)
+			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("lookup_accounts: {e:?}")))?;
 		let Some(account) = accounts.first() else {
 			return Ok(LedgerBalance { posted: 0, pending: 0, locked: 0 });
@@ -255,6 +266,15 @@ fn map_transfer_status(status: tb::CreateTransferStatus) -> Result<(), LedgerErr
 	}
 }
 
+/// Bound a single in-flight TigerBeetle call by [`TB_CALL_TIMEOUT`]; an elapsed deadline
+/// is reported as [`LedgerError::Unavailable`] (a stalled, not closed, replica), so the
+/// relay retries it rather than blocking its single drain loop on the hung `.await`.
+async fn deadline<F: std::future::Future>(op: &str, call: F) -> Result<F::Output, LedgerError> {
+	tokio::time::timeout(TB_CALL_TIMEOUT, call)
+		.await
+		.map_err(|_| LedgerError::Unavailable(format!("{op}: timed out after {TB_CALL_TIMEOUT:?}")))
+}
+
 fn tb_account(id: u128, key: &LedgerAccountKey) -> tb::Account {
 	tb::Account {
 		id,
@@ -277,4 +297,21 @@ fn account_flags(normal: Normal) -> tb::AccountFlags {
 fn u128_from_be(bytes: &[u8]) -> Result<u128, LedgerError> {
 	let array: [u8; 16] = bytes.try_into().map_err(|_| LedgerError::Conflict("malformed ledger account id".into()))?;
 	Ok(u128::from_be_bytes(array))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// A TigerBeetle replica that accepts the connection but stalls (never replies) leaves
+	/// the relay's drain loop awaiting a future that never resolves. The deadline must turn
+	/// that hang into a bounded `Unavailable` — which the relay retries — rather than wedging
+	/// the single worker forever. A never-resolving future stands in for the stalled replica;
+	/// the paused clock makes the 5s deadline elapse instantly.
+	#[tokio::test(start_paused = true)]
+	async fn a_stalled_tigerbeetle_call_elapses_to_unavailable() {
+		let stalled = std::future::pending::<()>();
+		let result = deadline("lookup_accounts", stalled).await;
+		assert!(matches!(result, Err(LedgerError::Unavailable(_))), "a hung TB call must map to Unavailable, not hang");
+	}
 }

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use evbanking_contracts::banking::v1 as bk;
 use evconcierge_contracts::concierge::v1 as cc;
@@ -8,6 +8,17 @@ use tonic::{
 };
 
 use crate::{config::Config, cookies::CookieNames, oauth::OAuthTxStore, session::SessionStore};
+
+/// Cap on establishing a TCP/TLS connection to an upstream plane: a black-holed or
+/// half-open replica must fail fast rather than wedge the awaiting request task.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Per-RPC deadline applied to every upstream call. tonic has no default request
+/// timeout, so without this a wedged plane keeps the browser-facing task (and the
+/// transparent-refresh single-flight lock in [`session`](crate::session)) alive
+/// indefinitely. The router's [`TimeoutLayer`](tower_http::timeout::TimeoutLayer) is a
+/// slightly looser outer bound, so an upstream stall surfaces here first as an error.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Shared application state, cheaply cloneable per request.
 #[derive(Clone)]
@@ -28,8 +39,8 @@ pub struct Grpc {
 }
 impl Grpc {
 	pub fn connect_lazy(piggybank_addr: &str, concierge_addr: &str) -> anyhow::Result<Self> {
-		let piggybank = Endpoint::from_shared(piggybank_addr.to_string())?.connect_lazy();
-		let concierge = Endpoint::from_shared(concierge_addr.to_string())?.connect_lazy();
+		let piggybank = endpoint(piggybank_addr)?.connect_lazy();
+		let concierge = endpoint(concierge_addr)?.connect_lazy();
 		Ok(Self { piggybank, concierge })
 	}
 
@@ -156,6 +167,12 @@ impl Grpc {
 	}
 }
 
+/// A lazily-connected upstream `Endpoint` with explicit connect + per-RPC deadlines, so a
+/// degraded plane fails fast instead of stalling the awaiting task indefinitely.
+fn endpoint(addr: &str) -> anyhow::Result<Endpoint> {
+	Ok(Endpoint::from_shared(addr.to_string())?.connect_timeout(CONNECT_TIMEOUT).timeout(REQUEST_TIMEOUT))
+}
+
 /// Attach the user's access token as `authorization: Bearer …` metadata — the inbound
 /// auth layer on each plane reads exactly that.
 // `tonic::Status` is a large error type; boxing it at every call site buys nothing here.
@@ -165,4 +182,34 @@ fn bearer<T>(token: &str, msg: T) -> Result<Request<T>, Status> {
 	let value = format!("Bearer {token}").parse().map_err(|_| Status::unauthenticated("invalid bearer token"))?;
 	req.metadata_mut().insert("authorization", value);
 	Ok(req)
+}
+
+#[cfg(test)]
+mod tests {
+	use std::{net::TcpListener, time::Instant};
+
+	use super::*;
+
+	/// A half-open upstream — a port whose TCP connection completes but never speaks HTTP/2
+	/// — is the worst case for the missing timeout: the connect succeeds, then the RPC awaits
+	/// a response that never comes. A bound listener that we never `accept()` is exactly that:
+	/// the OS backlog completes the handshake, but no gRPC frame is ever served. With the
+	/// per-RPC `timeout` on the `Endpoint`, the call must return an error well inside the
+	/// layer's outer deadline rather than hanging; an outer guard fails loudly on regression.
+	#[tokio::test]
+	async fn upstream_rpc_fails_fast_against_a_half_open_plane() {
+		let listener = TcpListener::bind("127.0.0.1:0").expect("bind black-hole listener");
+		let addr = listener.local_addr().unwrap();
+
+		let grpc = Grpc::connect_lazy(&format!("http://{addr}"), &format!("http://{addr}")).expect("build lazy channels");
+
+		let started = Instant::now();
+		let guard = tokio::time::timeout(REQUEST_TIMEOUT + Duration::from_secs(5), grpc.check()).await;
+
+		let result = guard.expect("the call must return within the deadline, not hang");
+		assert!(result.is_err(), "a half-open plane must surface an error, not a hung await");
+		assert!(started.elapsed() < REQUEST_TIMEOUT + Duration::from_secs(2), "the per-RPC timeout must bound the call");
+
+		drop(listener);
+	}
 }

@@ -3,17 +3,28 @@ pub mod identity;
 pub mod money;
 pub mod system;
 
+use std::time::Duration;
+
 use axum::{
 	Router,
 	body::Bytes,
-	http::HeaderMap,
+	http::{HeaderMap, StatusCode},
 	routing::{get, post},
 };
 use axum_extra::extract::cookie::CookieJar;
 use serde_json::Value;
-use tower_http::trace::TraceLayer;
+use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 
 use crate::{error::ApiError, state::AppState};
+
+/// Outer per-request deadline: a handler that is still awaiting an upstream plane past
+/// this bound is aborted and the response becomes a 408, so a wedged plane can never hold
+/// a browser connection (or, via the per-session refresh lock, sibling requests) open
+/// indefinitely. Looser than the upstream per-RPC [`REQUEST_TIMEOUT`] so an upstream stall
+/// normally surfaces as a gRPC error first; this is the backstop for everything else.
+///
+/// [`REQUEST_TIMEOUT`]: crate::state
+const REQUEST_DEADLINE: Duration = Duration::from_secs(15);
 
 /// Mount every BFF endpoint. Paths and methods mirror the old Next.js route handlers
 /// 1:1 so the frontend's same-origin `/api/*` calls are unchanged.
@@ -38,6 +49,7 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/funds/subscribe", post(money::subscribe))
 		.route("/api/funds/redeem", post(money::redeem))
 		.with_state(state)
+		.layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_DEADLINE))
 		.layer(TraceLayer::new_for_http())
 }
 
