@@ -55,6 +55,15 @@ dev), mirroring the cabinet BFF's session store; the production backing is the o
 central Redis (`REDIS_URL`) and the public surface here does not change when it
 lands. A per-service Redis is never introduced.
 
+Sessions are bounded three ways, all enforced in `rotate` **before** the sliding
+window: the sliding `expires_at` (reset to `now + AUTH_REFRESH_TTL_SECS` per
+rotation), an immutable `absolute_expires_at` stamped at issue time as
+`created_at + AUTH_MAX_SESSION_SECS` (default 90d) that no rotation can extend,
+and an optional idle timeout (`AUTH_IDLE_TIMEOUT_SECS`, `0` = off) over the
+family's `last_seen`. The absolute cap stops a thief who quietly rotates a token
+they exclusively hold from keeping a session alive indefinitely. These bounds are
+carried in the family record, so they survive the move to Redis unchanged.
+
 ## `token_version` revocation, where the truth is
 
 `users.token_version` (Postgres, owned by `core`) is authoritative. A "revoke all"

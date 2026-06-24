@@ -25,8 +25,14 @@ pub struct AuthConfig {
 	pub service_audience: String,
 	/// Access-token TTL (seconds). Short by design (5–15 min).
 	pub access_ttl_secs: u64,
-	/// Refresh-token TTL (seconds).
+	/// Refresh-token TTL (seconds) — the sliding window reset on each rotation.
 	pub refresh_ttl_secs: u64,
+	/// Absolute session lifetime (seconds): an immutable cap stamped at issue time,
+	/// past which a family can no longer rotate regardless of how often it slides.
+	pub max_session_secs: u64,
+	/// Idle/inactivity timeout (seconds): a family is rejected once `now - last_seen`
+	/// exceeds it. `0` disables the idle check (the absolute cap still applies).
+	pub idle_timeout_secs: u64,
 	/// Service-token TTL (seconds).
 	pub service_ttl_secs: u64,
 	/// Signing/verification key material. `None` ⇒ auth disabled (dev/CI).
@@ -57,6 +63,8 @@ impl AuthConfig {
 			service_audience: env::var("AUTH_SERVICE_AUDIENCE").unwrap_or_else(|_| "banking-services".to_string()),
 			access_ttl_secs: parse_secs("AUTH_ACCESS_TTL_SECS", 900)?,
 			refresh_ttl_secs: parse_secs("AUTH_REFRESH_TTL_SECS", 2_592_000)?,
+			max_session_secs: parse_secs("AUTH_MAX_SESSION_SECS", 7_776_000)?,
+			idle_timeout_secs: parse_secs("AUTH_IDLE_TIMEOUT_SECS", 0)?,
 			service_ttl_secs: parse_secs("AUTH_SERVICE_TTL_SECS", 300)?,
 			signing,
 			google,

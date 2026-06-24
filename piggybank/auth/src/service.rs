@@ -28,7 +28,7 @@ use crate::{
 	config::AuthConfig,
 	google::GoogleOauth,
 	jwks::{JwksCache, VerifyPolicy, verify_token},
-	management::{IssuedRefresh, RefreshStore},
+	management::{IssuedRefresh, RefreshStore, SessionBounds},
 	provisioner::{ProvisionedUser, Provisioner},
 	signer::{Signer, load_jwks},
 };
@@ -105,7 +105,11 @@ impl AuthGrpc {
 				refresh: RefreshStore::new(),
 				provisioner,
 				jwks,
-				refresh_ttl_secs: config.refresh_ttl_secs,
+				session_bounds: SessionBounds {
+					ttl_secs: config.refresh_ttl_secs,
+					max_session_secs: config.max_session_secs,
+					idle_timeout_secs: config.idle_timeout_secs,
+				},
 			}),
 		})
 	}
@@ -141,7 +145,7 @@ struct AuthEngine {
 	refresh: RefreshStore,
 	provisioner: Provisioner,
 	jwks: Vec<evbanking_contracts::banking::v1::Jwk>,
-	refresh_ttl_secs: u64,
+	session_bounds: SessionBounds,
 }
 
 fn token_response(access_token: String, access_exp: u64, refresh: IssuedRefresh, summary: &ProvisionedUser) -> TokenResponse {
@@ -174,7 +178,7 @@ impl AuthServiceRpc for AuthGrpc {
 		}
 
 		let (access_token, access_exp) = signer.mint_access(&summary.user_id, summary.token_version)?;
-		let refresh = engine.refresh.issue(&summary.user_id, summary.token_version, engine.refresh_ttl_secs, req.user_agent, req.ip);
+		let refresh = engine.refresh.issue(&summary.user_id, summary.token_version, engine.session_bounds, req.user_agent, req.ip);
 		Ok(Response::new(token_response(access_token, access_exp, refresh, &summary)))
 	}
 
@@ -183,7 +187,7 @@ impl AuthServiceRpc for AuthGrpc {
 		let signer = engine.signer.as_ref().ok_or(AuthError::NotConfigured)?;
 		let req = request.into_inner();
 
-		let rotated = engine.refresh.rotate(&req.refresh_token, engine.refresh_ttl_secs)?;
+		let rotated = engine.refresh.rotate(&req.refresh_token, engine.session_bounds)?;
 		let summary = engine.provisioner.lookup(rotated.user_id.clone()).await?;
 		if summary.is_disabled() {
 			engine.refresh.revoke_user(&summary.user_id);
@@ -274,6 +278,8 @@ mod tests {
 			service_audience: "banking-services".into(),
 			access_ttl_secs: 900,
 			refresh_ttl_secs: 3600,
+			max_session_secs: 7_776_000,
+			idle_timeout_secs: 0,
 			service_ttl_secs: 300,
 			signing: Some(SigningConfig {
 				signing_key_pem: TEST_PEM.into(),

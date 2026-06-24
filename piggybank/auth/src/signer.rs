@@ -134,6 +134,8 @@ mod tests {
 			service_audience: "banking-services".into(),
 			access_ttl_secs: 900,
 			refresh_ttl_secs: 3600,
+			max_session_secs: 7_776_000,
+			idle_timeout_secs: 0,
 			service_ttl_secs: 300,
 			signing: Some(SigningConfig {
 				signing_key_pem: TEST_PEM.into(),
