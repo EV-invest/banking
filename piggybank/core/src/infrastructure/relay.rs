@@ -2,7 +2,11 @@
 //!
 //! A single worker drains undispatched [`outbox`] rows in strict
 //! `seq` order and applies each to TigerBeetle (and, for withdrawals, the custody
-//! service) **after** the control-plane commit (Write-Last). Delivery is
+//! service) **after** the control-plane commit (Write-Last). "Single worker" is an
+//! enforced invariant, not a deploy assumption: [`Relay::run`] holds a fixed-key session
+//! `pg_advisory_lock` for its lifetime and only drains while held, so a second core
+//! instance blocks on the lock and never touches the outbox (see `OUTBOX_LOCK_KEY`).
+//! Delivery is
 //! at-least-once, so every op is idempotent: ledger transfer ids are deterministic
 //! (a posted transfer uses the event id; a reservation's pending uses an
 //! aggregate-derived id so its completion can reference it), the gateway treats
@@ -27,9 +31,9 @@ use domain::{
 	users::UserId,
 	withdrawals::WithdrawalEvent,
 };
-use sqlx::PgPool;
+use sqlx::{PgPool, pool::PoolConnection, postgres::Postgres};
 use tokio::sync::Notify;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
@@ -73,6 +77,15 @@ const BURN_VOID_CANCEL: &[u8] = b"redeem:burn:void:cancel";
 /// rather than wedging the single-worker queue forever.
 const MAX_RETRYABLE_ATTEMPTS: i32 = 25;
 
+/// Fixed key for the session-level `pg_advisory_lock` the relay holds while draining.
+/// The whole ordering/atomicity argument (strict `seq`, reserve-before-complete, the
+/// settle-time liquidity pre-check) is valid *only* with a single drainer; this lock
+/// makes that singleton an enforced invariant rather than a deploy assumption — a
+/// second instance blocks here and never touches the outbox. The value is an arbitrary
+/// stable constant (ASCII "EVBKOBX_"); only stability matters — changing it would let
+/// two cohorts drain concurrently across a deploy that mixed old and new keys.
+const OUTBOX_LOCK_KEY: i64 = 0x4556_424b_4f42_585f_u64 as i64;
+
 /// The relay task: drains the outbox to the ledger + custody. Cloneable handles
 /// (`pool`, `ledger`, `custody`, `notify`) so command handlers can `notify` it to
 /// dispatch promptly.
@@ -88,8 +101,20 @@ impl Relay {
 		Self { pool, ledger, custody, notify }
 	}
 
-	/// Run forever: drain the backlog, then wait for a nudge or a poll-fallback.
+	/// Run forever. First take the singleton outbox lock on a dedicated connection
+	/// (blocking until acquired — a second instance idles here, owning nothing), then
+	/// drain the backlog and wait for a nudge or a poll-fallback. The held connection
+	/// keeps the session-level lock for the process's lifetime; dropping it (process
+	/// exit) releases it so a standby can take over.
 	pub async fn run(self) {
+		let mut lock = match self.acquire_outbox_lock().await {
+			Ok(lock) => lock,
+			Err(err) => {
+				error!("relay: could not acquire the outbox lock, not draining: {err}");
+				return;
+			}
+		};
+		info!("relay: acquired the outbox lock — draining as the singleton worker");
 		loop {
 			let backoff = self.drain().await;
 			let wait = if backoff { Duration::from_secs(2) } else { Duration::from_millis(500) };
@@ -97,7 +122,32 @@ impl Relay {
 				() = self.notify.notified() => {},
 				() = tokio::time::sleep(wait) => {},
 			}
+			// Touch the lock-holding connection so a dropped backend surfaces here rather
+			// than letting a lockless relay silently keep draining.
+			if let Err(err) = sqlx::query("SELECT 1").execute(lock.as_mut()).await {
+				error!("relay: lost the outbox lock connection, stopping: {err}");
+				return;
+			}
 		}
+	}
+
+	/// Block on a dedicated pooled connection until the fixed-key session advisory lock
+	/// is held, then return that connection — its lifetime *is* the lock's. The first
+	/// instance returns immediately; any other blocks inside Postgres until the holder's
+	/// connection closes.
+	pub async fn acquire_outbox_lock(&self) -> Result<PoolConnection<Postgres>, sqlx::Error> {
+		let mut conn = self.pool.acquire().await?;
+		sqlx::query("SELECT pg_advisory_lock($1)").bind(OUTBOX_LOCK_KEY).execute(conn.as_mut()).await?;
+		Ok(conn)
+	}
+
+	/// Non-blocking sibling of [`acquire_outbox_lock`](Self::acquire_outbox_lock): take
+	/// the lock if free (returning the holding connection), else `None` — used by tests
+	/// to observe that a held lock makes a second drainer back off without blocking.
+	pub async fn try_acquire_outbox_lock(&self) -> Result<Option<PoolConnection<Postgres>>, sqlx::Error> {
+		let mut conn = self.pool.acquire().await?;
+		let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)").bind(OUTBOX_LOCK_KEY).fetch_one(conn.as_mut()).await?;
+		Ok(acquired.then_some(conn))
 	}
 
 	/// Drain the current backlog in `seq` order. Returns `true` if it stopped on a

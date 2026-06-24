@@ -68,9 +68,10 @@ pub struct OutboxRow {
 	pub payload: String,
 	pub attempts: i32,
 }
-/// The next undispatched events in strict `seq` order (a single relay worker, so no
-/// `SKIP LOCKED` — order is total, and a reservation's pending always precedes its
-/// completion).
+/// The next undispatched events in strict `seq` order. No `SKIP LOCKED`: the relay is a
+/// lock-enforced singleton (`pg_advisory_lock`, see [`super::relay::Relay::run`]), so the
+/// order is total and a reservation's pending always precedes its completion — `SKIP
+/// LOCKED` would let disjoint workers break that, so it is deliberately omitted.
 pub async fn next_batch(pool: &PgPool, limit: i64) -> Result<Vec<OutboxRow>, sqlx::Error> {
 	sqlx::query_as::<_, OutboxRow>("SELECT seq, event_id, aggregate, aggregate_id, kind, payload::text AS payload, attempts FROM outbox WHERE dispatched_at IS NULL ORDER BY seq LIMIT $1")
 		.bind(limit)

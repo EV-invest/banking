@@ -223,6 +223,20 @@ at-least-once, so consumers are idempotent (deterministic TB transfer ids; upser
 projections by event id). A reconciliation job compares Postgres projections to
 authoritative TB balances; TB always wins.
 
+**Single-drainer invariant (deploy constraint).** The relay's ordering/atomicity
+argument — strict `seq`, reserve-before-complete, and the settle-time liquidity
+pre-check — holds **only if exactly one relay drains the outbox** (`next_batch`
+deliberately omits `SKIP LOCKED` to keep the order total; `SKIP LOCKED` is *not* a
+drop-in here, as disjoint workers would apply a reservation's pending and its
+completion out of order and race the cross-event liquidity check). The relay enforces
+this in-process: at startup it takes a fixed-key session `pg_advisory_lock` on a
+dedicated connection and only drains while held, so a second `piggybank` core instance
+(a rolling deploy, an extra replica, a stuck old pod) blocks on the lock and owns
+nothing instead of double-draining. The release is automatic on the holder's
+connection closing (process exit), so a standby takes over without coordination.
+Deploy core as **maxReplicas=1** (or with leader election) as defence in depth — the
+lock is the hard guarantee, the replica cap keeps spare instances from idling on it.
+
 This matches the `ev::architecture` kernel (`EmitsEvents`/`EventEnvelope`, `Reader`
 = CQRS read port, `Gateway` forbidden from `UnitOfWork`). We do **not** adopt a
 full event-sourcing framework: `cqrs-es`/`postgres-es` require `sqlx 0.8` (we pin
