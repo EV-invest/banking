@@ -9,6 +9,12 @@ const AUTHORIZE_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const SCOPE: &str = "openid email profile";
 /// The OAuth handshake (PKCE/state/nonce) lives at most this long between authorize and callback.
 pub const OAUTH_TX_TTL: i64 = 600;
+/// Hard cap on in-flight OAuth txns. The unauthenticated `/api/auth/login` feeds this map,
+/// so an evict-on-write past the TTL (below) isn't enough on its own — a flood inside one TTL
+/// window could still grow it. The cap bounds memory regardless; at capacity the oldest entry
+/// is dropped (that abandoned login simply has to restart). Upstream rate-limiting is the
+/// first line of defense; this is defense-in-depth.
+const MAX_OAUTH_TXNS: usize = 10_000;
 
 /// A fresh PKCE verifier/challenge plus anti-forgery state and nonce.
 pub struct Challenge {
@@ -83,17 +89,28 @@ impl OAuthTxStore {
 		Self { txns: Mutex::new(HashMap::new()) }
 	}
 
-	/// Store a transaction, returning its id (the `ev_oauth_tx` cookie value).
+	/// Store a transaction, returning its id (the `ev_oauth_tx` cookie value). Evicts on
+	/// write: abandoned logins never replay their cookie, so `take` never frees them — drop
+	/// every expired entry here, and if the cap is still hit, drop the oldest. The map is
+	/// already locked on each insert, so the sweep is free; no background GC needed.
 	pub async fn put(&self, state: String, nonce: String, code_verifier: String, return_to: String) -> String {
 		let id = random_token(32);
+		let now = now_secs();
 		let tx = OAuthTx {
 			state,
 			nonce,
 			code_verifier,
 			return_to,
-			created_at: now_secs(),
+			created_at: now,
 		};
-		self.txns.lock().await.insert(id.clone(), tx);
+		let mut txns = self.txns.lock().await;
+		txns.retain(|_, t| now - t.created_at <= OAUTH_TX_TTL);
+		if txns.len() >= MAX_OAUTH_TXNS
+			&& let Some(oldest) = txns.iter().min_by_key(|(_, t)| t.created_at).map(|(k, _)| k.clone())
+		{
+			txns.remove(&oldest);
+		}
+		txns.insert(id.clone(), tx);
 		id
 	}
 
@@ -101,5 +118,49 @@ impl OAuthTxStore {
 	pub async fn take(&self, id: &str) -> Option<OAuthTx> {
 		let tx = self.txns.lock().await.remove(id)?;
 		(now_secs() - tx.created_at <= OAUTH_TX_TTL).then_some(tx)
+	}
+
+	#[cfg(test)]
+	async fn len(&self) -> usize {
+		self.txns.lock().await.len()
+	}
+
+	#[cfg(test)]
+	async fn insert_at(&self, created_at: i64) -> String {
+		let id = random_token(32);
+		let tx = OAuthTx {
+			state: String::new(),
+			nonce: String::new(),
+			code_verifier: String::new(),
+			return_to: "/".into(),
+			created_at,
+		};
+		self.txns.lock().await.insert(id.clone(), tx);
+		id
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[tokio::test]
+	async fn put_evicts_expired_entries() {
+		let store = OAuthTxStore::new();
+		let stale = store.insert_at(now_secs() - OAUTH_TX_TTL - 1).await;
+		store.put(String::new(), String::new(), String::new(), "/".into()).await;
+		assert_eq!(store.len().await, 1, "the expired entry is swept on write");
+		assert!(store.take(&stale).await.is_none(), "the swept entry is gone");
+	}
+
+	#[tokio::test]
+	async fn put_holds_the_hard_cap() {
+		let store = OAuthTxStore::new();
+		for _ in 0..MAX_OAUTH_TXNS {
+			store.insert_at(now_secs()).await;
+		}
+		assert_eq!(store.len().await, MAX_OAUTH_TXNS);
+		store.put(String::new(), String::new(), String::new(), "/".into()).await;
+		assert_eq!(store.len().await, MAX_OAUTH_TXNS, "the cap holds: the oldest entry is dropped to make room");
 	}
 }

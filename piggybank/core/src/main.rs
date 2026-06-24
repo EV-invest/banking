@@ -66,7 +66,9 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// The hub applies pending control-plane migrations on boot (idempotent). New
 	// migration FILES are authored with the sqlx CLI (`sqlx migrate add …`), never
 	// hand-written.
-	let pool = db::connect(&config.database_url).await.context("failed to connect to the database")?;
+	let pool = db::connect_sized(&config.database_url, config.db_max_connections)
+		.await
+		.context("failed to connect to the database")?;
 	db::migrate(&pool).await.context("failed to apply database migrations")?;
 	let tigerbeetle = Arc::new(TigerBeetle::connect(config.tigerbeetle_cluster_id, &config.tigerbeetle_address).context("failed to connect to TigerBeetle")?);
 
@@ -105,9 +107,14 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// (Write-Last); command handlers nudge it through `relay_notify` for low latency.
 	// Custody is a separate trust domain — a stub stands in until the real signing
 	// service exists; the relay broadcasts a withdrawal's on-chain leg through it.
+	// It gets its own small pool so a burst of request traffic can't starve money
+	// dispatch (and vice-versa) — the two planes no longer share the request pool.
+	let relay_pool = db::connect_sized(&config.database_url, config.relay_db_max_connections)
+		.await
+		.context("failed to connect the relay's database pool")?;
 	let relay_notify = Arc::new(Notify::new());
 	let custody: Arc<dyn Custody> = Arc::new(StubCustody);
-	let relay = Relay::new(pool.clone(), ledger.clone(), custody, relay_notify.clone());
+	let relay = Relay::new(relay_pool, ledger.clone(), custody, relay_notify.clone());
 
 	// ── auth service + user provisioning (in-process) ──────────────────────────
 	// Auth owns the keys/JWKS and hands core an `Authorizer` (core → auth, verify);

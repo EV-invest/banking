@@ -37,6 +37,14 @@ pub struct AppConfig {
 	/// provisioning over the `signer.v1` gRPC seam. The hub connects lazily, so this
 	/// only needs to resolve by the time the first address is provisioned.
 	pub signer_grpc_addr: String,
+	/// Max connections for the request-serving Postgres pool (the core gRPC handlers).
+	/// `DB_MAX_CONNECTIONS`; defaults to the sqlx default (10) — raise it for production.
+	pub db_max_connections: u32,
+	/// Max connections for the outbox relay's own dedicated Postgres pool, so request
+	/// traffic and money dispatch can't exhaust each other. `RELAY_DB_MAX_CONNECTIONS`;
+	/// a small pool suffices since the relay is a single-worker drainer (one drain
+	/// connection + the lock-holding connection).
+	pub relay_db_max_connections: u32,
 }
 
 impl AppConfig {
@@ -70,6 +78,16 @@ impl AppConfig {
 			.map(str::to_owned)
 			.collect();
 		let signer_grpc_addr = env::var("SIGNER_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50053".to_string());
+		let db_max_connections = env::var("DB_MAX_CONNECTIONS")
+			.ok()
+			.map(|v| v.parse().context("DB_MAX_CONNECTIONS must be a positive integer"))
+			.transpose()?
+			.unwrap_or(10);
+		let relay_db_max_connections = env::var("RELAY_DB_MAX_CONNECTIONS")
+			.ok()
+			.map(|v| v.parse().context("RELAY_DB_MAX_CONNECTIONS must be a positive integer"))
+			.transpose()?
+			.unwrap_or(3);
 		Ok(Self {
 			database_url,
 			grpc_addr,
@@ -82,6 +100,8 @@ impl AppConfig {
 			tigerbeetle_cluster_id,
 			admin_subjects,
 			signer_grpc_addr,
+			db_max_connections,
+			relay_db_max_connections,
 		})
 	}
 }
