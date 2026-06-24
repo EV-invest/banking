@@ -2,6 +2,11 @@ use std::net::SocketAddr;
 
 use anyhow::Context;
 
+/// Default HTTP bind: loopback, so the token-holding BFF is reachable only through the
+/// frontend's same-origin `/api/*` reverse proxy unless an operator opts into a wider
+/// bind (and pairs it with network segmentation — see `docs/ARCHITECTURE.md`).
+const DEFAULT_BIND: &str = "127.0.0.1:4000";
+
 /// Runtime configuration for the cabinet BFF, sourced from environment variables
 /// (and `clients/cabinet/backend/.env` in development via `dotenvy`).
 #[derive(Clone)]
@@ -34,10 +39,13 @@ impl Config {
 			Some(v) => v == "true",
 			None => app_env == "production",
 		};
+		// Loopback by default: the BFF holds every user's tokens and its only request-auth
+		// is the session cookie, so it must sit behind the same-origin reverse proxy. Opt
+		// into a wider bind (e.g. 0.0.0.0:4000) only with an upstream firewall in place.
 		let bind_addr = std::env::var("CABINET_BACKEND_BIND")
-			.unwrap_or_else(|_| "0.0.0.0:4000".to_string())
+			.unwrap_or_else(|_| DEFAULT_BIND.to_string())
 			.parse()
-			.context("CABINET_BACKEND_BIND must be a valid socket address, e.g. 0.0.0.0:4000")?;
+			.with_context(|| format!("CABINET_BACKEND_BIND must be a valid socket address, e.g. {DEFAULT_BIND}"))?;
 		Ok(Self {
 			bind_addr,
 			piggybank_grpc_addr: std::env::var("PIGGYBANK_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50051".to_string()),
@@ -56,4 +64,15 @@ impl Config {
 
 fn opt(key: &str) -> Option<String> {
 	std::env::var(key).ok().filter(|v| !v.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn default_bind_is_loopback() {
+		let addr: SocketAddr = DEFAULT_BIND.parse().expect("default bind parses");
+		assert!(addr.ip().is_loopback(), "the BFF must default to loopback, not all interfaces");
+	}
 }

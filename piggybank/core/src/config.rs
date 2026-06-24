@@ -2,6 +2,12 @@ use std::{env, net::SocketAddr};
 
 use anyhow::Context;
 
+/// Default gRPC binds: loopback, so the hub's internal data/auth seams are not exposed on
+/// every interface. A wider bind is an explicit opt-in that requires network segmentation
+/// (see `docs/ARCHITECTURE.md`).
+const DEFAULT_GRPC_ADDR: &str = "127.0.0.1:50051";
+const DEFAULT_AUTH_GRPC_ADDR: &str = "127.0.0.1:50052";
+
 /// Application configuration, sourced from environment variables (and `.env`
 /// in development via `dotenvy`).
 #[derive(Clone, Debug)]
@@ -36,14 +42,17 @@ pub struct AppConfig {
 impl AppConfig {
 	pub fn from_env() -> anyhow::Result<Self> {
 		let database_url = env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
+		// Loopback by default: the hub's data and auth planes are internal seams reached by
+		// the BFF (and same-host services). Opt into a wider bind (e.g. 0.0.0.0:50051) only
+		// behind network segmentation — see docs/ARCHITECTURE.md.
 		let grpc_addr = env::var("GRPC_ADDR")
-			.unwrap_or_else(|_| "0.0.0.0:50051".to_string())
+			.unwrap_or_else(|_| DEFAULT_GRPC_ADDR.to_string())
 			.parse()
-			.context("GRPC_ADDR must be a valid socket address, e.g. 0.0.0.0:50051")?;
+			.with_context(|| format!("GRPC_ADDR must be a valid socket address, e.g. {DEFAULT_GRPC_ADDR}"))?;
 		let auth_grpc_addr = env::var("AUTH_GRPC_ADDR")
-			.unwrap_or_else(|_| "0.0.0.0:50052".to_string())
+			.unwrap_or_else(|_| DEFAULT_AUTH_GRPC_ADDR.to_string())
 			.parse()
-			.context("AUTH_GRPC_ADDR must be a valid socket address, e.g. 0.0.0.0:50052")?;
+			.with_context(|| format!("AUTH_GRPC_ADDR must be a valid socket address, e.g. {DEFAULT_AUTH_GRPC_ADDR}"))?;
 		let sentry_dsn = env::var("SENTRY_DSN").ok().filter(|s| !s.is_empty());
 		let posthog_key = env::var("POSTHOG_KEY").ok().filter(|s| !s.is_empty());
 		let posthog_host = env::var("POSTHOG_HOST").ok().filter(|s| !s.is_empty());
@@ -74,5 +83,18 @@ impl AppConfig {
 			admin_subjects,
 			signer_grpc_addr,
 		})
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn default_grpc_binds_are_loopback() {
+		for raw in [DEFAULT_GRPC_ADDR, DEFAULT_AUTH_GRPC_ADDR] {
+			let addr: SocketAddr = raw.parse().expect("default addr parses");
+			assert!(addr.ip().is_loopback(), "{raw} must default to loopback, not all interfaces");
+		}
 	}
 }

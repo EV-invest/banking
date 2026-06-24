@@ -29,10 +29,16 @@ cookies and CSRF behave exactly as before the BFF moved out of Next.
 
 ## Run
 
-`nix run .#cabinet-backend` (listens on `:4000`). It needs the piggybank hub on `:50051`
-(`nix run .#piggybank`, or `.#dev`); identity flows additionally need the concierge runner
-on `:50061`, started from the sibling `concierge` repo. Config defaults live in
+`nix run .#cabinet-backend` (listens on `127.0.0.1:4000`). It needs the piggybank hub on
+`:50051` (`nix run .#piggybank`, or `.#dev`); identity flows additionally need the concierge
+runner on `:50061`, started from the sibling `concierge` repo. Config defaults live in
 `.env.example` (copy to `.env`); any value already in the environment wins.
+
+> **Network segmentation.** `CABINET_BACKEND_BIND` defaults to loopback (`127.0.0.1:4000`)
+> because this process holds every user's tokens and its only request-auth is the session
+> cookie. It must be reached **only** through the frontend's same-origin `/api/*` reverse
+> proxy. Widen the bind (`0.0.0.0`) only behind an upstream firewall that keeps `/api/*` off
+> any public interface — see [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md).
 
 > **Note:** end-to-end login depends on concierge's `AuthService`/`UserDirectory` being
 > implemented (currently scaffold stubs) and on piggybank trusting concierge-issued access
