@@ -17,9 +17,12 @@
 //! settle/cancel, so a two-phase completion never races its own pending. Transient
 //! failures (`Unavailable`/`Retryable`, or a custody outage) stop the cycle and retry
 //! from the same `seq`; a genuine inconsistency, `InsufficientFunds`, or a custody
-//! rejection is **parked** (advanced past, with a loud log + `last_error`) so one bad
-//! event can't wedge the whole queue — reconciliation and the `last_error` column
-//! surface it for intervention.
+//! rejection is **parked** — moved to a distinct `parked_at` terminal state (NOT
+//! `dispatched_at`) so the row stays queryable yet is excluded from the drain, with a
+//! loud (Sentry-shipped) `error!` + `last_error`. One bad event can't wedge the queue; a
+//! park *after* an earlier leg posted is flagged half-applied (`compensated_at`). The
+//! [`super::reconciliation`] job and the [`super::reaper`] then own recovery: nothing is
+//! silently dropped.
 
 use std::{sync::Arc, time::Duration};
 
@@ -173,10 +176,8 @@ impl Relay {
 						let _ = outbox::mark_dispatched(&self.pool, row.seq).await;
 						advanced = true;
 					}
-					Outcome::Park(reason) => {
-						error!(seq = row.seq, event_id = %row.event_id, "relay: parking event (needs intervention): {reason}");
-						let _ = outbox::record_failure(&self.pool, row.seq, &reason).await;
-						let _ = outbox::mark_dispatched(&self.pool, row.seq).await;
+					Outcome::Park { reason, applied_legs } => {
+						self.park(row, &reason, applied_legs).await;
 						advanced = true;
 					}
 					Outcome::Retry(reason) => {
@@ -185,15 +186,14 @@ impl Relay {
 						return true;
 					}
 					Outcome::RetryBounded(reason) => {
-						let _ = outbox::record_failure(&self.pool, row.seq, &reason).await;
 						// A retryable that can never resolve (a completion whose pending was
 						// itself parked, so it is never found) must not wedge the single-worker
 						// queue forever — park it after a bound so later events keep flowing.
 						if row.attempts + 1 >= MAX_RETRYABLE_ATTEMPTS {
-							error!(seq = row.seq, event_id = %row.event_id, attempts = row.attempts + 1, "relay: parking retryable after bound (wedge guard): {reason}");
-							let _ = outbox::mark_dispatched(&self.pool, row.seq).await;
+							self.park(row, &format!("retryable exhausted after {} attempts: {reason}", row.attempts + 1), 0).await;
 							advanced = true;
 						} else {
+							let _ = outbox::record_failure(&self.pool, row.seq, &reason).await;
 							warn!(seq = row.seq, attempts = row.attempts + 1, "relay: retryable, retrying from here: {reason}");
 							return true;
 						}
@@ -206,10 +206,26 @@ impl Relay {
 		}
 	}
 
+	/// Park a non-retryable event into its distinct terminal state (NOT dispatched), so it
+	/// stays queryable for reconciliation/the reaper instead of being silently dropped. If
+	/// any earlier leg of a multi-leg event already applied (`applied_legs > 0`), the event
+	/// is half-applied: stamp a compensation marker and alert at `error!` (which the Sentry
+	/// `tracing_layer` ships) so the aggregate's PG-vs-TB divergence is surfaced. Auto-
+	/// reversing the applied TB legs stays a follow-up — reconciliation owns recovery today.
+	async fn park(&self, row: &OutboxRow, reason: &str, applied_legs: usize) {
+		let _ = outbox::mark_parked(&self.pool, row.seq, reason).await;
+		if applied_legs > 0 {
+			error!(seq = row.seq, event_id = %row.event_id, aggregate = %row.aggregate, applied_legs, "relay: PARKED HALF-APPLIED event (compensation owed): {reason}");
+			let _ = outbox::mark_compensated(&self.pool, row.seq).await;
+		} else {
+			error!(seq = row.seq, event_id = %row.event_id, aggregate = %row.aggregate, "relay: parking event (needs intervention): {reason}");
+		}
+	}
+
 	async fn dispatch(&self, row: &OutboxRow) -> Outcome {
 		let ops = match plan(row) {
 			Ok(ops) => ops,
-			Err(reason) => return Outcome::Park(format!("unplannable event: {reason}")),
+			Err(reason) => return Outcome::park(format!("unplannable event: {reason}")),
 		};
 		// Settle-time liquidity pre-check. The relay is single-worker and sequential, so a
 		// Read-First check over *all* legs here guarantees a gated leg cannot fail with
@@ -231,14 +247,19 @@ impl Relay {
 				Ok(balance) => {
 					let have = if liquidity.is_some() { balance.available() } else { balance.posted };
 					if have < transfer.amount {
-						return Outcome::Park(format!("{} liquidity insufficient at settle", guarded.logical_key()));
+						// Pre-check parks before any leg applies — nothing half-applied.
+						return Outcome::park(format!("{} liquidity insufficient at settle", guarded.logical_key()));
 					}
 				}
 				Err(LedgerError::Unavailable(err)) => return Outcome::Retry(err),
 				Err(LedgerError::Retryable(err)) => return Outcome::RetryBounded(err),
-				Err(err) => return Outcome::Park(format!("settle liquidity check: {err}")),
+				Err(err) => return Outcome::park(format!("settle liquidity check: {err}")),
 			}
 		}
+		// Track applied legs so a park *after* an earlier leg posted (`applied > 0`) is flagged
+		// half-applied — the genuine residual a balance pre-check can't predict (a bare TB
+		// Conflict on a non-first leg). A first-leg park leaves nothing applied.
+		let mut applied = 0usize;
 		for (leg, op) in ops.iter().enumerate() {
 			let result = match &op.action {
 				LedgerAction::Post(transfer) => self.ledger.post(transfer).await,
@@ -252,11 +273,20 @@ impl Relay {
 					if !matches!(op.action, LedgerAction::Broadcast(_)) {
 						let _ = record_saga_step(&self.pool, row.event_id, leg as i32, op.role, op.transfer_id).await;
 					}
+					applied += 1;
 				}
 				Err(LedgerError::Unavailable(err)) => return Outcome::Retry(err),
 				Err(LedgerError::Retryable(err)) => return Outcome::RetryBounded(err),
-				Err(LedgerError::InsufficientFunds) => return Outcome::Park("insufficient funds".into()),
-				Err(LedgerError::Conflict(err)) => return Outcome::Park(format!("ledger conflict: {err}")),
+				Err(LedgerError::InsufficientFunds) =>
+					return Outcome::Park {
+						reason: "insufficient funds".into(),
+						applied_legs: applied,
+					},
+				Err(LedgerError::Conflict(err)) =>
+					return Outcome::Park {
+						reason: format!("ledger conflict: {err}"),
+						applied_legs: applied,
+					},
 			}
 		}
 		Outcome::Done
@@ -281,9 +311,21 @@ enum Outcome {
 	/// **bounded**: a pending that can never appear (its reserve was itself parked) must
 	/// not wedge the single-worker queue forever, so park after `MAX_RETRYABLE_ATTEMPTS`.
 	RetryBounded(String),
-	/// Terminal for this event — advance past it with a loud log (a discrepancy
-	/// reconciliation will catch; auto-compensation is a follow-up).
-	Park(String),
+	/// Terminal for this event — move it to the distinct **parked** state (stays queryable,
+	/// excluded from the drain). `applied_legs` is how many legs of this (possibly
+	/// multi-leg) event already posted before the park: `> 0` means it half-applied and a
+	/// compensation is owed (reconciliation catches it; auto-reversal is a follow-up).
+	Park {
+		reason: String,
+		applied_legs: usize,
+	},
+}
+
+impl Outcome {
+	/// Park before any leg applied — the common case (unplannable, pre-check shortfall).
+	fn park(reason: String) -> Self {
+		Outcome::Park { reason, applied_legs: 0 }
+	}
 }
 
 struct PlannedOp {

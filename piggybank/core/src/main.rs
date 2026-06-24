@@ -24,6 +24,8 @@ use piggybank_core::{
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
+		reaper::Reaper,
+		reconciliation::Reconciliation,
 		redemptions::PgRedemptions,
 		relay::Relay,
 		signer_addresses::SignerDepositAddresses,
@@ -114,7 +116,14 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.context("failed to connect the relay's database pool")?;
 	let relay_notify = Arc::new(Notify::new());
 	let custody: Arc<dyn Custody> = Arc::new(StubCustody);
-	let relay = Relay::new(relay_pool, ledger.clone(), custody, relay_notify.clone());
+	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody, relay_notify.clone());
+
+	// Recovery jobs, on the relay's dedicated pool so their periodic scans don't compete
+	// with request traffic. Reconciliation watches the PG-vs-TB invariants and surfaces any
+	// parked outbox row (TB wins, alert-only); the reaper owns the timeout for abandoned
+	// sagas (alert on stuck `processing` withdrawals; auto-resolve the safe `queued` ones).
+	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
+	let reaper = Reaper::new(relay_pool, withdrawals.clone(), redemptions.clone(), relay_notify.clone());
 
 	// ── auth service + user provisioning (in-process) ──────────────────────────
 	// Auth owns the keys/JWKS and hands core an `Authorizer` (core → auth, verify);
@@ -149,6 +158,8 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		result = auth_service.run(config.auth_grpc_addr) => result.context("auth service error")?,
 		() = auth_sync::run_provisioner(provision_rx, users) => {},
 		() = relay.run() => {},
+		() = reconciliation.run() => {},
+		() = reaper.run() => {},
 	}
 	Ok(())
 }

@@ -68,23 +68,47 @@ pub struct OutboxRow {
 	pub payload: String,
 	pub attempts: i32,
 }
-/// The next undispatched events in strict `seq` order. No `SKIP LOCKED`: the relay is a
-/// lock-enforced singleton (`pg_advisory_lock`, see [`super::relay::Relay::run`]), so the
-/// order is total and a reservation's pending always precedes its completion — `SKIP
-/// LOCKED` would let disjoint workers break that, so it is deliberately omitted.
+/// The next drainable events in strict `seq` order: neither dispatched nor parked. No
+/// `SKIP LOCKED`: the relay is a lock-enforced singleton (`pg_advisory_lock`, see
+/// [`super::relay::Relay::run`]), so the order is total and a reservation's pending always
+/// precedes its completion — `SKIP LOCKED` would let disjoint workers break that, so it is
+/// deliberately omitted. A *parked* row stays in the table (queryable by reconciliation /
+/// the reaper) but is excluded here so one non-retryable event can't wedge the queue.
 pub async fn next_batch(pool: &PgPool, limit: i64) -> Result<Vec<OutboxRow>, sqlx::Error> {
-	sqlx::query_as::<_, OutboxRow>("SELECT seq, event_id, aggregate, aggregate_id, kind, payload::text AS payload, attempts FROM outbox WHERE dispatched_at IS NULL ORDER BY seq LIMIT $1")
-		.bind(limit)
-		.fetch_all(pool)
-		.await
+	sqlx::query_as::<_, OutboxRow>(
+		"SELECT seq, event_id, aggregate, aggregate_id, kind, payload::text AS payload, attempts FROM outbox WHERE dispatched_at IS NULL AND parked_at IS NULL ORDER BY seq LIMIT $1",
+	)
+	.bind(limit)
+	.fetch_all(pool)
+	.await
 }
 /// Mark a row applied to the ledger (the relay advances past it).
 pub async fn mark_dispatched(pool: &PgPool, seq: i64) -> Result<(), sqlx::Error> {
 	sqlx::query("UPDATE outbox SET dispatched_at = now() WHERE seq = $1").bind(seq).execute(pool).await?;
 	Ok(())
 }
-/// Record a (transient or parked) failure for forensics without advancing — bumps
-/// the attempt counter and stores the last error.
+/// Move a non-retryable row to the distinct **parked** terminal state: stamp `parked_at`
+/// (NOT `dispatched_at`), bump the attempt counter, and store the reason. The row stays
+/// queryable for reconciliation/the reaper and an operator, yet is excluded from
+/// [`next_batch`] so it never wedges the single-worker drain. The relay still advances
+/// past it in-memory; this is what replaces the old "park == mark_dispatched" drop.
+pub async fn mark_parked(pool: &PgPool, seq: i64, reason: &str) -> Result<(), sqlx::Error> {
+	sqlx::query("UPDATE outbox SET parked_at = now(), attempts = attempts + 1, last_error = $2 WHERE seq = $1")
+		.bind(seq)
+		.bind(reason)
+		.execute(pool)
+		.await?;
+	Ok(())
+}
+/// Stamp that a parked multi-leg event has been flagged for compensation (it left the
+/// ledger half-applied), so reconciliation can tell a still-open park from one already
+/// routed to its recovery path.
+pub async fn mark_compensated(pool: &PgPool, seq: i64) -> Result<(), sqlx::Error> {
+	sqlx::query("UPDATE outbox SET compensated_at = now() WHERE seq = $1").bind(seq).execute(pool).await?;
+	Ok(())
+}
+/// Record a transient (retryable) failure for forensics without advancing or parking —
+/// bumps the attempt counter and stores the last error.
 pub async fn record_failure(pool: &PgPool, seq: i64, error: &str) -> Result<(), sqlx::Error> {
 	sqlx::query("UPDATE outbox SET attempts = attempts + 1, last_error = $2 WHERE seq = $1")
 		.bind(seq)
@@ -92,6 +116,28 @@ pub async fn record_failure(pool: &PgPool, seq: i64, error: &str) -> Result<(), 
 		.execute(pool)
 		.await?;
 	Ok(())
+}
+/// A parked outbox row, surfaced to reconciliation: enough to identify the stranded saga
+/// (`aggregate`/`aggregate_id`), why it parked (`last_error`), and whether it has already
+/// been compensated.
+#[derive(sqlx::FromRow)]
+pub struct ParkedRow {
+	pub seq: i64,
+	pub event_id: Uuid,
+	pub aggregate: String,
+	pub aggregate_id: Uuid,
+	pub kind: String,
+	pub last_error: Option<String>,
+	pub compensated: bool,
+}
+/// Scan every parked row (newest first) — the reconciliation job's parked-row leg. Cheap
+/// against the partial `outbox_parked_idx`; parked rows are an exceptional set.
+pub async fn parked_rows(pool: &PgPool) -> Result<Vec<ParkedRow>, sqlx::Error> {
+	sqlx::query_as::<_, ParkedRow>(
+		"SELECT seq, event_id, aggregate, aggregate_id, kind, last_error, compensated_at IS NOT NULL AS compensated FROM outbox WHERE parked_at IS NOT NULL ORDER BY parked_at DESC",
+	)
+	.fetch_all(pool)
+	.await
 }
 fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())

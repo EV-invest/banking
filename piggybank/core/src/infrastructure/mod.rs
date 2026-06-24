@@ -12,6 +12,10 @@
 //!   the state change, plus its drain side.
 //! - [`relay`] — the single-worker saga dispatcher that drains the outbox and
 //!   issues TigerBeetle transfers (Write-Last), idempotently.
+//! - [`reconciliation`] — the periodic PG-vs-TB discrepancy scan (cash invariant,
+//!   clearing vs in-flight withdrawals, parked-row surface); alert-only, TB wins.
+//! - [`reaper`] — the abandoned-saga sweep: alerts on stuck `processing` withdrawals
+//!   and auto-resolves the safe `queued` redemptions/withdrawals past a max age.
 //! - [`telemetry`] — the observability adapter: the one seam that hands errors to
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
@@ -21,6 +25,8 @@ pub mod ledger;
 pub mod nav;
 pub mod outbox;
 pub mod positions;
+pub mod reaper;
+pub mod reconciliation;
 pub mod redemptions;
 pub mod relay;
 pub mod signer_addresses;

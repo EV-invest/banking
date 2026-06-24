@@ -22,8 +22,14 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::tigerbeetle::TigerBeetle,
-	ports::ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
+	ports::ledger::{CashInvariant, CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
 };
+
+/// The USDT cash ledger id (`Ledger::Usdt`) and the `wallet:<net>` custody account code
+/// (`AccountCode::CryptoWallet`) — the two constants `cash_invariant` keys off to split
+/// the cash plane into custody (this code) vs claims (every other account on the ledger).
+const USDT_LEDGER_ID: i32 = 1;
+const CRYPTO_WALLET_CODE: i32 = 10;
 
 /// Application-level deadline on a single TigerBeetle call. The TB client surfaces a
 /// *closed* connection, but a replica that accepts the connection yet stalls has no
@@ -264,6 +270,46 @@ impl Ledger for TbLedger {
 			..Default::default()
 		};
 		self.create_transfers(&[row]).await
+	}
+
+	async fn cash_invariant(&self) -> Result<CashInvariant, LedgerError> {
+		// Every cash-plane account id lives in the id-map; pull the USDT-ledger rows with
+		// their code so we can split custody (wallet) from claims, then read the posted
+		// balances straight from TB (authoritative) and sum each side on its natural side.
+		let rows = sqlx::query_as::<_, (Vec<u8>, i32)>("SELECT tb_account_id, code FROM tb_accounts WHERE ledger = $1")
+			.bind(USDT_LEDGER_ID)
+			.fetch_all(&self.pool)
+			.await
+			.map_err(|e| LedgerError::Unavailable(format!("cash-plane account scan: {e}")))?;
+		if rows.is_empty() {
+			return Ok(CashInvariant { custody: 0, claims: 0 });
+		}
+		let mut ids = Vec::with_capacity(rows.len());
+		let mut is_custody = std::collections::HashMap::with_capacity(rows.len());
+		for (bytes, code) in &rows {
+			let id = u128_from_be(bytes)?;
+			ids.push(id);
+			is_custody.insert(id, *code == CRYPTO_WALLET_CODE);
+		}
+		let call = self
+			.tb
+			.client()
+			.lookup_accounts(&ids)
+			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
+		let accounts = deadline("lookup_accounts", call)
+			.await?
+			.map_err(|e| LedgerError::Unavailable(format!("lookup_accounts: {e:?}")))?;
+		let (mut custody, mut claims) = (0u128, 0u128);
+		for account in accounts {
+			if *is_custody.get(&account.id).unwrap_or(&false) {
+				// Custody is debit-normal: posted = debits − credits.
+				custody = custody.saturating_add(account.debits_posted.saturating_sub(account.credits_posted));
+			} else {
+				// Claims are credit-normal: posted = credits − debits.
+				claims = claims.saturating_add(account.credits_posted.saturating_sub(account.debits_posted));
+			}
+		}
+		Ok(CashInvariant { custody, claims })
 	}
 }
 

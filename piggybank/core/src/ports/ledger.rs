@@ -43,6 +43,26 @@ pub trait Ledger: Gateway {
 	/// Post or void a pending transfer. Already-posted/already-voided ⇒ success
 	/// (idempotent); pending-not-found ⇒ [`LedgerError::Retryable`].
 	async fn complete(&self, completion: &PendingCompletion) -> Result<(), LedgerError>;
+
+	/// The cash plane's global posted invariant, summed straight from TigerBeetle (the
+	/// authoritative store): total custody (`wallet:<net>` debit-normal assets) vs total
+	/// claims (`fund`/`user`/`service`/`fee`/`clearing` credit-normal). By construction
+	/// `custody == claims` always holds; reconciliation asserts it and alerts if TB and
+	/// the design ever diverge. Returns raw 18-dp USDT base units.
+	async fn cash_invariant(&self) -> Result<CashInvariant, LedgerError>;
+}
+/// The reconciliation read of the cash plane's global double-entry invariant: the summed
+/// posted custody side and claims side. They must be equal (`balanced()`).
+#[derive(Debug, Clone, Copy)]
+pub struct CashInvariant {
+	pub custody: u128,
+	pub claims: u128,
+}
+
+impl CashInvariant {
+	pub fn balanced(self) -> bool {
+		self.custody == self.claims
+	}
 }
 /// Failure modes the relay and query handlers must distinguish — most importantly
 /// `InsufficientFunds` (a real domain outcome from a non-negative-flag violation)

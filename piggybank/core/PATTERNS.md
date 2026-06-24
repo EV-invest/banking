@@ -167,9 +167,13 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   can recompute the same `pending_id`.
 - The gateway treats `Exists | AlreadyPosted | AlreadyVoided` as success; a post racing
   its pending is `Retryable` (can't happen under strict `seq`, but handled).
-  `InsufficientFunds`/`Conflict` are **parked** (advanced past with a loud log +
-  `last_error`) so one bad event can't wedge the queue — a discrepancy reconciliation
-  catches; auto-compensation is a follow-up.
+  `InsufficientFunds`/`Conflict` are **parked** into a distinct `outbox.parked_at`
+  terminal state (NOT `dispatched_at`) so the row stays queryable yet is excluded from
+  the drain (`WHERE dispatched_at IS NULL AND parked_at IS NULL`) — one bad event can't
+  wedge the queue, and nothing is silently dropped. A park *after* an earlier leg of a
+  multi-leg event posted is flagged half-applied (`compensated_at`); the
+  [`reconciliation`](src/infrastructure/reconciliation.rs) job surfaces every parked row
+  for intervention (TB-reversal of the applied legs is still a follow-up).
 - Deposits are idempotent by the `deposits.tx_ref` **gate** (`ON CONFLICT DO NOTHING` →
   emit the event only if newly inserted), so a re-record never double-credits.
 - A withdrawal's clearing reservation gets a **withdrawal-derived** id
@@ -195,13 +199,14 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   ledger state* (`PendingTransferNotFound`) retries **bounded** (`MAX_RETRYABLE_ATTEMPTS`)
   then parks — so a completion whose pending can never appear (its reserve was itself
   parked) cannot wedge the single, globally-ordered queue forever.
-- **Parked opening reserve (known limitation).** If a withdrawal's *first* op — the
-  `clearing` reserve — parks (e.g. two concurrent same-user requests both pass the
-  optimistic Read-First, but the second violates the user-claim non-negative flag), the
-  control-plane row stays `Queued` with nothing reserved. Its later cancel/settle then
-  parks (bounded, no wedge) and a real custody broadcast of such a withdrawal must be
-  refused — reconciliation flips the aggregate to failed. Until that job lands, custody is
-  a stub (no funds move), so this is latent.
+- **Parked opening reserve.** If a withdrawal's *first* op — the `clearing` reserve —
+  parks (e.g. two concurrent same-user requests both pass the optimistic Read-First, but
+  the second violates the user-claim non-negative flag), the control-plane row stays
+  `Queued` with nothing reserved. Its later cancel/settle then parks (bounded, no wedge),
+  and the [`reconciliation`](src/infrastructure/reconciliation.rs) clearing check (ledger
+  reserve vs the gross of in-flight withdrawals) catches the mismatch; the
+  [`reaper`](src/infrastructure/reaper.rs) auto-cancels the abandoned `queued` row. A real
+  custody broadcast of such a withdrawal must still be refused.
 
 ## Authorization (defense in depth)
 
@@ -223,14 +228,27 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `PostFundValuation` | admin | `is_admin` + `is_access` | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
 | `SettleRedemption` / `FailRedemption` | admin (treasury) | `is_admin` + `is_access` | state is `queued` (idempotent) |
 
-## Reconciliation (seam)
+## Reconciliation + reaper (recovery jobs)
 
-TB always wins. A reconciliation job (follow-up) must assert: the **global** posted
-`sum(custody) == sum(claims)`; `clearing`'s pending vs Postgres queued/processing
-withdrawals; and — the treasury's job, not the ledger's — each **rail's** custody against
-its real on-chain wallet balance, flagging rails that need a rebalance/top-up to clear the
-queue. The `last_error` column on a parked outbox row is the first place to look when money
-didn't move.
+TB always wins; both jobs are **read-mostly** and run as `select!` branches of the
+composition root next to the relay, on the relay's dedicated pool.
+
+[`reconciliation`](src/infrastructure/reconciliation.rs) (`Reconciliation::scan`) asserts
+and **alerts** (Sentry-shipped `error!`, no auto-write) on: the **global** posted
+`sum(custody) == sum(claims)` on the USDT ledger (read straight from TB via
+`Ledger::cash_invariant`); `clearing`'s reserved (pending + posted) balance vs the gross of
+every `queued`/`processing` withdrawal in Postgres; and a scan of every `outbox.parked_at`
+row (with its `last_error` and `compensated_at`). Per-rail custody vs the real on-chain
+wallet balance is the treasury's job, surfaced separately. The `last_error` column on a
+parked row is the first place to look when money didn't move.
+
+[`reaper`](src/infrastructure/reaper.rs) (`Reaper::sweep`) owns the timeout for abandoned
+sagas (TB pendings are `timeout = 0`, so nothing auto-voids). Split by safety per the
+cardinal withdrawal rule: a **`processing` withdrawal** past the max age is **alert-only**
+(its broadcast may have landed — voiding would double-pay; only a confirmed not-broadcast
+signal may fail it); a **`queued` withdrawal** is **auto-cancelled** (never broadcast →
+safe full refund); a **`queued` redemption** is **auto-failed** (internal claim→claim →
+safe). Max age is 24h (config seam: `Reaper::with_max_age`).
 
 ## Tests
 
@@ -244,5 +262,9 @@ subscribe minting at seed + fractional NAV pricing + staleness/Read-First; redee
 **auto-settle when liquid**, **short fund → queue → top-up → settle at settle-NAV (profit)**,
 **short settle parks without burning or paying**, cancel returns the units; and the
 withdrawal reserve→settle with fee, fail→refund, short-rail queue→dispatch→settle, queued
-cancel→refund). They skip when `DATABASE_URL` is unset or TB is unreachable. Drive the relay
-deterministically with `Relay::drain`.
+cancel→refund). `piggybank/core/tests/relay_recovery.rs` proves a parked event lands in the
+distinct `parked_at` state (never marked dispatched), stays queryable, and is surfaced by
+`Reconciliation::scan`, and that `Reaper::sweep` alerts on a stuck `processing` withdrawal
+(never auto-voids it) while auto-cancelling an abandoned `queued` one. They skip when
+`DATABASE_URL` is unset or TB is unreachable. Drive the relay deterministically with
+`Relay::drain`, and the recovery jobs with `Reconciliation::scan` / `Reaper::sweep`.
