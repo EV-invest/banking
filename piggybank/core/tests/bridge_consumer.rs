@@ -17,7 +17,10 @@ use evconcierge_contracts::concierge::v1::{
 	user_events_server::{UserEvents, UserEventsServer},
 	user_lifecycle_event::Kind,
 };
-use piggybank_core::infrastructure::{bridge, bridge::BridgeConsumer, db};
+use piggybank_core::{
+	infrastructure::{bridge, bridge::BridgeConsumer, db, users::PgUsers},
+	ports::UserRepository,
+};
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
@@ -83,6 +86,15 @@ fn event(subject: &str, kind: Kind, sequence: u64) -> UserLifecycleEvent {
 		email: "bridged@example.com".into(),
 		email_verified: true,
 		token_version: 0,
+	}
+}
+
+/// A CREATED event carrying a known concierge user id — the handle the BFF later presents on
+/// `IssueUserToken`, so the test can assert the bridge stores it and the resolve path finds it.
+fn created_event(subject: &str, concierge_user_id: uuid::Uuid) -> UserLifecycleEvent {
+	UserLifecycleEvent {
+		user_id: concierge_user_id.to_string(),
+		..event(subject, Kind::Created, 1)
 	}
 }
 
@@ -168,6 +180,45 @@ async fn created_then_suspended_freezes_user_and_gates_money_op() {
 			bridge::is_frozen(&pool, user_id).await.unwrap(),
 			"SUSPENDED must freeze the banking user — the money-op gate then rejects"
 		);
+		// And the issuance resolve reports the freeze, so AuthService.IssueUserToken refuses to
+		// mint a money-plane token for a suspended user (defense in depth beyond the op gate).
+		let target = PgUsers::new(pool.clone())
+			.resolve_issuance_by_banking_id(domain::users::UserId::from_raw(user_id))
+			.await
+			.unwrap()
+			.expect("resolve issuance");
+		assert!(target.disabled, "a suspended user resolves as disabled → no money token is issued");
+	})
+	.await;
+}
+
+#[tokio::test]
+async fn created_stores_concierge_id_and_resolves_for_issuance() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	let concierge_id = uuid::Uuid::new_v4();
+
+	drive(&pool, vec![created_event(&subject, concierge_id)], move |pool| {
+		let subject = subject.clone();
+		async move {
+			// The bridge stored the concierge user id on the mirror row — the issuance handle.
+			let stored: Option<uuid::Uuid> = sqlx::query_scalar("SELECT concierge_user_id FROM users WHERE auth_subject = $1")
+				.bind(&subject)
+				.fetch_one(&pool)
+				.await
+				.unwrap();
+			assert_eq!(stored, Some(concierge_id), "CREATED must store the concierge user id");
+
+			// The issuance resolve path (AuthService.IssueUserToken → ResolveForIssuance) finds the
+			// user by that concierge id, and the refresh path resolves the same row by hub id.
+			let users = PgUsers::new(pool.clone());
+			let by_concierge = users.resolve_issuance_by_concierge_id(concierge_id).await.unwrap().expect("resolved by concierge id");
+			assert!(!by_concierge.disabled, "a freshly created user is not disabled");
+			let by_banking = users.resolve_issuance_by_banking_id(by_concierge.user_id).await.unwrap().expect("resolved by hub id");
+			assert_eq!(by_banking.user_id, by_concierge.user_id, "both lookups resolve the same hub user");
+		}
 	})
 	.await;
 }

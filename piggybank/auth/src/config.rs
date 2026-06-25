@@ -46,8 +46,10 @@ pub struct AuthConfig {
 	pub service_ttl_secs: u64,
 	/// Signing/verification key material. `None` ⇒ auth disabled (dev/CI).
 	pub signing: Option<SigningConfig>,
-	/// Google OAuth2 client credentials. `None` ⇒ the `Exchange` route is disabled.
-	pub google: Option<GoogleConfig>,
+	/// Shared bearer the cabinet BFF presents on `IssueUserToken` (the concierge→banking
+	/// token-exchange seam). `None` ⇒ issuance is not configured and every call fails
+	/// closed. Must match `BANKING_ISSUANCE_TOKEN` on the BFF side.
+	pub issuance_token: Option<IssuanceToken>,
 }
 impl AuthConfig {
 	pub fn from_env() -> anyhow::Result<Self> {
@@ -59,13 +61,7 @@ impl AuthConfig {
 			}),
 			_ => None,
 		};
-		let google = match (
-			env::var("GOOGLE_CLIENT_ID").ok().filter(|s| !s.is_empty()),
-			env::var("GOOGLE_CLIENT_SECRET").ok().filter(|s| !s.is_empty()),
-		) {
-			(Some(client_id), Some(client_secret)) => Some(GoogleConfig { client_id, client_secret }),
-			_ => None,
-		};
+		let issuance_token = env::var("BANKING_ISSUANCE_TOKEN").ok().filter(|s| !s.is_empty()).map(IssuanceToken);
 		let config = Self {
 			issuer: env::var("AUTH_ISSUER").unwrap_or_else(|_| "https://auth.banking.ev".to_string()),
 			client_audience: env::var("AUTH_CLIENT_AUDIENCE").unwrap_or_else(|_| "banking-core".to_string()),
@@ -76,7 +72,7 @@ impl AuthConfig {
 			idle_timeout_secs: parse_secs("AUTH_IDLE_TIMEOUT_SECS", 0)?,
 			service_ttl_secs: parse_secs("AUTH_SERVICE_TTL_SECS", 300)?,
 			signing,
-			google,
+			issuance_token,
 		};
 		config.assert_plane()?;
 		Ok(config)
@@ -109,12 +105,15 @@ pub struct SigningConfig {
 	/// `kid` and any retired-but-still-valid keys (make-before-break rotation).
 	pub jwks_json: String,
 }
-/// Google OAuth2 confidential-client credentials. `Debug` is hand-written so the
-/// confidential client secret is never printed (same footgun as [`SigningConfig`]).
+/// The shared issuance bearer the BFF presents on `IssueUserToken`. A newtype with a
+/// hand-written `Debug` so the secret is never printed by a derived `AuthConfig` debug
+/// (same footgun as [`SigningConfig`]).
 #[derive(Clone)]
-pub struct GoogleConfig {
-	pub client_id: String,
-	pub client_secret: String,
+pub struct IssuanceToken(pub String);
+impl IssuanceToken {
+	pub fn as_str(&self) -> &str {
+		&self.0
+	}
 }
 /// Configuration a **downstream service** uses to build a [`Verifier`](crate::verifier::Verifier).
 #[derive(Clone, Debug)]
@@ -173,9 +172,9 @@ impl std::fmt::Debug for SigningConfig {
 	}
 }
 
-impl std::fmt::Debug for GoogleConfig {
+impl std::fmt::Debug for IssuanceToken {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("GoogleConfig").field("client_id", &self.client_id).field("client_secret", &"<redacted>").finish()
+		f.write_str("IssuanceToken(<redacted>)")
 	}
 }
 
@@ -210,15 +209,14 @@ mod tests {
 	}
 
 	#[test]
-	fn google_config_debug_redacts_client_secret() {
-		let cfg = GoogleConfig {
-			client_id: "client-123".to_string(),
-			client_secret: "GOCSPX-SUPERSECRET".to_string(),
+	fn issuance_token_debug_redacts_the_secret() {
+		let cfg = AuthConfig {
+			issuance_token: Some(IssuanceToken("super-secret-bridge-issuance".to_string())),
+			..issuing("https://auth.banking.ev", "banking-core", "banking-services")
 		};
 		let rendered = format!("{cfg:?}");
-		assert!(!rendered.contains("GOCSPX-SUPERSECRET"), "Debug leaked the client secret: {rendered}");
+		assert!(!rendered.contains("super-secret-bridge-issuance"), "Debug leaked the issuance token: {rendered}");
 		assert!(rendered.contains("<redacted>"));
-		assert!(rendered.contains("client-123"));
 	}
 
 	fn issuing(issuer: &str, client_audience: &str, service_audience: &str) -> AuthConfig {
@@ -232,7 +230,7 @@ mod tests {
 			idle_timeout_secs: 0,
 			service_ttl_secs: 300,
 			signing: None,
-			google: None,
+			issuance_token: None,
 		}
 	}
 

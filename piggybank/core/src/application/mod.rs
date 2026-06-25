@@ -14,8 +14,9 @@
 //! Both depend on the ports in [`crate::ports`], never on concrete adapters.
 //!
 //! [`auth_sync`] is the first use case: it drains the in-process `Provisioner`
-//! channel from the auth task and upserts the [`User`](domain::users::User)
-//! aggregate, keeping the hub identity in sync with the verified Google identity.
+//! channel from the auth task and resolves the user the auth task is minting a
+//! money-plane token for (users themselves are mirrored from concierge by the
+//! one-way bridge, not provisioned here).
 //! [`balance`], [`funds`], and [`withdrawals`] are the money use cases — each notifies
 //! the relay after its commit so the ledger move follows promptly.
 

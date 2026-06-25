@@ -142,7 +142,7 @@ mod tests {
 				kid: "test-kid".into(),
 				jwks_json: format!(r#"{{"keys":[{{"kty":"OKP","crv":"Ed25519","x":"{TEST_JWK_X}","kid":"test-kid","alg":"EdDSA","use":"sig"}}]}}"#),
 			}),
-			google: None,
+			issuance_token: None,
 		}
 	}
 

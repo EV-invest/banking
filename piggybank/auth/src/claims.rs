@@ -32,7 +32,7 @@ impl TokenType {
 /// locally by every service against the published JWKS.
 ///
 /// `sub` is the hub's canonical principal id — a user UUID for [`TokenType::Access`]
-/// (never Google's `sub`), or a service name for [`TokenType::Service`]. It is a
+/// (never the upstream identity provider's `sub`), or a service name for [`TokenType::Service`]. It is a
 /// plain `String` so this crate never needs to depend on `domain`; the hub parses
 /// it into a typed id at the edge.
 ///

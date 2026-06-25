@@ -15,7 +15,10 @@ use domain::{
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::{infrastructure::outbox, ports::UserRepository};
+use crate::{
+	infrastructure::outbox,
+	ports::{IssuanceTarget, UserRepository},
+};
 
 pub struct PgUsers {
 	pool: PgPool,
@@ -91,6 +94,35 @@ macro_rules! user_columns {
 	};
 }
 
+/// The issuance slice (see [`IssuanceTarget`]). `disabled` and `token_version` are computed in
+/// SQL to FOLD both revoke surfaces — the bridge-mirrored columns and banking's own aggregate
+/// columns — so either path gates a money token.
+#[derive(sqlx::FromRow)]
+struct IssuanceRow {
+	id: Uuid,
+	email: String,
+	disabled: bool,
+	token_version: i64,
+}
+impl IssuanceRow {
+	fn into_target(self) -> IssuanceTarget {
+		IssuanceTarget {
+			user_id: UserId::from_raw(self.id),
+			email: self.email,
+			disabled: self.disabled,
+			token_version: self.token_version as u64,
+		}
+	}
+}
+
+/// The folded issuance projection: refuse on a concierge freeze OR a banking disable, and take
+/// the GREATER of the two revoke versions. Keep in sync with [`IssuanceRow`].
+macro_rules! issuance_columns {
+	() => {
+		"id, email, (frozen OR status = 'disabled') AS disabled, GREATEST(concierge_token_version, token_version) AS token_version"
+	};
+}
+
 fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())
 }
@@ -154,6 +186,24 @@ impl UserRepository for PgUsers {
 		append_events(&mut tx, &mut user).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(user)
+	}
+
+	async fn resolve_issuance_by_concierge_id(&self, concierge_id: Uuid) -> Result<Option<IssuanceTarget>, DomainError> {
+		let row = sqlx::query_as::<_, IssuanceRow>(concat!("SELECT ", issuance_columns!(), " FROM users WHERE concierge_user_id = $1"))
+			.bind(concierge_id)
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		Ok(row.map(IssuanceRow::into_target))
+	}
+
+	async fn resolve_issuance_by_banking_id(&self, banking_id: UserId) -> Result<Option<IssuanceTarget>, DomainError> {
+		let row = sqlx::query_as::<_, IssuanceRow>(concat!("SELECT ", issuance_columns!(), " FROM users WHERE id = $1"))
+			.bind(banking_id.raw())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		Ok(row.map(IssuanceRow::into_target))
 	}
 
 	async fn save(&self, user: &mut User) -> Result<(), DomainError> {

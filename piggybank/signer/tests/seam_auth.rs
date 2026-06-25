@@ -86,7 +86,7 @@ impl AuthService for JwksOnlyAuth {
 		}))
 	}
 
-	async fn exchange(&self, _r: Request<evbanking_contracts::banking::v1::ExchangeRequest>) -> Result<Response<evbanking_contracts::banking::v1::TokenResponse>, Status> {
+	async fn issue_user_token(&self, _r: Request<evbanking_contracts::banking::v1::IssueUserTokenRequest>) -> Result<Response<evbanking_contracts::banking::v1::TokenResponse>, Status> {
 		Err(Status::unimplemented("jwks-only"))
 	}
 

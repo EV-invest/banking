@@ -121,14 +121,18 @@ impl BridgeConsumer {
 	async fn apply(&self, event: &UserLifecycleEvent) -> Result<(), sqlx::Error> {
 		let subject = &event.auth_subject;
 		let sequence = event.sequence as i64;
+		// Concierge's own user id — the handle the BFF later presents on IssueUserToken. A
+		// malformed value (should never happen) is stored as NULL rather than failing the event.
+		let concierge_user_id = uuid::Uuid::parse_str(&event.user_id).ok();
 		let mut tx = self.pool.begin().await?;
 
 		if event.kind() == Kind::Created {
 			sqlx::query(
-				"INSERT INTO users (id, auth_subject, email, email_verified, kyc_level, last_lifecycle_sequence) \
-				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5) ON CONFLICT (auth_subject) DO NOTHING",
+				"INSERT INTO users (id, auth_subject, concierge_user_id, email, email_verified, kyc_level, last_lifecycle_sequence) \
+				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6) ON CONFLICT (auth_subject) DO NOTHING",
 			)
 			.bind(subject)
+			.bind(concierge_user_id)
 			.bind(&event.email)
 			.bind(event.email_verified)
 			.bind(event.kyc_level as i32)
@@ -154,12 +158,14 @@ impl BridgeConsumer {
 		}
 
 		match event.kind() {
-			// CREATED already upserted above; just stamp the sequence (and refresh KYC).
+			// CREATED already upserted above; stamp the sequence, refresh KYC, and backfill
+			// concierge_user_id if a pre-existing row didn't have it (COALESCE never overwrites).
 			Kind::Created => {
-				sqlx::query("UPDATE users SET kyc_level = $2, last_lifecycle_sequence = $3, updated_at = now() WHERE auth_subject = $1")
+				sqlx::query("UPDATE users SET kyc_level = $2, last_lifecycle_sequence = $3, concierge_user_id = COALESCE(concierge_user_id, $4), updated_at = now() WHERE auth_subject = $1")
 					.bind(subject)
 					.bind(event.kyc_level as i32)
 					.bind(sequence)
+					.bind(concierge_user_id)
 					.execute(&mut *tx)
 					.await?;
 			}

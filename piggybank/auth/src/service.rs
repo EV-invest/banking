@@ -1,23 +1,28 @@
 //! The auth service — a separate application run by `core`.
 //!
-//! Owns the signing keys, JWKS, Google client, and refresh store; serves the
-//! **issuance** gRPC routes (`Exchange`/`Refresh`/`Logout`/`Jwks`) on its own
-//! address; provisions users in-process over the [`Provisioner`] channel; and
-//! answers `core`'s authorize requests over the [`Authorizer`] channel. `core`
-//! builds it, takes the `Authorizer`, hands it the `Provisioner`, and spawns
-//! [`AuthService::run`] in its own task.
+//! Owns the signing keys, JWKS, and refresh store; serves the money-plane **issuance**
+//! gRPC routes (`IssueUserToken`/`Refresh`/`Logout`/`Jwks`) on its own address; resolves
+//! the user it is minting for in-process over the [`Provisioner`] channel; and answers
+//! `core`'s authorize requests over the [`Authorizer`] channel. `core` builds it, takes
+//! the `Authorizer`, hands it the `Provisioner`, and spawns [`AuthService::run`] in its
+//! own task.
 //!
-//! Unconfigured (no `AUTH_SIGNING_KEY_PEM`) it runs inert: issuance and authorize
-//! both answer [`AuthError::NotConfigured`], so the scaffold still boots locally.
+//! This is the MONEY plane: it does NO third-party (Google) OAuth — sign-in lives wholly
+//! in concierge, and users are mirrored here by the one-way bridge. `IssueUserToken` is the
+//! concierge→banking seam, authenticated by a shared issuance token (not a user token).
+//!
+//! Unconfigured (no `AUTH_SIGNING_KEY_PEM`) it runs inert: issuance and authorize both
+//! answer [`AuthError::NotConfigured`], so the scaffold still boots locally.
 
 use std::{future::Future, net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
 use evbanking_contracts::banking::v1::{
-	ExchangeRequest, JwksRequest, JwksResponse, ListSessionsRequest, ListSessionsResponse, LogoutRequest, LogoutResponse, RefreshRequest, RevokeSessionRequest, RevokeSessionResponse,
+	IssueUserTokenRequest, JwksRequest, JwksResponse, ListSessionsRequest, ListSessionsResponse, LogoutRequest, LogoutResponse, RefreshRequest, RevokeSessionRequest, RevokeSessionResponse,
 	Session, TokenResponse, UserSummary,
 	auth_service_server::{AuthService as AuthServiceRpc, AuthServiceServer},
 };
+use subtle::ConstantTimeEq;
 use tokio::sync::mpsc;
 use tonic::{Request, Response, Status, transport::Server};
 
@@ -26,7 +31,6 @@ use crate::{
 	authorizer::{AuthorizeRequest, Authorizer, TokenClass},
 	claims::TokenType,
 	config::AuthConfig,
-	google::GoogleOauth,
 	jwks::{JwksCache, VerifyPolicy, verify_token},
 	management::{IssuedRefresh, RefreshStore, SessionBounds},
 	provisioner::{ProvisionedUser, Provisioner},
@@ -85,7 +89,7 @@ impl AuthGrpc {
 			}
 			None => (None, JwksCache::new(), Vec::new()),
 		};
-		let google = config.google.as_ref().map(GoogleOauth::new);
+		let issuance_token = config.issuance_token.as_ref().map(|t| Arc::from(t.as_str()));
 		let client_policy = VerifyPolicy {
 			issuer: config.issuer.clone(),
 			audiences: vec![config.client_audience.clone()],
@@ -102,7 +106,7 @@ impl AuthGrpc {
 				keyring,
 				client_policy,
 				service_policy,
-				google,
+				issuance_token,
 				refresh: RefreshStore::from_env().await?,
 				provisioner,
 				jwks,
@@ -131,6 +135,31 @@ impl AuthGrpc {
 		};
 		verify_token(token, &engine.keyring, policy)
 	}
+
+	/// Authenticate the service-to-service caller of `IssueUserToken` against the shared
+	/// issuance token. An unconfigured token fails closed (`UNAVAILABLE`); a wrong/absent
+	/// bearer is rejected. This seam is authenticated by the shared secret, NOT a user
+	/// access token — banking trusts its own credential, never concierge's issuer.
+	fn authenticate_issuer<T>(&self, request: &Request<T>) -> Result<(), Status> {
+		let Some(expected) = self.engine.issuance_token.as_deref() else {
+			return Err(Status::unavailable("issuance not configured"));
+		};
+		match bearer_token(request) {
+			Some(presented) if constant_time_eq(presented.as_bytes(), expected.as_bytes()) => Ok(()),
+			_ => Err(Status::unauthenticated("invalid issuance token")),
+		}
+	}
+}
+
+fn bearer_token<T>(request: &Request<T>) -> Option<String> {
+	let value = request.metadata().get("authorization")?.to_str().ok()?;
+	value.strip_prefix("Bearer ").map(str::to_owned)
+}
+
+/// Length-aware constant-time compare (length leak only, never a guessed value), so
+/// issuance-token verification doesn't leak content via timing. Mirrors `management::ct_eq`.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+	a.len() == b.len() && a.ct_eq(b).into()
 }
 
 struct AuthEngine {
@@ -142,7 +171,9 @@ struct AuthEngine {
 	/// In-process authorize policy reserved for genuinely inter-service surfaces:
 	/// pins the service audience and `typ=service` only.
 	service_policy: VerifyPolicy,
-	google: Option<GoogleOauth>,
+	/// Shared bearer the BFF presents on `IssueUserToken` (the concierge→banking seam).
+	/// `None` ⇒ issuance is not configured and every call fails closed.
+	issuance_token: Option<Arc<str>>,
 	refresh: RefreshStore,
 	provisioner: Provisioner,
 	jwks: Vec<evbanking_contracts::banking::v1::Jwk>,
@@ -166,20 +197,20 @@ fn token_response(access_token: String, access_exp: u64, refresh: IssuedRefresh,
 
 #[tonic::async_trait]
 impl AuthServiceRpc for AuthGrpc {
-	async fn exchange(&self, request: Request<ExchangeRequest>) -> Result<Response<TokenResponse>, Status> {
+	async fn issue_user_token(&self, request: Request<IssueUserTokenRequest>) -> Result<Response<TokenResponse>, Status> {
+		// Service-to-service seam: authenticate the shared issuance token BEFORE anything
+		// else, so an unauthenticated caller can neither mint nor probe internal state.
+		self.authenticate_issuer(&request)?;
 		let engine = &self.engine;
 		let signer = engine.signer.as_ref().ok_or(AuthError::NotConfigured)?;
-		let google = engine.google.as_ref().ok_or(AuthError::NotConfigured)?;
 		let req = request.into_inner();
 
-		let identity = google.exchange_code(&req.auth_code, &req.code_verifier, &req.redirect_uri, &req.nonce).await?;
-		// Policy: an unverified Google email may sign in (the account is keyed by the
-		// stable `sub`, and `email_verified` is persisted and surfaced end-to-end so
-		// nothing is silently trusted), but `User::change_email` never downgrades an
-		// already-verified stored email to an unverified one.
-		let summary = engine.provisioner.provision(identity.subject, identity.email, identity.email_verified).await?;
+		// The user must already be mirrored locally by the one-way bridge (concierge owns
+		// identity; banking never provisions on its own). A frozen/disabled user reads as
+		// disabled and is refused a fresh money-plane token.
+		let summary = engine.provisioner.resolve_for_issuance(req.concierge_user_id).await?;
 		if summary.is_disabled() {
-			return Err(Status::permission_denied("user is disabled"));
+			return Err(Status::permission_denied("user is frozen or disabled"));
 		}
 
 		let (access_token, access_exp) = signer.mint_access(&summary.user_id, summary.token_version)?;
@@ -281,6 +312,10 @@ mod tests {
 	const TEST_JWK_X: &str = "Z6BCmq9-_wo9d7co5CDW84Wn0sAC3BA0XWK2AOstpV4";
 
 	async fn configured_grpc() -> AuthGrpc {
+		grpc_with_issuance(None).await
+	}
+
+	async fn grpc_with_issuance(issuance_token: Option<&str>) -> AuthGrpc {
 		let config = AuthConfig {
 			issuer: "https://auth.test".into(),
 			client_audience: "banking-core".into(),
@@ -295,10 +330,34 @@ mod tests {
 				kid: "test-kid".into(),
 				jwks_json: format!(r#"{{"keys":[{{"kty":"OKP","crv":"Ed25519","x":"{TEST_JWK_X}","kid":"test-kid","alg":"EdDSA","use":"sig"}}]}}"#),
 			}),
-			google: None,
+			issuance_token: issuance_token.map(|t| crate::config::IssuanceToken(t.to_string())),
 		};
 		let (provisioner, _rx) = provisioner_channel();
 		AuthGrpc::build(config, provisioner).await.unwrap()
+	}
+
+	fn request_with_bearer(token: Option<&str>) -> Request<IssueUserTokenRequest> {
+		let mut request = Request::new(IssueUserTokenRequest::default());
+		if let Some(token) = token {
+			request.metadata_mut().insert("authorization", format!("Bearer {token}").parse().unwrap());
+		}
+		request
+	}
+
+	// The issuance seam is gated by the shared bearer: unconfigured fails closed
+	// (UNAVAILABLE), a wrong/absent token is UNAUTHENTICATED, and the exact token passes
+	// the auth check (reaching the resolver, which is dropped here → not Unauthenticated).
+	#[tokio::test]
+	async fn issue_user_token_requires_the_shared_issuance_token() {
+		use tonic::Code;
+
+		let unconfigured = grpc_with_issuance(None).await;
+		assert_eq!(unconfigured.authenticate_issuer(&request_with_bearer(Some("anything"))).unwrap_err().code(), Code::Unavailable);
+
+		let configured = grpc_with_issuance(Some("s3cret-issuance")).await;
+		assert_eq!(configured.authenticate_issuer(&request_with_bearer(None)).unwrap_err().code(), Code::Unauthenticated);
+		assert_eq!(configured.authenticate_issuer(&request_with_bearer(Some("wrong"))).unwrap_err().code(), Code::Unauthenticated);
+		assert!(configured.authenticate_issuer(&request_with_bearer(Some("s3cret-issuance"))).is_ok());
 	}
 
 	// The hub's mounted authorize path — not just the verify policy in isolation —

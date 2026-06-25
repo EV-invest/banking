@@ -6,11 +6,13 @@
 //! # For the hub (`piggybank-core`)
 //!
 //! - [`AuthService`] runs as its own task inside the composition root. It owns the
-//!   signing keys / JWKS / Google client / refresh store, serves the **issuance**
-//!   gRPC routes (`Exchange`/`Refresh`/`Logout`/`Jwks`), provisions users in
-//!   process over the [`Provisioner`] channel (auth → core), and answers core's
-//!   authorize requests over the [`Authorizer`] channel (core → auth). Both
-//!   channels cross a task boundary, never the network.
+//!   signing keys / JWKS / refresh store and serves the money-plane **issuance** gRPC
+//!   routes (`IssueUserToken`/`Refresh`/`Logout`/`Jwks`). This is the money plane: it
+//!   does NO third-party (Google) OAuth — users are mirrored from concierge by the
+//!   one-way bridge, and `IssueUserToken` mints the money pair for an already-identified
+//!   user (resolved over the [`Provisioner`] channel, auth → core). It answers core's
+//!   authorize requests over the [`Authorizer`] channel (core → auth). Both channels
+//!   cross a task boundary, never the network.
 //! - Core mounts [`grpc_auth_layer`]`(authorizer)` on each data service to
 //!   authorize inbound gRPC; handlers read the verified [`Claims`] with
 //!   [`claims_of`].
@@ -29,8 +31,8 @@
 //! with refresh rotation, plus a `token_version` claim enforced at refresh. See
 //! `docs/ARCHITECTURE.md` and `piggybank/auth/README.md`.
 //!
-//! This crate is **wasm-unsafe** (crypto backend + tonic + reqwest), so it must
-//! never be a dependency of the wasm-safe `domain` crate.
+//! This crate is **wasm-unsafe** (crypto backend + tonic), so it must never be a
+//! dependency of the wasm-safe `domain` crate.
 
 pub mod authorizer;
 pub mod claims;
@@ -45,13 +47,12 @@ pub mod verifier;
 
 // Issuance internals — host-only (used by `service` via `crate::`), not part of the
 // verify-side surface downstream service repos import, so kept private.
-mod google;
 mod management;
 mod signer;
 
 pub use authorizer::{Authorizer, TokenClass};
 pub use claims::{Claims, TokenType};
-pub use config::{AuthConfig, GoogleConfig, SigningConfig, VerifierConfig};
+pub use config::{AuthConfig, IssuanceToken, SigningConfig, VerifierConfig};
 pub use interceptor::{AuthLayer, Authenticate, claims_of, grpc_auth_layer};
 pub use jwks::{JwksCache, VerifyPolicy, verify_token};
 pub use provisioner::{ProvisionCommand, ProvisionRequest, ProvisionedUser, Provisioner, provisioner_channel};
@@ -80,9 +81,9 @@ pub enum AuthError {
 	/// No cached JWKS public key matches the token's `kid` header.
 	#[error("unknown signing key: {0}")]
 	UnknownKid(String),
-	/// The upstream identity provider (Google) rejected the exchange or returned an
-	/// unverifiable assertion.
-	#[error("identity provider error: {0}")]
+	/// A user resolution/provisioning step failed or returned an unusable value (e.g.
+	/// the user is not mirrored locally yet, or an id did not parse).
+	#[error("user resolution error: {0}")]
 	Provider(String),
 	/// The JWKS could not be refreshed from the hub.
 	#[error("jwks refresh failed: {0}")]
@@ -104,7 +105,7 @@ impl From<&AuthError> for tonic::Status {
 			MissingToken => tonic::Status::unauthenticated("missing bearer token"),
 			InvalidToken => tonic::Status::unauthenticated("invalid or expired token"),
 			UnknownKid(_) => tonic::Status::unauthenticated("unknown signing key"),
-			Provider(_) => tonic::Status::unauthenticated("identity provider rejected the request"),
+			Provider(_) => tonic::Status::unauthenticated("user resolution rejected the request"),
 			NotConfigured => tonic::Status::unavailable("auth not configured"),
 			Unavailable => tonic::Status::unavailable("auth service unavailable"),
 			JwksFetch(_) => tonic::Status::unavailable("could not refresh signing keys"),

@@ -1,25 +1,25 @@
-//! Auth → user synchronization: the receiving end of the [`Provisioner`] channel.
+//! Auth → user resolution: the receiving end of the [`Provisioner`] channel.
 //!
-//! The auth task verifies a Google identity, then asks core (over the in-process
-//! channel, never the network) to provision or look up the matching [`User`]. This
-//! loop is the only place that translates the auth crate's primitive DTOs into
-//! domain value objects and runs the aggregate's command — so `domain` never
-//! depends on `evbanking_auth` and `evbanking_auth` never depends on `domain`.
+//! The money-plane auth task asks core (over the in-process channel, never the network) to
+//! resolve the user it is about to mint a token for — by concierge id for issuance, by hub
+//! id at refresh — plus the durable half of a "revoke all". Users are NOT provisioned here:
+//! identity lives in concierge and is mirrored by the one-way bridge. This loop translates
+//! the auth crate's primitive DTOs at the edge, so `domain` never depends on `evbanking_auth`
+//! and `evbanking_auth` never depends on `domain`.
 //!
 //! [`Provisioner`]: evbanking_auth::Provisioner
 
 use std::sync::Arc;
 
 use domain::{
-	auth::AuthSubject,
 	error::DomainError,
-	users::{Email, User, UserId},
+	users::{User, UserId},
 };
 use evbanking_auth::{AuthError, ProvisionCommand, ProvisionRequest, ProvisionedUser};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::ports::UserRepository;
+use crate::ports::{IssuanceTarget, UserRepository};
 
 /// Drain provisioning requests from the auth task until the channel closes.
 pub async fn run_provisioner(mut rx: mpsc::Receiver<ProvisionRequest>, users: Arc<dyn UserRepository>) {
@@ -32,20 +32,29 @@ pub async fn run_provisioner(mut rx: mpsc::Receiver<ProvisionRequest>, users: Ar
 
 async fn handle(users: &dyn UserRepository, command: ProvisionCommand) -> Result<ProvisionedUser, AuthError> {
 	match command {
-		ProvisionCommand::Provision {
-			auth_subject,
-			email,
-			email_verified,
-		} => {
-			let subject = AuthSubject::parse(&auth_subject).map_err(invalid_identity)?;
-			let email = Email::parse(&email).map_err(invalid_identity)?;
-			let user = users.provision(subject, email, email_verified).await.map_err(to_auth)?;
-			Ok(summary(&user))
+		// Issuance: resolve the bridge-mirrored user by their concierge id. The money plane
+		// never provisions — the user must already exist locally (bridge `CREATED`).
+		ProvisionCommand::ResolveForIssuance { concierge_user_id } => {
+			let concierge_id = Uuid::parse_str(&concierge_user_id).map_err(|_| AuthError::Provider("invalid concierge user id".into()))?;
+			let target = users
+				.resolve_issuance_by_concierge_id(concierge_id)
+				.await
+				.map_err(to_auth)?
+				// Not mirrored yet: the bridge hasn't consumed this user's CREATED. Transient, not
+				// an auth failure — `Unavailable` (→ UNAVAILABLE) tells the caller to retry.
+				.ok_or(AuthError::Unavailable)?;
+			Ok(issuance_summary(target))
 		}
+		// Refresh-time re-check: resolve by hub id, against the SAME bridge-mirrored slice,
+		// so a concierge freeze/revoke is enforced when rotating a money-plane family.
 		ProvisionCommand::Lookup { user_id } => {
 			let id = parse_id(&user_id)?;
-			let user = users.find_by_id(id).await.map_err(to_auth)?.ok_or_else(|| AuthError::Provider("unknown user".into()))?;
-			Ok(summary(&user))
+			let target = users
+				.resolve_issuance_by_banking_id(id)
+				.await
+				.map_err(to_auth)?
+				.ok_or_else(|| AuthError::Provider("unknown user".into()))?;
+			Ok(issuance_summary(target))
 		}
 		ProvisionCommand::RevokeAll { user_id } => {
 			let id = parse_id(&user_id)?;
@@ -66,12 +75,20 @@ fn summary(user: &User) -> ProvisionedUser {
 	}
 }
 
-fn parse_id(raw: &str) -> Result<UserId, AuthError> {
-	Uuid::parse_str(raw).map(UserId::from_raw).map_err(|_| AuthError::Provider("invalid user id".into()))
+/// Map the issuance slice to the auth summary: a disabled user (concierge freeze OR banking
+/// disable) reads as `disabled` so issuance/refresh refuse a money token, and the token_version
+/// is the folded revoke floor (max of the concierge and banking versions).
+fn issuance_summary(target: IssuanceTarget) -> ProvisionedUser {
+	ProvisionedUser {
+		user_id: target.user_id.to_string(),
+		email: target.email,
+		status: if target.disabled { "disabled".to_owned() } else { "active".to_owned() },
+		token_version: target.token_version,
+	}
 }
 
-fn invalid_identity(_: DomainError) -> AuthError {
-	AuthError::Provider("invalid identity from provider".into())
+fn parse_id(raw: &str) -> Result<UserId, AuthError> {
+	Uuid::parse_str(raw).map(UserId::from_raw).map_err(|_| AuthError::Provider("invalid user id".into()))
 }
 
 fn to_auth(err: DomainError) -> AuthError {

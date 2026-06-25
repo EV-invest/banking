@@ -37,6 +37,7 @@ pub use nav::{NavRepository, Valuation};
 pub use positions::{FundPosition, FundPositionReader};
 pub use redemptions::RedemptionRepository;
 pub use subscriptions::SubscriptionRepository;
+use uuid::Uuid;
 pub use withdrawals::WithdrawalRepository;
 
 /// Persistence + read port for the [`User`] aggregate.
@@ -51,7 +52,33 @@ pub trait UserRepository: Repository<Aggregate = User> + Reader<Aggregate = User
 	/// aggregate.
 	async fn provision(&self, subject: AuthSubject, email: Email, email_verified: bool) -> Result<User, DomainError>;
 
+	/// Resolve the bridge-mirrored issuance slice by the user's CONCIERGE id (the handle the
+	/// BFF carries from sign-in). `None` if no local mirror exists yet (the bridge `CREATED`
+	/// has not been consumed). Read-only.
+	async fn resolve_issuance_by_concierge_id(&self, concierge_id: Uuid) -> Result<Option<IssuanceTarget>, DomainError>;
+
+	/// Resolve the same issuance slice by the hub user id — the refresh-time re-check.
+	async fn resolve_issuance_by_banking_id(&self, banking_id: UserId) -> Result<Option<IssuanceTarget>, DomainError>;
+
 	/// Persist a mutated aggregate — its new state and its drained events to the
 	/// event log — in one transaction.
 	async fn save(&self, user: &mut User) -> Result<(), DomainError>;
+}
+/// The minimal slice needed to mint a money-plane token for a user. The money plane never sees
+/// Google's `sub`. Each field FOLDS the two revoke surfaces so EITHER invalidates a money token:
+/// the cross-plane bridge columns (`frozen` from a concierge SUSPENDED, `concierge_token_version`
+/// from a SESSIONS_REVOKED) AND banking's own aggregate columns (`status='disabled'`,
+/// `token_version` from a banking-side "revoke all"). Read by raw SQL, not via the `User`
+/// aggregate (which deliberately doesn't model the bridge columns).
+pub struct IssuanceTarget {
+	/// The hub user id — stamped as the minted token's `sub`.
+	pub user_id: UserId,
+	pub email: String,
+	/// True when the user must be refused a money token — a concierge SUSPENDED (`frozen`) OR a
+	/// banking-side disable (`status='disabled'`). Gates both issuance and refresh.
+	pub disabled: bool,
+	/// The effective revoke floor: the GREATER of concierge's revoke version (SESSIONS_REVOKED)
+	/// and banking's own `token_version`. Minted as the token's `token_version` and re-checked on
+	/// refresh, so EITHER a concierge or a banking "revoke all" invalidates the money family.
+	pub token_version: u64,
 }
