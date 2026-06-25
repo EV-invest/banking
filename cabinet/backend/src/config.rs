@@ -8,7 +8,7 @@ use anyhow::Context;
 const DEFAULT_BIND: &str = "127.0.0.1:4000";
 
 /// Runtime configuration for the cabinet BFF, sourced from environment variables
-/// (and `clients/cabinet/backend/.env` in development via `dotenvy`).
+/// (and `cabinet/backend/.env` in development via `dotenvy`).
 #[derive(Clone)]
 pub struct Config {
 	/// HTTP listener — the address the Next.js frontend's `/api/*` rewrite points at.
@@ -67,7 +67,7 @@ impl Config {
 			google_client_id: opt("GOOGLE_CLIENT_ID"),
 			auth_redirect_uri: std::env::var("AUTH_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/api/auth/callback".to_string()),
 			cookie_secure,
-			mfe_registry_path: std::env::var("MFE_REGISTRY_PATH").unwrap_or_else(|_| "clients/cabinet/frontend/mfe-registry.json".to_string()),
+			mfe_registry_path: std::env::var("MFE_REGISTRY_PATH").unwrap_or_else(|_| "cabinet/frontend/mfe-registry.json".to_string()),
 			mfe_allowed_origins: opt("MFE_ALLOWED_ORIGINS")
 				.map(|v| v.split([' ', ',', '\t', '\n']).filter(|s| !s.is_empty()).map(str::to_string).collect())
 				.unwrap_or_default(),

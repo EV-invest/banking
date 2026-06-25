@@ -11,7 +11,7 @@ same-origin `/api/*` JSON requests to two gRPC planes:
 
 The browser never sees a token: it holds only an opaque `ev_session` cookie (HttpOnly) and
 a readable `ev_csrf` cookie (double-submit). The Next.js frontend
-(`clients/cabinet/frontend`) reaches this service through a same-origin `/api/*` rewrite, so
+(`cabinet/frontend`) reaches this service through a same-origin `/api/*` rewrite, so
 cookies and CSRF behave exactly as before the BFF moved out of Next.
 
 ## Layout

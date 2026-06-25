@@ -18,13 +18,13 @@ wasm-safe `domain` crate. Every other service lives in its own repo and talks
 | [`piggybank/auth/`](piggybank/auth) | auth service + shared verification flow | Rust · tonic · JWKS | — |
 | [`contracts/`](contracts) | gRPC wire contracts (`proto/` → tonic stubs) | Rust · tonic-build · proto3 | — |
 | [`domain/`](domain) | shared domain types (pure, wasm-safe) over `ev::architecture` | Rust | — |
-| [`clients/cabinet/`](clients/cabinet) | host shell + BFF + microfrontend runtime | Next.js 16 · TS · Tailwind | [README](clients/cabinet/README.md) |
+| [`cabinet/`](cabinet) | host shell + BFF + microfrontend runtime | Next.js 16 · TS · Tailwind | [README](cabinet/README.md) |
 
 `domain` is the shared source of truth for types — the hub and every service repo
 depend on it, never on each other. `contracts` (vendoring `proto/`) is the single
 gRPC dependency other repos import; the published `@evinvest/uikit` is the shared
 design source of truth for the clients. There is **no HTTP on the hub** — browser
-traffic reaches it through the `clients/cabinet` BFF, which proxies HTTP↔gRPC.
+traffic reaches it through the `cabinet` BFF, which proxies HTTP↔gRPC.
 
 ### Run
 
@@ -57,7 +57,7 @@ All UI lives in one Figma file (`e0V2P1cQpEFRuXTeNtEMh6`) — a dark-navy system
 | Surface | What | Figma |
 | ------- | ---- | ----- |
 | uikit | EV UIKit — tokens + component library (shadcn-class) | [node 10-2](https://www.figma.com/design/e0V2P1cQpEFRuXTeNtEMh6/Main?node-id=10-2) |
-| cabinet | Investor portal — `clients/cabinet` host shell: **Banking** nav + **Products** (mounted service MFEs) + per-service surfaces; desktop + mobile | [node 75-3](https://www.figma.com/design/e0V2P1cQpEFRuXTeNtEMh6/Main?node-id=75-3) |
+| cabinet | Investor portal — `cabinet` host shell: **Banking** nav + **Products** (mounted service MFEs) + per-service surfaces; desktop + mobile | [node 75-3](https://www.figma.com/design/e0V2P1cQpEFRuXTeNtEMh6/Main?node-id=75-3) |
 | admin | Operator console over the central hub (`piggybank`) + microservices — fleet health, users, MFE registry, feature flags; desktop + mobile | [node 346-27](https://www.figma.com/design/e0V2P1cQpEFRuXTeNtEMh6/Main?node-id=346-27) |
 
 Admin surfaces **Sentry** (errors + tracing across hub and services) and **PostHog** (product analytics, feature flags, A/B experiments).

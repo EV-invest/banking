@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 import { staticSecurityHeaders } from "./shared/config/security";
 
-// The BFF now lives in a separate Rust service (`clients/cabinet/backend`). The browser
+// The BFF now lives in a separate Rust service (`cabinet/backend`). The browser
 // keeps calling same-origin `/api/*`; Next proxies those to the backend so the
 // `__Host-`/HttpOnly session cookie + CSRF model stays same-origin. In production the
 // same apex domain routes `/api/*` to the backend (this rewrite is the dev/local form).

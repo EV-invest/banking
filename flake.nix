@@ -223,7 +223,7 @@
         # Runs `piggybank-core`, which spawns the core gRPC services and the auth
         # service as in-process tasks. A reachable Postgres + TigerBeetle are the
         # prerequisites (`.#db`/`.#tb`, or `.#dev`). No HTTP: browser traffic
-        # reaches the hub through the `clients/cabinet` BFF. Defaults mirror
+        # reaches the hub through the `cabinet` BFF. Defaults mirror
         # piggybank/core/.env.example; any value already in the environment wins.
         runPiggybank = pkgs.writeShellApplication {
           name = "run-piggybank";
@@ -314,7 +314,7 @@
         # plane (:50051) and the concierge identity plane (:50061 — run from the sibling
         # `concierge` repo). `linkTbClient` is required only so the Cargo workspace (which
         # contains the TB-using piggybank crates) resolves; the BFF itself never uses TB.
-        # Defaults mirror clients/cabinet/backend/.env.example; any value already set wins.
+        # Defaults mirror cabinet/backend/.env.example; any value already set wins.
         runCabinetBackend = pkgs.writeShellApplication {
           name = "run-cabinet-backend";
           runtimeInputs = with pkgs; [ rust pkg-config openssl protobuf git ];
@@ -327,9 +327,9 @@
             ${linkTbClient}
 
             set -a
-            if [ -f clients/cabinet/backend/.env ]; then
+            if [ -f cabinet/backend/.env ]; then
               # shellcheck disable=SC1091
-              . clients/cabinet/backend/.env
+              . cabinet/backend/.env
             fi
             set +a
 
@@ -390,7 +390,7 @@
             echo "▶ openapi.json → cabinet TypeScript types"
             [ -d node_modules ] || npm install
             npm run gen:api --workspace @evbanking/cabinet
-            echo "✓ regenerated contracts/openapi.json + clients/cabinet/shared/contracts/gen"
+            echo "✓ regenerated contracts/openapi.json + cabinet/shared/contracts/gen"
           '';
         };
 
