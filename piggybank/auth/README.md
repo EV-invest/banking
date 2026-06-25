@@ -78,9 +78,9 @@ hub_client.some_rpc(request).await?;
 
 ## Inside the hub (`piggybank-core` only)
 
-`core` builds the [`AuthService`] (which owns keys/JWKS/Google/refresh), takes an
+`core` builds the [`AuthService`] (which owns keys/JWKS/refresh), takes an
 [`Authorizer`] (core → auth verify channel), hands it a [`Provisioner`] (auth →
-core user-upsert channel), and mounts `grpc_auth_layer(authorizer)` on each data
+core user-resolution channel), and mounts `grpc_auth_layer(authorizer)` on each data
 service. Both channels cross a task boundary, never the network. See
 `piggybank/core/src/main.rs`.
 

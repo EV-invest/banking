@@ -262,6 +262,9 @@
             # the concierge plane's value. The concierge plane serves UserEvents on :50061.
             export CONCIERGE_BRIDGE_ADDR="''${CONCIERGE_BRIDGE_ADDR:-http://127.0.0.1:50061}"
             export BRIDGE_SERVICE_TOKEN="''${BRIDGE_SERVICE_TOKEN:-dev-bridge-token}"
+            # Concierge→banking token-exchange seam: the BFF presents this on IssueUserToken to
+            # mint the money-plane pair. Must match the cabinet-backend value below.
+            export BANKING_ISSUANCE_TOKEN="''${BANKING_ISSUANCE_TOKEN:-dev-issuance-token}"
             exec cargo run -p piggybank-core
           '';
         };
@@ -332,6 +335,9 @@
 
             export CABINET_BACKEND_BIND="''${CABINET_BACKEND_BIND:-0.0.0.0:4000}"
             export PIGGYBANK_GRPC_ADDR="''${PIGGYBANK_GRPC_ADDR:-http://127.0.0.1:50051}"
+            export BANKING_AUTH_GRPC_ADDR="''${BANKING_AUTH_GRPC_ADDR:-http://127.0.0.1:50052}"
+            # Money-plane token-exchange seam — must match the piggybank hub's BANKING_ISSUANCE_TOKEN.
+            export BANKING_ISSUANCE_TOKEN="''${BANKING_ISSUANCE_TOKEN:-dev-issuance-token}"
             export CONCIERGE_GRPC_ADDR="''${CONCIERGE_GRPC_ADDR:-http://127.0.0.1:50061}"
             export RUST_LOG="''${RUST_LOG:-info,cabinet_backend=debug}"
             exec cargo run -p cabinet-backend

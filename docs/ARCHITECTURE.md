@@ -104,23 +104,26 @@ with the hub's own core ↔ auth check done **in-process**, not over the wire.
 
 **Inside the hub (`piggybank`).** `core` and `auth` run as two tasks in one
 process (spawned by `piggybank-core`'s composition root). The `auth` task
-(`evbanking_auth`) owns the signing keys / JWKS / Google client / refresh store,
-serves its **own issuance gRPC routes** (`auth_grpc_addr`, e.g. `:50052` —
-`Exchange`/`Refresh`/`Logout`/`Jwks`), and exchanges two cloneable in-process
+(`evbanking_auth`) owns the signing keys / JWKS / refresh store, serves its **own
+issuance gRPC routes** (`auth_grpc_addr`, e.g. `:50052` —
+`IssueUserToken`/`Refresh`/`Logout`/`Jwks`), and exchanges two cloneable in-process
 channel handles with `core`, both crossing a task boundary, **never the network**:
 
 - [`Authorizer`] (core → auth): `core` mounts the async [`grpc_auth_layer`] on each
   data service; the layer calls `authorizer.authorize(token)` to verify a request
   and inject the `Claims`. Auth holds the keys; core never does.
-- [`Provisioner`] (auth → core): after a verified Google sign-in, `auth` asks
-  `core` to upsert the `users` aggregate (core owns Postgres, the only writer) and
-  returns the hub user id + `token_version` to stamp on the minted token.
+- [`Provisioner`] (auth → core): `auth` asks `core` to **resolve** the user it is about
+  to mint for (core owns Postgres) — by concierge id for `IssueUserToken`, by hub id at
+  refresh — returning the hub user id + the folded revoke version + a disabled flag. Users
+  are NOT provisioned here: that is the one-way bridge's job (concierge `CREATED`).
 
-**Issuance.** The auth service mints the hub's **own** short-TTL (5–15 min)
-asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 (code + PKCE) — it verifies
-Google's `id_token` locally and **discards it**, never forwarding it inward — with
-`sub` = the hub user id (never Google's `sub`). It publishes verification keys via
-the **`Jwks` gRPC RPC** (the hub speaks only gRPC — there is no HTTP `.well-known`).
+**Issuance.** This is the MONEY plane — it does **NO third-party (Google) OAuth**; sign-in
+lives wholly in concierge, and users are mirrored here by the one-way bridge. The auth
+service mints the hub's **own** short-TTL (5–15 min) asymmetric JWTs (EdDSA/Ed25519,
+`aud=banking-core`) for an already-identified user via `IssueUserToken` (the concierge→banking
+seam, authenticated by the shared `BANKING_ISSUANCE_TOKEN`), with `sub` = the hub user id
+(never Google's `sub`). It publishes verification keys via the **`Jwks` gRPC RPC** (the hub
+speaks only gRPC — there is no HTTP `.well-known`).
 
 **Token separation.** The two **signed JWT** directions carry a `typ`
 (`access`/`service`) and a **distinct `aud`**: client access → `banking-core`,
@@ -177,15 +180,19 @@ vs. banking `aud=banking-core`). So the BFF keeps a token pair **per plane** in 
 the concierge pair authorizes identity RPCs (`UserDirectory`), the banking pair authorizes
 money RPCs (`WalletService`/`FundsService`). It forwards each plane its **own** token and never
 forwards one plane's token to the other — a leaked identity token therefore cannot move money.
-The trust direction is **exchange-based**: the banking `aud=banking-core` token is minted by the
-**banking** plane (a narrow concierge→banking token-exchange, or a banking issuance route the BFF
-calls), so each plane stays the sole authority for its own audience. We explicitly **reject** the
+The trust direction is **exchange-based**: after the concierge sign-in, the BFF calls banking
+`AuthService.IssueUserToken` (authenticated by the shared `BANKING_ISSUANCE_TOKEN`, NOT a user
+token), and the **banking** plane mints the `aud=banking-core` pair for the bridge-mirrored user —
+so each plane stays the sole authority for its own audience. We explicitly **reject** the
 alternative of making piggybank trust concierge's issuer/JWKS for the money plane: a single
 identity token would then authorize money movement, collapsing the blast-radius isolation the
-two-plane split exists to provide (and see the hard ordering rule below). Until that exchange
-seam is built, the BFF mints no banking token, so the money routes surface `NotConfigured`
-rather than forwarding the wrong-plane token — `session.rs` keeps the banking slot separate and
-`require_money_token` (`routes/mod.rs`) gates on it.
+two-plane split exists to provide (and see the hard ordering rule below). The pair is minted at
+login (best-effort) and re-minted/rotated on demand by `money_token` (`session.rs`), which keeps
+the banking slot separate; `require_money_token` (`routes/mod.rs`) surfaces `NotConfigured` only
+when no banking token can be obtained (e.g. a brand-new user the bridge hasn't mirrored yet),
+never the wrong-plane token. Revocation is layered: a concierge SUSPENDED freezes money ops at
+once (per-op gate), and a SESSIONS_REVOKED (or a banking-side revoke) invalidates the money family
+at its next refresh, within the access TTL.
 
 **Inter-service.** mTLS + short-lived service JWTs (same stateless verify path,
 distinct `aud`); graduate to SPIFFE/SPIRE only at platform scale.

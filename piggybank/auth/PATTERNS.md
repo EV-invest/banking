@@ -31,9 +31,9 @@ below) — never JWTs — so they can't be replayed against `core` at all.
 ## Algorithm pinned at the verifier
 
 `verify_token` pins `Algorithm::EdDSA` and refuses anything else (never `none`,
-never HS\*, never a header-chosen algorithm). Google's `id_token` is verified
-separately with RS256 against Google's JWKS, then discarded — it is never forwarded
-inward.
+never HS\*, never a header-chosen algorithm). The money plane does no third-party
+(Google) OAuth — that lives wholly in concierge — so there is no RS256 / `id_token`
+verification here at all.
 
 ## Async layer, not a tonic interceptor
 

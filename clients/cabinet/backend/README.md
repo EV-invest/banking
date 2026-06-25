@@ -44,17 +44,17 @@ runner on `:50061`, started from the sibling `concierge` repo. Config defaults l
 > separate issuers and distinct `aud` (concierge `aud=concierge`, banking `aud=banking-core`).
 > The session holds a token pair **per plane**: the concierge pair authorizes identity RPCs, a
 > separate banking pair authorizes money RPCs. The BFF forwards each plane its **own** token and
-> never the other plane's — so a leaked identity token cannot move money. The banking token is
-> **exchange-based** (minted by the banking plane via a concierge→banking exchange / banking
-> issuance route), NOT piggybank trusting concierge's issuer — see
-> [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md).
+> never the other plane's — so a leaked identity token cannot move money. The banking pair is
+> **exchange-based**: after the concierge sign-in, the BFF calls banking `AuthService.IssueUserToken`
+> (the concierge→banking seam) — authenticated by the shared `BANKING_ISSUANCE_TOKEN`, NOT
+> piggybank trusting concierge's issuer — and banking mints an `aud=banking-core` pair for the
+> bridge-mirrored user. See [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md).
 >
-> **Note:** concierge's `AuthService`/`UserDirectory` are now implemented (the identity plane
-> mints real first-party tokens and provisions users), so identity login works end-to-end once
-> Google credentials are configured — see *Live Google login* below. What remains is the
-> concierge→banking token-exchange seam that mints the money-plane (`aud=banking-core`) token:
-> until it exists no banking token is minted, so the money routes surface `NotConfigured` (503)
-> rather than forwarding the identity token. The identity routes and the wiring here are complete.
+> **Note:** both planes are now implemented end-to-end. The money pair is minted at login
+> (best-effort) and re-minted/rotated on demand; if the bridge hasn't mirrored a brand-new user
+> yet, the money routes surface `NotConfigured` (503) until the next request re-mints. Cross-plane
+> revocation: a concierge SUSPENDED freezes money ops immediately (per-op gate); a SESSIONS_REVOKED
+> invalidates the money family within the banking access TTL (the revoke is enforced at refresh).
 
 ## Live Google login (e2e)
 
@@ -74,15 +74,17 @@ setup:
    `Exchange` returns `NotConfigured`.
 3. **this BFF** — in its `.env`: `GOOGLE_CLIENT_ID` (the same *public* id), unchanged
    `AUTH_REDIRECT_URI`, `AUTH_COOKIE_SECURE=false` (http://localhost rejects `__Host-`+Secure),
-   and `CONCIERGE_GRPC_ADDR=http://127.0.0.1:50061`.
+   `CONCIERGE_GRPC_ADDR=http://127.0.0.1:50061`, and — to mint the money pair —
+   `BANKING_AUTH_GRPC_ADDR=http://127.0.0.1:50052` plus a `BANKING_ISSUANCE_TOKEN` that
+   **matches the banking core's** `BANKING_ISSUANCE_TOKEN` (the shared concierge→banking seam token).
 
 Run, then sign in:
 
-1. `nix run .#db` (this repo) and concierge's Postgres; start the concierge runner (`:50061`).
+1. `nix run .#db` (this repo) and concierge's Postgres; start the concierge runner (`:50061`)
+   and the piggybank hub (`nix run .#piggybank` — core `:50051` + auth `:50052`).
 2. `nix run .#cabinet-backend` (`:4000`) and the frontend (`:3000`, which rewrites `/api/*` here).
 3. Open `http://localhost:3000`, sign in, complete Google consent.
 4. Verify: `GET /api/auth/session` returns `authenticated`; concierge's `users` table has the
-   row and `user_outbox` has its `CREATED` event (the banking plane pulls it over the bridge).
-
-Money-plane routes stay `503` until the concierge→banking exchange seam lands (above) —
-identity login itself is fully functional.
+   row and `user_outbox` has its `CREATED` event (the banking plane pulls it over the bridge);
+   once the bridge mirrors the user, the money routes (e.g. `GET /api/wallet`) serve a real
+   `aud=banking-core` token instead of `503`.
