@@ -35,17 +35,31 @@ pub struct AppState {
 #[derive(Clone)]
 pub struct Grpc {
 	piggybank: Channel,
+	banking_auth: Channel,
 	concierge: Channel,
+	/// The shared bearer presented on the banking `IssueUserToken` seam. `None` ⇒ no
+	/// money-plane token is minted (money routes surface `NotConfigured`).
+	banking_issuance_token: Option<Arc<str>>,
 }
 impl Grpc {
-	pub fn connect_lazy(piggybank_addr: &str, concierge_addr: &str) -> anyhow::Result<Self> {
+	pub fn connect_lazy(piggybank_addr: &str, banking_auth_addr: &str, concierge_addr: &str, banking_issuance_token: Option<String>) -> anyhow::Result<Self> {
 		let piggybank = endpoint(piggybank_addr)?.connect_lazy();
+		let banking_auth = endpoint(banking_auth_addr)?.connect_lazy();
 		let concierge = endpoint(concierge_addr)?.connect_lazy();
-		Ok(Self { piggybank, concierge })
+		Ok(Self {
+			piggybank,
+			banking_auth,
+			concierge,
+			banking_issuance_token: banking_issuance_token.map(Arc::from),
+		})
 	}
 
 	fn auth(&self) -> cc::auth_service_client::AuthServiceClient<Channel> {
 		cc::auth_service_client::AuthServiceClient::new(self.concierge.clone())
+	}
+
+	fn banking_auth(&self) -> bk::auth_service_client::AuthServiceClient<Channel> {
+		bk::auth_service_client::AuthServiceClient::new(self.banking_auth.clone())
 	}
 
 	fn directory(&self) -> cc::user_directory_client::UserDirectoryClient<Channel> {
@@ -107,6 +121,41 @@ impl Grpc {
 
 	pub async fn update_profile(&self, token: &str, req: cc::UpdateProfileRequest) -> Result<cc::UserProfile, Status> {
 		Ok(self.directory().update_profile(bearer(token, req)?).await?.into_inner())
+	}
+
+	// ── banking auth plane (money-plane token issuance) ─────────────────────────
+	/// Mint the money-plane token pair for the concierge-authenticated user — the
+	/// concierge→banking exchange seam. Authenticated by the shared issuance token (NOT a
+	/// user token); banking maps the concierge id to its bridge-mirrored row. Errors with
+	/// `UNAVAILABLE` when issuance is not configured, so the caller leaves the pair empty.
+	pub async fn issue_banking_token(&self, concierge_user_id: &str, user_agent: &str, ip: &str) -> Result<bk::TokenResponse, Status> {
+		let token = self.banking_issuance_token.as_deref().ok_or_else(|| Status::unavailable("banking issuance not configured"))?;
+		let req = bk::IssueUserTokenRequest {
+			concierge_user_id: concierge_user_id.to_string(),
+			user_agent: user_agent.to_string(),
+			ip: ip.to_string(),
+		};
+		Ok(self.banking_auth().issue_user_token(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Rotate the money-plane refresh token (the banking-side family), independent of the
+	/// concierge refresh. The public credential is the refresh token, not a user token.
+	pub async fn refresh_banking_token(&self, refresh_token: &str) -> Result<bk::TokenResponse, Status> {
+		let req = bk::RefreshRequest {
+			refresh_token: refresh_token.to_string(),
+		};
+		Ok(self.banking_auth().refresh(req).await?.into_inner())
+	}
+
+	/// Revoke the money-plane refresh family on logout, so a sign-out drops the banking token
+	/// pair too (not just the concierge one). Best-effort, mirroring the concierge `logout`.
+	pub async fn logout_banking(&self, refresh_token: &str, revoke_all: bool) -> Result<(), Status> {
+		let req = bk::LogoutRequest {
+			refresh_token: refresh_token.to_string(),
+			revoke_all,
+		};
+		self.banking_auth().logout(req).await?;
+		Ok(())
 	}
 
 	// ── piggybank money plane ──────────────────────────────────────────────────
@@ -201,7 +250,7 @@ mod tests {
 		let listener = TcpListener::bind("127.0.0.1:0").expect("bind black-hole listener");
 		let addr = listener.local_addr().unwrap();
 
-		let grpc = Grpc::connect_lazy(&format!("http://{addr}"), &format!("http://{addr}")).expect("build lazy channels");
+		let grpc = Grpc::connect_lazy(&format!("http://{addr}"), &format!("http://{addr}"), &format!("http://{addr}"), None).expect("build lazy channels");
 
 		let started = Instant::now();
 		let guard = tokio::time::timeout(REQUEST_TIMEOUT + Duration::from_secs(5), grpc.check()).await;

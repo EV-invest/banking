@@ -15,6 +15,13 @@ pub struct Config {
 	pub bind_addr: SocketAddr,
 	/// The piggybank money plane (wallet/funds/health), e.g. `http://127.0.0.1:50051`.
 	pub piggybank_grpc_addr: String,
+	/// The banking auth service (token issuance), e.g. `http://127.0.0.1:50052`. The BFF
+	/// calls `IssueUserToken`/`Refresh` here to obtain the money-plane token pair.
+	pub banking_auth_grpc_addr: String,
+	/// The shared bearer the BFF presents on `IssueUserToken` (the concierge→banking seam).
+	/// `None` ⇒ no money-plane token is minted (money routes surface `NotConfigured`). Must
+	/// match `BANKING_ISSUANCE_TOKEN` on the banking auth side.
+	pub banking_issuance_token: Option<String>,
 	/// The concierge identity plane (OAuth/sessions/profile), e.g. `http://127.0.0.1:50061`.
 	pub concierge_grpc_addr: String,
 	/// Google OAuth2 public client id. `None` ⇒ `/api/auth/login` returns 503.
@@ -54,6 +61,8 @@ impl Config {
 		Ok(Self {
 			bind_addr,
 			piggybank_grpc_addr: std::env::var("PIGGYBANK_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50051".to_string()),
+			banking_auth_grpc_addr: std::env::var("BANKING_AUTH_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50052".to_string()),
+			banking_issuance_token: opt("BANKING_ISSUANCE_TOKEN"),
 			concierge_grpc_addr: std::env::var("CONCIERGE_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50061".to_string()),
 			google_client_id: opt("GOOGLE_CLIENT_ID"),
 			auth_redirect_uri: std::env::var("AUTH_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/api/auth/callback".to_string()),

@@ -57,7 +57,13 @@ async fn run(config: Config) -> anyhow::Result<()> {
 	// no-op, so this is safe to construct unconfigured.
 	let _analytics = ev::analytics::Analytics::new(config.posthog_key.clone(), config.posthog_host.clone());
 
-	let grpc = Grpc::connect_lazy(&config.piggybank_grpc_addr, &config.concierge_grpc_addr).context("invalid gRPC address (PIGGYBANK_GRPC_ADDR / CONCIERGE_GRPC_ADDR)")?;
+	let grpc = Grpc::connect_lazy(
+		&config.piggybank_grpc_addr,
+		&config.banking_auth_grpc_addr,
+		&config.concierge_grpc_addr,
+		config.banking_issuance_token.clone(),
+	)
+	.context("invalid gRPC address (PIGGYBANK_GRPC_ADDR / BANKING_AUTH_GRPC_ADDR / CONCIERGE_GRPC_ADDR)")?;
 
 	let bind_addr = config.bind_addr;
 	tracing::info!(

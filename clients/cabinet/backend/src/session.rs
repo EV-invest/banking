@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use evbanking_contracts::banking::v1 as bk;
 use evconcierge_contracts::concierge::v1 as cc;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -49,16 +50,14 @@ impl SessionStore {
 		}
 	}
 
-	/// Open a session from a fresh token pair; returns `(session_id, csrf_token, max_age_secs)`.
-	pub async fn put(&self, tokens: cc::TokenResponse) -> (String, String, i64) {
+	/// Open a session from a fresh concierge token pair plus the (best-effort) banking
+	/// money-token pair minted at login; returns `(session_id, csrf_token, max_age_secs)`.
+	pub async fn put(&self, tokens: cc::TokenResponse, banking: Option<bk::TokenResponse>) -> (String, String, i64) {
 		let id = random_token(32);
 		let csrf = random_token(32);
 		let refresh_expires_at = tokens.refresh_expires_at;
-		let session = Session::from_tokens(tokens, csrf.clone());
-		match self {
-			Self::InProcess(s) => s.insert(id.clone(), session).await,
-			Self::Redis(s) => s.insert(&id, &session).await,
-		}
+		let session = Session::from_tokens(tokens, banking, csrf.clone());
+		self.insert(&id, &session).await;
 		(id, csrf, (refresh_expires_at - now_secs()).max(0))
 	}
 
@@ -82,18 +81,30 @@ impl SessionStore {
 
 	/// The fresh banking `aud=banking-core` token for money-plane calls. Distinct from the
 	/// concierge identity token: the two planes are cryptographically separated (distinct
-	/// issuer + `aud`), so a leaked identity token cannot move money. Returns `MoneyToken`,
-	/// which is `NotIssued` until the concierge→banking token-exchange seam is built — the
-	/// money routes surface that as `NotConfigured` rather than forwarding the wrong-plane
-	/// token (which the money verifier would reject on issuer/audience anyway).
+	/// issuer + `aud`), so a leaked identity token cannot move money. Anchored on concierge
+	/// session liveness (checked first), then resolves the banking pair — minting it if a
+	/// login-time mint failed (the bridge may have lagged) or rotating it if near expiry.
+	/// `NotIssued` when no money token can be obtained (issuance unconfigured / user not yet
+	/// mirrored); the money routes surface that as `NotConfigured` rather than ever
+	/// forwarding the wrong-plane token.
 	pub async fn money_token(&self, id: &str, grpc: &Grpc) -> MoneyToken {
+		// Outer gate: a dead concierge session means no money token at all.
 		if self.ensure_fresh(id, grpc).await.is_none() {
 			return MoneyToken::NoSession;
 		}
-		match self.get(id).await.map(|s| s.banking_access_token) {
-			Some(token) if !token.is_empty() => MoneyToken::Token(token),
-			Some(_) => MoneyToken::NotIssued,
-			None => MoneyToken::NoSession,
+		// Single-flight on the SAME per-session lock as the concierge refresh, so concurrent
+		// money requests coalesce to one mint/rotate.
+		let lock = self.lock_for(id).await;
+		let _guard = lock.lock().await;
+		let Some(mut session) = self.get(id).await else {
+			return MoneyToken::NoSession;
+		};
+		match ensure_banking_token(&mut session, grpc).await {
+			Some(token) => {
+				self.insert(id, &session).await;
+				MoneyToken::Token(token)
+			}
+			None => MoneyToken::NotIssued,
 		}
 	}
 
@@ -103,18 +114,38 @@ impl SessionStore {
 		(s.refresh_expires_at > now_secs()).then_some(s.refresh_token)
 	}
 
-	/// Forget a session, returning its refresh token so the caller can revoke it upstream.
-	pub async fn forget(&self, id: &str) -> Option<String> {
-		match self {
+	/// Forget a session, surfacing BOTH plane families' refresh tokens so logout can revoke each
+	/// upstream (concierge identity + banking money). Each is `Some` only if still within its
+	/// refresh window (an expired family is already dead upstream).
+	pub async fn forget(&self, id: &str) -> Option<ForgottenSession> {
+		let session = match self {
 			Self::InProcess(s) => s.forget(id).await,
 			Self::Redis(s) => s.forget(id).await,
-		}
+		}?;
+		Some(ForgottenSession {
+			concierge_refresh: (session.refresh_expires_at > now_secs()).then_some(session.refresh_token),
+			banking_refresh: (!session.banking_refresh_token.is_empty() && session.banking_refresh_expires_at > now_secs()).then_some(session.banking_refresh_token),
+		})
 	}
 
 	async fn get(&self, id: &str) -> Option<Session> {
 		match self {
 			Self::InProcess(s) => s.get(id).await,
 			Self::Redis(s) => s.get(id).await,
+		}
+	}
+
+	async fn insert(&self, id: &str, session: &Session) {
+		match self {
+			Self::InProcess(s) => s.insert(id.to_string(), session.clone()).await,
+			Self::Redis(s) => s.insert(id, session).await,
+		}
+	}
+
+	async fn lock_for(&self, id: &str) -> Arc<Mutex<()>> {
+		match self {
+			Self::InProcess(s) => s.lock_for(id).await,
+			Self::Redis(s) => s.lock_for(id).await,
 		}
 	}
 }
@@ -176,9 +207,9 @@ impl InProcessSessionStore {
 		}
 	}
 
-	async fn forget(&self, id: &str) -> Option<String> {
+	async fn forget(&self, id: &str) -> Option<Session> {
 		self.locks.lock().await.remove(id);
-		self.sessions.lock().await.remove(id).map(|s| s.refresh_token)
+		self.sessions.lock().await.remove(id)
 	}
 }
 
@@ -253,18 +284,26 @@ impl RedisSessionStore {
 		}
 	}
 
-	async fn forget(&self, id: &str) -> Option<String> {
+	async fn forget(&self, id: &str) -> Option<Session> {
 		self.locks.lock().await.remove(id);
 		let session = self.get(id).await;
 		let mut conn = self.conn.clone();
 		let _: Result<(), _> = conn.del(Self::key(id)).await;
-		session.map(|s| s.refresh_token)
+		session
 	}
 }
 
 /// The resolution of a money-plane token for a request. The money plane has its own issuer
 /// and `aud=banking-core`, so the concierge identity token never authorizes it; until the
 /// concierge→banking token-exchange seam exists, `NotIssued` is the steady state.
+/// The refresh tokens a forgotten session yields, so logout can revoke BOTH plane families —
+/// the concierge identity family and the banking money family. Each is `Some` only if the token
+/// is still within its refresh window.
+pub struct ForgottenSession {
+	pub concierge_refresh: Option<String>,
+	pub banking_refresh: Option<String>,
+}
+
 pub enum MoneyToken {
 	/// A live banking `aud=banking-core` token to forward to the money plane.
 	Token(String),
@@ -274,7 +313,8 @@ pub enum MoneyToken {
 	NoSession,
 }
 /// Apply a successful concierge refresh onto the prior session, preserving the fields that
-/// rotation does not touch (the BFF-minted CSRF token and the separate banking token).
+/// the concierge rotation does not touch (the BFF-minted CSRF token and the separate banking
+/// money-token pair, which rotates on its own path).
 fn refreshed_session(prior: &Session, tokens: cc::TokenResponse) -> Session {
 	Session {
 		access_token: tokens.access_token,
@@ -282,6 +322,9 @@ fn refreshed_session(prior: &Session, tokens: cc::TokenResponse) -> Session {
 		refresh_token: tokens.refresh_token,
 		refresh_expires_at: tokens.refresh_expires_at,
 		banking_access_token: prior.banking_access_token.clone(),
+		banking_access_expires_at: prior.banking_access_expires_at,
+		banking_refresh_token: prior.banking_refresh_token.clone(),
+		banking_refresh_expires_at: prior.banking_refresh_expires_at,
 		user: tokens.user.map(User::from).unwrap_or_default(),
 		csrf_token: prior.csrf_token.clone(),
 	}
@@ -293,25 +336,72 @@ struct Session {
 	access_expires_at: i64,
 	refresh_token: String,
 	refresh_expires_at: i64,
-	/// The separate banking-plane (`aud=banking-core`) access token for money RPCs. Empty until
-	/// the concierge→banking token-exchange seam is built; never derived from the concierge token.
-	/// Its own rotation/expiry machinery lands with that seam (kept off the concierge refresh path).
+	/// The SEPARATE banking-plane (`aud=banking-core`) money-token pair, minted by the
+	/// concierge→banking exchange seam (`Grpc::issue_banking_token`) and rotated independently
+	/// of the concierge pair (`Grpc::refresh_banking_token`). Never derived from the concierge
+	/// token. Empty until first minted; re-minted on demand if a mint failed at login (the
+	/// bridge may not have mirrored the user yet).
 	banking_access_token: String,
+	banking_access_expires_at: i64,
+	banking_refresh_token: String,
+	banking_refresh_expires_at: i64,
 	user: User,
 	csrf_token: String,
 }
 impl Session {
-	fn from_tokens(tokens: cc::TokenResponse, csrf: String) -> Self {
-		Self {
+	fn from_tokens(tokens: cc::TokenResponse, banking: Option<bk::TokenResponse>, csrf: String) -> Self {
+		let mut session = Self {
 			access_token: tokens.access_token,
 			access_expires_at: tokens.access_expires_at,
 			refresh_token: tokens.refresh_token,
 			refresh_expires_at: tokens.refresh_expires_at,
 			banking_access_token: String::new(),
+			banking_access_expires_at: 0,
+			banking_refresh_token: String::new(),
+			banking_refresh_expires_at: 0,
 			user: tokens.user.map(User::from).unwrap_or_default(),
 			csrf_token: csrf,
+		};
+		if let Some(banking) = banking {
+			session.apply_banking(banking);
 		}
+		session
 	}
+
+	/// Store a freshly minted/rotated banking money-token pair.
+	fn apply_banking(&mut self, banking: bk::TokenResponse) {
+		self.banking_access_token = banking.access_token;
+		self.banking_access_expires_at = banking.access_expires_at;
+		self.banking_refresh_token = banking.refresh_token;
+		self.banking_refresh_expires_at = banking.refresh_expires_at;
+	}
+}
+
+/// Ensure the session's banking (money-plane) access token is fresh: return it if still
+/// valid, rotate it via the banking refresh family if near expiry, or mint a fresh pair if
+/// absent (a mint may have failed at login before the bridge mirrored the user). Mutates
+/// `session` in place and returns the usable access token, or `None` if one can't be
+/// obtained (issuance unconfigured, the user isn't mirrored yet, or upstream is down). The
+/// caller holds the per-session single-flight lock, mirroring the concierge refresh.
+async fn ensure_banking_token(session: &mut Session, grpc: &Grpc) -> Option<String> {
+	if !session.banking_access_token.is_empty() && session.banking_access_expires_at > now_secs() + 30 {
+		return Some(session.banking_access_token.clone());
+	}
+	// Prefer rotating the existing family; fall back to minting a new one. The concierge
+	// session liveness is the outer gate (the caller checks it first), so this only runs
+	// for a live user.
+	let rotated = if !session.banking_refresh_token.is_empty() && session.banking_refresh_expires_at > now_secs() {
+		grpc.refresh_banking_token(&session.banking_refresh_token).await.ok()
+	} else {
+		None
+	};
+	let tokens = match rotated {
+		Some(tokens) => tokens,
+		None if !session.user.user_id.is_empty() => grpc.issue_banking_token(&session.user.user_id, "", "").await.ok()?,
+		None => return None,
+	};
+	session.apply_banking(tokens);
+	Some(session.banking_access_token.clone())
 }
 
 #[cfg(test)]
@@ -321,7 +411,7 @@ mod tests {
 	/// A lazy `Grpc` to a black-hole address: a far-future session never refreshes, so no RPC
 	/// is made and the channel stays unused — the seam test exercises pure token resolution.
 	fn grpc() -> Grpc {
-		Grpc::connect_lazy("http://127.0.0.1:1", "http://127.0.0.1:1").expect("lazy channels")
+		Grpc::connect_lazy("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1", None).expect("lazy channels")
 	}
 
 	fn fresh_concierge_tokens() -> cc::TokenResponse {
@@ -341,13 +431,13 @@ mod tests {
 
 	// FB-22 / BANK-ARCH-01, CROSS-1, BANK-COMM-5: the BFF holds two token pairs. The identity
 	// path serves the concierge token; the money path serves the SEPARATE banking pair — and
-	// never the concierge token. Until the concierge→banking exchange seam exists, the banking
-	// pair is empty, so a money RPC resolves to `NotIssued` (the route surfaces NotConfigured)
-	// rather than forwarding the identity token to the money plane.
+	// NEVER the concierge token. Here issuance is unconfigured (the test `grpc` has no issuance
+	// token) so the mint can't succeed: the money path resolves to `NotIssued` (the route
+	// surfaces NotConfigured) rather than ever falling back to the identity token.
 	#[tokio::test]
 	async fn money_path_never_serves_the_concierge_identity_token() {
 		let store = SessionStore::InProcess(InProcessSessionStore::new());
-		let (id, _csrf, _max_age) = store.put(fresh_concierge_tokens()).await;
+		let (id, _csrf, _max_age) = store.put(fresh_concierge_tokens(), None).await;
 		let grpc = grpc();
 
 		let identity = store.access_token(&id, &grpc).await.expect("a live session yields the concierge token");
@@ -379,7 +469,7 @@ mod redis_tests {
 	use super::*;
 
 	fn grpc() -> Grpc {
-		Grpc::connect_lazy("http://127.0.0.1:1", "http://127.0.0.1:1").expect("lazy channels")
+		Grpc::connect_lazy("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1", None).expect("lazy channels")
 	}
 
 	fn fresh_tokens() -> cc::TokenResponse {
@@ -407,7 +497,7 @@ mod redis_tests {
 		let Some(store) = store().await else {
 			return;
 		};
-		let (id, csrf, max_age) = store.put(fresh_tokens()).await;
+		let (id, csrf, max_age) = store.put(fresh_tokens(), None).await;
 		assert!(max_age > 0);
 
 		let (user, served_csrf) = store.ensure_fresh(&id, &grpc()).await.expect("a fresh session is found in Redis");
@@ -418,8 +508,12 @@ mod redis_tests {
 		assert_eq!(identity, "concierge-access");
 		assert_eq!(store.refresh_token(&id).await.as_deref(), Some("concierge-refresh"));
 
-		let revoked = store.forget(&id).await;
-		assert_eq!(revoked.as_deref(), Some("concierge-refresh"), "forget returns the refresh token for upstream revoke");
+		let forgotten = store.forget(&id).await.expect("forget yields the forgotten session");
+		assert_eq!(
+			forgotten.concierge_refresh.as_deref(),
+			Some("concierge-refresh"),
+			"forget surfaces the concierge refresh for upstream revoke"
+		);
 		assert!(store.ensure_fresh(&id, &grpc()).await.is_none(), "an evicted session is gone from Redis");
 		assert!(store.refresh_token(&id).await.is_none());
 	}
@@ -429,7 +523,7 @@ mod redis_tests {
 		let Some(store) = store().await else {
 			return;
 		};
-		let (id, _csrf, _max_age) = store.put(fresh_tokens()).await;
+		let (id, _csrf, _max_age) = store.put(fresh_tokens(), None).await;
 		match store.money_token(&id, &grpc()).await {
 			MoneyToken::NotIssued => {}
 			MoneyToken::Token(t) => panic!("money path must not reuse the identity token, got {t:?}"),

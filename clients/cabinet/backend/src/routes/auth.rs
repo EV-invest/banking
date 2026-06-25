@@ -60,17 +60,33 @@ pub async fn callback(State(st): State<AppState>, jar: CookieJar, headers: Heade
 		return fail(&st, jar, "invalid");
 	}
 
+	let user_agent = headers.get("user-agent").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+	let ip = client_ip(&headers);
 	let req = cc::ExchangeRequest {
 		auth_code: code,
 		code_verifier: tx.code_verifier,
 		redirect_uri: st.config.auth_redirect_uri.clone(),
 		nonce: tx.nonce,
-		user_agent: headers.get("user-agent").and_then(|v| v.to_str().ok()).unwrap_or("").to_string(),
-		ip: client_ip(&headers),
+		user_agent: user_agent.clone(),
+		ip: ip.clone(),
 	};
 	match st.grpc.exchange(req).await {
 		Ok(tokens) => {
-			let (id, csrf, max_age) = st.sessions.put(tokens).await;
+			// Cross-plane seam: with the concierge identity established, mint the SEPARATE
+			// money-plane pair (`aud=banking-core`). Best-effort — identity login must still
+			// succeed if the bridge hasn't mirrored the user yet; the money routes re-mint on a
+			// later request (and surface 503 until then) rather than failing sign-in.
+			let banking = match tokens.user.as_ref().map(|u| u.user_id.as_str()).filter(|id| !id.is_empty()) {
+				Some(concierge_user_id) => match st.grpc.issue_banking_token(concierge_user_id, &user_agent, &ip).await {
+					Ok(pair) => Some(pair),
+					Err(e) => {
+						tracing::warn!(code = ?e.code(), detail = %e.message(), "auth/callback: money-plane token mint failed; money routes will re-mint");
+						None
+					}
+				},
+				None => None,
+			};
+			let (id, csrf, max_age) = st.sessions.put(tokens, banking).await;
 			let jar = jar
 				.add(st.cookies.server_cookie(st.cookies.session.clone(), id, max_age))
 				.add(st.cookies.readable_cookie(st.cookies.csrf.clone(), csrf, max_age));
@@ -105,10 +121,17 @@ pub async fn logout(State(st): State<AppState>, jar: CookieJar, headers: HeaderM
 		return Err(ApiError::Csrf);
 	}
 	if let Some(id) = session_id(&st, &jar)
-		&& let Some(refresh) = st.sessions.forget(&id).await
+		&& let Some(forgotten) = st.sessions.forget(&id).await
 	{
-		// The session is already gone locally; an upstream blip must not block logout.
-		let _ = st.grpc.logout(&refresh, false).await;
+		// The session is already gone locally; an upstream blip on either plane must not block
+		// logout. Revoke BOTH families so a sign-out drops the money-plane pair too, not just the
+		// identity one (else the banking refresh family would linger until its TTL).
+		if let Some(refresh) = forgotten.concierge_refresh {
+			let _ = st.grpc.logout(&refresh, false).await;
+		}
+		if let Some(refresh) = forgotten.banking_refresh {
+			let _ = st.grpc.logout_banking(&refresh, false).await;
+		}
 	}
 	Ok((clear_session(&st, jar), Json(json!({ "ok": true }))))
 }
