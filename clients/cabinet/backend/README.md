@@ -49,8 +49,40 @@ runner on `:50061`, started from the sibling `concierge` repo. Config defaults l
 > issuance route), NOT piggybank trusting concierge's issuer — see
 > [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md).
 >
-> **Note:** end-to-end login depends on concierge's `AuthService`/`UserDirectory` being
-> implemented (currently scaffold stubs) and on the concierge→banking token-exchange seam that
-> mints the money-plane (`aud=banking-core`) token. Until that seam exists no banking token is
-> minted, so the money routes surface `NotConfigured` (503) rather than forwarding the identity
-> token; the identity routes and the routing/wiring here are complete and forward-ready.
+> **Note:** concierge's `AuthService`/`UserDirectory` are now implemented (the identity plane
+> mints real first-party tokens and provisions users), so identity login works end-to-end once
+> Google credentials are configured — see *Live Google login* below. What remains is the
+> concierge→banking token-exchange seam that mints the money-plane (`aud=banking-core`) token:
+> until it exists no banking token is minted, so the money routes surface `NotConfigured` (503)
+> rather than forwarding the identity token. The identity routes and the wiring here are complete.
+
+## Live Google login (e2e)
+
+The full login chain — `/api/auth/login` → Google consent → `/api/auth/callback` →
+concierge `Exchange` → user provisioned + first-party tokens minted → session opened — is
+wired and contract-tested, but exercising it live needs real Google credentials. One-time
+setup:
+
+1. **Google Cloud Console → Credentials → OAuth client ID → Web application.** Add
+   `http://localhost:3000/api/auth/callback` as an Authorized redirect URI (it must match
+   `AUTH_REDIRECT_URI` here *and* the `redirect_uri` concierge sends to Google). Note the
+   client id + secret.
+2. **concierge** (the secret lives only here) — in its `.env`: `GOOGLE_CLIENT_ID`,
+   `GOOGLE_CLIENT_SECRET`, a signing key so it can mint/serve JWKS (`AUTH_SIGNING_KEY_PEM` +
+   `AUTH_SIGNING_KID` + `AUTH_JWKS_JSON`; generate per its `.env.example`), and `DATABASE_URL`
+   (the user is provisioned on first sign-in). Without a signing key or Google client,
+   `Exchange` returns `NotConfigured`.
+3. **this BFF** — in its `.env`: `GOOGLE_CLIENT_ID` (the same *public* id), unchanged
+   `AUTH_REDIRECT_URI`, `AUTH_COOKIE_SECURE=false` (http://localhost rejects `__Host-`+Secure),
+   and `CONCIERGE_GRPC_ADDR=http://127.0.0.1:50061`.
+
+Run, then sign in:
+
+1. `nix run .#db` (this repo) and concierge's Postgres; start the concierge runner (`:50061`).
+2. `nix run .#cabinet-backend` (`:4000`) and the frontend (`:3000`, which rewrites `/api/*` here).
+3. Open `http://localhost:3000`, sign in, complete Google consent.
+4. Verify: `GET /api/auth/session` returns `authenticated`; concierge's `users` table has the
+   row and `user_outbox` has its `CREATED` event (the banking plane pulls it over the bridge).
+
+Money-plane routes stay `503` until the concierge→banking exchange seam lands (above) —
+identity login itself is fully functional.
