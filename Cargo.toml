@@ -32,9 +32,15 @@ domain = { path = "domain" }
 evbanking_auth = { path = "piggybank/auth" }
 evbanking_contracts = { path = "contracts" }
 # The concierge identity plane's wire contracts, pulled in by git like any downstream
-# consumer. Only the cabinet backend depends on it — it is the one orchestrator that
-# spans both planes. Pinned to a rev for reproducibility (Cargo.lock pins it too).
-evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "a058513e1ffd490ae951613361fb875aa43bf168" }
+# consumer. The cabinet backend (the cross-plane orchestrator) and now piggybank-core
+# (the one-way lifecycle bridge consumer) depend on it.
+#
+# TEMPORARY LOCAL OVERRIDE: pointed at the sibling checkout so the new
+# `UserEvents.PullUserLifecycle` RPC (added on concierge's fen/identity-plane branch)
+# generates before concierge is pushed. Revert to the git rev/tag pin below once that
+# branch lands and a tag exists:
+#   evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "<new-rev>" }
+evconcierge_contracts = { path = "../concierge/contracts" }
 http = "1"
 # `rust_crypto` selects the pure-Rust provider (ed25519-dalek for our EdDSA tokens,
 # rsa for verifying Google's RS256 id_tokens) — no C/aws-lc-rs toolchain, matching

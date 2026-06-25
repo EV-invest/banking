@@ -1685,7 +1685,6 @@ dependencies = [
 [[package]]
 name = "evconcierge_contracts"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=a058513e1ffd490ae951613361fb875aa43bf168#a058513e1ffd490ae951613361fb875aa43bf168"
 dependencies = [
  "prost",
  "tonic",
@@ -3421,6 +3420,7 @@ dependencies = [
  "ev_lib",
  "evbanking_auth",
  "evbanking_contracts",
+ "evconcierge_contracts",
  "serde_json",
  "sqlx",
  "thiserror 2.0.18",
