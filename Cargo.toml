@@ -33,14 +33,9 @@ evbanking_auth = { path = "piggybank/auth" }
 evbanking_contracts = { path = "contracts" }
 # The concierge identity plane's wire contracts, pulled in by git like any downstream
 # consumer. The cabinet backend (the cross-plane orchestrator) and now piggybank-core
-# (the one-way lifecycle bridge consumer) depend on it.
-#
-# TEMPORARY LOCAL OVERRIDE: pointed at the sibling checkout so the new
-# `UserEvents.PullUserLifecycle` RPC (added on concierge's fen/identity-plane branch)
-# generates before concierge is pushed. Revert to the git rev/tag pin below once that
-# branch lands and a tag exists:
-#   evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "<new-rev>" }
-evconcierge_contracts = { path = "../concierge/contracts" }
+# (the one-way lifecycle bridge consumer) depend on it. Pinned to the rev that ships
+# `UserEvents.PullUserLifecycle` + the identity/bridge work (concierge main @ 66d2aa1).
+evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "66d2aa1fae3b4c59aaee5f759fd0f54670529a61" }
 http = "1"
 # `rust_crypto` selects the pure-Rust provider (ed25519-dalek for our EdDSA tokens) —
 # no C/aws-lc-rs toolchain, matching the rustls-only stance. The money plane does no
