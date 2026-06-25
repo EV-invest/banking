@@ -25,6 +25,7 @@ evbanking_contracts.workspace = true
 evconcierge_contracts.workspace = true
 form_urlencoded.workspace = true
 getrandom.workspace = true
+redis.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

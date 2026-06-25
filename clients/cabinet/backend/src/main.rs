@@ -69,7 +69,7 @@ async fn run(config: Config) -> anyhow::Result<()> {
 
 	let state = AppState {
 		cookies: Arc::new(CookieNames::new(config.cookie_secure)),
-		sessions: Arc::new(SessionStore::new()),
+		sessions: Arc::new(SessionStore::from_env().await.context("failed to initialize the session store")?),
 		oauth: Arc::new(OAuthTxStore::new()),
 		grpc,
 		config: Arc::new(config),
