@@ -15,6 +15,7 @@ ev = { workspace = true, features = ["error_monitoring"] }
 evbanking_contracts.workspace = true
 http.workspace = true
 jsonwebtoken.workspace = true
+redis.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

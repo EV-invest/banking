@@ -42,9 +42,9 @@ pub struct AuthService {
 impl AuthService {
 	/// Build the service from config and the [`Provisioner`] handle (core keeps the
 	/// receiver). Returns the [`Authorizer`] handle for core to authorize requests.
-	pub fn try_new(config: AuthConfig, provisioner: Provisioner) -> anyhow::Result<(Self, Authorizer)> {
+	pub async fn try_new(config: AuthConfig, provisioner: Provisioner) -> anyhow::Result<(Self, Authorizer)> {
 		let (tx, rx) = mpsc::channel(1024);
-		let grpc = AuthGrpc::build(config, provisioner)?;
+		let grpc = AuthGrpc::build(config, provisioner).await?;
 		Ok((Self { authorize_rx: rx, grpc }, Authorizer::new(tx)))
 	}
 
@@ -76,7 +76,7 @@ pub struct AuthGrpc {
 	engine: Arc<AuthEngine>,
 }
 impl AuthGrpc {
-	fn build(config: AuthConfig, provisioner: Provisioner) -> anyhow::Result<Self> {
+	async fn build(config: AuthConfig, provisioner: Provisioner) -> anyhow::Result<Self> {
 		let (signer, keyring, jwks) = match &config.signing {
 			Some(signing) => {
 				let signer = Signer::try_new(signing, &config).map_err(|e| anyhow::anyhow!("auth signer init failed: {e}"))?;
@@ -103,7 +103,7 @@ impl AuthGrpc {
 				client_policy,
 				service_policy,
 				google,
-				refresh: RefreshStore::new(),
+				refresh: RefreshStore::from_env().await?,
 				provisioner,
 				jwks,
 				session_bounds: SessionBounds {
@@ -183,7 +183,10 @@ impl AuthServiceRpc for AuthGrpc {
 		}
 
 		let (access_token, access_exp) = signer.mint_access(&summary.user_id, summary.token_version)?;
-		let refresh = engine.refresh.issue(&summary.user_id, summary.token_version, engine.session_bounds, req.user_agent, req.ip);
+		let refresh = engine
+			.refresh
+			.issue(&summary.user_id, summary.token_version, engine.session_bounds, req.user_agent, req.ip)
+			.await?;
 		Ok(Response::new(token_response(access_token, access_exp, refresh, &summary)))
 	}
 
@@ -192,16 +195,16 @@ impl AuthServiceRpc for AuthGrpc {
 		let signer = engine.signer.as_ref().ok_or(AuthError::NotConfigured)?;
 		let req = request.into_inner();
 
-		let rotated = engine.refresh.rotate(&req.refresh_token, engine.session_bounds)?;
+		let rotated = engine.refresh.rotate(&req.refresh_token, engine.session_bounds).await?;
 		let summary = engine.provisioner.lookup(rotated.user_id.clone()).await?;
 		if summary.is_disabled() {
-			engine.refresh.revoke_user(&summary.user_id);
+			engine.refresh.revoke_user(&summary.user_id).await?;
 			return Err(Status::permission_denied("user is disabled"));
 		}
 		// A "revoke all" since this family was issued bumps the authoritative
 		// token_version in Postgres; refuse to mint and drop the family.
 		if summary.token_version > rotated.token_version_snapshot {
-			engine.refresh.revoke_user(&summary.user_id);
+			engine.refresh.revoke_user(&summary.user_id).await?;
 			return Err(Status::unauthenticated("tokens revoked"));
 		}
 
@@ -213,7 +216,7 @@ impl AuthServiceRpc for AuthGrpc {
 		let engine = &self.engine;
 		let req = request.into_inner();
 		if req.revoke_all {
-			if let Some(user_id) = engine.refresh.user_of(&req.refresh_token) {
+			if let Some(user_id) = engine.refresh.user_of(&req.refresh_token).await? {
 				// Durable half: bump the authoritative token_version in the control
 				// plane. Best-effort — dropping the refresh families below already ends
 				// every session and access tokens expire within the short TTL, so a
@@ -221,10 +224,10 @@ impl AuthServiceRpc for AuthGrpc {
 				if let Err(err) = engine.provisioner.revoke_all(user_id.clone()).await {
 					crate::telemetry::report(&err);
 				}
-				engine.refresh.revoke_user(&user_id);
+				engine.refresh.revoke_user(&user_id).await?;
 			}
 		} else {
-			engine.refresh.revoke(&req.refresh_token);
+			engine.refresh.revoke(&req.refresh_token).await?;
 		}
 		Ok(Response::new(LogoutResponse {}))
 	}
@@ -232,13 +235,14 @@ impl AuthServiceRpc for AuthGrpc {
 	async fn list_sessions(&self, request: Request<ListSessionsRequest>) -> Result<Response<ListSessionsResponse>, Status> {
 		let engine = &self.engine;
 		let req = request.into_inner();
-		let Some(user_id) = engine.refresh.user_of(&req.refresh_token) else {
+		let Some(user_id) = engine.refresh.user_of(&req.refresh_token).await? else {
 			return Err(AuthError::InvalidToken.into());
 		};
-		let current_id = engine.refresh.family_id_of(&req.refresh_token);
+		let current_id = engine.refresh.family_id_of(&req.refresh_token).await?;
 		let sessions = engine
 			.refresh
 			.list_for_user(&user_id)
+			.await?
 			.into_iter()
 			.map(|s| Session {
 				current: current_id.as_deref() == Some(s.id.as_str()),
@@ -255,10 +259,10 @@ impl AuthServiceRpc for AuthGrpc {
 	async fn revoke_session(&self, request: Request<RevokeSessionRequest>) -> Result<Response<RevokeSessionResponse>, Status> {
 		let engine = &self.engine;
 		let req = request.into_inner();
-		let Some(user_id) = engine.refresh.user_of(&req.refresh_token) else {
+		let Some(user_id) = engine.refresh.user_of(&req.refresh_token).await? else {
 			return Err(AuthError::InvalidToken.into());
 		};
-		engine.refresh.revoke_by_id(&user_id, &req.session_id);
+		engine.refresh.revoke_by_id(&user_id, &req.session_id).await?;
 		Ok(Response::new(RevokeSessionResponse {}))
 	}
 
@@ -276,7 +280,7 @@ mod tests {
 	const TEST_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKolOSMXwE+tafZkX+jkKYJbmJ066f4E12wAwTIkKps6\n-----END PRIVATE KEY-----\n";
 	const TEST_JWK_X: &str = "Z6BCmq9-_wo9d7co5CDW84Wn0sAC3BA0XWK2AOstpV4";
 
-	fn configured_grpc() -> AuthGrpc {
+	async fn configured_grpc() -> AuthGrpc {
 		let config = AuthConfig {
 			issuer: "https://auth.test".into(),
 			client_audience: "banking-core".into(),
@@ -294,16 +298,16 @@ mod tests {
 			google: None,
 		};
 		let (provisioner, _rx) = provisioner_channel();
-		AuthGrpc::build(config, provisioner).unwrap()
+		AuthGrpc::build(config, provisioner).await.unwrap()
 	}
 
 	// The hub's mounted authorize path — not just the verify policy in isolation —
 	// keeps the two principal classes apart: a `mint_service` token is rejected on the
 	// client (user-facing) layer, and a client access token is rejected on the
 	// service layer.
-	#[test]
-	fn authorize_token_separates_client_and_service_classes() {
-		let grpc = configured_grpc();
+	#[tokio::test]
+	async fn authorize_token_separates_client_and_service_classes() {
+		let grpc = configured_grpc().await;
 		let signer = grpc.engine.signer.as_ref().unwrap();
 
 		let (access, _) = signer.mint_access("00000000-0000-0000-0000-000000000001", 0).unwrap();

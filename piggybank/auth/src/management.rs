@@ -5,16 +5,24 @@
 //! already-rotated secret is treated as theft and revokes the whole family
 //! (OWASP refresh-rotation reuse detection).
 //!
-//! **Backing store.** This slice keeps the family table **in-process** (a `Mutex`
-//! map) — correct and the smallest thing that works for a single-instance dev/CI
-//! hub, mirroring the cabinet BFF's session store. PRODUCTION: back this with the
-//! one central Redis (`REDIS_URL`) so refresh state survives restarts and is shared
-//! across replicas; the public surface here does not change when that lands. A
-//! per-service Redis is never introduced — verification stays stateless.
+//! **Backing store.** [`RefreshStore`] is a thin enum over two interchangeable
+//! backends with identical semantics:
+//!
+//! * [`InProcessRefreshStore`] — a `Mutex` map. Correct and the smallest thing that
+//!   works for a single-instance dev/CI hub (mirrors the cabinet BFF's session store).
+//! * [`RedisRefreshStore`] — the one central Redis (`REDIS_URL`), so refresh state
+//!   survives restarts and is shared across replicas. A per-service Redis is never
+//!   introduced — verification stays stateless; this is the *issuing* side's state.
+//!
+//! [`RefreshStore::from_env`] picks Redis when `REDIS_URL` is set and falls back to
+//! in-process otherwise, so unconfigured local/CI runs are unaffected. The public
+//! surface is the same for both arms; the rotate/reuse decision in the Redis arm runs
+//! as a single Lua script so it is atomic across replicas.
 
 use std::{collections::HashMap, sync::Mutex};
 
 use jsonwebtoken::get_current_timestamp;
+use redis::aio::ConnectionManager;
 use subtle::ConstantTimeEq;
 
 use crate::AuthError;
@@ -47,12 +55,92 @@ pub struct SessionView {
 	pub created_at: u64,
 	pub last_seen: u64,
 }
-/// In-process refresh-token family table (see module docs for the production note).
-#[derive(Default)]
-pub struct RefreshStore {
-	families: Mutex<HashMap<String, Family>>,
+
+/// The refresh-token family store. Construct with [`RefreshStore::from_env`]; both
+/// arms share the same async surface so callers never branch on the backend.
+pub enum RefreshStore {
+	InProcess(InProcessRefreshStore),
+	Redis(RedisRefreshStore),
 }
 impl RefreshStore {
+	/// Back the store with Redis when `REDIS_URL` is set; otherwise keep the
+	/// in-process map (no-op-until-configured, so local/CI is unaffected).
+	pub async fn from_env() -> anyhow::Result<Self> {
+		match std::env::var("REDIS_URL").ok().filter(|u| !u.is_empty()) {
+			Some(url) => Ok(Self::Redis(RedisRefreshStore::connect(&url).await?)),
+			None => Ok(Self::InProcess(InProcessRefreshStore::new())),
+		}
+	}
+
+	pub async fn issue(&self, user_id: &str, token_version: u64, bounds: SessionBounds, user_agent: String, ip: String) -> Result<IssuedRefresh, AuthError> {
+		match self {
+			Self::InProcess(s) => Ok(s.issue(user_id, token_version, bounds, user_agent, ip)),
+			Self::Redis(s) => s.issue(user_id, token_version, bounds, user_agent, ip).await,
+		}
+	}
+
+	pub async fn rotate(&self, token: &str, bounds: SessionBounds) -> Result<RotatedRefresh, AuthError> {
+		match self {
+			Self::InProcess(s) => s.rotate(token, bounds),
+			Self::Redis(s) => s.rotate(token, bounds).await,
+		}
+	}
+
+	pub async fn user_of(&self, token: &str) -> Result<Option<String>, AuthError> {
+		match self {
+			Self::InProcess(s) => Ok(s.user_of(token)),
+			Self::Redis(s) => s.user_of(token).await,
+		}
+	}
+
+	pub async fn revoke(&self, token: &str) -> Result<(), AuthError> {
+		match self {
+			Self::InProcess(s) => {
+				s.revoke(token);
+				Ok(())
+			}
+			Self::Redis(s) => s.revoke(token).await,
+		}
+	}
+
+	pub async fn revoke_user(&self, user_id: &str) -> Result<(), AuthError> {
+		match self {
+			Self::InProcess(s) => {
+				s.revoke_user(user_id);
+				Ok(())
+			}
+			Self::Redis(s) => s.revoke_user(user_id).await,
+		}
+	}
+
+	pub async fn list_for_user(&self, user_id: &str) -> Result<Vec<SessionView>, AuthError> {
+		match self {
+			Self::InProcess(s) => Ok(s.list_for_user(user_id)),
+			Self::Redis(s) => s.list_for_user(user_id).await,
+		}
+	}
+
+	pub async fn revoke_by_id(&self, user_id: &str, id: &str) -> Result<bool, AuthError> {
+		match self {
+			Self::InProcess(s) => Ok(s.revoke_by_id(user_id, id)),
+			Self::Redis(s) => s.revoke_by_id(user_id, id).await,
+		}
+	}
+
+	pub async fn family_id_of(&self, refresh_token: &str) -> Result<Option<String>, AuthError> {
+		match self {
+			Self::InProcess(s) => Ok(s.family_id_of(refresh_token)),
+			Self::Redis(s) => s.family_id_of(refresh_token).await,
+		}
+	}
+}
+
+/// In-process refresh-token family table (see module docs for the production note).
+#[derive(Default)]
+pub struct InProcessRefreshStore {
+	families: Mutex<HashMap<String, Family>>,
+}
+impl InProcessRefreshStore {
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -191,6 +279,260 @@ impl RefreshStore {
 	}
 }
 
+/// Redis-backed refresh-token family store — same semantics as [`InProcessRefreshStore`],
+/// shared across replicas and durable across restarts.
+///
+/// Layout: each family is a hash `refresh:fam:<family>` (current/prev secret, owner,
+/// the per-family `token_version` snapshot, the stable session id, sliding `expires_at`,
+/// the immutable `absolute_expires_at`, `last_seen`, device metadata). A per-user set
+/// `refresh:user:<user_id>` indexes the family ids for listing and bulk revoke. The
+/// `rotate` decision (window/idle/absolute checks, reuse detection, secret swap) runs as
+/// one Lua script so it is atomic — a concurrent reuse on a second replica cannot race the
+/// legitimate rotation.
+#[derive(Clone)]
+pub struct RedisRefreshStore {
+	conn: ConnectionManager,
+}
+impl RedisRefreshStore {
+	pub async fn connect(url: &str) -> anyhow::Result<Self> {
+		let client = redis::Client::open(url)?;
+		let conn = client.get_connection_manager().await?;
+		Ok(Self { conn })
+	}
+
+	fn fam_key(family: &str) -> String {
+		format!("refresh:fam:{family}")
+	}
+
+	fn user_key(user_id: &str) -> String {
+		format!("refresh:user:{user_id}")
+	}
+
+	pub async fn issue(&self, user_id: &str, token_version: u64, bounds: SessionBounds, user_agent: String, ip: String) -> Result<IssuedRefresh, AuthError> {
+		let family = uuid::Uuid::new_v4().to_string();
+		let secret = uuid::Uuid::new_v4().to_string();
+		let session_id = uuid::Uuid::new_v4().to_string();
+		let now = get_current_timestamp();
+		let expires_at = now + bounds.ttl_secs;
+		let absolute_expires_at = now + bounds.max_session_secs;
+
+		let mut conn = self.conn.clone();
+		redis::pipe()
+			.atomic()
+			.hset_multiple(
+				Self::fam_key(&family),
+				&[
+					("id", session_id.as_str()),
+					("user_id", user_id),
+					("current", secret.as_str()),
+					("token_version", &token_version.to_string()),
+					("expires_at", &expires_at.to_string()),
+					("absolute_expires_at", &absolute_expires_at.to_string()),
+					("user_agent", &user_agent),
+					("ip", &ip),
+					("created_at", &now.to_string()),
+					("last_seen", &now.to_string()),
+				],
+			)
+			// TTL the family at its absolute cap, so an abandoned family is reaped even
+			// if it is never rotated again (mirrors the in-process `now >= absolute`).
+			.expire_at(Self::fam_key(&family), absolute_expires_at as i64)
+			.sadd(Self::user_key(user_id), family.as_str())
+			.expire_at(Self::user_key(user_id), absolute_expires_at as i64)
+			.exec_async(&mut conn)
+			.await
+			.map_err(redis_err)?;
+
+		Ok(IssuedRefresh {
+			token: format!("{family}.{secret}"),
+			expires_at,
+		})
+	}
+
+	pub async fn rotate(&self, token: &str, bounds: SessionBounds) -> Result<RotatedRefresh, AuthError> {
+		let (family, secret) = token.split_once('.').ok_or(AuthError::InvalidToken)?;
+		let now = get_current_timestamp();
+		let new_secret = uuid::Uuid::new_v4().to_string();
+		let expires_at = now + bounds.ttl_secs;
+
+		let mut conn = self.conn.clone();
+		// Returns `{"ok", user_id, token_version}` on success, `{"reuse", user_id}` to
+		// signal a compromised family that must be wiped, or nil for any other rejection.
+		let outcome: Vec<String> = ROTATE_SCRIPT
+			.key(Self::fam_key(family))
+			.arg(secret)
+			.arg(now)
+			.arg(bounds.idle_timeout_secs)
+			.arg(&new_secret)
+			.arg(expires_at)
+			.invoke_async(&mut conn)
+			.await
+			.map_err(redis_err)?;
+
+		match outcome.as_slice() {
+			[tag, user_id, token_version] if tag == "ok" => {
+				let token_version_snapshot = token_version.parse().unwrap_or(0);
+				Ok(RotatedRefresh {
+					user_id: user_id.clone(),
+					token_version_snapshot,
+					refresh: IssuedRefresh {
+						token: format!("{family}.{new_secret}"),
+						expires_at,
+					},
+				})
+			}
+			[tag, user_id] if tag == "reuse" => {
+				// Reuse of a rotated-out secret — wipe the family and drop the user index.
+				self.delete_family(family, user_id).await?;
+				Err(AuthError::InvalidToken)
+			}
+			_ => Err(AuthError::InvalidToken),
+		}
+	}
+
+	pub async fn user_of(&self, token: &str) -> Result<Option<String>, AuthError> {
+		let Some(family) = token.split_once('.').map(|(f, _)| f) else {
+			return Ok(None);
+		};
+		let mut conn = self.conn.clone();
+		let user_id: Option<String> = redis::cmd("HGET").arg(Self::fam_key(family)).arg("user_id").query_async(&mut conn).await.map_err(redis_err)?;
+		Ok(user_id)
+	}
+
+	pub async fn revoke(&self, token: &str) -> Result<(), AuthError> {
+		let Some(family) = token.split_once('.').map(|(f, _)| f) else {
+			return Ok(());
+		};
+		if let Some(user_id) = self.user_of(token).await? {
+			self.delete_family(family, &user_id).await?;
+		}
+		Ok(())
+	}
+
+	pub async fn revoke_user(&self, user_id: &str) -> Result<(), AuthError> {
+		let mut conn = self.conn.clone();
+		let families: Vec<String> = redis::cmd("SMEMBERS").arg(Self::user_key(user_id)).query_async(&mut conn).await.map_err(redis_err)?;
+		let mut pipe = redis::pipe();
+		pipe.atomic();
+		for family in &families {
+			pipe.del(Self::fam_key(family));
+		}
+		pipe.del(Self::user_key(user_id));
+		pipe.exec_async(&mut conn).await.map_err(redis_err)?;
+		Ok(())
+	}
+
+	pub async fn list_for_user(&self, user_id: &str) -> Result<Vec<SessionView>, AuthError> {
+		let mut conn = self.conn.clone();
+		let families: Vec<String> = redis::cmd("SMEMBERS").arg(Self::user_key(user_id)).query_async(&mut conn).await.map_err(redis_err)?;
+		let now = get_current_timestamp();
+		let mut views = Vec::new();
+		let mut stale = Vec::new();
+		for family in families {
+			let fields: HashMap<String, String> = redis::cmd("HGETALL").arg(Self::fam_key(&family)).query_async(&mut conn).await.map_err(redis_err)?;
+			if fields.is_empty() {
+				// The family hash expired (TTL) but the user-index entry lingered — prune it.
+				stale.push(family);
+				continue;
+			}
+			let expires_at = fields.get("expires_at").and_then(|v| v.parse().ok()).unwrap_or(0);
+			if now >= expires_at {
+				continue;
+			}
+			views.push(SessionView {
+				id: fields.get("id").cloned().unwrap_or_default(),
+				user_agent: fields.get("user_agent").cloned().unwrap_or_default(),
+				ip: fields.get("ip").cloned().unwrap_or_default(),
+				created_at: fields.get("created_at").and_then(|v| v.parse().ok()).unwrap_or(0),
+				last_seen: fields.get("last_seen").and_then(|v| v.parse().ok()).unwrap_or(0),
+			});
+		}
+		if !stale.is_empty() {
+			let mut pipe = redis::pipe();
+			pipe.atomic();
+			for family in &stale {
+				pipe.srem(Self::user_key(user_id), family);
+			}
+			pipe.exec_async(&mut conn).await.map_err(redis_err)?;
+		}
+		Ok(views)
+	}
+
+	pub async fn revoke_by_id(&self, user_id: &str, id: &str) -> Result<bool, AuthError> {
+		let mut conn = self.conn.clone();
+		let families: Vec<String> = redis::cmd("SMEMBERS").arg(Self::user_key(user_id)).query_async(&mut conn).await.map_err(redis_err)?;
+		for family in families {
+			let session_id: Option<String> = redis::cmd("HGET").arg(Self::fam_key(&family)).arg("id").query_async(&mut conn).await.map_err(redis_err)?;
+			if session_id.as_deref() == Some(id) {
+				self.delete_family(&family, user_id).await?;
+				return Ok(true);
+			}
+		}
+		Ok(false)
+	}
+
+	pub async fn family_id_of(&self, refresh_token: &str) -> Result<Option<String>, AuthError> {
+		let Some(family) = refresh_token.split_once('.').map(|(f, _)| f) else {
+			return Ok(None);
+		};
+		let mut conn = self.conn.clone();
+		let id: Option<String> = redis::cmd("HGET").arg(Self::fam_key(family)).arg("id").query_async(&mut conn).await.map_err(redis_err)?;
+		Ok(id)
+	}
+
+	async fn delete_family(&self, family: &str, user_id: &str) -> Result<(), AuthError> {
+		let mut conn = self.conn.clone();
+		redis::pipe()
+			.atomic()
+			.del(Self::fam_key(family))
+			.srem(Self::user_key(user_id), family)
+			.exec_async(&mut conn)
+			.await
+			.map_err(redis_err)
+	}
+}
+
+/// The atomic rotate/reuse decision. KEYS[1] = family hash. ARGV = presented secret,
+/// now, idle_timeout_secs, new secret, new sliding expiry. Returns `{"ok", user_id,
+/// token_version}` on a successful rotation, `{"reuse", user_id}` when an already-rotated
+/// secret is replayed (caller wipes the family), or nil for any other rejection
+/// (missing/expired/wrong secret).
+static ROTATE_SCRIPT: std::sync::LazyLock<redis::Script> = std::sync::LazyLock::new(|| {
+	redis::Script::new(
+		r#"
+local fam = redis.call('HGETALL', KEYS[1])
+if #fam == 0 then return nil end
+local h = {}
+for i = 1, #fam, 2 do h[fam[i]] = fam[i + 1] end
+
+local now = tonumber(ARGV[2])
+local idle = tonumber(ARGV[3])
+local absolute = tonumber(h['absolute_expires_at'])
+local expires = tonumber(h['expires_at'])
+local last_seen = tonumber(h['last_seen'])
+
+if now >= absolute or now >= expires or (idle ~= 0 and (now - last_seen) > idle) then
+  redis.call('DEL', KEYS[1])
+  return nil
+end
+
+if h['current'] == ARGV[1] then
+  redis.call('HSET', KEYS[1], 'prev', h['current'], 'current', ARGV[4], 'expires_at', ARGV[5], 'last_seen', ARGV[2])
+  return { 'ok', h['user_id'], h['token_version'] }
+elseif h['prev'] == ARGV[1] then
+  return { 'reuse', h['user_id'] }
+else
+  return nil
+end
+"#,
+	)
+});
+
+fn redis_err(e: redis::RedisError) -> AuthError {
+	crate::telemetry::report(&e);
+	AuthError::Unavailable
+}
+
 /// Constant-time string equality for refresh secrets: an early length check (which
 /// only reveals length, never a guessed value) then a byte-wise `ConstantTimeEq` that
 /// does not short-circuit on the first differing byte.
@@ -233,13 +575,13 @@ mod tests {
 		}
 	}
 
-	fn issue(store: &RefreshStore, user_id: &str) -> IssuedRefresh {
+	fn issue(store: &InProcessRefreshStore, user_id: &str) -> IssuedRefresh {
 		store.issue(user_id, 0, bounds(), String::new(), String::new())
 	}
 
 	#[test]
 	fn rotate_then_reuse_revokes_family() {
-		let store = RefreshStore::new();
+		let store = InProcessRefreshStore::new();
 		let issued = issue(&store, "user-1");
 		let rotated = store.rotate(&issued.token, bounds()).unwrap();
 		assert_eq!(rotated.user_id, "user-1");
@@ -251,7 +593,7 @@ mod tests {
 
 	#[test]
 	fn revoke_user_drops_all_families() {
-		let store = RefreshStore::new();
+		let store = InProcessRefreshStore::new();
 		let a = issue(&store, "user-1");
 		let b = issue(&store, "user-1");
 		store.revoke_user("user-1");
@@ -261,7 +603,7 @@ mod tests {
 
 	#[test]
 	fn session_id_is_stable_across_rotation() {
-		let store = RefreshStore::new();
+		let store = InProcessRefreshStore::new();
 		let issued = store.issue("user-1", 0, bounds(), "agent".into(), "1.2.3.4".into());
 		let id = store.family_id_of(&issued.token).unwrap();
 		let rotated = store.rotate(&issued.token, bounds()).unwrap();
@@ -275,7 +617,7 @@ mod tests {
 
 	#[test]
 	fn revoke_by_id_guards_cross_user() {
-		let store = RefreshStore::new();
+		let store = InProcessRefreshStore::new();
 		let mine = store.issue("user-1", 0, bounds(), String::new(), String::new());
 		let id = store.family_id_of(&mine.token).unwrap();
 		// A different user cannot revoke it.
@@ -296,7 +638,7 @@ mod tests {
 			max_session_secs: 86_400,
 			idle_timeout_secs: 0,
 		};
-		let store = RefreshStore::new();
+		let store = InProcessRefreshStore::new();
 		let issued = store.issue("user-1", 0, bounds, String::new(), String::new());
 		store.backdate(&issued.token, 3600);
 		assert!(store.rotate(&issued.token, bounds).is_ok());
@@ -312,7 +654,7 @@ mod tests {
 			max_session_secs: 86_400,
 			idle_timeout_secs: 0,
 		};
-		let store = RefreshStore::new();
+		let store = InProcessRefreshStore::new();
 		let issued = store.issue("user-1", 0, bounds, String::new(), String::new());
 		store.backdate(&issued.token, 86_401);
 		assert!(store.rotate(&issued.token, bounds).is_err());
@@ -329,7 +671,7 @@ mod tests {
 			max_session_secs: 7_776_000,
 			idle_timeout_secs: 3600,
 		};
-		let store = RefreshStore::new();
+		let store = InProcessRefreshStore::new();
 		let issued = store.issue("user-1", 0, bounds, String::new(), String::new());
 		store.backdate(&issued.token, 3601);
 		assert!(store.rotate(&issued.token, bounds).is_err());
@@ -345,11 +687,116 @@ mod tests {
 			max_session_secs: 7_776_000,
 			idle_timeout_secs: 3600,
 		};
-		let store = RefreshStore::new();
+		let store = InProcessRefreshStore::new();
 		let issued = store.issue("user-1", 0, bounds, String::new(), String::new());
 		store.backdate(&issued.token, 1800);
 		let rotated = store.rotate(&issued.token, bounds).unwrap();
 		store.backdate(&rotated.refresh.token, 1800);
 		assert!(store.rotate(&rotated.refresh.token, bounds).is_ok());
+	}
+}
+
+/// Real-Redis round-trips for [`RedisRefreshStore`]. No mocks — these hit the Redis at
+/// `REDIS_URL` and are skipped (early-return) when it is unset, so unconfigured local/CI
+/// runs are unaffected. They prove the Redis arm matches the in-process semantics:
+/// rotation, reuse detection, the lifetime bounds, listing, and the revoke surfaces.
+#[cfg(test)]
+mod redis_tests {
+	use super::*;
+
+	fn bounds() -> SessionBounds {
+		SessionBounds {
+			ttl_secs: 3600,
+			max_session_secs: 7_776_000,
+			idle_timeout_secs: 0,
+		}
+	}
+
+	/// Connect to the configured Redis, or `None` to skip when `REDIS_URL` is unset.
+	/// A unique user id per test keeps concurrent test runs from colliding on keys.
+	async fn store() -> Option<(RedisRefreshStore, String)> {
+		let url = std::env::var("REDIS_URL").ok().filter(|u| !u.is_empty())?;
+		let store = RedisRefreshStore::connect(&url).await.expect("connect to REDIS_URL");
+		Some((store, format!("user-{}", uuid::Uuid::new_v4())))
+	}
+
+	#[tokio::test]
+	async fn rotate_then_reuse_revokes_family() {
+		let Some((store, user)) = store().await else {
+			return;
+		};
+		let issued = store.issue(&user, 7, bounds(), "agent".into(), "1.2.3.4".into()).await.unwrap();
+		let rotated = store.rotate(&issued.token, bounds()).await.unwrap();
+		assert_eq!(rotated.user_id, user);
+		assert_eq!(rotated.token_version_snapshot, 7);
+		// Reuse of the rotated-out secret revokes the whole family.
+		assert!(store.rotate(&issued.token, bounds()).await.is_err());
+		assert!(store.rotate(&rotated.refresh.token, bounds()).await.is_err());
+		assert!(store.list_for_user(&user).await.unwrap().is_empty());
+	}
+
+	#[tokio::test]
+	async fn revoke_user_drops_all_families() {
+		let Some((store, user)) = store().await else {
+			return;
+		};
+		let a = store.issue(&user, 0, bounds(), String::new(), String::new()).await.unwrap();
+		let b = store.issue(&user, 0, bounds(), String::new(), String::new()).await.unwrap();
+		store.revoke_user(&user).await.unwrap();
+		assert!(store.rotate(&a.token, bounds()).await.is_err());
+		assert!(store.rotate(&b.token, bounds()).await.is_err());
+		assert!(store.list_for_user(&user).await.unwrap().is_empty());
+	}
+
+	#[tokio::test]
+	async fn session_id_is_stable_across_rotation() {
+		let Some((store, user)) = store().await else {
+			return;
+		};
+		let issued = store.issue(&user, 0, bounds(), "agent".into(), "1.2.3.4".into()).await.unwrap();
+		let id = store.family_id_of(&issued.token).await.unwrap().expect("a fresh family has a session id");
+		let rotated = store.rotate(&issued.token, bounds()).await.unwrap();
+		assert_eq!(store.family_id_of(&rotated.refresh.token).await.unwrap().as_deref(), Some(id.as_str()));
+		let sessions = store.list_for_user(&user).await.unwrap();
+		assert_eq!(sessions.len(), 1);
+		assert_eq!(sessions[0].id, id);
+		assert_eq!(sessions[0].user_agent, "agent");
+		store.revoke_user(&user).await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn revoke_by_id_guards_cross_user() {
+		let Some((store, user)) = store().await else {
+			return;
+		};
+		let other = format!("other-{}", uuid::Uuid::new_v4());
+		let mine = store.issue(&user, 0, bounds(), String::new(), String::new()).await.unwrap();
+		let id = store.family_id_of(&mine.token).await.unwrap().unwrap();
+		// A different user cannot revoke it.
+		assert!(!store.revoke_by_id(&other, &id).await.unwrap());
+		assert!(store.rotate(&mine.token, bounds()).await.is_ok());
+		// The owner can; a second attempt is a no-op.
+		let id = store.family_id_of(&mine.token).await.unwrap().unwrap();
+		assert!(store.revoke_by_id(&user, &id).await.unwrap());
+		assert!(!store.revoke_by_id(&user, &id).await.unwrap());
+		assert!(store.list_for_user(&user).await.unwrap().is_empty());
+	}
+
+	#[tokio::test]
+	async fn rotation_fails_past_idle_timeout() {
+		let Some((store, user)) = store().await else {
+			return;
+		};
+		// A 1s idle window with a now-2s-stale family: the next rotation must drop it
+		// even though the sliding and absolute deadlines are far in the future.
+		let bounds = SessionBounds {
+			ttl_secs: 3600,
+			max_session_secs: 7_776_000,
+			idle_timeout_secs: 1,
+		};
+		let issued = store.issue(&user, 0, bounds, String::new(), String::new()).await.unwrap();
+		tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+		assert!(store.rotate(&issued.token, bounds).await.is_err());
+		assert!(store.list_for_user(&user).await.unwrap().is_empty());
 	}
 }

@@ -140,7 +140,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// core hands auth a `Provisioner` (auth → core, upsert users) and drains it.
 	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
 	let (provisioner, provision_rx) = provisioner_channel();
-	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).context("failed to build the auth service")?;
+	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).await.context("failed to build the auth service")?;
 
 	let state = AppState::new(
 		pool,
