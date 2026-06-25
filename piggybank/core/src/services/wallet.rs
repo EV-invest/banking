@@ -15,7 +15,7 @@ use tonic::{Request, Response, Status};
 use crate::{
 	AppState,
 	application::{wallet as wallet_app, withdrawals as withdrawal_app},
-	services::support::{caller_id, map_err, parse_withdrawal_id},
+	services::support::{caller_id, map_err, parse_withdrawal_id, unfrozen_caller},
 };
 
 #[derive(Clone)]
@@ -69,7 +69,7 @@ impl WalletService for WalletSvc {
 	}
 
 	async fn request_withdrawal(&self, request: Request<pb::RequestWithdrawalRequest>) -> Result<Response<pb::Withdrawal>, Status> {
-		let user = caller_id(&request)?;
+		let user = unfrozen_caller(&self.state, &request).await?;
 		let req = request.into_inner();
 		let network = Network::parse(&req.network).map_err(map_err)?;
 		let address = WalletAddress::parse(network, &req.address).map_err(map_err)?;

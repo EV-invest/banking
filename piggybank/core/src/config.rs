@@ -45,8 +45,11 @@ pub struct AppConfig {
 	/// a small pool suffices since the relay is a single-worker drainer (one drain
 	/// connection + the lock-holding connection).
 	pub relay_db_max_connections: u32,
+	/// The cross-plane lifecycle bridge consumer's config. `None` (either var unset) leaves
+	/// the consumer un-run — unconfigured dev/CI is unaffected, matching the other optional
+	/// seams. See [`infrastructure::bridge`](crate::infrastructure::bridge).
+	pub bridge: Option<BridgeConfig>,
 }
-
 impl AppConfig {
 	pub fn from_env() -> anyhow::Result<Self> {
 		let database_url = env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
@@ -88,6 +91,27 @@ impl AppConfig {
 			.map(|v| v.parse().context("RELAY_DB_MAX_CONNECTIONS must be a positive integer"))
 			.transpose()?
 			.unwrap_or(3);
+		// The bridge runs only when BOTH the concierge address and the shared token are set —
+		// a half-configured bridge (one without the other) is a misconfiguration, not a
+		// silent no-op, so it's an error rather than running un-authenticated or address-less.
+		let concierge_bridge_addr = env::var("CONCIERGE_BRIDGE_ADDR").ok().filter(|s| !s.is_empty());
+		let bridge_service_token = env::var("BRIDGE_SERVICE_TOKEN").ok().filter(|s| !s.is_empty());
+		let bridge = match (concierge_bridge_addr, bridge_service_token) {
+			(Some(concierge_addr), Some(service_token)) => {
+				let poll_secs = env::var("BRIDGE_POLL_SECS")
+					.ok()
+					.map(|v| v.parse().context("BRIDGE_POLL_SECS must be a positive integer"))
+					.transpose()?
+					.unwrap_or(5);
+				Some(BridgeConfig {
+					concierge_addr,
+					service_token,
+					poll_secs,
+				})
+			}
+			(None, None) => None,
+			_ => anyhow::bail!("CONCIERGE_BRIDGE_ADDR and BRIDGE_SERVICE_TOKEN must be set together (the bridge needs both an endpoint and the shared token)"),
+		};
 		Ok(Self {
 			database_url,
 			grpc_addr,
@@ -102,8 +126,21 @@ impl AppConfig {
 			signer_grpc_addr,
 			db_max_connections,
 			relay_db_max_connections,
+			bridge,
 		})
 	}
+}
+
+/// Config for the one-way concierge→banking lifecycle bridge consumer.
+#[derive(Clone, Debug)]
+pub struct BridgeConfig {
+	/// The concierge plane's gRPC endpoint serving `UserEvents.PullUserLifecycle`.
+	pub concierge_addr: String,
+	/// The shared bridge service token (`authorization: Bearer …`), the same value
+	/// concierge verifies the pull against.
+	pub service_token: String,
+	/// Seconds between pulls when the backlog is drained. `BRIDGE_POLL_SECS`; defaults to 5.
+	pub poll_secs: u64,
 }
 
 #[cfg(test)]

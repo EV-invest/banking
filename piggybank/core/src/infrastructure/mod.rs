@@ -19,6 +19,7 @@
 //! - [`telemetry`] — the observability adapter: the one seam that hands errors to
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
+pub mod bridge;
 pub mod custody;
 pub mod db;
 pub mod ledger;

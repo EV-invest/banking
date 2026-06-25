@@ -19,7 +19,7 @@ use tonic::{Request, Response, Status};
 use crate::{
 	AppState,
 	application::funds as funds_app,
-	services::support::{caller_id, map_err, parse_redemption_id, unix_now},
+	services::support::{caller_id, map_err, parse_redemption_id, unfrozen_caller, unix_now},
 };
 
 #[derive(Clone)]
@@ -36,7 +36,7 @@ impl FundsSvc {
 #[tonic::async_trait]
 impl FundsService for FundsSvc {
 	async fn subscribe(&self, request: Request<pb::SubscribeRequest>) -> Result<Response<pb::Subscription>, Status> {
-		let user = caller_id(&request)?;
+		let user = unfrozen_caller(&self.state, &request).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
@@ -56,7 +56,7 @@ impl FundsService for FundsSvc {
 	}
 
 	async fn redeem(&self, request: Request<pb::RedeemRequest>) -> Result<Response<pb::Redemption>, Status> {
-		let user = caller_id(&request)?;
+		let user = unfrozen_caller(&self.state, &request).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;

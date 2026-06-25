@@ -22,6 +22,7 @@ dotenvy.workspace = true
 ev = { workspace = true, features = ["analytics", "error_monitoring"] }
 evbanking_auth.workspace = true
 evbanking_contracts.workspace = true
+evconcierge_contracts.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "migrate"] }
 thiserror.workspace = true

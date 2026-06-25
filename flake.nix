@@ -257,6 +257,11 @@
             export TIGERBEETLE_ADDRESS="''${TIGERBEETLE_ADDRESS:-127.0.0.1:3033}"
             export TIGERBEETLE_CLUSTER_ID="''${TIGERBEETLE_CLUSTER_ID:-0}"
             export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-http://127.0.0.1:50053}"
+            # Cross-plane lifecycle bridge consumer (one-way concierge → banking). Both vars
+            # must be set together or the consumer doesn't run; BRIDGE_SERVICE_TOKEN must match
+            # the concierge plane's value. The concierge plane serves UserEvents on :50061.
+            export CONCIERGE_BRIDGE_ADDR="''${CONCIERGE_BRIDGE_ADDR:-http://127.0.0.1:50061}"
+            export BRIDGE_SERVICE_TOKEN="''${BRIDGE_SERVICE_TOKEN:-dev-bridge-token}"
             exec cargo run -p piggybank-core
           '';
         };

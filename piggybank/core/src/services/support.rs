@@ -30,6 +30,20 @@ pub(super) fn caller_id<T>(request: &Request<T>) -> Result<UserId, Status> {
 	parse_user_id(&claims.sub)
 }
 
+/// Gate a money-moving RPC on the cross-plane freeze flag: reject if the caller's banking
+/// row was frozen by a concierge SUSPENDED lifecycle event (see
+/// [`infrastructure::bridge`](crate::infrastructure::bridge)). Returns the caller's id on
+/// success so the handler keeps its existing `let user = ...?` shape. A control-plane read
+/// failure fails CLOSED (UNAVAILABLE) — a money op never proceeds when the gate can't be read.
+pub(super) async fn unfrozen_caller<T>(state: &AppState, request: &Request<T>) -> Result<UserId, Status> {
+	let user = caller_id(request)?;
+	match crate::infrastructure::bridge::is_frozen(&state.pool, user.raw()).await {
+		Ok(false) => Ok(user),
+		Ok(true) => Err(Status::failed_precondition("account is frozen")),
+		Err(_) => Err(Status::unavailable("internal error")),
+	}
+}
+
 /// Gate an RPC on the admin allowlist. Only a human access token can be an admin —
 /// a service token (distinct `typ`) never qualifies, even if its `sub` matched.
 pub(super) fn require_admin<T>(state: &AppState, request: &Request<T>) -> Result<(), Status> {

@@ -19,6 +19,7 @@ use piggybank_core::{
 	application::auth_sync,
 	config::AppConfig,
 	infrastructure::{
+		bridge::BridgeConsumer,
 		custody::StubCustody,
 		db,
 		ledger::{self, TbLedger},
@@ -135,6 +136,32 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
 	let reaper = Reaper::new(relay_pool, withdrawals.clone(), redemptions.clone(), relay_notify.clone());
 
+	// ── cross-plane lifecycle bridge consumer (one-way concierge → banking) ─────
+	// Pull concierge `UserLifecycleEvent`s and mirror them onto the `users` control
+	// plane so money ops can be gated (a SUSPENDED user is frozen). Runs only when
+	// configured (CONCIERGE_BRIDGE_ADDR + BRIDGE_SERVICE_TOKEN); unconfigured dev/CI
+	// simply doesn't consume. The consumer holds its own pool clone so its polling
+	// reads don't compete with request traffic on the relay pool.
+	let bridge = match &config.bridge {
+		Some(bridge_config) => {
+			let endpoint = Endpoint::from_shared(bridge_config.concierge_addr.clone())
+				.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
+				.connect_timeout(Duration::from_secs(3))
+				.timeout(Duration::from_secs(10));
+			let channel = endpoint.connect_lazy();
+			Some(BridgeConsumer::new(
+				pool.clone(),
+				channel,
+				bridge_config.service_token.clone(),
+				Duration::from_secs(bridge_config.poll_secs),
+			))
+		}
+		None => {
+			tracing::info!("bridge: CONCIERGE_BRIDGE_ADDR/BRIDGE_SERVICE_TOKEN unset — not consuming concierge lifecycle events");
+			None
+		}
+	};
+
 	// ── auth service + user provisioning (in-process) ──────────────────────────
 	// Auth owns the keys/JWKS and hands core an `Authorizer` (core → auth, verify);
 	// core hands auth a `Provisioner` (auth → core, upsert users) and drains it.
@@ -169,7 +196,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// is cancelled — so the first to finish triggers the rest to wind down on their own terms
 	// rather than being aborted mid-work, and `join!` waits for them all.
 	let shutdown = CancellationToken::new();
-	let (signal, core, auth, provisioner, relay_done, reconciliation_done, reaper_done) = tokio::join!(
+	let (signal, core, auth, provisioner, relay_done, reconciliation_done, reaper_done, bridge_done) = tokio::join!(
 		await_signal(shutdown.clone()),
 		branch(&shutdown, "core gRPC server", services::serve(config.grpc_addr, state, shutdown.clone().cancelled_owned())),
 		branch(&shutdown, "auth service", auth_service.run(config.auth_grpc_addr, shutdown.clone().cancelled_owned())),
@@ -177,10 +204,11 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		branch(&shutdown, "relay", infallible(relay.run(shutdown.clone()))),
 		branch(&shutdown, "reconciliation", infallible(reconciliation.run(shutdown.clone()))),
 		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
+		branch(&shutdown, "bridge", infallible(run_bridge(bridge, shutdown.clone()))),
 	);
 	let () = signal;
 	// The first error (if any) becomes the process result; a clean shutdown is `Ok`.
-	core.and(auth).and(provisioner).and(relay_done).and(reconciliation_done).and(reaper_done)
+	core.and(auth).and(provisioner).and(relay_done).and(reconciliation_done).and(reaper_done).and(bridge_done)
 }
 
 /// Run one composition-root branch to completion, mapping any error to `anyhow`, then cancel
@@ -200,6 +228,15 @@ async fn branch<E: std::fmt::Display>(shutdown: &CancellationToken, name: &str, 
 async fn infallible(fut: impl Future<Output = ()>) -> Result<(), std::convert::Infallible> {
 	fut.await;
 	Ok(())
+}
+
+/// Run the bridge consumer if configured, else idle until shutdown — so the `join!` branch
+/// exists unconditionally (an unconfigured bridge is a no-op, not a missing branch).
+async fn run_bridge(bridge: Option<BridgeConsumer>, shutdown: CancellationToken) {
+	match bridge {
+		Some(consumer) => consumer.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
 }
 
 /// Resolve on the first of `SIGINT` (ctrl_c), `SIGTERM`, or a peer cancelling `shutdown`,

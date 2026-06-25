@@ -245,17 +245,28 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | RPC | Who | Boundary | In-tx invariant |
 | --- | --- | --- | --- |
 | `GetTreasury` / `SeedCapital` / `RecordDeposit` | admin | `is_admin` + `is_access` | `tx_ref` gate |
-| `Subscribe` | the user | `sub == user`, `is_access` | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
-| `Redeem` | the user | `sub == user`, `is_access` | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
+| `Subscribe` | the user | `sub == user`, `is_access`, **not frozen** | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
+| `Redeem` | the user | `sub == user`, `is_access`, **not frozen** | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
 | `CancelRedemption` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `GetPosition` / `ListPositions` / `ListRedemptions` / `GetFundNav` | the user | `sub == user` | — |
 | `GetWallet` / `GetDepositAddress` / `ListWithdrawals` | the user | `sub == user` | — |
-| `RequestWithdrawal` | the user | `sub == user`, `is_access` | active account ∧ available claim ≥ gross (TB flag backstop) |
+| `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | active account ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `DispatchWithdrawal` | admin (treasury) | `is_admin` + `is_access` | state is `queued` (idempotent) |
 | `SettleWithdrawal` / `FailWithdrawal` | admin | `is_admin` + `is_access` | state is `processing` (idempotent) |
 | `PostFundValuation` | admin | `is_admin` + `is_access` | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
 | `SettleRedemption` / `FailRedemption` | admin (treasury) | `is_admin` + `is_access` | state is `queued` (idempotent) |
+
+**Cross-plane freeze gate** (`services::support::unfrozen_caller`): the value-leaving RPCs
+above (`Subscribe`/`Redeem`/`RequestWithdrawal`) reject with `failed_precondition` when the
+caller's banking row is `frozen`. `frozen` is set by the one-way concierge→banking lifecycle
+bridge consumer (`infrastructure::bridge`), which PULLS `UserLifecycleEvent`s from the
+concierge plane (`UserEvents.PullUserLifecycle`, `BRIDGE_SERVICE_TOKEN`) and mirrors
+SUSPENDED→frozen / REINSTATED→unfrozen, KYC, and the revoke floor onto `users`, keyed by
+`auth_subject` and dedup/ordered by per-user `sequence`. Identity stays owned by concierge;
+banking only mirrors the gating slice. The gate fails CLOSED (UNAVAILABLE) if the flag can't
+be read. Cancel/read RPCs are intentionally NOT gated, so a frozen user can still unwind
+queued positions.
 
 ## Reconciliation + reaper (recovery jobs)
 
