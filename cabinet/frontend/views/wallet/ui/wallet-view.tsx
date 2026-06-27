@@ -171,18 +171,31 @@ function DepositPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex justify-center">{address ? <DepositQr value={address.address ?? ""} /> : <Skeleton className="size-44 rounded-2xl" />}</div>
-          <div className="flex items-center gap-2">
-            {address ? (
-              <code className="flex-1 break-all rounded-md border border-border bg-main-surface px-3 py-2 text-sm">{address.address}</code>
-            ) : (
-              <Skeleton className="h-10 flex-1" />
-            )}
-            <Button type="button" variant="outline" size="icon" onClick={copy} disabled={!address} aria-label="Copy address">
-              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">Credited to your one balance after {address?.min_confirmations ?? "several"} network confirmations.</p>
+          {address === null ? (
+            <>
+              <div className="flex justify-center">
+                <Skeleton className="size-44 rounded-2xl" />
+              </div>
+              <Skeleton className="h-10 w-full" />
+            </>
+          ) : address.address ? (
+            <>
+              <div className="flex justify-center">
+                <DepositQr value={address.address} />
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 break-all rounded-md border border-border bg-main-surface px-3 py-2 text-sm">{address.address}</code>
+                <Button type="button" variant="outline" size="icon" onClick={copy} aria-label="Copy address">
+                  {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Credited to your one balance after {address.min_confirmations} network confirmations.</p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              A {networkLabel(network)} deposit address isn&apos;t available yet — this rail is still being provisioned. Check back soon.
+            </p>
+          )}
         </CardContent>
       </Card>
       <Alert>

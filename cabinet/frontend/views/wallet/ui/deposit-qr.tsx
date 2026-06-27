@@ -9,8 +9,8 @@ export function DepositQr({ value }: { value: string }) {
   return (
     <div className="relative flex size-44 shrink-0 items-center justify-center rounded-2xl bg-white p-3.5 ring-1 ring-border">
       <QRCode value={value} level="H" size={256} fgColor="#0c1626" bgColor="#ffffff" className="h-full w-full" />
-      <span className="absolute flex size-10 items-center justify-center rounded-xl bg-white shadow-[0_0_0_4px_white]">
-        <Logo className="h-5 w-auto text-main-accent-t1" />
+      <span className="absolute flex size-7 items-center justify-center rounded-lg bg-white shadow-[0_0_0_3px_white]">
+        <Logo className="h-3.5 w-auto text-main-accent-t1" />
       </span>
     </div>
   );
