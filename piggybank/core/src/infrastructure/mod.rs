@@ -20,8 +20,10 @@
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
 pub mod bridge;
+pub mod bsc_rpc;
 pub mod custody;
 pub mod db;
+pub mod deposit_watcher;
 pub mod ledger;
 pub mod nav;
 pub mod outbox;
@@ -32,7 +34,9 @@ pub mod redemptions;
 pub mod relay;
 pub mod signer_addresses;
 pub mod subscriptions;
+pub mod sweep;
 pub mod telemetry;
 pub mod tigerbeetle;
 pub mod users;
+pub mod withdrawal_watcher;
 pub mod withdrawals;

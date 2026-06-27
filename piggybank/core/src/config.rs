@@ -1,6 +1,7 @@
 use std::{env, net::SocketAddr};
 
 use anyhow::Context;
+use domain::money::Network;
 
 /// Default gRPC binds: loopback, so the hub's internal data/auth seams are not exposed on
 /// every interface. A wider bind is an explicit opt-in that requires network segmentation
@@ -49,6 +50,17 @@ pub struct AppConfig {
 	/// the consumer un-run — unconfigured dev/CI is unaffected, matching the other optional
 	/// seams. See [`infrastructure::bridge`](crate::infrastructure::bridge).
 	pub bridge: Option<BridgeConfig>,
+	/// The on-chain BSC config. `None` (no `BSC_RPC_URL`) leaves every on-chain seam — the
+	/// deposit watcher, the withdrawal confirmation watcher, and real custody — un-run, the
+	/// same no-op-when-unconfigured stance as the bridge. See
+	/// [`infrastructure::deposit_watcher`](crate::infrastructure::deposit_watcher) and
+	/// [`infrastructure::withdrawal_watcher`](crate::infrastructure::withdrawal_watcher).
+	pub bsc: Option<BscConfig>,
+	/// The treasury sweep's config. `Some` only when BSC is configured AND `SWEEP_ENABLED`
+	/// is set — it moves user deposit balances on-chain into the treasury, so it is opt-in
+	/// (merely configuring deposits/withdrawals does not start it). See
+	/// [`infrastructure::sweep`](crate::infrastructure::sweep).
+	pub sweep: Option<SweepConfig>,
 }
 impl AppConfig {
 	pub fn from_env() -> anyhow::Result<Self> {
@@ -112,6 +124,39 @@ impl AppConfig {
 			(None, None) => None,
 			_ => anyhow::bail!("CONCIERGE_BRIDGE_ADDR and BRIDGE_SERVICE_TOKEN must be set together (the bridge needs both an endpoint and the shared token)"),
 		};
+		// The on-chain seams run only when BSC_RPC_URL is set (the endpoint must support
+		// eth_getLogs for deposit scanning). Everything else has a sensible default —
+		// mainnet USDT, 15 confs.
+		let bsc = match env::var("BSC_RPC_URL").ok().filter(|s| !s.is_empty()) {
+			Some(rpc_url) => Some(BscConfig {
+				rpc_url,
+				usdt_contract: env::var("BSC_USDT_CONTRACT")
+					.ok()
+					.filter(|s| !s.is_empty())
+					.unwrap_or_else(|| "0x55d398326f99059fF775485246999027B3197955".to_string()),
+				confirmations: parse_opt("BSC_CONFIRMATIONS")?.unwrap_or(Network::Bep20.min_confirmations() as u64),
+				poll_secs: parse_opt("BSC_POLL_SECS")?.unwrap_or(12),
+				start_block: parse_opt("BSC_DEPOSIT_START_BLOCK")?,
+				max_block_range: parse_opt("BSC_MAX_BLOCK_RANGE")?.unwrap_or(500),
+				chain_id: parse_opt("BSC_CHAIN_ID")?.unwrap_or(56),
+				gas_limit: parse_opt("BSC_GAS_LIMIT")?.unwrap_or(100_000),
+			}),
+			None => None,
+		};
+		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND the
+		// chain is configured — opt-in, never implied by the deposit/withdraw seams.
+		let sweep_enabled = env::var("SWEEP_ENABLED").map(|v| v == "true" || v == "1").unwrap_or(false);
+		let sweep = match (&bsc, sweep_enabled) {
+			(Some(_), true) => Some(SweepConfig {
+				min_usdt: parse_opt("SWEEP_MIN_USDT")?.unwrap_or(1_000_000_000_000_000_000),
+				gas_drop_multiple: parse_opt("SWEEP_GAS_DROP_MULTIPLE")?.unwrap_or(3),
+				min_gas_drop_wei: parse_opt("SWEEP_MIN_GAS_DROP_WEI")?.unwrap_or(300_000_000_000_000),
+				topup_grace_secs: parse_opt("SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
+				poll_secs: parse_opt("SWEEP_POLL_SECS")?.unwrap_or(30),
+			}),
+			(None, true) => anyhow::bail!("SWEEP_ENABLED is set but BSC_RPC_URL is not — the sweep needs the chain configured"),
+			_ => None,
+		};
 		Ok(Self {
 			database_url,
 			grpc_addr,
@@ -127,6 +172,8 @@ impl AppConfig {
 			db_max_connections,
 			relay_db_max_connections,
 			bridge,
+			bsc,
+			sweep,
 		})
 	}
 }
@@ -141,6 +188,63 @@ pub struct BridgeConfig {
 	pub service_token: String,
 	/// Seconds between pulls when the backlog is drained. `BRIDGE_POLL_SECS`; defaults to 5.
 	pub poll_secs: u64,
+}
+/// The on-chain BSC config, shared by the deposit watcher, the withdrawal confirmation
+/// watcher, and real custody. Present only when `BSC_RPC_URL` is set; the endpoint MUST
+/// support `eth_getLogs` (for deposit scanning).
+#[derive(Clone, Debug)]
+pub struct BscConfig {
+	/// BSC JSON-RPC endpoint (`BSC_RPC_URL`). Switch this (+ `BSC_USDT_CONTRACT`) between
+	/// testnet and mainnet — the watcher logic is network-agnostic.
+	pub rpc_url: String,
+	/// The USDT (BEP20) contract address to watch (`BSC_USDT_CONTRACT`). Defaults to the BSC
+	/// mainnet USDT (`0x55d3…7955`, 18-dp); set it to the testnet token for a testnet run.
+	pub usdt_contract: String,
+	/// Confirmations to wait before crediting a deposit / settling a withdrawal
+	/// (`BSC_CONFIRMATIONS`); defaults to the domain's BEP20 value (15) — reorg safety.
+	pub confirmations: u64,
+	/// Seconds between polls, for both the deposit scan and the withdrawal-receipt check
+	/// (`BSC_POLL_SECS`); defaults to 12.
+	pub poll_secs: u64,
+	/// First block to scan on a fresh cursor (`BSC_DEPOSIT_START_BLOCK`). `None` ⇒ start at
+	/// the current safe head (watch from now), ignoring pre-existing on-chain history.
+	pub start_block: Option<u64>,
+	/// Max blocks per `eth_getLogs` call (`BSC_MAX_BLOCK_RANGE`); defaults to 500 to stay
+	/// within common provider range limits.
+	pub max_block_range: u64,
+	/// Chain id for signing withdrawals (`BSC_CHAIN_ID`); 56 = BSC mainnet, 97 = testnet.
+	pub chain_id: u64,
+	/// Gas limit for an ERC-20 transfer withdrawal (`BSC_GAS_LIMIT`); defaults to 100_000 (a
+	/// USDT transfer is ~50–65k — the headroom is safe, and unused gas is refunded).
+	pub gas_limit: u64,
+}
+/// Treasury-sweep economics. `Some` only when BSC is configured AND `SWEEP_ENABLED` is set
+/// (it moves user funds on-chain — opt-in). The chain params (rpc, USDT, chain id, the
+/// transfer gas limit) come from [`BscConfig`]; these knobs tune *when* and *how much*.
+#[derive(Clone, Debug)]
+pub struct SweepConfig {
+	/// Minimum USDT (18-dp base units) on a deposit address worth sweeping (`SWEEP_MIN_USDT`);
+	/// defaults to 1 USDT — below this the gas isn't worth it.
+	pub min_usdt: u128,
+	/// A BNB top-up sends `max(needed_gas × this, min_gas_drop_wei)` (`SWEEP_GAS_DROP_MULTIPLE`);
+	/// defaults to 3, so one top-up covers several future sweeps.
+	pub gas_drop_multiple: u128,
+	/// Floor for a BNB top-up, in wei (`SWEEP_MIN_GAS_DROP_WEI`); defaults to 3e14 (0.0003 BNB).
+	pub min_gas_drop_wei: u128,
+	/// Don't re-top-up the same address within this many seconds (`SWEEP_TOPUP_GRACE_SECS`);
+	/// defaults to 60 — long enough for a top-up to confirm before we'd consider another.
+	pub topup_grace_secs: u64,
+	/// Seconds between sweep cycles (`SWEEP_POLL_SECS`); defaults to 30.
+	pub poll_secs: u64,
+}
+/// Parse an optional env var that, when present and non-empty, must be a valid `T`.
+fn parse_opt<T: std::str::FromStr>(key: &str) -> anyhow::Result<Option<T>>
+where
+	T::Err: std::fmt::Display, {
+	match env::var(key).ok().filter(|s| !s.is_empty()) {
+		Some(raw) => raw.parse::<T>().map(Some).map_err(|e| anyhow::anyhow!("{key} must be a valid value: {e}")),
+		None => Ok(None),
+	}
 }
 
 #[cfg(test)]
