@@ -80,6 +80,29 @@ impl WalletSecrets {
 		Ok(address)
 	}
 
+	/// The watch-only `(address, public_key)` for `(user, network)`, if provisioned. Public
+	/// data only — never the sealed blob; used to (re-)derive the on-chain address.
+	pub async fn find_watch(&self, user_id: Uuid, network: Network) -> Result<Option<(String, Vec<u8>)>, SignerError> {
+		let row = sqlx::query_as::<_, (String, Vec<u8>)>("SELECT address, public_key FROM wallet_secrets WHERE user_id = $1 AND network = $2")
+			.bind(user_id)
+			.bind(network.as_str())
+			.fetch_optional(&self.pool)
+			.await?;
+		Ok(row)
+	}
+
+	/// Backfill the stored watch-only address in place — e.g. a placeholder upgraded to the
+	/// real derived address once a chain's encoding lands. Never touches the key material.
+	pub async fn update_address(&self, user_id: Uuid, network: Network, address: &str) -> Result<(), SignerError> {
+		sqlx::query("UPDATE wallet_secrets SET address = $3 WHERE user_id = $1 AND network = $2")
+			.bind(user_id)
+			.bind(network.as_str())
+			.bind(address)
+			.execute(&self.pool)
+			.await?;
+		Ok(())
+	}
+
 	/// Load the SEALED private key for `(user, network)` — the signer-only path used
 	/// by signing (and the round-trip test). The blob is still encrypted; the caller
 	/// opens it transiently in the [`Vault`](crate::key_vault::Vault) and zeroizes it.

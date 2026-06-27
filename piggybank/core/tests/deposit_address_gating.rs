@@ -18,7 +18,7 @@ use std::sync::{
 
 use domain::{money::Network, users::UserId};
 use evbanking_contracts::signer::v1::{
-	ProvisionAddressRequest, ProvisionAddressResponse,
+	ProvisionAddressRequest, ProvisionAddressResponse, SignErc20TransferRequest, SignErc20TransferResponse, SignNativeTransferRequest, SignNativeTransferResponse,
 	signer_service_client::SignerServiceClient,
 	signer_service_server::{SignerService, SignerServiceServer},
 };
@@ -57,6 +57,14 @@ impl SignerService for FakeSigner {
 			address: sample_address(network).to_owned(),
 			address_kind: kind.to_owned(),
 		}))
+	}
+
+	async fn sign_erc20_transfer(&self, _request: tonic::Request<SignErc20TransferRequest>) -> Result<tonic::Response<SignErc20TransferResponse>, tonic::Status> {
+		Err(tonic::Status::unimplemented("sign_erc20_transfer is not exercised by the deposit-address gating test"))
+	}
+
+	async fn sign_native_transfer(&self, _request: tonic::Request<SignNativeTransferRequest>) -> Result<tonic::Response<SignNativeTransferResponse>, tonic::Status> {
+		Err(tonic::Status::unimplemented("sign_native_transfer is not exercised by the deposit-address gating test"))
 	}
 }
 
