@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
 	error::SignerError,
-	key_vault::{Chain, Vault, ed25519_pubkey, gen_ed25519, gen_secp256k1, secp256k1_pubkey},
+	key_vault::{Chain, Vault, ed25519_pubkey, evm_address, gen_ed25519, gen_secp256k1, secp256k1_pubkey},
 	secrets::{NewSecret, WalletSecrets},
 };
 
@@ -38,16 +38,20 @@ pub struct ProvisionedAddress {
 /// Provision (or return the existing) key-backed deposit address for `(user, network)`.
 /// Idempotent: a second call returns the first call's address without minting a new key.
 pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, network: Network) -> Result<ProvisionedAddress, SignerError> {
-	// The stored address is whatever was minted before. Until real encoding ships that is
-	// always a placeholder, so the re-read path reports the same kind the mint path does;
-	// this single point flips to [`KIND_DERIVED`] (and persists the kind) when it lands.
-	if let Some(address) = secrets.find_address(user_id, network).await? {
-		return Ok(ProvisionedAddress { address, kind: KIND_PLACEHOLDER });
+	// Existing key: re-derive the address from the stored public key (deterministic). For
+	// BEP20 that is the real on-chain (derived) address; a previously-stored placeholder is
+	// upgraded in place. Never opens the sealed private key.
+	if let Some((stored, public_key)) = secrets.find_watch(user_id, network).await? {
+		let (address, kind) = render_address(network, &public_key)?;
+		if address != stored {
+			secrets.update_address(user_id, network, &address).await?;
+		}
+		return Ok(ProvisionedAddress { address, kind });
 	}
 
 	let generated = generate(network);
 	let id = Uuid::new_v4();
-	let address = placeholder_address(network, &generated.pubkey)?;
+	let (address, _) = render_address(network, &generated.pubkey)?;
 	// AAD binds the blob to this chain + this row id, so it can't be replayed onto
 	// another wallet's row. `id` is the row PK → also the future signing path's lookup.
 	let sealed = vault.seal(chain_of(network), &id.to_string(), &*generated.secret)?;
@@ -65,13 +69,31 @@ pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, ne
 		})
 		.await?;
 
-	// Re-read the canonical row: ours, or a concurrent racer's whose insert won (ours
-	// was then a no-op and its sealed key was dropped/zeroized unused).
-	let address = secrets
-		.find_address(user_id, network)
+	// Re-read the canonical row: ours, or a concurrent racer's whose insert won (ours was
+	// then a no-op and its sealed key was dropped/zeroized unused). Derive from its public
+	// key so the returned address always matches the persisted row.
+	let (stored, public_key) = secrets
+		.find_watch(user_id, network)
 		.await?
 		.ok_or_else(|| SignerError::Repository("wallet_secrets row missing immediately after insert".into()))?;
-	Ok(ProvisionedAddress { address, kind: KIND_PLACEHOLDER })
+	let (address, kind) = render_address(network, &public_key)?;
+	if address != stored {
+		secrets.update_address(user_id, network, &address).await?;
+	}
+	Ok(ProvisionedAddress { address, kind })
+}
+
+/// The on-chain address for a stored/fresh public key, plus its kind. **BEP20** derives the
+/// real EVM address (EIP-55) and reports [`KIND_DERIVED`] — fundable. TRC20/TON still return
+/// a [`KIND_PLACEHOLDER`] until their encodings land (Base58Check / the TON wallet contract).
+fn render_address(network: Network, public_key: &[u8]) -> Result<(String, &'static str), SignerError> {
+	match network {
+		Network::Bep20 => {
+			let address = evm_address(public_key).ok_or_else(|| SignerError::Repository("EVM address derivation failed for a stored secp256k1 key".into()))?;
+			Ok((address, KIND_DERIVED))
+		}
+		Network::Trc20 | Network::Ton => Ok((placeholder_address(network, public_key)?.as_str().to_owned(), KIND_PLACEHOLDER)),
+	}
 }
 
 struct Generated {
@@ -97,7 +119,7 @@ fn generate(network: Network) -> Generated {
 	}
 }
 
-fn chain_of(network: Network) -> Chain {
+pub fn chain_of(network: Network) -> Chain {
 	match network {
 		Network::Bep20 => Chain::BscBep20,
 		Network::Trc20 => Chain::TronTrc20,

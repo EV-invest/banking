@@ -150,12 +150,46 @@ pub fn secp256k1_pubkey(seed: &[u8; 32]) -> Vec<u8> {
 	let sk = SigningKey::from_slice(seed).expect("valid secp256k1 scalar");
 	sk.verifying_key().to_sec1_bytes().to_vec()
 }
+/// The EVM (BSC/BEP20) address for a stored compressed secp256k1 public key:
+/// `keccak256(uncompressed_pubkey[1..])[12..]`, EIP-55 mixed-case checksummed.
+/// `None` only if the bytes are not a valid curve point (never for keys we minted).
+/// Address derivation is network-agnostic — the same on BSC mainnet and testnet.
+pub fn evm_address(compressed_pubkey: &[u8]) -> Option<String> {
+	use k256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
+	use sha3::{Digest, Keccak256};
+
+	let pubkey = PublicKey::from_sec1_bytes(compressed_pubkey).ok()?;
+	let point = pubkey.to_encoded_point(false); // 0x04 || X(32) || Y(32)
+	let hash = Keccak256::digest(&point.as_bytes()[1..]);
+	Some(eip55_checksum(&hash[12..32]))
+}
+
 /// ed25519 public key (32 bytes). The TON wallet ADDRESS additionally needs a
 /// wallet contract (v4/v5) + workchain; use a TON SDK to derive/deploy it.
 pub fn ed25519_pubkey(seed: &[u8; 32]) -> [u8; 32] {
 	use ed25519_dalek::SigningKey;
 	SigningKey::from_bytes(seed).verifying_key().to_bytes()
 }
+/// EIP-55 mixed-case checksum of 20 address bytes: a hex char `a-f` is uppercased
+/// when the corresponding nibble of `keccak256(lowercase_hex)` is ≥ 8.
+fn eip55_checksum(addr: &[u8]) -> String {
+	use sha3::{Digest, Keccak256};
+
+	let lower: String = addr.iter().map(|b| format!("{b:02x}")).collect();
+	let hash = Keccak256::digest(lower.as_bytes());
+	let mut out = String::with_capacity(2 + lower.len());
+	out.push_str("0x");
+	for (i, c) in lower.bytes().enumerate() {
+		let nibble = if i % 2 == 0 { hash[i / 2] >> 4 } else { hash[i / 2] & 0x0f };
+		if c.is_ascii_alphabetic() && nibble >= 8 {
+			out.push(c.to_ascii_uppercase() as char);
+		} else {
+			out.push(c as char);
+		}
+	}
+	out
+}
+
 /// 32 fresh bytes from the OS CSPRNG.
 fn random_bytes<const N: usize>() -> [u8; N] {
 	let mut b = [0u8; N];
@@ -215,5 +249,23 @@ mod tests {
 		let ton = gen_ed25519();
 		let ton_blob = vault.seal(Chain::Ton, "wallet-42", &*ton).unwrap();
 		assert_eq!(&*vault.open(Chain::Ton, "wallet-42", &ton_blob).unwrap(), &ton[..]);
+	}
+
+	#[test]
+	fn evm_address_matches_canonical_vector() {
+		// secp256k1 private key = 1 → public key = G → the canonical EVM address.
+		// This pins both the keccak/last-20-bytes derivation and the EIP-55 casing.
+		let mut seed = [0u8; 32];
+		seed[31] = 1;
+		let pubkey = secp256k1_pubkey(&seed);
+		assert_eq!(evm_address(&pubkey).unwrap(), "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf");
+	}
+
+	#[test]
+	fn evm_address_is_deterministic_and_well_formed() {
+		let pubkey = secp256k1_pubkey(&gen_secp256k1());
+		let a = evm_address(&pubkey).unwrap();
+		assert_eq!(a, evm_address(&pubkey).unwrap());
+		assert!(a.starts_with("0x") && a.len() == 42);
 	}
 }

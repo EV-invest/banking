@@ -20,8 +20,10 @@ use piggybank_core::{
 	config::AppConfig,
 	infrastructure::{
 		bridge::BridgeConsumer,
-		custody::StubCustody,
+		bsc_rpc::BscRpc,
+		custody::{ChainCustody, StubCustody},
 		db,
+		deposit_watcher::DepositWatcher,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
@@ -31,8 +33,10 @@ use piggybank_core::{
 		relay::Relay,
 		signer_addresses::SignerDepositAddresses,
 		subscriptions::PgSubscriptions,
+		sweep::Sweep,
 		tigerbeetle::TigerBeetle,
 		users::PgUsers,
+		withdrawal_watcher::WithdrawalWatcher,
 		withdrawals::PgWithdrawals,
 	},
 	ports::{Custody, DepositAddresses, FundPositionReader, NavRepository, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
@@ -114,7 +118,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// Authenticate the hub's onward calls to the signer with a service token (out-of-band
 	// `SERVICE_TOKEN` until the `MintServiceToken` RPC lands). `None` in unconfigured dev/CI.
 	let service_token = ServiceTokenSource::from_env();
-	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(signer_channel), service_token));
+	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(signer_channel.clone()), service_token));
 
 	// The single-worker outbox relay moves money in TigerBeetle after each commit
 	// (Write-Last); command handlers nudge it through `relay_notify` for low latency.
@@ -126,7 +130,31 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.await
 		.context("failed to connect the relay's database pool")?;
 	let relay_notify = Arc::new(Notify::new());
-	let custody: Arc<dyn Custody> = Arc::new(StubCustody);
+	// Real BSC custody when the chain is configured (same gate as the deposit watcher): sign
+	// the withdrawal via the signer's treasury key and broadcast it. Else the no-op stub (an
+	// operator settles manually). Unconfigured dev/CI is unaffected.
+	let custody: Arc<dyn Custody> = match &config.bsc {
+		Some(bsc) => {
+			let chain_custody = ChainCustody::new(
+				pool.clone(),
+				BscRpc::new(bsc.rpc_url.clone()),
+				SignerServiceClient::new(signer_channel.clone()),
+				ServiceTokenSource::from_env(),
+				bsc.chain_id,
+				bsc.usdt_contract.clone(),
+				bsc.gas_limit,
+			);
+			// Resolve + log the treasury hot wallet at boot so the operator can fund it (USDT
+			// for liquidity, BNB for gas) before any withdrawal settles. Best-effort: if the
+			// signer isn't up yet it resolves on the first withdrawal instead — boot is never
+			// blocked on it.
+			if let Err(err) = chain_custody.treasury_address().await {
+				tracing::warn!("could not resolve the treasury address at boot (resolves on first withdrawal): {err}");
+			}
+			Arc::new(chain_custody)
+		}
+		None => Arc::new(StubCustody),
+	};
 	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody, relay_notify.clone());
 
 	// Recovery jobs, on the relay's dedicated pool so their periodic scans don't compete
@@ -165,6 +193,30 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// ── auth service + user provisioning (in-process) ──────────────────────────
 	// Auth owns the keys/JWKS and hands core an `Authorizer` (core → auth, verify);
 	// core hands auth a `Provisioner` (auth → core, upsert users) and drains it.
+	// ── on-chain deposit watcher (BEP20 USDT) ──────────────────────────────────
+	// Poll BSC for confirmed USDT transfers to users' derived deposit addresses and record
+	// each (idempotent by tx_ref); the relay then credits the user's claim. Runs only when
+	// BSC_RPC_URL is set — unconfigured dev/CI doesn't watch. Its own pool clone keeps the
+	// polling reads off the request path.
+	let deposit_watcher = config.bsc.clone().map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config));
+
+	// ── on-chain withdrawal confirmation watcher (BEP20 USDT) ──────────────────
+	// Auto-settle a broadcast withdrawal once its transaction confirms — the positive chain
+	// signal the reaper lacks (it can only alert on a stuck `processing` withdrawal). Same
+	// BSC gate; its own pool clone keeps the receipt reads off the request path.
+	let withdrawal_watcher = config
+		.bsc
+		.as_ref()
+		.map(|bsc| WithdrawalWatcher::new(pool.clone(), withdrawals.clone(), relay_notify.clone(), bsc));
+
+	// ── treasury sweep (BEP20 USDT consolidation) ──────────────────────────────
+	// Move user deposit balances on-chain into the treasury (a gas station tops up gas
+	// first). Opt-in (BSC configured AND SWEEP_ENABLED); its own pool clone + signer channel.
+	let sweep = match (&config.bsc, &config.sweep) {
+		(Some(bsc), Some(sweep_config)) => Some(Sweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), bsc, sweep_config.clone())),
+		_ => None,
+	};
+
 	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
 	let (provisioner, provision_rx) = provisioner_channel();
 	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).await.context("failed to build the auth service")?;
@@ -196,7 +248,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// is cancelled — so the first to finish triggers the rest to wind down on their own terms
 	// rather than being aborted mid-work, and `join!` waits for them all.
 	let shutdown = CancellationToken::new();
-	let (signal, core, auth, provisioner, relay_done, reconciliation_done, reaper_done, bridge_done) = tokio::join!(
+	let (signal, core, auth, provisioner, relay_done, reconciliation_done, reaper_done, bridge_done, watcher_done, withdrawal_watcher_done, sweep_done) = tokio::join!(
 		await_signal(shutdown.clone()),
 		branch(&shutdown, "core gRPC server", services::serve(config.grpc_addr, state, shutdown.clone().cancelled_owned())),
 		branch(&shutdown, "auth service", auth_service.run(config.auth_grpc_addr, shutdown.clone().cancelled_owned())),
@@ -205,10 +257,21 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		branch(&shutdown, "reconciliation", infallible(reconciliation.run(shutdown.clone()))),
 		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
 		branch(&shutdown, "bridge", infallible(run_bridge(bridge, shutdown.clone()))),
+		branch(&shutdown, "deposit watcher", infallible(run_watcher(deposit_watcher, shutdown.clone()))),
+		branch(&shutdown, "withdrawal watcher", infallible(run_withdrawal_watcher(withdrawal_watcher, shutdown.clone()))),
+		branch(&shutdown, "sweep", infallible(run_sweep(sweep, shutdown.clone()))),
 	);
 	let () = signal;
 	// The first error (if any) becomes the process result; a clean shutdown is `Ok`.
-	core.and(auth).and(provisioner).and(relay_done).and(reconciliation_done).and(reaper_done).and(bridge_done)
+	core.and(auth)
+		.and(provisioner)
+		.and(relay_done)
+		.and(reconciliation_done)
+		.and(reaper_done)
+		.and(bridge_done)
+		.and(watcher_done)
+		.and(withdrawal_watcher_done)
+		.and(sweep_done)
 }
 
 /// Run one composition-root branch to completion, mapping any error to `anyhow`, then cancel
@@ -235,6 +298,33 @@ async fn infallible(fut: impl Future<Output = ()>) -> Result<(), std::convert::I
 async fn run_bridge(bridge: Option<BridgeConsumer>, shutdown: CancellationToken) {
 	match bridge {
 		Some(consumer) => consumer.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the deposit watcher if configured, else idle until shutdown — so the `join!` branch
+/// exists unconditionally (an unconfigured watcher is a no-op, not a missing branch).
+async fn run_watcher(watcher: Option<DepositWatcher>, shutdown: CancellationToken) {
+	match watcher {
+		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the withdrawal confirmation watcher if configured, else idle until shutdown — the
+/// same unconditional-branch shape as the deposit watcher.
+async fn run_withdrawal_watcher(watcher: Option<WithdrawalWatcher>, shutdown: CancellationToken) {
+	match watcher {
+		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the treasury sweep if enabled, else idle until shutdown — the same unconditional-
+/// branch shape (an un-enabled sweep is a no-op, not a missing branch).
+async fn run_sweep(sweep: Option<Sweep>, shutdown: CancellationToken) {
+	match sweep {
+		Some(sweep) => sweep.run(shutdown).await,
 		None => shutdown.cancelled().await,
 	}
 }

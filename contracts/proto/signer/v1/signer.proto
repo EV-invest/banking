@@ -4,8 +4,8 @@ syntax = "proto3";
 // own package (not `banking.v1`) so it stays out of the cabinet-facing OpenAPI/TS
 // generation (`nix run .#gen-api` only reads `proto/banking/v1`). The signer is a
 // separate trust domain: it holds the encrypted chain private keys; the hub never
-// does. For now it exposes only key provisioning — signing/broadcast is a later
-// feature that adds an RPC here.
+// does. It exposes key provisioning and ERC-20 transfer signing — the hub fetches the
+// chain params and broadcasts; the signer only ever holds keys and produces signatures.
 package signer.v1;
 
 service SignerService {
@@ -13,6 +13,20 @@ service SignerService {
   // the curve keypair, seal the private key at rest, return the public address.
   // Idempotent per (user_id, network) — a repeat returns the existing address.
   rpc ProvisionAddress(ProvisionAddressRequest) returns (ProvisionAddressResponse);
+
+  // Sign an ERC-20 `transfer(to, amount)` from a wallet the signer holds: the treasury
+  // hot wallet (empty from_user_id) for a withdrawal, or a user's deposit address for a
+  // sweep. The signer unseals the key, builds the legacy EIP-155 transaction, signs it,
+  // and returns the raw bytes for the hub to broadcast — the key never leaves the signer.
+  // Signing is deterministic (RFC-6979), so a retry with the same params yields the same
+  // transaction; the hub dedupes the BROADCAST by withdrawal id.
+  rpc SignErc20Transfer(SignErc20TransferRequest) returns (SignErc20TransferResponse);
+
+  // Sign a native (BNB) value transfer from a wallet the signer holds — the gas-station
+  // account topping up a user's deposit address with gas before that address's USDT is
+  // swept to the treasury. The same legacy EIP-155 envelope as SignErc20Transfer but with
+  // value = amount and empty calldata.
+  rpc SignNativeTransfer(SignNativeTransferRequest) returns (SignNativeTransferResponse);
 }
 
 message ProvisionAddressRequest {
@@ -27,4 +41,39 @@ message ProvisionAddressResponse {
   // image). The hub tags the cached row with this so a placeholder is NEVER served as a
   // fundable deposit destination — the rail is presented as unavailable instead.
   string address_kind = 2;
+}
+
+message SignErc20TransferRequest {
+  // The sending wallet: a user's UUID, or EMPTY for the treasury hot wallet.
+  string from_user_id = 1;
+  string network = 2;        // "bep20"
+  string token_contract = 3; // the ERC-20 token (e.g. USDT), 0x-hex 20-byte address
+  string to_address = 4;     // recipient, 0x-hex 20-byte address
+  string amount = 5;         // token base units, decimal string (fits u128)
+  uint64 chain_id = 6;       // 56 = BSC mainnet, 97 = testnet
+  uint64 nonce = 7;          // the sending wallet's next nonce (hub-fetched)
+  string gas_price = 8;      // wei, decimal string (fits u128)
+  uint64 gas_limit = 9;
+}
+
+message SignErc20TransferResponse {
+  string raw_tx = 1;  // 0x-prefixed RLP-encoded signed transaction, ready to broadcast
+  string tx_hash = 2; // 0x-prefixed transaction hash (keccak256 of raw_tx)
+}
+
+message SignNativeTransferRequest {
+  // The sending wallet: a user's UUID, the gas-station UUID, or EMPTY for the treasury.
+  string from_user_id = 1;
+  string network = 2;     // "bep20"
+  string to_address = 3;  // recipient, 0x-hex 20-byte address
+  string amount = 4;      // native (wei) base units, decimal string (fits u128)
+  uint64 chain_id = 5;    // 56 = BSC mainnet, 97 = testnet
+  uint64 nonce = 6;       // the sending wallet's next nonce (hub-fetched)
+  string gas_price = 7;   // wei, decimal string (fits u128)
+  uint64 gas_limit = 8;   // 21000 for a plain value transfer
+}
+
+message SignNativeTransferResponse {
+  string raw_tx = 1;  // 0x-prefixed RLP-encoded signed transaction, ready to broadcast
+  string tx_hash = 2; // 0x-prefixed transaction hash (keccak256 of raw_tx)
 }
