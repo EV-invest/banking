@@ -17,6 +17,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const IN_PRODUCTION = process.env.NODE_ENV === "production";
+// `next dev` only (never build/start, never the test runner where NODE_ENV is
+// unset): React + Turbopack use eval() in development for HMR and callstack
+// reconstruction, so the strict no-eval CSP would break the dev server.
+const IN_DEVELOPMENT = process.env.NODE_ENV === "development";
 
 // Absolute-URL origins of MFE bundles, read once from the same registry the BFF
 // serves. Relative scriptUrls (e.g. "/mfe/x.js") are same-origin and covered by
@@ -67,6 +71,7 @@ function splitList(value: string | undefined): string[] {
 /** The Content-Security-Policy for the host document, bound to a per-request nonce. */
 export function contentSecurityPolicy(nonce: string): string {
   const script = ["'self'", `'nonce-${nonce}'`, ...mfeOrigins()];
+  if (IN_DEVELOPMENT) script.push("'unsafe-eval'");
   const connect = ["'self'", ...connectOrigins()];
   return [
     `default-src 'self'`,
