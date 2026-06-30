@@ -61,6 +61,14 @@ pub struct AppConfig {
 	/// (merely configuring deposits/withdrawals does not start it). See
 	/// [`infrastructure::sweep`](crate::infrastructure::sweep).
 	pub sweep: Option<SweepConfig>,
+	/// The on-chain TON config. `None` (no `TON_API_URL`) leaves every TON seam — the
+	/// jetton deposit watcher, the withdrawal confirmation watcher, and real custody —
+	/// un-run, the same no-op-when-unconfigured stance as BSC. Point `TON_API_URL` at
+	/// `https://testnet.toncenter.com/api/v3` (`TON_IS_TESTNET=true`) for bring-up.
+	pub ton: Option<TonConfig>,
+	/// The TON treasury sweep's config. `Some` only when TON is configured AND
+	/// `SWEEP_ENABLED` is set (the same opt-in gate as the BSC sweep).
+	pub ton_sweep: Option<TonSweepConfig>,
 }
 impl AppConfig {
 	pub fn from_env() -> anyhow::Result<Self> {
@@ -143,9 +151,32 @@ impl AppConfig {
 			}),
 			None => None,
 		};
-		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND the
+		// The on-chain TON seams run only when TON_API_URL is set (a toncenter v3 base URL).
+		// Everything else defaults — mainnet USDT jetton master, 6s poll.
+		let ton = match env::var("TON_API_URL").ok().filter(|s| !s.is_empty()) {
+			Some(api_url) => Some(TonConfig {
+				api_url,
+				api_key: env::var("TON_API_KEY").ok().filter(|s| !s.is_empty()),
+				usdt_master: env::var("TON_USDT_MASTER")
+					.ok()
+					.filter(|s| !s.is_empty())
+					.unwrap_or_else(|| "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs".to_string()),
+				poll_secs: parse_opt("TON_POLL_SECS")?.unwrap_or(6),
+				start_cursor: parse_opt("TON_DEPOSIT_START_LT")?,
+				is_testnet: env::var("TON_IS_TESTNET").map(|v| v == "true" || v == "1").unwrap_or(false),
+				wallet_version: env::var("TON_WALLET_VERSION").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "v4r2".to_string()),
+				forward_ton_amount: parse_opt("TON_FORWARD_TON_AMOUNT")?.unwrap_or(50_000_000),
+				msg_value: parse_opt("TON_MSG_VALUE")?.unwrap_or(100_000_000),
+			}),
+			None => None,
+		};
+
+		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND a
 		// chain is configured — opt-in, never implied by the deposit/withdraw seams.
 		let sweep_enabled = env::var("SWEEP_ENABLED").map(|v| v == "true" || v == "1").unwrap_or(false);
+		if sweep_enabled && bsc.is_none() && ton.is_none() {
+			anyhow::bail!("SWEEP_ENABLED is set but no chain (BSC_RPC_URL / TON_API_URL) is configured — the sweep needs a chain");
+		}
 		let sweep = match (&bsc, sweep_enabled) {
 			(Some(_), true) => Some(SweepConfig {
 				min_usdt: parse_opt("SWEEP_MIN_USDT")?.unwrap_or(1_000_000_000_000_000_000),
@@ -154,7 +185,15 @@ impl AppConfig {
 				topup_grace_secs: parse_opt("SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
 				poll_secs: parse_opt("SWEEP_POLL_SECS")?.unwrap_or(30),
 			}),
-			(None, true) => anyhow::bail!("SWEEP_ENABLED is set but BSC_RPC_URL is not — the sweep needs the chain configured"),
+			_ => None,
+		};
+		let ton_sweep = match (&ton, sweep_enabled) {
+			(Some(_), true) => Some(TonSweepConfig {
+				min_usdt: parse_opt("TON_SWEEP_MIN_USDT")?.unwrap_or(1_000_000),
+				gas_topup_nano: parse_opt("TON_SWEEP_GAS_TOPUP_NANO")?.unwrap_or(100_000_000),
+				topup_grace_secs: parse_opt("TON_SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
+				poll_secs: parse_opt("TON_SWEEP_POLL_SECS")?.unwrap_or(30),
+			}),
 			_ => None,
 		};
 		Ok(Self {
@@ -174,6 +213,8 @@ impl AppConfig {
 			bridge,
 			bsc,
 			sweep,
+			ton,
+			ton_sweep,
 		})
 	}
 }
@@ -237,6 +278,60 @@ pub struct SweepConfig {
 	/// Seconds between sweep cycles (`SWEEP_POLL_SECS`); defaults to 30.
 	pub poll_secs: u64,
 }
+/// The on-chain TON config, shared by the jetton deposit watcher, the withdrawal
+/// confirmation watcher, and real custody. Present only when `TON_API_URL` is set (a
+/// toncenter v3 base URL). Switch it (+ `TON_USDT_MASTER`, `TON_IS_TESTNET`) between
+/// mainnet and testnet — the watcher/custody logic is network-agnostic.
+#[derive(Clone, Debug)]
+pub struct TonConfig {
+	/// toncenter v3 base URL (`TON_API_URL`), e.g. `https://toncenter.com/api/v3` or
+	/// `https://testnet.toncenter.com/api/v3`.
+	pub api_url: String,
+	/// toncenter API key (`TON_API_KEY`), sent as `X-Api-Key`. `None` uses the anonymous
+	/// (rate-limited) tier — fine for testnet bring-up.
+	pub api_key: Option<String>,
+	/// The USDT jetton master address (`TON_USDT_MASTER`). Defaults to mainnet USDT; set it
+	/// to the testnet master (`kQD0GKBM…`) for a testnet run.
+	pub usdt_master: String,
+	/// Seconds between polls, for both the jetton-deposit scan and the withdrawal-seqno
+	/// check (`TON_POLL_SECS`); defaults to 6 (TON finality is ~5s).
+	pub poll_secs: u64,
+	/// Start watermark for a fresh deposit cursor (`TON_DEPOSIT_START_LT`). `None` ⇒ start at
+	/// the current time (watch from now), ignoring pre-existing on-chain history. NOTE: the
+	/// watcher tracks the cursor as a unix-time watermark (a globally-comparable value), not
+	/// a per-account logical time — see [`infrastructure::ton_deposit_watcher`].
+	pub start_cursor: Option<u64>,
+	/// Whether the rail is on TON testnet (`TON_IS_TESTNET`); selects the address tag for the
+	/// user-facing form (display-edge concern) and documents which base URL is in use.
+	pub is_testnet: bool,
+	/// The wallet contract version (`TON_WALLET_VERSION`); only `v4r2` is supported today.
+	pub wallet_version: String,
+	/// Nanotons forwarded with a jetton transfer to deploy the recipient's jetton wallet (if
+	/// absent) and trigger its notification (`TON_FORWARD_TON_AMOUNT`); defaults to 0.05 TON.
+	pub forward_ton_amount: u64,
+	/// Nanotons attached to the jetton-wallet internal message (the gas budget; excess
+	/// returns to the response destination) (`TON_MSG_VALUE`); defaults to 0.1 TON.
+	pub msg_value: u64,
+}
+
+/// TON treasury-sweep economics. `Some` only when TON is configured AND `SWEEP_ENABLED`
+/// is set (it moves user funds on-chain — opt-in). The chain params (api, master, fee
+/// budgets) come from [`TonConfig`]; these knobs tune *when* and *how much*.
+#[derive(Clone, Debug)]
+pub struct TonSweepConfig {
+	/// Minimum USDT (6-dp base units) on a user's jetton wallet worth sweeping
+	/// (`TON_SWEEP_MIN_USDT`); defaults to 1 USDT — below this the gas isn't worth it.
+	pub min_usdt: u128,
+	/// Nanotons the gas station tops a user wallet up with before sweeping its USDT
+	/// (`TON_SWEEP_GAS_TOPUP_NANO`); defaults to 0.1 TON (covers the deploy + jetton send).
+	pub gas_topup_nano: u64,
+	/// Don't re-top-up the same address within this many seconds (`TON_SWEEP_TOPUP_GRACE_SECS`);
+	/// defaults to 60 — long enough for a top-up to confirm before another is considered.
+	pub topup_grace_secs: u64,
+	/// Seconds between sweep cycles (`TON_SWEEP_POLL_SECS`); defaults to 30.
+	pub poll_secs: u64,
+}
+
 /// Parse an optional env var that, when present and non-empty, must be a valid `T`.
 fn parse_opt<T: std::str::FromStr>(key: &str) -> anyhow::Result<Option<T>>
 where
