@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
 	error::SignerError,
-	key_vault::{Chain, Vault, ed25519_pubkey, evm_address, gen_ed25519, gen_secp256k1, secp256k1_pubkey},
+	key_vault::{Chain, Vault, ed25519_pubkey, evm_address, gen_ed25519, gen_secp256k1, secp256k1_pubkey, tron_address},
 	secrets::{NewSecret, WalletSecrets},
 };
 
@@ -83,16 +83,20 @@ pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, ne
 	Ok(ProvisionedAddress { address, kind })
 }
 
-/// The on-chain address for a stored/fresh public key, plus its kind. **BEP20** derives the
-/// real EVM address (EIP-55) and reports [`KIND_DERIVED`] — fundable. TRC20/TON still return
-/// a [`KIND_PLACEHOLDER`] until their encodings land (Base58Check / the TON wallet contract).
+/// The on-chain address for a stored/fresh public key, plus its kind. **BEP20** derives the real
+/// EVM address (EIP-55) and **TRC20** the real Base58Check `T…` address — both [`KIND_DERIVED`]
+/// (fundable). TON still returns a [`KIND_PLACEHOLDER`] until its wallet-contract encoding lands.
 fn render_address(network: Network, public_key: &[u8]) -> Result<(String, &'static str), SignerError> {
 	match network {
 		Network::Bep20 => {
 			let address = evm_address(public_key).ok_or_else(|| SignerError::Repository("EVM address derivation failed for a stored secp256k1 key".into()))?;
 			Ok((address, KIND_DERIVED))
 		}
-		Network::Trc20 | Network::Ton => Ok((placeholder_address(network, public_key)?.as_str().to_owned(), KIND_PLACEHOLDER)),
+		Network::Trc20 => {
+			let address = tron_address(public_key).ok_or_else(|| SignerError::Repository("Tron address derivation failed for a stored secp256k1 key".into()))?;
+			Ok((address, KIND_DERIVED))
+		}
+		Network::Ton => Ok((placeholder_address(network, public_key)?.as_str().to_owned(), KIND_PLACEHOLDER)),
 	}
 }
 

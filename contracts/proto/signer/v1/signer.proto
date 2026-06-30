@@ -27,6 +27,19 @@ service SignerService {
   // swept to the treasury. The same legacy EIP-155 envelope as SignErc20Transfer but with
   // value = amount and empty calldata.
   rpc SignNativeTransfer(SignNativeTransferRequest) returns (SignNativeTransferResponse);
+
+  // Sign a TRC20 `transfer(to, amount)` on Tron from a wallet the signer holds (treasury for a
+  // withdrawal, a user's deposit address for a sweep). A Tron tx is protobuf, not RLP: the signer
+  // builds the TriggerSmartContract, computes txID = sha256(raw_data), and signs it. The hub
+  // fetches the recent-block reference (getnowblock) and passes it in, then broadcasts + persists
+  // the returned bytes/txid before sending (Tron has no nonce — replay safety is ref-block +
+  // expiration + the unique txid).
+  rpc SignTrc20Transfer(SignTrc20TransferRequest) returns (SignedTronTxResponse);
+
+  // Sign a native TRX transfer (a gas-station top-up of a deposit address before its USDT is
+  // swept). The same Tron protobuf envelope as SignTrc20Transfer but a TransferContract — no
+  // fee_limit (bandwidth-only).
+  rpc SignTrxTransfer(SignTrxTransferRequest) returns (SignedTronTxResponse);
 }
 
 message ProvisionAddressRequest {
@@ -76,4 +89,37 @@ message SignNativeTransferRequest {
 message SignNativeTransferResponse {
   string raw_tx = 1;  // 0x-prefixed RLP-encoded signed transaction, ready to broadcast
   string tx_hash = 2; // 0x-prefixed transaction hash (keccak256 of raw_tx)
+}
+
+// --- Tron (TRC20) signing ---------------------------------------------------------------------
+message SignTrc20TransferRequest {
+  // The sending wallet: a user's UUID, or EMPTY for the treasury hot wallet.
+  string from_user_id = 1;
+  string network = 2;          // "trc20"
+  string token_contract = 3;   // the TRC20 token (USDT), Base58Check "T..." address
+  string to_address = 4;       // recipient, Base58Check "T..." address
+  string amount = 5;           // token base units (6dp), decimal string (fits u128)
+  string ref_block_bytes = 6;  // hex, 2 bytes — hub-fetched from getnowblock
+  string ref_block_hash = 7;   // hex, 8 bytes
+  int64 expiration = 8;        // unix ms; the tx is dead after this (~head ts + 60s)
+  int64 timestamp = 9;         // unix ms
+  int64 fee_limit = 10;        // SUN cap for the contract call (e.g. 100_000_000 = 100 TRX)
+}
+
+message SignTrxTransferRequest {
+  // The sending wallet: a user's UUID, the gas-station UUID, or EMPTY for the treasury.
+  string from_user_id = 1;
+  string network = 2;          // "trc20"
+  string to_address = 3;       // recipient, Base58Check "T..." address
+  string amount = 4;           // SUN, decimal string (fits u128)
+  string ref_block_bytes = 5;  // hex, 2 bytes
+  string ref_block_hash = 6;   // hex, 8 bytes
+  int64 expiration = 7;        // unix ms
+  int64 timestamp = 8;         // unix ms
+}
+
+message SignedTronTxResponse {
+  string signed_tx = 1; // hex of the full signed Transaction protobuf (for /wallet/broadcasthex)
+  string txid = 2;      // hex sha256(raw_data) — the on-chain id + idempotency key
+  int64 expiration = 3; // echoed so the hub persists it for the expiry-aware re-sign
 }

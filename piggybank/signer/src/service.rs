@@ -8,13 +8,13 @@
 
 use domain::money::Network;
 use evbanking_contracts::signer::v1::{
-	ProvisionAddressRequest, ProvisionAddressResponse, SignErc20TransferRequest, SignErc20TransferResponse, SignNativeTransferRequest, SignNativeTransferResponse,
-	signer_service_server::SignerService,
+	ProvisionAddressRequest, ProvisionAddressResponse, SignErc20TransferRequest, SignErc20TransferResponse, SignNativeTransferRequest, SignNativeTransferResponse, SignTrc20TransferRequest,
+	SignTrxTransferRequest, SignedTronTxResponse, signer_service_server::SignerService,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{evm_tx, key_vault::Vault, provision, secrets::WalletSecrets};
+use crate::{evm_tx, key_vault::Vault, provision, secrets::WalletSecrets, tron_tx};
 
 /// The reserved wallet id for the treasury hot wallet. Real user ids are random v4 UUIDs
 /// (never nil), so the treasury shares the `(user_id, network)` store without a schema
@@ -137,6 +137,57 @@ impl SignerService for Signer {
 			tx_hash: format!("0x{}", hex::encode(signed.hash)),
 		}))
 	}
+
+	async fn sign_trc20_transfer(&self, request: Request<SignTrc20TransferRequest>) -> Result<Response<SignedTronTxResponse>, Status> {
+		let req = request.into_inner();
+		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
+		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
+		let token = parse_tron_address(&req.token_contract).ok_or_else(|| Status::invalid_argument("token_contract must be a base58 Tron address"))?;
+		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
+		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
+		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
+
+		let secret = self.unseal(wallet_id, network).await?;
+		let signed = tron_tx::sign_trc20_transfer(&secret, &token, &to, amount, req.fee_limit, &tx_ref).map_err(|_| Status::internal("signing failed"))?;
+		Ok(Response::new(SignedTronTxResponse {
+			signed_tx: signed.raw_tx,
+			txid: signed.txid,
+			expiration: req.expiration,
+		}))
+	}
+
+	async fn sign_trx_transfer(&self, request: Request<SignTrxTransferRequest>) -> Result<Response<SignedTronTxResponse>, Status> {
+		let req = request.into_inner();
+		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
+		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
+		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
+		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
+		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
+
+		let secret = self.unseal(wallet_id, network).await?;
+		let signed = tron_tx::sign_trx_transfer(&secret, &to, amount, &tx_ref).map_err(|_| Status::internal("signing failed"))?;
+		Ok(Response::new(SignedTronTxResponse {
+			signed_tx: signed.raw_tx,
+			txid: signed.txid,
+			expiration: req.expiration,
+		}))
+	}
+}
+
+/// Parse a Base58Check `T…` Tron address into its 21-byte raw form, validating the checksum.
+fn parse_tron_address(value: &str) -> Option<[u8; 21]> {
+	crate::key_vault::tron_base58_to_raw(value)
+}
+
+/// Build the [`tron_tx::TxRef`] from the wire fields: the hub-fetched recent-block reference (hex)
+/// plus the validity window. The ref-block hex must decode; the window is passed through.
+fn parse_tron_ref(ref_block_bytes: &str, ref_block_hash: &str, expiration: i64, timestamp: i64) -> Result<tron_tx::TxRef, Status> {
+	Ok(tron_tx::TxRef {
+		ref_block_bytes: hex::decode(ref_block_bytes).map_err(|_| Status::invalid_argument("ref_block_bytes must be hex"))?,
+		ref_block_hash: hex::decode(ref_block_hash).map_err(|_| Status::invalid_argument("ref_block_hash must be hex"))?,
+		expiration,
+		timestamp,
+	})
 }
 
 /// Parse a `0x`-prefixed (or bare) hex string into a 20-byte EVM address. `None` if it is
