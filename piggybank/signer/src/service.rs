@@ -8,13 +8,13 @@
 
 use domain::money::Network;
 use evbanking_contracts::signer::v1::{
-	ProvisionAddressRequest, ProvisionAddressResponse, SignErc20TransferRequest, SignErc20TransferResponse, SignNativeTransferRequest, SignNativeTransferResponse,
-	signer_service_server::SignerService,
+	ProvisionAddressRequest, ProvisionAddressResponse, SignErc20TransferRequest, SignErc20TransferResponse, SignJettonTransferRequest, SignNativeTransferRequest, SignNativeTransferResponse,
+	SignTonTransferRequest, SignedTonTxResponse, signer_service_server::SignerService,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{evm_tx, key_vault::Vault, provision, secrets::WalletSecrets};
+use crate::{evm_tx, key_vault::Vault, provision, secrets::WalletSecrets, ton_tx};
 
 /// The reserved wallet id for the treasury hot wallet. Real user ids are random v4 UUIDs
 /// (never nil), so the treasury shares the `(user_id, network)` store without a schema
@@ -136,6 +136,79 @@ impl SignerService for Signer {
 			raw_tx: format!("0x{}", hex::encode(&signed.raw)),
 			tx_hash: format!("0x{}", hex::encode(signed.hash)),
 		}))
+	}
+
+	// === TON region (jetton USDT) =============================================
+	async fn sign_jetton_transfer(&self, request: Request<SignJettonTransferRequest>) -> Result<Response<SignedTonTxResponse>, Status> {
+		let req = request.into_inner();
+		let network = require_ton(&req.network)?;
+		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
+		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
+
+		let seed = self.unseal(wallet_id, network).await?;
+		let signed = ton_tx::build_jetton_transfer(
+			&seed,
+			&ton_tx::JettonTransfer {
+				our_jetton_wallet: &req.our_jetton_wallet,
+				to_owner: &req.to_address,
+				response_destination: &req.response_destination,
+				amount,
+				forward_ton_amount: req.forward_ton_amount,
+				msg_value: req.msg_value,
+				seqno: req.seqno,
+				valid_until: req.valid_until,
+			},
+		)
+		.map_err(ton_sign_status)?;
+		Ok(Response::new(signed_ton_response(signed)))
+	}
+
+	async fn sign_ton_transfer(&self, request: Request<SignTonTransferRequest>) -> Result<Response<SignedTonTxResponse>, Status> {
+		let req = request.into_inner();
+		let network = require_ton(&req.network)?;
+		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
+		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal (nanotons)"))?;
+
+		let seed = self.unseal(wallet_id, network).await?;
+		let signed = ton_tx::build_native_transfer(
+			&seed,
+			&ton_tx::NativeTransfer {
+				to_address: &req.to_address,
+				amount,
+				seqno: req.seqno,
+				valid_until: req.valid_until,
+			},
+		)
+		.map_err(ton_sign_status)?;
+		Ok(Response::new(signed_ton_response(signed)))
+	}
+}
+
+/// Parse the wire network and require TON — the jetton/native TON signers unseal an
+/// Ed25519 seed (`Chain::Ton`), so a non-TON network would mis-resolve the curve.
+fn require_ton(raw: &str) -> Result<Network, Status> {
+	match Network::parse(raw) {
+		Ok(Network::Ton) => Ok(Network::Ton),
+		Ok(other) => Err(Status::invalid_argument(format!("TON signer called with a non-TON network: {other}"))),
+		Err(_) => Err(Status::invalid_argument(format!("unknown network: {raw}"))),
+	}
+}
+
+/// A bad address is the caller's fault (invalid argument); a cell/serialize failure is
+/// internal. Either way the seed never leaked — it stays in the [`ton_tx`] scope.
+fn ton_sign_status(err: ton_tx::TonTxError) -> Status {
+	match err {
+		ton_tx::TonTxError::Address { .. } | ton_tx::TonTxError::Amount => Status::invalid_argument(err.to_string()),
+		ton_tx::TonTxError::Cell(_) => Status::internal(err.to_string()),
+	}
+}
+
+fn signed_ton_response(signed: ton_tx::SignedTonTx) -> SignedTonTxResponse {
+	SignedTonTxResponse {
+		signed_boc: signed.signed_boc,
+		msg_hash: signed.msg_hash,
+		seqno: signed.seqno,
+		valid_until: signed.valid_until,
 	}
 }
 
