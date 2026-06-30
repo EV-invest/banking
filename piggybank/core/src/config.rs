@@ -162,7 +162,7 @@ impl AppConfig {
 					.filter(|s| !s.is_empty())
 					.unwrap_or_else(|| "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs".to_string()),
 				poll_secs: parse_opt("TON_POLL_SECS")?.unwrap_or(6),
-				start_cursor: parse_opt("TON_DEPOSIT_START_LT")?,
+				start_cursor: parse_opt("TON_DEPOSIT_START_UTIME")?,
 				is_testnet: env::var("TON_IS_TESTNET").map(|v| v == "true" || v == "1").unwrap_or(false),
 				wallet_version: env::var("TON_WALLET_VERSION").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "v4r2".to_string()),
 				forward_ton_amount: parse_opt("TON_FORWARD_TON_AMOUNT")?.unwrap_or(50_000_000),
@@ -171,30 +171,30 @@ impl AppConfig {
 			None => None,
 		};
 
-		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND a
-		// chain is configured — opt-in, never implied by the deposit/withdraw seams.
+		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND a chain
+		// is configured — opt-in, never implied by the deposit/withdraw seams. `SWEEP_ENABLED`
+		// turns it on for every configured rail; an unconfigured rail simply has no sweep.
 		let sweep_enabled = env::var("SWEEP_ENABLED").map(|v| v == "true" || v == "1").unwrap_or(false);
-		if sweep_enabled && bsc.is_none() && ton.is_none() {
-			anyhow::bail!("SWEEP_ENABLED is set but no chain (BSC_RPC_URL / TON_API_URL) is configured — the sweep needs a chain");
-		}
-		let sweep = match (&bsc, sweep_enabled) {
-			(Some(_), true) => Some(SweepConfig {
+		let sweep = if sweep_enabled && bsc.is_some() {
+			Some(SweepConfig {
 				min_usdt: parse_opt("SWEEP_MIN_USDT")?.unwrap_or(1_000_000_000_000_000_000),
 				gas_drop_multiple: parse_opt("SWEEP_GAS_DROP_MULTIPLE")?.unwrap_or(3),
 				min_gas_drop_wei: parse_opt("SWEEP_MIN_GAS_DROP_WEI")?.unwrap_or(300_000_000_000_000),
 				topup_grace_secs: parse_opt("SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
 				poll_secs: parse_opt("SWEEP_POLL_SECS")?.unwrap_or(30),
-			}),
-			_ => None,
+			})
+		} else {
+			None
 		};
-		let ton_sweep = match (&ton, sweep_enabled) {
-			(Some(_), true) => Some(TonSweepConfig {
+		let ton_sweep = if sweep_enabled && ton.is_some() {
+			Some(TonSweepConfig {
 				min_usdt: parse_opt("TON_SWEEP_MIN_USDT")?.unwrap_or(1_000_000),
 				gas_topup_nano: parse_opt("TON_SWEEP_GAS_TOPUP_NANO")?.unwrap_or(100_000_000),
 				topup_grace_secs: parse_opt("TON_SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
 				poll_secs: parse_opt("TON_SWEEP_POLL_SECS")?.unwrap_or(30),
-			}),
-			_ => None,
+			})
+		} else {
+			None
 		};
 		Ok(Self {
 			database_url,
@@ -296,7 +296,7 @@ pub struct TonConfig {
 	/// Seconds between polls, for both the jetton-deposit scan and the withdrawal-seqno
 	/// check (`TON_POLL_SECS`); defaults to 6 (TON finality is ~5s).
 	pub poll_secs: u64,
-	/// Start watermark for a fresh deposit cursor (`TON_DEPOSIT_START_LT`). `None` ⇒ start at
+	/// Start watermark for a fresh deposit cursor (`TON_DEPOSIT_START_UTIME`, unix seconds). `None` ⇒ start at
 	/// the current time (watch from now), ignoring pre-existing on-chain history. NOTE: the
 	/// watcher tracks the cursor as a unix-time watermark (a globally-comparable value), not
 	/// a per-account logical time — see [`infrastructure::ton_deposit_watcher`].

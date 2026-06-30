@@ -125,8 +125,8 @@ impl TonDepositWatcher {
 	}
 
 	/// The deposit cursor (a unix-time watermark). On first run, initialize to the configured
-	/// start (`TON_DEPOSIT_START_LT`, interpreted as a start unix time) or the current time
-	/// (watch from now), ignoring pre-existing on-chain history.
+	/// start (`TON_DEPOSIT_START_UTIME`, unix seconds) or the current time (watch from now),
+	/// ignoring pre-existing on-chain history.
 	async fn cursor(&self, network: Network) -> Result<u64, WatcherError> {
 		let existing: Option<i64> = sqlx::query_scalar("SELECT last_scanned_block FROM deposit_scan_cursor WHERE network = $1")
 			.bind(network.as_str())
