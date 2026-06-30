@@ -8,9 +8,10 @@
 //!   - the **core** gRPC services (health/users/balance/funds/wallet) on `grpc_addr`,
 //!     authorizing each request via the `Authorizer` core got from auth.
 
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use anyhow::Context;
+use domain::money::Network;
 use ev::error_monitoring::{self, Config as SentryConfig};
 use evbanking_auth::{AuthConfig, AuthService, ServiceTokenSource, provisioner_channel};
 use evbanking_contracts::signer::v1::signer_service_client::SignerServiceClient;
@@ -21,7 +22,7 @@ use piggybank_core::{
 	infrastructure::{
 		bridge::BridgeConsumer,
 		bsc_rpc::BscRpc,
-		custody::{ChainCustody, StubCustody},
+		custody::{ChainCustody, MultiChainCustody, StubCustody},
 		db,
 		deposit_watcher::DepositWatcher,
 		ledger::{self, TbLedger},
@@ -130,31 +131,30 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.await
 		.context("failed to connect the relay's database pool")?;
 	let relay_notify = Arc::new(Notify::new());
-	// Real BSC custody when the chain is configured (same gate as the deposit watcher): sign
-	// the withdrawal via the signer's treasury key and broadcast it. Else the no-op stub (an
-	// operator settles manually). Unconfigured dev/CI is unaffected.
-	let custody: Arc<dyn Custody> = match &config.bsc {
-		Some(bsc) => {
-			let chain_custody = ChainCustody::new(
-				pool.clone(),
-				BscRpc::new(bsc.rpc_url.clone()),
-				SignerServiceClient::new(signer_channel.clone()),
-				ServiceTokenSource::from_env(),
-				bsc.chain_id,
-				bsc.usdt_contract.clone(),
-				bsc.gas_limit,
-			);
-			// Resolve + log the treasury hot wallet at boot so the operator can fund it (USDT
-			// for liquidity, BNB for gas) before any withdrawal settles. Best-effort: if the
-			// signer isn't up yet it resolves on the first withdrawal instead — boot is never
-			// blocked on it.
-			if let Err(err) = chain_custody.treasury_address().await {
-				tracing::warn!("could not resolve the treasury address at boot (resolves on first withdrawal): {err}");
-			}
-			Arc::new(chain_custody)
+	// Per-rail custody registry: each configured chain registers its adapter, keyed by network;
+	// the relay holds the one `MultiChainCustody` that fans out by `request.network`. An unwired
+	// rail falls through to the no-op stub (an operator settles manually), so unconfigured dev/CI
+	// is unaffected — same gate per chain as its deposit watcher.
+	let mut custody_by_network: HashMap<Network, Arc<dyn Custody>> = HashMap::new();
+	if let Some(bsc) = &config.bsc {
+		let chain_custody = ChainCustody::new(
+			pool.clone(),
+			BscRpc::new(bsc.rpc_url.clone()),
+			SignerServiceClient::new(signer_channel.clone()),
+			ServiceTokenSource::from_env(),
+			bsc.chain_id,
+			bsc.usdt_contract.clone(),
+			bsc.gas_limit,
+		);
+		// Resolve + log the treasury hot wallet at boot so the operator can fund it (USDT for
+		// liquidity, BNB for gas) before any withdrawal settles. Best-effort: if the signer isn't
+		// up yet it resolves on the first withdrawal instead — boot is never blocked on it.
+		if let Err(err) = chain_custody.treasury_address().await {
+			tracing::warn!("could not resolve the treasury address at boot (resolves on first withdrawal): {err}");
 		}
-		None => Arc::new(StubCustody),
-	};
+		custody_by_network.insert(Network::Bep20, Arc::new(chain_custody));
+	}
+	let custody: Arc<dyn Custody> = Arc::new(MultiChainCustody::new(custody_by_network, Arc::new(StubCustody)));
 	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody, relay_notify.clone());
 
 	// Recovery jobs, on the relay's dedicated pool so their periodic scans don't compete

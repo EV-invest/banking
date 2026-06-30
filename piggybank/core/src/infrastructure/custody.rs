@@ -11,6 +11,8 @@
 //! step — an operator's `SettleWithdrawal` (or a future confirmation watcher) on the mined
 //! transaction; this adapter only gets the bytes onto the chain.
 
+use std::{collections::HashMap, sync::Arc};
+
 use async_trait::async_trait;
 use domain::money::Network;
 use evbanking_auth::ServiceTokenSource;
@@ -41,6 +43,30 @@ impl Custody for StubCustody {
 			"stub custody: pretending to broadcast a withdrawal (no real chain); awaiting operator settle/fail"
 		);
 		Ok(())
+	}
+}
+
+/// Routes each withdrawal to the per-rail custody adapter registered for its network. The relay
+/// holds a single `Arc<dyn Custody>`; this is that one — it fans out by `request.network`, so each
+/// chain's adapter ([`ChainCustody`] for BEP20, and the TRC20/TON equivalents) stays single-rail
+/// and never has to know about the others. A network with no registered adapter falls through to
+/// `fallback` (the [`StubCustody`]), so an unwired rail behaves like unconfigured custody — an
+/// operator settles it manually — rather than hard-rejecting a real withdrawal.
+pub struct MultiChainCustody {
+	by_network: HashMap<Network, Arc<dyn Custody>>,
+	fallback: Arc<dyn Custody>,
+}
+
+impl MultiChainCustody {
+	pub fn new(by_network: HashMap<Network, Arc<dyn Custody>>, fallback: Arc<dyn Custody>) -> Self {
+		Self { by_network, fallback }
+	}
+}
+
+#[async_trait]
+impl Custody for MultiChainCustody {
+	async fn broadcast(&self, request: &BroadcastRequest) -> Result<(), CustodyError> {
+		self.by_network.get(&request.network).unwrap_or(&self.fallback).broadcast(request).await
 	}
 }
 
@@ -113,7 +139,7 @@ impl ChainCustody {
 	}
 
 	async fn store_tx(&self, withdrawal_id: Uuid, nonce: u64, raw_tx: &str, tx_hash: &str) -> Result<(), CustodyError> {
-		sqlx::query("INSERT INTO withdrawal_broadcasts (withdrawal_id, nonce, raw_tx, tx_hash) VALUES ($1, $2, $3, $4) ON CONFLICT (withdrawal_id) DO NOTHING")
+		sqlx::query("INSERT INTO withdrawal_broadcasts (withdrawal_id, network, nonce, raw_tx, tx_hash) VALUES ($1, 'bep20', $2, $3, $4) ON CONFLICT (withdrawal_id) DO NOTHING")
 			.bind(withdrawal_id)
 			.bind(nonce as i64)
 			.bind(raw_tx)
@@ -126,10 +152,11 @@ impl ChainCustody {
 
 	/// The next nonce for the treasury: the max of the chain's pending count and one past the
 	/// highest nonce we've already assigned — monotonic even if a public node lags, and it
-	/// catches up to the chain after a restart.
+	/// catches up to the chain after a restart. Scoped to `network = 'bep20'` so the seqno values
+	/// other rails store in the shared `nonce` column never bleed into the EVM sequence.
 	async fn next_nonce(&self, treasury: &str) -> Result<u64, CustodyError> {
 		let chain = self.rpc.pending_nonce(treasury).await.map_err(read_err)?;
-		let local_max: Option<i64> = sqlx::query_scalar("SELECT MAX(nonce) FROM withdrawal_broadcasts")
+		let local_max: Option<i64> = sqlx::query_scalar("SELECT MAX(nonce) FROM withdrawal_broadcasts WHERE network = 'bep20'")
 			.fetch_one(&self.pool)
 			.await
 			.map_err(db_unavailable)?;
@@ -195,9 +222,11 @@ impl ChainCustody {
 #[async_trait]
 impl Custody for ChainCustody {
 	async fn broadcast(&self, request: &BroadcastRequest) -> Result<(), CustodyError> {
-		if !matches!(request.network, Network::Bep20) {
-			return Err(CustodyError::Rejected(format!("on-chain withdrawal is not wired for {} yet", request.network)));
-		}
+		debug_assert!(
+			matches!(request.network, Network::Bep20),
+			"ChainCustody is the BEP20 adapter; the registry must not route {} here",
+			request.network
+		);
 		// Idempotent: if we already signed+stored a transaction for this withdrawal, re-send
 		// THOSE exact bytes rather than signing a new one (no second nonce can ever go out).
 		if let Some(raw_tx) = self.stored_tx(request.withdrawal_id).await? {
