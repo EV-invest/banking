@@ -61,6 +61,13 @@ pub struct AppConfig {
 	/// (merely configuring deposits/withdrawals does not start it). See
 	/// [`infrastructure::sweep`](crate::infrastructure::sweep).
 	pub sweep: Option<SweepConfig>,
+	/// The on-chain Tron (TRC20) config. `None` (no `TRON_RPC_URL`) leaves every Tron seam — the
+	/// deposit watcher, the withdrawal confirmation watcher, and real custody — un-run, the same
+	/// no-op-when-unconfigured stance as BSC. See [`infrastructure::tron_rpc`](crate::infrastructure::tron_rpc).
+	pub tron: Option<TronConfig>,
+	/// The Tron treasury sweep's config. `Some` only when Tron is configured AND `SWEEP_ENABLED`
+	/// is set — the same opt-in gate as the BEP20 [`sweep`](Self::sweep).
+	pub tron_sweep: Option<TronSweepConfig>,
 }
 impl AppConfig {
 	pub fn from_env() -> anyhow::Result<Self> {
@@ -143,19 +150,48 @@ impl AppConfig {
 			}),
 			None => None,
 		};
-		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND the
-		// chain is configured — opt-in, never implied by the deposit/withdraw seams.
+		// The Tron rail: same no-op-when-unconfigured stance as BSC, gated on TRON_RPC_URL. The
+		// TronGrid REST endpoint serves both `/wallet/*` and the indexed `/v1/accounts/*`.
+		let tron = match env::var("TRON_RPC_URL").ok().filter(|s| !s.is_empty()) {
+			Some(rpc_url) => Some(TronConfig {
+				rpc_url,
+				usdt_contract: env::var("TRON_USDT_CONTRACT")
+					.ok()
+					.filter(|s| !s.is_empty())
+					.unwrap_or_else(|| "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t".to_string()),
+				api_key: env::var("TRON_API_KEY").ok().filter(|s| !s.is_empty()),
+				poll_secs: parse_opt("TRON_POLL_SECS")?.unwrap_or(12),
+				start_timestamp: parse_opt("TRON_DEPOSIT_START_TS")?,
+				fee_limit: parse_opt("TRON_FEE_LIMIT")?.unwrap_or(100_000_000),
+				expiration_secs: parse_opt("TRON_EXPIRATION_SECS")?.unwrap_or(60),
+				max_transfers_per_scan: parse_opt("TRON_MAX_TRANSFERS")?.unwrap_or(200),
+			}),
+			None => None,
+		};
+		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND a chain
+		// is configured — opt-in, never implied by the deposit/withdraw seams. `SWEEP_ENABLED`
+		// turns it on for every configured rail; an unconfigured rail simply has no sweep.
 		let sweep_enabled = env::var("SWEEP_ENABLED").map(|v| v == "true" || v == "1").unwrap_or(false);
-		let sweep = match (&bsc, sweep_enabled) {
-			(Some(_), true) => Some(SweepConfig {
+		let sweep = if sweep_enabled && bsc.is_some() {
+			Some(SweepConfig {
 				min_usdt: parse_opt("SWEEP_MIN_USDT")?.unwrap_or(1_000_000_000_000_000_000),
 				gas_drop_multiple: parse_opt("SWEEP_GAS_DROP_MULTIPLE")?.unwrap_or(3),
 				min_gas_drop_wei: parse_opt("SWEEP_MIN_GAS_DROP_WEI")?.unwrap_or(300_000_000_000_000),
 				topup_grace_secs: parse_opt("SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
 				poll_secs: parse_opt("SWEEP_POLL_SECS")?.unwrap_or(30),
-			}),
-			(None, true) => anyhow::bail!("SWEEP_ENABLED is set but BSC_RPC_URL is not — the sweep needs the chain configured"),
-			_ => None,
+			})
+		} else {
+			None
+		};
+		let tron_sweep = if sweep_enabled && tron.is_some() {
+			Some(TronSweepConfig {
+				min_usdt: parse_opt("TRON_SWEEP_MIN_USDT")?.unwrap_or(1_000_000),
+				min_trx_drop_sun: parse_opt("TRON_SWEEP_MIN_TRX_DROP_SUN")?.unwrap_or(30_000_000),
+				topup_grace_secs: parse_opt("TRON_SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
+				poll_secs: parse_opt("TRON_SWEEP_POLL_SECS")?.unwrap_or(30),
+			})
+		} else {
+			None
 		};
 		Ok(Self {
 			database_url,
@@ -174,6 +210,8 @@ impl AppConfig {
 			bridge,
 			bsc,
 			sweep,
+			tron,
+			tron_sweep,
 		})
 	}
 }
@@ -235,6 +273,50 @@ pub struct SweepConfig {
 	/// defaults to 60 — long enough for a top-up to confirm before we'd consider another.
 	pub topup_grace_secs: u64,
 	/// Seconds between sweep cycles (`SWEEP_POLL_SECS`); defaults to 30.
+	pub poll_secs: u64,
+}
+/// The on-chain Tron (TRC20) config, shared by the deposit watcher, the withdrawal confirmation
+/// watcher, the sweep, and real custody. Present only when `TRON_RPC_URL` is set.
+#[derive(Clone, Debug)]
+pub struct TronConfig {
+	/// TronGrid base URL (`TRON_RPC_URL`). Switch between mainnet (`https://api.trongrid.io`) and
+	/// the Nile testnet (`https://nile.trongrid.io`) here — the watcher logic is network-agnostic.
+	pub rpc_url: String,
+	/// The USDT (TRC20) contract, Base58Check `T…` (`TRON_USDT_CONTRACT`). Defaults to mainnet USDT
+	/// (`TR7N…Lj6t`, 6-dp); set it to the Nile faucet token for a testnet run.
+	pub usdt_contract: String,
+	/// Optional TronGrid API key (`TRON_API_KEY`, sent as `TRON-PRO-API-KEY`). Lifts rate limits on
+	/// mainnet; the testnets don't need one.
+	pub api_key: Option<String>,
+	/// Seconds between deposit/withdrawal-confirmation polls (`TRON_POLL_SECS`); defaults to 12.
+	pub poll_secs: u64,
+	/// First `block_timestamp` (unix ms) to scan on a fresh cursor (`TRON_DEPOSIT_START_TS`). `None`
+	/// starts from the current head (watch from now), ignoring pre-existing on-chain history.
+	pub start_timestamp: Option<i64>,
+	/// `fee_limit` (SUN) cap for a TRC20 transfer (`TRON_FEE_LIMIT`); defaults to 100_000_000
+	/// (100 TRX) — comfortably above a USDT transfer's energy burn, low enough to bound a misfire.
+	pub fee_limit: i64,
+	/// Seconds a signed transaction stays valid past the head block (`TRON_EXPIRATION_SECS`);
+	/// defaults to 60. After this a not-yet-mined tx is provably dead and can be safely re-signed.
+	pub expiration_secs: i64,
+	/// Max TRC20 transfers fetched per address per deposit scan (`TRON_MAX_TRANSFERS`); defaults to
+	/// 200 (the indexed-history page size), the analogue of BSC's `max_block_range`.
+	pub max_transfers_per_scan: u32,
+}
+/// Tron treasury-sweep economics. `Some` only when Tron is configured AND `SWEEP_ENABLED` is set.
+/// The chain params (rpc, USDT, fee limit) come from [`TronConfig`]; these tune *when*/*how much*.
+#[derive(Clone, Debug)]
+pub struct TronSweepConfig {
+	/// Minimum USDT (6-dp base units) on a deposit address worth sweeping (`TRON_SWEEP_MIN_USDT`);
+	/// defaults to 1_000_000 (1 USDT) — below this the fee isn't worth it.
+	pub min_usdt: u128,
+	/// TRX (SUN) to drop on an address short of fees (`TRON_SWEEP_MIN_TRX_DROP_SUN`); defaults to
+	/// 30_000_000 (30 TRX) — covers a worst-case fresh-recipient USDT-transfer energy burn.
+	pub min_trx_drop_sun: u128,
+	/// Don't re-top-up the same address within this many seconds (`TRON_SWEEP_TOPUP_GRACE_SECS`);
+	/// defaults to 60.
+	pub topup_grace_secs: u64,
+	/// Seconds between sweep cycles (`TRON_SWEEP_POLL_SECS`); defaults to 30.
 	pub poll_secs: u64,
 }
 /// Parse an optional env var that, when present and non-empty, must be a valid `T`.

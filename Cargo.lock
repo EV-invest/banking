@@ -3430,6 +3430,7 @@ dependencies = [
  "evbanking_auth",
  "evbanking_contracts",
  "evconcierge_contracts",
+ "hex",
  "reqwest 0.12.28",
  "serde_json",
  "sqlx",
