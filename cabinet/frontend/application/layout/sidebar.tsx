@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeCheck, Home, LineChart, ListChecks, LogOut, Settings, type LucideIcon } from "lucide-react";
+import { BadgeCheck, Home, Landmark, LayoutGrid, LineChart, ListChecks, LogOut, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Logo } from "@/application/layout/logo";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
+import { useSession } from "@/shared/lib/use-session";
 
 interface NavItem {
   href: string;
@@ -30,10 +31,23 @@ const PRODUCTS = [
   { href: "/invest", label: "Coastal Yield", badge: "C", tone: "bg-main-accent-t2/15 text-main-accent-t2" },
 ];
 
+// ADMINISTER group — the operator console. Rendered only for a non-investor session
+// role (the BFF's `/api/auth/session` `isAdmin`); every screen is also authorized
+// server-side, so hiding the nav is cosmetic, not the security boundary.
+const ADMIN: NavItem[] = [
+  { href: "/admin/overview", label: "Overview", icon: LayoutGrid, active: (p) => p.startsWith("/admin/overview") },
+  { href: "/admin/users", label: "Users", icon: UsersRound, active: (p) => p.startsWith("/admin/users") },
+  { href: "/admin/cabinet", label: "Cabinet", icon: PanelsTopLeft, active: (p) => p.startsWith("/admin/cabinet") },
+  { href: "/admin/treasury", label: "Treasury", icon: Landmark, active: (p) => p.startsWith("/admin/treasury") },
+  { href: "/admin/valuation", label: "Valuation & redemptions", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
+];
+
 // The signed-in app shell's left rail (Figma cabinet sidebar). Persistent across the
 // `(app)` route group; auth is enforced upstream in `proxy.ts`.
 export function Sidebar() {
   const pathname = usePathname();
+  const session = useSession();
+  const isAdmin = session?.user?.isAdmin ?? false;
   return (
     <aside className="sticky top-0 flex h-screen w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
       <Link href="/" aria-label="EV Investment — home" className="block">
@@ -58,6 +72,13 @@ export function Sidebar() {
             </Link>
           ))}
         </Group>
+        {isAdmin && (
+          <Group label="Administer">
+            {ADMIN.map((item) => (
+              <NavLink key={item.label} item={item} active={item.active(pathname)} />
+            ))}
+          </Group>
+        )}
       </nav>
 
       <div className="flex-1" />
