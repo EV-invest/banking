@@ -86,6 +86,9 @@ fn event(subject: &str, kind: Kind, sequence: u64) -> UserLifecycleEvent {
 		email: "bridged@example.com".into(),
 		email_verified: true,
 		token_version: 0,
+		// Base events carry no role (empty → the consumer mirrors it as Investor); a
+		// ROLE_CHANGED test overrides this field explicitly.
+		role: String::new(),
 	}
 }
 
@@ -188,6 +191,38 @@ async fn created_then_suspended_freezes_user_and_gates_money_op() {
 			.unwrap()
 			.expect("resolve issuance");
 		assert!(target.disabled, "a suspended user resolves as disabled → no money token is issued");
+	})
+	.await;
+}
+
+#[tokio::test]
+async fn role_changed_mirrors_role_onto_the_projection() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	// CREATED (empty role → Investor) then a ROLE_CHANGED promoting to admin. The money
+	// plane's operator gate reads exactly this mirrored column.
+	let mut promote = event(&subject, Kind::RoleChanged, 2);
+	promote.role = "admin".to_string();
+	let events = vec![event(&subject, Kind::Created, 1), promote];
+
+	drive(&pool, events, move |pool| {
+		let subject = subject.clone();
+		async move {
+			let role: String = sqlx::query_scalar("SELECT role FROM users WHERE auth_subject = $1")
+				.bind(&subject)
+				.fetch_one(&pool)
+				.await
+				.unwrap();
+			assert_eq!(role, "admin", "ROLE_CHANGED mirrors the granted role onto the banking projection");
+			let user_id = user_id_for(&pool, &subject).await.expect("user provisioned");
+			assert_eq!(
+				bridge::role_of(&pool, user_id).await.unwrap(),
+				domain::authz::Role::Admin,
+				"role_of reads it back for the operator gate"
+			);
+		}
 	})
 	.await;
 }

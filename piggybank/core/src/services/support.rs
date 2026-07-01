@@ -10,7 +10,13 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use domain::{error::DomainError, redemptions::RedemptionId, users::UserId, withdrawals::WithdrawalId};
+use domain::{
+	authz::{Permission, Role, grants},
+	error::DomainError,
+	redemptions::RedemptionId,
+	users::UserId,
+	withdrawals::WithdrawalId,
+};
 use evbanking_auth::claims_of;
 use tonic::{Request, Status};
 use uuid::Uuid;
@@ -37,6 +43,13 @@ pub(super) fn caller_id<T>(request: &Request<T>) -> Result<UserId, Status> {
 /// failure fails CLOSED (UNAVAILABLE) — a money op never proceeds when the gate can't be read.
 pub(super) async fn unfrozen_caller<T>(state: &AppState, request: &Request<T>) -> Result<UserId, Status> {
 	let user = caller_id(request)?;
+	// Global read-only kill-switch: every user money mutation routes through here, so this
+	// is the single choke point that enforces "pause deposits & withdrawals". Fails CLOSED.
+	match crate::infrastructure::operations::is_read_only(&state.pool).await {
+		Ok(false) => {}
+		Ok(true) => return Err(Status::failed_precondition("deposits and withdrawals are temporarily paused")),
+		Err(_) => return Err(Status::unavailable("internal error")),
+	}
 	match crate::infrastructure::bridge::is_frozen(&state.pool, user.raw()).await {
 		Ok(false) => Ok(user),
 		Ok(true) => Err(Status::failed_precondition("account is frozen")),
@@ -44,14 +57,32 @@ pub(super) async fn unfrozen_caller<T>(state: &AppState, request: &Request<T>) -
 	}
 }
 
-/// Gate an RPC on the admin allowlist. Only a human access token can be an admin —
-/// a service token (distinct `typ`) never qualifies, even if its `sub` matched.
-pub(super) fn require_admin<T>(state: &AppState, request: &Request<T>) -> Result<(), Status> {
-	let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
-	if claims.is_access() && state.is_admin(&claims.sub) {
+/// Gate an RPC on a required money-plane [`Permission`], resolved from the caller's
+/// mirrored [`Role`] (the RBAC matrix). Only a human access token qualifies — a service
+/// token never carries a user role. An `ADMIN_SUBJECTS`-listed subject is treated as
+/// [`Role::Owner`] (break-glass bootstrap). The role is the one the identity plane
+/// granted, mirrored onto the local user projection by the bridge; a missing/unknown
+/// user is `Investor` (holds nothing), so the gate fails closed. A control-plane read
+/// failure fails CLOSED (UNAVAILABLE) — an admin op never proceeds when the gate can't
+/// be read.
+pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>, permission: Permission) -> Result<(), Status> {
+	let (is_access, sub) = {
+		let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
+		(claims.is_access(), claims.sub.clone())
+	};
+	if !is_access {
+		return Err(Status::permission_denied("access token required"));
+	}
+	let role = if state.is_admin(&sub) {
+		Role::Owner
+	} else {
+		let id = Uuid::parse_str(&sub).map_err(|_| Status::unauthenticated("subject is not a user id"))?;
+		crate::infrastructure::bridge::role_of(&state.pool, id).await.map_err(|_| Status::unavailable("internal error"))?
+	};
+	if grants(role, permission) {
 		Ok(())
 	} else {
-		Err(Status::permission_denied("admin only"))
+		Err(Status::permission_denied("insufficient role"))
 	}
 }
 

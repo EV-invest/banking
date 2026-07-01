@@ -26,6 +26,7 @@ pub mod db;
 pub mod deposit_watcher;
 pub mod ledger;
 pub mod nav;
+pub mod operations;
 pub mod outbox;
 pub mod positions;
 pub mod reaper;

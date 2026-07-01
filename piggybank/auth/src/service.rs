@@ -191,6 +191,9 @@ fn token_response(access_token: String, access_exp: u64, refresh: IssuedRefresh,
 			email: summary.email.clone(),
 			status: summary.status.clone(),
 			token_version: summary.token_version,
+			// Empty on the money plane — the cabinet reads the role from concierge's login
+			// summary; this field exists only for cross-plane wire parity.
+			role: String::new(),
 		}),
 	}
 }

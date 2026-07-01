@@ -48,6 +48,45 @@ service BalanceService {
   // Fail a queued fund redemption (operator): voids the reserved burn, returning the
   // user's units. Idempotent.
   rpc FailRedemption(FailRedemptionRequest) returns (Redemption);
+
+  // Operator (RedemptionSettle): the cross-user queue of redemptions awaiting settle,
+  // oldest first — the "Valuation & redemptions" screen's clear-the-queue surface.
+  // (Est. cash = units × current NAV is computed client-side from the posted NAV.)
+  rpc ListRedemptionQueue(ListRedemptionQueueRequest) returns (RedemptionQueue);
+
+  // Operator (TreasuryRead): the money-plane operations mode (the read-only kill-switch).
+  rpc GetOperationsMode(GetOperationsModeRequest) returns (OperationsMode);
+
+  // Admin (OperationsManage): toggle read-only mode. When on, every user money mutation
+  // (withdraw / subscribe / redeem) is rejected — "pause deposits & withdrawals".
+  rpc SetOperationsMode(SetOperationsModeRequest) returns (OperationsMode);
+}
+
+message ListRedemptionQueueRequest {}
+
+// One queued redemption for the operator queue. `email` is the mirrored identity email
+// (may be empty if the bridge hasn't populated it). `created_at` is unix seconds.
+message RedemptionQueueItem {
+  string redemption_id = 1;
+  string user_id = 2;
+  string email = 3;
+  string service = 4;
+  string units = 5;
+  int64 created_at = 6;
+}
+
+message RedemptionQueue {
+  repeated RedemptionQueueItem items = 1;
+}
+
+message GetOperationsModeRequest {}
+
+message OperationsMode {
+  bool read_only = 1;
+}
+
+message SetOperationsModeRequest {
+  bool read_only = 1;
 }
 
 message GetTreasuryRequest {}

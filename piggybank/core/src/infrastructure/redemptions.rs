@@ -21,7 +21,10 @@ use domain::{
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::{infrastructure::outbox, ports::RedemptionRepository};
+use crate::{
+	infrastructure::outbox,
+	ports::{QueuedRedemption, RedemptionRepository},
+};
 
 const SELECT_BY_ID: &str = "SELECT id, user_id, service, units, nav, cash, state FROM redemptions WHERE id = $1";
 const SELECT_BY_ID_FOR_UPDATE: &str = "SELECT id, user_id, service, units, nav, cash, state FROM redemptions WHERE id = $1 FOR UPDATE";
@@ -223,4 +226,39 @@ impl RedemptionRepository for PgRedemptions {
 			.map_err(repo_err)?;
 		rows.into_iter().map(RedemptionRow::into_domain).collect()
 	}
+
+	async fn list_queued(&self) -> Result<Vec<QueuedRedemption>, DomainError> {
+		let rows = sqlx::query_as::<_, QueuedRow>(
+			"SELECT r.id, r.user_id, u.email, r.service, r.units, EXTRACT(EPOCH FROM r.created_at)::BIGINT AS created_at \
+			 FROM redemptions r LEFT JOIN users u ON u.id = r.user_id \
+			 WHERE r.state = 'queued' ORDER BY r.created_at ASC",
+		)
+		.fetch_all(&self.pool)
+		.await
+		.map_err(repo_err)?;
+		rows.into_iter()
+			.map(|r| {
+				Ok(QueuedRedemption {
+					id: RedemptionId::from_raw(r.id),
+					user_id: UserId::from_raw(r.user_id),
+					email: r.email.unwrap_or_default(),
+					service: r.service,
+					units: Shares::from_base_units(parse_units(&r.units, "redemption units")?),
+					created_at: r.created_at,
+				})
+			})
+			.collect()
+	}
+}
+
+/// A lightweight row for the operator queue read (joins the mirrored identity email +
+/// the DB-managed `created_at`).
+#[derive(sqlx::FromRow)]
+struct QueuedRow {
+	id: Uuid,
+	user_id: Uuid,
+	email: Option<String>,
+	service: String,
+	units: String,
+	created_at: i64,
 }

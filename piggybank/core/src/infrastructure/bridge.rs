@@ -20,6 +20,7 @@
 
 use std::time::Duration;
 
+use domain::authz::Role;
 use evconcierge_contracts::concierge::v1::{PullUserLifecycleRequest, UserLifecycleEvent, user_events_client::UserEventsClient, user_lifecycle_event::Kind};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
@@ -126,16 +127,20 @@ impl BridgeConsumer {
 		let concierge_user_id = uuid::Uuid::parse_str(&event.user_id).ok();
 		let mut tx = self.pool.begin().await?;
 
+		// The role snapshot rides on every lifecycle row; an older concierge (or a
+		// pre-role row) carries an empty value that degrades to Investor.
+		let role = Role::parse_or_default(&event.role);
 		if event.kind() == Kind::Created {
 			sqlx::query(
-				"INSERT INTO users (id, auth_subject, concierge_user_id, email, email_verified, kyc_level, last_lifecycle_sequence) \
-				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6) ON CONFLICT (auth_subject) DO NOTHING",
+				"INSERT INTO users (id, auth_subject, concierge_user_id, email, email_verified, kyc_level, role, last_lifecycle_sequence) \
+				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (auth_subject) DO NOTHING",
 			)
 			.bind(subject)
 			.bind(concierge_user_id)
 			.bind(&event.email)
 			.bind(event.email_verified)
 			.bind(event.kyc_level as i32)
+			.bind(role.as_str())
 			.bind(sequence)
 			.execute(&mut *tx)
 			.await?;
@@ -161,13 +166,16 @@ impl BridgeConsumer {
 			// CREATED already upserted above; stamp the sequence, refresh KYC, and backfill
 			// concierge_user_id if a pre-existing row didn't have it (COALESCE never overwrites).
 			Kind::Created => {
-				sqlx::query("UPDATE users SET kyc_level = $2, last_lifecycle_sequence = $3, concierge_user_id = COALESCE(concierge_user_id, $4), updated_at = now() WHERE auth_subject = $1")
-					.bind(subject)
-					.bind(event.kyc_level as i32)
-					.bind(sequence)
-					.bind(concierge_user_id)
-					.execute(&mut *tx)
-					.await?;
+				sqlx::query(
+					"UPDATE users SET kyc_level = $2, role = $3, last_lifecycle_sequence = $4, concierge_user_id = COALESCE(concierge_user_id, $5), updated_at = now() WHERE auth_subject = $1",
+				)
+				.bind(subject)
+				.bind(event.kyc_level as i32)
+				.bind(role.as_str())
+				.bind(sequence)
+				.bind(concierge_user_id)
+				.execute(&mut *tx)
+				.await?;
 			}
 			Kind::Suspended => {
 				sqlx::query("UPDATE users SET frozen = TRUE, last_lifecycle_sequence = $2, updated_at = now() WHERE auth_subject = $1")
@@ -187,6 +195,14 @@ impl BridgeConsumer {
 				sqlx::query("UPDATE users SET kyc_level = $2, last_lifecycle_sequence = $3, updated_at = now() WHERE auth_subject = $1")
 					.bind(subject)
 					.bind(event.kyc_level as i32)
+					.bind(sequence)
+					.execute(&mut *tx)
+					.await?;
+			}
+			Kind::RoleChanged => {
+				sqlx::query("UPDATE users SET role = $2, last_lifecycle_sequence = $3, updated_at = now() WHERE auth_subject = $1")
+					.bind(subject)
+					.bind(role.as_str())
 					.bind(sequence)
 					.execute(&mut *tx)
 					.await?;
@@ -223,4 +239,12 @@ impl BridgeConsumer {
 pub async fn is_frozen(pool: &PgPool, user_id: uuid::Uuid) -> Result<bool, sqlx::Error> {
 	let frozen: Option<bool> = sqlx::query_scalar("SELECT frozen FROM users WHERE id = $1").bind(user_id).fetch_optional(pool).await?;
 	Ok(frozen.unwrap_or(false))
+}
+
+/// The mirrored access role for a banking user id (the money-op RBAC gate reads this).
+/// `None` local row ⇒ `Investor` (holds nothing) so the gate fails closed. A corrupt
+/// stored value likewise degrades to `Investor` rather than erroring the gate open.
+pub async fn role_of(pool: &PgPool, user_id: uuid::Uuid) -> Result<Role, sqlx::Error> {
+	let role: Option<String> = sqlx::query_scalar("SELECT role FROM users WHERE id = $1").bind(user_id).fetch_optional(pool).await?;
+	Ok(role.as_deref().map(Role::parse_or_default).unwrap_or_default())
 }

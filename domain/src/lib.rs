@@ -14,6 +14,7 @@
 pub mod error;
 
 pub mod auth;
+pub mod authz;
 pub mod balance;
 pub mod money;
 pub mod redemptions;

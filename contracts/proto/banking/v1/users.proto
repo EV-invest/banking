@@ -28,6 +28,15 @@ service UsersService {
   // Admin (allowlist): disable a user, freezing future sign-in/refresh without
   // deleting the record.
   rpc DisableUser(DisableUserRequest) returns (DisableUserResponse);
+
+  // Admin (UserBalanceRead): read ANY user's live balance by id — the operator
+  // console's user-detail drawer. The self-service GetBalance above acts on the
+  // caller's own `sub`; this one takes an explicit target and is role-gated.
+  rpc GetUserBalance(AdminBalanceRequest) returns (UserBalanceResponse);
+}
+
+message AdminBalanceRequest {
+  string user_id = 1;
 }
 
 message GetMeRequest {}
@@ -50,6 +59,12 @@ message UserProfile {
   string language = 13;
   string base_currency = 14;
   string timezone = 15;
+  // Kept wire-identical with concierge.v1.UserProfile (the cabinet TS is aliased to the
+  // concierge shape). The identity plane OWNS kyc/role; the money plane mirrors them for
+  // gating but does not re-serve them on its self-service GetMe, so these stay default
+  // here — the fields exist for cross-plane wire parity.
+  uint32 kyc_level = 16;
+  string role = 17;
 }
 
 // The caller's editable profile, full-replace. Same 10 fields as the editable part of

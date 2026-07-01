@@ -7,6 +7,7 @@
 #![allow(clippy::result_large_err)]
 
 use domain::{
+	authz::Permission,
 	balance::{Party, ServiceId},
 	money::{Network, TxRef, Usdt},
 };
@@ -19,7 +20,7 @@ use crate::{
 	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
 	services::{
 		funds::redemption_to_proto,
-		support::{map_err, optional, parse_redemption_id, parse_withdrawal_id, require_admin, unix_now},
+		support::{map_err, optional, parse_redemption_id, parse_withdrawal_id, require_permission, unix_now},
 	},
 };
 
@@ -37,7 +38,7 @@ impl BalanceSvc {
 #[tonic::async_trait]
 impl BalanceService for BalanceSvc {
 	async fn get_treasury(&self, request: Request<pb::GetTreasuryRequest>) -> Result<Response<pb::Treasury>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
 		let t = balance_app::treasury(self.state.ledger.as_ref()).await.map_err(map_err)?;
 		Ok(Response::new(pb::Treasury {
 			rails: t
@@ -58,7 +59,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn seed_capital(&self, request: Request<pb::SeedCapitalRequest>) -> Result<Response<pb::SeedCapitalResponse>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::CapitalManage).await?;
 		let req = request.into_inner();
 		let network = Network::parse(&req.network).map_err(map_err)?;
 		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
@@ -69,7 +70,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn record_deposit(&self, request: Request<pb::RecordDepositRequest>) -> Result<Response<pb::RecordDepositResponse>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::CapitalManage).await?;
 		let req = request.into_inner();
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;
@@ -82,7 +83,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn dispatch_withdrawal(&self, request: Request<pb::DispatchWithdrawalRequest>) -> Result<Response<pb::DispatchWithdrawalResponse>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::WithdrawalDispatch).await?;
 		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
 		withdrawal_app::dispatch_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
 			.await
@@ -91,7 +92,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn settle_withdrawal(&self, request: Request<pb::SettleWithdrawalRequest>) -> Result<Response<pb::SettleWithdrawalResponse>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::WithdrawalSettle).await?;
 		let req = request.into_inner();
 		let id = parse_withdrawal_id(&req.withdrawal_id)?;
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
@@ -102,7 +103,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn fail_withdrawal(&self, request: Request<pb::FailWithdrawalRequest>) -> Result<Response<pb::FailWithdrawalResponse>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::WithdrawalFail).await?;
 		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
 		withdrawal_app::fail_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
 			.await
@@ -111,7 +112,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn post_fund_valuation(&self, request: Request<pb::PostFundValuationRequest>) -> Result<Response<pb::FundNav>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::ValuationPost).await?;
 		let claims = claims_of(&request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
 		let posted_by = claims.sub.clone();
 		let req = request.into_inner();
@@ -131,7 +132,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn settle_redemption(&self, request: Request<pb::SettleRedemptionRequest>) -> Result<Response<pb::Redemption>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::RedemptionSettle).await?;
 		let id = parse_redemption_id(&request.get_ref().redemption_id)?;
 		let redemption = funds_app::settle_redemption(self.state.redemptions.as_ref(), self.state.nav.as_ref(), &self.state.relay_notify, id, unix_now())
 			.await
@@ -140,9 +141,43 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn fail_redemption(&self, request: Request<pb::FailRedemptionRequest>) -> Result<Response<pb::Redemption>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::RedemptionSettle).await?;
 		let id = parse_redemption_id(&request.get_ref().redemption_id)?;
 		let redemption = funds_app::fail_redemption(self.state.redemptions.as_ref(), &self.state.relay_notify, id).await.map_err(map_err)?;
 		Ok(Response::new(redemption_to_proto(&redemption)))
+	}
+
+	async fn list_redemption_queue(&self, request: Request<pb::ListRedemptionQueueRequest>) -> Result<Response<pb::RedemptionQueue>, Status> {
+		require_permission(&self.state, &request, Permission::RedemptionSettle).await?;
+		let queued = self.state.redemptions.list_queued().await.map_err(map_err)?;
+		Ok(Response::new(pb::RedemptionQueue {
+			items: queued
+				.into_iter()
+				.map(|q| pb::RedemptionQueueItem {
+					redemption_id: q.id.to_string(),
+					user_id: q.user_id.to_string(),
+					email: q.email,
+					service: q.service,
+					units: q.units.to_decimal_string(),
+					created_at: q.created_at,
+				})
+				.collect(),
+		}))
+	}
+
+	async fn get_operations_mode(&self, request: Request<pb::GetOperationsModeRequest>) -> Result<Response<pb::OperationsMode>, Status> {
+		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
+		let read_only = crate::infrastructure::operations::is_read_only(&self.state.pool)
+			.await
+			.map_err(|_| Status::unavailable("internal error"))?;
+		Ok(Response::new(pb::OperationsMode { read_only }))
+	}
+
+	async fn set_operations_mode(&self, request: Request<pb::SetOperationsModeRequest>) -> Result<Response<pb::OperationsMode>, Status> {
+		require_permission(&self.state, &request, Permission::OperationsManage).await?;
+		let read_only = crate::infrastructure::operations::set_read_only(&self.state.pool, request.get_ref().read_only)
+			.await
+			.map_err(|_| Status::unavailable("internal error"))?;
+		Ok(Response::new(pb::OperationsMode { read_only }))
 	}
 }

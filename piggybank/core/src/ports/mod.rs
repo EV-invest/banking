@@ -35,7 +35,7 @@ use domain::{
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
 pub use nav::{NavRepository, Valuation};
 pub use positions::{FundPosition, FundPositionReader};
-pub use redemptions::RedemptionRepository;
+pub use redemptions::{QueuedRedemption, RedemptionRepository};
 pub use subscriptions::SubscriptionRepository;
 use uuid::Uuid;
 pub use withdrawals::WithdrawalRepository;

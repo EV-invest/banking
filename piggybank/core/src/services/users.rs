@@ -10,6 +10,7 @@
 #![allow(clippy::result_large_err)]
 
 use domain::{
+	authz::Permission,
 	balance::LedgerAccountKey,
 	money::Usdt,
 	users::{ProfileFields, User},
@@ -19,7 +20,7 @@ use tonic::{Request, Response, Status};
 
 use crate::{
 	AppState,
-	services::support::{caller_id, map_err, optional, parse_user_id, require_admin, unix_now},
+	services::support::{caller_id, map_err, optional, parse_user_id, require_permission, unix_now},
 };
 
 #[derive(Clone)]
@@ -80,7 +81,7 @@ impl UsersService for UsersSvc {
 	}
 
 	async fn revoke_tokens(&self, request: Request<pb::RevokeTokensRequest>) -> Result<Response<pb::RevokeTokensResponse>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::UserRevoke).await?;
 		let target = parse_user_id(&request.get_ref().user_id)?;
 		let mut user = self.state.users.find_by_id(target).await.map_err(map_err)?.ok_or_else(|| Status::not_found("user"))?;
 		let token_version = user.revoke_tokens();
@@ -89,12 +90,30 @@ impl UsersService for UsersSvc {
 	}
 
 	async fn disable_user(&self, request: Request<pb::DisableUserRequest>) -> Result<Response<pb::DisableUserResponse>, Status> {
-		require_admin(&self.state, &request)?;
+		require_permission(&self.state, &request, Permission::UserSuspend).await?;
 		let target = parse_user_id(&request.get_ref().user_id)?;
 		let mut user = self.state.users.find_by_id(target).await.map_err(map_err)?.ok_or_else(|| Status::not_found("user"))?;
 		user.disable();
 		self.state.users.save(&mut user).await.map_err(map_err)?;
 		Ok(Response::new(pb::DisableUserResponse {}))
+	}
+
+	async fn get_user_balance(&self, request: Request<pb::AdminBalanceRequest>) -> Result<Response<pb::UserBalanceResponse>, Status> {
+		require_permission(&self.state, &request, Permission::UserBalanceRead).await?;
+		let target = parse_user_id(&request.get_ref().user_id)?;
+		// Any user's single unified claim, read live from TigerBeetle (Read-First).
+		let balance = self
+			.state
+			.ledger
+			.balance(&LedgerAccountKey::UserClaim(target))
+			.await
+			.map_err(|_| Status::unavailable("ledger unavailable"))?;
+		Ok(Response::new(pb::UserBalanceResponse {
+			amount: Usdt::from_base_units(balance.posted).to_decimal_string(),
+			pending: Usdt::from_base_units(balance.pending).to_decimal_string(),
+			authoritative: true,
+			as_of: unix_now(),
+		}))
 	}
 }
 
@@ -115,5 +134,10 @@ fn user_to_proto(user: &User) -> pb::UserProfile {
 		language: user.language().unwrap_or_default().to_owned(),
 		base_currency: user.base_currency().unwrap_or_default().to_owned(),
 		timezone: user.timezone().unwrap_or_default().to_owned(),
+		// Identity (kyc/role) is OWNED by concierge; banking mirrors it onto the bridge
+		// projection for gating but does not re-serve it on this self-service profile (the
+		// cabinet reads identity from concierge). Default here — present for wire parity.
+		kyc_level: 0,
+		role: String::new(),
 	}
 }
