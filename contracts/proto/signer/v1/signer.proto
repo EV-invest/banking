@@ -40,6 +40,20 @@ service SignerService {
   // swept). The same Tron protobuf envelope as SignTrc20Transfer but a TransferContract — no
   // fee_limit (bandwidth-only).
   rpc SignTrxTransfer(SignTrxTransferRequest) returns (SignedTronTxResponse);
+
+  // === TON region (jetton USDT) =============================================
+  // Sign a TEP-74 jetton (USDT) transfer from a v4R2 wallet the signer holds: the
+  // treasury (empty from_user_id) for a withdrawal, or a user's deposit wallet for a
+  // sweep. The signer unseals the Ed25519 seed, derives the wallet, builds the external
+  // message carrying an internal message to OUR jetton wallet (the TEP-74 transfer body),
+  // signs the cell hash, and returns the BoC for the hub to POST to toncenter. On the
+  // wallet's first send (seqno 0) the StateInit is attached so the wallet self-deploys.
+  rpc SignJettonTransfer(SignJettonTransferRequest) returns (SignedTonTxResponse);
+
+  // Sign a native (Toncoin) value transfer from a TON wallet the signer holds — the
+  // gas-station topping up a user's wallet with TON before that wallet's USDT is swept.
+  // A plain value transfer (no jetton body); self-deploys the sender on its first send.
+  rpc SignTonTransfer(SignTonTransferRequest) returns (SignedTonTxResponse);
 }
 
 message ProvisionAddressRequest {
@@ -49,10 +63,10 @@ message ProvisionAddressRequest {
 
 message ProvisionAddressResponse {
   string address = 1;
-  // "placeholder" | "derived". Until real pubkey→address encoding ships the signer
-  // returns a placeholder (structurally valid, bound to the key, but NOT its on-chain
-  // image). The hub tags the cached row with this so a placeholder is NEVER served as a
-  // fundable deposit destination — the rail is presented as unavailable instead.
+  // "placeholder" | "derived". Every supported rail now returns "derived" (the real
+  // on-chain image). The hub tags the cached row with this and refuses to serve anything
+  // but a derived address as a fundable deposit destination — a non-derived rail is
+  // presented as unavailable instead.
   string address_kind = 2;
 }
 
@@ -122,4 +136,42 @@ message SignedTronTxResponse {
   string signed_tx = 1; // hex of the full signed Transaction protobuf (for /wallet/broadcasthex)
   string txid = 2;      // hex sha256(raw_data) — the on-chain id + idempotency key
   int64 expiration = 3; // echoed so the hub persists it for the expiry-aware re-sign
+}
+
+// === TON messages (jetton USDT) =============================================
+// Kept in their own region so a parallel TRON branch's additions never overlap.
+
+message SignJettonTransferRequest {
+  // The sending wallet: a user's UUID (sweep), or EMPTY for the treasury (withdrawal).
+  string from_user_id = 1;
+  string network = 2;              // "ton"
+  string our_jetton_wallet = 3;    // OUR sender wallet's jetton wallet (the internal-msg dest), raw/UQ
+  string to_address = 4;           // recipient OWNER address (the TEP-74 `destination`), raw/UQ
+  string amount = 5;               // jetton base units (6dp), decimal string (fits u128)
+  string response_destination = 6; // where excess TON returns (treasury / gas station), raw/UQ
+  uint64 forward_ton_amount = 7;   // nanotons forwarded to trigger the receiver notification
+  uint64 msg_value = 8;            // nanotons attached to the internal message (gas budget)
+  uint64 seqno = 9;                // the sending wallet's current seqno (hub-fetched)
+  uint32 valid_until = 10;         // unix time the external message expires
+  bool is_testnet = 11;            // reserved: address-form/network selection at the display edge
+  string wallet_version = 12;      // reserved: wallet contract version (defaults to v4r2)
+}
+
+message SignTonTransferRequest {
+  // The sending wallet: the gas-station UUID, a user's UUID, or EMPTY for the treasury.
+  string from_user_id = 1;
+  string network = 2;        // "ton"
+  string to_address = 3;     // recipient address, raw/UQ
+  string amount = 4;         // nanotons, decimal string (fits u128)
+  uint64 seqno = 5;          // the sending wallet's current seqno (hub-fetched)
+  uint32 valid_until = 6;    // unix time the external message expires
+  bool is_testnet = 7;       // reserved
+  string wallet_version = 8; // reserved (defaults to v4r2)
+}
+
+message SignedTonTxResponse {
+  string signed_boc = 1;  // base64 BoC of the signed external message, ready to POST to toncenter
+  string msg_hash = 2;    // hex cell hash of the external message — the hub's tracking id
+  uint64 seqno = 3;       // the seqno this message was signed at
+  uint32 valid_until = 4; // the unix expiry it was signed with
 }

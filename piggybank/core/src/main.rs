@@ -36,6 +36,10 @@ use piggybank_core::{
 		subscriptions::PgSubscriptions,
 		sweep::Sweep,
 		tigerbeetle::TigerBeetle,
+		ton_custody::TonCustody,
+		ton_deposit_watcher::TonDepositWatcher,
+		ton_sweep::TonSweep,
+		ton_withdrawal_watcher::TonWithdrawalWatcher,
 		tron_custody::TronCustody,
 		tron_deposit_watcher::TronDepositWatcher,
 		tron_sweep::TronSweep,
@@ -165,6 +169,16 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		}
 		custody_by_network.insert(Network::Trc20, Arc::new(tron_custody));
 	}
+	// --- TON custody (jetton USDT) ---
+	if let Some(ton) = &config.ton {
+		let ton_custody = TonCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton);
+		// Resolve + log the treasury at boot so the operator funds it (USDT + TON) before any
+		// withdrawal settles. Best-effort — resolves on the first withdrawal otherwise.
+		if let Err(err) = ton_custody.treasury_address().await {
+			tracing::warn!("could not resolve the TON treasury address at boot (resolves on first withdrawal): {err}");
+		}
+		custody_by_network.insert(Network::Ton, Arc::new(ton_custody));
+	}
 	let custody: Arc<dyn Custody> = Arc::new(MultiChainCustody::new(custody_by_network, Arc::new(StubCustody)));
 	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody, relay_notify.clone());
 
@@ -242,6 +256,26 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		_ => None,
 	};
 
+	// --- TON on-chain tasks (jetton USDT) ---
+	// Deposit watcher + withdrawal confirmation watcher run when TON_API_URL is set; the
+	// sweep additionally needs SWEEP_ENABLED. Each holds its own pool clone / signer channel,
+	// mirroring the BEP20 tasks; all are no-ops (idle branch) when unconfigured.
+	let ton_deposit_watcher = config.ton.clone().map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton));
+	let ton_withdrawal_watcher = config.ton.as_ref().map(|ton| {
+		TonWithdrawalWatcher::new(
+			pool.clone(),
+			signer_channel.clone(),
+			ServiceTokenSource::from_env(),
+			withdrawals.clone(),
+			relay_notify.clone(),
+			ton,
+		)
+	});
+	let ton_sweep = match (&config.ton, &config.ton_sweep) {
+		(Some(ton), Some(sweep_config)) => Some(TonSweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton, sweep_config.clone())),
+		_ => None,
+	};
+
 	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
 	let (provisioner, provision_rx) = provisioner_channel();
 	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).await.context("failed to build the auth service")?;
@@ -288,6 +322,9 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		tron_watcher_done,
 		tron_withdrawal_watcher_done,
 		tron_sweep_done,
+		ton_watcher_done,
+		ton_withdrawal_watcher_done,
+		ton_sweep_done,
 	) = tokio::join!(
 		await_signal(shutdown.clone()),
 		branch(&shutdown, "core gRPC server", services::serve(config.grpc_addr, state, shutdown.clone().cancelled_owned())),
@@ -307,6 +344,13 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 			infallible(run_tron_withdrawal_watcher(tron_withdrawal_watcher, shutdown.clone()))
 		),
 		branch(&shutdown, "tron sweep", infallible(run_tron_sweep(tron_sweep, shutdown.clone()))),
+		branch(&shutdown, "ton deposit watcher", infallible(run_ton_watcher(ton_deposit_watcher, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"ton withdrawal watcher",
+			infallible(run_ton_withdrawal_watcher(ton_withdrawal_watcher, shutdown.clone()))
+		),
+		branch(&shutdown, "ton sweep", infallible(run_ton_sweep(ton_sweep, shutdown.clone()))),
 	);
 	let () = signal;
 	// The first error (if any) becomes the process result; a clean shutdown is `Ok`.
@@ -322,6 +366,9 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.and(tron_watcher_done)
 		.and(tron_withdrawal_watcher_done)
 		.and(tron_sweep_done)
+		.and(ton_watcher_done)
+		.and(ton_withdrawal_watcher_done)
+		.and(ton_sweep_done)
 }
 
 /// Run one composition-root branch to completion, mapping any error to `anyhow`, then cancel
@@ -388,6 +435,15 @@ async fn run_tron_deposit_watcher(watcher: Option<TronDepositWatcher>, shutdown:
 	}
 }
 
+/// Run the TON deposit watcher if configured, else idle until shutdown — the same
+/// unconditional-branch shape as its BEP20 sibling.
+async fn run_ton_watcher(watcher: Option<TonDepositWatcher>, shutdown: CancellationToken) {
+	match watcher {
+		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
 /// Run the Tron withdrawal confirmation watcher if configured, else idle until shutdown.
 async fn run_tron_withdrawal_watcher(watcher: Option<TronWithdrawalWatcher>, shutdown: CancellationToken) {
 	match watcher {
@@ -396,8 +452,24 @@ async fn run_tron_withdrawal_watcher(watcher: Option<TronWithdrawalWatcher>, shu
 	}
 }
 
+/// Run the TON withdrawal confirmation watcher if configured, else idle until shutdown.
+async fn run_ton_withdrawal_watcher(watcher: Option<TonWithdrawalWatcher>, shutdown: CancellationToken) {
+	match watcher {
+		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
 /// Run the Tron treasury sweep if enabled, else idle until shutdown.
 async fn run_tron_sweep(sweep: Option<TronSweep>, shutdown: CancellationToken) {
+	match sweep {
+		Some(sweep) => sweep.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the TON treasury sweep if enabled, else idle until shutdown.
+async fn run_ton_sweep(sweep: Option<TonSweep>, shutdown: CancellationToken) {
 	match sweep {
 		Some(sweep) => sweep.run(shutdown).await,
 		None => shutdown.cancelled().await,

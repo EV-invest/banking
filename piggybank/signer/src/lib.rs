@@ -23,4 +23,5 @@ pub mod key_vault;
 pub mod provision;
 pub mod secrets;
 pub mod service;
+pub mod ton_tx;
 pub mod tron_tx;
