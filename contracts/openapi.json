@@ -2,14 +2,14 @@
   "openapi": "3.1.0",
   "info": {},
   "paths": {
-    "/banking.v1.AuthService/Exchange": {
+    "/banking.v1.AuthService/IssueUserToken": {
       "post": {
         "tags": [
           "banking.v1.AuthService"
         ],
-        "summary": "Exchange",
-        "description": "Exchange a Google authorization code (with its PKCE verifier) for the hub's\n OWN tokens. Called by the cabinet BFF on the OAuth callback. Provisions the\n user on first sign-in (in-process Provisioner channel into core).",
-        "operationId": "banking.v1.AuthService.Exchange",
+        "summary": "IssueUserToken",
+        "description": "Mint the money-plane token pair for an already-identified user, keyed by their\n concierge user id. Service-to-service: authenticated by the shared issuance token\n in the `authorization` metadata (Bearer), never a user token. The user must already\n exist locally (provisioned by the cross-plane bridge) and not be frozen.",
+        "operationId": "banking.v1.AuthService.IssueUserToken",
         "parameters": [
           {
             "name": "Connect-Protocol-Version",
@@ -31,7 +31,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/banking.v1.ExchangeRequest"
+                "$ref": "#/components/schemas/banking.v1.IssueUserTokenRequest"
               }
             }
           },
@@ -533,6 +533,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/GetOperationsMode": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "GetOperationsMode",
+        "description": "Operator (TreasuryRead): the money-plane operations mode (the read-only kill-switch).",
+        "operationId": "banking.v1.BalanceService.GetOperationsMode",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetOperationsModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.OperationsMode"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/GetTreasury": {
       "post": {
         "tags": [
@@ -585,6 +644,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.Treasury"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/ListRedemptionQueue": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "ListRedemptionQueue",
+        "description": "Operator (RedemptionSettle): the cross-user queue of redemptions awaiting settle,\n oldest first — the \"Valuation \u0026 redemptions\" screen's clear-the-queue surface.\n (Est. cash = units × current NAV is computed client-side from the posted NAV.)",
+        "operationId": "banking.v1.BalanceService.ListRedemptionQueue",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListRedemptionQueueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RedemptionQueue"
                 }
               }
             }
@@ -762,6 +880,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.SeedCapitalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/SetOperationsMode": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "SetOperationsMode",
+        "description": "Admin (OperationsManage): toggle read-only mode. When on, every user money mutation\n (withdraw / subscribe / redeem) is rejected — \"pause deposits \u0026 withdrawals\".",
+        "operationId": "banking.v1.BalanceService.SetOperationsMode",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetOperationsModeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.OperationsMode"
                 }
               }
             }
@@ -1593,6 +1770,65 @@
         }
       }
     },
+    "/banking.v1.UsersService/GetUserBalance": {
+      "post": {
+        "tags": [
+          "banking.v1.UsersService"
+        ],
+        "summary": "GetUserBalance",
+        "description": "Admin (UserBalanceRead): read ANY user's live balance by id — the operator\n console's user-detail drawer. The self-service GetBalance above acts on the\n caller's own `sub`; this one takes an explicit target and is role-gated.",
+        "operationId": "banking.v1.UsersService.GetUserBalance",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.AdminBalanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UserBalanceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.UsersService/RevokeTokens": {
       "post": {
         "tags": [
@@ -2366,7 +2602,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "DisableUser",
-        "description": "Admin (allowlist): disable a user, freezing future sign-in/refresh without\n deleting the record.",
+        "description": "Admin (allowlist): disable a user, freezing future sign-in/refresh without\n deleting the record. Emits SUSPENDED across the cross-plane bridge.",
         "operationId": "concierge.v1.UserDirectory.DisableUser",
         "parameters": [
           {
@@ -2478,6 +2714,183 @@
         }
       }
     },
+    "/concierge.v1.UserDirectory/GetUser": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "GetUser",
+        "description": "Admin (UserRead): the full profile of ANY user by id (the admin sibling of the\n self-only GetMe), for the user-detail drawer.",
+        "operationId": "concierge.v1.UserDirectory.GetUser",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.GetUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProfile"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/ListUsers": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "ListUsers",
+        "description": "Admin (UserRead): list/search users for the operator console — paginated, with\n optional role/KYC/status filters. Returns lightweight summaries, not full profiles.",
+        "operationId": "concierge.v1.UserDirectory.ListUsers",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ListUsersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.ListUsersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/ReinstateUser": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "ReinstateUser",
+        "description": "Admin (allowlist): re-enable a disabled user, lifting the sign-in/refresh\n freeze. Emits REINSTATED across the cross-plane bridge.",
+        "operationId": "concierge.v1.UserDirectory.ReinstateUser",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ReinstateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.ReinstateUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.UserDirectory/RevokeTokens": {
       "post": {
         "tags": [
@@ -2530,6 +2943,124 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.RevokeTokensResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/SetKycLevel": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "SetKycLevel",
+        "description": "Admin (allowlist): set a user's KYC level. Emits KYC_CHANGED across the\n cross-plane bridge (so the money plane learns the new level). Echoes the\n level now in effect.",
+        "operationId": "concierge.v1.UserDirectory.SetKycLevel",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.SetKycLevelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.SetKycLevelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.UserDirectory/SetRole": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "SetRole",
+        "description": "Admin (RoleGrant, Owner only): set a user's platform access role. Emits\n ROLE_CHANGED across the cross-plane bridge so the money plane mirrors it. Echoes\n the role now in effect.",
+        "operationId": "concierge.v1.UserDirectory.SetRole",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.SetRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.SetRoleResponse"
                 }
               }
             }
@@ -2599,6 +3130,17 @@
   },
   "components": {
     "schemas": {
+      "banking.v1.AdminBalanceRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          }
+        },
+        "title": "AdminBalanceRequest",
+        "additionalProperties": false
+      },
       "banking.v1.Balance": {
         "type": "object",
         "properties": {
@@ -2717,42 +3259,6 @@
         "title": "DispatchWithdrawalResponse",
         "additionalProperties": false
       },
-      "banking.v1.ExchangeRequest": {
-        "type": "object",
-        "properties": {
-          "auth_code": {
-            "type": "string",
-            "title": "auth_code",
-            "description": "The Google authorization code from the OAuth redirect."
-          },
-          "code_verifier": {
-            "type": "string",
-            "title": "code_verifier",
-            "description": "The PKCE code verifier the BFF generated for this transaction (S256)."
-          },
-          "redirect_uri": {
-            "type": "string",
-            "title": "redirect_uri",
-            "description": "The exact redirect_uri used in the authorize request (Google requires a match)."
-          },
-          "nonce": {
-            "type": "string",
-            "title": "nonce",
-            "description": "The nonce the BFF put in the authorize request; matched against Google's id_token."
-          },
-          "user_agent": {
-            "type": "string",
-            "title": "user_agent",
-            "description": "Device metadata captured by the BFF at sign-in, stored on the refresh-token family\n for the \"sessions \u0026 devices\" surface. Best-effort, free-form."
-          },
-          "ip": {
-            "type": "string",
-            "title": "ip"
-          }
-        },
-        "title": "ExchangeRequest",
-        "additionalProperties": false
-      },
       "banking.v1.FailRedemptionRequest": {
         "type": "object",
         "properties": {
@@ -2853,6 +3359,11 @@
         "title": "GetMeRequest",
         "additionalProperties": false
       },
+      "banking.v1.GetOperationsModeRequest": {
+        "type": "object",
+        "title": "GetOperationsModeRequest",
+        "additionalProperties": false
+      },
       "banking.v1.GetPositionRequest": {
         "type": "object",
         "properties": {
@@ -2877,6 +3388,27 @@
       "banking.v1.GetWalletRequest": {
         "type": "object",
         "title": "GetWalletRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.IssueUserTokenRequest": {
+        "type": "object",
+        "properties": {
+          "concierge_user_id": {
+            "type": "string",
+            "title": "concierge_user_id",
+            "description": "The concierge canonical user id (a UUID) of the already-authenticated user. Banking\n maps it to its local mirror row (provisioned by the cross-plane bridge) and mints the\n money-plane pair for that user. Banking never sees Google's `sub` — the bridge carries\n it; the BFF carries this concierge id, which it has from the concierge sign-in."
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "user_agent",
+            "description": "Device metadata captured by the BFF at sign-in, stored on the refresh-token family\n for the \"sessions \u0026 devices\" surface. Best-effort, free-form."
+          },
+          "ip": {
+            "type": "string",
+            "title": "ip"
+          }
+        },
+        "title": "IssueUserTokenRequest",
         "additionalProperties": false
       },
       "banking.v1.Jwk": {
@@ -2933,6 +3465,11 @@
       "banking.v1.ListPositionsRequest": {
         "type": "object",
         "title": "ListPositionsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListRedemptionQueueRequest": {
+        "type": "object",
+        "title": "ListRedemptionQueueRequest",
         "additionalProperties": false
       },
       "banking.v1.ListRedemptionsRequest": {
@@ -3024,6 +3561,17 @@
         "title": "NetworkWithdrawable",
         "additionalProperties": false,
         "description": "Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole\n available balance (a request beyond `instant` is accepted and queued); `instant` is\n the portion that ships without queueing = min(available, rail liquidity)."
+      },
+      "banking.v1.OperationsMode": {
+        "type": "object",
+        "properties": {
+          "read_only": {
+            "type": "boolean",
+            "title": "read_only"
+          }
+        },
+        "title": "OperationsMode",
+        "additionalProperties": false
       },
       "banking.v1.Position": {
         "type": "object",
@@ -3282,6 +3830,56 @@
         "title": "RedemptionList",
         "additionalProperties": false
       },
+      "banking.v1.RedemptionQueue": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.RedemptionQueueItem"
+            },
+            "title": "items"
+          }
+        },
+        "title": "RedemptionQueue",
+        "additionalProperties": false
+      },
+      "banking.v1.RedemptionQueueItem": {
+        "type": "object",
+        "properties": {
+          "redemption_id": {
+            "type": "string",
+            "title": "redemption_id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "units": {
+            "type": "string",
+            "title": "units"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          }
+        },
+        "title": "RedemptionQueueItem",
+        "additionalProperties": false,
+        "description": "One queued redemption for the operator queue. `email` is the mirrored identity email\n (may be empty if the bridge hasn't populated it). `created_at` is unix seconds."
+      },
       "banking.v1.RefreshRequest": {
         "type": "object",
         "properties": {
@@ -3425,6 +4023,17 @@
         "title": "Session",
         "additionalProperties": false,
         "description": "One active session = one refresh-token family. Timestamps are unix SECONDS."
+      },
+      "banking.v1.SetOperationsModeRequest": {
+        "type": "object",
+        "properties": {
+          "read_only": {
+            "type": "boolean",
+            "title": "read_only"
+          }
+        },
+        "title": "SetOperationsModeRequest",
+        "additionalProperties": false
       },
       "banking.v1.SettleRedemptionRequest": {
         "type": "object",
@@ -3728,6 +4337,15 @@
           "timezone": {
             "type": "string",
             "title": "timezone"
+          },
+          "kyc_level": {
+            "type": "integer",
+            "title": "kyc_level",
+            "description": "Kept wire-identical with concierge.v1.UserProfile (the cabinet TS is aliased to the\n concierge shape). The identity plane OWNS kyc/role; the money plane mirrors them for\n gating but does not re-serve them on its self-service GetMe, so these stay default\n here — the fields exist for cross-plane wire parity."
+          },
+          "role": {
+            "type": "string",
+            "title": "role"
           }
         },
         "title": "UserProfile",
@@ -3756,6 +4374,11 @@
             ],
             "title": "token_version",
             "format": "int64"
+          },
+          "role": {
+            "type": "string",
+            "title": "role",
+            "description": "Kept wire-identical with concierge.v1.UserSummary (the cabinet TS is aliased to the\n concierge shape). The money plane doesn't serve the role here — the cabinet reads it\n from concierge's login summary — so this stays empty; the field exists for parity."
           }
         },
         "title": "UserSummary",
@@ -3850,6 +4473,51 @@
         "title": "WithdrawalList",
         "additionalProperties": false
       },
+      "concierge.v1.AdminUserSummary": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "status": {
+            "type": "string",
+            "title": "status"
+          },
+          "kyc_level": {
+            "type": "integer",
+            "title": "kyc_level"
+          },
+          "role": {
+            "type": "string",
+            "title": "role"
+          },
+          "token_version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "token_version",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64",
+            "description": "Unix SECONDS the user was provisioned (joined)."
+          }
+        },
+        "title": "AdminUserSummary",
+        "additionalProperties": false,
+        "description": "A lightweight user row for the operator console's user list (not the full profile).\n Named distinctly from auth.proto's login `UserSummary` (same package)."
+      },
       "concierge.v1.DisableUserRequest": {
         "type": "object",
         "properties": {
@@ -3905,6 +4573,17 @@
       "concierge.v1.GetMeRequest": {
         "type": "object",
         "title": "GetMeRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.GetUserRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          }
+        },
+        "title": "GetUserRequest",
         "additionalProperties": false
       },
       "concierge.v1.Jwk": {
@@ -3984,6 +4663,59 @@
         "title": "ListSessionsResponse",
         "additionalProperties": false
       },
+      "concierge.v1.ListUsersRequest": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "query",
+            "description": "Free-text match over email/user_id (empty = no text filter)."
+          },
+          "role": {
+            "type": "string",
+            "title": "role",
+            "description": "Optional exact filters (empty string = unfiltered)."
+          },
+          "status": {
+            "type": "string",
+            "title": "status"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "Page window. `limit` is clamped server-side; `offset` is a simple row offset."
+          },
+          "offset": {
+            "type": "integer",
+            "title": "offset"
+          }
+        },
+        "title": "ListUsersRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListUsersResponse": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.AdminUserSummary"
+            },
+            "title": "users"
+          },
+          "total": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "total",
+            "format": "int64",
+            "description": "Total matching the filters (before the page window), for the list header count."
+          }
+        },
+        "title": "ListUsersResponse",
+        "additionalProperties": false
+      },
       "concierge.v1.LogoutRequest": {
         "type": "object",
         "properties": {
@@ -4014,6 +4746,22 @@
           }
         },
         "title": "RefreshRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ReinstateUserRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          }
+        },
+        "title": "ReinstateUserRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ReinstateUserResponse": {
+        "type": "object",
+        "title": "ReinstateUserResponse",
         "additionalProperties": false
       },
       "concierge.v1.RevokeSessionRequest": {
@@ -4104,6 +4852,61 @@
         "title": "Session",
         "additionalProperties": false,
         "description": "One active session = one refresh-token family. Timestamps are unix SECONDS."
+      },
+      "concierge.v1.SetKycLevelRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "kyc_level": {
+            "type": "integer",
+            "title": "kyc_level"
+          }
+        },
+        "title": "SetKycLevelRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.SetKycLevelResponse": {
+        "type": "object",
+        "properties": {
+          "kyc_level": {
+            "type": "integer",
+            "title": "kyc_level",
+            "description": "The user's KYC level now in effect (echoes the applied level)."
+          }
+        },
+        "title": "SetKycLevelResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.SetRoleRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "role": {
+            "type": "string",
+            "title": "role",
+            "description": "The role to grant (snake_case: investor/operator/admin/owner)."
+          }
+        },
+        "title": "SetRoleRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.SetRoleResponse": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "role",
+            "description": "The role now in effect (echoes the applied role)."
+          }
+        },
+        "title": "SetRoleResponse",
+        "additionalProperties": false
       },
       "concierge.v1.TokenResponse": {
         "type": "object",
@@ -4256,6 +5059,16 @@
           "timezone": {
             "type": "string",
             "title": "timezone"
+          },
+          "kyc_level": {
+            "type": "integer",
+            "title": "kyc_level",
+            "description": "The user's KYC level (admin-managed; mirrored to the money plane)."
+          },
+          "role": {
+            "type": "string",
+            "title": "role",
+            "description": "The user's platform access role (snake_case: investor/operator/admin/owner).\n Admin-managed via SetRole; read-only here."
           }
         },
         "title": "UserProfile",
@@ -4284,6 +5097,11 @@
             ],
             "title": "token_version",
             "format": "int64"
+          },
+          "role": {
+            "type": "string",
+            "title": "role",
+            "description": "The user's platform access role (snake_case: investor/operator/admin/owner), so the\n BFF can gate the admin console at sign-in without a second round trip. Read-only."
           }
         },
         "title": "UserSummary",
@@ -4385,7 +5203,7 @@
   "tags": [
     {
       "name": "banking.v1.AuthService",
-      "description": "AuthService — the hub's token issuance and authorization surface.\n\n Issues first-party asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 sign-in,\n rotates refresh tokens, and publishes verification keys. Services do NOT call\n this per request to authorize: they verify access tokens locally against the\n cached JWKS via the shared `evbanking_auth` flow (no round trip, no per-service\n token storage). They DO call `Jwks` periodically to refresh that cache, since\n the hub speaks only gRPC (no HTTP `.well-known` endpoint).\n\n The cabinet BFF is the OAuth confidential client. It runs the browser-facing\n authorize redirect (PKCE + state + nonce) and then calls `Exchange`\n server-to-server with the Google authorization code; the auth task performs the\n confidential code→token exchange with Google, validates Google's id_token, and\n discards it — Google's token is never forwarded inward. See docs/ARCHITECTURE.md."
+      "description": "AuthService — the money plane's token issuance and authorization surface.\n\n This is the MONEY plane: it does NOT do third-party (Google) OAuth — identity and\n sign-in live wholly in the concierge plane. Users are mirrored here by the one-way\n cross-plane bridge (concierge `CREATED` → a local row keyed by `auth_subject`).\n This service only issues/rotates the hub's OWN first-party asymmetric JWTs\n (EdDSA/Ed25519, `aud=banking-core`) for those already-identified users, and\n publishes verification keys. Services do NOT call this per request to authorize:\n they verify access tokens locally against the cached JWKS via the shared\n `evbanking_auth` flow (no round trip, no per-service token storage). They DO call\n `Jwks` periodically to refresh that cache, since the hub speaks only gRPC (no HTTP\n `.well-known` endpoint).\n\n `IssueUserToken` is the concierge→banking token-exchange seam: after the cabinet\n BFF authenticates a user against concierge, it calls this server-to-server (with the\n shared bridge issuance token, NOT a user token) to mint the money-plane pair for that\n user. Banking trusts its OWN service credential, never concierge's issuer — so a\n leaked concierge token can't move money. See docs/ARCHITECTURE.md."
     },
     {
       "name": "banking.v1.FundsService",

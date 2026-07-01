@@ -158,10 +158,9 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
       .catch(() => setBalance(null));
   }, [summary.user_id]);
 
+  // The parent gives this drawer a `key` per user, so it remounts (state starts null) —
+  // no synchronous reset needed here; `reload` only sets state in its async callbacks.
   useEffect(() => {
-    setProfile(null);
-    setBalance(null);
-    setError(null);
     reload();
   }, [reload]);
 

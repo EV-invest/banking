@@ -14,6 +14,7 @@ export function OverviewView() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Manual "Run health check" (event handler — may set state synchronously).
   const load = useCallback(() => {
     setRefreshing(true);
     fetchOverview()
@@ -25,7 +26,21 @@ export function OverviewView() {
       .finally(() => setRefreshing(false));
   }, []);
 
-  useEffect(load, [load]);
+  // Mount fetch — state is set only in the async callbacks (no synchronous setState in
+  // the effect body), so it doesn't trigger cascading renders.
+  useEffect(() => {
+    let active = true;
+    fetchOverview()
+      .then((o) => {
+        if (!active) return;
+        setOverview(o);
+        setError(null);
+      })
+      .catch((e: Error) => active && setError(e.message));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const healthy = overview?.services.filter((s) => s.status === "healthy").length ?? 0;
   const totalServices = overview?.services.length ?? 0;

@@ -5,6 +5,16 @@ export type ClientOptions = {
 };
 
 /**
+ * AdminBalanceRequest
+ */
+export type BankingV1AdminBalanceRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+};
+
+/**
  * Balance
  *
  * The user's single, network-agnostic balance, segmented by lifecycle. Every figure is
@@ -130,47 +140,6 @@ export type BankingV1DispatchWithdrawalResponse = {
 };
 
 /**
- * ExchangeRequest
- */
-export type BankingV1ExchangeRequest = {
-    /**
-     * auth_code
-     *
-     * The Google authorization code from the OAuth redirect.
-     */
-    auth_code?: string;
-    /**
-     * code_verifier
-     *
-     * The PKCE code verifier the BFF generated for this transaction (S256).
-     */
-    code_verifier?: string;
-    /**
-     * redirect_uri
-     *
-     * The exact redirect_uri used in the authorize request (Google requires a match).
-     */
-    redirect_uri?: string;
-    /**
-     * nonce
-     *
-     * The nonce the BFF put in the authorize request; matched against Google's id_token.
-     */
-    nonce?: string;
-    /**
-     * user_agent
-     *
-     * Device metadata captured by the BFF at sign-in, stored on the refresh-token family
-     * for the "sessions & devices" surface. Best-effort, free-form.
-     */
-    user_agent?: string;
-    /**
-     * ip
-     */
-    ip?: string;
-};
-
-/**
  * FailRedemptionRequest
  */
 export type BankingV1FailRedemptionRequest = {
@@ -275,6 +244,13 @@ export type BankingV1GetMeRequest = {
 };
 
 /**
+ * GetOperationsModeRequest
+ */
+export type BankingV1GetOperationsModeRequest = {
+    [key: string]: never;
+};
+
+/**
  * GetPositionRequest
  */
 export type BankingV1GetPositionRequest = {
@@ -303,6 +279,32 @@ export type BankingV1GetUserBalanceRequest = {
  */
 export type BankingV1GetWalletRequest = {
     [key: string]: never;
+};
+
+/**
+ * IssueUserTokenRequest
+ */
+export type BankingV1IssueUserTokenRequest = {
+    /**
+     * concierge_user_id
+     *
+     * The concierge canonical user id (a UUID) of the already-authenticated user. Banking
+     * maps it to its local mirror row (provisioned by the cross-plane bridge) and mints the
+     * money-plane pair for that user. Banking never sees Google's `sub` — the bridge carries
+     * it; the BFF carries this concierge id, which it has from the concierge sign-in.
+     */
+    concierge_user_id?: string;
+    /**
+     * user_agent
+     *
+     * Device metadata captured by the BFF at sign-in, stored on the refresh-token family
+     * for the "sessions & devices" surface. Best-effort, free-form.
+     */
+    user_agent?: string;
+    /**
+     * ip
+     */
+    ip?: string;
 };
 
 /**
@@ -359,6 +361,13 @@ export type BankingV1JwksResponse = {
  * ListPositionsRequest
  */
 export type BankingV1ListPositionsRequest = {
+    [key: string]: never;
+};
+
+/**
+ * ListRedemptionQueueRequest
+ */
+export type BankingV1ListRedemptionQueueRequest = {
     [key: string]: never;
 };
 
@@ -460,6 +469,16 @@ export type BankingV1NetworkWithdrawable = {
      * flat network fee retained on a withdrawal
      */
     withdrawal_fee?: string;
+};
+
+/**
+ * OperationsMode
+ */
+export type BankingV1OperationsMode = {
+    /**
+     * read_only
+     */
+    read_only?: boolean;
 };
 
 /**
@@ -722,6 +741,49 @@ export type BankingV1RedemptionList = {
 };
 
 /**
+ * RedemptionQueue
+ */
+export type BankingV1RedemptionQueue = {
+    /**
+     * items
+     */
+    items?: Array<BankingV1RedemptionQueueItem>;
+};
+
+/**
+ * RedemptionQueueItem
+ *
+ * One queued redemption for the operator queue. `email` is the mirrored identity email
+ * (may be empty if the bridge hasn't populated it). `created_at` is unix seconds.
+ */
+export type BankingV1RedemptionQueueItem = {
+    /**
+     * redemption_id
+     */
+    redemption_id?: string;
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * units
+     */
+    units?: string;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+};
+
+/**
  * RefreshRequest
  */
 export type BankingV1RefreshRequest = {
@@ -857,6 +919,16 @@ export type BankingV1Session = {
      * True for the family that owns the refresh token presented on the listing call.
      */
     current?: boolean;
+};
+
+/**
+ * SetOperationsModeRequest
+ */
+export type BankingV1SetOperationsModeRequest = {
+    /**
+     * read_only
+     */
+    read_only?: boolean;
 };
 
 /**
@@ -1170,6 +1242,19 @@ export type BankingV1UserProfile = {
      * timezone
      */
     timezone?: string;
+    /**
+     * kyc_level
+     *
+     * Kept wire-identical with concierge.v1.UserProfile (the cabinet TS is aliased to the
+     * concierge shape). The identity plane OWNS kyc/role; the money plane mirrors them for
+     * gating but does not re-serve them on its self-service GetMe, so these stay default
+     * here — the fields exist for cross-plane wire parity.
+     */
+    kyc_level?: number;
+    /**
+     * role
+     */
+    role?: string;
 };
 
 /**
@@ -1197,6 +1282,14 @@ export type BankingV1UserSummary = {
      * token_version
      */
     token_version?: number | string;
+    /**
+     * role
+     *
+     * Kept wire-identical with concierge.v1.UserSummary (the cabinet TS is aliased to the
+     * concierge shape). The money plane doesn't serve the role here — the cabinet reads it
+     * from concierge's login summary — so this stays empty; the field exists for parity.
+     */
+    role?: string;
 };
 
 /**
@@ -1288,6 +1381,45 @@ export type BankingV1WithdrawalList = {
 };
 
 /**
+ * AdminUserSummary
+ *
+ * A lightweight user row for the operator console's user list (not the full profile).
+ * Named distinctly from auth.proto's login `UserSummary` (same package).
+ */
+export type ConciergeV1AdminUserSummary = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * status
+     */
+    status?: string;
+    /**
+     * kyc_level
+     */
+    kyc_level?: number;
+    /**
+     * role
+     */
+    role?: string;
+    /**
+     * token_version
+     */
+    token_version?: number | string;
+    /**
+     * created_at
+     *
+     * Unix SECONDS the user was provisioned (joined).
+     */
+    created_at?: number | string;
+};
+
+/**
  * DisableUserRequest
  */
 export type ConciergeV1DisableUserRequest = {
@@ -1350,6 +1482,16 @@ export type ConciergeV1ExchangeRequest = {
  */
 export type ConciergeV1GetMeRequest = {
     [key: string]: never;
+};
+
+/**
+ * GetUserRequest
+ */
+export type ConciergeV1GetUserRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
 };
 
 /**
@@ -1425,6 +1567,54 @@ export type ConciergeV1ListSessionsResponse = {
 };
 
 /**
+ * ListUsersRequest
+ */
+export type ConciergeV1ListUsersRequest = {
+    /**
+     * query
+     *
+     * Free-text match over email/user_id (empty = no text filter).
+     */
+    query?: string;
+    /**
+     * role
+     *
+     * Optional exact filters (empty string = unfiltered).
+     */
+    role?: string;
+    /**
+     * status
+     */
+    status?: string;
+    /**
+     * limit
+     *
+     * Page window. `limit` is clamped server-side; `offset` is a simple row offset.
+     */
+    limit?: number;
+    /**
+     * offset
+     */
+    offset?: number;
+};
+
+/**
+ * ListUsersResponse
+ */
+export type ConciergeV1ListUsersResponse = {
+    /**
+     * users
+     */
+    users?: Array<ConciergeV1AdminUserSummary>;
+    /**
+     * total
+     *
+     * Total matching the filters (before the page window), for the list header count.
+     */
+    total?: number | string;
+};
+
+/**
  * LogoutRequest
  */
 export type ConciergeV1LogoutRequest = {
@@ -1456,6 +1646,23 @@ export type ConciergeV1RefreshRequest = {
      * refresh_token
      */
     refresh_token?: string;
+};
+
+/**
+ * ReinstateUserRequest
+ */
+export type ConciergeV1ReinstateUserRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+};
+
+/**
+ * ReinstateUserResponse
+ */
+export type ConciergeV1ReinstateUserResponse = {
+    [key: string]: never;
 };
 
 /**
@@ -1535,6 +1742,60 @@ export type ConciergeV1Session = {
      * True for the family that owns the refresh token presented on the listing call.
      */
     current?: boolean;
+};
+
+/**
+ * SetKycLevelRequest
+ */
+export type ConciergeV1SetKycLevelRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * kyc_level
+     */
+    kyc_level?: number;
+};
+
+/**
+ * SetKycLevelResponse
+ */
+export type ConciergeV1SetKycLevelResponse = {
+    /**
+     * kyc_level
+     *
+     * The user's KYC level now in effect (echoes the applied level).
+     */
+    kyc_level?: number;
+};
+
+/**
+ * SetRoleRequest
+ */
+export type ConciergeV1SetRoleRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * role
+     *
+     * The role to grant (snake_case: investor/operator/admin/owner).
+     */
+    role?: string;
+};
+
+/**
+ * SetRoleResponse
+ */
+export type ConciergeV1SetRoleResponse = {
+    /**
+     * role
+     *
+     * The role now in effect (echoes the applied role).
+     */
+    role?: string;
 };
 
 /**
@@ -1683,6 +1944,19 @@ export type ConciergeV1UserProfile = {
      * timezone
      */
     timezone?: string;
+    /**
+     * kyc_level
+     *
+     * The user's KYC level (admin-managed; mirrored to the money plane).
+     */
+    kyc_level?: number;
+    /**
+     * role
+     *
+     * The user's platform access role (snake_case: investor/operator/admin/owner).
+     * Admin-managed via SetRole; read-only here.
+     */
+    role?: string;
 };
 
 /**
@@ -1710,6 +1984,13 @@ export type ConciergeV1UserSummary = {
      * token_version
      */
     token_version?: number | string;
+    /**
+     * role
+     *
+     * The user's platform access role (snake_case: investor/operator/admin/owner), so the
+     * BFF can gate the admin console at sign-in without a second round trip. Read-only.
+     */
+    role?: string;
 };
 
 /**
@@ -1770,34 +2051,34 @@ export type ConnectErrorDetailsAny = {
     [key: string]: unknown;
 };
 
-export type BankingV1AuthServiceExchangeData = {
-    body: BankingV1ExchangeRequest;
+export type BankingV1AuthServiceIssueUserTokenData = {
+    body: BankingV1IssueUserTokenRequest;
     headers: {
         'Connect-Protocol-Version': ConnectProtocolVersion;
         'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
     };
     path?: never;
     query?: never;
-    url: '/banking.v1.AuthService/Exchange';
+    url: '/banking.v1.AuthService/IssueUserToken';
 };
 
-export type BankingV1AuthServiceExchangeErrors = {
+export type BankingV1AuthServiceIssueUserTokenErrors = {
     /**
      * Error
      */
     default: ConnectError;
 };
 
-export type BankingV1AuthServiceExchangeError = BankingV1AuthServiceExchangeErrors[keyof BankingV1AuthServiceExchangeErrors];
+export type BankingV1AuthServiceIssueUserTokenError = BankingV1AuthServiceIssueUserTokenErrors[keyof BankingV1AuthServiceIssueUserTokenErrors];
 
-export type BankingV1AuthServiceExchangeResponses = {
+export type BankingV1AuthServiceIssueUserTokenResponses = {
     /**
      * Success
      */
     200: BankingV1TokenResponse;
 };
 
-export type BankingV1AuthServiceExchangeResponse = BankingV1AuthServiceExchangeResponses[keyof BankingV1AuthServiceExchangeResponses];
+export type BankingV1AuthServiceIssueUserTokenResponse = BankingV1AuthServiceIssueUserTokenResponses[keyof BankingV1AuthServiceIssueUserTokenResponses];
 
 export type BankingV1AuthServiceJwksData = {
     body: BankingV1JwksRequest;
@@ -2031,6 +2312,35 @@ export type BankingV1BalanceServiceFailWithdrawalResponses = {
 
 export type BankingV1BalanceServiceFailWithdrawalResponse = BankingV1BalanceServiceFailWithdrawalResponses[keyof BankingV1BalanceServiceFailWithdrawalResponses];
 
+export type BankingV1BalanceServiceGetOperationsModeData = {
+    body: BankingV1GetOperationsModeRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/GetOperationsMode';
+};
+
+export type BankingV1BalanceServiceGetOperationsModeErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceGetOperationsModeError = BankingV1BalanceServiceGetOperationsModeErrors[keyof BankingV1BalanceServiceGetOperationsModeErrors];
+
+export type BankingV1BalanceServiceGetOperationsModeResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1OperationsMode;
+};
+
+export type BankingV1BalanceServiceGetOperationsModeResponse = BankingV1BalanceServiceGetOperationsModeResponses[keyof BankingV1BalanceServiceGetOperationsModeResponses];
+
 export type BankingV1BalanceServiceGetTreasuryData = {
     body: BankingV1GetTreasuryRequest;
     headers: {
@@ -2059,6 +2369,35 @@ export type BankingV1BalanceServiceGetTreasuryResponses = {
 };
 
 export type BankingV1BalanceServiceGetTreasuryResponse = BankingV1BalanceServiceGetTreasuryResponses[keyof BankingV1BalanceServiceGetTreasuryResponses];
+
+export type BankingV1BalanceServiceListRedemptionQueueData = {
+    body: BankingV1ListRedemptionQueueRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/ListRedemptionQueue';
+};
+
+export type BankingV1BalanceServiceListRedemptionQueueErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceListRedemptionQueueError = BankingV1BalanceServiceListRedemptionQueueErrors[keyof BankingV1BalanceServiceListRedemptionQueueErrors];
+
+export type BankingV1BalanceServiceListRedemptionQueueResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1RedemptionQueue;
+};
+
+export type BankingV1BalanceServiceListRedemptionQueueResponse = BankingV1BalanceServiceListRedemptionQueueResponses[keyof BankingV1BalanceServiceListRedemptionQueueResponses];
 
 export type BankingV1BalanceServicePostFundValuationData = {
     body: BankingV1PostFundValuationRequest;
@@ -2146,6 +2485,35 @@ export type BankingV1BalanceServiceSeedCapitalResponses = {
 };
 
 export type BankingV1BalanceServiceSeedCapitalResponse = BankingV1BalanceServiceSeedCapitalResponses[keyof BankingV1BalanceServiceSeedCapitalResponses];
+
+export type BankingV1BalanceServiceSetOperationsModeData = {
+    body: BankingV1SetOperationsModeRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/SetOperationsMode';
+};
+
+export type BankingV1BalanceServiceSetOperationsModeErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceSetOperationsModeError = BankingV1BalanceServiceSetOperationsModeErrors[keyof BankingV1BalanceServiceSetOperationsModeErrors];
+
+export type BankingV1BalanceServiceSetOperationsModeResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1OperationsMode;
+};
+
+export type BankingV1BalanceServiceSetOperationsModeResponse = BankingV1BalanceServiceSetOperationsModeResponses[keyof BankingV1BalanceServiceSetOperationsModeResponses];
 
 export type BankingV1BalanceServiceSettleRedemptionData = {
     body: BankingV1SettleRedemptionRequest;
@@ -2552,6 +2920,35 @@ export type BankingV1UsersServiceGetMeResponses = {
 };
 
 export type BankingV1UsersServiceGetMeResponse = BankingV1UsersServiceGetMeResponses[keyof BankingV1UsersServiceGetMeResponses];
+
+export type BankingV1UsersServiceGetUserBalanceData = {
+    body: BankingV1AdminBalanceRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.UsersService/GetUserBalance';
+};
+
+export type BankingV1UsersServiceGetUserBalanceErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1UsersServiceGetUserBalanceError = BankingV1UsersServiceGetUserBalanceErrors[keyof BankingV1UsersServiceGetUserBalanceErrors];
+
+export type BankingV1UsersServiceGetUserBalanceResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1UserBalanceResponse;
+};
+
+export type BankingV1UsersServiceGetUserBalanceResponse = BankingV1UsersServiceGetUserBalanceResponses[keyof BankingV1UsersServiceGetUserBalanceResponses];
 
 export type BankingV1UsersServiceRevokeTokensData = {
     body: BankingV1RevokeTokensRequest;
@@ -2988,6 +3385,93 @@ export type ConciergeV1UserDirectoryGetMeResponses = {
 
 export type ConciergeV1UserDirectoryGetMeResponse = ConciergeV1UserDirectoryGetMeResponses[keyof ConciergeV1UserDirectoryGetMeResponses];
 
+export type ConciergeV1UserDirectoryGetUserData = {
+    body: ConciergeV1GetUserRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/GetUser';
+};
+
+export type ConciergeV1UserDirectoryGetUserErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryGetUserError = ConciergeV1UserDirectoryGetUserErrors[keyof ConciergeV1UserDirectoryGetUserErrors];
+
+export type ConciergeV1UserDirectoryGetUserResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProfile;
+};
+
+export type ConciergeV1UserDirectoryGetUserResponse = ConciergeV1UserDirectoryGetUserResponses[keyof ConciergeV1UserDirectoryGetUserResponses];
+
+export type ConciergeV1UserDirectoryListUsersData = {
+    body: ConciergeV1ListUsersRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/ListUsers';
+};
+
+export type ConciergeV1UserDirectoryListUsersErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryListUsersError = ConciergeV1UserDirectoryListUsersErrors[keyof ConciergeV1UserDirectoryListUsersErrors];
+
+export type ConciergeV1UserDirectoryListUsersResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1ListUsersResponse;
+};
+
+export type ConciergeV1UserDirectoryListUsersResponse = ConciergeV1UserDirectoryListUsersResponses[keyof ConciergeV1UserDirectoryListUsersResponses];
+
+export type ConciergeV1UserDirectoryReinstateUserData = {
+    body: ConciergeV1ReinstateUserRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/ReinstateUser';
+};
+
+export type ConciergeV1UserDirectoryReinstateUserErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryReinstateUserError = ConciergeV1UserDirectoryReinstateUserErrors[keyof ConciergeV1UserDirectoryReinstateUserErrors];
+
+export type ConciergeV1UserDirectoryReinstateUserResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1ReinstateUserResponse;
+};
+
+export type ConciergeV1UserDirectoryReinstateUserResponse = ConciergeV1UserDirectoryReinstateUserResponses[keyof ConciergeV1UserDirectoryReinstateUserResponses];
+
 export type ConciergeV1UserDirectoryRevokeTokensData = {
     body: ConciergeV1RevokeTokensRequest;
     headers: {
@@ -3016,6 +3500,64 @@ export type ConciergeV1UserDirectoryRevokeTokensResponses = {
 };
 
 export type ConciergeV1UserDirectoryRevokeTokensResponse = ConciergeV1UserDirectoryRevokeTokensResponses[keyof ConciergeV1UserDirectoryRevokeTokensResponses];
+
+export type ConciergeV1UserDirectorySetKycLevelData = {
+    body: ConciergeV1SetKycLevelRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/SetKycLevel';
+};
+
+export type ConciergeV1UserDirectorySetKycLevelErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectorySetKycLevelError = ConciergeV1UserDirectorySetKycLevelErrors[keyof ConciergeV1UserDirectorySetKycLevelErrors];
+
+export type ConciergeV1UserDirectorySetKycLevelResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1SetKycLevelResponse;
+};
+
+export type ConciergeV1UserDirectorySetKycLevelResponse = ConciergeV1UserDirectorySetKycLevelResponses[keyof ConciergeV1UserDirectorySetKycLevelResponses];
+
+export type ConciergeV1UserDirectorySetRoleData = {
+    body: ConciergeV1SetRoleRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/SetRole';
+};
+
+export type ConciergeV1UserDirectorySetRoleErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectorySetRoleError = ConciergeV1UserDirectorySetRoleErrors[keyof ConciergeV1UserDirectorySetRoleErrors];
+
+export type ConciergeV1UserDirectorySetRoleResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1SetRoleResponse;
+};
+
+export type ConciergeV1UserDirectorySetRoleResponse = ConciergeV1UserDirectorySetRoleResponses[keyof ConciergeV1UserDirectorySetRoleResponses];
 
 export type ConciergeV1UserDirectoryUpdateProfileData = {
     body: ConciergeV1UpdateProfileRequest;

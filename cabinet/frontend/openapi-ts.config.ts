@@ -8,7 +8,7 @@ import { defineConfig } from "@hey-api/openapi-ts";
 // backend emits — not an HTTP client. Output is committed so the app type-checks
 // without the backend.
 export default defineConfig({
-  input: "../../../contracts/openapi.json",
+  input: "../../contracts/openapi.json",
   output: { path: "shared/contracts/gen" },
   plugins: ["@hey-api/typescript"],
 });
