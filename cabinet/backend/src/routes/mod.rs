@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod auth;
 pub mod identity;
 pub mod money;
@@ -14,9 +15,14 @@ use axum::{
 use axum_extra::extract::cookie::CookieJar;
 use serde_json::Value;
 use subtle::ConstantTimeEq;
+use tonic::Status;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 
-use crate::{error::ApiError, session::MoneyToken, state::AppState};
+use crate::{
+	error::ApiError,
+	session::{MoneyToken, User},
+	state::AppState,
+};
 
 /// Outer per-request deadline: a handler that is still awaiting an upstream plane past
 /// this bound is aborted and the response becomes a 408, so a wedged plane can never hold
@@ -49,6 +55,28 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/funds/redemptions/cancel", post(money::cancel_redemption))
 		.route("/api/funds/subscribe", post(money::subscribe))
 		.route("/api/funds/redeem", post(money::redeem))
+		// Admin console — role-gated at the BFF (coarse) AND re-checked per-permission by the
+		// owning plane (defense in depth). Identity/platform routes hit concierge; money/
+		// treasury routes hit the piggybank money plane.
+		.route("/api/admin/overview", get(admin::overview))
+		.route("/api/admin/users", get(admin::list_users))
+		.route("/api/admin/users/detail", get(admin::get_user))
+		.route("/api/admin/users/role", post(admin::set_role))
+		.route("/api/admin/users/suspend", post(admin::suspend_user))
+		.route("/api/admin/users/reinstate", post(admin::reinstate_user))
+		.route("/api/admin/users/revoke", post(admin::revoke_sessions))
+		.route("/api/admin/users/kyc", post(admin::set_kyc))
+		.route("/api/admin/users/balance", get(admin::user_balance))
+		.route("/api/admin/treasury", get(admin::treasury))
+		.route("/api/admin/valuation/queue", get(admin::redemption_queue))
+		.route("/api/admin/valuation/post", post(admin::post_valuation))
+		.route("/api/admin/valuation/settle", post(admin::settle_redemption))
+		.route("/api/admin/valuation/fail", post(admin::fail_redemption))
+		.route("/api/admin/cabinet", get(admin::cabinet_config))
+		.route("/api/admin/cabinet/maintenance", post(admin::set_maintenance))
+		.route("/api/admin/cabinet/read-only", post(admin::set_read_only))
+		.route("/api/admin/cabinet/announcement", post(admin::set_announcement))
+		.route("/api/admin/cabinet/flag", post(admin::set_flag))
 		.with_state(state)
 		.layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_DEADLINE))
 		.layer(TraceLayer::new_for_http())
@@ -79,6 +107,22 @@ pub async fn require_money_token(state: &AppState, jar: &CookieJar) -> Result<St
 		MoneyToken::NotIssued => Err(ApiError::NotConfigured),
 		MoneyToken::NoSession => Err(ApiError::Unauthenticated),
 	}
+}
+
+/// Coarse admin gate for the console routes: the live session must belong to a
+/// non-investor role. This is defense in depth — the owning plane re-checks the
+/// SPECIFIC permission and returns `PermissionDenied` (→ 403) if the role is
+/// insufficient for that action; here we only cheaply reject a plain investor before
+/// any upstream call. Returns the admin principal (the handler may branch on the exact
+/// role). Role is captured at login into the server-side session, so this needs no
+/// upstream round trip.
+pub async fn require_admin(state: &AppState, jar: &CookieJar) -> Result<User, ApiError> {
+	let id = session_id(state, jar).ok_or(ApiError::Unauthenticated)?;
+	let (user, _csrf) = state.sessions.ensure_fresh(&id, &state.grpc).await.ok_or(ApiError::Unauthenticated)?;
+	if user.role.is_empty() || user.role == "investor" {
+		return Err(ApiError::Grpc(Status::permission_denied("admin access required")));
+	}
+	Ok(user)
 }
 
 /// CSRF double-submit: the `x-ev-csrf` header must equal the readable `ev_csrf` cookie.

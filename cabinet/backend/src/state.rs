@@ -78,6 +78,22 @@ impl Grpc {
 		bk::health_service_client::HealthServiceClient::new(self.piggybank.clone())
 	}
 
+	fn users_svc(&self) -> bk::users_service_client::UsersServiceClient<Channel> {
+		bk::users_service_client::UsersServiceClient::new(self.piggybank.clone())
+	}
+
+	fn balance(&self) -> bk::balance_service_client::BalanceServiceClient<Channel> {
+		bk::balance_service_client::BalanceServiceClient::new(self.piggybank.clone())
+	}
+
+	fn platform(&self) -> cc::platform_service_client::PlatformServiceClient<Channel> {
+		cc::platform_service_client::PlatformServiceClient::new(self.concierge.clone())
+	}
+
+	fn concierge_health(&self) -> cc::health_service_client::HealthServiceClient<Channel> {
+		cc::health_service_client::HealthServiceClient::new(self.concierge.clone())
+	}
+
 	// ── concierge identity plane ───────────────────────────────────────────────
 	pub async fn exchange(&self, req: cc::ExchangeRequest) -> Result<cc::TokenResponse, Status> {
 		Ok(self.auth().exchange(req).await?.into_inner())
@@ -213,6 +229,115 @@ impl Grpc {
 	pub async fn fund_nav(&self, token: &str, service: &str) -> Result<bk::FundNav, Status> {
 		let req = bk::GetFundNavRequest { service: service.to_string() };
 		Ok(self.funds().get_fund_nav(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn readiness(&self) -> Result<bk::ReadinessResponse, Status> {
+		Ok(self.health().readiness(bk::ReadinessRequest {}).await?.into_inner())
+	}
+
+	pub async fn concierge_check(&self) -> Result<cc::CheckResponse, Status> {
+		Ok(self.concierge_health().check(cc::CheckRequest {}).await?.into_inner())
+	}
+
+	// ── admin: concierge identity plane (identity token) ────────────────────────
+	pub async fn admin_list_users(&self, token: &str, req: cc::ListUsersRequest) -> Result<cc::ListUsersResponse, Status> {
+		Ok(self.directory().list_users(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn admin_get_user(&self, token: &str, user_id: &str) -> Result<cc::UserProfile, Status> {
+		let req = cc::GetUserRequest { user_id: user_id.to_string() };
+		Ok(self.directory().get_user(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn admin_set_role(&self, token: &str, user_id: &str, role: &str) -> Result<cc::SetRoleResponse, Status> {
+		let req = cc::SetRoleRequest {
+			user_id: user_id.to_string(),
+			role: role.to_string(),
+		};
+		Ok(self.directory().set_role(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn admin_disable_user(&self, token: &str, user_id: &str) -> Result<(), Status> {
+		let req = cc::DisableUserRequest { user_id: user_id.to_string() };
+		self.directory().disable_user(bearer(token, req)?).await?;
+		Ok(())
+	}
+
+	pub async fn admin_reinstate_user(&self, token: &str, user_id: &str) -> Result<(), Status> {
+		let req = cc::ReinstateUserRequest { user_id: user_id.to_string() };
+		self.directory().reinstate_user(bearer(token, req)?).await?;
+		Ok(())
+	}
+
+	pub async fn admin_revoke_tokens(&self, token: &str, user_id: &str) -> Result<cc::RevokeTokensResponse, Status> {
+		let req = cc::RevokeTokensRequest { user_id: user_id.to_string() };
+		Ok(self.directory().revoke_tokens(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn admin_set_kyc_level(&self, token: &str, user_id: &str, kyc_level: u32) -> Result<cc::SetKycLevelResponse, Status> {
+		let req = cc::SetKycLevelRequest {
+			user_id: user_id.to_string(),
+			kyc_level,
+		};
+		Ok(self.directory().set_kyc_level(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn platform_config(&self, token: &str) -> Result<cc::PlatformConfig, Status> {
+		Ok(self.platform().get_platform_config(bearer(token, cc::GetPlatformConfigRequest {})?).await?.into_inner())
+	}
+
+	pub async fn set_maintenance_mode(&self, token: &str, enabled: bool) -> Result<cc::PlatformConfig, Status> {
+		let req = cc::SetMaintenanceModeRequest { enabled };
+		Ok(self.platform().set_maintenance_mode(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn set_announcement(&self, token: &str, req: cc::SetAnnouncementRequest) -> Result<cc::PlatformConfig, Status> {
+		Ok(self.platform().set_announcement(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn set_feature_flag(&self, token: &str, req: cc::SetFeatureFlagRequest) -> Result<cc::PlatformConfig, Status> {
+		Ok(self.platform().set_feature_flag(bearer(token, req)?).await?.into_inner())
+	}
+
+	// ── admin: piggybank money plane (money token) ──────────────────────────────
+	pub async fn treasury(&self, token: &str) -> Result<bk::Treasury, Status> {
+		Ok(self.balance().get_treasury(bearer(token, bk::GetTreasuryRequest {})?).await?.into_inner())
+	}
+
+	pub async fn admin_user_balance(&self, token: &str, user_id: &str) -> Result<bk::UserBalanceResponse, Status> {
+		let req = bk::AdminBalanceRequest { user_id: user_id.to_string() };
+		Ok(self.users_svc().get_user_balance(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn redemption_queue(&self, token: &str) -> Result<bk::RedemptionQueue, Status> {
+		Ok(self.balance().list_redemption_queue(bearer(token, bk::ListRedemptionQueueRequest {})?).await?.into_inner())
+	}
+
+	pub async fn post_valuation(&self, token: &str, req: bk::PostFundValuationRequest) -> Result<bk::FundNav, Status> {
+		Ok(self.balance().post_fund_valuation(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn settle_redemption(&self, token: &str, redemption_id: &str) -> Result<bk::Redemption, Status> {
+		let req = bk::SettleRedemptionRequest {
+			redemption_id: redemption_id.to_string(),
+		};
+		Ok(self.balance().settle_redemption(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn fail_redemption(&self, token: &str, redemption_id: &str) -> Result<bk::Redemption, Status> {
+		let req = bk::FailRedemptionRequest {
+			redemption_id: redemption_id.to_string(),
+		};
+		Ok(self.balance().fail_redemption(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn operations_mode(&self, token: &str) -> Result<bk::OperationsMode, Status> {
+		Ok(self.balance().get_operations_mode(bearer(token, bk::GetOperationsModeRequest {})?).await?.into_inner())
+	}
+
+	pub async fn set_operations_mode(&self, token: &str, read_only: bool) -> Result<bk::OperationsMode, Status> {
+		let req = bk::SetOperationsModeRequest { read_only };
+		Ok(self.balance().set_operations_mode(bearer(token, req)?).await?.into_inner())
 	}
 }
 

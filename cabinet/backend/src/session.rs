@@ -17,6 +17,9 @@ pub struct User {
 	pub user_id: String,
 	pub email: String,
 	pub status: String,
+	/// The platform access role (snake_case: investor/operator/admin/owner), captured at
+	/// login so `/api/auth/session` can gate the admin console nav without a round trip.
+	pub role: String,
 }
 
 impl From<cc::UserSummary> for User {
@@ -25,6 +28,7 @@ impl From<cc::UserSummary> for User {
 			user_id: u.user_id,
 			email: u.email,
 			status: u.status,
+			role: u.role,
 		}
 	}
 }
@@ -425,6 +429,7 @@ mod tests {
 				email: "a@b.c".into(),
 				status: "active".into(),
 				token_version: 1,
+				role: "investor".into(),
 			}),
 		}
 	}
@@ -483,6 +488,7 @@ mod redis_tests {
 				email: "a@b.c".into(),
 				status: "active".into(),
 				token_version: 1,
+				role: "investor".into(),
 			}),
 		}
 	}

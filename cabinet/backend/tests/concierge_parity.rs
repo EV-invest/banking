@@ -31,6 +31,8 @@ fn user_profile_is_wire_identical_across_planes() {
 		language: "en".into(),
 		base_currency: "USDT".into(),
 		timezone: "Europe/London".into(),
+		kyc_level: 2,
+		role: "admin".into(),
 	};
 
 	let bk_profile = bk::UserProfile::decode(cc_profile.encode_to_vec().as_slice()).expect("concierge UserProfile decodes as banking UserProfile");
@@ -50,6 +52,8 @@ fn user_profile_is_wire_identical_across_planes() {
 	assert_eq!(bk_profile.language, cc_profile.language);
 	assert_eq!(bk_profile.base_currency, cc_profile.base_currency);
 	assert_eq!(bk_profile.timezone, cc_profile.timezone);
+	assert_eq!(bk_profile.kyc_level, cc_profile.kyc_level);
+	assert_eq!(bk_profile.role, cc_profile.role);
 
 	// Re-encoding from banking must reproduce concierge's exact bytes — no field added on
 	// one side that the other silently drops.
@@ -85,6 +89,7 @@ fn user_summary_is_wire_identical_across_planes() {
 		email: "a@b.c".into(),
 		status: "active".into(),
 		token_version: 3,
+		role: "operator".into(),
 	};
 
 	let bk_summary = bk::UserSummary::decode(cc_summary.encode_to_vec().as_slice()).expect("concierge UserSummary decodes as banking UserSummary");
@@ -93,5 +98,6 @@ fn user_summary_is_wire_identical_across_planes() {
 	assert_eq!(bk_summary.email, cc_summary.email);
 	assert_eq!(bk_summary.status, cc_summary.status);
 	assert_eq!(bk_summary.token_version, cc_summary.token_version);
+	assert_eq!(bk_summary.role, cc_summary.role);
 	assert_eq!(bk_summary.encode_to_vec(), cc_summary.encode_to_vec());
 }

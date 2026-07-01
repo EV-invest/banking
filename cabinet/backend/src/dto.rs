@@ -19,6 +19,12 @@ pub struct SessionUser {
 	pub user_id: String,
 	pub email: String,
 	pub status: String,
+	/// The platform access role (investor/operator/admin/owner).
+	pub role: String,
+	/// Derived convenience for the frontend nav: any non-investor role opens the admin
+	/// console. Real per-screen authorization is still enforced server-side (the BFF
+	/// admin routes re-check permission and the plane re-checks the role).
+	pub is_admin: bool,
 }
 
 #[derive(Serialize)]
@@ -30,12 +36,15 @@ pub struct SessionInfo {
 
 impl SessionInfo {
 	pub fn authenticated(user: User) -> Self {
+		let is_admin = !user.role.is_empty() && user.role != "investor";
 		Self {
 			authenticated: true,
 			user: Some(SessionUser {
 				user_id: user.user_id,
 				email: user.email,
 				status: user.status,
+				role: user.role,
+				is_admin,
 			}),
 		}
 	}
@@ -64,6 +73,8 @@ pub struct UserProfile {
 	pub language: String,
 	pub base_currency: String,
 	pub timezone: String,
+	pub kyc_level: u32,
+	pub role: String,
 }
 
 impl From<cc::UserProfile> for UserProfile {
@@ -84,6 +95,8 @@ impl From<cc::UserProfile> for UserProfile {
 			language: p.language,
 			base_currency: p.base_currency,
 			timezone: p.timezone,
+			kyc_level: p.kyc_level,
+			role: p.role,
 		}
 	}
 }
@@ -360,6 +373,213 @@ impl From<bk::FundNav> for FundNav {
 	}
 }
 
+// ── admin console ─────────────────────────────────────────────────────────────
+
+/// One fleet-health row (Overview). Backend-sourced where a plane serves it; the
+/// frontend renders the rest (Sentry/PostHog/incidents) against the shared obs libs.
+#[derive(Serialize)]
+pub struct FleetService {
+	pub name: String,
+	pub kind: String,
+	pub status: String,
+	pub detail: String,
+}
+
+#[derive(Serialize)]
+pub struct AdminOverview {
+	pub services: Vec<FleetService>,
+	/// Parked outbox rows on the money plane (the "money didn't move" set), from Readiness.
+	pub parked_rows: String,
+	pub backlog: String,
+	pub oldest_backlog_age_secs: String,
+}
+
+/// A user row in the operator user list.
+#[derive(Serialize)]
+pub struct AdminUserSummary {
+	pub user_id: String,
+	pub email: String,
+	pub status: String,
+	pub kyc_level: u32,
+	pub role: String,
+	pub token_version: String,
+	pub created_at: String,
+}
+
+impl From<cc::AdminUserSummary> for AdminUserSummary {
+	fn from(u: cc::AdminUserSummary) -> Self {
+		Self {
+			user_id: u.user_id,
+			email: u.email,
+			status: u.status,
+			kyc_level: u.kyc_level,
+			role: u.role,
+			token_version: u.token_version.to_string(),
+			created_at: u.created_at.to_string(),
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct AdminUserList {
+	pub users: Vec<AdminUserSummary>,
+	pub total: String,
+}
+
+impl From<cc::ListUsersResponse> for AdminUserList {
+	fn from(r: cc::ListUsersResponse) -> Self {
+		Self {
+			users: r.users.into_iter().map(AdminUserSummary::from).collect(),
+			total: r.total.to_string(),
+		}
+	}
+}
+
+/// A live user balance (the user-detail drawer).
+#[derive(Serialize)]
+pub struct UserBalance {
+	pub amount: String,
+	pub pending: String,
+	pub authoritative: bool,
+	pub as_of: String,
+}
+
+impl From<bk::UserBalanceResponse> for UserBalance {
+	fn from(b: bk::UserBalanceResponse) -> Self {
+		Self {
+			amount: b.amount,
+			pending: b.pending,
+			authoritative: b.authoritative,
+			as_of: b.as_of.to_string(),
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct RailLiquidity {
+	pub network: String,
+	pub custody: String,
+}
+
+/// The two-layer treasury picture (Treasury screen).
+#[derive(Serialize)]
+pub struct Treasury {
+	pub rails: Vec<RailLiquidity>,
+	pub bank: String,
+	pub total_custody: String,
+	pub fund_capital: String,
+	pub fee_revenue: String,
+	pub held_for_clients: String,
+	pub reserved_for_withdrawals: String,
+}
+
+impl From<bk::Treasury> for Treasury {
+	fn from(t: bk::Treasury) -> Self {
+		Self {
+			rails: t
+				.rails
+				.into_iter()
+				.map(|r| RailLiquidity {
+					network: r.network,
+					custody: r.custody,
+				})
+				.collect(),
+			bank: t.bank,
+			total_custody: t.total_custody,
+			fund_capital: t.fund_capital,
+			fee_revenue: t.fee_revenue,
+			held_for_clients: t.held_for_clients,
+			reserved_for_withdrawals: t.reserved_for_withdrawals,
+		}
+	}
+}
+
+/// One queued redemption in the Valuation screen's queue.
+#[derive(Serialize)]
+pub struct RedemptionQueueItem {
+	pub redemption_id: String,
+	pub user_id: String,
+	pub email: String,
+	pub service: String,
+	pub units: String,
+	pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct RedemptionQueue {
+	pub items: Vec<RedemptionQueueItem>,
+}
+
+impl From<bk::RedemptionQueue> for RedemptionQueue {
+	fn from(q: bk::RedemptionQueue) -> Self {
+		Self {
+			items: q
+				.items
+				.into_iter()
+				.map(|i| RedemptionQueueItem {
+					redemption_id: i.redemption_id,
+					user_id: i.user_id,
+					email: i.email,
+					service: i.service,
+					units: i.units,
+					created_at: i.created_at.to_string(),
+				})
+				.collect(),
+		}
+	}
+}
+
+/// The money-plane read-only kill-switch state (Cabinet screen).
+#[derive(Serialize)]
+pub struct OperationsMode {
+	pub read_only: bool,
+}
+
+impl From<bk::OperationsMode> for OperationsMode {
+	fn from(m: bk::OperationsMode) -> Self {
+		Self { read_only: m.read_only }
+	}
+}
+
+#[derive(Serialize)]
+pub struct FeatureFlag {
+	pub key: String,
+	pub description: String,
+	pub enabled: bool,
+	pub rollout: u32,
+}
+
+/// The platform/cabinet config (Cabinet screen: maintenance, announcement, flags).
+#[derive(Serialize)]
+pub struct PlatformConfig {
+	pub maintenance_mode: bool,
+	pub announcement_title: String,
+	pub announcement_body: String,
+	pub announcement_active: bool,
+	pub flags: Vec<FeatureFlag>,
+}
+
+impl From<cc::PlatformConfig> for PlatformConfig {
+	fn from(c: cc::PlatformConfig) -> Self {
+		Self {
+			maintenance_mode: c.maintenance_mode,
+			announcement_title: c.announcement_title,
+			announcement_body: c.announcement_body,
+			announcement_active: c.announcement_active,
+			flags: c
+				.flags
+				.into_iter()
+				.map(|f| FeatureFlag {
+					key: f.key,
+					description: f.description,
+					enabled: f.enabled,
+					rollout: f.rollout,
+				})
+				.collect(),
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use serde_json::json;
@@ -376,13 +596,15 @@ mod tests {
 			user_id: "u-1".into(),
 			email: "a@b.c".into(),
 			status: "active".into(),
+			role: "operator".into(),
 		};
 		let got = serde_json::to_value(SessionInfo::authenticated(user)).unwrap();
 		assert_eq!(
 			got,
 			json!({
 				"authenticated": true,
-				"user": { "userId": "u-1", "email": "a@b.c", "status": "active" }
+				// A non-investor role opens the admin console nav; `isAdmin` is the derived flag.
+				"user": { "userId": "u-1", "email": "a@b.c", "status": "active", "role": "operator", "isAdmin": true }
 			})
 		);
 	}
