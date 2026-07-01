@@ -14,11 +14,12 @@ pub async fn is_read_only(pool: &PgPool) -> Result<bool, sqlx::Error> {
 	Ok(value.unwrap_or(false))
 }
 
-/// Set read-only mode. Returns the value now in effect.
+/// Set read-only mode. Returns the value now in effect, read back via `RETURNING` so a
+/// missing singleton row surfaces as an error rather than a silent success.
 pub async fn set_read_only(pool: &PgPool, read_only: bool) -> Result<bool, sqlx::Error> {
-	sqlx::query("UPDATE operations_mode SET read_only = $1, updated_at = now() WHERE id = TRUE")
+	let now: bool = sqlx::query_scalar("UPDATE operations_mode SET read_only = $1, updated_at = now() WHERE id = TRUE RETURNING read_only")
 		.bind(read_only)
-		.execute(pool)
+		.fetch_one(pool)
 		.await?;
-	Ok(read_only)
+	Ok(now)
 }

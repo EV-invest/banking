@@ -43,11 +43,13 @@ pub(super) fn caller_id<T>(request: &Request<T>) -> Result<UserId, Status> {
 /// failure fails CLOSED (UNAVAILABLE) — a money op never proceeds when the gate can't be read.
 pub(super) async fn unfrozen_caller<T>(state: &AppState, request: &Request<T>) -> Result<UserId, Status> {
 	let user = caller_id(request)?;
-	// Global read-only kill-switch: every user money mutation routes through here, so this
-	// is the single choke point that enforces "pause deposits & withdrawals". Fails CLOSED.
+	// Global read-only kill-switch: every user-INITIATED money mutation (withdraw /
+	// subscribe / redeem) routes through here, so this is the single choke point that
+	// pauses outflows. Inbound on-chain deposit crediting (the deposit watchers) is
+	// deliberately NOT gated — funds already on-chain are still credited. Fails CLOSED.
 	match crate::infrastructure::operations::is_read_only(&state.pool).await {
 		Ok(false) => {}
-		Ok(true) => return Err(Status::failed_precondition("deposits and withdrawals are temporarily paused")),
+		Ok(true) => return Err(Status::failed_precondition("money movements are temporarily paused (read-only mode)")),
 		Err(_) => return Err(Status::unavailable("internal error")),
 	}
 	match crate::infrastructure::bridge::is_frozen(&state.pool, user.raw()).await {

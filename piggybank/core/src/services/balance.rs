@@ -141,7 +141,7 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn fail_redemption(&self, request: Request<pb::FailRedemptionRequest>) -> Result<Response<pb::Redemption>, Status> {
-		require_permission(&self.state, &request, Permission::RedemptionSettle).await?;
+		require_permission(&self.state, &request, Permission::RedemptionFail).await?;
 		let id = parse_redemption_id(&request.get_ref().redemption_id)?;
 		let redemption = funds_app::fail_redemption(self.state.redemptions.as_ref(), &self.state.relay_notify, id).await.map_err(map_err)?;
 		Ok(Response::new(redemption_to_proto(&redemption)))
