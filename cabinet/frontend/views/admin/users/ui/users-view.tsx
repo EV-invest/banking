@@ -17,17 +17,24 @@ export function UsersView() {
   const [total, setTotal] = useState("0");
   const [selected, setSelected] = useState<AdminUserSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped after a drawer mutation to re-run the list fetch below.
+  const [refresh, setRefresh] = useState(0);
 
-  const load = useCallback(() => {
+  // Filter/refresh-driven fetch with an ordering guard: a slower earlier response
+  // must not clobber a newer one (search fires per keystroke).
+  useEffect(() => {
+    let active = true;
     fetchUsers(filters)
       .then((list) => {
+        if (!active) return;
         setUsers(list.users ?? []);
         setTotal(list.total ?? "0");
       })
-      .catch((e: Error) => setError(e.message));
-  }, [filters]);
-
-  useEffect(load, [load]);
+      .catch((e: Error) => active && setError(e.message));
+    return () => {
+      active = false;
+    };
+  }, [filters, refresh]);
 
   return (
     <div className="space-y-6 px-8 pb-10 pt-6">
@@ -97,13 +104,9 @@ export function UsersView() {
         </Card>
 
         {selected && (
-          <UserDrawer
-            summary={selected}
-            onClose={() => setSelected(null)}
-            onChanged={() => {
-              load();
-            }}
-          />
+          // `key` remounts the drawer per user, so its uncontrolled inputs (KYC level)
+          // reset — otherwise a stale value could be committed against the wrong user.
+          <UserDrawer key={selected.user_id} summary={selected} onClose={() => setSelected(null)} onChanged={() => setRefresh((n) => n + 1)} />
         )}
       </div>
     </div>
