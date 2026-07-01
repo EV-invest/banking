@@ -140,28 +140,123 @@ pub fn gen_secp256k1() -> Zeroizing<[u8; 32]> {
 pub fn gen_ed25519() -> Zeroizing<[u8; 32]> {
 	Zeroizing::new(random_bytes::<32>())
 }
-/// Compressed secp256k1 public key (33 bytes).
-/// EVM address  = last 20 bytes of keccac256(uncompressed_pubkey[1..]).
-/// Tron address = same 20 bytes, prefix 0x41, then Base58Check.
-/// (use `alloy`/`ethers` for EVM and a tron lib for the encoding — no need
-///  to hand-roll keccak/base58.)
+/// Compressed secp256k1 public key (33 bytes). BSC/BEP20 and Tron/TRC20 share this curve, so
+/// the same stored key backs both an EVM and a Tron address — they differ only in the encoding
+/// of the same `keccak256(pubkey)[12..]` 20-byte image ([`evm_address`] / [`tron_address`]).
 pub fn secp256k1_pubkey(seed: &[u8; 32]) -> Vec<u8> {
 	use k256::ecdsa::SigningKey;
 	let sk = SigningKey::from_slice(seed).expect("valid secp256k1 scalar");
 	sk.verifying_key().to_sec1_bytes().to_vec()
 }
-/// The EVM (BSC/BEP20) address for a stored compressed secp256k1 public key:
-/// `keccak256(uncompressed_pubkey[1..])[12..]`, EIP-55 mixed-case checksummed.
+/// The 20-byte account image shared by EVM and Tron: `keccak256(uncompressed_pubkey[1..])[12..]`.
 /// `None` only if the bytes are not a valid curve point (never for keys we minted).
-/// Address derivation is network-agnostic — the same on BSC mainnet and testnet.
-pub fn evm_address(compressed_pubkey: &[u8]) -> Option<String> {
+fn keccak_address_bytes(compressed_pubkey: &[u8]) -> Option<[u8; 20]> {
 	use k256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
 	use sha3::{Digest, Keccak256};
 
 	let pubkey = PublicKey::from_sec1_bytes(compressed_pubkey).ok()?;
 	let point = pubkey.to_encoded_point(false); // 0x04 || X(32) || Y(32)
 	let hash = Keccak256::digest(&point.as_bytes()[1..]);
-	Some(eip55_checksum(&hash[12..32]))
+	let mut out = [0u8; 20];
+	out.copy_from_slice(&hash[12..32]);
+	Some(out)
+}
+/// The EVM (BSC/BEP20) address for a stored compressed secp256k1 public key:
+/// `keccak256(uncompressed_pubkey[1..])[12..]`, EIP-55 mixed-case checksummed.
+/// `None` only if the bytes are not a valid curve point (never for keys we minted).
+/// Address derivation is network-agnostic — the same on BSC mainnet and testnet.
+pub fn evm_address(compressed_pubkey: &[u8]) -> Option<String> {
+	Some(eip55_checksum(&keccak_address_bytes(compressed_pubkey)?))
+}
+/// The Tron (TRC20) address for the same stored secp256k1 key: the EVM 20-byte image with a
+/// `0x41` mainnet prefix, Base58Check-encoded (double-SHA-256 checksum) into the `T…` string.
+/// Tron shares EVM's curve + keccak step; only the envelope differs. `None` only for a non-curve
+/// point. Network-agnostic — the same `T…` form on Tron mainnet and the Nile/Shasta testnets.
+pub fn tron_address(compressed_pubkey: &[u8]) -> Option<String> {
+	Some(base58check(&tron_raw_address(compressed_pubkey)?))
+}
+/// The 21-byte raw Tron address (`0x41 || keccak_image`) for a stored secp256k1 key — the form
+/// that goes on the wire as `owner_address` in a signed transaction. The `T…` string is its
+/// Base58Check rendering ([`tron_address`]).
+pub fn tron_raw_address(compressed_pubkey: &[u8]) -> Option<[u8; 21]> {
+	let image = keccak_address_bytes(compressed_pubkey)?;
+	let mut raw = [0u8; 21];
+	raw[0] = 0x41;
+	raw[1..].copy_from_slice(&image);
+	Some(raw)
+}
+/// Decode a `T…` Base58Check Tron address back to its 21-byte raw form (`0x41 || account`),
+/// verifying the 4-byte double-SHA-256 checksum. `None` on a bad alphabet, length, or checksum —
+/// so a malformed destination is rejected before it can reach a signed transaction.
+pub fn tron_base58_to_raw(address: &str) -> Option<[u8; 21]> {
+	use sha2::{Digest, Sha256};
+
+	let decoded = base58_decode(address)?;
+	if decoded.len() != 25 {
+		return None;
+	}
+	let (payload, checksum) = decoded.split_at(21);
+	if Sha256::digest(Sha256::digest(payload))[..4] != *checksum {
+		return None;
+	}
+	payload.try_into().ok()
+}
+/// Base58Check: append the first 4 bytes of `sha256(sha256(payload))` and Base58-encode. This is
+/// the Tron (and Bitcoin) address envelope; hand-rolled here rather than pulling a chain SDK,
+/// matching the repo's "hand-roll the encoding, not a heavyweight dep" stance (cf. EVM RLP).
+fn base58check(payload: &[u8]) -> String {
+	use sha2::{Digest, Sha256};
+
+	let checksum = Sha256::digest(Sha256::digest(payload));
+	let mut full = Vec::with_capacity(payload.len() + 4);
+	full.extend_from_slice(payload);
+	full.extend_from_slice(&checksum[..4]);
+	base58_encode(&full)
+}
+/// Base58 (Bitcoin/Tron alphabet) of an arbitrary big-endian byte string. Leading zero bytes map
+/// to leading `1`s; the rest is base-256 → base-58 by repeated division over the digit buffer.
+fn base58_encode(input: &[u8]) -> String {
+	const ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+	let zeros = input.iter().take_while(|&&b| b == 0).count();
+	let mut digits: Vec<u8> = Vec::new();
+	for &byte in input {
+		let mut carry = byte as u32;
+		for digit in digits.iter_mut() {
+			carry += (*digit as u32) << 8;
+			*digit = (carry % 58) as u8;
+			carry /= 58;
+		}
+		while carry > 0 {
+			digits.push((carry % 58) as u8);
+			carry /= 58;
+		}
+	}
+	let mut out = String::with_capacity(zeros + digits.len());
+	out.extend(std::iter::repeat_n('1', zeros));
+	out.extend(digits.iter().rev().map(|&d| ALPHABET[d as usize] as char));
+	out
+}
+/// Inverse of [`base58_encode`]: decode a Base58 string to its big-endian bytes (leading `1`s
+/// become leading zero bytes). `None` on any character outside the alphabet.
+fn base58_decode(input: &str) -> Option<Vec<u8>> {
+	const ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+	let zeros = input.bytes().take_while(|&b| b == b'1').count();
+	let mut bytes: Vec<u8> = Vec::new();
+	for ch in input.bytes() {
+		let mut carry = ALPHABET.iter().position(|&a| a == ch)? as u32;
+		for byte in bytes.iter_mut() {
+			carry += (*byte as u32) * 58;
+			*byte = (carry & 0xff) as u8;
+			carry >>= 8;
+		}
+		while carry > 0 {
+			bytes.push((carry & 0xff) as u8);
+			carry >>= 8;
+		}
+	}
+	let mut out = vec![0u8; zeros];
+	out.extend(bytes.iter().rev());
+	Some(out)
 }
 
 /// ed25519 public key (32 bytes). The TON wallet ADDRESS additionally needs a
@@ -294,6 +389,33 @@ mod tests {
 		let a = evm_address(&pubkey).unwrap();
 		assert_eq!(a, evm_address(&pubkey).unwrap());
 		assert!(a.starts_with("0x") && a.len() == 42);
+	}
+
+	#[test]
+	fn tron_address_matches_canonical_vector() {
+		// secp256k1 private key = 1 → the same key the EVM vector uses. EVM address
+		// 0x7E5F…395Bdf re-encodes to this Tron T-address (0x41 prefix + Base58Check),
+		// pinning the shared keccak image + the Base58Check envelope.
+		let mut seed = [0u8; 32];
+		seed[31] = 1;
+		let pubkey = secp256k1_pubkey(&seed);
+		assert_eq!(tron_address(&pubkey).unwrap(), "TMVQGm1qAQYVdetCeGRRkTWYYrLXuHK2HC");
+	}
+
+	#[test]
+	fn base58check_matches_the_usdt_contract_address() {
+		// Independently pins Base58Check against external truth: the mainnet USDT (TRC20)
+		// contract's 21-byte hex 0x41a614…d13c encodes to its canonical T-address.
+		let payload = hex::decode("41a614f803b6fd780986a42c78ec9c7f77e6ded13c").unwrap();
+		assert_eq!(base58check(&payload), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
+	}
+
+	#[test]
+	fn tron_address_is_deterministic_and_well_formed() {
+		let pubkey = secp256k1_pubkey(&gen_secp256k1());
+		let a = tron_address(&pubkey).unwrap();
+		assert_eq!(a, tron_address(&pubkey).unwrap());
+		assert!(a.starts_with('T') && a.len() == 34);
 	}
 
 	#[test]

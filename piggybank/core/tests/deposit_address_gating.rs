@@ -19,7 +19,7 @@ use std::sync::{
 use domain::{money::Network, users::UserId};
 use evbanking_contracts::signer::v1::{
 	ProvisionAddressRequest, ProvisionAddressResponse, SignErc20TransferRequest, SignErc20TransferResponse, SignJettonTransferRequest, SignNativeTransferRequest, SignNativeTransferResponse,
-	SignTonTransferRequest, SignedTonTxResponse,
+	SignTonTransferRequest, SignTrc20TransferRequest, SignTrxTransferRequest, SignedTonTxResponse, SignedTronTxResponse,
 	signer_service_client::SignerServiceClient,
 	signer_service_server::{SignerService, SignerServiceServer},
 };
@@ -66,6 +66,14 @@ impl SignerService for FakeSigner {
 
 	async fn sign_native_transfer(&self, _request: tonic::Request<SignNativeTransferRequest>) -> Result<tonic::Response<SignNativeTransferResponse>, tonic::Status> {
 		Err(tonic::Status::unimplemented("sign_native_transfer is not exercised by the deposit-address gating test"))
+	}
+
+	async fn sign_trc20_transfer(&self, _request: tonic::Request<SignTrc20TransferRequest>) -> Result<tonic::Response<SignedTronTxResponse>, tonic::Status> {
+		Err(tonic::Status::unimplemented("sign_trc20_transfer is not exercised by the deposit-address gating test"))
+	}
+
+	async fn sign_trx_transfer(&self, _request: tonic::Request<SignTrxTransferRequest>) -> Result<tonic::Response<SignedTronTxResponse>, tonic::Status> {
+		Err(tonic::Status::unimplemented("sign_trx_transfer is not exercised by the deposit-address gating test"))
 	}
 
 	async fn sign_jetton_transfer(&self, _request: tonic::Request<SignJettonTransferRequest>) -> Result<tonic::Response<SignedTonTxResponse>, tonic::Status> {

@@ -40,6 +40,10 @@ use piggybank_core::{
 		ton_deposit_watcher::TonDepositWatcher,
 		ton_sweep::TonSweep,
 		ton_withdrawal_watcher::TonWithdrawalWatcher,
+		tron_custody::TronCustody,
+		tron_deposit_watcher::TronDepositWatcher,
+		tron_sweep::TronSweep,
+		tron_withdrawal_watcher::TronWithdrawalWatcher,
 		users::PgUsers,
 		withdrawal_watcher::WithdrawalWatcher,
 		withdrawals::PgWithdrawals,
@@ -158,6 +162,13 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		}
 		custody_by_network.insert(Network::Bep20, Arc::new(chain_custody));
 	}
+	if let Some(tron) = &config.tron {
+		let tron_custody = TronCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), tron);
+		if let Err(err) = tron_custody.treasury_address().await {
+			tracing::warn!("could not resolve the tron treasury address at boot (resolves on first withdrawal): {err}");
+		}
+		custody_by_network.insert(Network::Trc20, Arc::new(tron_custody));
+	}
 	// --- TON custody (jetton USDT) ---
 	if let Some(ton) = &config.ton {
 		let ton_custody = TonCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton);
@@ -231,6 +242,20 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		_ => None,
 	};
 
+	// ── on-chain Tron (TRC20 USDT) watchers + sweep ────────────────────────────
+	// The Tron analogues of the BEP20 seams above: deposit watcher, withdrawal confirmation
+	// watcher, and (opt-in) sweep. Each runs only when TRON_RPC_URL is set; their own pool clones
+	// keep the polling reads off the request path.
+	let tron_deposit_watcher = config.tron.as_ref().map(|tron| TronDepositWatcher::new(pool.clone(), relay_notify.clone(), tron));
+	let tron_withdrawal_watcher = config
+		.tron
+		.as_ref()
+		.map(|tron| TronWithdrawalWatcher::new(pool.clone(), withdrawals.clone(), relay_notify.clone(), tron));
+	let tron_sweep = match (&config.tron, &config.tron_sweep) {
+		(Some(tron), Some(sweep_config)) => Some(TronSweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), tron, sweep_config.clone())),
+		_ => None,
+	};
+
 	// --- TON on-chain tasks (jetton USDT) ---
 	// Deposit watcher + withdrawal confirmation watcher run when TON_API_URL is set; the
 	// sweep additionally needs SWEEP_ENABLED. Each holds its own pool clone / signer channel,
@@ -294,6 +319,9 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		watcher_done,
 		withdrawal_watcher_done,
 		sweep_done,
+		tron_watcher_done,
+		tron_withdrawal_watcher_done,
+		tron_sweep_done,
 		ton_watcher_done,
 		ton_withdrawal_watcher_done,
 		ton_sweep_done,
@@ -309,6 +337,13 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		branch(&shutdown, "deposit watcher", infallible(run_watcher(deposit_watcher, shutdown.clone()))),
 		branch(&shutdown, "withdrawal watcher", infallible(run_withdrawal_watcher(withdrawal_watcher, shutdown.clone()))),
 		branch(&shutdown, "sweep", infallible(run_sweep(sweep, shutdown.clone()))),
+		branch(&shutdown, "tron deposit watcher", infallible(run_tron_deposit_watcher(tron_deposit_watcher, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"tron withdrawal watcher",
+			infallible(run_tron_withdrawal_watcher(tron_withdrawal_watcher, shutdown.clone()))
+		),
+		branch(&shutdown, "tron sweep", infallible(run_tron_sweep(tron_sweep, shutdown.clone()))),
 		branch(&shutdown, "ton deposit watcher", infallible(run_ton_watcher(ton_deposit_watcher, shutdown.clone()))),
 		branch(
 			&shutdown,
@@ -328,6 +363,9 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.and(watcher_done)
 		.and(withdrawal_watcher_done)
 		.and(sweep_done)
+		.and(tron_watcher_done)
+		.and(tron_withdrawal_watcher_done)
+		.and(tron_sweep_done)
 		.and(ton_watcher_done)
 		.and(ton_withdrawal_watcher_done)
 		.and(ton_sweep_done)
@@ -388,9 +426,26 @@ async fn run_sweep(sweep: Option<Sweep>, shutdown: CancellationToken) {
 	}
 }
 
+/// Run the Tron deposit watcher if configured, else idle until shutdown — same shape as the
+/// BEP20 watcher (an unconfigured Tron rail is a no-op, not a missing branch).
+async fn run_tron_deposit_watcher(watcher: Option<TronDepositWatcher>, shutdown: CancellationToken) {
+	match watcher {
+		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
 /// Run the TON deposit watcher if configured, else idle until shutdown — the same
 /// unconditional-branch shape as its BEP20 sibling.
 async fn run_ton_watcher(watcher: Option<TonDepositWatcher>, shutdown: CancellationToken) {
+	match watcher {
+		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the Tron withdrawal confirmation watcher if configured, else idle until shutdown.
+async fn run_tron_withdrawal_watcher(watcher: Option<TronWithdrawalWatcher>, shutdown: CancellationToken) {
 	match watcher {
 		Some(watcher) => watcher.run(shutdown).await,
 		None => shutdown.cancelled().await,
@@ -401,6 +456,14 @@ async fn run_ton_watcher(watcher: Option<TonDepositWatcher>, shutdown: Cancellat
 async fn run_ton_withdrawal_watcher(watcher: Option<TonWithdrawalWatcher>, shutdown: CancellationToken) {
 	match watcher {
 		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the Tron treasury sweep if enabled, else idle until shutdown.
+async fn run_tron_sweep(sweep: Option<TronSweep>, shutdown: CancellationToken) {
+	match sweep {
+		Some(sweep) => sweep.run(shutdown).await,
 		None => shutdown.cancelled().await,
 	}
 }

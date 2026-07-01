@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+// Minimal vendored subset of the TRON protocol (github.com/tronprotocol/protocol) — only the
+// messages the signer needs to BUILD and SIGN a transaction. Field numbers and the ContractType
+// enum values MUST match TRON exactly: the on-chain txID is sha256(serialized Transaction.raw),
+// and the node validates the wire layout, so any drift yields a wrong hash or an invalid tx.
+// Sources: core/Tron.proto, core/contract/smart_contract.proto, core/contract/balance_contract.proto.
+package protocol;
+
+// Wire-identical to google.protobuf.Any (string type_url = 1; bytes value = 2). Defined locally so
+// the build needs no well-known-types include path — the only field that matters is `type_url`
+// (e.g. "type.googleapis.com/protocol.TriggerSmartContract"), which we set explicitly.
+message Any {
+  string type_url = 1;
+  bytes value = 2;
+}
+
+// Native TRX transfer — used for gas-station top-ups (bandwidth-only, no fee_limit/energy).
+message TransferContract {
+  bytes owner_address = 1; // 21 bytes: 0x41 || account
+  bytes to_address = 2;    // 21 bytes
+  int64 amount = 3;        // SUN
+}
+
+// A smart-contract call — used for the TRC20 USDT transfer(address,uint256).
+message TriggerSmartContract {
+  bytes owner_address = 1;    // 21 bytes
+  bytes contract_address = 2; // 21 bytes: the USDT contract
+  int64 call_value = 3;       // 0 for a token transfer
+  bytes data = 4;             // the ABI calldata (selector + args)
+  int64 call_token_value = 5;
+  int64 token_id = 6;
+}
+
+message Transaction {
+  message Contract {
+    enum ContractType {
+      AccountCreateContract = 0;
+      TransferContract = 1;
+      TriggerSmartContract = 31;
+    }
+    ContractType type = 1;
+    Any parameter = 2;
+    bytes provider = 3;
+    bytes ContractName = 4;
+    int32 Permission_id = 5;
+  }
+  // The signed digest is sha256 over THIS message's serialized bytes.
+  message raw {
+    bytes ref_block_bytes = 1;
+    int64 ref_block_num = 3;
+    bytes ref_block_hash = 4;
+    int64 expiration = 8;
+    bytes data = 10;
+    repeated Contract contract = 11;
+    int64 timestamp = 14;
+    int64 fee_limit = 18;
+  }
+  raw raw_data = 1;
+  repeated bytes signature = 2;
+}

@@ -5,12 +5,12 @@
 //! signer**, lives only in a [`Zeroizing`] buffer, is sealed immediately, and is
 //! never logged — it leaves this function only as ciphertext.
 
-use domain::money::{Network, WalletAddress};
+use domain::money::Network;
 use uuid::Uuid;
 
 use crate::{
 	error::SignerError,
-	key_vault::{Chain, Vault, ed25519_pubkey, evm_address, gen_ed25519, gen_secp256k1, secp256k1_pubkey, ton_address},
+	key_vault::{Chain, Vault, ed25519_pubkey, evm_address, gen_ed25519, gen_secp256k1, secp256k1_pubkey, ton_address, tron_address},
 	secrets::{NewSecret, WalletSecrets},
 };
 
@@ -18,18 +18,13 @@ use crate::{
 /// blob's `key_version` tells the signer how to open it. Only `1` exists today.
 const KEY_VERSION: i32 = 1;
 
-const BASE58: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const BASE64URL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-
-/// Address-kind tags the signer reports to the hub. Real pubkey→address encoding is a
-/// deferred feature, so today every address is a [`KIND_PLACEHOLDER`]; [`KIND_DERIVED`]
-/// is the value the signer will report once it computes the true on-chain image. The hub
-/// uses this to refuse to serve a placeholder as a fundable deposit destination.
-pub const KIND_PLACEHOLDER: &str = "placeholder";
+/// Address-kind tag the signer reports to the hub. Every supported rail now computes its
+/// true on-chain image, so provisioning reports [`KIND_DERIVED`]; the hub still gates on
+/// this to refuse serving a non-derived address as a fundable deposit destination.
 pub const KIND_DERIVED: &str = "derived";
 
-/// A provisioned (or re-read) deposit address plus the [`KIND_PLACEHOLDER`]/
-/// [`KIND_DERIVED`] tag the hub needs to decide whether the rail is fundable.
+/// A provisioned (or re-read) deposit address plus the [`KIND_DERIVED`] tag the hub needs
+/// to decide whether the rail is fundable.
 pub struct ProvisionedAddress {
 	pub address: String,
 	pub kind: &'static str,
@@ -83,21 +78,23 @@ pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, ne
 	Ok(ProvisionedAddress { address, kind })
 }
 
-/// The on-chain address for a stored/fresh public key, plus its kind. **BEP20** derives the
-/// real EVM address (EIP-55) and **TON** the real v4R2 wallet (StateInit hash), both
-/// reporting [`KIND_DERIVED`] — fundable. TRC20 still returns a [`KIND_PLACEHOLDER`] until
-/// its Base58Check encoding lands.
+/// The on-chain address for a stored/fresh public key, plus its kind. **BEP20** derives the real
+/// EVM address (EIP-55), **TRC20** the real Base58Check `T…` address, and **TON** the real v4R2
+/// wallet (StateInit hash) — all [`KIND_DERIVED`] (fundable).
 fn render_address(network: Network, public_key: &[u8]) -> Result<(String, &'static str), SignerError> {
 	match network {
 		Network::Bep20 => {
 			let address = evm_address(public_key).ok_or_else(|| SignerError::Repository("EVM address derivation failed for a stored secp256k1 key".into()))?;
 			Ok((address, KIND_DERIVED))
 		}
+		Network::Trc20 => {
+			let address = tron_address(public_key).ok_or_else(|| SignerError::Repository("Tron address derivation failed for a stored secp256k1 key".into()))?;
+			Ok((address, KIND_DERIVED))
+		}
 		Network::Ton => {
 			let address = ton_address(public_key).ok_or_else(|| SignerError::Repository("TON address derivation failed for a stored ed25519 key".into()))?;
 			Ok((address, KIND_DERIVED))
 		}
-		Network::Trc20 => Ok((placeholder_address(network, public_key)?.as_str().to_owned(), KIND_PLACEHOLDER)),
 	}
 }
 
@@ -130,40 +127,4 @@ pub fn chain_of(network: Network) -> Chain {
 		Network::Trc20 => Chain::TronTrc20,
 		Network::Ton => Chain::Ton,
 	}
-}
-
-/// A structurally-valid address **bound to the real public key** — but NOT yet its
-/// cryptographic image. Real pubkey→address encoding (EVM keccak, Tron Base58Check,
-/// TON wallet-contract v4/v5 via a TON SDK) is a separate feature; until it lands the
-/// signer returns this placeholder so the watch-only surface keeps a stable, parseable
-/// address per wallet. Recompute from the stored `public_key` when real encoding ships.
-fn placeholder_address(network: Network, pubkey: &[u8]) -> Result<WalletAddress, SignerError> {
-	let byte_at = |i: usize| pubkey[i % pubkey.len()];
-	let rendered = match network {
-		// EVM: 0x + 40 hex (20 bytes).
-		Network::Bep20 => {
-			let mut s = String::from("0x");
-			for i in 0..20 {
-				s.push_str(&format!("{:02x}", byte_at(i)));
-			}
-			s
-		}
-		// TRON: 'T' + 33 base58 chars.
-		Network::Trc20 => {
-			let mut s = String::from("T");
-			for i in 0..33 {
-				s.push(BASE58[byte_at(i) as usize % BASE58.len()] as char);
-			}
-			s
-		}
-		// TON: 48-char user-friendly base64url.
-		Network::Ton => {
-			let mut s = String::with_capacity(48);
-			for i in 0..48 {
-				s.push(BASE64URL[byte_at(i) as usize % BASE64URL.len()] as char);
-			}
-			s
-		}
-	};
-	WalletAddress::parse(network, &rendered).map_err(|e| SignerError::Repository(e.to_string()))
 }
