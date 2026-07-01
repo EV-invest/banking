@@ -8,9 +8,10 @@
 //!   - the **core** gRPC services (health/users/balance/funds/wallet) on `grpc_addr`,
 //!     authorizing each request via the `Authorizer` core got from auth.
 
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use anyhow::Context;
+use domain::money::Network;
 use ev::error_monitoring::{self, Config as SentryConfig};
 use evbanking_auth::{AuthConfig, AuthService, ServiceTokenSource, provisioner_channel};
 use evbanking_contracts::signer::v1::signer_service_client::SignerServiceClient;
@@ -21,7 +22,7 @@ use piggybank_core::{
 	infrastructure::{
 		bridge::BridgeConsumer,
 		bsc_rpc::BscRpc,
-		custody::{ChainCustody, StubCustody},
+		custody::{ChainCustody, MultiChainCustody, StubCustody},
 		db,
 		deposit_watcher::DepositWatcher,
 		ledger::{self, TbLedger},
@@ -35,6 +36,10 @@ use piggybank_core::{
 		subscriptions::PgSubscriptions,
 		sweep::Sweep,
 		tigerbeetle::TigerBeetle,
+		ton_custody::TonCustody,
+		ton_deposit_watcher::TonDepositWatcher,
+		ton_sweep::TonSweep,
+		ton_withdrawal_watcher::TonWithdrawalWatcher,
 		users::PgUsers,
 		withdrawal_watcher::WithdrawalWatcher,
 		withdrawals::PgWithdrawals,
@@ -130,31 +135,40 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.await
 		.context("failed to connect the relay's database pool")?;
 	let relay_notify = Arc::new(Notify::new());
-	// Real BSC custody when the chain is configured (same gate as the deposit watcher): sign
-	// the withdrawal via the signer's treasury key and broadcast it. Else the no-op stub (an
-	// operator settles manually). Unconfigured dev/CI is unaffected.
-	let custody: Arc<dyn Custody> = match &config.bsc {
-		Some(bsc) => {
-			let chain_custody = ChainCustody::new(
-				pool.clone(),
-				BscRpc::new(bsc.rpc_url.clone()),
-				SignerServiceClient::new(signer_channel.clone()),
-				ServiceTokenSource::from_env(),
-				bsc.chain_id,
-				bsc.usdt_contract.clone(),
-				bsc.gas_limit,
-			);
-			// Resolve + log the treasury hot wallet at boot so the operator can fund it (USDT
-			// for liquidity, BNB for gas) before any withdrawal settles. Best-effort: if the
-			// signer isn't up yet it resolves on the first withdrawal instead — boot is never
-			// blocked on it.
-			if let Err(err) = chain_custody.treasury_address().await {
-				tracing::warn!("could not resolve the treasury address at boot (resolves on first withdrawal): {err}");
-			}
-			Arc::new(chain_custody)
+	// Per-rail custody registry: each configured chain registers its adapter, keyed by network;
+	// the relay holds the one `MultiChainCustody` that fans out by `request.network`. An unwired
+	// rail falls through to the no-op stub (an operator settles manually), so unconfigured dev/CI
+	// is unaffected — same gate per chain as its deposit watcher.
+	let mut custody_by_network: HashMap<Network, Arc<dyn Custody>> = HashMap::new();
+	if let Some(bsc) = &config.bsc {
+		let chain_custody = ChainCustody::new(
+			pool.clone(),
+			BscRpc::new(bsc.rpc_url.clone()),
+			SignerServiceClient::new(signer_channel.clone()),
+			ServiceTokenSource::from_env(),
+			bsc.chain_id,
+			bsc.usdt_contract.clone(),
+			bsc.gas_limit,
+		);
+		// Resolve + log the treasury hot wallet at boot so the operator can fund it (USDT for
+		// liquidity, BNB for gas) before any withdrawal settles. Best-effort: if the signer isn't
+		// up yet it resolves on the first withdrawal instead — boot is never blocked on it.
+		if let Err(err) = chain_custody.treasury_address().await {
+			tracing::warn!("could not resolve the treasury address at boot (resolves on first withdrawal): {err}");
 		}
-		None => Arc::new(StubCustody),
-	};
+		custody_by_network.insert(Network::Bep20, Arc::new(chain_custody));
+	}
+	// --- TON custody (jetton USDT) ---
+	if let Some(ton) = &config.ton {
+		let ton_custody = TonCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton);
+		// Resolve + log the treasury at boot so the operator funds it (USDT + TON) before any
+		// withdrawal settles. Best-effort — resolves on the first withdrawal otherwise.
+		if let Err(err) = ton_custody.treasury_address().await {
+			tracing::warn!("could not resolve the TON treasury address at boot (resolves on first withdrawal): {err}");
+		}
+		custody_by_network.insert(Network::Ton, Arc::new(ton_custody));
+	}
+	let custody: Arc<dyn Custody> = Arc::new(MultiChainCustody::new(custody_by_network, Arc::new(StubCustody)));
 	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody, relay_notify.clone());
 
 	// Recovery jobs, on the relay's dedicated pool so their periodic scans don't compete
@@ -217,6 +231,26 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		_ => None,
 	};
 
+	// --- TON on-chain tasks (jetton USDT) ---
+	// Deposit watcher + withdrawal confirmation watcher run when TON_API_URL is set; the
+	// sweep additionally needs SWEEP_ENABLED. Each holds its own pool clone / signer channel,
+	// mirroring the BEP20 tasks; all are no-ops (idle branch) when unconfigured.
+	let ton_deposit_watcher = config.ton.clone().map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton));
+	let ton_withdrawal_watcher = config.ton.as_ref().map(|ton| {
+		TonWithdrawalWatcher::new(
+			pool.clone(),
+			signer_channel.clone(),
+			ServiceTokenSource::from_env(),
+			withdrawals.clone(),
+			relay_notify.clone(),
+			ton,
+		)
+	});
+	let ton_sweep = match (&config.ton, &config.ton_sweep) {
+		(Some(ton), Some(sweep_config)) => Some(TonSweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton, sweep_config.clone())),
+		_ => None,
+	};
+
 	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
 	let (provisioner, provision_rx) = provisioner_channel();
 	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).await.context("failed to build the auth service")?;
@@ -248,7 +282,22 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// is cancelled — so the first to finish triggers the rest to wind down on their own terms
 	// rather than being aborted mid-work, and `join!` waits for them all.
 	let shutdown = CancellationToken::new();
-	let (signal, core, auth, provisioner, relay_done, reconciliation_done, reaper_done, bridge_done, watcher_done, withdrawal_watcher_done, sweep_done) = tokio::join!(
+	let (
+		signal,
+		core,
+		auth,
+		provisioner,
+		relay_done,
+		reconciliation_done,
+		reaper_done,
+		bridge_done,
+		watcher_done,
+		withdrawal_watcher_done,
+		sweep_done,
+		ton_watcher_done,
+		ton_withdrawal_watcher_done,
+		ton_sweep_done,
+	) = tokio::join!(
 		await_signal(shutdown.clone()),
 		branch(&shutdown, "core gRPC server", services::serve(config.grpc_addr, state, shutdown.clone().cancelled_owned())),
 		branch(&shutdown, "auth service", auth_service.run(config.auth_grpc_addr, shutdown.clone().cancelled_owned())),
@@ -260,6 +309,13 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		branch(&shutdown, "deposit watcher", infallible(run_watcher(deposit_watcher, shutdown.clone()))),
 		branch(&shutdown, "withdrawal watcher", infallible(run_withdrawal_watcher(withdrawal_watcher, shutdown.clone()))),
 		branch(&shutdown, "sweep", infallible(run_sweep(sweep, shutdown.clone()))),
+		branch(&shutdown, "ton deposit watcher", infallible(run_ton_watcher(ton_deposit_watcher, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"ton withdrawal watcher",
+			infallible(run_ton_withdrawal_watcher(ton_withdrawal_watcher, shutdown.clone()))
+		),
+		branch(&shutdown, "ton sweep", infallible(run_ton_sweep(ton_sweep, shutdown.clone()))),
 	);
 	let () = signal;
 	// The first error (if any) becomes the process result; a clean shutdown is `Ok`.
@@ -272,6 +328,9 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.and(watcher_done)
 		.and(withdrawal_watcher_done)
 		.and(sweep_done)
+		.and(ton_watcher_done)
+		.and(ton_withdrawal_watcher_done)
+		.and(ton_sweep_done)
 }
 
 /// Run one composition-root branch to completion, mapping any error to `anyhow`, then cancel
@@ -323,6 +382,31 @@ async fn run_withdrawal_watcher(watcher: Option<WithdrawalWatcher>, shutdown: Ca
 /// Run the treasury sweep if enabled, else idle until shutdown — the same unconditional-
 /// branch shape (an un-enabled sweep is a no-op, not a missing branch).
 async fn run_sweep(sweep: Option<Sweep>, shutdown: CancellationToken) {
+	match sweep {
+		Some(sweep) => sweep.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the TON deposit watcher if configured, else idle until shutdown — the same
+/// unconditional-branch shape as its BEP20 sibling.
+async fn run_ton_watcher(watcher: Option<TonDepositWatcher>, shutdown: CancellationToken) {
+	match watcher {
+		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the TON withdrawal confirmation watcher if configured, else idle until shutdown.
+async fn run_ton_withdrawal_watcher(watcher: Option<TonWithdrawalWatcher>, shutdown: CancellationToken) {
+	match watcher {
+		Some(watcher) => watcher.run(shutdown).await,
+		None => shutdown.cancelled().await,
+	}
+}
+
+/// Run the TON treasury sweep if enabled, else idle until shutdown.
+async fn run_ton_sweep(sweep: Option<TonSweep>, shutdown: CancellationToken) {
 	match sweep {
 		Some(sweep) => sweep.run(shutdown).await,
 		None => shutdown.cancelled().await,

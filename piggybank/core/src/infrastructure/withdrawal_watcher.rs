@@ -94,9 +94,11 @@ impl WithdrawalWatcher {
 	/// of truth — a settled one leaves the set as its state moves to `completed`, so a
 	/// re-settle is never even attempted.
 	async fn pending_broadcasts(&self) -> Result<Vec<(Uuid, String)>, WatcherError> {
+		// Scoped to `network = 'bep20'` so a Tron/TON broadcast row in the shared table is never
+		// read as an EVM tx hash (its receipt lookup would be meaningless on this rail).
 		sqlx::query_as::<_, (Uuid, String)>(
 			"SELECT b.withdrawal_id, b.tx_hash FROM withdrawal_broadcasts b \
-			 JOIN withdrawals w ON w.id = b.withdrawal_id WHERE w.state = 'processing'",
+			 JOIN withdrawals w ON w.id = b.withdrawal_id WHERE w.state = 'processing' AND b.network = 'bep20'",
 		)
 		.fetch_all(&self.pool)
 		.await

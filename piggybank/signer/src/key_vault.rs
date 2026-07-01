@@ -165,10 +165,37 @@ pub fn evm_address(compressed_pubkey: &[u8]) -> Option<String> {
 }
 
 /// ed25519 public key (32 bytes). The TON wallet ADDRESS additionally needs a
-/// wallet contract (v4/v5) + workchain; use a TON SDK to derive/deploy it.
+/// wallet contract (v4/v5) + workchain; see [`ton_address`].
 pub fn ed25519_pubkey(seed: &[u8; 32]) -> [u8; 32] {
 	use ed25519_dalek::SigningKey;
 	SigningKey::from_bytes(seed).verifying_key().to_bytes()
+}
+
+/// The TON v4R2 wallet-contract address for a stored 32-byte Ed25519 public key.
+///
+/// Unlike EVM (`addr = keccak(pubkey)[12..]`), a TON address is the contract's
+/// **StateInit hash** — `sha256(code ++ data)` where `data` embeds the pubkey and the
+/// v4R2 `wallet_id` (`0x29a9a317` = 698983191). So the same pubkey on a different
+/// wallet version is a different address; we standardize on v4R2 (simplest `seqno`
+/// nonce, universally indexed). We return the RAW canonical `0:<64hex>` form, which is
+/// bounceability- and network-agnostic and accepted by
+/// [`domain::money::WalletAddress::parse`]`(Ton, …)`; the user-facing `UQ…`/`0Q…`
+/// (mainnet/testnet, non-bounceable) form is a display-time concern derived from this.
+/// `None` only if the bytes are not a 32-byte key (never for keys we minted).
+pub fn ton_address(pubkey: &[u8]) -> Option<String> {
+	use tonlib_core::wallet::{mnemonic::KeyPair, ton_wallet::TonWallet, wallet_version::WalletVersion};
+
+	if pubkey.len() != 32 {
+		return None;
+	}
+	// Only the public key participates in address derivation (the StateInit data cell);
+	// the secret half is irrelevant here (signing lives in `ton_tx`), so leave it empty.
+	let key_pair = KeyPair {
+		public_key: pubkey.to_vec(),
+		secret_key: Vec::new(),
+	};
+	let wallet = TonWallet::new(WalletVersion::V4R2, key_pair).ok()?;
+	Some(wallet.address.to_hex())
 }
 /// EIP-55 mixed-case checksum of 20 address bytes: a hex char `a-f` is uppercased
 /// when the corresponding nibble of `keccak256(lowercase_hex)` is ≥ 8.
@@ -267,5 +294,34 @@ mod tests {
 		let a = evm_address(&pubkey).unwrap();
 		assert_eq!(a, evm_address(&pubkey).unwrap());
 		assert!(a.starts_with("0x") && a.len() == 42);
+	}
+
+	#[test]
+	fn ton_address_matches_a_known_v4r2_vector() {
+		// A real v4R2 wallet's pubkey → its on-chain (deploy-time, seqno 0) StateInit
+		// address. Pins the StateInit-hash derivation + the v4R2 wallet_id/code. The
+		// non-bounceable mainnet (UQ) rendering of the stored raw `0:hex` is the wallet's
+		// user-friendly address as seen on tonviewer.
+		let pubkey = hex::decode("cbf377c9b73604c70bf73488ddceba14f763baef2ac70f68d1d6032a120149f4").unwrap();
+		let raw = ton_address(&pubkey).unwrap();
+		let parsed = tonlib_core::TonAddress::from_hex_str(&raw).unwrap();
+		assert_eq!(parsed.to_base64_url_flags(true, false), "UQCS65EGyiApUTLOYXDs4jOLoQNCE0o8oNnkmfIcm0iX5FRT");
+	}
+
+	#[test]
+	fn ton_address_is_deterministic_and_domain_parseable() {
+		use domain::money::{Network, WalletAddress};
+
+		let pubkey = ed25519_pubkey(&gen_ed25519());
+		let a = ton_address(&pubkey).unwrap();
+		// Deterministic for a fixed key.
+		assert_eq!(a, ton_address(&pubkey).unwrap());
+		// Raw canonical `0:<64hex>`, and the domain's parser accepts it (so the hub can
+		// serve it as a fundable deposit address). A real testnet deposit is the final
+		// external proof of correctness; here we pin shape + determinism + parse-acceptance.
+		assert!(a.starts_with("0:") && a.len() == 66);
+		assert!(WalletAddress::parse(Network::Ton, &a).is_ok());
+		// A short/garbage key is refused, never panics.
+		assert!(ton_address(&[0u8; 4]).is_none());
 	}
 }
