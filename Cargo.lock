@@ -1693,7 +1693,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_contracts"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=66d2aa1fae3b4c59aaee5f759fd0f54670529a61#66d2aa1fae3b4c59aaee5f759fd0f54670529a61"
+source = "git+https://github.com/EV-invest/concierge.git?rev=15ad806b756052178594f957a2e841e155a1d713#15ad806b756052178594f957a2e841e155a1d713"
 dependencies = [
  "prost",
  "tonic",

@@ -34,8 +34,9 @@ evbanking_contracts = { path = "contracts" }
 # The concierge identity plane's wire contracts, pulled in by git like any downstream
 # consumer. The cabinet backend (the cross-plane orchestrator) and now piggybank-core
 # (the one-way lifecycle bridge consumer) depend on it. Pinned to the rev that ships
-# `UserEvents.PullUserLifecycle` + the identity/bridge work (concierge main @ 66d2aa1).
-evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "66d2aa1fae3b4c59aaee5f759fd0f54670529a61" }
+# `UserEvents.PullUserLifecycle` + the RBAC role/admin work incl. the `ROLE_CHANGED`
+# bridge event and the directory/platform admin RPCs (concierge main @ 15ad806).
+evconcierge_contracts = { git = "https://github.com/EV-invest/concierge.git", rev = "15ad806b756052178594f957a2e841e155a1d713" }
 http = "1"
 # `rust_crypto` selects the pure-Rust provider (ed25519-dalek for our EdDSA tokens) —
 # no C/aws-lc-rs toolchain, matching the rustls-only stance. The money plane does no
