@@ -21,10 +21,14 @@ impl From<sqlx::Error> for SignerError {
 
 impl From<SignerError> for Status {
 	/// Map to gRPC status without leaking internals: crypto/repository failures
-	/// collapse to a generic `internal` (the secret-bearing detail never ships).
+	/// collapse to a generic `internal` (the secret-bearing detail never ships) —
+	/// the real cause goes to the server log instead of the wire.
 	fn from(err: SignerError) -> Self {
 		match err {
-			SignerError::Crypto(_) | SignerError::Repository(_) => Status::new(Code::Internal, "internal error"),
+			SignerError::Crypto(_) | SignerError::Repository(_) => {
+				tracing::warn!(error = ?err, "signer error withheld from the wire");
+				Status::new(Code::Internal, "internal error")
+			}
 		}
 	}
 }

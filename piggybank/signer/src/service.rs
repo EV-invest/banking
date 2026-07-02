@@ -44,6 +44,16 @@ impl Signer {
 		Ok(())
 	}
 
+	/// Apply the destination allowlist to a NATIVE (gas-coin) transfer signed FROM the
+	/// treasury — the USDT cap cannot price a native amount, so only the allowlist applies.
+	/// Gas top-ups are signed from the separate gas-station wallet and pass unchecked.
+	fn guard_treasury_native_transfer(&self, wallet_id: Uuid, to_address: &str) -> Result<(), Status> {
+		if wallet_id == TREASURY_WALLET {
+			self.policy.check_treasury_native_transfer(to_address)?;
+		}
+		Ok(())
+	}
+
 	/// Resolve the sending wallet id from the wire `from_user_id`: empty ⇒ the treasury hot
 	/// wallet (nil), else a parsed UUID (a real user's deposit address, or the gas station).
 	fn resolve_wallet(from_user_id: &str) -> Result<Uuid, Status> {
@@ -54,22 +64,23 @@ impl Signer {
 		}
 	}
 
-	/// Transiently unseal a sending wallet's secp256k1 key into a `Zeroizing` buffer (wiped
-	/// on drop). The plaintext key exists only for the duration of one signing call and never
-	/// leaves this process.
+	/// Transiently unseal a sending wallet's 32-byte signing secret — a secp256k1 key
+	/// (EVM/Tron) or a TON ed25519 seed — into a `Zeroizing` buffer (wiped on drop). The
+	/// plaintext exists only for the duration of one signing call and never leaves this process.
 	async fn unseal(&self, wallet_id: Uuid, network: Network) -> Result<zeroize::Zeroizing<[u8; 32]>, Status> {
 		let sealed = self
 			.secrets
 			.find_sealed(wallet_id, network)
 			.await?
 			.ok_or_else(|| Status::failed_precondition("sending wallet is not provisioned"))?;
-		let opened = self
-			.vault
-			.open(provision::chain_of(network), &sealed.id.to_string(), &sealed.sealed_key)
-			.map_err(|_| Status::internal("could not unseal the signing key"))?;
-		Ok(zeroize::Zeroizing::new(
-			<[u8; 32]>::try_from(opened.as_slice()).map_err(|_| Status::internal("stored key is not 32 bytes"))?,
-		))
+		let opened = self.vault.open(provision::chain_of(network), &sealed.id.to_string(), &sealed.sealed_key).map_err(|err| {
+			tracing::warn!(error = %err, %wallet_id, %network, "could not unseal the signing key");
+			Status::internal("could not unseal the signing key")
+		})?;
+		Ok(zeroize::Zeroizing::new(<[u8; 32]>::try_from(opened.as_slice()).map_err(|_| {
+			tracing::warn!(len = opened.len(), %wallet_id, %network, "stored key is not 32 bytes");
+			Status::internal("stored key is not 32 bytes")
+		})?))
 	}
 }
 
@@ -112,7 +123,7 @@ impl SignerService for Signer {
 				data: &data,
 			},
 		)
-		.map_err(|_| Status::internal("signing failed"))?;
+		.map_err(sign_status("erc20 transfer"))?;
 
 		Ok(Response::new(SignErc20TransferResponse {
 			raw_tx: format!("0x{}", hex::encode(&signed.raw)),
@@ -127,6 +138,7 @@ impl SignerService for Signer {
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let gas_price: u128 = req.gas_price.parse().map_err(|_| Status::invalid_argument("gas_price must be a u128 decimal"))?;
+		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		let secret = self.unseal(wallet_id, network).await?;
 		// A native transfer carries the value directly and no calldata.
@@ -142,7 +154,7 @@ impl SignerService for Signer {
 				data: &[],
 			},
 		)
-		.map_err(|_| Status::internal("signing failed"))?;
+		.map_err(sign_status("native transfer"))?;
 
 		Ok(Response::new(SignNativeTransferResponse {
 			raw_tx: format!("0x{}", hex::encode(&signed.raw)),
@@ -161,7 +173,7 @@ impl SignerService for Signer {
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let secret = self.unseal(wallet_id, network).await?;
-		let signed = tron_tx::sign_trc20_transfer(&secret, &token, &to, amount, req.fee_limit, &tx_ref).map_err(|_| Status::internal("signing failed"))?;
+		let signed = tron_tx::sign_trc20_transfer(&secret, &token, &to, amount, req.fee_limit, &tx_ref).map_err(sign_status("trc20 transfer"))?;
 		Ok(Response::new(SignedTronTxResponse {
 			signed_tx: signed.raw_tx,
 			txid: signed.txid,
@@ -176,9 +188,10 @@ impl SignerService for Signer {
 		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
+		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		let secret = self.unseal(wallet_id, network).await?;
-		let signed = tron_tx::sign_trx_transfer(&secret, &to, amount, &tx_ref).map_err(|_| Status::internal("signing failed"))?;
+		let signed = tron_tx::sign_trx_transfer(&secret, &to, amount, &tx_ref).map_err(sign_status("trx transfer"))?;
 		Ok(Response::new(SignedTronTxResponse {
 			signed_tx: signed.raw_tx,
 			txid: signed.txid,
@@ -217,6 +230,7 @@ impl SignerService for Signer {
 		let network = require_ton(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal (nanotons)"))?;
+		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
 		let seed = self.unseal(wallet_id, network).await?;
 		let signed = ton_tx::build_native_transfer(
@@ -256,6 +270,15 @@ fn require_ton(raw: &str) -> Result<Network, Status> {
 		Ok(Network::Ton) => Ok(Network::Ton),
 		Ok(other) => Err(Status::invalid_argument(format!("TON signer called with a non-TON network: {other}"))),
 		Err(_) => Err(Status::invalid_argument(format!("unknown network: {raw}"))),
+	}
+}
+
+/// Log-then-withhold at a sign collapse point: the real cause goes to the server log, the
+/// wire keeps the fixed non-leaking message.
+fn sign_status<E: std::fmt::Display>(op: &'static str) -> impl Fn(E) -> Status {
+	move |err| {
+		tracing::warn!(error = %err, op, "signing failed");
+		Status::internal("signing failed")
 	}
 }
 
