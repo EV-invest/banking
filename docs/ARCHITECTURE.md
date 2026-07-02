@@ -159,9 +159,9 @@ refresh-token rotation + reuse detection, optional `jti` revocation. A per-user
 `token_version` claim gives coarse "revoke all" without fleet state — enforced at
 **refresh** (the auth service re-reads the authoritative version over the
 `Provisioner` channel and refuses to mint), while stateless downstream verifiers
-rely on the short access TTL. _Slice note:_ the refresh store currently runs
-in-process (single-instance/dev), with the central Redis as the documented
-production backing.
+rely on the short access TTL. _Slice note:_ the refresh store is in-process by
+default (single-instance/dev); `RefreshStore::from_env` engages the central-Redis
+arm when `REDIS_URL` is set.
 
 **Browser.** The BFF token-handler pattern: the cabinet **backend** (`cabinet/backend`,
 a standalone Rust service) is the OAuth confidential client, holds tokens server-side, and

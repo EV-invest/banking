@@ -50,10 +50,10 @@ JWKS) and [`Authorizer`](src/authorizer.rs) (the hub, in-process channel). Mount
 Refresh tokens are opaque `"<family>.<secret>"` handles
 ([`management`](src/management.rs)). Each use rotates the secret; presenting an
 already-rotated secret is treated as theft and revokes the whole family (OWASP
-refresh-rotation). This slice keeps the family table in-process (single-instance /
-dev), mirroring the cabinet BFF's session store; the production backing is the one
-central Redis (`REDIS_URL`) and the public surface here does not change when it
-lands. A per-service Redis is never introduced.
+refresh-rotation). The family table is in-process by default (single-instance /
+dev, mirroring the cabinet BFF's session store); `RefreshStore::from_env` engages
+the Redis arm — the one central Redis, same semantics, rotate/reuse as one atomic
+Lua script — when `REDIS_URL` is set. A per-service Redis is never introduced.
 
 Sessions are bounded three ways, all enforced in `rotate` **before** the sliding
 window: the sliding `expires_at` (reset to `now + AUTH_REFRESH_TTL_SECS` per
