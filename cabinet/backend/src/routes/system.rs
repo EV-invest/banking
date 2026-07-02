@@ -13,7 +13,12 @@ use crate::{error::ApiError, state::AppState};
 pub async fn health(State(st): State<AppState>) -> Response {
 	match st.grpc.check().await {
 		Ok(res) => Json(json!({ "ok": true, "backend": res.status })).into_response(),
-		Err(e) => (StatusCode::BAD_GATEWAY, Json(json!({ "ok": false, "error": e.message() }))).into_response(),
+		Err(e) => {
+			// Log-then-withhold (the `error.rs` discipline): a transport error can embed
+			// addresses/dependency detail, so the browser gets a fixed generic string.
+			tracing::warn!(code = ?e.code(), detail = %e.message(), "health check upstream error withheld from client");
+			(StatusCode::BAD_GATEWAY, Json(json!({ "ok": false, "error": "upstream unavailable" }))).into_response()
+		}
 	}
 }
 

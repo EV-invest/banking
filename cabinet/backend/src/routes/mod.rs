@@ -25,7 +25,7 @@ use crate::{
 };
 
 /// Outer per-request deadline: a handler that is still awaiting an upstream plane past
-/// this bound is aborted and the response becomes a 408, so a wedged plane can never hold
+/// this bound is aborted and the response becomes a 504, so a wedged plane can never hold
 /// a browser connection (or, via the per-session refresh lock, sibling requests) open
 /// indefinitely. Looser than the upstream per-RPC [`REQUEST_TIMEOUT`] so an upstream stall
 /// normally surfaces as a gRPC error first; this is the backstop for everything else.
@@ -96,8 +96,9 @@ pub async fn require_token(state: &AppState, jar: &CookieJar) -> Result<String, 
 
 /// The fresh **banking** (`aud=banking-core`) access token for a money-plane RPC. The two
 /// planes are cryptographically separated, so the BFF forwards the banking token here and
-/// the concierge token to identity — never one plane's token to the other. Until the
-/// concierge→banking token-exchange seam is built no banking token is minted, so this
+/// the concierge token to identity — never one plane's token to the other. The banking pair
+/// is minted via the concierge→banking exchange seam (`IssueUserToken`); when none can be
+/// obtained (issuance unconfigured, or the bridge hasn't mirrored the user yet) this
 /// surfaces `NotConfigured` (503) rather than forwarding the wrong-plane token, which the
 /// money verifier would reject on issuer/audience.
 pub async fn require_money_token(state: &AppState, jar: &CookieJar) -> Result<String, ApiError> {
