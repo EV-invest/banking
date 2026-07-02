@@ -245,9 +245,9 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   real on-chain balance (a lagging sweep, an out-of-band spend). So each custody adapter also
   Read-Firsts the **real** treasury balance (USDT to send + native gas) before it allocates a
   nonce/seqno or signs; a shortfall **parks** (`Rejected`) rather than retrying, so an
-  underfunded rail can't wedge the single-worker drain. On BSC a node rejection of a
-  *first-ever* send additionally frees its stored nonce (`discard_tx`) so the sequence never
-  gaps at a slot nothing will fill.
+  underfunded rail can't wedge the single-worker drain. On BSC and TON a node rejection
+  of a *first-ever* send additionally frees its stored nonce/seqno (`discard_tx`) so the
+  sequence never gaps at a slot nothing will fill.
 - **Provable death before re-sign (TRON/TON).** A nonce-free rail (TRON, TON) can only
   re-sign a stuck send once it is *provably* dead, never merely past its local-clock
   expiration: TRON waits until the **solidified** head's timestamp is past the tx expiration
@@ -282,7 +282,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 
 | RPC | Who | Boundary | In-tx invariant |
 | --- | --- | --- | --- |
-| `GetTreasury` / `SeedCapital` / `RecordDeposit` | admin | `is_admin` + `is_access` | `tx_ref` gate |
+| `GetTreasury` / `SeedCapital` / `RecordDeposit` | operator | `require_permission` (RBAC matrix) | `tx_ref` gate |
 | `Subscribe` | the user | `sub == user`, `is_access`, **not frozen** | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
 | `Redeem` | the user | `sub == user`, `is_access`, **not frozen** | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
 | `CancelRedemption` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
@@ -290,10 +290,16 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `GetWallet` / `GetDepositAddress` / `ListWithdrawals` | the user | `sub == user` | — |
 | `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | active account ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
-| `DispatchWithdrawal` | admin (treasury) | `is_admin` + `is_access` | state is `queued` (idempotent) |
-| `SettleWithdrawal` / `FailWithdrawal` | admin | `is_admin` + `is_access` | state is `processing` (idempotent) |
-| `PostFundValuation` | admin | `is_admin` + `is_access` | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
-| `SettleRedemption` / `FailRedemption` | admin (treasury) | `is_admin` + `is_access` | state is `queued` (idempotent) |
+| `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
+| `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
+| `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
+| `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
+
+`require_permission` (`services::support`) is `is_access` + the pure RBAC matrix
+(`domain::authz::grants` — the single place the matrix is defined) over the caller's
+bridge-mirrored role, **after** the account gates: a `disabled` (or frozen) operator is
+refused, a stale `token_version` is refused, and the `ADMIN_SUBJECTS` allowlist is only a
+break-glass **role override** — it never bypasses those gates when a local row exists.
 
 **Cross-plane freeze gate** (`services::support::unfrozen_caller`): the value-leaving RPCs
 above (`Subscribe`/`Redeem`/`RequestWithdrawal`) reject with `failed_precondition` when the
