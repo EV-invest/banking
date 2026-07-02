@@ -232,13 +232,20 @@ impl BridgeConsumer {
 	}
 }
 
-/// Whether the caller's banking row is frozen by a concierge SUSPENDED — the money-op gate.
-/// `None` (no local row yet) is NOT frozen: a user with no row has nothing to move, and the
-/// downstream solvency checks gate that case anyway. Errs to the caller as a control-plane
-/// failure (mapped to UNAVAILABLE) — fail-closed for a money op when the gate can't be read.
+/// Whether the caller's banking row is blocked from moving money — the money-op gate.
+/// Blocked by EITHER a concierge SUSPENDED (mirrored into `frozen`) OR a banking-side
+/// DisableUser (`status='disabled'`), the SAME fold issuance/refresh already apply
+/// (`resolve_issuance_by_*`); otherwise a banking DisableUser would not stop
+/// subscribe/redeem during the access-token TTL, unlike a concierge SUSPENDED.
+/// `None` (no local row yet) is NOT blocked: a user with no row has nothing to move, and
+/// the downstream solvency checks gate that case anyway. Errs to the caller as a
+/// control-plane failure (mapped to UNAVAILABLE) — fail-closed when the gate can't be read.
 pub async fn is_frozen(pool: &PgPool, user_id: uuid::Uuid) -> Result<bool, sqlx::Error> {
-	let frozen: Option<bool> = sqlx::query_scalar("SELECT frozen FROM users WHERE id = $1").bind(user_id).fetch_optional(pool).await?;
-	Ok(frozen.unwrap_or(false))
+	let blocked: Option<bool> = sqlx::query_scalar("SELECT (frozen OR status = 'disabled') FROM users WHERE id = $1")
+		.bind(user_id)
+		.fetch_optional(pool)
+		.await?;
+	Ok(blocked.unwrap_or(false))
 }
 
 /// The mirrored access role for a banking user id (the money-op RBAC gate reads this).
