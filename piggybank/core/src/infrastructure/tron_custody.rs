@@ -93,7 +93,7 @@ impl TronCustody {
 	}
 
 	async fn stored_tx(&self, withdrawal_id: Uuid) -> Result<Option<StoredTx>, CustodyError> {
-		let row: Option<(String, String, Option<i64>)> = sqlx::query_as("SELECT raw_tx, tx_hash, expiration FROM withdrawal_broadcasts WHERE withdrawal_id = $1")
+		let row: Option<(String, String, Option<i64>)> = sqlx::query_as("SELECT raw_tx, tx_hash, expiration FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = 'trc20'")
 			.bind(withdrawal_id)
 			.fetch_optional(&self.pool)
 			.await

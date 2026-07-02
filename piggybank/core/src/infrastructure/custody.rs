@@ -135,7 +135,7 @@ impl ChainCustody {
 
 	/// The previously signed+stored raw transaction for this withdrawal, if any.
 	async fn stored_tx(&self, withdrawal_id: Uuid) -> Result<Option<String>, CustodyError> {
-		sqlx::query_scalar::<_, String>("SELECT raw_tx FROM withdrawal_broadcasts WHERE withdrawal_id = $1")
+		sqlx::query_scalar::<_, String>("SELECT raw_tx FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = 'bep20'")
 			.bind(withdrawal_id)
 			.fetch_optional(&self.pool)
 			.await
