@@ -7,7 +7,7 @@
 //! publishes. Refresh tokens are NOT minted here — they are opaque handles owned
 //! by [`management`](crate::management).
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use evbanking_contracts::banking::v1::Jwk;
 use jsonwebtoken::{
@@ -23,6 +23,9 @@ use crate::{
 };
 
 /// Signs the hub's first-party access and service tokens with the active key.
+///
+/// The private key never appears in a `Debug` rendering: a leaked `Signer` in a log
+/// or a panic message must not disclose key material.
 pub struct Signer {
 	encoding: EncodingKey,
 	kid: String,
@@ -36,7 +39,6 @@ pub struct Signer {
 	#[allow(dead_code)]
 	service_ttl_secs: u64,
 }
-
 impl Signer {
 	pub fn try_new(signing: &SigningConfig, config: &AuthConfig) -> Result<Self, AuthError> {
 		let encoding = EncodingKey::from_ed_pem(signing.signing_key_pem.as_bytes()).map_err(|_| AuthError::NotConfigured)?;
@@ -84,6 +86,16 @@ impl Signer {
 	#[allow(dead_code)]
 	pub fn mint_service(&self, service_name: &str) -> Result<(String, u64), AuthError> {
 		self.mint(service_name, &self.service_audience, TokenType::Service, self.service_ttl_secs, 0)
+	}
+}
+
+impl fmt::Debug for Signer {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.debug_struct("Signer")
+			.field("kid", &self.kid)
+			.field("issuer", &self.issuer)
+			.field("encoding", &"<redacted>")
+			.finish_non_exhaustive()
 	}
 }
 
@@ -228,5 +240,15 @@ mod tests {
 
 		// An access-only client policy must reject the service token.
 		assert!(verify_token(&token, &cache, &policy("banking-services", vec![TokenType::Access])).is_err());
+	}
+
+	#[test]
+	fn debug_redacts_the_private_key() {
+		let cfg = config();
+		let signing = cfg.signing.clone().unwrap();
+		let signer = Signer::try_new(&signing, &cfg).unwrap();
+		let rendered = format!("{signer:?}");
+		assert!(rendered.contains("<redacted>"));
+		assert!(!rendered.contains("PRIVATE KEY"));
 	}
 }
