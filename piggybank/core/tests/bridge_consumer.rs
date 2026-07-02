@@ -196,6 +196,29 @@ async fn created_then_suspended_freezes_user_and_gates_money_op() {
 }
 
 #[tokio::test]
+async fn banking_disable_blocks_money_ops_without_a_concierge_freeze() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+
+	drive(&pool, vec![event(&subject, Kind::Created, 1)], |pool| async move {
+		let user_id = user_id_for(&pool, &subject).await.expect("CREATED provisioned a banking user");
+		// Not concierge-frozen, so nothing blocks money ops yet.
+		assert!(!bridge::is_frozen(&pool, user_id).await.unwrap(), "a fresh user is not blocked");
+
+		// A banking-side DisableUser sets status='disabled' and leaves `frozen` FALSE. The
+		// money-op gate must still block it, matching the fold issuance already applies.
+		sqlx::query("UPDATE users SET status = 'disabled' WHERE id = $1").bind(user_id).execute(&pool).await.unwrap();
+		assert!(
+			bridge::is_frozen(&pool, user_id).await.unwrap(),
+			"a banking-disabled user must be blocked from money ops, like a concierge freeze"
+		);
+	})
+	.await;
+}
+
+#[tokio::test]
 async fn role_changed_mirrors_role_onto_the_projection() {
 	let Some(pool) = pool().await else {
 		return;
