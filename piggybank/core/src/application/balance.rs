@@ -1,21 +1,18 @@
 //! Balance use cases — seed fund capital, record deposits, read the fund balance.
 //!
-//! Commands open one Postgres transaction (the ACID point), record intent + an
-//! event to the outbox, and `notify` the relay to move money in TigerBeetle
-//! afterwards (Write-Last). The query reads live, TigerBeetle-authoritative balances
-//! (Read-First).
+//! Commands validate and hand the fact to the [`Deposits`] port, whose adapter is
+//! its own atomic unit (one Postgres transaction: the gate row + the outbox event),
+//! then `notify` the relay to move money in TigerBeetle afterwards (Write-Last).
+//! The query reads live, TigerBeetle-authoritative balances (Read-First).
 
 use domain::{
-	architecture::DomainEvent,
-	balance::{LedgerAccountKey, LedgerEvent, Party},
+	balance::{LedgerAccountKey, Party},
 	error::DomainError,
 	money::{Network, TxRef, Usdt},
 };
-use sqlx::PgPool;
 use tokio::sync::Notify;
-use uuid::Uuid;
 
-use crate::{infrastructure::outbox, ports::ledger::Ledger};
+use crate::ports::{Deposits, ledger::Ledger};
 
 /// Per-rail on-chain liquidity (the treasury / Layer 2). TigerBeetle-authoritative.
 pub struct RailLiquidity {
@@ -49,50 +46,26 @@ pub struct Treasury {
 
 /// Seed the company's own capital on `network` (`Dr WALLET / Cr FUND`). Admin-gated
 /// at the boundary.
-pub async fn seed_fund_capital(pool: &PgPool, relay: &Notify, network: Network, amount: Usdt) -> Result<(), DomainError> {
+pub async fn seed_fund_capital(deposits: &dyn Deposits, relay: &Notify, network: Network, amount: Usdt) -> Result<(), DomainError> {
 	if amount.is_zero() {
 		return Err(DomainError::Validation("seed amount must be positive".into()));
 	}
-	let mut tx = pool.begin().await.map_err(repo_err)?;
-	let aggregate_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("fund:{network}").as_bytes());
-	let payload = serde_json::to_string(&LedgerEvent::CapitalSeeded { network, amount }).map_err(|e| DomainError::Repository(e.to_string()))?;
-	outbox::insert_event(&mut tx, Uuid::new_v4(), "fund", aggregate_id, LedgerEvent::KIND, &payload, true).await?;
-	tx.commit().await.map_err(repo_err)?;
+	deposits.seed_capital(network, amount).await?;
 	relay.notify_one();
 	Ok(())
 }
-/// Record an on-chain deposit, **idempotent by `tx_ref`**: the unique gate makes a
-/// second record of the same chain tx impossible, so the credit happens at most
-/// once even under concurrent recorders. Returns `true` if newly recorded, `false`
-/// for a duplicate.
-pub async fn record_deposit(pool: &PgPool, relay: &Notify, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
+/// Record an on-chain deposit, **idempotent by `tx_ref`** (see [`Deposits::record`]).
+/// Returns `true` if newly recorded, `false` for a duplicate; the relay is nudged
+/// only when a new event was committed.
+pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
 	if amount.is_zero() {
 		return Err(DomainError::Validation("deposit amount must be positive".into()));
 	}
-	let mut tx = pool.begin().await.map_err(repo_err)?;
-	let event_id = Uuid::new_v4();
-	let inserted = sqlx::query_scalar::<_, String>(
-		"INSERT INTO deposits (tx_ref, party_kind, party_id, network, amount, event_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (tx_ref) DO NOTHING RETURNING tx_ref",
-	)
-	.bind(tx_ref.as_str())
-	.bind(party.kind_str())
-	.bind(party.id_str())
-	.bind(network.as_str())
-	.bind(amount.base_units().to_string())
-	.bind(event_id)
-	.fetch_optional(&mut *tx)
-	.await
-	.map_err(repo_err)?;
-	if inserted.is_none() {
-		// Already recorded — drop the tx (no-op) and report idempotent success.
-		return Ok(false);
+	let recorded = deposits.record(tx_ref, party, network, amount).await?;
+	if recorded {
+		relay.notify_one();
 	}
-	let deposit_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, tx_ref.as_str().as_bytes());
-	let payload = serde_json::to_string(&LedgerEvent::Deposited { party, network, amount }).map_err(|e| DomainError::Repository(e.to_string()))?;
-	outbox::insert_event(&mut tx, event_id, "deposit", deposit_id, LedgerEvent::KIND, &payload, true).await?;
-	tx.commit().await.map_err(repo_err)?;
-	relay.notify_one();
-	Ok(true)
+	Ok(recorded)
 }
 /// The treasury, read live from TigerBeetle (Read-First): per-rail liquidity plus the
 /// claims it backs.
@@ -121,7 +94,4 @@ pub async fn treasury(ledger: &dyn Ledger) -> Result<Treasury, DomainError> {
 		held_for_clients,
 		reserved_for_withdrawals,
 	})
-}
-fn repo_err(err: sqlx::Error) -> DomainError {
-	DomainError::Repository(err.to_string())
 }

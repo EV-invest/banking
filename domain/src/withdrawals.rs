@@ -14,10 +14,9 @@
 //! void once the broadcast may have reached the chain* — is why `fail` is only legal
 //! from `Processing` and `cancel` only from `Queued`.
 //!
-//! Pure and wasm-safe (mirrors [`Allocation`](crate::allocations::Allocation)): ids
-//! are minted by the application layer, no clock, no I/O. The relay maps each event
-//! to ledger ops (and the custody broadcast); that orchestration lives in the
-//! adapter, never on this aggregate.
+//! Pure and wasm-safe: ids are minted by the application layer, no clock, no I/O.
+//! The relay maps each event to ledger ops (and the custody broadcast); that
+//! orchestration lives in the adapter, never on this aggregate.
 
 use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};

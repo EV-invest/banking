@@ -25,6 +25,7 @@ use piggybank_core::{
 		custody::{ChainCustody, MultiChainCustody, StubCustody},
 		db,
 		deposit_watcher::DepositWatcher,
+		deposits::PgDeposits,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
@@ -48,7 +49,7 @@ use piggybank_core::{
 		withdrawal_watcher::WithdrawalWatcher,
 		withdrawals::PgWithdrawals,
 	},
-	ports::{Custody, DepositAddresses, FundPositionReader, NavRepository, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
 	services,
 };
 use tokio::sync::Notify;
@@ -104,7 +105,8 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
 	let subscriptions: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(pool.clone()));
 	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
-	let nav: Arc<dyn NavRepository> = Arc::new(PgNav::new(pool.clone()));
+	let deposits: Arc<dyn Deposits> = Arc::new(PgDeposits::new(pool.clone()));
+	let nav: Arc<dyn NavMarks> = Arc::new(PgNav::new(pool.clone()));
 	let positions: Arc<dyn FundPositionReader> = Arc::new(PgFundPositions::new(pool.clone()));
 
 	// Deposit addresses are provisioned by the separate-process signer (it mints + seals
@@ -290,6 +292,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		withdrawals,
 		subscriptions,
 		redemptions,
+		deposits,
 		nav,
 		positions,
 		deposit_addresses,

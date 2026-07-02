@@ -24,6 +24,7 @@ pub mod bsc_rpc;
 pub mod custody;
 pub mod db;
 pub mod deposit_watcher;
+pub mod deposits;
 pub mod ledger;
 pub mod nav;
 pub mod operations;

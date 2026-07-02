@@ -14,7 +14,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use domain::money::Network;
+use domain::{architecture::Gateway, money::Network};
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignErc20TransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -31,6 +31,8 @@ use crate::{
 /// No-op custody: logs and returns success. An operator supplies the real on-chain tx ref
 /// later via `BalanceService.SettleWithdrawal`. Used when BSC is unconfigured.
 pub struct StubCustody;
+
+impl Gateway for StubCustody {}
 
 #[async_trait]
 impl Custody for StubCustody {
@@ -62,6 +64,8 @@ impl MultiChainCustody {
 		Self { by_network, fallback }
 	}
 }
+
+impl Gateway for MultiChainCustody {}
 
 #[async_trait]
 impl Custody for MultiChainCustody {
@@ -253,6 +257,8 @@ impl ChainCustody {
 		}
 	}
 }
+
+impl Gateway for ChainCustody {}
 
 #[async_trait]
 impl Custody for ChainCustody {

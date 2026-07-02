@@ -8,7 +8,7 @@
 //! because the AUM input is the most dangerous seam in the system ("trusted" ≠ "safe").
 
 use domain::{
-	balance::{LedgerAccountKey, ServiceId},
+	balance::{LedgerAccountKey, ServiceId, ValuationId},
 	error::DomainError,
 	money::{Nav, Shares, Usdt},
 	redemptions::{Redemption, RedemptionId},
@@ -16,12 +16,11 @@ use domain::{
 	users::UserId,
 };
 use tokio::sync::Notify;
-use uuid::Uuid;
 
 use crate::ports::{
 	FundPositionReader, RedemptionRepository, SubscriptionRepository,
 	ledger::Ledger,
-	nav::{NavRepository, Valuation},
+	nav::{NavMarks, Valuation},
 };
 
 /// A derived NAV that jumps more than this (percent) from the previous mark is rejected
@@ -58,7 +57,7 @@ pub struct FundNavView {
 /// The current NAV plus whether it is fresh enough to deal on (`now − posted_at ≤
 /// MAX_NAV_AGE_SECS`). A fund with no mark yet uses the seed NAV and is always fresh
 /// (nothing to be stale against). Subscribe/redeem call this before pricing.
-pub async fn dealing_nav(nav: &dyn NavRepository, service: &ServiceId, now_unix: i64) -> Result<Nav, DomainError> {
+pub async fn dealing_nav(nav: &dyn NavMarks, service: &ServiceId, now_unix: i64) -> Result<Nav, DomainError> {
 	match nav.current(service).await? {
 		Some(v) => {
 			if now_unix.saturating_sub(v.posted_at_unix) > MAX_NAV_AGE_SECS {
@@ -80,7 +79,7 @@ pub async fn dealing_nav(nav: &dyn NavRepository, service: &ServiceId, now_unix:
 pub async fn subscribe(
 	subscriptions: &dyn SubscriptionRepository,
 	ledger: &dyn Ledger,
-	nav: &dyn NavRepository,
+	nav: &dyn NavMarks,
 	relay: &Notify,
 	user: UserId,
 	service: ServiceId,
@@ -109,7 +108,7 @@ pub async fn subscribe(
 pub async fn request_redemption(
 	redemptions: &dyn RedemptionRepository,
 	ledger: &dyn Ledger,
-	nav: &dyn NavRepository,
+	nav: &dyn NavMarks,
 	relay: &Notify,
 	user: UserId,
 	service: ServiceId,
@@ -141,7 +140,7 @@ pub async fn request_redemption(
 /// The cost-basis reduction divides by the position's own projection-tracked units inside
 /// the locked settle tx — not a live TB holding, which lags the async burn — so back-to-back
 /// settles compound deterministically (BANK-MONEY-3).
-pub async fn settle_redemption(redemptions: &dyn RedemptionRepository, nav: &dyn NavRepository, relay: &Notify, id: RedemptionId, now_unix: i64) -> Result<Redemption, DomainError> {
+pub async fn settle_redemption(redemptions: &dyn RedemptionRepository, nav: &dyn NavMarks, relay: &Notify, id: RedemptionId, now_unix: i64) -> Result<Redemption, DomainError> {
 	let existing = redemptions.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "redemption",
 		id: id.to_string(),
@@ -181,13 +180,13 @@ pub async fn list_redemptions(redemptions: &dyn RedemptionRepository, user: User
 
 /// The caller's position in one fund: live units × current NAV, with the cost basis for
 /// P&L. A fund never subscribed to reports zero units at the seed NAV.
-pub async fn get_position(positions: &dyn FundPositionReader, ledger: &dyn Ledger, nav: &dyn NavRepository, user: UserId, service: ServiceId) -> Result<PositionView, DomainError> {
+pub async fn get_position(positions: &dyn FundPositionReader, ledger: &dyn Ledger, nav: &dyn NavMarks, user: UserId, service: ServiceId) -> Result<PositionView, DomainError> {
 	let cost_basis = positions.find(user, &service).await?.map(|p| p.cost_basis).unwrap_or(Usdt::ZERO);
 	build_position_view(ledger, nav, user, service, cost_basis).await
 }
 
 /// All of the caller's fund positions with a non-zero unit balance.
-pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Ledger, nav: &dyn NavRepository, user: UserId) -> Result<Vec<PositionView>, DomainError> {
+pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Ledger, nav: &dyn NavMarks, user: UserId) -> Result<Vec<PositionView>, DomainError> {
 	let mut out = Vec::new();
 	for position in positions.list(user).await? {
 		let view = build_position_view(ledger, nav, user, position.service, position.cost_basis).await?;
@@ -199,7 +198,7 @@ pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Led
 }
 
 /// The current NAV + freshness for a fund (the seed NAV when never marked).
-pub async fn fund_nav_view(nav: &dyn NavRepository, ledger: &dyn Ledger, service: ServiceId, now_unix: i64) -> Result<FundNavView, DomainError> {
+pub async fn fund_nav_view(nav: &dyn NavMarks, ledger: &dyn Ledger, service: ServiceId, now_unix: i64) -> Result<FundNavView, DomainError> {
 	let units_outstanding = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
 	Ok(match nav.current(&service).await? {
 		Some(v) => FundNavView {
@@ -224,7 +223,7 @@ pub async fn fund_nav_view(nav: &dyn NavRepository, ledger: &dyn Ledger, service
 /// live from TigerBeetle). Rejects zero units (NAV undefined) and — unless `force` — a
 /// move beyond [`MAX_NAV_MOVE_PCT`] vs the last mark. Records the mark (with `posted_by`)
 /// and returns it.
-pub async fn post_fund_valuation(nav: &dyn NavRepository, ledger: &dyn Ledger, service: ServiceId, aum: Usdt, posted_by: &str, force: bool) -> Result<Valuation, DomainError> {
+pub async fn post_fund_valuation(nav: &dyn NavMarks, ledger: &dyn Ledger, service: ServiceId, aum: Usdt, posted_by: &str, force: bool) -> Result<Valuation, DomainError> {
 	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
 	// `from_aum` rejects zero units — NAV is undefined with nothing outstanding.
 	let derived = Nav::from_aum(aum, units)?;
@@ -237,8 +236,7 @@ pub async fn post_fund_valuation(nav: &dyn NavRepository, ledger: &dyn Ledger, s
 			prev.nav
 		)));
 	}
-	let id = Uuid::new_v4();
-	let posted_at_unix = nav.record(id, &service, aum, units, derived, posted_by).await?;
+	let posted_at_unix = nav.record(ValuationId::new(), &service, aum, units, derived, posted_by).await?;
 	Ok(Valuation {
 		service,
 		aum,
@@ -249,7 +247,7 @@ pub async fn post_fund_valuation(nav: &dyn NavRepository, ledger: &dyn Ledger, s
 	})
 }
 /// Assemble a position view: read the live unit balance and the current NAV, value it.
-async fn build_position_view(ledger: &dyn Ledger, nav: &dyn NavRepository, user: UserId, service: ServiceId, cost_basis: Usdt) -> Result<PositionView, DomainError> {
+async fn build_position_view(ledger: &dyn Ledger, nav: &dyn NavMarks, user: UserId, service: ServiceId, cost_basis: Usdt) -> Result<PositionView, DomainError> {
 	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?.posted);
 	let (price, nav_as_of) = match nav.current(&service).await? {
 		Some(v) => (v.nav, v.posted_at_unix),

@@ -52,7 +52,7 @@ pub(super) async fn unfrozen_caller<T>(state: &AppState, request: &Request<T>) -
 		Ok(true) => return Err(Status::failed_precondition("money movements are temporarily paused (read-only mode)")),
 		Err(_) => return Err(Status::unavailable("internal error")),
 	}
-	match crate::infrastructure::bridge::is_frozen(&state.pool, user.raw()).await {
+	match crate::infrastructure::bridge::is_frozen(&state.pool, user).await {
 		Ok(false) => Ok(user),
 		Ok(true) => Err(Status::failed_precondition("account is frozen")),
 		Err(_) => Err(Status::unavailable("internal error")),
@@ -79,7 +79,9 @@ pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>
 		Role::Owner
 	} else {
 		let id = Uuid::parse_str(&sub).map_err(|_| Status::unauthenticated("subject is not a user id"))?;
-		crate::infrastructure::bridge::role_of(&state.pool, id).await.map_err(|_| Status::unavailable("internal error"))?
+		crate::infrastructure::bridge::role_of(&state.pool, UserId::from_raw(id))
+			.await
+			.map_err(|_| Status::unavailable("internal error"))?
 	};
 	if grants(role, permission) {
 		Ok(())

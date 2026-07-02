@@ -19,6 +19,7 @@
 
 use async_trait::async_trait;
 use domain::{
+	architecture::Gateway,
 	error::DomainError,
 	money::{Network, WalletAddress},
 	users::UserId,
@@ -83,6 +84,8 @@ impl SignerDepositAddresses {
 		Ok((address, derived))
 	}
 }
+
+impl Gateway for SignerDepositAddresses {}
 
 #[async_trait]
 impl DepositAddresses for SignerDepositAddresses {

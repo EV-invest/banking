@@ -1,4 +1,4 @@
-//! Postgres adapter for the [`NavRepository`] port — append-only fund valuation marks.
+//! Postgres adapter for the [`NavMarks`] port — append-only fund valuation marks.
 //!
 //! Amounts/prices are stored as exact integer base-unit strings (the money-plane
 //! convention) and parsed back to the typed `Usdt`/`Shares`/`Nav` on read. `posted_at`
@@ -6,14 +6,13 @@
 
 use async_trait::async_trait;
 use domain::{
-	balance::ServiceId,
+	balance::{ServiceId, ValuationId},
 	error::DomainError,
 	money::{Nav, Shares, Usdt},
 };
 use sqlx::{PgPool, Row};
-use uuid::Uuid;
 
-use crate::ports::nav::{NavRepository, Valuation};
+use crate::ports::nav::{NavMarks, Valuation};
 
 pub struct PgNav {
 	pool: PgPool,
@@ -26,7 +25,7 @@ impl PgNav {
 }
 
 #[async_trait]
-impl NavRepository for PgNav {
+impl NavMarks for PgNav {
 	async fn current(&self, service: &ServiceId) -> Result<Option<Valuation>, DomainError> {
 		let row = sqlx::query(
 			"SELECT aum, units_outstanding, nav, posted_by, EXTRACT(EPOCH FROM posted_at)::bigint AS posted_at_unix \
@@ -39,12 +38,12 @@ impl NavRepository for PgNav {
 		row.map(|row| valuation_from_row(service, &row)).transpose()
 	}
 
-	async fn record(&self, id: Uuid, service: &ServiceId, aum: Usdt, units_outstanding: Shares, nav: Nav, posted_by: &str) -> Result<i64, DomainError> {
+	async fn record(&self, id: ValuationId, service: &ServiceId, aum: Usdt, units_outstanding: Shares, nav: Nav, posted_by: &str) -> Result<i64, DomainError> {
 		let posted_at_unix = sqlx::query_scalar::<_, i64>(
 			"INSERT INTO fund_valuations (id, service, aum, units_outstanding, nav, posted_by) \
 			 VALUES ($1, $2, $3, $4, $5, $6) RETURNING EXTRACT(EPOCH FROM posted_at)::bigint",
 		)
-		.bind(id)
+		.bind(id.raw())
 		.bind(service.as_str())
 		.bind(aum.base_units().to_string())
 		.bind(units_outstanding.base_units().to_string())

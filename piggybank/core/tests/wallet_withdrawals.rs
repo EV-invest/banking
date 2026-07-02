@@ -23,6 +23,7 @@ use piggybank_core::{
 	infrastructure::{
 		custody::StubCustody,
 		db,
+		deposits::PgDeposits,
 		ledger::{self, TbLedger},
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
@@ -40,7 +41,7 @@ const BASE58: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwx
 const BASE64URL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 struct Harness {
-	pool: PgPool,
+	deposits: PgDeposits,
 	ledger: Arc<dyn Ledger>,
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	users: Arc<dyn UserRepository>,
@@ -69,7 +70,7 @@ async fn harness() -> Option<Harness> {
 	let notify = Arc::new(Notify::new());
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	Some(Harness {
-		pool,
+		deposits: PgDeposits::new(pool.clone()),
 		ledger,
 		withdrawals,
 		users,
@@ -128,7 +129,7 @@ async fn bal(h: &Harness, key: &LedgerAccountKey) -> Bal {
 }
 
 async fn deposit(h: &Harness, user: UserId, network: Network, amount: &str) {
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt(amount))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt(amount))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -264,9 +265,7 @@ async fn a_disabled_user_cannot_withdraw() {
 	let network = Network::Trc20;
 	deposit(&h, user, network, "100").await;
 
-	let mut account = h.users.find_by_id(user).await.unwrap().unwrap();
-	account.disable();
-	h.users.save(&mut account).await.unwrap();
+	h.users.disable(user).await.unwrap();
 
 	let err = withdrawal_app::request_withdrawal(
 		h.withdrawals.as_ref(),
@@ -314,7 +313,7 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	assert_eq!(bal(&h, &claim).await.locked, big, "the gross is reserved while queued");
 
 	// The treasury tops up the TON rail past the net; the worker then dispatches it.
-	balance_app::seed_fund_capital(&h.pool, &h.notify, Network::Ton, big).await.unwrap();
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, Network::Ton, big).await.unwrap();
 	h.relay.drain().await;
 	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
 	assert_eq!(dispatched.state(), WithdrawalState::Processing, "a funded rail dispatches");
@@ -391,6 +390,8 @@ impl StubDepositAddresses {
 		Self { pool }
 	}
 }
+
+impl domain::architecture::Gateway for StubDepositAddresses {}
 
 #[async_trait]
 impl DepositAddresses for StubDepositAddresses {

@@ -1,4 +1,3 @@
-#![feature(default_field_values)]
 //! Shared domain crate.
 //!
 //! The single source of truth for domain types across the platform. The hub
@@ -6,10 +5,11 @@
 //! their wasm frontends (it stays wasm-safe). It never depends on the hub server
 //! or any adapter.
 //!
-//! Scaffold: this seeds the cross-cutting [`error::DomainError`], re-exports the
-//! `ev` architecture building blocks, and declares the four bounded contexts the
-//! hub owns. Each context module is an empty placeholder — aggregates, value
-//! objects, and ports land there as real features arrive.
+//! It carries the cross-cutting [`error::DomainError`], re-exports the `ev`
+//! architecture building blocks, and holds the hub's bounded contexts — `auth` /
+//! `authz` (identity + the RBAC matrix), `balance` / `money` (the chart of accounts
+//! and the 18-dp USDT unit), and the `users` / `subscriptions` / `redemptions` /
+//! `withdrawals` aggregates.
 
 pub mod error;
 

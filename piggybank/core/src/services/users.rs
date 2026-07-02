@@ -20,6 +20,7 @@ use tonic::{Request, Response, Status};
 
 use crate::{
 	AppState,
+	application::users as users_app,
 	services::support::{caller_id, map_err, optional, parse_user_id, require_permission, unix_now},
 };
 
@@ -45,8 +46,7 @@ impl UsersService for UsersSvc {
 	async fn update_profile(&self, request: Request<pb::UpdateProfileRequest>) -> Result<Response<pb::UserProfile>, Status> {
 		let id = caller_id(&request)?;
 		let req = request.into_inner();
-		let mut user = self.state.users.find_by_id(id).await.map_err(map_err)?.ok_or_else(|| Status::not_found("user"))?;
-		user.update_profile(ProfileFields {
+		let fields = ProfileFields {
 			legal_name: optional(&req.legal_name).map(str::to_owned),
 			preferred_name: optional(&req.preferred_name).map(str::to_owned),
 			phone: optional(&req.phone).map(str::to_owned),
@@ -57,8 +57,8 @@ impl UsersService for UsersSvc {
 			language: optional(&req.language).map(str::to_owned),
 			base_currency: optional(&req.base_currency).map(str::to_owned),
 			timezone: optional(&req.timezone).map(str::to_owned),
-		});
-		self.state.users.save(&mut user).await.map_err(map_err)?;
+		};
+		let user = users_app::update_profile(self.state.users.as_ref(), id, fields).await.map_err(map_err)?;
 		Ok(Response::new(user_to_proto(&user)))
 	}
 
@@ -83,18 +83,16 @@ impl UsersService for UsersSvc {
 	async fn revoke_tokens(&self, request: Request<pb::RevokeTokensRequest>) -> Result<Response<pb::RevokeTokensResponse>, Status> {
 		require_permission(&self.state, &request, Permission::UserRevoke).await?;
 		let target = parse_user_id(&request.get_ref().user_id)?;
-		let mut user = self.state.users.find_by_id(target).await.map_err(map_err)?.ok_or_else(|| Status::not_found("user"))?;
-		let token_version = user.revoke_tokens();
-		self.state.users.save(&mut user).await.map_err(map_err)?;
-		Ok(Response::new(pb::RevokeTokensResponse { token_version }))
+		let user = users_app::revoke_tokens(self.state.users.as_ref(), target).await.map_err(map_err)?;
+		Ok(Response::new(pb::RevokeTokensResponse {
+			token_version: user.token_version(),
+		}))
 	}
 
 	async fn disable_user(&self, request: Request<pb::DisableUserRequest>) -> Result<Response<pb::DisableUserResponse>, Status> {
 		require_permission(&self.state, &request, Permission::UserSuspend).await?;
 		let target = parse_user_id(&request.get_ref().user_id)?;
-		let mut user = self.state.users.find_by_id(target).await.map_err(map_err)?.ok_or_else(|| Status::not_found("user"))?;
-		user.disable();
-		self.state.users.save(&mut user).await.map_err(map_err)?;
+		users_app::disable_user(self.state.users.as_ref(), target).await.map_err(map_err)?;
 		Ok(Response::new(pb::DisableUserResponse {}))
 	}
 

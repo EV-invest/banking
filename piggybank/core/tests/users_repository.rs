@@ -80,15 +80,12 @@ async fn revoke_and_disable_persist() {
 	};
 	let user = repo.provision(unique_subject(), Email::parse("rev@example.com").unwrap(), true).await.unwrap();
 
-	let mut loaded = repo.find_by_id(user.id()).await.unwrap().expect("user exists");
-	let new_version = loaded.revoke_tokens();
-	repo.save(&mut loaded).await.unwrap();
-	assert_eq!(new_version, 1);
+	let revoked = repo.revoke_tokens(user.id()).await.unwrap();
+	assert_eq!(revoked.token_version(), 1);
 
-	let mut loaded = repo.find_by_id(user.id()).await.unwrap().unwrap();
+	let loaded = repo.find_by_id(user.id()).await.unwrap().unwrap();
 	assert_eq!(loaded.token_version(), 1);
-	loaded.disable();
-	repo.save(&mut loaded).await.unwrap();
+	repo.disable(user.id()).await.unwrap();
 
 	let after = repo.find_by_id(user.id()).await.unwrap().unwrap();
 	assert_eq!(after.status(), UserStatus::Disabled);

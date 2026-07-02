@@ -18,25 +18,6 @@ pub struct TonRpc {
 	base_url: String,
 	api_key: Option<String>,
 }
-
-/// One incoming jetton transfer the deposit watcher credits.
-#[derive(Debug, Clone, PartialEq)]
-pub struct JettonDeposit {
-	/// The transaction hash — the stable idempotency key for [`record_deposit`].
-	pub tx_hash: String,
-	/// Jetton base units (6-dp on-chain) received.
-	pub amount: u128,
-	/// The transaction's unix time — the deposit watcher's globally-comparable cursor.
-	pub now: u64,
-}
-
-/// A user/treasury jetton wallet's address + balance (one `/jetton/wallets` row).
-#[derive(Debug, Clone, PartialEq)]
-pub struct JettonWallet {
-	pub address: String,
-	pub balance: u128,
-}
-
 impl TonRpc {
 	pub fn new(base_url: String, api_key: Option<String>) -> Self {
 		let http = reqwest::Client::builder()
@@ -157,6 +138,24 @@ impl TonRpc {
 		}
 		Ok(value)
 	}
+}
+
+/// One incoming jetton transfer the deposit watcher credits.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JettonDeposit {
+	/// The transaction hash — the stable idempotency key for [`record_deposit`].
+	pub tx_hash: String,
+	/// Jetton base units (6-dp on-chain) received.
+	pub amount: u128,
+	/// The transaction's unix time — the deposit watcher's globally-comparable cursor.
+	pub now: u64,
+}
+
+/// A user/treasury jetton wallet's address + balance (one `/jetton/wallets` row).
+#[derive(Debug, Clone, PartialEq)]
+pub struct JettonWallet {
+	pub address: String,
+	pub balance: u128,
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -7,10 +7,10 @@
 
 use async_trait::async_trait;
 use domain::{
-	architecture::{Reader, Repository},
+	architecture::{AggregateRoot, Reader, Repository},
 	auth::AuthSubject,
 	error::DomainError,
-	users::{Email, ProfileFields, User, UserId, UserStatus},
+	users::{ConciergeUserId, Email, ProfileFields, User, UserId, UserStatus},
 };
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
@@ -23,11 +23,29 @@ use crate::{
 pub struct PgUsers {
 	pool: PgPool,
 }
-
 impl PgUsers {
 	pub fn new(pool: PgPool) -> Self {
 		Self { pool }
 	}
+}
+
+/// The full column projection for the three [`UserRow`] reads. sqlx 0.9 requires a
+/// `&'static str` query, so each `SELECT` splices this literal in via `concat!` rather
+/// than a runtime `format!` — keep this list in sync with [`UserRow`].
+macro_rules! user_columns {
+	() => {
+		"id, auth_subject, email, email_verified, status, token_version, \
+		legal_name, preferred_name, phone, date_of_birth, nationality, tax_residence, \
+		residential_address, language, base_currency, timezone"
+	};
+}
+
+/// The folded issuance projection: refuse on a concierge freeze OR a banking disable, and take
+/// the GREATER of the two revoke versions. Keep in sync with [`IssuanceRow`].
+macro_rules! issuance_columns {
+	() => {
+		"id, email, (frozen OR status = 'disabled') AS disabled, GREATEST(concierge_token_version, token_version) AS token_version"
+	};
 }
 
 impl Repository for PgUsers {
@@ -83,17 +101,6 @@ impl UserRow {
 	}
 }
 
-/// The full column projection for the three [`UserRow`] reads. sqlx 0.9 requires a
-/// `&'static str` query, so each `SELECT` splices this literal in via `concat!` rather
-/// than a runtime `format!` — keep this list in sync with [`UserRow`].
-macro_rules! user_columns {
-	() => {
-		"id, auth_subject, email, email_verified, status, token_version, \
-		legal_name, preferred_name, phone, date_of_birth, nationality, tax_residence, \
-		residential_address, language, base_currency, timezone"
-	};
-}
-
 /// The issuance slice (see [`IssuanceTarget`]). `disabled` and `token_version` are computed in
 /// SQL to FOLD both revoke surfaces — the bridge-mirrored columns and banking's own aggregate
 /// columns — so either path gates a money token.
@@ -113,14 +120,6 @@ impl IssuanceRow {
 			token_version: self.token_version as u64,
 		}
 	}
-}
-
-/// The folded issuance projection: refuse on a concierge freeze OR a banking disable, and take
-/// the GREATER of the two revoke versions. Keep in sync with [`IssuanceRow`].
-macro_rules! issuance_columns {
-	() => {
-		"id, email, (frozen OR status = 'disabled') AS disabled, GREATEST(concierge_token_version, token_version) AS token_version"
-	};
 }
 
 fn repo_err(err: sqlx::Error) -> DomainError {
@@ -188,9 +187,9 @@ impl UserRepository for PgUsers {
 		Ok(user)
 	}
 
-	async fn resolve_issuance_by_concierge_id(&self, concierge_id: Uuid) -> Result<Option<IssuanceTarget>, DomainError> {
+	async fn resolve_issuance_by_concierge_id(&self, concierge_id: ConciergeUserId) -> Result<Option<IssuanceTarget>, DomainError> {
 		let row = sqlx::query_as::<_, IssuanceRow>(concat!("SELECT ", issuance_columns!(), " FROM users WHERE concierge_user_id = $1"))
-			.bind(concierge_id)
+			.bind(concierge_id.raw())
 			.fetch_optional(&self.pool)
 			.await
 			.map_err(repo_err)?;
@@ -206,35 +205,19 @@ impl UserRepository for PgUsers {
 		Ok(row.map(IssuanceRow::into_target))
 	}
 
-	async fn save(&self, user: &mut User) -> Result<(), DomainError> {
-		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		sqlx::query(
-			"UPDATE users SET email = $2, email_verified = $3, status = $4, token_version = $5, \
-			legal_name = $6, preferred_name = $7, phone = $8, date_of_birth = $9, nationality = $10, \
-			tax_residence = $11, residential_address = $12, language = $13, base_currency = $14, \
-			timezone = $15, updated_at = now() WHERE id = $1",
-		)
-		.bind(user.id().raw())
-		.bind(user.email().as_str())
-		.bind(user.email_verified())
-		.bind(user.status().as_str())
-		.bind(user.token_version() as i64)
-		.bind(user.legal_name())
-		.bind(user.preferred_name())
-		.bind(user.phone())
-		.bind(user.date_of_birth())
-		.bind(user.nationality())
-		.bind(user.tax_residence())
-		.bind(user.residential_address())
-		.bind(user.language())
-		.bind(user.base_currency())
-		.bind(user.timezone())
-		.execute(&mut *tx)
+	async fn update_profile(&self, id: UserId, fields: ProfileFields) -> Result<User, DomainError> {
+		mutate(&self.pool, id, |user| user.update_profile(fields)).await
+	}
+
+	async fn revoke_tokens(&self, id: UserId) -> Result<User, DomainError> {
+		mutate(&self.pool, id, |user| {
+			user.revoke_tokens();
+		})
 		.await
-		.map_err(repo_err)?;
-		append_events(&mut tx, user).await?;
-		tx.commit().await.map_err(repo_err)?;
-		Ok(())
+	}
+
+	async fn disable(&self, id: UserId) -> Result<User, DomainError> {
+		mutate(&self.pool, id, User::disable).await
 	}
 }
 
@@ -260,4 +243,57 @@ async fn update_email_on(conn: &mut PgConnection, row: UserRow, email: Email, em
 /// the outbox.
 async fn append_events(conn: &mut PgConnection, user: &mut User) -> Result<(), DomainError> {
 	outbox::drain_to_outbox(conn, user, false).await
+}
+
+/// The one command core every user mutation shares: load `id` **`FOR UPDATE`**,
+/// apply the aggregate transition, and persist the row + drained events in the
+/// same transaction. The lock makes read-modify-write atomic — a profile save can
+/// never write a stale `status`/`token_version` back over a concurrent admin
+/// disable/revoke.
+async fn mutate<F>(pool: &PgPool, id: UserId, transition: F) -> Result<User, DomainError>
+where
+	F: FnOnce(&mut User) + Send, {
+	let mut tx = pool.begin().await.map_err(repo_err)?;
+	let row = sqlx::query_as::<_, UserRow>(concat!("SELECT ", user_columns!(), " FROM users WHERE id = $1 FOR UPDATE"))
+		.bind(id.raw())
+		.fetch_optional(&mut *tx)
+		.await
+		.map_err(repo_err)?
+		.ok_or_else(|| DomainError::NotFound {
+			entity: User::NAME,
+			id: id.to_string(),
+		})?;
+	let mut user = row.into_domain()?;
+	transition(&mut user);
+	let affected = sqlx::query(
+		"UPDATE users SET email = $2, email_verified = $3, status = $4, token_version = $5, \
+		legal_name = $6, preferred_name = $7, phone = $8, date_of_birth = $9, nationality = $10, \
+		tax_residence = $11, residential_address = $12, language = $13, base_currency = $14, \
+		timezone = $15, updated_at = now() WHERE id = $1",
+	)
+	.bind(user.id().raw())
+	.bind(user.email().as_str())
+	.bind(user.email_verified())
+	.bind(user.status().as_str())
+	.bind(user.token_version() as i64)
+	.bind(user.legal_name())
+	.bind(user.preferred_name())
+	.bind(user.phone())
+	.bind(user.date_of_birth())
+	.bind(user.nationality())
+	.bind(user.tax_residence())
+	.bind(user.residential_address())
+	.bind(user.language())
+	.bind(user.base_currency())
+	.bind(user.timezone())
+	.execute(&mut *tx)
+	.await
+	.map_err(repo_err)?
+	.rows_affected();
+	if affected != 1 {
+		return Err(DomainError::Repository("user row vanished under lock".into()));
+	}
+	append_events(&mut tx, &mut user).await?;
+	tx.commit().await.map_err(repo_err)?;
+	Ok(user)
 }

@@ -29,11 +29,15 @@ use tracing::{info, warn};
 use crate::{
 	application::balance::record_deposit,
 	config::TronConfig,
-	infrastructure::tron_rpc::{Trc20Transfer, TronRpc},
+	infrastructure::{
+		deposits::PgDeposits,
+		tron_rpc::{Trc20Transfer, TronRpc},
+	},
 };
 
 pub struct TronDepositWatcher {
 	pool: PgPool,
+	deposits: PgDeposits,
 	relay: Arc<Notify>,
 	rpc: TronRpc,
 	usdt_contract: String,
@@ -45,6 +49,7 @@ pub struct TronDepositWatcher {
 impl TronDepositWatcher {
 	pub fn new(pool: PgPool, relay: Arc<Notify>, config: &TronConfig) -> Self {
 		Self {
+			deposits: PgDeposits::new(pool.clone()),
 			pool,
 			relay,
 			rpc: TronRpc::new(config.rpc_url.clone(), config.api_key.clone(), config.expiration_secs),
@@ -106,7 +111,7 @@ impl TronDepositWatcher {
 			return Ok(()); // a legal but meaningless zero-value transfer — not a deposit.
 		}
 		let tx_ref = TxRef::parse(&transfer.transaction_id).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.pool, &self.relay, tx_ref, Party::User(user), network, amount)
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
 		if newly {

@@ -30,9 +30,9 @@ pub struct AppConfig {
 	pub tigerbeetle_address: String,
 	/// TigerBeetle cluster id. `0` for single-node dev.
 	pub tigerbeetle_cluster_id: u128,
-	/// Hub user ids (UUIDs) allowed to call admin RPCs (`RevokeTokens`/`DisableUser`).
-	/// A coarse, config-driven allowlist standing in for RBAC until a role slice
-	/// lands; `ADMIN_SUBJECTS` is a comma-separated list (empty ⇒ no admins).
+	/// Break-glass role override: subjects treated as `Owner` by the RBAC gate even
+	/// with no mirrored role — the bootstrap path before the identity plane grants
+	/// roles. `ADMIN_SUBJECTS` is a comma-separated list (empty ⇒ no override).
 	pub admin_subjects: Vec<String>,
 	/// Endpoint of the separate-process signer (the key vault), for deposit-address
 	/// provisioning over the `signer.v1` gRPC seam. The hub connects lazily, so this

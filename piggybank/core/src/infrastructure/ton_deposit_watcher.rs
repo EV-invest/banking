@@ -36,7 +36,10 @@ use tracing::{info, warn};
 use crate::{
 	application::balance::record_deposit,
 	config::TonConfig,
-	infrastructure::ton_rpc::{JettonDeposit, TonRpc},
+	infrastructure::{
+		deposits::PgDeposits,
+		ton_rpc::{JettonDeposit, TonRpc},
+	},
 };
 
 /// Per-owner page size for `/jetton/transfers`.
@@ -49,6 +52,7 @@ const LOOKBACK_SECS: u64 = 120;
 
 pub struct TonDepositWatcher {
 	pool: PgPool,
+	deposits: PgDeposits,
 	relay: Arc<Notify>,
 	rpc: TonRpc,
 	config: TonConfig,
@@ -57,7 +61,8 @@ pub struct TonDepositWatcher {
 impl TonDepositWatcher {
 	pub fn new(pool: PgPool, relay: Arc<Notify>, config: TonConfig) -> Self {
 		let rpc = TonRpc::new(config.api_url.clone(), config.api_key.clone());
-		Self { pool, relay, rpc, config }
+		let deposits = PgDeposits::new(pool.clone());
+		Self { pool, deposits, relay, rpc, config }
 	}
 
 	/// Poll until `shutdown` is cancelled. A failed cycle is logged and retried next poll
@@ -115,7 +120,7 @@ impl TonDepositWatcher {
 			return Ok(());
 		}
 		let tx_ref = TxRef::parse(&transfer.tx_hash).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.pool, &self.relay, tx_ref, Party::User(user), network, amount)
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
 		if newly {

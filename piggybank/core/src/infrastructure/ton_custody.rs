@@ -20,7 +20,7 @@
 //! watcher; this adapter only gets the bytes onto the chain.
 
 use async_trait::async_trait;
-use domain::money::Network;
+use domain::{architecture::Gateway, money::Network};
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignJettonTransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -272,6 +272,8 @@ impl TonCustody {
 		}
 	}
 }
+
+impl Gateway for TonCustody {}
 
 #[async_trait]
 impl Custody for TonCustody {

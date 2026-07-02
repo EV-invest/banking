@@ -9,11 +9,7 @@
 //! performance fee. The relay posts the cash move and the unit mint, then the projection.
 
 use async_trait::async_trait;
-use domain::{
-	architecture::{Reader, Repository},
-	error::DomainError,
-	subscriptions::Subscription,
-};
+use domain::{architecture::Repository, error::DomainError, subscriptions::Subscription};
 use sqlx::{PgConnection, PgPool};
 
 use crate::{infrastructure::outbox, ports::SubscriptionRepository};
@@ -29,10 +25,6 @@ impl PgSubscriptions {
 }
 
 impl Repository for PgSubscriptions {
-	type Aggregate = Subscription;
-}
-
-impl Reader for PgSubscriptions {
 	type Aggregate = Subscription;
 }
 

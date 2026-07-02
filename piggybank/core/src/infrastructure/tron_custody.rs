@@ -19,7 +19,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use domain::money::Network;
+use domain::{architecture::Gateway, money::Network};
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignTrc20TransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -40,13 +40,6 @@ use crate::{
 /// of a premature re-sign is a double payout.
 const EXPIRATION_MARGIN_MS: i64 = 60_000;
 
-/// A previously signed+stored Tron transaction for a withdrawal.
-struct StoredTx {
-	raw_tx: String,
-	txid: String,
-	expiration: i64,
-}
-
 pub struct TronCustody {
 	pool: PgPool,
 	rpc: TronRpc,
@@ -56,7 +49,6 @@ pub struct TronCustody {
 	fee_limit: i64,
 	treasury_address: OnceCell<String>,
 }
-
 impl TronCustody {
 	pub fn new(pool: PgPool, channel: Channel, service_token: Option<ServiceTokenSource>, config: &TronConfig) -> Self {
 		Self {
@@ -270,6 +262,15 @@ impl TronCustody {
 		}
 	}
 }
+
+/// A previously signed+stored Tron transaction for a withdrawal.
+struct StoredTx {
+	raw_tx: String,
+	txid: String,
+	expiration: i64,
+}
+
+impl Gateway for TronCustody {}
 
 #[async_trait]
 impl Custody for TronCustody {

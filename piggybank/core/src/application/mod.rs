@@ -18,10 +18,12 @@
 //! money-plane token for (users themselves are mirrored from concierge by the
 //! one-way bridge, not provisioned here).
 //! [`balance`], [`funds`], and [`withdrawals`] are the money use cases — each notifies
-//! the relay after its commit so the ledger move follows promptly.
+//! the relay after its commit so the ledger move follows promptly. [`users`] holds the
+//! account commands (profile / revoke / disable) shared by the service and the auth task.
 
 pub mod auth_sync;
 pub mod balance;
 pub mod funds;
+pub mod users;
 pub mod wallet;
 pub mod withdrawals;
