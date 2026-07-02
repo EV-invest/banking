@@ -30,7 +30,11 @@
 //!
 //! Read-mostly; never touches TigerBeetle — money is still written last, in the relay.
 
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{
+	collections::{HashMap, HashSet},
+	sync::Arc,
+	time::Duration,
+};
 
 use domain::{
 	money::{Network, TxRef, Usdt, WalletAddress},
@@ -106,43 +110,38 @@ impl TonWithdrawalWatcher {
 		let treasury = self.custody.treasury_address().await.map_err(|e| WatcherError::Custody(e.to_string()))?;
 		let seqno = self.rpc.seqno(&treasury).await.map_err(|e| WatcherError::Rpc(e.to_string()))?;
 
-		// One outgoing-transfer read covers every settle-candidate this scan. Only fetch when
-		// something has actually advanced past its signed seqno.
-		let advanced_from = pending.iter().filter(|p| seqno > p.signed_seqno).map(|p| p.valid_until).min();
-		let outgoing = match advanced_from {
-			Some(oldest) => {
-				let start = oldest.saturating_sub(SETTLE_LOOKBACK_SECS).max(0) as u64;
-				self.rpc
-					.outgoing_jetton_transfers(&treasury, &self.usdt_master, start, OUTGOING_LIMIT)
-					.await
-					.map_err(|e| WatcherError::Rpc(e.to_string()))?
-			}
-			None => Vec::new(),
-		};
+		// A seqno advance only proves the wallet processed *a* message — a bounce advances it
+		// too — so a send settles only against a matching non-aborted outgoing transfer.
+		let advanced: Vec<&PendingBroadcast> = pending.iter().filter(|p| seqno > p.signed_seqno).collect();
+		let next_in_line = pending.iter().filter(|p| seqno == p.signed_seqno);
 
-		// Attribute each outgoing transfer to at most one withdrawal so two same-amount sends
-		// don't both claim one on-chain transfer.
-		let mut claimed = HashSet::new();
-		for pending in &pending {
-			match seqno.cmp(&pending.signed_seqno) {
-				// The treasury processed the message at this seqno — but only a matching
-				// non-aborted outgoing transfer proves the USDT actually left. Absent that, the
-				// send bounced (or isn't indexed yet): leave it `processing` (reserve held,
-				// recoverable), never settle it into a phantom disbursement.
-				std::cmp::Ordering::Greater => match match_outgoing(pending.net_onchain, &outgoing, &mut claimed) {
-					Some(tx_hash) => self.settle(pending.withdrawal_id, &tx_hash).await,
+		if !advanced.is_empty() {
+			let start = advanced.iter().map(|p| p.valid_until).min().unwrap_or(0).saturating_sub(SETTLE_LOOKBACK_SECS).max(0) as u64;
+			let outgoing = self
+				.rpc
+				.outgoing_jetton_transfers(&treasury, &self.usdt_master, start, OUTGOING_LIMIT)
+				.await
+				.map_err(|e| WatcherError::Rpc(e.to_string()))?;
+			// Durable cross-scan dedup: a transfer already recorded as some withdrawal's settle
+			// tx must never be re-attributed on a later scan (the per-scan claim set can't see
+			// across scans, and the transfer lingers in the lookback window after the owner
+			// settles and drops out of `pending`).
+			let already_used = self.used_tx_refs(&outgoing).await?;
+			let settlements = plan_settlements(&advanced, &outgoing, &already_used);
+			for p in &advanced {
+				match settlements.get(&p.withdrawal_id) {
+					Some(tx_hash) => self.settle(p.withdrawal_id, tx_hash).await,
 					None => warn!(
-						withdrawal_id = %pending.withdrawal_id,
-						seqno = pending.signed_seqno,
-						"ton withdrawal watcher: treasury seqno advanced but no matching outgoing USDT transfer — NOT settling (bounced or not-yet-indexed); reaper/operator backstops"
+						withdrawal_id = %p.withdrawal_id,
+						seqno = p.signed_seqno,
+						"ton withdrawal watcher: treasury seqno advanced but no unambiguous matching outgoing USDT transfer — NOT settling (bounced, not-yet-indexed, or a same-amount sibling is ambiguous); reaper/operator backstops"
 					),
-				},
-				// This withdrawal is next in line. Re-sign it if the stored send has expired
-				// (else the pipeline freezes on un-landable bytes), otherwise re-broadcast.
-				std::cmp::Ordering::Equal => self.advance_next_in_line(pending).await,
-				// A queued future seqno — wait for the earlier ones to land first.
-				std::cmp::Ordering::Less => {}
+				}
 			}
+		}
+		// Next-in-line sends: recover if expired (unfreeze the queue), else re-broadcast.
+		for pending in next_in_line {
+			self.advance_next_in_line(pending).await;
 		}
 		Ok(())
 	}
@@ -177,6 +176,22 @@ impl TonWithdrawalWatcher {
 			Ok(_) => info!(%withdrawal_id, %tx_hash, "ton withdrawal watcher: proven outgoing USDT transfer — settled"),
 			Err(err) => warn!(%withdrawal_id, "ton withdrawal watcher: could not settle confirmed withdrawal (will retry next poll): {err}"),
 		}
+	}
+
+	/// Which of `outgoing`'s tx hashes are ALREADY recorded as some TON withdrawal's settle
+	/// `tx_ref` — so a transfer can never settle a second withdrawal on a later scan. The
+	/// durable half of the dedup (the per-scan grouping in [`plan_settlements`] is the other).
+	async fn used_tx_refs(&self, outgoing: &[JettonDeposit]) -> Result<HashSet<String>, WatcherError> {
+		if outgoing.is_empty() {
+			return Ok(HashSet::new());
+		}
+		let hashes: Vec<String> = outgoing.iter().map(|t| t.tx_hash.clone()).collect();
+		let rows: Vec<(String,)> = sqlx::query_as("SELECT tx_ref FROM withdrawals WHERE network = 'ton' AND tx_ref = ANY($1)")
+			.bind(&hashes)
+			.fetch_all(&self.pool)
+			.await
+			.map_err(|e| WatcherError::Db(e.to_string()))?;
+		Ok(rows.into_iter().map(|(t,)| t).collect())
 	}
 
 	/// The `processing` TON withdrawals we have broadcast, with the net amount and stored send
@@ -253,14 +268,42 @@ impl PendingBroadcast {
 	}
 }
 
-/// Find an unclaimed, non-aborted outgoing transfer of exactly `net` on-chain units and
-/// claim it (so two same-amount sends can't both attribute to one transfer). The indexer
-/// only surfaces transfers whose transaction was not aborted, so a match is positive proof
-/// the USDT left. Pure — unit-tested without an indexer.
-fn match_outgoing(net: u128, transfers: &[JettonDeposit], claimed: &mut HashSet<String>) -> Option<String> {
-	let hit = transfers.iter().find(|t| t.amount == net && !claimed.contains(&t.tx_hash))?;
-	claimed.insert(hit.tx_hash.clone());
-	Some(hit.tx_hash.clone())
+/// Decide which advanced withdrawals may settle, and against which outgoing transfer.
+///
+/// Amount is the only identity we have (the indexer feed carries no destination we can
+/// compare without decoding TON addresses, which core avoids). So a settlement is only safe
+/// when it is **unambiguous**: for each net-amount group, we settle its members only if there
+/// are at least as many distinct, non-aborted, not-already-used outgoing transfers of that
+/// amount as there are withdrawals in the group — i.e. every same-amount sibling has its own
+/// landed transfer. If fewer transfers than siblings, at least one bounced and amount alone
+/// can't say which, so **none** of the group settles (they wait for the operator/reaper). A
+/// lone withdrawal of a unique amount settles as soon as its transfer appears. `already_used`
+/// (transfers recorded on prior settlements) is excluded so nothing double-settles across
+/// scans. Pure — unit-tested without an indexer.
+fn plan_settlements(advanced: &[&PendingBroadcast], outgoing: &[JettonDeposit], already_used: &HashSet<String>) -> HashMap<Uuid, String> {
+	let mut available: HashMap<u128, Vec<&str>> = HashMap::new();
+	for t in outgoing {
+		if t.amount == 0 || already_used.contains(&t.tx_hash) {
+			continue;
+		}
+		available.entry(t.amount).or_default().push(&t.tx_hash);
+	}
+	let mut by_amount: HashMap<u128, Vec<Uuid>> = HashMap::new();
+	for p in advanced {
+		by_amount.entry(p.net_onchain).or_default().push(p.withdrawal_id);
+	}
+	let mut settlements = HashMap::new();
+	for (amount, ids) in by_amount {
+		let transfers = available.get(&amount).map(Vec::as_slice).unwrap_or(&[]);
+		// Fewer landed transfers than same-amount siblings ⇒ ambiguous ⇒ settle none of them.
+		if transfers.len() < ids.len() {
+			continue;
+		}
+		for (id, tx) in ids.iter().zip(transfers.iter()) {
+			settlements.insert(*id, (*tx).to_owned());
+		}
+	}
+	settlements
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -285,24 +328,68 @@ mod tests {
 		}
 	}
 
-	#[test]
-	fn matches_by_amount_and_claims_each_transfer_once() {
-		let transfers = vec![transfer("a", 5_000_000), transfer("b", 5_000_000), transfer("c", 9_000_000)];
-		let mut claimed = HashSet::new();
-		// Two same-amount withdrawals consume the two matching transfers, not the same one.
-		assert_eq!(match_outgoing(5_000_000, &transfers, &mut claimed), Some("a".to_owned()));
-		assert_eq!(match_outgoing(5_000_000, &transfers, &mut claimed), Some("b".to_owned()));
-		// A third same-amount withdrawal has no unclaimed transfer left — not settleable yet.
-		assert_eq!(match_outgoing(5_000_000, &transfers, &mut claimed), None);
-		// A different amount matches its own transfer.
-		assert_eq!(match_outgoing(9_000_000, &transfers, &mut claimed), Some("c".to_owned()));
+	fn pending(net: u128) -> PendingBroadcast {
+		let id = Uuid::new_v4();
+		PendingBroadcast {
+			withdrawal_id: id,
+			signed_seqno: 0,
+			valid_until: 0,
+			raw_tx: String::new(),
+			net_onchain: net,
+			request: BroadcastRequest {
+				withdrawal_id: id,
+				network: Network::Ton,
+				address: WalletAddress::parse(Network::Ton, "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N").unwrap(),
+				amount: Usdt::from_base_units(net),
+			},
+		}
 	}
 
 	#[test]
-	fn no_matching_amount_is_never_settled() {
+	fn a_unique_amount_settles_against_its_transfer() {
+		let w = pending(9_000_000);
+		let transfers = vec![transfer("c", 9_000_000)];
+		let plan = plan_settlements(&[&w], &transfers, &HashSet::new());
+		assert_eq!(plan.get(&w.withdrawal_id), Some(&"c".to_owned()));
+	}
+
+	#[test]
+	fn two_same_amount_sends_that_both_landed_each_get_a_distinct_transfer() {
+		let (a, b) = (pending(5_000_000), pending(5_000_000));
+		let transfers = vec![transfer("t1", 5_000_000), transfer("t2", 5_000_000)];
+		let plan = plan_settlements(&[&a, &b], &transfers, &HashSet::new());
+		let (ta, tb) = (plan.get(&a.withdrawal_id).unwrap(), plan.get(&b.withdrawal_id).unwrap());
+		assert_ne!(ta, tb, "each same-amount withdrawal settles against a DISTINCT transfer");
+		assert_eq!(plan.len(), 2);
+	}
+
+	#[test]
+	fn same_amount_with_a_bounce_settles_none_of_the_group() {
+		// A landed (one transfer of the amount), B bounced (no transfer) — amount alone can't
+		// say which of A/B the single transfer belongs to, so NEITHER settles. This is the bug
+		// the review found: without this, the greedy match could settle the bounced one.
+		let (a, b) = (pending(5_000_000), pending(5_000_000));
+		let transfers = vec![transfer("t1", 5_000_000)];
+		let plan = plan_settlements(&[&a, &b], &transfers, &HashSet::new());
+		assert!(plan.is_empty(), "an ambiguous same-amount group with a bounce settles nobody");
+	}
+
+	#[test]
+	fn an_already_used_transfer_is_never_re_attributed() {
+		// The cross-scan case: A already settled against t1 (state now completed, gone from the
+		// pending set); a later same-amount B whose send bounced must NOT re-grab t1.
+		let b = pending(5_000_000);
+		let transfers = vec![transfer("t1", 5_000_000)];
+		let already_used = HashSet::from(["t1".to_owned()]);
+		let plan = plan_settlements(&[&b], &transfers, &already_used);
+		assert!(plan.is_empty(), "a transfer already recorded on a prior settlement is excluded");
+	}
+
+	#[test]
+	fn a_bounced_send_with_no_transfer_never_settles() {
+		let w = pending(7_000_000);
 		let transfers = vec![transfer("a", 5_000_000)];
-		let mut claimed = HashSet::new();
-		// A bounced send leaves no outgoing transfer of the expected amount → no settle.
-		assert_eq!(match_outgoing(7_000_000, &transfers, &mut claimed), None);
+		let plan = plan_settlements(&[&w], &transfers, &HashSet::new());
+		assert!(plan.is_empty(), "no outgoing transfer of the expected amount → no settle");
 	}
 }
