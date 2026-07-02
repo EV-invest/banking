@@ -116,7 +116,7 @@ impl DepositWatcher {
 	}
 
 	async fn credit(&self, user: UserId, network: Network, transfer: &Transfer) -> Result<(), WatcherError> {
-		let amount = Usdt::from_base_units(transfer.value);
+		let amount = Usdt::from_onchain(network, transfer.value).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {
 			return Ok(()); // a legal but meaningless zero-value Transfer — not a deposit.
 		}

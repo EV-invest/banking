@@ -87,14 +87,33 @@ impl TronDepositWatcher {
 		let cursor = self.cursor(network).await?;
 		let mut high_watermark = cursor;
 		for (address, user) in &watched {
-			let transfers = self
-				.rpc
-				.incoming_trc20(address, &self.usdt_contract, cursor, self.max_transfers)
-				.await
-				.map_err(|e| WatcherError::Rpc(e.to_string()))?;
-			for transfer in &transfers {
-				self.credit(*user, network, transfer).await?;
-				high_watermark = high_watermark.max(transfer.block_timestamp);
+			// Drain this address to the head, page by page: a single capped page could leave
+			// older transfers unfetched while ANOTHER address's newer transfer advances the
+			// global watermark past them — skipped forever. Paging until a short raw page
+			// makes the post-loop watermark advance safe for every address.
+			let mut address_from = cursor;
+			loop {
+				let page = self
+					.rpc
+					.incoming_trc20(address, &self.usdt_contract, address_from, self.max_transfers)
+					.await
+					.map_err(|e| WatcherError::Rpc(e.to_string()))?;
+				for transfer in &page.transfers {
+					self.credit(*user, network, transfer).await?;
+					high_watermark = high_watermark.max(transfer.block_timestamp);
+				}
+				if page.raw_len < self.max_transfers as usize {
+					break;
+				}
+				if page.max_timestamp <= address_from {
+					// A full page that cannot advance the window (one timestamp). Defer: the
+					// unmoved cursor re-scans next cycle; crediting is idempotent by tx id.
+					warn!(address, "tron deposit watcher: full page without time progress — deferring scan");
+					return Ok(());
+				}
+				// Resume AT the newest raw timestamp (inclusive): boundary rows are refetched
+				// and deduped, filtered rows still advance the window.
+				address_from = page.max_timestamp;
 			}
 		}
 		// Advance only after the window's deposits are recorded. A crash before this re-scans from

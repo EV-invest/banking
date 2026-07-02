@@ -51,7 +51,11 @@ impl TonRpc {
 
 	/// Incoming jetton transfers to `owner` (decoded by the indexer), at or after the
 	/// `start_now` unix-time watermark, oldest first. The deposit watcher's scan call.
-	pub async fn incoming_jetton_transfers(&self, owner: &str, master: &str, start_now: u64, limit: u32) -> Result<Vec<JettonDeposit>, RpcError> {
+	/// Returns the page with its RAW size and newest raw transaction time: the decoder
+	/// filters aborted/zero/malformed rows, so the filtered length alone cannot tell a
+	/// short (drained) page from a full one — and the raw max is the resume key that
+	/// still advances past filtered rows.
+	pub async fn incoming_jetton_transfers(&self, owner: &str, master: &str, start_now: u64, limit: u32) -> Result<JettonTransferPage, RpcError> {
 		let start = start_now.to_string();
 		let limit = limit.to_string();
 		let query = [
@@ -65,7 +69,12 @@ impl TonRpc {
 		// Attribution is entirely the server-side `owner_address` + `jetton_master` filter, so
 		// core never decodes a TON address.
 		let value = self.get("jetton/transfers", &query).await?;
-		Ok(decode_jetton_transfers(&value))
+		let raw = value.get("jetton_transfers").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
+		Ok(JettonTransferPage {
+			raw_len: raw.len(),
+			max_now: raw.iter().filter_map(|e| e.get("transaction_now").and_then(serde_json::Value::as_u64)).max().unwrap_or(0),
+			transfers: decode_jetton_transfers(&value),
+		})
 	}
 
 	/// Outgoing jetton transfers FROM `owner` (decoded by the indexer), at or after the
@@ -138,6 +147,16 @@ impl TonRpc {
 		}
 		Ok(value)
 	}
+}
+
+/// One ascending page of incoming jetton transfers (see
+/// [`TonRpc::incoming_jetton_transfers`]).
+pub struct JettonTransferPage {
+	pub transfers: Vec<JettonDeposit>,
+	/// Raw entries in the page BEFORE decode-filtering — the short-page (drained) test.
+	pub raw_len: usize,
+	/// Newest raw `transaction_now` in the page — the next page's resume key.
+	pub max_now: u64,
 }
 
 /// One incoming jetton transfer the deposit watcher credits.

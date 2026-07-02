@@ -96,14 +96,34 @@ impl TonDepositWatcher {
 		let from = cursor.saturating_sub(LOOKBACK_SECS);
 		let mut high = cursor;
 		for (owner, user) in &watched {
-			let transfers = self
-				.rpc
-				.incoming_jetton_transfers(owner, &self.config.usdt_master, from, PAGE_LIMIT)
-				.await
-				.map_err(|e| WatcherError::Rpc(e.to_string()))?;
-			for transfer in &transfers {
-				self.credit(*user, network, transfer).await?;
-				high = high.max(transfer.now);
+			// Drain this owner to the head, page by page: a single capped page could leave
+			// older transfers unfetched while ANOTHER owner's newer transfer advances the
+			// global watermark past them — skipped forever. Paging until a short raw page
+			// makes the post-loop watermark advance safe for every owner.
+			let mut owner_from = from;
+			loop {
+				let page = self
+					.rpc
+					.incoming_jetton_transfers(owner, &self.config.usdt_master, owner_from, PAGE_LIMIT)
+					.await
+					.map_err(|e| WatcherError::Rpc(e.to_string()))?;
+				for transfer in &page.transfers {
+					self.credit(*user, network, transfer).await?;
+					high = high.max(transfer.now);
+				}
+				if page.raw_len < PAGE_LIMIT as usize {
+					break;
+				}
+				if page.max_now <= owner_from {
+					// A full page that cannot advance the window (all entries share the
+					// start second). Defer: the unmoved cursor re-scans next cycle, and
+					// crediting is idempotent by tx hash.
+					warn!(owner, "ton deposit watcher: full page without time progress — deferring scan");
+					return Ok(());
+				}
+				// Resume AT the newest raw time (inclusive): boundary entries are refetched
+				// and deduped, filtered rows still advance the window.
+				owner_from = page.max_now;
 			}
 		}
 		// Advance to the newest transaction time seen (never backwards). The next cycle
