@@ -87,6 +87,28 @@ impl TonRpc {
 		Ok(decode_jetton_transfers(&value))
 	}
 
+	/// Outgoing jetton transfers FROM `owner` (decoded by the indexer), at or after the
+	/// `start_now` unix-time watermark, oldest first. The withdrawal watcher's settlement
+	/// proof: a treasury seqno advance only means the wallet processed *an* external message,
+	/// not that the internal jetton transfer landed (a bounce advances the seqno too). The
+	/// indexer only surfaces transfers whose transaction was not aborted, so a matching
+	/// non-aborted outgoing transfer of the expected amount is positive proof the USDT
+	/// actually left — the mirror of the deposit path, reusing the same tested decoder.
+	pub async fn outgoing_jetton_transfers(&self, owner: &str, master: &str, start_now: u64, limit: u32) -> Result<Vec<JettonDeposit>, RpcError> {
+		let start = start_now.to_string();
+		let limit = limit.to_string();
+		let query = [
+			("owner_address", owner),
+			("jetton_master", master),
+			("direction", "out"),
+			("start_utime", start.as_str()),
+			("sort", "asc"),
+			("limit", limit.as_str()),
+		];
+		let value = self.get("jetton/transfers", &query).await?;
+		Ok(decode_jetton_transfers(&value))
+	}
+
 	/// The account's native Toncoin balance in nanotons (the gas the sweep checks before a
 	/// jetton move, and the gas station tops up when short).
 	pub async fn balance(&self, address: &str) -> Result<u128, RpcError> {
