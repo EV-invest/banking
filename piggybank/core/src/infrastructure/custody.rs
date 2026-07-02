@@ -150,6 +150,41 @@ impl ChainCustody {
 		Ok(())
 	}
 
+	/// Forget the stored tx for a withdrawal whose FIRST send the node synchronously
+	/// rejected: those bytes never entered any mempool, so freeing its nonce is safe —
+	/// keeping the row would gap the sequence at that nonce and queue every later
+	/// withdrawal behind a slot nothing will ever fill. Only legal on the fresh path;
+	/// a rebroadcast's earlier attempt may have propagated, so its row must stay.
+	async fn discard_tx(&self, withdrawal_id: Uuid) -> Result<(), CustodyError> {
+		sqlx::query("DELETE FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = 'bep20'")
+			.bind(withdrawal_id)
+			.execute(&self.pool)
+			.await
+			.map_err(db_unavailable)?;
+		Ok(())
+	}
+
+	/// On-chain Read-First before a nonce is allocated or anything is signed: the treasury
+	/// must hold the USDT to send AND the BNB to pay the gas. The ledger's rail-liquidity
+	/// check reads TigerBeetle — accounting, not the hot wallet's real balances (a lagging
+	/// sweep or an out-of-band spend desyncs them) — and letting the node discover the
+	/// shortfall at broadcast would reject AFTER a nonce was allocated. A shortfall parks
+	/// (`Rejected`) rather than retries: an unbounded retry would wedge the single-worker
+	/// drain behind an underfunded rail, freezing every other money movement.
+	async fn ensure_treasury_funded(&self, treasury: &str, request: &BroadcastRequest, gas_price: u128) -> Result<(), CustodyError> {
+		let usdt = self.rpc.erc20_balance(&self.usdt_contract, treasury).await.map_err(read_err)?;
+		let needed = request.amount.base_units();
+		if usdt < needed {
+			return Err(CustodyError::Rejected(format!("treasury underfunded on-chain: {usdt} USDT base units < {needed} needed")));
+		}
+		let bnb = self.rpc.bnb_balance(treasury).await.map_err(read_err)?;
+		let gas = u128::from(self.gas_limit).saturating_mul(gas_price);
+		if bnb < gas {
+			return Err(CustodyError::Rejected(format!("treasury gas underfunded on-chain: {bnb} wei < {gas} needed")));
+		}
+		Ok(())
+	}
+
 	/// The next nonce for the treasury: the max of the chain's pending count and one past the
 	/// highest nonce we've already assigned — monotonic even if a public node lags, and it
 	/// catches up to the chain after a restart. Scoped to `network = 'bep20'` so the seqno values
@@ -234,14 +269,28 @@ impl Custody for ChainCustody {
 		}
 
 		let treasury = self.treasury_address().await?;
-		let nonce = self.next_nonce(&treasury).await?;
 		let gas_price = self.rpc.gas_price().await.map_err(read_err)?;
+		// Balance Read-First BEFORE the nonce exists — an underfunded treasury parks the
+		// withdrawal without ever burning a slot in the nonce sequence.
+		self.ensure_treasury_funded(&treasury, request, gas_price).await?;
+		let nonce = self.next_nonce(&treasury).await?;
 		let (raw_tx, tx_hash) = self.sign(request, nonce, gas_price).await?;
 
 		// Persist BEFORE broadcasting — a crash after this re-broadcasts THIS tx (same nonce),
 		// never a freshly-signed one with a different nonce.
 		self.store_tx(request.withdrawal_id, nonce, &raw_tx, &tx_hash).await?;
-		self.submit(&raw_tx, false).await
+		match self.submit(&raw_tx, false).await {
+			// The node synchronously refused a first-ever send: nothing entered the mempool,
+			// so free the nonce before parking — otherwise the sequence gaps at this slot and
+			// every later withdrawal signs above a hole nothing will ever fill.
+			Err(err @ CustodyError::Rejected(_)) => {
+				if let Err(discard) = self.discard_tx(request.withdrawal_id).await {
+					warn!(withdrawal_id = %request.withdrawal_id, "chain custody: could not free the rejected tx's nonce (manual gap repair needed): {discard}");
+				}
+				Err(err)
+			}
+			other => other,
+		}
 	}
 }
 

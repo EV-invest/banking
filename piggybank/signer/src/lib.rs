@@ -20,6 +20,7 @@ pub mod config;
 pub mod error;
 pub mod evm_tx;
 pub mod key_vault;
+pub mod policy;
 pub mod provision;
 pub mod secrets;
 pub mod service;

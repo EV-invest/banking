@@ -164,7 +164,11 @@ settle: `user` falls by `gross`, `wallet:<net>` by `net`, `fee` rises by `fee`, 
 **Custody is a separate trust domain.** [`Custody`] is the hub's only ask of the signing
 service ("broadcast this *already-reserved* withdrawal, idempotently by id"); the hub never
 holds keys. [`StubCustody`] no-ops until the real MPC/HSM service exists — the saga, the
-ledger, and the RPCs are complete and unchanged when it lands.
+ledger, and the RPCs are complete and unchanged when it lands. The **signer** applies its own
+spend policy as an independent second gate (holds even if the hub is compromised): a
+per-transfer USDT cap (`SIGNER_MAX_TRANSFER_USDT`) and an optional destination allowlist
+(`SIGNER_DESTINATION_ALLOWLIST`) on treasury-sourced transfers — both no-ops until configured,
+so set the cap before scaling real liquidity.
 
 ## Write path (Write-Last, Read-First)
 
@@ -211,6 +215,11 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   recoverable by a rail top-up + reconciliation. (Concurrent withdrawals on one rail are
   the realistic trigger — each is dispatched against the same liquidity, since reserves go
   to `clearing`, not the rail.)
+- **No shutdown cascade on a DB blip.** The composition root cancels every sibling task when
+  any branch returns, so the relay must not exit on a transient DB failure. `Relay::run`
+  re-acquires the outbox advisory lock with capped backoff when the lock connection drops (or
+  initial acquisition errors) instead of returning — a Postgres hiccup pauses the drain, it
+  doesn't tear down the money plane. Cancellation is still observed at every wait point.
 - **Bounded retryable.** Infra outages (`Unavailable`) retry **unbounded**; a *retryable
   ledger state* (`PendingTransferNotFound`) retries **bounded** (`MAX_RETRYABLE_ATTEMPTS`)
   then parks — so a completion whose pending can never appear (its reserve was itself
@@ -222,7 +231,36 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   and the [`reconciliation`](src/infrastructure/reconciliation.rs) clearing check (ledger
   reserve vs the gross of in-flight withdrawals) catches the mismatch; the
   [`reaper`](src/infrastructure/reaper.rs) auto-cancels the abandoned `queued` row. A real
-  custody broadcast of such a withdrawal must still be refused.
+  custody broadcast of such a withdrawal is **refused**: the `Dispatched` event's broadcast
+  op is the one op with no TB leg whose flags could reject it (it is an external side
+  effect), so the relay guards it with a Read-First on the reserve having actually applied —
+  its `CLEARING_RESERVE` transfer id recorded in `saga_steps` by the strictly-earlier
+  Requested leg. No step ⇒ the reserve parked ⇒ the broadcast is parked, never sent. This
+  closes the over-withdrawal race where a double-submit (TB lags the committed-but-undrained
+  reserve, so the second request passes the optimistic Read-First) would otherwise broadcast
+  real money with nothing locked. The `saga_steps` insert is therefore load-bearing, not
+  best-effort: a failed insert retries the whole (idempotent) event.
+- **On-chain treasury Read-First (custody).** The application's rail-liquidity check reads
+  the TigerBeetle `wallet:<net>` accounting balance, which can diverge from the hot wallet's
+  real on-chain balance (a lagging sweep, an out-of-band spend). So each custody adapter also
+  Read-Firsts the **real** treasury balance (USDT to send + native gas) before it allocates a
+  nonce/seqno or signs; a shortfall **parks** (`Rejected`) rather than retrying, so an
+  underfunded rail can't wedge the single-worker drain. On BSC a node rejection of a
+  *first-ever* send additionally frees its stored nonce (`discard_tx`) so the sequence never
+  gaps at a slot nothing will fill.
+- **Provable death before re-sign (TRON/TON).** A nonce-free rail (TRON, TON) can only
+  re-sign a stuck send once it is *provably* dead, never merely past its local-clock
+  expiration: TRON waits until the **solidified** head's timestamp is past the tx expiration
+  (+ margin) with no receipt; TON re-signs at the **same seqno** with a fresh window (only one
+  message per seqno can ever be accepted, and the replaced one is expired) — which also
+  unfreezes the strictly-sequential seqno pipeline when a send expired before its turn. A
+  wall-clock-only re-sign would double-pay a tx that later lands.
+- **Settlement proof, not seqno advance (TON).** A treasury seqno advance only proves the
+  wallet processed *an* external message — a bounced jetton transfer advances it too, with the
+  USDT returned. The TON watcher therefore settles only on a matching non-aborted **outgoing**
+  jetton transfer from the indexer (the mirror of the deposit path), recording that transfer's
+  real tx hash; a seqno advance with no such transfer leaves the withdrawal `processing`
+  (reserve held, operator/reaper-recoverable) rather than settling a phantom disbursement.
 - **Cross-flow claim contention (shared per-user lock).** Withdraw and subscribe both spend
   the **same** `UserClaim`, yet live in different tables — so a per-table `FOR UPDATE` (the
   redemptions' `fund_positions` lock) does **not** serialize a withdraw against a subscribe.

@@ -127,6 +127,32 @@ impl TonCustody {
 			.map_err(db_unavailable)
 	}
 
+	/// The stored `(seqno, valid_until)` for a withdrawal's TON send, if any.
+	async fn stored_seqno(&self, withdrawal_id: Uuid) -> Result<Option<(u64, i64)>, CustodyError> {
+		let row: Option<(Option<i64>, Option<i64>)> = sqlx::query_as("SELECT nonce, expiration FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = 'ton'")
+			.bind(withdrawal_id)
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(db_unavailable)?;
+		Ok(row.map(|(seqno, valid_until)| (seqno.unwrap_or(0).max(0) as u64, valid_until.unwrap_or(0))))
+	}
+
+	/// Replace a stuck send's stored bytes with a freshly signed one at the SAME seqno and a
+	/// new validity window. Safe by the wallet's replay rule — only one message per seqno can
+	/// ever be accepted, and the message being replaced is provably expired.
+	async fn replace_tx(&self, withdrawal_id: Uuid, seqno: u64, valid_until: u32, raw_tx: &str, tx_hash: &str) -> Result<(), CustodyError> {
+		sqlx::query("UPDATE withdrawal_broadcasts SET nonce = $2, expiration = $3, raw_tx = $4, tx_hash = $5 WHERE withdrawal_id = $1 AND network = 'ton'")
+			.bind(withdrawal_id)
+			.bind(seqno as i64)
+			.bind(valid_until as i64)
+			.bind(raw_tx)
+			.bind(tx_hash)
+			.execute(&self.pool)
+			.await
+			.map_err(db_unavailable)?;
+		Ok(())
+	}
+
 	async fn store_tx(&self, withdrawal_id: Uuid, seqno: u64, valid_until: u32, raw_tx: &str, tx_hash: &str) -> Result<(), CustodyError> {
 		sqlx::query(
 			"INSERT INTO withdrawal_broadcasts (withdrawal_id, network, nonce, expiration, raw_tx, tx_hash) \
@@ -154,6 +180,53 @@ impl TonCustody {
 			.map_err(db_unavailable)?;
 		let local_next = local_max.map(|n| n as u64 + 1).unwrap_or(0);
 		Ok(chain.max(local_next))
+	}
+
+	/// On-chain Read-First before signing: the treasury's USDT jetton wallet must hold the
+	/// amount to send AND the treasury must hold the native TON to attach to the message.
+	/// The ledger's rail-liquidity check reads TigerBeetle — accounting, not the hot
+	/// wallet's real balances — so this is the real-funds gate. A shortfall parks
+	/// (`Rejected`): retrying would wedge the single-worker drain behind an underfunded rail.
+	async fn ensure_treasury_funded(&self, treasury: &str, amount: u128) -> Result<(), CustodyError> {
+		let usdt = self.rpc.jetton_wallet(treasury, &self.usdt_master).await.map_err(read_err)?.map(|w| w.balance).unwrap_or(0);
+		if usdt < amount {
+			return Err(CustodyError::Rejected(format!("ton treasury underfunded on-chain: {usdt} USDT units < {amount} needed")));
+		}
+		let ton = self.rpc.balance(treasury).await.map_err(read_err)?;
+		let gas = u128::from(self.msg_value);
+		if ton < gas {
+			return Err(CustodyError::Rejected(format!("ton treasury gas-underfunded on-chain: {ton} nanoton < {gas} needed")));
+		}
+		Ok(())
+	}
+
+	/// Re-sign a stuck send at its SAME seqno with a fresh validity window and re-broadcast,
+	/// unfreezing the strictly-sequential pipeline when a signed message expired before its
+	/// seqno turn came (so re-sending the stored — now expired — bytes can never land). Only
+	/// acts once the stored message is provably expired; returns `false` if there is nothing
+	/// stored or it is still live (the watcher then re-broadcasts the original bytes). Safe by
+	/// the wallet's replay rule: at most one message per seqno is ever accepted, and the one
+	/// being replaced is expired, so no double-send is possible.
+	pub async fn resign_stuck(&self, request: &BroadcastRequest) -> Result<bool, CustodyError> {
+		let Some((seqno, valid_until)) = self.stored_seqno(request.withdrawal_id).await? else {
+			return Ok(false);
+		};
+		if now_unix() < valid_until.max(0) as u64 {
+			return Ok(false);
+		}
+		let treasury = self.treasury_address().await?;
+		let treasury_jetton_wallet = self.treasury_jetton_wallet(&treasury).await?;
+		let amount = request
+			.amount
+			.to_onchain(Network::Ton)
+			.map_err(|e| CustodyError::Rejected(format!("amount not representable on TON: {e}")))?;
+		self.ensure_treasury_funded(&treasury, amount).await?;
+		let fresh_valid_until = (now_unix() + VALID_WINDOW_SECS) as u32;
+		let (boc, msg_hash) = self.sign(request, &treasury, &treasury_jetton_wallet, amount, seqno, fresh_valid_until).await?;
+		self.replace_tx(request.withdrawal_id, seqno, fresh_valid_until, &boc, &msg_hash).await?;
+		warn!(withdrawal_id = %request.withdrawal_id, seqno, "ton custody: re-signed a stuck expired send at the same seqno — pipeline unfrozen");
+		self.submit(&boc, false).await?;
+		Ok(true)
 	}
 
 	/// Sign the withdrawal's jetton transfer from the treasury key via the signer.
@@ -221,6 +294,7 @@ impl Custody for TonCustody {
 			.amount
 			.to_onchain(Network::Ton)
 			.map_err(|e| CustodyError::Rejected(format!("amount not representable on TON: {e}")))?;
+		self.ensure_treasury_funded(&treasury, amount).await?;
 		let seqno = self.next_seqno(&treasury).await?;
 		let valid_until = (now_unix() + VALID_WINDOW_SECS) as u32;
 		let (boc, msg_hash) = self.sign(request, &treasury, &treasury_jetton_wallet, amount, seqno, valid_until).await?;

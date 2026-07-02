@@ -14,23 +14,34 @@ use evbanking_contracts::signer::v1::{
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{evm_tx, key_vault::Vault, provision, secrets::WalletSecrets, ton_tx, tron_tx};
+use crate::{evm_tx, key_vault::Vault, policy::SignerPolicy, provision, secrets::WalletSecrets, ton_tx, tron_tx};
 
 /// The reserved wallet id for the treasury hot wallet. Real user ids are random v4 UUIDs
 /// (never nil), so the treasury shares the `(user_id, network)` store without a schema
 /// change. A withdrawal sends from here; a sweep sends INTO here from user addresses.
 const TREASURY_WALLET: Uuid = Uuid::nil();
 
-/// The signer service: the loaded [`Vault`] (holding the KEK) plus the
-/// `wallet_secrets` store.
+/// The signer service: the loaded [`Vault`] (holding the KEK), the `wallet_secrets` store,
+/// and the independent spend [`SignerPolicy`] (the second gate — cap/allowlist).
 pub struct Signer {
 	vault: Vault,
 	secrets: WalletSecrets,
+	policy: SignerPolicy,
 }
 
 impl Signer {
-	pub fn new(vault: Vault, secrets: WalletSecrets) -> Self {
-		Self { vault, secrets }
+	pub fn new(vault: Vault, secrets: WalletSecrets, policy: SignerPolicy) -> Self {
+		Self { vault, secrets, policy }
+	}
+
+	/// Apply the spend policy to a USDT transfer signed FROM the treasury (the drain vector).
+	/// Transfers from any other wallet — a user's deposit address being swept in, the gas
+	/// station — are not treasury spends and pass unchecked.
+	fn guard_treasury_transfer(&self, wallet_id: Uuid, network: Network, to_address: &str, amount_base_units: u128) -> Result<(), Status> {
+		if wallet_id == TREASURY_WALLET {
+			self.policy.check_treasury_transfer(network, to_address, amount_base_units)?;
+		}
+		Ok(())
 	}
 
 	/// Resolve the sending wallet id from the wire `from_user_id`: empty ⇒ the treasury hot
@@ -85,6 +96,7 @@ impl SignerService for Signer {
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let gas_price: u128 = req.gas_price.parse().map_err(|_| Status::invalid_argument("gas_price must be a u128 decimal"))?;
+		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let secret = self.unseal(wallet_id, network).await?;
 		let data = evm_tx::erc20_transfer_calldata(&to, amount);
@@ -146,6 +158,7 @@ impl SignerService for Signer {
 		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
+		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let secret = self.unseal(wallet_id, network).await?;
 		let signed = tron_tx::sign_trc20_transfer(&secret, &token, &to, amount, req.fee_limit, &tx_ref).map_err(|_| Status::internal("signing failed"))?;
@@ -179,6 +192,7 @@ impl SignerService for Signer {
 		let network = require_ton(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
+		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
 		let seed = self.unseal(wallet_id, network).await?;
 		let signed = ton_tx::build_jetton_transfer(

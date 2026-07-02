@@ -170,15 +170,22 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		custody_by_network.insert(Network::Trc20, Arc::new(tron_custody));
 	}
 	// --- TON custody (jetton USDT) ---
-	if let Some(ton) = &config.ton {
-		let ton_custody = TonCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton);
-		// Resolve + log the treasury at boot so the operator funds it (USDT + TON) before any
-		// withdrawal settles. Best-effort — resolves on the first withdrawal otherwise.
-		if let Err(err) = ton_custody.treasury_address().await {
-			tracing::warn!("could not resolve the TON treasury address at boot (resolves on first withdrawal): {err}");
+	// One shared `Arc<TonCustody>` — the registry broadcasts through it, and the withdrawal
+	// watcher reuses it to re-sign a stuck expired send at the same seqno (only the key-holder
+	// path can do that safely). Held so the watcher (built below) can clone it.
+	let ton_custody: Option<Arc<TonCustody>> = match &config.ton {
+		Some(ton) => {
+			let ton_custody = Arc::new(TonCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton));
+			// Resolve + log the treasury at boot so the operator funds it (USDT + TON) before any
+			// withdrawal settles. Best-effort — resolves on the first withdrawal otherwise.
+			if let Err(err) = ton_custody.treasury_address().await {
+				tracing::warn!("could not resolve the TON treasury address at boot (resolves on first withdrawal): {err}");
+			}
+			custody_by_network.insert(Network::Ton, ton_custody.clone());
+			Some(ton_custody)
 		}
-		custody_by_network.insert(Network::Ton, Arc::new(ton_custody));
-	}
+		None => None,
+	};
 	let custody: Arc<dyn Custody> = Arc::new(MultiChainCustody::new(custody_by_network, Arc::new(StubCustody)));
 	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody, relay_notify.clone());
 
@@ -261,16 +268,10 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// sweep additionally needs SWEEP_ENABLED. Each holds its own pool clone / signer channel,
 	// mirroring the BEP20 tasks; all are no-ops (idle branch) when unconfigured.
 	let ton_deposit_watcher = config.ton.clone().map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton));
-	let ton_withdrawal_watcher = config.ton.as_ref().map(|ton| {
-		TonWithdrawalWatcher::new(
-			pool.clone(),
-			signer_channel.clone(),
-			ServiceTokenSource::from_env(),
-			withdrawals.clone(),
-			relay_notify.clone(),
-			ton,
-		)
-	});
+	let ton_withdrawal_watcher = match (&config.ton, &ton_custody) {
+		(Some(ton), Some(ton_custody)) => Some(TonWithdrawalWatcher::new(pool.clone(), ton_custody.clone(), withdrawals.clone(), relay_notify.clone(), ton)),
+		_ => None,
+	};
 	let ton_sweep = match (&config.ton, &config.ton_sweep) {
 		(Some(ton), Some(sweep_config)) => Some(TonSweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton, sweep_config.clone())),
 		_ => None,

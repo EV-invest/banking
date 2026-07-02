@@ -145,7 +145,7 @@ async fn seam_rejects_unauthenticated_and_foreign_aud_accepts_service_token() {
 	let auth_server = Server::builder().add_service(AuthServiceServer::new(JwksOnlyAuth)).serve(auth_addr);
 
 	let vault = Vault::from_hex(&hex::encode([9u8; 32])).unwrap();
-	let signer = Signer::new(vault, WalletSecrets::new(pool));
+	let signer = Signer::new(vault, WalletSecrets::new(pool), piggybank_signer::policy::SignerPolicy::default());
 	let verifier = Verifier::try_new(VerifierConfig {
 		issuer: ISSUER.to_owned(),
 		audiences: vec![SERVICE_AUDIENCE.to_owned()],

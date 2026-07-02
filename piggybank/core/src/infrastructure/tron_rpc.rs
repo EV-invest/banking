@@ -106,6 +106,20 @@ impl TronRpc {
 			.ok_or_else(|| TronRpcError::Rpc("getnowblock(solid): missing number".into()))
 	}
 
+	/// The latest **solidified** block's timestamp (unix ms). Tron only includes a transaction
+	/// in a block whose timestamp is at or below the tx's `expiration`, and block timestamps
+	/// are slot-monotonic — so once this passes an expiration, no future block can ever carry
+	/// that tx, and any block that already did is itself solidified. That makes "expired" a
+	/// *provable* death (see [`TronCustody::resubmit`](super::tron_custody::TronCustody)),
+	/// where the local wall clock alone can only make it a guess.
+	pub async fn solid_block_timestamp(&self) -> Result<i64, TronRpcError> {
+		let block = self.post("/walletsolidity/getnowblock", json!({})).await?;
+		block
+			.pointer("/block_header/raw_data/timestamp")
+			.and_then(Value::as_i64)
+			.ok_or_else(|| TronRpcError::Rpc("getnowblock(solid): missing timestamp".into()))
+	}
+
 	/// The account's TRX (SUN) + TRC20 balances from the indexed account view. The sweep reads
 	/// both: the USDT to move, and the TRX gas budget to move it. Unactivated ⇒ all zero.
 	pub async fn account_state(&self, address: &str) -> Result<AccountState, TronRpcError> {

@@ -7,9 +7,11 @@
 //!   1. Persist the signed transaction (`withdrawal_broadcasts`, keyed by `withdrawal_id`, with its
 //!      `expiration`) BEFORE broadcasting. A relay re-delivery within the window re-broadcasts the
 //!      SAME bytes (`DUP_TRANSACTION_ERROR` = idempotent success) — never a second tx.
-//!   2. Only after the stored tx has provably **expired without landing** — `now >= expiration` AND
+//!   2. Only after the stored tx has provably **expired without landing** — the SOLIDIFIED head's
+//!      timestamp is past `expiration` (+ margin), so no block can ever include it again, AND
 //!      `gettransactioninfobyid` finds nothing — is it safe to re-sign at a fresh ref-block and
-//!      replace the row. A blind re-sign after a timeout would risk a second on-chain send.
+//!      replace the row. A wall-clock-only expiry check would re-sign while the original could
+//!      still land (or already sits in an unreported block) — a double payout.
 //!
 //! Scope: TRC20 only. The on-chain SETTLE is the [`tron_withdrawal_watcher`](super::tron_withdrawal_watcher)
 //! (or an operator's `SettleWithdrawal`); this adapter only gets the bytes onto the chain.
@@ -31,6 +33,12 @@ use crate::{
 	infrastructure::tron_rpc::{RefBlockParams, TronRpc, TronRpcError},
 	ports::custody::{BroadcastRequest, Custody, CustodyError},
 };
+
+/// Extra solidified-time that must pass beyond a stored tx's `expiration` before it is
+/// treated as provably dead (re-signable). Covers block-slot granularity and node clock
+/// tolerance; generous, because the cost of waiting is a minute of latency while the cost
+/// of a premature re-sign is a double payout.
+const EXPIRATION_MARGIN_MS: i64 = 60_000;
 
 /// A previously signed+stored Tron transaction for a withdrawal.
 struct StoredTx {
@@ -164,6 +172,31 @@ impl TronCustody {
 		})
 	}
 
+	/// On-chain Read-First before signing: the treasury must hold the USDT to send AND
+	/// TRX up to the fee limit. The ledger's rail-liquidity check reads TigerBeetle —
+	/// accounting, not the hot wallet's real balances — and a node-level refusal at
+	/// broadcast is noisier and later than refusing here. A shortfall parks (`Rejected`):
+	/// retrying would wedge the single-worker drain behind an underfunded rail.
+	async fn ensure_treasury_funded(&self, request: &BroadcastRequest) -> Result<(), CustodyError> {
+		let treasury = self.treasury_address().await?;
+		let state = self.rpc.account_state(&treasury).await.map_err(read_err)?;
+		let needed = request
+			.amount
+			.to_onchain(Network::Trc20)
+			.map_err(|e| CustodyError::Rejected(format!("amount not representable on trc20: {e}")))?;
+		let usdt = state.trc20(&self.usdt_contract);
+		if usdt < needed {
+			return Err(CustodyError::Rejected(format!("tron treasury underfunded on-chain: {usdt} USDT units < {needed} needed")));
+		}
+		if state.trx < self.fee_limit as u128 {
+			return Err(CustodyError::Rejected(format!(
+				"tron treasury fee-underfunded on-chain: {} SUN < fee limit {}",
+				state.trx, self.fee_limit
+			)));
+		}
+		Ok(())
+	}
+
 	/// Sign a fresh transaction (fetching a recent ref-block) for the withdrawal's net amount.
 	async fn sign_fresh(&self, request: &BroadcastRequest) -> Result<Signed, CustodyError> {
 		let amount = request
@@ -175,12 +208,29 @@ impl TronCustody {
 	}
 
 	/// Re-handle a withdrawal that already has a stored transaction. Within the validity window,
-	/// re-broadcast the SAME bytes (idempotent). Past expiration, only re-sign if the stored txid
-	/// is provably not on-chain — otherwise treat it as landed and let the confirmation watcher
-	/// settle it.
+	/// re-broadcast the SAME bytes (idempotent). Past expiration, only re-sign once the stored
+	/// txid is **provably** dead — otherwise treat it as landed (or landable) and let the
+	/// confirmation watcher settle it.
+	///
+	/// "Provably dead" is a chain fact, not a wall-clock one: the local clock passing
+	/// `expiration` only means the tx *looks* expired — it may sit in a block the node hasn't
+	/// reported yet, or in one still below solidity that a re-signed twin would then double-pay.
+	/// Tron includes a tx only in blocks whose timestamp ≤ its `expiration` and block timestamps
+	/// are slot-monotonic, so once the SOLIDIFIED head's timestamp is past `expiration` (plus a
+	/// margin for slot/clock tolerance) no future block can carry it, and any block that already
+	/// did is itself solidified — a missing receipt is then final, never merely late.
 	async fn resubmit(&self, request: &BroadcastRequest, stored: StoredTx) -> Result<(), CustodyError> {
 		if now_ms() < stored.expiration {
 			return self.submit(&stored.raw_tx, true).await;
+		}
+		let solid_ts = self.rpc.solid_block_timestamp().await.map_err(read_err)?;
+		if solid_ts <= stored.expiration.saturating_add(EXPIRATION_MARGIN_MS) {
+			// Looks expired but not provably dead yet — a transient wait (~a minute of
+			// solidification), NOT a park and NOT a re-sign. The relay retries this seq.
+			return Err(CustodyError::Unavailable(format!(
+				"stored tx {} past expiration but not yet provably dead (solid head ts {solid_ts} <= expiration {} + margin) — waiting for solidification",
+				stored.txid, stored.expiration
+			)));
 		}
 		match self.rpc.transaction_info(&stored.txid).await.map_err(read_err)? {
 			Some(_) => {
@@ -188,7 +238,8 @@ impl TronCustody {
 				Ok(())
 			}
 			None => {
-				warn!(withdrawal_id = %request.withdrawal_id, txid = %stored.txid, "tron custody: stored transaction expired without landing — re-signing at a fresh ref-block");
+				warn!(withdrawal_id = %request.withdrawal_id, txid = %stored.txid, "tron custody: stored transaction provably dead (solidified past expiration, no receipt) — re-signing at a fresh ref-block");
+				self.ensure_treasury_funded(request).await?;
 				let signed = self.sign_fresh(request).await?;
 				self.replace_tx(request.withdrawal_id, &signed).await?;
 				self.submit(&signed.raw_tx, false).await
@@ -232,6 +283,7 @@ impl Custody for TronCustody {
 		if let Some(stored) = self.stored_tx(request.withdrawal_id).await? {
 			return self.resubmit(request, stored).await;
 		}
+		self.ensure_treasury_funded(request).await?;
 		let signed = self.sign_fresh(request).await?;
 		// Persist BEFORE broadcasting — a crash after this re-broadcasts THIS tx (same bytes/txid),
 		// never a freshly-signed one with a different txid.
