@@ -1,4 +1,3 @@
-#![feature(default_field_values)]
 //! `piggybank-signer` — the separate-process key vault.
 //!
 //! A distinct trust domain from the hub: it holds chain private keys ENCRYPTED AT
