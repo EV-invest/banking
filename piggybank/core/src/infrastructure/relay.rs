@@ -4,8 +4,10 @@
 //! `seq` order and applies each to TigerBeetle (and, for withdrawals, the custody
 //! service) **after** the control-plane commit (Write-Last). "Single worker" is an
 //! enforced invariant, not a deploy assumption: [`Relay::run`] holds a fixed-key session
-//! `pg_advisory_lock` for its lifetime and only drains while held, so a second core
-//! instance blocks on the lock and never touches the outbox (see `OUTBOX_LOCK_KEY`).
+//! `pg_advisory_lock` and only drains while held, so a second core instance blocks on
+//! the lock and never touches the outbox (see `OUTBOX_LOCK_KEY`); losing the lock's
+//! connection re-enters that acquisition (with backoff) rather than exiting, so a DB
+//! blip never cascades into a whole-process teardown.
 //! Delivery is
 //! at-least-once, so every op is idempotent: ledger transfer ids are deterministic
 //! (a posted transfer uses the event id; a reservation's pending uses an
@@ -108,50 +110,68 @@ impl Relay {
 		Self { pool, ledger, custody, notify }
 	}
 
-	/// Run until `shutdown` is cancelled. First take the singleton outbox lock on a
-	/// dedicated connection (blocking until acquired — a second instance idles here, owning
+	/// Run until `shutdown` is cancelled. Take the singleton outbox lock on a dedicated
+	/// connection (blocking until acquired — a second instance idles here, owning
 	/// nothing), then drain the backlog and wait for a nudge or a poll-fallback. The held
-	/// connection keeps the session-level lock for the process's lifetime; dropping it
-	/// (process exit) releases it so a standby can take over.
+	/// connection keeps the session-level lock for as long as it lives; dropping it
+	/// (process exit, or a lost backend) releases it so a standby can take over.
 	///
-	/// Graceful shutdown is cooperative: cancellation is only observed at the wait point
-	/// *between* drains and during the lock wait, never mid-`drain`. Each `drain` iteration
-	/// runs to completion before exit (it is already crash-safe to stop between rows), so an
-	/// in-flight dispatch is never torn down partway — a deploy/restart leaves the outbox in
-	/// the same clean state a graceful drain does.
+	/// A transient DB failure — the lock acquisition erroring, or the lock-holding
+	/// connection dropping mid-run — must NOT return: the composition root cancels every
+	/// sibling task when any branch completes, so an early return turns a DB blip into a
+	/// full money-plane teardown. Instead the outer loop re-acquires the lock with capped
+	/// exponential backoff (a standby may legitimately win it first — we then block on it,
+	/// which is exactly the singleton hand-off working).
+	///
+	/// Graceful shutdown is cooperative: cancellation is only observed at the wait points
+	/// *between* drains and during the lock/backoff waits, never mid-`drain`. Each `drain`
+	/// iteration runs to completion before exit (it is already crash-safe to stop between
+	/// rows), so an in-flight dispatch is never torn down partway — a deploy/restart leaves
+	/// the outbox in the same clean state a graceful drain does.
 	pub async fn run(self, shutdown: CancellationToken) {
-		let mut lock = tokio::select! {
-			biased;
-			() = shutdown.cancelled() => return,
-			lock = self.acquire_outbox_lock() => match lock {
-				Ok(lock) => lock,
-				Err(err) => {
-					error!("relay: could not acquire the outbox lock, not draining: {err}");
+		const MAX_BACKOFF: Duration = Duration::from_secs(30);
+		let mut backoff = Duration::from_millis(500);
+		'acquire: loop {
+			let mut lock = tokio::select! {
+				biased;
+				() = shutdown.cancelled() => return,
+				lock = self.acquire_outbox_lock() => match lock {
+					Ok(lock) => lock,
+					Err(err) => {
+						error!("relay: could not acquire the outbox lock (retrying in {backoff:?}): {err}");
+						tokio::select! {
+							() = shutdown.cancelled() => return,
+							() = tokio::time::sleep(backoff) => {},
+						}
+						backoff = (backoff * 2).min(MAX_BACKOFF);
+						continue 'acquire;
+					}
+				},
+			};
+			backoff = Duration::from_millis(500);
+			info!("relay: acquired the outbox lock — draining as the singleton worker");
+			loop {
+				let throttle = self.drain().await;
+				if shutdown.is_cancelled() {
+					info!("relay: shutdown requested — drain iteration complete, stopping");
 					return;
 				}
-			},
-		};
-		info!("relay: acquired the outbox lock — draining as the singleton worker");
-		loop {
-			let backoff = self.drain().await;
-			if shutdown.is_cancelled() {
-				info!("relay: shutdown requested — drain iteration complete, stopping");
-				return;
-			}
-			let wait = if backoff { Duration::from_secs(2) } else { Duration::from_millis(500) };
-			tokio::select! {
-				() = shutdown.cancelled() => {
-					info!("relay: shutdown requested — stopping");
-					return;
-				},
-				() = self.notify.notified() => {},
-				() = tokio::time::sleep(wait) => {},
-			}
-			// Touch the lock-holding connection so a dropped backend surfaces here rather
-			// than letting a lockless relay silently keep draining.
-			if let Err(err) = sqlx::query("SELECT 1").execute(lock.as_mut()).await {
-				error!("relay: lost the outbox lock connection, stopping: {err}");
-				return;
+				let wait = if throttle { Duration::from_secs(2) } else { Duration::from_millis(500) };
+				tokio::select! {
+					() = shutdown.cancelled() => {
+						info!("relay: shutdown requested — stopping");
+						return;
+					},
+					() = self.notify.notified() => {},
+					() = tokio::time::sleep(wait) => {},
+				}
+				// Touch the lock-holding connection so a dropped backend surfaces here rather
+				// than letting a lockless relay silently keep draining. Postgres released the
+				// lock with the dead session, so re-acquiring (not exiting) is the recovery.
+				if let Err(err) = sqlx::query("SELECT 1").execute(lock.as_mut()).await {
+					error!("relay: lost the outbox lock connection — re-acquiring: {err}");
+					continue 'acquire;
+				}
 			}
 		}
 	}
@@ -278,6 +298,24 @@ impl Relay {
 				Err(err) => return Outcome::park(format!("settle liquidity check: {err}")),
 			}
 		}
+		// The custody Broadcast is the one op with an external side effect and no TB leg
+		// whose flags could refuse it, so it gets its own Read-First: the withdrawal's
+		// clearing reservation must have **actually applied** — its deterministic transfer
+		// id recorded in `saga_steps` by the (strictly earlier in `seq`) Requested leg.
+		// Without this, a parked reserve (the optimistic solvency check reads TB, which
+		// lags committed-but-undrained outbox rows, so a double-submit passes it twice)
+		// leaves the trailing Dispatched row free to send real money on-chain with
+		// nothing locked behind it — the over-withdrawal race.
+		for op in &ops {
+			if !matches!(op.action, LedgerAction::Broadcast(_)) {
+				continue;
+			}
+			match reserve_applied(&self.pool, row.aggregate_id).await {
+				Ok(true) => {}
+				Ok(false) => return Outcome::park("withdrawal reserve never applied to the ledger (parked?) — refusing to broadcast".into()),
+				Err(err) => return Outcome::Retry(format!("reserve-applied check: {err}")),
+			}
+		}
 		// Track applied legs so a park *after* an earlier leg posted (`applied > 0`) is flagged
 		// half-applied — the genuine residual a balance pre-check can't predict (a bare TB
 		// Conflict on a non-first leg). A first-leg park leaves nothing applied.
@@ -292,8 +330,14 @@ impl Relay {
 			match result {
 				Ok(()) => {
 					// A broadcast is an external side effect, not a TB transfer — no saga step.
-					if !matches!(op.action, LedgerAction::Broadcast(_)) {
-						let _ = record_saga_step(&self.pool, row.event_id, leg as i32, op.role, op.transfer_id).await;
+					// The step record is load-bearing (the broadcast guard above reads it), so
+					// a failed insert retries the whole event: every leg is idempotent
+					// (`Exists`/`AlreadyPosted` are success), so the redelivery re-applies
+					// cleanly and records the step it owes.
+					if !matches!(op.action, LedgerAction::Broadcast(_))
+						&& let Err(err) = record_saga_step(&self.pool, row.event_id, leg as i32, op.role, op.transfer_id).await
+					{
+						return Outcome::Retry(format!("saga step record: {err}"));
 					}
 					applied += 1;
 				}
@@ -694,6 +738,20 @@ fn void_clearing(aggregate_id: Uuid, user: UserId, amount: Usdt, reference: u128
 /// the same id and a completion can recompute its reservation's `pending_id`.
 fn tid(aggregate_id: Uuid, salt: &[u8]) -> u128 {
 	Uuid::new_v5(&aggregate_id, salt).as_u128()
+}
+
+/// Whether a withdrawal's clearing reservation actually applied to the ledger: its
+/// deterministic transfer id (`tid(aggregate, CLEARING_RESERVE)`) was recorded in
+/// `saga_steps` when the Requested leg posted. Strict `seq` order (single worker)
+/// guarantees the Requested row was fully processed — applied or parked — before its
+/// Dispatched row is reached, so a missing step means the reserve parked, not that it
+/// is still pending.
+async fn reserve_applied(pool: &PgPool, aggregate_id: Uuid) -> Result<bool, sqlx::Error> {
+	let reserve_tid = tid(aggregate_id, CLEARING_RESERVE);
+	sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM saga_steps WHERE tb_transfer_id = $1)")
+		.bind(&reserve_tid.to_be_bytes()[..])
+		.fetch_one(pool)
+		.await
 }
 
 async fn record_saga_step(pool: &PgPool, event_id: Uuid, leg: i32, role: &str, transfer_id: u128) -> Result<(), sqlx::Error> {
