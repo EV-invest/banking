@@ -40,10 +40,10 @@ pub struct SessionBounds {
 	pub max_session_secs: u64,
 	pub idle_timeout_secs: u64,
 }
-/// The result of a successful rotation: who the family belongs to, the
-/// `token_version` snapshot it was issued under, and the new handle.
+/// The result of a successful rotation: the `token_version` snapshot the family was
+/// issued under (compared against the authoritative version to honour a "revoke all")
+/// and the new handle.
 pub struct RotatedRefresh {
-	pub user_id: String,
 	pub token_version_snapshot: u64,
 	pub refresh: IssuedRefresh,
 }
@@ -54,6 +54,21 @@ pub struct SessionView {
 	pub ip: String,
 	pub created_at: u64,
 	pub last_seen: u64,
+}
+
+/// The non-mutating classification of a presented refresh handle, keyed on its SECRET
+/// half (never the family-id prefix alone). It lets a caller authorize on the real
+/// credential — and detect a replayed rotated-out secret — WITHOUT performing the
+/// destructive rotation, so the fallible steps of a refresh (the user lookup) can
+/// run before the irreversible `prev` advance.
+pub enum RefreshInspect {
+	/// The presented secret is the family's CURRENT secret. Carries the owner id.
+	Current { user_id: String },
+	/// The presented secret is a rotated-out (PREV) secret — a replay/theft signal; the
+	/// caller should revoke the family (reuse detection).
+	Reuse { user_id: String },
+	/// No such family, or the secret matches neither current nor prev.
+	Invalid,
 }
 
 /// The refresh-token family store. Construct with [`RefreshStore::from_env`]; both
@@ -86,10 +101,13 @@ impl RefreshStore {
 		}
 	}
 
-	pub async fn user_of(&self, token: &str) -> Result<Option<String>, AuthError> {
+	/// Classify a presented refresh handle by its SECRET without rotating it — the
+	/// credential check for the session-management RPCs and the pre-rotation gate for
+	/// refresh. See [`RefreshInspect`].
+	pub async fn inspect(&self, token: &str) -> Result<RefreshInspect, AuthError> {
 		match self {
-			Self::InProcess(s) => Ok(s.user_of(token)),
-			Self::Redis(s) => s.user_of(token).await,
+			Self::InProcess(s) => Ok(s.inspect(token)),
+			Self::Redis(s) => s.inspect(token).await,
 		}
 	}
 
@@ -198,7 +216,6 @@ impl InProcessRefreshStore {
 			fam.expires_at = expires_at;
 			fam.last_seen = now;
 			Ok(RotatedRefresh {
-				user_id: fam.user_id.clone(),
 				token_version_snapshot: fam.token_version,
 				refresh: IssuedRefresh {
 					token: format!("{family}.{new_secret}"),
@@ -214,10 +231,23 @@ impl InProcessRefreshStore {
 		}
 	}
 
-	/// The user a refresh handle belongs to, if the family still exists.
-	pub fn user_of(&self, token: &str) -> Option<String> {
-		let family = token.split_once('.')?.0;
-		self.families.lock().unwrap_or_else(|e| e.into_inner()).get(family).map(|f| f.user_id.clone())
+	/// Classify a presented handle by its secret (constant-time), without mutating the
+	/// family. `current` ⇒ the live credential; a rotated-out `prev` ⇒ replay/theft.
+	pub fn inspect(&self, token: &str) -> RefreshInspect {
+		let Some((family, secret)) = token.split_once('.') else {
+			return RefreshInspect::Invalid;
+		};
+		let map = self.families.lock().unwrap_or_else(|e| e.into_inner());
+		let Some(fam) = map.get(family) else {
+			return RefreshInspect::Invalid;
+		};
+		if ct_eq(&fam.current, secret) {
+			RefreshInspect::Current { user_id: fam.user_id.clone() }
+		} else if fam.prev.as_deref().is_some_and(|prev| ct_eq(prev, secret)) {
+			RefreshInspect::Reuse { user_id: fam.user_id.clone() }
+		} else {
+			RefreshInspect::Invalid
+		}
 	}
 
 	/// Revoke a single refresh family (one logout).
@@ -370,10 +400,9 @@ impl RedisRefreshStore {
 			.map_err(redis_err)?;
 
 		match outcome.as_slice() {
-			[tag, user_id, token_version] if tag == "ok" => {
+			[tag, _user_id, token_version] if tag == "ok" => {
 				let token_version_snapshot = token_version.parse().unwrap_or(0);
 				Ok(RotatedRefresh {
-					user_id: user_id.clone(),
 					token_version_snapshot,
 					refresh: IssuedRefresh {
 						token: format!("{family}.{new_secret}"),
@@ -397,6 +426,27 @@ impl RedisRefreshStore {
 		let mut conn = self.conn.clone();
 		let user_id: Option<String> = redis::cmd("HGET").arg(Self::fam_key(family)).arg("user_id").query_async(&mut conn).await.map_err(redis_err)?;
 		Ok(user_id)
+	}
+
+	/// Classify a presented handle by its secret without mutating the family (the Redis
+	/// twin of [`InProcessRefreshStore::inspect`]).
+	pub async fn inspect(&self, token: &str) -> Result<RefreshInspect, AuthError> {
+		let Some((family, secret)) = token.split_once('.') else {
+			return Ok(RefreshInspect::Invalid);
+		};
+		let mut conn = self.conn.clone();
+		let fields: HashMap<String, String> = redis::cmd("HGETALL").arg(Self::fam_key(family)).query_async(&mut conn).await.map_err(redis_err)?;
+		if fields.is_empty() {
+			return Ok(RefreshInspect::Invalid);
+		}
+		let user_id = fields.get("user_id").cloned().unwrap_or_default();
+		if fields.get("current").is_some_and(|current| ct_eq(current, secret)) {
+			Ok(RefreshInspect::Current { user_id })
+		} else if fields.get("prev").is_some_and(|prev| ct_eq(prev, secret)) {
+			Ok(RefreshInspect::Reuse { user_id })
+		} else {
+			Ok(RefreshInspect::Invalid)
+		}
 	}
 
 	pub async fn revoke(&self, token: &str) -> Result<(), AuthError> {
@@ -584,7 +634,7 @@ mod tests {
 		let store = InProcessRefreshStore::new();
 		let issued = issue(&store, "user-1");
 		let rotated = store.rotate(&issued.token, bounds()).unwrap();
-		assert_eq!(rotated.user_id, "user-1");
+		assert!(matches!(store.inspect(&rotated.refresh.token), RefreshInspect::Current { user_id } if user_id == "user-1"));
 		// The original (now rotated-out) secret is a reuse → family revoked.
 		assert!(store.rotate(&issued.token, bounds()).is_err());
 		// And the just-issued one is now dead too.
@@ -599,6 +649,31 @@ mod tests {
 		store.revoke_user("user-1");
 		assert!(store.rotate(&a.token, bounds()).is_err());
 		assert!(store.rotate(&b.token, bounds()).is_err());
+	}
+
+	#[test]
+	fn inspect_authorizes_only_the_current_secret() {
+		let store = InProcessRefreshStore::new();
+		let issued = store.issue("user-1", 5, bounds(), String::new(), String::new());
+
+		// The live token authorizes as its family's user.
+		match store.inspect(&issued.token) {
+			RefreshInspect::Current { user_id } => assert_eq!(user_id, "user-1"),
+			_ => panic!("a live token must inspect as Current"),
+		}
+		// A right-family / wrong-secret handle (the family-id prefix alone) is NOT a
+		// credential — this is the session-RPC hardening.
+		let (family, _) = issued.token.split_once('.').unwrap();
+		assert!(matches!(store.inspect(&format!("{family}.not-the-secret")), RefreshInspect::Invalid));
+		assert!(matches!(store.inspect("no-dot"), RefreshInspect::Invalid));
+
+		// After a rotation the prior secret inspects as Reuse (theft signal) WITHOUT being
+		// mutated by the inspection, and the new secret is Current.
+		let rotated = store.rotate(&issued.token, bounds()).unwrap();
+		assert!(matches!(store.inspect(&issued.token), RefreshInspect::Reuse { .. }));
+		assert!(matches!(store.inspect(&rotated.refresh.token), RefreshInspect::Current { .. }));
+		// Inspection did not revoke the family (unlike a rotate of the reused secret).
+		assert!(matches!(store.inspect(&rotated.refresh.token), RefreshInspect::Current { .. }));
 	}
 
 	#[test]
@@ -727,8 +802,8 @@ mod redis_tests {
 		};
 		let issued = store.issue(&user, 7, bounds(), "agent".into(), "1.2.3.4".into()).await.unwrap();
 		let rotated = store.rotate(&issued.token, bounds()).await.unwrap();
-		assert_eq!(rotated.user_id, user);
 		assert_eq!(rotated.token_version_snapshot, 7);
+		assert!(matches!(store.inspect(&rotated.refresh.token).await.unwrap(), RefreshInspect::Current { user_id } if user_id == user));
 		// Reuse of the rotated-out secret revokes the whole family.
 		assert!(store.rotate(&issued.token, bounds()).await.is_err());
 		assert!(store.rotate(&rotated.refresh.token, bounds()).await.is_err());
