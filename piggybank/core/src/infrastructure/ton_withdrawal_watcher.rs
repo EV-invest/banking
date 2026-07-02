@@ -281,9 +281,12 @@ impl PendingBroadcast {
 /// (transfers recorded on prior settlements) is excluded so nothing double-settles across
 /// scans. Pure — unit-tested without an indexer.
 fn plan_settlements(advanced: &[&PendingBroadcast], outgoing: &[JettonDeposit], already_used: &HashSet<String>) -> HashMap<Uuid, String> {
+	// De-dup by tx hash too (a batched external message could surface one transaction hash
+	// twice): each transfer must back at most one settlement, so a hash is a candidate once.
+	let mut seen_hashes = HashSet::new();
 	let mut available: HashMap<u128, Vec<&str>> = HashMap::new();
 	for t in outgoing {
-		if t.amount == 0 || already_used.contains(&t.tx_hash) {
+		if t.amount == 0 || already_used.contains(&t.tx_hash) || !seen_hashes.insert(t.tx_hash.as_str()) {
 			continue;
 		}
 		available.entry(t.amount).or_default().push(&t.tx_hash);
@@ -383,6 +386,17 @@ mod tests {
 		let already_used = HashSet::from(["t1".to_owned()]);
 		let plan = plan_settlements(&[&b], &transfers, &already_used);
 		assert!(plan.is_empty(), "a transfer already recorded on a prior settlement is excluded");
+	}
+
+	#[test]
+	fn a_duplicated_transfer_hash_backs_at_most_one_settlement() {
+		// If the indexer surfaced one transaction hash twice, a same-amount pair must not both
+		// settle against it — the deduped `available` leaves only one candidate → group of 2
+		// with 1 transfer → settles nobody (ambiguous).
+		let (a, b) = (pending(5_000_000), pending(5_000_000));
+		let transfers = vec![transfer("dup", 5_000_000), transfer("dup", 5_000_000)];
+		let plan = plan_settlements(&[&a, &b], &transfers, &HashSet::new());
+		assert!(plan.is_empty(), "a repeated tx hash counts once, so the group stays ambiguous");
 	}
 
 	#[test]
