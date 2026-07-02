@@ -120,7 +120,7 @@ impl TonCustody {
 	}
 
 	async fn stored_tx(&self, withdrawal_id: Uuid) -> Result<Option<String>, CustodyError> {
-		sqlx::query_scalar::<_, String>("SELECT raw_tx FROM withdrawal_broadcasts WHERE withdrawal_id = $1")
+		sqlx::query_scalar::<_, String>("SELECT raw_tx FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = 'ton'")
 			.bind(withdrawal_id)
 			.fetch_optional(&self.pool)
 			.await
@@ -147,6 +147,18 @@ impl TonCustody {
 			.bind(valid_until as i64)
 			.bind(raw_tx)
 			.bind(tx_hash)
+			.execute(&self.pool)
+			.await
+			.map_err(db_unavailable)?;
+		Ok(())
+	}
+
+	/// Forget a stored send whose FIRST broadcast the node rejected synchronously — it never
+	/// entered the network, so its seqno slot must be freed for the next withdrawal. Never
+	/// called for bytes that may have been accepted.
+	async fn discard_tx(&self, withdrawal_id: Uuid) -> Result<(), CustodyError> {
+		sqlx::query("DELETE FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = 'ton'")
+			.bind(withdrawal_id)
 			.execute(&self.pool)
 			.await
 			.map_err(db_unavailable)?;
@@ -225,7 +237,7 @@ impl TonCustody {
 		let (boc, msg_hash) = self.sign(request, &treasury, &treasury_jetton_wallet, amount, seqno, fresh_valid_until).await?;
 		self.replace_tx(request.withdrawal_id, seqno, fresh_valid_until, &boc, &msg_hash).await?;
 		warn!(withdrawal_id = %request.withdrawal_id, seqno, "ton custody: re-signed a stuck expired send at the same seqno — pipeline unfrozen");
-		self.submit(&boc, false).await?;
+		self.submit(&boc, false, request.withdrawal_id).await?;
 		Ok(true)
 	}
 
@@ -258,10 +270,10 @@ impl TonCustody {
 
 	/// Submit a signed BoC. A transport failure is retryable (nothing reached the chain); a
 	/// toncenter rejection parks the withdrawal for intervention.
-	async fn submit(&self, boc: &str, rebroadcast: bool) -> Result<(), CustodyError> {
+	async fn submit(&self, boc: &str, rebroadcast: bool, withdrawal_id: Uuid) -> Result<(), CustodyError> {
 		match self.rpc.send_message(boc).await {
 			Ok(()) => {
-				info!(rebroadcast, "ton custody: broadcast withdrawal message");
+				info!(%withdrawal_id, rebroadcast, "ton custody: broadcast withdrawal message");
 				Ok(())
 			}
 			Err(RpcError::Transport(detail)) => Err(CustodyError::Unavailable(detail)),
@@ -287,7 +299,7 @@ impl Custody for TonCustody {
 		// exact bytes rather than signing a new one (the wallet's strict-seqno rule makes a
 		// stale re-send a no-op; no second seqno can ever go out).
 		if let Some(boc) = self.stored_tx(request.withdrawal_id).await? {
-			return self.submit(&boc, true).await;
+			return self.submit(&boc, true, request.withdrawal_id).await;
 		}
 
 		let treasury = self.treasury_address().await?;
@@ -304,7 +316,18 @@ impl Custody for TonCustody {
 		// Persist BEFORE broadcasting — a crash after this re-broadcasts THIS message (same
 		// seqno), never a freshly-signed one.
 		self.store_tx(request.withdrawal_id, seqno, valid_until, &boc, &msg_hash).await?;
-		self.submit(&boc, false).await
+		match self.submit(&boc, false, request.withdrawal_id).await {
+			// The node refused this FIRST send synchronously — the message never entered the
+			// network, so free its stored seqno (mirrors BSC's `discard_tx`): a lingering row
+			// feeds `next_seqno`'s MAX(nonce) and would wedge every later send above a slot
+			// nothing will ever fill. Re-broadcasts are NOT discarded — a rejection there can
+			// mean "already accepted".
+			Err(CustodyError::Rejected(msg)) => {
+				self.discard_tx(request.withdrawal_id).await?;
+				Err(CustodyError::Rejected(msg))
+			}
+			other => other,
+		}
 	}
 }
 
