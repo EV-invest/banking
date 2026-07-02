@@ -9,13 +9,16 @@
 //! ACID point), so callers never juggle a transaction across the port boundary.
 //!
 //! The money plane adds the fund-currency ports — [`SubscriptionRepository`],
-//! [`RedemptionRepository`], [`WithdrawalRepository`], and [`NavRepository`] — each
-//! the aggregate's atomic, row-locked persistence, plus [`Ledger`], the TigerBeetle
-//! [`Gateway`](domain::architecture::Gateway), which by construction cannot enrol in
-//! a Postgres `UnitOfWork` (money is written last, in the relay).
+//! [`RedemptionRepository`], [`WithdrawalRepository`], [`NavMarks`], and
+//! [`Deposits`] — each an atomic, row-locked persistence seam, plus the external
+//! gateways ([`Gateway`](domain::architecture::Gateway)): [`Ledger`] (TigerBeetle),
+//! [`Custody`] (the signing service), and [`DepositAddresses`] — which by
+//! construction cannot enrol in a Postgres `UnitOfWork` (money is written last, in
+//! the relay).
 
 pub mod custody;
 pub mod deposit_addresses;
+pub mod deposits;
 pub mod ledger;
 pub mod nav;
 pub mod positions;
@@ -26,18 +29,18 @@ pub mod withdrawals;
 use async_trait::async_trait;
 pub use custody::{BroadcastRequest, Custody, CustodyError};
 pub use deposit_addresses::DepositAddresses;
+pub use deposits::Deposits;
 use domain::{
 	architecture::{Reader, Repository},
 	auth::AuthSubject,
 	error::DomainError,
-	users::{Email, User, UserId},
+	users::{ConciergeUserId, Email, ProfileFields, User, UserId},
 };
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
-pub use nav::{NavRepository, Valuation};
+pub use nav::{NavMarks, Valuation};
 pub use positions::{FundPosition, FundPositionReader};
 pub use redemptions::{QueuedRedemption, RedemptionRepository};
 pub use subscriptions::SubscriptionRepository;
-use uuid::Uuid;
 pub use withdrawals::WithdrawalRepository;
 
 /// Persistence + read port for the [`User`] aggregate.
@@ -55,14 +58,23 @@ pub trait UserRepository: Repository<Aggregate = User> + Reader<Aggregate = User
 	/// Resolve the bridge-mirrored issuance slice by the user's CONCIERGE id (the handle the
 	/// BFF carries from sign-in). `None` if no local mirror exists yet (the bridge `CREATED`
 	/// has not been consumed). Read-only.
-	async fn resolve_issuance_by_concierge_id(&self, concierge_id: Uuid) -> Result<Option<IssuanceTarget>, DomainError>;
+	async fn resolve_issuance_by_concierge_id(&self, concierge_id: ConciergeUserId) -> Result<Option<IssuanceTarget>, DomainError>;
 
 	/// Resolve the same issuance slice by the hub user id — the refresh-time re-check.
 	async fn resolve_issuance_by_banking_id(&self, banking_id: UserId) -> Result<Option<IssuanceTarget>, DomainError>;
 
-	/// Persist a mutated aggregate — its new state and its drained events to the
-	/// event log — in one transaction.
-	async fn save(&self, user: &mut User) -> Result<(), DomainError>;
+	/// Apply a self-service profile update under the row lock — load `FOR UPDATE`,
+	/// apply [`User::update_profile`], persist + drain events in one transaction, so
+	/// a stale read can never overwrite a concurrent admin transition. Returns the
+	/// updated aggregate.
+	async fn update_profile(&self, id: UserId, fields: ProfileFields) -> Result<User, DomainError>;
+
+	/// Bump the user's `token_version` (invalidate all outstanding tokens) under the
+	/// row lock. Returns the updated aggregate (carrying the new version).
+	async fn revoke_tokens(&self, id: UserId) -> Result<User, DomainError>;
+
+	/// Disable the account under the row lock (idempotent).
+	async fn disable(&self, id: UserId) -> Result<User, DomainError>;
 }
 /// The minimal slice needed to mint a money-plane token for a user. The money plane never sees
 /// Google's `sub`. Each field FOLDS the two revoke surfaces so EITHER invalidates a money token:

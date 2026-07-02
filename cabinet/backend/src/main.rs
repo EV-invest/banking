@@ -1,4 +1,3 @@
-#![feature(default_field_values)]
 //! The cabinet BFF — a standalone, stateless HTTP orchestration service.
 //!
 //! It is the cabinet's single auth/egress boundary: it runs the OAuth confidential-client
@@ -61,7 +60,7 @@ async fn run(config: Config) -> anyhow::Result<()> {
 		&config.piggybank_grpc_addr,
 		&config.banking_auth_grpc_addr,
 		&config.concierge_grpc_addr,
-		config.banking_issuance_token.clone(),
+		config.banking_issuance_token.as_ref().map(|t| t.0.clone()),
 	)
 	.context("invalid gRPC address (PIGGYBANK_GRPC_ADDR / BANKING_AUTH_GRPC_ADDR / CONCIERGE_GRPC_ADDR)")?;
 

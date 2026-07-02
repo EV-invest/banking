@@ -21,6 +21,7 @@ use piggybank_core::{
 	infrastructure::{
 		custody::StubCustody,
 		db,
+		deposits::PgDeposits,
 		ledger::{self, TbLedger},
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
@@ -33,6 +34,7 @@ use uuid::Uuid;
 
 struct Harness {
 	pool: PgPool,
+	deposits: PgDeposits,
 	notify: Arc<Notify>,
 }
 impl Harness {
@@ -51,6 +53,7 @@ async fn harness() -> Option<Harness> {
 		return None;
 	}
 	Some(Harness {
+		deposits: PgDeposits::new(pool.clone()),
 		pool,
 		notify: Arc::new(Notify::new()),
 	})
@@ -81,7 +84,7 @@ async fn only_one_relay_drains_under_the_outbox_lock() {
 	let party = Party::User(UserId::new());
 	let claim = party.claim_key();
 	let before = h.balance(&claim).await;
-	balance_app::record_deposit(&h.pool, &h.notify, tx_ref(), party, Network::Bep20, usdt("250")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), party, Network::Bep20, usdt("250")).await.unwrap();
 	primary.drain().await;
 	let after = h.balance(&claim).await;
 	assert_eq!(after.saturating_sub(before), usdt("250").base_units(), "the lock holder applied the committed deposit");

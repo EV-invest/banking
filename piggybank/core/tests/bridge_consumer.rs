@@ -180,7 +180,7 @@ async fn created_then_suspended_freezes_user_and_gates_money_op() {
 	drive(&pool, events, |pool| async move {
 		let user_id = user_id_for(&pool, &subject).await.expect("CREATED provisioned a banking user");
 		assert!(
-			bridge::is_frozen(&pool, user_id).await.unwrap(),
+			bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
 			"SUSPENDED must freeze the banking user — the money-op gate then rejects"
 		);
 		// And the issuance resolve reports the freeze, so AuthService.IssueUserToken refuses to
@@ -205,13 +205,13 @@ async fn banking_disable_blocks_money_ops_without_a_concierge_freeze() {
 	drive(&pool, vec![event(&subject, Kind::Created, 1)], |pool| async move {
 		let user_id = user_id_for(&pool, &subject).await.expect("CREATED provisioned a banking user");
 		// Not concierge-frozen, so nothing blocks money ops yet.
-		assert!(!bridge::is_frozen(&pool, user_id).await.unwrap(), "a fresh user is not blocked");
+		assert!(!bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(), "a fresh user is not blocked");
 
 		// A banking-side DisableUser sets status='disabled' and leaves `frozen` FALSE. The
 		// money-op gate must still block it, matching the fold issuance already applies.
 		sqlx::query("UPDATE users SET status = 'disabled' WHERE id = $1").bind(user_id).execute(&pool).await.unwrap();
 		assert!(
-			bridge::is_frozen(&pool, user_id).await.unwrap(),
+			bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
 			"a banking-disabled user must be blocked from money ops, like a concierge freeze"
 		);
 	})
@@ -241,7 +241,7 @@ async fn role_changed_mirrors_role_onto_the_projection() {
 			assert_eq!(role, "admin", "ROLE_CHANGED mirrors the granted role onto the banking projection");
 			let user_id = user_id_for(&pool, &subject).await.expect("user provisioned");
 			assert_eq!(
-				bridge::role_of(&pool, user_id).await.unwrap(),
+				bridge::role_of(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
 				domain::authz::Role::Admin,
 				"role_of reads it back for the operator gate"
 			);
@@ -272,7 +272,11 @@ async fn created_stores_concierge_id_and_resolves_for_issuance() {
 			// The issuance resolve path (AuthService.IssueUserToken → ResolveForIssuance) finds the
 			// user by that concierge id, and the refresh path resolves the same row by hub id.
 			let users = PgUsers::new(pool.clone());
-			let by_concierge = users.resolve_issuance_by_concierge_id(concierge_id).await.unwrap().expect("resolved by concierge id");
+			let by_concierge = users
+				.resolve_issuance_by_concierge_id(domain::users::ConciergeUserId::from_raw(concierge_id))
+				.await
+				.unwrap()
+				.expect("resolved by concierge id");
 			assert!(!by_concierge.disabled, "a freshly created user is not disabled");
 			let by_banking = users.resolve_issuance_by_banking_id(by_concierge.user_id).await.unwrap().expect("resolved by hub id");
 			assert_eq!(by_banking.user_id, by_concierge.user_id, "both lookups resolve the same hub user");
@@ -301,7 +305,10 @@ async fn redelivery_is_idempotent() {
 			.await
 			.unwrap();
 		assert_eq!(seq, 5, "applied through the suspend; the stale lower-sequence reinstate is dropped");
-		assert!(bridge::is_frozen(&pool, user_id).await.unwrap(), "stale REINSTATED must not un-freeze");
+		assert!(
+			bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
+			"stale REINSTATED must not un-freeze"
+		);
 	})
 	.await;
 
@@ -316,7 +323,10 @@ async fn redelivery_is_idempotent() {
 			.await
 			.unwrap();
 		assert_eq!(seq, 5, "redelivery is a no-op — sequence does not move");
-		assert!(bridge::is_frozen(&pool, user_id).await.unwrap(), "redelivery keeps the user frozen");
+		assert!(
+			bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
+			"redelivery keeps the user frozen"
+		);
 	})
 	.await;
 }

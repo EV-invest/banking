@@ -63,7 +63,7 @@ impl BalanceService for BalanceSvc {
 		let req = request.into_inner();
 		let network = Network::parse(&req.network).map_err(map_err)?;
 		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
-		balance_app::seed_fund_capital(&self.state.pool, &self.state.relay_notify, network, amount)
+		balance_app::seed_fund_capital(self.state.deposits.as_ref(), &self.state.relay_notify, network, amount)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(pb::SeedCapitalResponse {}))
@@ -76,7 +76,7 @@ impl BalanceService for BalanceSvc {
 		let network = Network::parse(&req.network).map_err(map_err)?;
 		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
 		let party = Party::from_parts(&req.party_kind, optional(&req.party_id)).map_err(map_err)?;
-		let recorded = balance_app::record_deposit(&self.state.pool, &self.state.relay_notify, tx_ref, party, network, amount)
+		let recorded = balance_app::record_deposit(self.state.deposits.as_ref(), &self.state.relay_notify, tx_ref, party, network, amount)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(pb::RecordDepositResponse { recorded }))
@@ -157,7 +157,7 @@ impl BalanceService for BalanceSvc {
 					redemption_id: q.id.to_string(),
 					user_id: q.user_id.to_string(),
 					email: q.email,
-					service: q.service,
+					service: q.service.to_string(),
 					units: q.units.to_decimal_string(),
 					created_at: q.created_at,
 				})

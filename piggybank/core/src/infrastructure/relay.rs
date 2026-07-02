@@ -215,7 +215,9 @@ impl Relay {
 			for row in &batch {
 				match self.dispatch(row).await {
 					Outcome::Done => {
-						let _ = outbox::mark_dispatched(&self.pool, row.seq).await;
+						if let Err(err) = outbox::mark_dispatched(&self.pool, row.seq).await {
+							warn!(seq = row.seq, "relay: failed to mark dispatched (event will re-deliver): {err}");
+						}
 						advanced = true;
 					}
 					Outcome::Park { reason, applied_legs } => {
@@ -224,7 +226,9 @@ impl Relay {
 					}
 					Outcome::Retry(reason) => {
 						warn!(seq = row.seq, "relay: transient failure (unbounded), retrying from here: {reason}");
-						let _ = outbox::record_failure(&self.pool, row.seq, &reason).await;
+						if let Err(err) = outbox::record_failure(&self.pool, row.seq, &reason).await {
+							warn!(seq = row.seq, "relay: failed to record the retry attempt: {err}");
+						}
 						return true;
 					}
 					Outcome::RetryBounded(reason) => {
@@ -235,7 +239,9 @@ impl Relay {
 							self.park(row, &format!("retryable exhausted after {} attempts: {reason}", row.attempts + 1), 0).await;
 							advanced = true;
 						} else {
-							let _ = outbox::record_failure(&self.pool, row.seq, &reason).await;
+							if let Err(err) = outbox::record_failure(&self.pool, row.seq, &reason).await {
+								warn!(seq = row.seq, "relay: failed to record the retry attempt: {err}");
+							}
 							warn!(seq = row.seq, attempts = row.attempts + 1, "relay: retryable, retrying from here: {reason}");
 							return true;
 						}
@@ -255,10 +261,14 @@ impl Relay {
 	/// `tracing_layer` ships) so the aggregate's PG-vs-TB divergence is surfaced. Auto-
 	/// reversing the applied TB legs stays a follow-up — reconciliation owns recovery today.
 	async fn park(&self, row: &OutboxRow, reason: &str, applied_legs: usize) {
-		let _ = outbox::mark_parked(&self.pool, row.seq, reason).await;
+		if let Err(err) = outbox::mark_parked(&self.pool, row.seq, reason).await {
+			error!(seq = row.seq, "relay: failed to stamp parked_at (event will re-deliver): {err}");
+		}
 		if applied_legs > 0 {
 			error!(seq = row.seq, event_id = %row.event_id, aggregate = %row.aggregate, applied_legs, "relay: PARKED HALF-APPLIED event (compensation owed): {reason}");
-			let _ = outbox::mark_compensated(&self.pool, row.seq).await;
+			if let Err(err) = outbox::mark_compensated(&self.pool, row.seq).await {
+				error!(seq = row.seq, "relay: failed to stamp compensated_at: {err}");
+			}
 		} else {
 			error!(seq = row.seq, event_id = %row.event_id, aggregate = %row.aggregate, "relay: parking event (needs intervention): {reason}");
 		}
@@ -472,7 +482,7 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 		}
 		"withdrawals" => {
 			let event: WithdrawalEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
-			Ok(plan_withdrawal(event, row.aggregate_id, reference))
+			plan_withdrawal(event, row.aggregate_id, reference)
 		}
 		"subscriptions" => {
 			let event: SubscriptionEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
@@ -633,8 +643,8 @@ fn void_burn(aggregate_id: Uuid, user: UserId, service: domain::balance::Service
 ///   non-zero) fee→`fee`. The `Cr wallet:<net>` is where rail liquidity is finally
 ///   checked by the non-negative flag.
 /// - **Failed/Cancelled** → void the clearing pending, refunding the user in full.
-fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) -> Vec<PlannedOp> {
-	match event {
+fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) -> Result<Vec<PlannedOp>, String> {
+	Ok(match event {
 		WithdrawalEvent::Requested { user, amount, .. } => vec![PlannedOp {
 			role: "withdraw_reserve",
 			transfer_id: tid(aggregate_id, CLEARING_RESERVE),
@@ -648,7 +658,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 			}),
 		}],
 		WithdrawalEvent::Dispatched { network, address, amount, fee, .. } => {
-			let net = amount.checked_sub(fee).unwrap_or(Usdt::ZERO);
+			let net = amount.checked_sub(fee).ok_or("withdrawal fee exceeds amount")?;
 			vec![PlannedOp {
 				role: "withdraw_broadcast",
 				transfer_id: 0,
@@ -661,7 +671,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 			}]
 		}
 		WithdrawalEvent::Settled { user, network, amount, fee, .. } => {
-			let net = amount.checked_sub(fee).unwrap_or(Usdt::ZERO);
+			let net = amount.checked_sub(fee).ok_or("withdrawal fee exceeds amount")?;
 			// Post the clearing reservation, then disburse: net leaves the rail's custody,
 			// the fee is retained. The Vec order matters — the post must land before the
 			// disbursements debit the now-posted clearing balance.
@@ -711,7 +721,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 		}
 		WithdrawalEvent::Failed { user, amount, .. } => vec![void_clearing(aggregate_id, user, amount, reference, CLEARING_VOID_FAIL)],
 		WithdrawalEvent::Cancelled { user, amount, .. } => vec![void_clearing(aggregate_id, user, amount, reference, CLEARING_VOID_CANCEL)],
-	}
+	})
 }
 
 /// Void the clearing reservation (full refund) — shared by fail and cancel, which only

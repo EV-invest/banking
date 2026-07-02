@@ -37,6 +37,16 @@ use crate::{
 /// forged unknown-`kid` tokens can't amplify into a DoS against the central hub.
 const MIN_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 
+/// Cap on establishing a TCP/TLS connection to the hub: a black-holed or half-open
+/// hub must fail fast rather than wedge the awaiting verify task. Mirrors the
+/// cabinet BFF's upstream deadlines.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Per-RPC deadline on the `Jwks` refresh call. tonic has no default request
+/// timeout, so without this a wedged hub would hold the single-flight lock — and
+/// every verify queued behind it — indefinitely.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// A cheaply-cloneable handle for local token verification.
 #[derive(Clone)]
 pub struct Verifier {
@@ -48,6 +58,8 @@ impl Verifier {
 	pub fn try_new(config: VerifierConfig) -> Result<Self, AuthError> {
 		let channel = Channel::from_shared(config.jwks_grpc_endpoint.clone())
 			.map_err(|e| AuthError::JwksFetch(format!("invalid jwks endpoint {}: {e}", config.jwks_grpc_endpoint)))?
+			.connect_timeout(CONNECT_TIMEOUT)
+			.timeout(REQUEST_TIMEOUT)
 			.connect_lazy();
 		Ok(Self {
 			inner: Arc::new(Inner {
@@ -98,6 +110,11 @@ impl Verifier {
 		{
 			return Ok(());
 		}
+		// Stamp the ATTEMPT before the RPC, so a FAILED refresh is throttled too. Otherwise
+		// a flood of forged unknown-`kid` tokens would re-dial an already-degraded hub on
+		// essentially every miss (the success-only throttle voids both guards during an
+		// outage). A genuine key rotation heals at most `MIN_REFRESH_INTERVAL` later.
+		*last_refresh = Some(Instant::now());
 
 		let mut client = self.inner.client.clone();
 		let response = client
@@ -118,7 +135,6 @@ impl Verifier {
 			return Err(AuthError::JwksFetch("hub published no Ed25519 keys".into()));
 		}
 		self.inner.cache.write().await.replace(keys);
-		*last_refresh = Some(Instant::now());
 		Ok(())
 	}
 }
@@ -128,7 +144,7 @@ struct Inner {
 	policy: VerifyPolicy,
 	/// A long-lived lazy channel to the hub auth service; reconnects under the hood.
 	client: AuthServiceClient<Channel>,
-	/// Single-flight + throttle guard: holds the last successful refresh instant
+	/// Single-flight + throttle guard: holds the last refresh ATTEMPT instant
 	/// (`None` until the first). Held across the refresh so concurrent misses await
 	/// one network call instead of each issuing their own.
 	last_refresh: Mutex<Option<Instant>>,

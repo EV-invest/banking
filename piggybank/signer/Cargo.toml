@@ -17,29 +17,22 @@ workspace = true
 [dependencies]
 chacha20poly1305 = "0.10"
 ed25519-dalek = "2"
-getrandom = "0.2"
 hex = "0.4"
 k256 = { version = "0.13", features = ["ecdsa"] }
-sha2 = "0.10"
-sha3 = "0.10"
-zeroize = "1"
-# TON cell/BoC/address/wallet/jetton construction (pure Rust, no native tonlib-sys).
-# We build the v4R2 wallet StateInit + TEP-74 jetton transfer with this, and sign the
-# cell hash with our own ed25519-dalek — `tonlib-client` (native C++) is deliberately
-# NOT pulled in; the hub talks to toncenter over plain HTTP instead.
-tonlib-core = "0.26"
 num-bigint = "0.4"
-base64.workspace = true
-
-# Tron transaction envelope: the signed tx is protobuf (not RLP), and txID = sha256(raw_data).
-# prost generates the minimal vendored tron messages (see build.rs + proto/tron.proto).
-prost = "0.13"
+sha3 = "0.10"
+tonlib-core = "0.26"
+zeroize = "1"
 
 anyhow.workspace = true
+base64.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
 evbanking_auth.workspace = true
 evbanking_contracts.workspace = true
+getrandom.workspace = true
+prost.workspace = true
+sha2.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "migrate"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }

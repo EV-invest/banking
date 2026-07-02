@@ -1,4 +1,3 @@
-#![feature(default_field_values)]
 //! `piggybank-core` — the hub server library.
 //!
 //! The central bank's driving adapter is **gRPC** (tonic): the closed, internal
@@ -19,14 +18,15 @@
 //!   infrastructure  — driven adapters (Postgres control plane, TigerBeetle ledger,
 //!                     telemetry)
 //!
-//! Scaffold: the application/ports layers are placeholders; no business logic or
-//! migrations land until a feature explicitly asks.
+//! The money plane (balance, subscriptions, redemptions, withdrawals) is implemented
+//! end to end through these layers; remaining domain areas stay documented
+//! placeholders until a feature explicitly asks.
 
 use std::sync::Arc;
 
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
-use ports::{DepositAddresses, FundPositionReader, NavRepository, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
+use ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 
@@ -59,8 +59,10 @@ pub struct AppState {
 	pub subscriptions: Arc<dyn SubscriptionRepository>,
 	/// The `redemptions` aggregate's driven port (the accept-and-queue saga).
 	pub redemptions: Arc<dyn RedemptionRepository>,
+	/// The aggregate-less company-money facts (seed capital, deposit gate) + outbox.
+	pub deposits: Arc<dyn Deposits>,
 	/// Fund valuation marks → the derived NAV (the operator-posted AUM history).
-	pub nav: Arc<dyn NavRepository>,
+	pub nav: Arc<dyn NavMarks>,
 	/// The per-investor fund-position projection (cost basis, high-water mark).
 	pub positions: Arc<dyn FundPositionReader>,
 	/// Per-user deposit-address provisioning (stub HD derivation behind a port).
@@ -82,7 +84,8 @@ impl AppState {
 		withdrawals: Arc<dyn WithdrawalRepository>,
 		subscriptions: Arc<dyn SubscriptionRepository>,
 		redemptions: Arc<dyn RedemptionRepository>,
-		nav: Arc<dyn NavRepository>,
+		deposits: Arc<dyn Deposits>,
+		nav: Arc<dyn NavMarks>,
 		positions: Arc<dyn FundPositionReader>,
 		deposit_addresses: Arc<dyn DepositAddresses>,
 		relay_notify: Arc<Notify>,
@@ -97,6 +100,7 @@ impl AppState {
 			withdrawals,
 			subscriptions,
 			redemptions,
+			deposits,
 			nav,
 			positions,
 			deposit_addresses,

@@ -12,24 +12,12 @@
 use async_trait::async_trait;
 use domain::{
 	architecture::{Reader, Repository},
+	balance::ServiceId,
 	error::DomainError,
 	money::{Nav, Shares},
 	redemptions::{Redemption, RedemptionId},
 	users::UserId,
 };
-
-/// A queued redemption for the operator "clear the queue" surface — a lightweight read
-/// projection that also carries the mirrored identity `email` and DB-managed
-/// `created_at`, neither of which the [`Redemption`] aggregate models.
-pub struct QueuedRedemption {
-	pub id: RedemptionId,
-	pub user_id: UserId,
-	pub email: String,
-	pub service: String,
-	pub units: Shares,
-	/// Unix seconds the redemption was requested (for the "age" column).
-	pub created_at: i64,
-}
 
 #[async_trait]
 pub trait RedemptionRepository: Repository<Aggregate = Redemption> + Reader<Aggregate = Redemption> {
@@ -63,4 +51,16 @@ pub trait RedemptionRepository: Repository<Aggregate = Redemption> + Reader<Aggr
 	/// The cross-user queue of redemptions awaiting settle (state `queued`), oldest
 	/// first — the operator "clear the queue" read. Joins the mirrored identity email.
 	async fn list_queued(&self) -> Result<Vec<QueuedRedemption>, DomainError>;
+}
+/// A queued redemption for the operator "clear the queue" surface — a lightweight read
+/// projection that also carries the mirrored identity `email` and DB-managed
+/// `created_at`, neither of which the [`Redemption`] aggregate models.
+pub struct QueuedRedemption {
+	pub id: RedemptionId,
+	pub user_id: UserId,
+	pub email: String,
+	pub service: ServiceId,
+	pub units: Shares,
+	/// Unix seconds the redemption was requested (for the "age" column).
+	pub created_at: i64,
 }

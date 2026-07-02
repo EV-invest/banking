@@ -8,13 +8,16 @@
 
 use async_trait::async_trait;
 use domain::{
+	architecture::Gateway,
 	error::DomainError,
 	money::{Network, WalletAddress},
 	users::UserId,
 };
 
+/// A [`Gateway`]: the signer/key-management seam is a separate trust domain — it
+/// owns its own store and can never enrol in a hub Postgres transaction.
 #[async_trait]
-pub trait DepositAddresses: Send + Sync {
+pub trait DepositAddresses: Gateway {
 	/// The user's **fundable** deposit address on `network`, derived once and reused
 	/// (stable across calls so a user always sees the same address). `None` means no
 	/// fundable address exists yet — the underlying address is still a placeholder (not

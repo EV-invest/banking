@@ -21,7 +21,7 @@ pub struct Config {
 	/// The shared bearer the BFF presents on `IssueUserToken` (the concierge→banking seam).
 	/// `None` ⇒ no money-plane token is minted (money routes surface `NotConfigured`). Must
 	/// match `BANKING_ISSUANCE_TOKEN` on the banking auth side.
-	pub banking_issuance_token: Option<String>,
+	pub banking_issuance_token: Option<IssuanceToken>,
 	/// The concierge identity plane (OAuth/sessions/profile), e.g. `http://127.0.0.1:50061`.
 	pub concierge_grpc_addr: String,
 	/// Google OAuth2 public client id. `None` ⇒ `/api/auth/login` returns 503.
@@ -62,7 +62,7 @@ impl Config {
 			bind_addr,
 			piggybank_grpc_addr: std::env::var("PIGGYBANK_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50051".to_string()),
 			banking_auth_grpc_addr: std::env::var("BANKING_AUTH_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50052".to_string()),
-			banking_issuance_token: opt("BANKING_ISSUANCE_TOKEN"),
+			banking_issuance_token: opt("BANKING_ISSUANCE_TOKEN").map(IssuanceToken),
 			concierge_grpc_addr: std::env::var("CONCIERGE_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50061".to_string()),
 			google_client_id: opt("GOOGLE_CLIENT_ID"),
 			auth_redirect_uri: std::env::var("AUTH_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/api/auth/callback".to_string()),
@@ -76,6 +76,16 @@ impl Config {
 			posthog_key: opt("POSTHOG_KEY"),
 			posthog_host: opt("POSTHOG_HOST"),
 		})
+	}
+}
+
+/// The issuance bearer as a newtype with a hand-written `Debug`, so the secret is never
+/// printed by a derived debug (mirrors `evbanking_auth`'s `IssuanceToken`).
+#[derive(Clone)]
+pub struct IssuanceToken(pub String);
+impl std::fmt::Debug for IssuanceToken {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str("IssuanceToken(<redacted>)")
 	}
 }
 

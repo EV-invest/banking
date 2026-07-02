@@ -19,6 +19,15 @@ pub struct RefBlockParams {
 	pub timestamp: i64,          // head ts (ms)
 }
 
+/// One ascending page of incoming TRC20 transfers (see [`TronRpc::incoming_trc20`]).
+pub struct Trc20TransferPage {
+	pub transfers: Vec<Trc20Transfer>,
+	/// Raw rows in the page BEFORE decode-filtering — the short-page (drained) test.
+	pub raw_len: usize,
+	/// Newest raw `block_timestamp` in the page — the next page's resume key.
+	pub max_timestamp: i64,
+}
+
 /// One decoded incoming TRC20 transfer (from the indexed `/v1/accounts/.../transactions/trc20`).
 pub struct Trc20Transfer {
 	pub transaction_id: String,
@@ -151,13 +160,17 @@ impl TronRpc {
 	/// Confirmed incoming TRC20 transfers to `address` for `token`, newer than `min_timestamp`
 	/// (ms), oldest first. `only_confirmed` returns solidified-only — Tron's irreversible-block
 	/// guarantee, the analogue of waiting N EVM confirmations.
-	pub async fn incoming_trc20(&self, address: &str, token: &str, min_timestamp: i64, limit: u32) -> Result<Vec<Trc20Transfer>, TronRpcError> {
+	pub async fn incoming_trc20(&self, address: &str, token: &str, min_timestamp: i64, limit: u32) -> Result<Trc20TransferPage, TronRpcError> {
 		let path = format!(
 			"/v1/accounts/{address}/transactions/trc20?only_to=true&only_confirmed=true&contract_address={token}&min_timestamp={min_timestamp}&order_by=block_timestamp,asc&limit={limit}"
 		);
 		let response = self.get(&path).await?;
 		let rows = response.get("data").and_then(Value::as_array).cloned().unwrap_or_default();
-		Ok(rows.iter().filter_map(decode_trc20_transfer).collect())
+		Ok(Trc20TransferPage {
+			raw_len: rows.len(),
+			max_timestamp: rows.iter().filter_map(|r| r.get("block_timestamp").and_then(Value::as_i64)).max().unwrap_or(0),
+			transfers: rows.iter().filter_map(decode_trc20_transfer).collect(),
+		})
 	}
 
 	async fn post(&self, path: &str, body: Value) -> Result<Value, TronRpcError> {

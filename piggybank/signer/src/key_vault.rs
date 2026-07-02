@@ -13,18 +13,8 @@
 //! Why XChaCha20-Poly1305: 24-byte nonce -> a random nonce per encryption is
 //! safe, so there is zero nonce bookkeeping. That removes the classic footgun.
 //!
-//! Cargo.toml:
-//!   chacha20poly1305 = "0.10"
-//!   k256             = { version = "0.13", features = ["ecdsa"] }
-//!   ed25519-dalek    = "2"
-//!   zeroize          = "1"
-//!   getrandom        = "0.2"
-//!   hex              = "0.4"
-//!   thiserror        = "1"
-//!
-//! Note: every random value here comes from `getrandom` (the OS CSPRNG)
-//! directly, so the crates above do NOT need to agree on a `rand_core`
-//! version. That avoids the most common Rust-crypto build headache.
+//! Every random value here comes from `getrandom` (the OS CSPRNG) directly, so
+//! the crypto crates do NOT need to agree on a `rand_core` version.
 
 // `chacha20poly1305 0.10` re-exports `generic-array 0.14`, whose `from_slice` is
 // deprecated in favour of the 1.x API the crate hasn't upgraded to yet. The calls
@@ -127,7 +117,6 @@ pub fn gen_secp256k1() -> Zeroizing<[u8; 32]> {
 	// Rejection sampling: a random 32-byte value exceeds secp256k1's order with
 	// probability ~2^-128, so this all but always succeeds on the first iteration;
 	// retrying is the correct, unbiased fix and there is no meaningful bound to enforce.
-	//LOOP
 	loop {
 		let bytes = random_bytes::<32>();
 		// Rejects the astronomically rare out-of-range scalar.
@@ -147,19 +136,6 @@ pub fn secp256k1_pubkey(seed: &[u8; 32]) -> Vec<u8> {
 	use k256::ecdsa::SigningKey;
 	let sk = SigningKey::from_slice(seed).expect("valid secp256k1 scalar");
 	sk.verifying_key().to_sec1_bytes().to_vec()
-}
-/// The 20-byte account image shared by EVM and Tron: `keccak256(uncompressed_pubkey[1..])[12..]`.
-/// `None` only if the bytes are not a valid curve point (never for keys we minted).
-fn keccak_address_bytes(compressed_pubkey: &[u8]) -> Option<[u8; 20]> {
-	use k256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
-	use sha3::{Digest, Keccak256};
-
-	let pubkey = PublicKey::from_sec1_bytes(compressed_pubkey).ok()?;
-	let point = pubkey.to_encoded_point(false); // 0x04 || X(32) || Y(32)
-	let hash = Keccak256::digest(&point.as_bytes()[1..]);
-	let mut out = [0u8; 20];
-	out.copy_from_slice(&hash[12..32]);
-	Some(out)
 }
 /// The EVM (BSC/BEP20) address for a stored compressed secp256k1 public key:
 /// `keccak256(uncompressed_pubkey[1..])[12..]`, EIP-55 mixed-case checksummed.
@@ -200,6 +176,51 @@ pub fn tron_base58_to_raw(address: &str) -> Option<[u8; 21]> {
 		return None;
 	}
 	payload.try_into().ok()
+}
+/// ed25519 public key (32 bytes). The TON wallet ADDRESS additionally needs a
+/// wallet contract (v4/v5) + workchain; see [`ton_address`].
+pub fn ed25519_pubkey(seed: &[u8; 32]) -> [u8; 32] {
+	use ed25519_dalek::SigningKey;
+	SigningKey::from_bytes(seed).verifying_key().to_bytes()
+}
+/// The TON v4R2 wallet-contract address for a stored 32-byte Ed25519 public key.
+///
+/// Unlike EVM (`addr = keccak(pubkey)[12..]`), a TON address is the contract's
+/// **StateInit hash** — `sha256(code ++ data)` where `data` embeds the pubkey and the
+/// v4R2 `wallet_id` (`0x29a9a317` = 698983191). So the same pubkey on a different
+/// wallet version is a different address; we standardize on v4R2 (simplest `seqno`
+/// nonce, universally indexed). We return the RAW canonical `0:<64hex>` form, which is
+/// bounceability- and network-agnostic and accepted by
+/// [`domain::money::WalletAddress::parse`]`(Ton, …)`; the user-facing `UQ…`/`0Q…`
+/// (mainnet/testnet, non-bounceable) form is a display-time concern derived from this.
+/// `None` only if the bytes are not a 32-byte key (never for keys we minted).
+pub fn ton_address(pubkey: &[u8]) -> Option<String> {
+	use tonlib_core::wallet::{mnemonic::KeyPair, ton_wallet::TonWallet, wallet_version::WalletVersion};
+
+	if pubkey.len() != 32 {
+		return None;
+	}
+	// Only the public key participates in address derivation (the StateInit data cell);
+	// the secret half is irrelevant here (signing lives in `ton_tx`), so leave it empty.
+	let key_pair = KeyPair {
+		public_key: pubkey.to_vec(),
+		secret_key: Vec::new(),
+	};
+	let wallet = TonWallet::new(WalletVersion::V4R2, key_pair).ok()?;
+	Some(wallet.address.to_hex())
+}
+/// The 20-byte account image shared by EVM and Tron: `keccak256(uncompressed_pubkey[1..])[12..]`.
+/// `None` only if the bytes are not a valid curve point (never for keys we minted).
+fn keccak_address_bytes(compressed_pubkey: &[u8]) -> Option<[u8; 20]> {
+	use k256::{PublicKey, elliptic_curve::sec1::ToEncodedPoint};
+	use sha3::{Digest, Keccak256};
+
+	let pubkey = PublicKey::from_sec1_bytes(compressed_pubkey).ok()?;
+	let point = pubkey.to_encoded_point(false); // 0x04 || X(32) || Y(32)
+	let hash = Keccak256::digest(&point.as_bytes()[1..]);
+	let mut out = [0u8; 20];
+	out.copy_from_slice(&hash[12..32]);
+	Some(out)
 }
 /// Base58Check: append the first 4 bytes of `sha256(sha256(payload))` and Base58-encode. This is
 /// the Tron (and Bitcoin) address envelope; hand-rolled here rather than pulling a chain SDK,
@@ -259,39 +280,6 @@ fn base58_decode(input: &str) -> Option<Vec<u8>> {
 	Some(out)
 }
 
-/// ed25519 public key (32 bytes). The TON wallet ADDRESS additionally needs a
-/// wallet contract (v4/v5) + workchain; see [`ton_address`].
-pub fn ed25519_pubkey(seed: &[u8; 32]) -> [u8; 32] {
-	use ed25519_dalek::SigningKey;
-	SigningKey::from_bytes(seed).verifying_key().to_bytes()
-}
-
-/// The TON v4R2 wallet-contract address for a stored 32-byte Ed25519 public key.
-///
-/// Unlike EVM (`addr = keccak(pubkey)[12..]`), a TON address is the contract's
-/// **StateInit hash** — `sha256(code ++ data)` where `data` embeds the pubkey and the
-/// v4R2 `wallet_id` (`0x29a9a317` = 698983191). So the same pubkey on a different
-/// wallet version is a different address; we standardize on v4R2 (simplest `seqno`
-/// nonce, universally indexed). We return the RAW canonical `0:<64hex>` form, which is
-/// bounceability- and network-agnostic and accepted by
-/// [`domain::money::WalletAddress::parse`]`(Ton, …)`; the user-facing `UQ…`/`0Q…`
-/// (mainnet/testnet, non-bounceable) form is a display-time concern derived from this.
-/// `None` only if the bytes are not a 32-byte key (never for keys we minted).
-pub fn ton_address(pubkey: &[u8]) -> Option<String> {
-	use tonlib_core::wallet::{mnemonic::KeyPair, ton_wallet::TonWallet, wallet_version::WalletVersion};
-
-	if pubkey.len() != 32 {
-		return None;
-	}
-	// Only the public key participates in address derivation (the StateInit data cell);
-	// the secret half is irrelevant here (signing lives in `ton_tx`), so leave it empty.
-	let key_pair = KeyPair {
-		public_key: pubkey.to_vec(),
-		secret_key: Vec::new(),
-	};
-	let wallet = TonWallet::new(WalletVersion::V4R2, key_pair).ok()?;
-	Some(wallet.address.to_hex())
-}
 /// EIP-55 mixed-case checksum of 20 address bytes: a hex char `a-f` is uppercased
 /// when the corresponding nibble of `keccak256(lowercase_hex)` is ≥ 8.
 fn eip55_checksum(addr: &[u8]) -> String {
@@ -315,7 +303,7 @@ fn eip55_checksum(addr: &[u8]) -> String {
 /// 32 fresh bytes from the OS CSPRNG.
 fn random_bytes<const N: usize>() -> [u8; N] {
 	let mut b = [0u8; N];
-	getrandom::getrandom(&mut b).expect("OS RNG unavailable");
+	getrandom::fill(&mut b).expect("OS RNG unavailable");
 	b
 }
 

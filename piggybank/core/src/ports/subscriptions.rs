@@ -8,14 +8,10 @@
 //! strand a phantom basis.
 
 use async_trait::async_trait;
-use domain::{
-	architecture::{Reader, Repository},
-	error::DomainError,
-	subscriptions::Subscription,
-};
+use domain::{architecture::Repository, error::DomainError, subscriptions::Subscription};
 
 #[async_trait]
-pub trait SubscriptionRepository: Repository<Aggregate = Subscription> + Reader<Aggregate = Subscription> {
+pub trait SubscriptionRepository: Repository<Aggregate = Subscription> {
 	/// Persist a brand-new subscription, drain its `Subscribed` event, and upsert the
 	/// user's `fund_positions` cost basis / high-water mark — atomically.
 	async fn open(&self, subscription: &mut Subscription) -> Result<(), DomainError>;

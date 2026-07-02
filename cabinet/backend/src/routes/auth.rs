@@ -86,7 +86,7 @@ pub async fn callback(State(st): State<AppState>, jar: CookieJar, headers: Heade
 				},
 				None => None,
 			};
-			let (id, csrf, max_age) = st.sessions.put(tokens, banking).await;
+			let (id, csrf, max_age) = st.sessions.put(tokens, banking, &user_agent, &ip).await;
 			let jar = jar
 				.add(st.cookies.server_cookie(st.cookies.session.clone(), id, max_age))
 				.add(st.cookies.readable_cookie(st.cookies.csrf.clone(), csrf, max_age));

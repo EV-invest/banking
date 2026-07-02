@@ -12,10 +12,12 @@
 //!     withdrawal model sends to arbitrary user addresses).
 //!
 //! Both apply only to transfers signed FROM the **treasury** wallet (the withdrawal drain
-//! vector); sweeps *into* the treasury and gas top-ups are not treasury spends. Both are
-//! **no-ops until configured** (`SIGNER_MAX_TRANSFER_USDT`, `SIGNER_DESTINATION_ALLOWLIST`),
-//! so dev/CI and existing deployments are unaffected until an operator opts in — the same
-//! convention as the observability seams.
+//! vector); sweeps *into* the treasury and gas top-ups (signed from the separate gas-station
+//! wallet) are not treasury spends. Native (gas-coin) transfers from the treasury honor the
+//! allowlist too, but not the cap — it is USDT-denominated and cannot price a native amount.
+//! Both controls are **no-ops until configured** (`SIGNER_MAX_TRANSFER_USDT`,
+//! `SIGNER_DESTINATION_ALLOWLIST`), so dev/CI and existing deployments are unaffected until
+//! an operator opts in — the same convention as the observability seams.
 //!
 //! `Status` is tonic's large error type we don't control (same as the service handlers).
 #![allow(clippy::result_large_err)]
@@ -82,6 +84,19 @@ impl SignerPolicy {
 				)));
 			}
 		}
+		self.check_allowlist(to_address)
+	}
+
+	/// Enforce the policy on a treasury-sourced NATIVE (gas-coin) transfer: only the
+	/// destination allowlist applies — the per-transfer cap is USDT-denominated and cannot
+	/// price a native amount. No core flow sends native funds FROM the treasury today (gas
+	/// top-ups are signed from the gas-station wallet), so an operator enabling the
+	/// allowlist must include any deliberate treasury-native destination on it.
+	pub fn check_treasury_native_transfer(&self, to_address: &str) -> Result<(), Status> {
+		self.check_allowlist(to_address)
+	}
+
+	fn check_allowlist(&self, to_address: &str) -> Result<(), Status> {
 		if !self.destination_allowlist.is_empty() && !self.destination_allowlist.contains(to_address) {
 			return Err(Status::permission_denied("treasury transfer destination is not on the signer's allowlist"));
 		}
@@ -126,6 +141,17 @@ mod tests {
 		let p = policy(None, &["0xgood", "0xalsogood"]);
 		assert!(p.check_treasury_transfer(Network::Bep20, "0xgood", 1).is_ok());
 		assert!(p.check_treasury_transfer(Network::Bep20, "0xbad", 1).is_err());
+	}
+
+	#[test]
+	fn native_transfers_honor_the_allowlist_but_not_the_usdt_cap() {
+		let p = policy(Some(1), &["0xgood"]);
+		// On the allowlist → allowed regardless of the (inapplicable) USDT cap.
+		assert!(p.check_treasury_native_transfer("0xgood").is_ok());
+		assert!(p.check_treasury_native_transfer("0xbad").is_err());
+		// Allowlist unset → no-op, even with a cap configured.
+		let p = policy(Some(1), &[]);
+		assert!(p.check_treasury_native_transfer("0xanything").is_ok());
 	}
 
 	#[test]

@@ -8,12 +8,17 @@
 //! double-send). A stub adapter stands in until the real custody service exists.
 
 use async_trait::async_trait;
-use domain::money::{Network, Usdt, WalletAddress};
+use domain::{
+	architecture::Gateway,
+	money::{Network, Usdt, WalletAddress},
+};
 use thiserror::Error;
 use uuid::Uuid;
 
+/// A [`Gateway`]: an external transactional system that owns its own atomicity —
+/// by construction it can never enrol in a Postgres transaction.
 #[async_trait]
-pub trait Custody: Send + Sync {
+pub trait Custody: Gateway {
 	/// Submit the withdrawal's on-chain leg for signing + broadcast. MUST be
 	/// idempotent by `request.withdrawal_id` so an at-least-once relay never
 	/// double-spends.

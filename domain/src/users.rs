@@ -22,6 +22,13 @@ pub type UserId = Id<UserTag>;
 /// Phantom tag making [`UserId`] a distinct, incompatible identity type.
 pub struct UserTag;
 
+/// The same person's id in the CONCIERGE identity plane — a foreign correlation
+/// handle (the BFF carries it from sign-in), opaque to the hub. A distinct tag keeps
+/// it compile-incompatible with the hub's own [`UserId`].
+pub type ConciergeUserId = Id<ConciergeUserTag>;
+/// Phantom tag making [`ConciergeUserId`] a distinct, incompatible identity type.
+pub struct ConciergeUserTag;
+
 /// A verified email address. Parse-don't-validate: lowercased and trimmed on
 /// construction, so equality and the storage form are normalized. Deliberately
 /// **not** a unique key — a person may change the email behind a stable

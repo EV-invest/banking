@@ -1,4 +1,3 @@
-#![feature(default_field_values)]
 //! The hub's auth — a service **and** a shared verification flow.
 //!
 //! Two facets, one crate. Pick the half you need:
@@ -7,12 +6,12 @@
 //!
 //! - [`AuthService`] runs as its own task inside the composition root. It owns the
 //!   signing keys / JWKS / refresh store and serves the money-plane **issuance** gRPC
-//!   routes (`IssueUserToken`/`Refresh`/`Logout`/`Jwks`). This is the money plane: it
-//!   does NO third-party (Google) OAuth — users are mirrored from concierge by the
-//!   one-way bridge, and `IssueUserToken` mints the money pair for an already-identified
-//!   user (resolved over the [`Provisioner`] channel, auth → core). It answers core's
-//!   authorize requests over the [`Authorizer`] channel (core → auth). Both channels
-//!   cross a task boundary, never the network.
+//!   routes (`IssueUserToken`/`Refresh`/`Logout`/`ListSessions`/`RevokeSession`/`Jwks`).
+//!   This is the money plane: it does NO third-party (Google) OAuth — users are mirrored
+//!   from concierge by the one-way bridge, and `IssueUserToken` mints the money pair for
+//!   an already-identified user (resolved over the [`Provisioner`] channel, auth → core).
+//!   It answers core's authorize requests over the [`Authorizer`] channel (core → auth).
+//!   Both channels cross a task boundary, never the network.
 //! - Core mounts [`grpc_auth_layer`]`(authorizer)` on each data service to
 //!   authorize inbound gRPC; handlers read the verified [`Claims`] with
 //!   [`claims_of`].

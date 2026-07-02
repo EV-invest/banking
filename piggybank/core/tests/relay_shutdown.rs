@@ -23,6 +23,7 @@ use piggybank_core::{
 	infrastructure::{
 		custody::StubCustody,
 		db,
+		deposits::PgDeposits,
 		ledger::{self, TbLedger},
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
@@ -36,6 +37,7 @@ use uuid::Uuid;
 
 struct Harness {
 	pool: PgPool,
+	deposits: PgDeposits,
 	notify: Arc<Notify>,
 }
 impl Harness {
@@ -53,6 +55,7 @@ async fn harness() -> Option<Harness> {
 		return None;
 	}
 	Some(Harness {
+		deposits: PgDeposits::new(pool.clone()),
 		pool,
 		notify: Arc::new(Notify::new()),
 	})
@@ -71,7 +74,7 @@ async fn run_finishes_its_drain_then_stops_on_cancellation() {
 
 	let party = Party::User(UserId::new());
 	let before = h.claim_balance(&party).await;
-	balance_app::record_deposit(&h.pool, &h.notify, tx_ref(), party.clone(), Network::Bep20, usdt("125"))
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), party.clone(), Network::Bep20, usdt("125"))
 		.await
 		.unwrap();
 	let expected = before.saturating_add(usdt("125").base_units());

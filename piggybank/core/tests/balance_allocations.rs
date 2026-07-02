@@ -24,6 +24,7 @@ use piggybank_core::{
 	infrastructure::{
 		custody::StubCustody,
 		db,
+		deposits::PgDeposits,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
@@ -37,7 +38,7 @@ use piggybank_core::{
 	ports::{
 		FundPositionReader, SubscriptionRepository, UserRepository,
 		ledger::{Ledger, LedgerError, LedgerTransfer},
-		nav::NavRepository,
+		nav::NavMarks,
 	},
 };
 use sqlx::PgPool;
@@ -46,6 +47,7 @@ use uuid::Uuid;
 
 struct Harness {
 	pool: PgPool,
+	deposits: PgDeposits,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -68,7 +70,14 @@ async fn harness() -> Option<Harness> {
 
 	let notify = Arc::new(Notify::new());
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
-	Some(Harness { pool, ledger, relay, notify })
+	let deposits = PgDeposits::new(pool.clone());
+	Some(Harness {
+		pool,
+		deposits,
+		ledger,
+		relay,
+		notify,
+	})
 }
 
 fn usdt(decimal: &str) -> Usdt {
@@ -149,7 +158,7 @@ async fn deposit_credits_once_and_is_idempotent_by_tx_ref() {
 
 	assert!(claim(&h, &key).await.is_zero());
 
-	let recorded = balance_app::record_deposit(&h.pool, &h.notify, tx_ref.clone(), Party::User(user), network, usdt("100"))
+	let recorded = balance_app::record_deposit(&h.deposits, &h.notify, tx_ref.clone(), Party::User(user), network, usdt("100"))
 		.await
 		.unwrap();
 	assert!(recorded, "first record is new");
@@ -157,7 +166,9 @@ async fn deposit_credits_once_and_is_idempotent_by_tx_ref() {
 	assert_eq!(claim(&h, &key).await, usdt("100"), "the deposit credited the user's claim");
 
 	// Re-recording the same chain tx is a no-op — no second event, no double credit.
-	let again = balance_app::record_deposit(&h.pool, &h.notify, tx_ref, Party::User(user), network, usdt("100")).await.unwrap();
+	let again = balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), network, usdt("100"))
+		.await
+		.unwrap();
 	assert!(!again, "duplicate tx_ref is idempotent");
 	h.relay.drain().await;
 	assert_eq!(claim(&h, &key).await, usdt("100"), "no double credit on a duplicate");
@@ -170,7 +181,7 @@ async fn deposit_credits_a_claim_backed_by_custody() {
 	let wallet = LedgerAccountKey::CryptoWallet(network);
 	let user = UserId::new();
 
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("250"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("250"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -188,7 +199,7 @@ async fn non_negative_flag_is_the_ledger_backstop() {
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let network = Network::Bep20;
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("10"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("10"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -213,7 +224,7 @@ async fn transfer_id_is_idempotent_no_double_move() {
 	let user = UserId::new();
 	let network = Network::Ton;
 	let service = unique_service();
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -345,7 +356,7 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
 	let outstanding = LedgerAccountKey::SharesOutstanding(service.clone());
 
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("400"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("400"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -404,7 +415,7 @@ async fn redeem_when_fund_is_liquid_auto_completes() {
 	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
 	let outstanding = LedgerAccountKey::SharesOutstanding(service.clone());
 
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -439,7 +450,7 @@ async fn queued_short_redemption(
 	service: &ServiceId,
 	now: i64,
 ) -> domain::redemptions::RedemptionId {
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -479,7 +490,7 @@ async fn redeem_on_a_short_fund_queues_then_settles_with_profit() {
 	assert_eq!(claim(&h, &user_claim).await, Usdt::ZERO, "no cash paid while queued");
 
 	// The fund realizes profit: a deposit credits the service claim up to 200.
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -559,7 +570,7 @@ async fn a_parked_subscribe_cash_leg_leaves_no_cost_basis() {
 
 	// Fund only 50, then commit a 100-cash subscription straight through the repo (skipping the
 	// application solvency check) so the relay's cash leg `Dr user / Cr service` overdraws.
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("50"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("50"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -599,7 +610,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
 	let network = Network::Bep20;
 
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -673,7 +684,7 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	let service = unique_service();
 	let now = now_unix();
 
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -700,7 +711,7 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	h.relay.drain().await;
 
 	// Top the fund up so both settles' payouts clear the relay pre-check (2 × 120 = 240).
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("140"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("140"))
 		.await
 		.unwrap();
 	h.relay.drain().await;

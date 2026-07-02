@@ -25,6 +25,7 @@ use piggybank_core::{
 	infrastructure::{
 		custody::StubCustody,
 		db,
+		deposits::PgDeposits,
 		ledger::{self, TbLedger},
 		reaper::Reaper,
 		reconciliation::Reconciliation,
@@ -42,6 +43,7 @@ use uuid::Uuid;
 
 struct Harness {
 	pool: PgPool,
+	deposits: PgDeposits,
 	ledger: Arc<dyn Ledger>,
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	redemptions: Arc<dyn RedemptionRepository>,
@@ -70,6 +72,7 @@ async fn harness() -> Option<Harness> {
 	let notify = Arc::new(Notify::new());
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	Some(Harness {
+		deposits: PgDeposits::new(pool.clone()),
 		pool,
 		ledger,
 		withdrawals,
@@ -153,12 +156,12 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	// A `processing` withdrawal: deposit, request with a liquid rail (auto-dispatched →
 	// processing), then backdate its last transition past the reaper's window.
 	let processing_user = active_user(&h).await;
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(processing_user), network, usdt("100"))
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(processing_user), network, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
 	// Seed the rail so the request auto-dispatches to `processing`.
-	balance_app::seed_fund_capital(&h.pool, &h.notify, network, usdt("100")).await.unwrap();
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
 	h.relay.drain().await;
 	let processing = withdrawal_app::request_withdrawal(
 		h.withdrawals.as_ref(),
@@ -184,7 +187,7 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	let queued_user = active_user(&h).await;
 	let short_network = Network::Trc20;
 	let big = usdt("1000000000");
-	balance_app::record_deposit(&h.pool, &h.notify, unique_tx_ref(), Party::User(queued_user), network, big)
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(queued_user), network, big)
 		.await
 		.unwrap();
 	h.relay.drain().await;

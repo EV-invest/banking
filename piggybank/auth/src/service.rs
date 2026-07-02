@@ -1,9 +1,10 @@
 //! The auth service — a separate application run by `core`.
 //!
 //! Owns the signing keys, JWKS, and refresh store; serves the money-plane **issuance**
-//! gRPC routes (`IssueUserToken`/`Refresh`/`Logout`/`Jwks`) on its own address; resolves
-//! the user it is minting for in-process over the [`Provisioner`] channel; and answers
-//! `core`'s authorize requests over the [`Authorizer`] channel. `core` builds it, takes
+//! gRPC routes (`IssueUserToken`/`Refresh`/`Logout`/`ListSessions`/`RevokeSession`/
+//! `Jwks`) on its own address; resolves the user it is minting for in-process over the
+//! [`Provisioner`] channel; and answers `core`'s authorize requests over the
+//! [`Authorizer`] channel. `core` builds it, takes
 //! the `Authorizer`, hands it the `Provisioner`, and spawns [`AuthService::run`] in its
 //! own task.
 //!
@@ -32,7 +33,7 @@ use crate::{
 	claims::TokenType,
 	config::AuthConfig,
 	jwks::{JwksCache, VerifyPolicy, verify_token},
-	management::{IssuedRefresh, RefreshStore, SessionBounds},
+	management::{IssuedRefresh, RefreshInspect, RefreshStore, SessionBounds},
 	provisioner::{ProvisionedUser, Provisioner},
 	signer::{Signer, load_jwks},
 };
@@ -229,14 +230,32 @@ impl AuthServiceRpc for AuthGrpc {
 		let signer = engine.signer.as_ref().ok_or(AuthError::NotConfigured)?;
 		let req = request.into_inner();
 
-		let rotated = engine.refresh.rotate(&req.refresh_token, engine.session_bounds).await?;
-		let summary = engine.provisioner.lookup(rotated.user_id.clone()).await?;
+		// Classify the presented handle WITHOUT rotating it, and run the fallible user
+		// lookup BEFORE the irreversible rotation. Rotating first would advance `prev`, so a
+		// transient lookup failure would make the client's retry (with the same, now
+		// rotated-out token) trip reuse detection and revoke the whole family. Reuse
+		// detection is preserved: a replayed rotated-out secret is caught here as `Reuse`
+		// and revokes the family, exactly as the destructive rotate would.
+		let user_id = match engine.refresh.inspect(&req.refresh_token).await? {
+			RefreshInspect::Current { user_id } => user_id,
+			RefreshInspect::Reuse { user_id } => {
+				engine.refresh.revoke_user(&user_id).await?;
+				return Err(AuthError::InvalidToken.into());
+			}
+			RefreshInspect::Invalid => return Err(AuthError::InvalidToken.into()),
+		};
+
+		let summary = engine.provisioner.lookup(user_id).await?;
 		if summary.is_disabled() {
 			engine.refresh.revoke_user(&summary.user_id).await?;
 			return Err(Status::permission_denied("user is disabled"));
 		}
-		// A "revoke all" since this family was issued bumps the authoritative
-		// token_version in Postgres; refuse to mint and drop the family.
+
+		// The fallible checks passed — commit the (irreversible) rotation now.
+		let rotated = engine.refresh.rotate(&req.refresh_token, engine.session_bounds).await?;
+		// A "revoke all" since this family was issued bumps the authoritative token_version
+		// in Postgres; refuse to mint and drop the family. (A pure comparison, so running it
+		// after the rotation is safe — the family is dropped on mismatch regardless.)
 		if summary.token_version > rotated.token_version_snapshot {
 			engine.refresh.revoke_user(&summary.user_id).await?;
 			return Err(Status::unauthenticated("tokens revoked"));
@@ -249,17 +268,20 @@ impl AuthServiceRpc for AuthGrpc {
 	async fn logout(&self, request: Request<LogoutRequest>) -> Result<Response<LogoutResponse>, Status> {
 		let engine = &self.engine;
 		let req = request.into_inner();
+		// Authorize on the full credential (the secret), not the family-id prefix, so a
+		// leaked/rotated-out token cannot force-logout a victim.
+		let RefreshInspect::Current { user_id, .. } = engine.refresh.inspect(&req.refresh_token).await? else {
+			return Err(AuthError::InvalidToken.into());
+		};
 		if req.revoke_all {
-			if let Some(user_id) = engine.refresh.user_of(&req.refresh_token).await? {
-				// Durable half: bump the authoritative token_version in the control
-				// plane. Best-effort — dropping the refresh families below already ends
-				// every session and access tokens expire within the short TTL, so a
-				// transient control-plane blip must not fail the logout.
-				if let Err(err) = engine.provisioner.revoke_all(user_id.clone()).await {
-					crate::telemetry::report(&err);
-				}
-				engine.refresh.revoke_user(&user_id).await?;
+			// Durable half: bump the authoritative token_version in the control plane.
+			// Best-effort — dropping the refresh families below already ends every
+			// session and access tokens expire within the short TTL, so a transient
+			// control-plane blip must not fail the logout.
+			if let Err(err) = engine.provisioner.revoke_all(user_id.clone()).await {
+				crate::telemetry::report(&err);
 			}
+			engine.refresh.revoke_user(&user_id).await?;
 		} else {
 			engine.refresh.revoke(&req.refresh_token).await?;
 		}
@@ -269,7 +291,9 @@ impl AuthServiceRpc for AuthGrpc {
 	async fn list_sessions(&self, request: Request<ListSessionsRequest>) -> Result<Response<ListSessionsResponse>, Status> {
 		let engine = &self.engine;
 		let req = request.into_inner();
-		let Some(user_id) = engine.refresh.user_of(&req.refresh_token).await? else {
+		// Authorize on the secret, not the family-id prefix — else a leaked handle would
+		// disclose every session's device/IP metadata for the family.
+		let RefreshInspect::Current { user_id, .. } = engine.refresh.inspect(&req.refresh_token).await? else {
 			return Err(AuthError::InvalidToken.into());
 		};
 		let current_id = engine.refresh.family_id_of(&req.refresh_token).await?;
@@ -293,7 +317,9 @@ impl AuthServiceRpc for AuthGrpc {
 	async fn revoke_session(&self, request: Request<RevokeSessionRequest>) -> Result<Response<RevokeSessionResponse>, Status> {
 		let engine = &self.engine;
 		let req = request.into_inner();
-		let Some(user_id) = engine.refresh.user_of(&req.refresh_token).await? else {
+		// Authorize on the secret, not the family-id prefix — else a leaked handle could
+		// revoke any of the victim's sessions (targeted DoS).
+		let RefreshInspect::Current { user_id, .. } = engine.refresh.inspect(&req.refresh_token).await? else {
 			return Err(AuthError::InvalidToken.into());
 		};
 		engine.refresh.revoke_by_id(&user_id, &req.session_id).await?;

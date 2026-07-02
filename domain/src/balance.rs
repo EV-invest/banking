@@ -59,9 +59,15 @@ impl core::fmt::Display for ServiceId {
 	}
 }
 
-/// A holder of value in (or a claim against) the fund. The owner/sharer roles on an
-/// [`Allocation`](crate::allocations::Allocation) are `Party`s. Tagged for a self-
-/// describing JSON shape in event payloads and the `sharers` projection.
+/// Identity of one operator valuation mark (a `fund_valuations` row). Caller-minted,
+/// like every id.
+pub type ValuationId = Id<ValuationTag>;
+/// Phantom tag making [`ValuationId`] a distinct, incompatible identity type.
+pub struct ValuationTag;
+
+/// A holder of value in (or a claim against) the fund — the party a deposit credits
+/// and a claim belongs to. Tagged for a self-describing JSON shape in event payloads
+/// and projections.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "id", rename_all = "snake_case")]
 pub enum Party {

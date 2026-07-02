@@ -30,7 +30,7 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use crate::{application::balance::record_deposit, config::BscConfig};
+use crate::{application::balance::record_deposit, config::BscConfig, infrastructure::deposits::PgDeposits};
 
 /// `keccak256("Transfer(address,address,uint256)")` — the ERC-20 Transfer event topic0.
 const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
@@ -39,6 +39,7 @@ const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a116
 /// compete with request traffic, and the relay `Notify` so a credit dispatches promptly.
 pub struct DepositWatcher {
 	pool: PgPool,
+	deposits: PgDeposits,
 	relay: Arc<Notify>,
 	http: reqwest::Client,
 	config: BscConfig,
@@ -50,7 +51,14 @@ impl DepositWatcher {
 			.timeout(Duration::from_secs(20))
 			.build()
 			.expect("reqwest client builds with default config");
-		Self { pool, relay, http, config }
+		let deposits = PgDeposits::new(pool.clone());
+		Self {
+			pool,
+			deposits,
+			relay,
+			http,
+			config,
+		}
 	}
 
 	/// Poll until `shutdown` is cancelled. A failed cycle is logged and retried next poll
@@ -108,12 +116,12 @@ impl DepositWatcher {
 	}
 
 	async fn credit(&self, user: UserId, network: Network, transfer: &Transfer) -> Result<(), WatcherError> {
-		let amount = Usdt::from_base_units(transfer.value);
+		let amount = Usdt::from_onchain(network, transfer.value).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {
 			return Ok(()); // a legal but meaningless zero-value Transfer — not a deposit.
 		}
 		let tx_ref = TxRef::parse(&transfer.tx_ref()).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.pool, &self.relay, tx_ref, Party::User(user), network, amount)
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
 		if newly {

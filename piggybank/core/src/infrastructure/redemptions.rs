@@ -242,7 +242,7 @@ impl RedemptionRepository for PgRedemptions {
 					id: RedemptionId::from_raw(r.id),
 					user_id: UserId::from_raw(r.user_id),
 					email: r.email.unwrap_or_default(),
-					service: r.service,
+					service: ServiceId::parse(&r.service)?,
 					units: Shares::from_base_units(parse_units(&r.units, "redemption units")?),
 					created_at: r.created_at,
 				})

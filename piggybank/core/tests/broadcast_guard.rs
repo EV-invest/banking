@@ -28,6 +28,7 @@ use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
 	infrastructure::{
 		db,
+		deposits::PgDeposits,
 		ledger::{self, TbLedger},
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
@@ -49,6 +50,8 @@ use uuid::Uuid;
 /// TigerBeetle stay real), like the `StubCustody` the other withdrawal tests wire.
 struct RecordingCustody(Mutex<Vec<Uuid>>);
 
+impl domain::architecture::Gateway for RecordingCustody {}
+
 #[async_trait]
 impl Custody for RecordingCustody {
 	async fn broadcast(&self, request: &BroadcastRequest) -> Result<(), CustodyError> {
@@ -59,6 +62,7 @@ impl Custody for RecordingCustody {
 
 struct Harness {
 	pool: PgPool,
+	deposits: PgDeposits,
 	ledger: Arc<dyn Ledger>,
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	users: Arc<dyn UserRepository>,
@@ -87,6 +91,7 @@ async fn harness() -> Option<Harness> {
 	let custody = Arc::new(RecordingCustody(Mutex::new(Vec::new())));
 	let relay = Relay::new(pool.clone(), ledger.clone(), custody.clone(), notify.clone());
 	Some(Harness {
+		deposits: PgDeposits::new(pool.clone()),
 		pool,
 		ledger,
 		withdrawals,
@@ -121,7 +126,9 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 	// Fund the user with 100 and apply it to TB, so both Read-Firsts see available=100.
 	let user = active_user(&h).await;
 	let tx_ref = TxRef::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
-	balance_app::record_deposit(&h.pool, &h.notify, tx_ref, Party::User(user), network, usdt("100")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), network, usdt("100"))
+		.await
+		.unwrap();
 	h.relay.drain().await;
 
 	// Double-submit the full balance WITHOUT draining in between — the exploit window.

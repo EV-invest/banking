@@ -81,3 +81,91 @@ pub fn verify_token(token: &str, cache: &JwksCache, policy: &VerifyPolicy) -> Re
 	}
 	Ok(data.claims)
 }
+
+#[cfg(test)]
+mod tests {
+	use jsonwebtoken::{EncodingKey, Header, encode, get_current_timestamp};
+
+	use super::*;
+
+	// A throwaway Ed25519 keypair, generated with `openssl genpkey -algorithm ed25519`.
+	const TEST_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKolOSMXwE+tafZkX+jkKYJbmJ066f4E12wAwTIkKps6\n-----END PRIVATE KEY-----\n";
+	const TEST_JWK_X: &str = "Z6BCmq9-_wo9d7co5CDW84Wn0sAC3BA0XWK2AOstpV4";
+	const TEST_KID: &str = "test-kid";
+
+	fn cache() -> JwksCache {
+		let mut cache = JwksCache::new();
+		cache.insert(TEST_KID.into(), DecodingKey::from_ed_components(TEST_JWK_X).unwrap());
+		cache
+	}
+
+	fn policy(types: Vec<TokenType>) -> VerifyPolicy {
+		VerifyPolicy {
+			issuer: "https://auth.test".into(),
+			audiences: vec!["banking-core".into()],
+			allowed_types: types,
+		}
+	}
+
+	fn mint(claims: &Claims) -> String {
+		let key = EncodingKey::from_ed_pem(TEST_PEM.as_bytes()).unwrap();
+		let mut header = Header::new(Algorithm::EdDSA);
+		header.kid = Some(TEST_KID.into());
+		encode(&header, claims, &key).unwrap()
+	}
+
+	fn claims(typ: TokenType) -> Claims {
+		Claims {
+			sub: "user-123".into(),
+			iss: "https://auth.test".into(),
+			aud: "banking-core".into(),
+			exp: get_current_timestamp() + 900,
+			iat: get_current_timestamp(),
+			typ,
+			jti: None,
+			token_version: 0,
+		}
+	}
+
+	#[test]
+	fn rejects_non_eddsa_header() {
+		// A token signed (and thus header-stamped) with HS256 must be rejected by the
+		// EdDSA pin before any key lookup, so an attacker cannot downgrade the alg.
+		let mut header = Header::new(Algorithm::HS256);
+		header.kid = Some(TEST_KID.into());
+		let token = encode(&header, &claims(TokenType::Access), &EncodingKey::from_secret(b"attacker-secret")).unwrap();
+		assert!(matches!(verify_token(&token, &cache(), &policy(vec![TokenType::Access])), Err(AuthError::InvalidToken)));
+	}
+
+	#[test]
+	fn rejects_wrong_typ() {
+		let token = mint(&claims(TokenType::Service));
+		// A valid EdDSA service token must be rejected by an access-only policy.
+		assert!(matches!(verify_token(&token, &cache(), &policy(vec![TokenType::Access])), Err(AuthError::InvalidToken)));
+		// And accepted when the policy allows its typ.
+		assert!(verify_token(&token, &cache(), &policy(vec![TokenType::Service])).is_ok());
+	}
+
+	#[test]
+	fn rejects_missing_required_claims() {
+		#[derive(serde::Serialize)]
+		struct Partial {
+			sub: String,
+			typ: TokenType,
+			// no exp/iss/aud
+		}
+		let key = EncodingKey::from_ed_pem(TEST_PEM.as_bytes()).unwrap();
+		let mut header = Header::new(Algorithm::EdDSA);
+		header.kid = Some(TEST_KID.into());
+		let token = encode(
+			&header,
+			&Partial {
+				sub: "user-123".into(),
+				typ: TokenType::Access,
+			},
+			&key,
+		)
+		.unwrap();
+		assert!(matches!(verify_token(&token, &cache(), &policy(vec![TokenType::Access])), Err(AuthError::InvalidToken)));
+	}
+}

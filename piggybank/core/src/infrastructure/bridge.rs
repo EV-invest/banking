@@ -20,7 +20,7 @@
 
 use std::time::Duration;
 
-use domain::authz::Role;
+use domain::{authz::Role, users::UserId};
 use evconcierge_contracts::concierge::v1::{PullUserLifecycleRequest, UserLifecycleEvent, user_events_client::UserEventsClient, user_lifecycle_event::Kind};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
@@ -240,9 +240,9 @@ impl BridgeConsumer {
 /// `None` (no local row yet) is NOT blocked: a user with no row has nothing to move, and
 /// the downstream solvency checks gate that case anyway. Errs to the caller as a
 /// control-plane failure (mapped to UNAVAILABLE) — fail-closed when the gate can't be read.
-pub async fn is_frozen(pool: &PgPool, user_id: uuid::Uuid) -> Result<bool, sqlx::Error> {
+pub async fn is_frozen(pool: &PgPool, user_id: UserId) -> Result<bool, sqlx::Error> {
 	let blocked: Option<bool> = sqlx::query_scalar("SELECT (frozen OR status = 'disabled') FROM users WHERE id = $1")
-		.bind(user_id)
+		.bind(user_id.raw())
 		.fetch_optional(pool)
 		.await?;
 	Ok(blocked.unwrap_or(false))
@@ -251,7 +251,7 @@ pub async fn is_frozen(pool: &PgPool, user_id: uuid::Uuid) -> Result<bool, sqlx:
 /// The mirrored access role for a banking user id (the money-op RBAC gate reads this).
 /// `None` local row ⇒ `Investor` (holds nothing) so the gate fails closed. A corrupt
 /// stored value likewise degrades to `Investor` rather than erroring the gate open.
-pub async fn role_of(pool: &PgPool, user_id: uuid::Uuid) -> Result<Role, sqlx::Error> {
-	let role: Option<String> = sqlx::query_scalar("SELECT role FROM users WHERE id = $1").bind(user_id).fetch_optional(pool).await?;
+pub async fn role_of(pool: &PgPool, user_id: UserId) -> Result<Role, sqlx::Error> {
+	let role: Option<String> = sqlx::query_scalar("SELECT role FROM users WHERE id = $1").bind(user_id.raw()).fetch_optional(pool).await?;
 	Ok(role.as_deref().map(Role::parse_or_default).unwrap_or_default())
 }

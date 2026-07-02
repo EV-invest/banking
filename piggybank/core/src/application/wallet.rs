@@ -16,7 +16,7 @@ use domain::{
 	withdrawals::{WithdrawalPolicy, WithdrawalState},
 };
 
-use crate::ports::{DepositAddresses, FundPositionReader, NavRepository, WithdrawalRepository, ledger::Ledger};
+use crate::ports::{DepositAddresses, FundPositionReader, NavMarks, WithdrawalRepository, ledger::Ledger};
 
 /// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
 /// non-negative; `total = available + invested + pending_withdrawal`.
@@ -63,7 +63,7 @@ pub struct Wallet {
 pub async fn get_wallet(
 	ledger: &dyn Ledger,
 	positions: &dyn FundPositionReader,
-	nav: &dyn NavRepository,
+	nav: &dyn NavMarks,
 	withdrawals: &dyn WithdrawalRepository,
 	deposit_addresses: &dyn DepositAddresses,
 	user: UserId,

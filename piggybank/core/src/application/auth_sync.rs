@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use domain::{
 	error::DomainError,
-	users::{User, UserId},
+	users::{ConciergeUserId, User, UserId},
 };
 use evbanking_auth::{AuthError, ProvisionCommand, ProvisionRequest, ProvisionedUser};
 use tokio::sync::mpsc;
@@ -35,7 +35,9 @@ async fn handle(users: &dyn UserRepository, command: ProvisionCommand) -> Result
 		// Issuance: resolve the bridge-mirrored user by their concierge id. The money plane
 		// never provisions — the user must already exist locally (bridge `CREATED`).
 		ProvisionCommand::ResolveForIssuance { concierge_user_id } => {
-			let concierge_id = Uuid::parse_str(&concierge_user_id).map_err(|_| AuthError::Provider("invalid concierge user id".into()))?;
+			let concierge_id = Uuid::parse_str(&concierge_user_id)
+				.map(ConciergeUserId::from_raw)
+				.map_err(|_| AuthError::Provider("invalid concierge user id".into()))?;
 			let target = users
 				.resolve_issuance_by_concierge_id(concierge_id)
 				.await
@@ -58,9 +60,7 @@ async fn handle(users: &dyn UserRepository, command: ProvisionCommand) -> Result
 		}
 		ProvisionCommand::RevokeAll { user_id } => {
 			let id = parse_id(&user_id)?;
-			let mut user = users.find_by_id(id).await.map_err(to_auth)?.ok_or_else(|| AuthError::Provider("unknown user".into()))?;
-			user.revoke_tokens();
-			users.save(&mut user).await.map_err(to_auth)?;
+			let user = super::users::revoke_tokens(users, id).await.map_err(to_auth)?;
 			Ok(summary(&user))
 		}
 	}
