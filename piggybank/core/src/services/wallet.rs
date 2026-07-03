@@ -15,6 +15,7 @@ use tonic::{Request, Response, Status};
 use crate::{
 	AppState,
 	application::{wallet as wallet_app, withdrawals as withdrawal_app},
+	ports::deposits::DepositRecord,
 	services::support::{caller_id, map_err, parse_withdrawal_id, unfrozen_caller},
 };
 
@@ -106,6 +107,14 @@ impl WalletService for WalletSvc {
 			withdrawals: withdrawals.iter().map(withdrawal_to_proto).collect(),
 		}))
 	}
+
+	async fn list_deposits(&self, request: Request<pb::ListDepositsRequest>) -> Result<Response<pb::DepositList>, Status> {
+		let user = caller_id(&request)?;
+		let deposits = wallet_app::list_deposits(self.state.deposits.as_ref(), user).await.map_err(map_err)?;
+		Ok(Response::new(pb::DepositList {
+			deposits: deposits.iter().map(deposit_to_proto).collect(),
+		}))
+	}
 }
 
 fn deposit_rail_to_proto(rail: &wallet_app::DepositRail) -> pb::DepositAddress {
@@ -123,6 +132,15 @@ fn withdrawable_to_proto(rail: &wallet_app::NetworkWithdrawable) -> pb::NetworkW
 		instant: rail.instant.to_decimal_string(),
 		min_withdrawal: rail.min_withdrawal.to_decimal_string(),
 		withdrawal_fee: rail.withdrawal_fee.to_decimal_string(),
+	}
+}
+
+fn deposit_to_proto(deposit: &DepositRecord) -> pb::Deposit {
+	pb::Deposit {
+		tx_ref: deposit.tx_ref.as_str().to_owned(),
+		network: deposit.network.as_str().to_owned(),
+		amount: deposit.amount.to_decimal_string(),
+		created_at: deposit.created_at,
 	}
 }
 

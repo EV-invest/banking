@@ -16,7 +16,7 @@ use domain::{
 	withdrawals::{WithdrawalPolicy, WithdrawalState},
 };
 
-use crate::ports::{DepositAddresses, FundPositionReader, NavMarks, WithdrawalRepository, ledger::Ledger};
+use crate::ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, WithdrawalRepository, deposits::DepositRecord, ledger::Ledger};
 
 /// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
 /// non-negative; `total = available + invested + pending_withdrawal`.
@@ -139,4 +139,9 @@ pub async fn get_wallet(
 /// while the address is still a placeholder — the rail is not yet fundable.
 pub async fn get_deposit_address(deposit_addresses: &dyn DepositAddresses, user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
 	deposit_addresses.address(user, network).await
+}
+
+/// The caller's credited on-chain deposits (projection), newest first.
+pub async fn list_deposits(deposits: &dyn Deposits, user: UserId) -> Result<Vec<DepositRecord>, DomainError> {
+	deposits.list_by_user(user).await
 }

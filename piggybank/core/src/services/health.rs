@@ -67,6 +67,7 @@ impl HealthService for Health {
 			parked_rows,
 			backlog,
 			oldest_backlog_age_secs,
+			scan_cursors: Vec::new(),
 		}))
 	}
 }

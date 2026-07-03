@@ -11,11 +11,15 @@ use domain::{
 	balance::{LedgerEvent, Party},
 	error::DomainError,
 	money::{Network, TxRef, Usdt},
+	users::UserId,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{infrastructure::outbox, ports::Deposits};
+use crate::{
+	infrastructure::outbox,
+	ports::{Deposits, deposits::DepositRecord},
+};
 
 pub struct PgDeposits {
 	pool: PgPool,
@@ -65,5 +69,28 @@ impl Deposits for PgDeposits {
 		outbox::insert_event(&mut tx, event_id, "deposit", deposit_id, LedgerEvent::KIND, &payload, true).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(true)
+	}
+
+	async fn list_by_user(&self, user: UserId) -> Result<Vec<DepositRecord>, DomainError> {
+		// A plain pool read — a projection, not a fact write, so no transaction. The
+		// LIMIT is defensive (there is no paging API yet): 200 confirmed deposits per
+		// user comfortably exceeds any realistic history at current scale.
+		let rows = sqlx::query_as::<_, (String, String, String, i64)>(
+			"SELECT tx_ref, network, amount, EXTRACT(EPOCH FROM created_at)::bigint FROM deposits WHERE party_kind = 'user' AND party_id = $1 ORDER BY created_at DESC LIMIT 200",
+		)
+		.bind(user.to_string())
+		.fetch_all(&self.pool)
+		.await
+		.map_err(repo_err)?;
+		rows.into_iter()
+			.map(|(tx_ref, network, amount, created_at)| {
+				Ok(DepositRecord {
+					tx_ref: TxRef::parse(&tx_ref)?,
+					network: Network::parse(&network)?,
+					amount: Usdt::from_base_units(amount.parse::<u128>().map_err(|_| DomainError::Repository("malformed deposit amount".into()))?),
+					created_at,
+				})
+			})
+			.collect()
 	}
 }
