@@ -20,7 +20,10 @@
 //! watcher; this adapter only gets the bytes onto the chain.
 
 use async_trait::async_trait;
-use domain::{architecture::Gateway, money::Network};
+use domain::{
+	architecture::Gateway,
+	money::{Network, Usdt},
+};
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignJettonTransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -328,6 +331,15 @@ impl Custody for TonCustody {
 			}
 			other => other,
 		}
+	}
+
+	async fn treasury_liquidity(&self, _network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let treasury = self.treasury_address().await?;
+		// A treasury that never received USDT has no jetton wallet yet — that is a zero
+		// balance for the dispatch gate, not an error (broadcast-time provisioning parks it).
+		let raw = self.rpc.jetton_wallet(&treasury, &self.usdt_master).await.map_err(read_err)?.map(|w| w.balance).unwrap_or(0);
+		let usdt = Usdt::from_onchain(Network::Ton, raw).map_err(|e| CustodyError::Unavailable(format!("ton treasury balance not representable: {e}")))?;
+		Ok(Some(usdt))
 	}
 }
 

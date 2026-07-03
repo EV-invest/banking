@@ -23,6 +23,18 @@ pub trait Custody: Gateway {
 	/// idempotent by `request.withdrawal_id` so an at-least-once relay never
 	/// double-spends.
 	async fn broadcast(&self, request: &BroadcastRequest) -> Result<(), CustodyError>;
+
+	/// The rail treasury's spendable **on-chain** USDT, in 18-dp base units — the
+	/// withdrawal **dispatch gate**'s source. The ledger's `wallet:<net>` balance is
+	/// accounting (it counts un-swept deposit-address funds the treasury cannot spend),
+	/// so dispatchability is `min(TB rail, this)`. `None` means the adapter has no chain
+	/// view (the stub / an unwired rail) — callers fall back to the TB-only behaviour.
+	/// Read-only: never signs, never allocates a nonce/seqno; the adapter's broadcast-time
+	/// `ensure_treasury_funded` remains the last-line backstop.
+	async fn treasury_liquidity(&self, network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let _ = network;
+		Ok(None)
+	}
 }
 /// A request to broadcast the on-chain leg of a withdrawal. `withdrawal_id` is the
 /// idempotency key the custodian MUST dedupe on.

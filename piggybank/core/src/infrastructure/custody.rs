@@ -14,7 +14,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use domain::{architecture::Gateway, money::Network};
+use domain::{
+	architecture::Gateway,
+	money::{Network, Usdt},
+};
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignErc20TransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -71,6 +74,15 @@ impl Gateway for MultiChainCustody {}
 impl Custody for MultiChainCustody {
 	async fn broadcast(&self, request: &BroadcastRequest) -> Result<(), CustodyError> {
 		self.by_network.get(&request.network).unwrap_or(&self.fallback).broadcast(request).await
+	}
+
+	async fn treasury_liquidity(&self, network: Network) -> Result<Option<Usdt>, CustodyError> {
+		// An unwired rail has no chain view (`None`) — it must behave like the stub
+		// (operator-settled), not report a zero that would freeze its dispatches.
+		match self.by_network.get(&network) {
+			Some(adapter) => adapter.treasury_liquidity(network).await,
+			None => Ok(None),
+		}
 	}
 }
 
@@ -297,6 +309,13 @@ impl Custody for ChainCustody {
 			}
 			other => other,
 		}
+	}
+
+	async fn treasury_liquidity(&self, _network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let treasury = self.treasury_address().await?;
+		let usdt = self.rpc.erc20_balance(&self.usdt_contract, &treasury).await.map_err(read_err)?;
+		// BEP20 USDT is 18-dp — already base units.
+		Ok(Some(Usdt::from_base_units(usdt)))
 	}
 }
 

@@ -19,7 +19,10 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use domain::{architecture::Gateway, money::Network};
+use domain::{
+	architecture::Gateway,
+	money::{Network, Usdt},
+};
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignTrc20TransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -290,6 +293,13 @@ impl Custody for TronCustody {
 		// never a freshly-signed one with a different txid.
 		self.store_tx(request.withdrawal_id, &signed).await?;
 		self.submit(&signed.raw_tx, false).await
+	}
+
+	async fn treasury_liquidity(&self, _network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let treasury = self.treasury_address().await?;
+		let state = self.rpc.account_state(&treasury).await.map_err(read_err)?;
+		let usdt = Usdt::from_onchain(Network::Trc20, state.trc20(&self.usdt_contract)).map_err(|e| CustodyError::Unavailable(format!("tron treasury balance not representable: {e}")))?;
+		Ok(Some(usdt))
 	}
 }
 
