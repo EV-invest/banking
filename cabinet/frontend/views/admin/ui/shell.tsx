@@ -1,16 +1,26 @@
 "use client";
 
 // Small presentational primitives shared across the admin-console views: the page
-// header (eyebrow · title · subtitle · PROD badge · action slot), a status dot, and a
-// switch toggle. Kept dependency-light (no uncertain uikit exports) — plain buttons +
-// tokens, matching the wallet view's idiom.
+// header (eyebrow · title · subtitle · environment badge · action slot), a status dot,
+// and a switch toggle. Kept dependency-light (no uncertain uikit exports) — plain
+// buttons + tokens, matching the wallet view's idiom.
 
 import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
+import { usePlatform } from "@/shared/lib/use-platform";
 import { statusTone } from "@/views/admin/lib/format";
 
+// Server-truthful environment (the BFF's APP_ENV); anything unrecognised — including
+// the default "development" — reads as DEV.
+const ENV_BADGES: Record<string, { label: string; tone: string }> = {
+  production: { label: "PROD", tone: "text-main-accent-t2" },
+  staging: { label: "STAGING", tone: "text-main-accent-t3" },
+};
+
 export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle: string; action?: ReactNode }) {
+  const environment = usePlatform()?.environment;
+  const badge = environment ? (ENV_BADGES[environment] ?? { label: "DEV", tone: "text-muted-foreground" }) : null;
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
@@ -19,10 +29,12 @@ export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: str
         <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
       <div className="flex items-center gap-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-main-accent-t2">
-          <span className="size-1.5 rounded-full bg-main-accent-t2" />
-          PROD
-        </span>
+        {badge && (
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium", badge.tone)}>
+            <span className="size-1.5 rounded-full bg-current" />
+            {badge.label}
+          </span>
+        )}
         {action}
       </div>
     </header>
