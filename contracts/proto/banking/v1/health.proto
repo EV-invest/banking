@@ -34,4 +34,16 @@ message ReadinessResponse {
   uint64 parked_rows = 4;
   uint64 backlog = 5;
   uint64 oldest_backlog_age_secs = 6;
+  // Per-rail deposit-scan diagnostics; only configured rails appear. A large age on
+  // a configured rail means the deposit scan is stalled — deposits confirm on-chain
+  // but are not credited. Diagnostics only: it does NOT gate `ready`.
+  repeated DepositScanCursor scan_cursors = 7;
+}
+
+// Seconds since a rail's deposit watcher last advanced/touched its per-network scan
+// cursor (refreshed only by a completed scan cycle, so age ≈ time since the last
+// healthy cycle; thresholds are the consumer's concern).
+message DepositScanCursor {
+  string network = 1;
+  uint64 age_secs = 2;
 }

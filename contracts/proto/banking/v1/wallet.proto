@@ -34,6 +34,9 @@ service WalletService {
 
   // The caller's withdrawals, newest first.
   rpc ListWithdrawals(ListWithdrawalsRequest) returns (WithdrawalList);
+
+  // The caller's confirmed on-chain deposits, newest first.
+  rpc ListDeposits(ListDepositsRequest) returns (DepositList);
 }
 
 message GetWalletRequest {}
@@ -103,4 +106,18 @@ message Withdrawal {
 
 message WithdrawalList {
   repeated Withdrawal withdrawals = 1;
+}
+
+message ListDepositsRequest {}
+
+// A confirmed on-chain deposit credited to the caller's unified balance.
+message Deposit {
+  string tx_ref = 1;     // on-chain transaction reference
+  string network = 2;    // bep20 | trc20 | ton
+  string amount = 3;     // credited decimal USDT
+  int64 created_at = 4;  // unix seconds the hub recorded the credit
+}
+
+message DepositList {
+  repeated Deposit deposits = 1;
 }
