@@ -5,7 +5,7 @@
 
 import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
-import type { AdminOverview, AdminUserList, AdminUserProfile, CabinetConfig, FundNav, OperationsMode, PlatformConfig, Redemption, RedemptionQueue, Treasury, UserBalance } from "@/shared/contracts/admin";
+import type { AdminOverview, AdminUserList, AdminUserProfile, CabinetConfig, FundNav, OperationsMode, ParkedEventList, PlatformConfig, Redemption, RedemptionQueue, Treasury, UserBalance } from "@/shared/contracts/admin";
 
 async function getJson<T>(url: `/${string}`): Promise<T> {
   const res = await fetch(apiPath(url), { headers: { accept: "application/json" } });
@@ -27,6 +27,11 @@ async function postJson<T>(url: `/${string}`, body: unknown): Promise<T> {
 
 // ── overview ──────────────────────────────────────────────────────────────────
 export const fetchOverview = (): Promise<AdminOverview> => getJson("/api/admin/overview");
+
+// ── outbox ────────────────────────────────────────────────────────────────────
+export const fetchParkedEvents = (): Promise<ParkedEventList> => getJson("/api/admin/outbox/parked");
+
+export const unparkEvent = (seq: string): Promise<{ ok: boolean }> => postJson("/api/admin/outbox/unpark", { seq });
 
 // ── users ─────────────────────────────────────────────────────────────────────
 export interface UserFilters {

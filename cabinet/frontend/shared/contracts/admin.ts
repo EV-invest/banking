@@ -75,10 +75,29 @@ export interface UserBalance {
   as_of: string;
 }
 
+// ── outbox ────────────────────────────────────────────────────────────────────
+export interface ParkedEvent {
+  seq: string;
+  event_id: string;
+  aggregate: string;
+  aggregate_id: string;
+  kind: string;
+  reason: string;
+  parked_at: string;
+  compensated: boolean;
+}
+
+export interface ParkedEventList {
+  events: ParkedEvent[];
+}
+
 // ── treasury ──────────────────────────────────────────────────────────────────
 export interface RailLiquidity {
   network: string;
   custody: string;
+  treasury_address: string;
+  onchain_usdt: string;
+  onchain_gas: string;
 }
 
 export interface Treasury {
