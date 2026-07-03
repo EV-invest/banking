@@ -6,10 +6,10 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 
 import { Logo } from "@/application/layout/logo";
+import { useProfile } from "@/entities/user/model/profile-store";
 import { apiPath, withBasePath } from "@/shared/config/base-path";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
-import { useProfile } from "@/shared/lib/use-profile";
 import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
 
 interface NavItem {

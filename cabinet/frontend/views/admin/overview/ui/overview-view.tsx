@@ -20,17 +20,33 @@ export function OverviewView() {
   const [parkedHint, setParkedHint] = useState<string | null>(null);
   const [unparkError, setUnparkError] = useState<string | null>(null);
   const [unparking, setUnparking] = useState<string | null>(null);
+  // Rows whose unpark POST succeeded but whose refetch failed — still listed, but they
+  // must not offer a second unpark. A successful refetch drops them from the list.
+  const [unparked, setUnparked] = useState<ReadonlySet<string>>(new Set());
+  const [refetchError, setRefetchError] = useState<string | null>(null);
 
-  // Manual "Run health check" (event handler — may set state synchronously).
+  // Manual "Run health check" (event handler — may set state synchronously). Refetches
+  // BOTH the overview and the parked list so the "Parked rows" KPI and the table agree.
   const load = useCallback(() => {
     setRefreshing(true);
-    fetchOverview()
+    const overviewDone = fetchOverview()
       .then((o) => {
         setOverview(o);
         setError(null);
       })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setRefreshing(false));
+      .catch((e: Error) => setError(e.message));
+    const parkedDone = fetchParkedEvents()
+      .then((l) => {
+        setParked(l.events ?? []);
+        setParkedHint(null);
+        setUnparked(new Set());
+        setRefetchError(null);
+      })
+      .catch((e: Error) => {
+        setParked([]);
+        setParkedHint(e.message);
+      });
+    void Promise.allSettled([overviewDone, parkedDone]).then(() => setRefreshing(false));
   }, []);
 
   // Mount fetch — state is set only in the async callbacks (no synchronous setState in
@@ -63,14 +79,26 @@ export function OverviewView() {
   const unpark = async (seq: string) => {
     setUnparking(seq);
     setUnparkError(null);
+    setRefetchError(null);
     try {
-      await unparkEvent(seq);
+      const { ok } = await unparkEvent(seq);
+      if (!ok) throw new Error("the hub declined the unpark");
+    } catch (e) {
+      setUnparkError((e as Error).message);
+      setUnparking(null);
+      return;
+    }
+    // The POST succeeded — mark the row unparked before the refetch so a refetch
+    // failure can't leave an enabled Unpark button on an already-unparked event.
+    setUnparked((prev) => new Set(prev).add(seq));
+    try {
       // Re-fetch both so the "Parked rows" KPI drops together with the list.
       const [list, o] = await Promise.all([fetchParkedEvents(), fetchOverview()]);
       setParked(list.events ?? []);
       setOverview(o);
+      setUnparked(new Set());
     } catch (e) {
-      setUnparkError((e as Error).message);
+      setRefetchError((e as Error).message);
     } finally {
       setUnparking(null);
     }
@@ -163,6 +191,11 @@ export function OverviewView() {
               <TriangleAlert className="size-3.5" /> {unparkError}
             </p>
           )}
+          {refetchError && (
+            <p className="flex items-center gap-2 text-xs text-main-accent-t3">
+              <TriangleAlert className="size-3.5" /> Unparked, but refreshing the list failed: {refetchError} — run a health check to resync.
+            </p>
+          )}
           {!parked ? (
             <Skeleton className="h-16 w-full" />
           ) : parkedHint ? (
@@ -199,7 +232,14 @@ export function OverviewView() {
                     <td className="py-2.5 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {e.compensated && <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-xs font-medium text-main-mist">compensated</span>}
-                        <Button type="button" variant="outline" size="sm" disabled={e.compensated || unparking !== null} onClick={() => void unpark(e.seq)}>
+                        {unparked.has(e.seq) && <span className="rounded-full bg-main-accent-t2/15 px-2 py-0.5 text-xs font-medium text-main-accent-t2">unparked</span>}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={e.compensated || unparked.has(e.seq) || unparking !== null}
+                          onClick={() => void unpark(e.seq)}
+                        >
                           {unparking === e.seq ? <Loader2 className="size-3.5 animate-spin" /> : null}
                           Unpark
                         </Button>

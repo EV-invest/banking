@@ -23,6 +23,9 @@ let cached: SessionInfo | null = null;
 let inflight: Promise<SessionInfo> | null = null;
 
 function fetchSession(): Promise<SessionInfo> {
+  // Serving the cache here (not in the hook) closes the render→effect race: a consumer
+  // whose effect runs after another consumer's fetch resolved still syncs its state.
+  if (cached) return Promise.resolve(cached);
   inflight ??= fetch(apiPath("/api/auth/session"))
     .then((r) => r.json() as Promise<SessionInfo>)
     .then((s) => {
@@ -39,7 +42,6 @@ function fetchSession(): Promise<SessionInfo> {
 export function useSession(): SessionInfo | null {
   const [session, setSession] = useState<SessionInfo | null>(cached);
   useEffect(() => {
-    if (cached) return;
     let active = true;
     void fetchSession().then((s) => active && setSession(s));
     return () => {

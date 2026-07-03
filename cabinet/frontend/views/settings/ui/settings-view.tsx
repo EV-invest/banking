@@ -7,9 +7,9 @@ import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger,
 
 import { fetchSessions, revokeSession } from "@/entities/session/api/sessions-client";
 import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
+import { publishProfile } from "@/entities/user/model/profile-store";
 import type { Session, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
-import { publishProfile } from "@/shared/lib/use-profile";
 import { displayName } from "@/views/settings/lib/format";
 
 const CARD = "rounded-[14px] border border-border bg-main-card";
