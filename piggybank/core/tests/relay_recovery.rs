@@ -323,6 +323,71 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 	assert_eq!(broadcasts.load(Ordering::SeqCst), 0, "custody must never see a broadcast for a non-processing withdrawal");
 }
 
+/// The never-void rule, enforced at the void itself: a `Failed` event for a withdrawal
+/// custody already acted on (its `withdrawal_broadcasts` row exists, so the transfer
+/// may have landed on-chain) must PARK, not void — the clearing reservation stays
+/// locked for the operator instead of refunding a user who may also be paid on-chain.
+#[tokio::test]
+async fn a_fail_void_parks_when_a_broadcast_row_exists() {
+	let Some(h) = harness().await else { return };
+	let network = Network::Bep20;
+	let user = active_user(&h).await;
+	let claim = domain::balance::LedgerAccountKey::UserClaim(user);
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	// Seed the rail so the request auto-dispatches to `processing` (fail is only legal
+	// from there — the shape of a real broadcast-then-operator-fail incident).
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
+	h.relay.drain().await;
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&StubCustody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Processing, "a liquid rail auto-dispatches to processing");
+	h.relay.drain().await;
+	let reserved = h.ledger.balance(&claim).await.unwrap();
+	assert_eq!(Usdt::from_base_units(reserved.locked), usdt("50"), "the gross is reserved before the fail");
+
+	// Custody acted: the signed transaction was persisted before the send (the adapters'
+	// crash-safety record). The stub custody records nothing, so inject the row.
+	sqlx::query("INSERT INTO withdrawal_broadcasts (withdrawal_id, network, nonce, raw_tx, tx_hash) VALUES ($1, 'bep20', 0, '0xdead', '0xbeef')")
+		.bind(withdrawal.id().raw())
+		.execute(&h.pool)
+		.await
+		.expect("inject the broadcast row");
+
+	// An operator fails it anyway (mistaken "confirmed not-broadcast") — the relay must
+	// refuse the void and park the Failed event.
+	withdrawal_app::fail_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
+	h.relay.drain().await;
+
+	let (is_dispatched, is_parked, last_error): (bool, bool, Option<String>) =
+		sqlx::query_as("SELECT dispatched_at IS NOT NULL, parked_at IS NOT NULL, last_error FROM outbox WHERE aggregate_id = $1 ORDER BY seq DESC LIMIT 1")
+			.bind(withdrawal.id().raw())
+			.fetch_one(&h.pool)
+			.await
+			.expect("the Failed row is queryable");
+	assert!(!is_dispatched, "the guarded Failed event must never be marked dispatched");
+	assert!(is_parked, "the Failed event parks when a broadcast row exists");
+	assert!(last_error.is_some_and(|e| e.contains("refusing to void")), "the park reason names the never-void guard");
+
+	// The clearing pending was NOT voided — the gross stays locked for the operator.
+	let after = h.ledger.balance(&claim).await.unwrap();
+	assert_eq!(Usdt::from_base_units(after.locked), usdt("50"), "the reservation survives the refused void");
+}
+
 /// The operator unpark path end to end: a parked row — here a retry-exhausted but valid
 /// deposit event, injected atomically already-parked so no concurrent drain touches it
 /// first — is cleared by `outbox::unpark` (`parked_at` NULL **and** `attempts` reset to

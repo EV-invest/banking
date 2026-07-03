@@ -336,6 +336,26 @@ impl Relay {
 				Err(err) => return Outcome::Retry(format!("broadcast-state check: {err}")),
 			}
 		}
+		// The fail void's Read-First — the cardinal never-void rule, enforced
+		// structurally: every custody adapter records its `withdrawal_broadcasts` row
+		// before the signed bytes go out, so a row here means the transfer may already
+		// have landed on-chain, and voiding the clearing reservation would refund the
+		// user while real money left custody too — the double-pay. Park for the operator
+		// instead. Because the single worker applies this (strictly later in `seq`)
+		// Failed row only after any broadcast leg recorded its row, the guard also
+		// closes the send-side TOCTOU the broadcast-state check above leaves open: a
+		// fail raced past that state read is serialized behind the broadcast row it
+		// must observe, and refuses here.
+		for op in &ops {
+			if op.transfer_id != tid(row.aggregate_id, CLEARING_VOID_FAIL) {
+				continue;
+			}
+			match broadcast_recorded(&self.pool, row.aggregate_id).await {
+				Ok(true) => return Outcome::park("broadcast row exists — refusing to void a possibly-landed withdrawal".into()),
+				Ok(false) => {}
+				Err(err) => return Outcome::Retry(format!("broadcast-row check: {err}")),
+			}
+		}
 		// Track applied legs so a park *after* an earlier leg posted (`applied > 0`) is flagged
 		// half-applied — the genuine residual a balance pre-check can't predict (a bare TB
 		// Conflict on a non-first leg). A first-leg park leaves nothing applied.
@@ -778,6 +798,17 @@ async fn reserve_applied(pool: &PgPool, aggregate_id: Uuid) -> Result<bool, sqlx
 /// [`reserve_applied`]): only a `processing` withdrawal may broadcast.
 async fn withdrawal_state(pool: &PgPool, aggregate_id: Uuid) -> Result<Option<String>, sqlx::Error> {
 	sqlx::query_scalar("SELECT state FROM withdrawals WHERE id = $1").bind(aggregate_id).fetch_optional(pool).await
+}
+
+/// Whether custody recorded a `withdrawal_broadcasts` row for this withdrawal — the
+/// fail void's Read-First: every adapter persists the signed transaction there before
+/// sending it, so a row means the broadcast may have landed and the reservation must
+/// never be voided automatically.
+async fn broadcast_recorded(pool: &PgPool, aggregate_id: Uuid) -> Result<bool, sqlx::Error> {
+	sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM withdrawal_broadcasts WHERE withdrawal_id = $1)")
+		.bind(aggregate_id)
+		.fetch_one(pool)
+		.await
 }
 
 async fn record_saga_step(pool: &PgPool, event_id: Uuid, leg: i32, role: &str, transfer_id: u128) -> Result<(), sqlx::Error> {
