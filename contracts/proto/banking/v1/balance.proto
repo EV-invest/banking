@@ -65,15 +65,15 @@ service BalanceService {
   rpc ListParkedEvents(ListParkedEventsRequest) returns (ParkedEventList);
 
   // Admin (OutboxManage): clear `parked_at` so the relay re-drives the event once the
-  // cause is fixed; refused for a compensated row — its recovery event already
-  // applied, so re-driving would double-apply.
+  // cause is fixed; refused for a compensated row — it parked half-applied with
+  // compensation owed, so re-driving would re-apply the legs that already posted.
   rpc UnparkEvent(UnparkEventRequest) returns (UnparkEventResponse);
 }
 
 message ListParkedEventsRequest {}
 
 // One parked outbox row. `reason` is the relay's last error; `parked_at` is unix
-// seconds; `compensated` marks a half-applied event whose recovery already ran
+// seconds; `compensated` marks a half-applied event that is owed compensation
 // (never unparkable).
 message ParkedEvent {
   int64 seq = 1;

@@ -216,13 +216,15 @@ impl BalanceService for BalanceSvc {
 			self.state.relay_notify.notify_one();
 			return Ok(Response::new(pb::UnparkEventResponse {}));
 		}
-		// Refused — answer precisely: a compensated park already emitted its recovery
-		// event (re-driving would double-apply); a dispatched row has nothing to re-drive.
+		// Refused — answer precisely: a compensated park is half-applied with compensation
+		// OWED (the relay stamps it at park time, before any recovery runs), so re-driving
+		// would re-apply the legs that already posted; a dispatched row has nothing to
+		// re-drive.
 		match crate::infrastructure::outbox::unpark_refusal(&self.state.pool, seq)
 			.await
 			.map_err(|_| Status::unavailable("internal error"))?
 		{
-			Some((_, true)) => Err(Status::failed_precondition("event was compensated — unparking would double-apply")),
+			Some((_, true)) => Err(Status::failed_precondition("event parked half-applied — compensation is owed; unparking would double-apply")),
 			Some((true, _)) => Err(Status::failed_precondition("event already dispatched")),
 			_ => Err(Status::not_found("parked event")),
 		}
