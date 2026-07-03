@@ -590,6 +590,71 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	h.relay.drain().await;
 }
 
+/// One sweep must account the liquidity it already dispatched: three queued
+/// withdrawals summing past the rail's on-chain treasury each pass a *static* gate
+/// (the balances only move when the relay settles), so an unaccounted sweep would
+/// dispatch all three and mass-park downstream. The dispatcher walks the backlog
+/// FIFO and deducts every dispatched net from the rail's remaining liquidity — only
+/// the oldest fits this sweep; the rest stay queued (and cancellable) for the next
+/// top-up. TRC20 keeps this test's rows off the rails the other dispatcher test tops
+/// up, and the ~50 on-chain cap keeps any parallel test's huge queued grosses out.
+#[tokio::test]
+async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Trc20;
+	deposit(&h, user, Network::Bep20, "200").await;
+	// The TB rail covers every net individually — the on-chain view is the binding
+	// budget, so what's proven is the running deduction, not a static shortfall.
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("200")).await.unwrap();
+	h.relay.drain().await;
+
+	let custody = Arc::new(TestCustody::short_everywhere());
+	let mut withdrawals = Vec::new();
+	for _ in 0..3 {
+		let withdrawal = withdrawal_app::request_withdrawal(
+			h.withdrawals.as_ref(),
+			h.ledger.as_ref(),
+			h.users.as_ref(),
+			custody.as_ref(),
+			&h.notify,
+			&Network::ALL,
+			user,
+			network,
+			destination(network),
+			usdt("50"),
+		)
+		.await
+		.unwrap();
+		assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues each request");
+		withdrawals.push(withdrawal);
+	}
+	h.relay.drain().await;
+
+	// Top up the treasury to cover exactly one net (49) — a static gate would let all
+	// three (net 147) through.
+	custody.set(network, TreasuryView::OnChain(usdt("50")));
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	dispatcher.sweep().await.unwrap();
+
+	let first = h.withdrawals.find_by_id(withdrawals[0].id()).await.unwrap().unwrap();
+	assert_eq!(first.state(), WithdrawalState::Processing, "the FIFO-first withdrawal fits the rail's liquidity");
+	for later in &withdrawals[1..] {
+		let after = h.withdrawals.find_by_id(later.id()).await.unwrap().unwrap();
+		assert_eq!(after.state(), WithdrawalState::Queued, "the rest exceed the remaining liquidity and stay queued");
+	}
+
+	// Settle the dispatched one and cancel the rest, so the shared rails aren't left
+	// with dangling in-flight reservations.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawals[0].id(), unique_tx_ref())
+		.await
+		.unwrap();
+	for later in &withdrawals[1..] {
+		withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, later.id(), user).await.unwrap();
+	}
+	h.relay.drain().await;
+}
+
 #[tokio::test]
 async fn deposit_address_is_stable_per_user_and_network() {
 	let Some(h) = harness().await else { return };

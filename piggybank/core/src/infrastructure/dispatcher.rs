@@ -8,9 +8,13 @@
 //! interval. The reaper's 24h auto-cancel of `queued` withdrawals remains the final
 //! backstop (the de-facto rail top-up SLA).
 
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use domain::{balance::LedgerAccountKey, money::Usdt, withdrawals::WithdrawalId};
+use domain::{
+	balance::LedgerAccountKey,
+	money::{Network, Usdt},
+	withdrawals::WithdrawalId,
+};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
@@ -66,9 +70,20 @@ impl Dispatcher {
 	/// the admin RPC uses (row-locked, idempotent — [`domain::withdrawals::Withdrawal::dispatch`]
 	/// no-ops from `Processing`), so a raced operator dispatch is harmless. Per-withdrawal
 	/// failures warn-and-continue; only the backlog read itself fails the sweep.
+	///
+	/// The backlog is FIFO and each dispatched net is deducted from the rail's remaining
+	/// liquidity for the rest of the sweep: both gates read balances that only move when
+	/// the relay settles, so a batch summing past the rail would otherwise pass each
+	/// static check, dispatch in full, and mass-park at the custody backstop. What no
+	/// longer fits stays queued for the next top-up.
 	pub async fn sweep(&self) -> Result<usize, sqlx::Error> {
-		let queued: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM withdrawals WHERE state = 'queued'").fetch_all(&self.pool).await?;
+		let queued: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM withdrawals WHERE state = 'queued' ORDER BY created_at")
+			.fetch_all(&self.pool)
+			.await?;
 		let mut dispatched = 0usize;
+		// Per-rail net already dispatched this sweep — the running deduction both gates
+		// subtract before comparing.
+		let mut in_flight: HashMap<Network, Usdt> = HashMap::new();
 		for id in queued {
 			let id = WithdrawalId::from_raw(id);
 			let withdrawal = match self.withdrawals.find_by_id(id).await {
@@ -82,21 +97,24 @@ impl Dispatcher {
 			};
 			let net = withdrawal.net_amount();
 			let network = withdrawal.network();
-			// Gate 1 — the TB rail accounting balance must cover the net.
+			let spent = in_flight.get(&network).copied().unwrap_or(Usdt::ZERO);
+			// Gate 1 — the TB rail accounting balance, less this sweep's dispatches, must
+			// cover the net.
 			match self.ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await {
-				Ok(balance) if Usdt::from_base_units(balance.posted) >= net => {}
+				Ok(balance) if Usdt::from_base_units(balance.posted).checked_sub(spent).is_some_and(|remaining| remaining >= net) => {}
 				Ok(_) => continue,
 				Err(err) => {
 					warn!(withdrawal_id = %id, %network, "dispatcher: rail balance read failed — skipping this cycle: {err}");
 					continue;
 				}
 			}
-			// Gate 2 — the real on-chain treasury must cover it too (when there is a chain
-			// view). Unlike the operator RPC, an `Err` here has no human judgment behind it,
-			// so the automatic path stays conservative: skip and retry next interval.
+			// Gate 2 — the real on-chain treasury, under the same deduction, must cover it
+			// too (when there is a chain view). Unlike the operator RPC, an `Err` here has
+			// no human judgment behind it, so the automatic path stays conservative: skip
+			// and retry next interval.
 			match self.custody.treasury_liquidity(network).await {
 				Ok(None) => {}
-				Ok(Some(onchain)) if onchain >= net => {}
+				Ok(Some(onchain)) if onchain.checked_sub(spent).is_some_and(|remaining| remaining >= net) => {}
 				Ok(Some(_)) => continue,
 				Err(err) => {
 					warn!(withdrawal_id = %id, %network, "dispatcher: treasury liquidity read failed — skipping this cycle: {err}");
@@ -104,7 +122,11 @@ impl Dispatcher {
 				}
 			}
 			match withdrawal_app::dispatch_withdrawal(self.withdrawals.as_ref(), self.custody.as_ref(), &self.notify, id).await {
-				Ok(_) => dispatched += 1,
+				Ok(_) => {
+					dispatched += 1;
+					// A saturating add: an (impossible in practice) overflow keeps the rail gated.
+					in_flight.insert(network, spent.checked_add(net).unwrap_or(Usdt::from_base_units(u128::MAX)));
+				}
 				Err(err) => warn!(withdrawal_id = %id, "dispatcher: could not dispatch: {err}"),
 			}
 		}
