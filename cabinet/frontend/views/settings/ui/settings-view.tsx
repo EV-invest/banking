@@ -1,7 +1,7 @@
 "use client";
 
-import { BadgeCheck, Laptop, Loader2, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { BadgeCheck, Check, Laptop, Loader2, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton } from "@evinvest/uikit";
 
@@ -9,6 +9,7 @@ import { fetchSessions, revokeSession } from "@/entities/session/api/sessions-cl
 import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
 import type { Session, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { publishProfile } from "@/shared/lib/use-profile";
 import { displayName } from "@/views/settings/lib/format";
 
 const CARD = "rounded-[14px] border border-border bg-main-card";
@@ -41,6 +42,8 @@ export function SettingsView() {
   const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
   const [form, setForm] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [sessions, setSessions] = useState<Session[] | undefined>(undefined);
@@ -78,6 +81,7 @@ export function SettingsView() {
   const dirty = !!form && !!profile && EDITABLE.some((k) => form[k] !== (profile[k] ?? ""));
 
   function set(key: keyof Form, value: string) {
+    setSaved(false);
     setForm((f) => (f ? { ...f, [key]: value } : f));
   }
   async function save() {
@@ -88,12 +92,22 @@ export function SettingsView() {
       const updated = await saveProfile(form as UpdateProfileRequest);
       setProfile(updated);
       setForm(formFrom(updated));
+      publishProfile(updated); // the sidebar account chip picks up the new name live
+      setSaved(true);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setSaving(false);
     }
   }
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
 
   async function revoke(id: string) {
     setBusy(true);
@@ -130,14 +144,21 @@ export function SettingsView() {
           <p className="text-[13px] text-muted-foreground">Manage your account, security and access</p>
         </div>
         {section === "general" && (
-          <button
-            type="button"
-            onClick={save}
-            disabled={loading || saving || !dirty}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {saving && <Loader2 className="size-4 animate-spin" />} Save changes
-          </button>
+          <div className="flex shrink-0 items-center gap-3">
+            {saved && (
+              <span className="inline-flex items-center gap-1 text-[13px] font-medium text-main-accent-t2">
+                <Check className="size-4" /> Saved
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={save}
+              disabled={loading || saving || !dirty}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {saving && <Loader2 className="size-4 animate-spin" />} Save changes
+            </button>
+          </div>
         )}
       </div>
 

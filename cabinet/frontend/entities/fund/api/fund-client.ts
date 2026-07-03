@@ -18,6 +18,8 @@ export function fetchPositions(): Promise<PositionList> {
 }
 
 export function fetchFundNav(service: string): Promise<FundNav> {
+  // Never issue a bare `/api/funds/nav` — the BFF 400s without ?service, so fail fast here.
+  if (!service.trim()) return Promise.reject(new Error("fund service required"));
   return getJson<FundNav>(`/api/funds/nav?service=${encodeURIComponent(service)}`);
 }
 

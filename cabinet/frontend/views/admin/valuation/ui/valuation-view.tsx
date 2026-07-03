@@ -79,6 +79,9 @@ export function ValuationView() {
     try {
       await fn(id);
       loadQueue();
+      // Settle burns units, so the derived-NAV preview and the queue's est-cash go
+      // stale on the load-time units_outstanding — refresh the mark alongside the queue.
+      loadNav(service);
     } catch (e) {
       setError((e as Error).message);
     } finally {
