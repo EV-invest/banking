@@ -7,6 +7,11 @@
 //! of queued/in-flight withdrawals (Postgres projections). Network re-enters only as a
 //! transaction attribute: a per-rail deposit address and a per-rail withdrawable view
 //! (`instant = min(available, rail liquidity)`, the accept-and-queue degradation hint).
+//!
+//! Only **configured** rails (those with a running on-chain watcher) are presented or
+//! provisioned at all: an unconfigured rail is omitted entirely — never provisioned,
+//! not merely "address pending" — because a deposit sent to an address no watcher
+//! scans is stranded, not credited.
 
 use domain::{
 	balance::LedgerAccountKey,
@@ -31,7 +36,8 @@ pub struct WalletBalance {
 	pub total: Usdt,
 }
 
-/// A deposit rail — where to send USDT (on a given chain) to top up the unified balance.
+/// A deposit rail — where to send USDT (on a given chain) to top up the unified
+/// balance. Only configured rails appear; an unconfigured one is omitted entirely.
 pub struct DepositRail {
 	pub network: Network,
 	pub address: Option<WalletAddress>,
@@ -58,14 +64,15 @@ pub struct Wallet {
 	pub withdrawable: Vec<NetworkWithdrawable>,
 }
 
-/// The caller's wallet: the unified lifecycle balance, a deposit address per rail, and
-/// the per-rail withdrawable view.
+/// The caller's wallet: the unified lifecycle balance, a deposit address per
+/// configured rail, and the per-rail withdrawable view.
 pub async fn get_wallet(
 	ledger: &dyn Ledger,
 	positions: &dyn FundPositionReader,
 	nav: &dyn NavMarks,
 	withdrawals: &dyn WithdrawalRepository,
 	deposit_addresses: &dyn DepositAddresses,
+	configured: &[Network],
 	user: UserId,
 ) -> Result<Wallet, DomainError> {
 	// Layer 1 — the single unified claim. The ledger speaks raw base units; wrap into
@@ -105,10 +112,10 @@ pub async fn get_wallet(
 		total,
 	};
 
-	// Layer 2 — per-rail deposit addresses and withdrawable view.
-	let mut deposit_addresses_out = Vec::with_capacity(Network::ALL.len());
-	let mut withdrawable = Vec::with_capacity(Network::ALL.len());
-	for network in Network::ALL {
+	// Layer 2 — per-rail deposit addresses and withdrawable view, configured rails only.
+	let mut deposit_addresses_out = Vec::with_capacity(configured.len());
+	let mut withdrawable = Vec::with_capacity(configured.len());
+	for network in configured.iter().copied() {
 		// `None` ⇒ no fundable address yet (still a placeholder): the rail is presented as
 		// unavailable, never with an address that cannot actually receive funds.
 		deposit_addresses_out.push(DepositRail {
@@ -136,8 +143,15 @@ pub async fn get_wallet(
 }
 
 /// The caller's deposit address on `network` (stable; derived once and reused). `None`
-/// while the address is still a placeholder — the rail is not yet fundable.
-pub async fn get_deposit_address(deposit_addresses: &dyn DepositAddresses, user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
+/// while the address is still a placeholder — the rail is not yet fundable — or when
+/// the rail is not configured at all.
+pub async fn get_deposit_address(deposit_addresses: &dyn DepositAddresses, configured: &[Network], user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
+	// The gate must sit ABOVE the port: the first `DepositAddresses::address` call
+	// provisions a signer keypair, and a key minted for a rail no watcher scans strands
+	// whatever is deposited to it.
+	if !configured.contains(&network) {
+		return Ok(None);
+	}
 	deposit_addresses.address(user, network).await
 }
 

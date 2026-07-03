@@ -624,6 +624,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 		users_dyn.as_ref(),
 		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		user,
 		network,
 		destination(network),

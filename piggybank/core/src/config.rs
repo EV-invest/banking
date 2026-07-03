@@ -253,6 +253,21 @@ impl AppConfig {
 			ton_sweep,
 		})
 	}
+
+	/// The rails whose chain config is present — exactly the rails whose deposit watcher
+	/// runs (the same `BSC_RPC_URL`/`TRON_RPC_URL`/`TON_API_URL` gates as above). Only
+	/// configured rails are provisioned/served by the wallet surface: an address minted
+	/// for a rail no watcher scans would strand whatever is sent to it.
+	pub fn configured_networks(&self) -> Vec<Network> {
+		[
+			self.bsc.as_ref().map(|_| Network::Bep20),
+			self.tron.as_ref().map(|_| Network::Trc20),
+			self.ton.as_ref().map(|_| Network::Ton),
+		]
+		.into_iter()
+		.flatten()
+		.collect()
+	}
 }
 
 /// Config for the one-way concierge→banking lifecycle bridge consumer.
@@ -432,5 +447,69 @@ mod tests {
 			let addr: SocketAddr = raw.parse().expect("default addr parses");
 			assert!(addr.ip().is_loopback(), "{raw} must default to loopback, not all interfaces");
 		}
+	}
+
+	/// A minimal config with the given chain Options set — only the fields
+	/// `configured_networks` reads matter; the rest are inert placeholders.
+	fn config(bsc: bool, tron: bool, ton: bool) -> AppConfig {
+		AppConfig {
+			database_url: String::new(),
+			grpc_addr: DEFAULT_GRPC_ADDR.parse().unwrap(),
+			auth_grpc_addr: DEFAULT_AUTH_GRPC_ADDR.parse().unwrap(),
+			sentry_dsn: None,
+			posthog_key: None,
+			posthog_host: None,
+			app_env: "test".to_string(),
+			tigerbeetle_address: String::new(),
+			tigerbeetle_cluster_id: 0,
+			admin_subjects: Vec::new(),
+			signer_grpc_addr: String::new(),
+			db_max_connections: 1,
+			relay_db_max_connections: 1,
+			bridge: None,
+			bsc: bsc.then(|| BscConfig {
+				rpc_url: String::new(),
+				usdt_contract: String::new(),
+				confirmations: 1,
+				poll_secs: 1,
+				start_block: None,
+				max_block_range: 1,
+				chain_id: 1,
+				gas_limit: 1,
+			}),
+			sweep: None,
+			tron: tron.then(|| TronConfig {
+				rpc_url: String::new(),
+				usdt_contract: String::new(),
+				api_key: None,
+				poll_secs: 1,
+				start_timestamp: None,
+				fee_limit: 1,
+				expiration_secs: 1,
+				max_transfers_per_scan: 1,
+			}),
+			tron_sweep: None,
+			ton: ton.then(|| TonConfig {
+				api_url: String::new(),
+				api_key: None,
+				usdt_master: String::new(),
+				poll_secs: 1,
+				start_cursor: None,
+				is_testnet: false,
+				wallet_version: String::new(),
+				forward_ton_amount: 1,
+				msg_value: 1,
+			}),
+			ton_sweep: None,
+		}
+	}
+
+	#[test]
+	fn configured_networks_mirror_the_chain_config_options() {
+		assert!(config(false, false, false).configured_networks().is_empty());
+		assert_eq!(config(true, false, false).configured_networks(), [Network::Bep20]);
+		assert_eq!(config(false, true, false).configured_networks(), [Network::Trc20]);
+		assert_eq!(config(false, false, true).configured_networks(), [Network::Ton]);
+		assert_eq!(config(true, true, true).configured_networks(), [Network::Bep20, Network::Trc20, Network::Ton]);
 	}
 }

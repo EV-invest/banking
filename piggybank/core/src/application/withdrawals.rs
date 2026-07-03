@@ -36,11 +36,19 @@ pub async fn request_withdrawal(
 	users: &dyn UserRepository,
 	custody: &dyn Custody,
 	relay: &Notify,
+	configured: &[Network],
 	user: UserId,
 	network: Network,
 	address: WalletAddress,
 	amount: Usdt,
 ) -> Result<Withdrawal, DomainError> {
+	// Rail gate — the withdrawable view no longer offers an unconfigured rail, but a
+	// direct API caller could otherwise queue a withdrawal that only a manual operator
+	// settle (the stub custody fallthrough) could ever ship. Pre-existing withdrawals
+	// on a since-de-configured rail stay listable/cancellable.
+	if !configured.contains(&network) {
+		return Err(DomainError::Validation(format!("{network} withdrawals are not available")));
+	}
 	// KYC/freeze gate — a disabled account may not move money out.
 	let account = users.find_by_id(user).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "user",

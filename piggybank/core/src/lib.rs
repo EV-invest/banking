@@ -24,6 +24,7 @@
 
 use std::sync::Arc;
 
+use domain::money::Network;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use ports::{Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
@@ -70,6 +71,10 @@ pub struct AppState {
 	/// The custody gateway (the same registry the relay broadcasts through) — read-only
 	/// here: the withdrawal handlers gate dispatch on its on-chain treasury liquidity.
 	pub custody: Arc<dyn Custody>,
+	/// The rails with a running on-chain watcher — the wallet surface presents
+	/// deposit/withdraw rails only for these, and the health probe reports scan-cursor
+	/// age only for these.
+	pub configured_networks: Arc<[Network]>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
 	/// User ids permitted to call admin RPCs (config allowlist; see [`config`]).
@@ -92,6 +97,7 @@ impl AppState {
 		positions: Arc<dyn FundPositionReader>,
 		deposit_addresses: Arc<dyn DepositAddresses>,
 		custody: Arc<dyn Custody>,
+		configured_networks: Arc<[Network]>,
 		relay_notify: Arc<Notify>,
 		admin_subjects: Arc<[String]>,
 	) -> Self {
@@ -109,6 +115,7 @@ impl AppState {
 			positions,
 			deposit_addresses,
 			custody,
+			configured_networks,
 			relay_notify,
 			admin_subjects,
 		}

@@ -290,6 +290,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		positions,
 		deposit_addresses,
 		custody,
+		Arc::from(config.configured_networks()),
 		relay_notify,
 		Arc::from(config.admin_subjects.clone()),
 	);
