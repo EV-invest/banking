@@ -60,7 +60,41 @@ service BalanceService {
   // Admin (OperationsManage): toggle read-only mode. When on, every user money mutation
   // (withdraw / subscribe / redeem) is rejected — "pause deposits & withdrawals".
   rpc SetOperationsMode(SetOperationsModeRequest) returns (OperationsMode);
+
+  // Operator (TreasuryRead): outbox rows the relay parked (needs-intervention).
+  rpc ListParkedEvents(ListParkedEventsRequest) returns (ParkedEventList);
+
+  // Admin (OutboxManage): clear `parked_at` so the relay re-drives the event once the
+  // cause is fixed; refused for a compensated row — its recovery event already
+  // applied, so re-driving would double-apply.
+  rpc UnparkEvent(UnparkEventRequest) returns (UnparkEventResponse);
 }
+
+message ListParkedEventsRequest {}
+
+// One parked outbox row. `reason` is the relay's last error; `parked_at` is unix
+// seconds; `compensated` marks a half-applied event whose recovery already ran
+// (never unparkable).
+message ParkedEvent {
+  int64 seq = 1;
+  string event_id = 2;
+  string aggregate = 3;
+  string aggregate_id = 4;
+  string kind = 5;
+  string reason = 6;
+  int64 parked_at = 7;
+  bool compensated = 8;
+}
+
+message ParkedEventList {
+  repeated ParkedEvent events = 1;
+}
+
+message UnparkEventRequest {
+  int64 seq = 1;
+}
+
+message UnparkEventResponse {}
 
 message ListRedemptionQueueRequest {}
 
@@ -91,10 +125,15 @@ message SetOperationsModeRequest {
 
 message GetTreasuryRequest {}
 
-// Per-rail on-chain liquidity (the treasury / Layer 2).
+// Per-rail on-chain liquidity (the treasury / Layer 2). The `treasury_*`/`onchain_*`
+// fields are the operator funding view, read best-effort from the chain — empty means
+// the rail is unconfigured or the read was unavailable, never an error.
 message RailLiquidity {
-  string network = 1;  // bep20 | trc20 | ton
-  string custody = 2;  // liquid on-chain USDT held in this rail's custody wallet
+  string network = 1;           // bep20 | trc20 | ton
+  string custody = 2;           // liquid on-chain USDT held in this rail's custody wallet
+  string treasury_address = 3;  // the rail's hot wallet — fund USDT (liquidity) + gas here
+  string onchain_usdt = 4;      // decimal USDT actually on-chain in the treasury wallet
+  string onchain_gas = 5;       // decimal native units (BNB | TRX | TON) for gas
 }
 
 // The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).

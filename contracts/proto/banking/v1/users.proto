@@ -36,6 +36,11 @@ service UsersService {
 }
 
 message AdminBalanceRequest {
+  // The target: the CONCIERGE user id (the handle the operator console carries from
+  // the identity plane's ListUsers) or the banking user id. Resolution is
+  // concierge-first via the bridge mirror (`users.concierge_user_id`), falling back
+  // to the banking id (existing money-plane callers stay valid); an id matching
+  // neither returns NOT_FOUND — never an authoritative zero.
   string user_id = 1;
 }
 
