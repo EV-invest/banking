@@ -234,13 +234,24 @@ function DepositPanel({ wallet }: { wallet: Wallet | null }) {
   );
 }
 
+// What the user reviewed, frozen at the "Review" click — Confirm submits exactly this
+// even if a wallet refetch changes the live selection underneath the open confirm.
+interface ReviewedWithdrawal {
+  network: string;
+  address: string;
+  amount: string;
+  fee: string | undefined;
+  instant: string | undefined;
+  rails: string; // the rail list at review time — a changed list voids the review
+}
+
 function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () => void }) {
   const networks = networksOf(wallet?.withdrawable);
   const [selected, setSelected] = useState<string | null>(null);
   const network = selected ?? networks[0] ?? "";
   const [address, setAddress] = useState("");
   const [amount, setAmount] = useState("");
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<ReviewedWithdrawal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Withdrawal | null>(null);
@@ -251,12 +262,18 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
   const youReceive = subUsdt(amount, opts?.withdrawal_fee); // decimal string
   const queuedUnits = amountUnits - toBaseUnits(opts?.instant); // > 0 ⇒ partly queued
 
+  // A wallet refetch that changes the rail list invalidates an open review — the
+  // snapshot may point at a rail that no longer exists (guarded render-time reset).
+  const rails = networks.join(",");
+  if (confirming && confirming.rails !== rails) setConfirming(null);
+
   const submit = async () => {
+    if (submitting || !confirming) return;
     setSubmitting(true);
     setError(null);
     setDone(null);
     try {
-      const withdrawal = await submitWithdrawal({ network, address, amount });
+      const withdrawal = await submitWithdrawal({ network: confirming.network, address: confirming.address, amount: confirming.amount });
       setDone(withdrawal);
       setAddress("");
       setAmount("");
@@ -265,7 +282,7 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
       setError((e as Error).message);
     } finally {
       setSubmitting(false);
-      setConfirming(false);
+      setConfirming(null);
     }
   };
 
@@ -281,7 +298,7 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
         value={network}
         onChange={(n) => {
           setSelected(n);
-          setConfirming(false);
+          setConfirming(null);
         }}
       />
 
@@ -312,7 +329,7 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
               value={address}
               onChange={(e) => {
                 setAddress(e.target.value);
-                setConfirming(false);
+                setConfirming(null);
               }}
               placeholder={`${networkLabel(network)} address`}
               spellCheck={false}
@@ -327,7 +344,7 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
                 className="text-xs text-main-accent-t1 hover:underline"
                 onClick={() => {
                   setAmount(opts?.withdrawable ?? "0");
-                  setConfirming(false);
+                  setConfirming(null);
                 }}
               >
                 Available {formatUsdt(opts?.withdrawable)} · Max
@@ -337,7 +354,7 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
               value={amount}
               onChange={(e) => {
                 setAmount(e.target.value);
-                setConfirming(false);
+                setConfirming(null);
               }}
               inputMode="decimal"
               placeholder="0.00"
@@ -359,7 +376,12 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
           </div>
 
           {!confirming ? (
-            <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={!valid || submitting} onClick={() => setConfirming(true)}>
+            <Button
+              type="button"
+              className={cn("w-full", TEAL_CTA)}
+              disabled={!valid || submitting}
+              onClick={() => setConfirming({ network, address, amount, fee: opts?.withdrawal_fee, instant: opts?.instant, rails })}
+            >
               <ArrowUpFromLine className="size-4" />
               Review withdrawal
             </Button>
@@ -367,15 +389,16 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
             <div className="space-y-3 rounded-lg border border-main-accent-t1/40 bg-main-accent-t1/[0.06] p-4">
               <p className="text-sm font-semibold">Confirm withdrawal</p>
               <div className="space-y-1 text-sm">
-                <Row label="Network" value={networkLabel(network)} />
-                <Row label="Amount" value={`${formatUsdt(amount)} USDT`} />
-                <Row label="Network fee" value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} />
-                <Row label="You will receive" value={`${formatUsdt(youReceive)} USDT`} strong />
+                <Row label="Network" value={networkLabel(confirming.network)} />
+                <Row label="Amount" value={`${formatUsdt(confirming.amount)} USDT`} />
+                <Row label="Network fee" value={`${formatUsdt(confirming.fee)} USDT`} />
+                <Row label="You will receive" value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} strong />
               </div>
-              <p className="break-all font-mono-tech text-xs text-muted-foreground">To {address}</p>
-              {queuedUnits > 0n && amountUnits > 0n && (
+              <p className="break-all font-mono-tech text-xs text-muted-foreground">To {confirming.address}</p>
+              {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
                 <p className="text-xs text-main-accent-t3">
-                  ~{formatUsdt(fromBaseUnits(queuedUnits))} USDT exceeds instant {networkLabel(network)} liquidity and will be queued until the rail is topped up.
+                  ~{formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant)))} USDT exceeds instant {networkLabel(confirming.network)}{" "}
+                  liquidity and will be queued until the rail is topped up.
                 </p>
               )}
               <div className="flex gap-2">
@@ -383,7 +406,7 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
                   {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpFromLine className="size-4" />}
                   Confirm withdrawal
                 </Button>
-                <Button type="button" variant="outline" disabled={submitting} onClick={() => setConfirming(false)}>
+                <Button type="button" variant="outline" disabled={submitting} onClick={() => setConfirming(null)}>
                   Back
                 </Button>
               </div>
@@ -500,8 +523,10 @@ function ActivityPanel() {
             </div>
           );
         })}
-        {sortedDeposits.map((d) => (
-          <div key={`d-${d.tx_ref ?? ""}`} className="flex items-center justify-between gap-4 px-4 py-3">
+        {sortedDeposits.map((d, i) => (
+          // tx_ref alone can be missing (or repeat for multi-output txs) — suffix with
+          // created_at + position so React keys stay unique.
+          <div key={`d-${d.tx_ref ?? ""}-${d.created_at ?? ""}-${i}`} className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0 space-y-0.5">
               <p className="text-sm">
                 <span className="font-medium">+{formatUsdt(d.amount)} USDT</span> <span className="text-muted-foreground">deposit</span>
