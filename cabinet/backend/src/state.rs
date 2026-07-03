@@ -335,6 +335,16 @@ impl Grpc {
 		Ok(self.balance().fail_redemption(bearer(token, req)?).await?.into_inner())
 	}
 
+	pub async fn parked_events(&self, token: &str) -> Result<bk::ParkedEventList, Status> {
+		Ok(self.balance().list_parked_events(bearer(token, bk::ListParkedEventsRequest {})?).await?.into_inner())
+	}
+
+	pub async fn unpark_event(&self, token: &str, seq: i64) -> Result<(), Status> {
+		let req = bk::UnparkEventRequest { seq };
+		self.balance().unpark_event(bearer(token, req)?).await?;
+		Ok(())
+	}
+
 	pub async fn operations_mode(&self, token: &str) -> Result<bk::OperationsMode, Status> {
 		Ok(self.balance().get_operations_mode(bearer(token, bk::GetOperationsModeRequest {})?).await?.into_inner())
 	}

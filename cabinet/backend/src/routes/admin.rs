@@ -270,6 +270,31 @@ pub async fn fail_redemption(State(st): State<AppState>, jar: CookieJar, headers
 	Ok(Json(st.grpc.fail_redemption(&token, &id).await?.into()))
 }
 
+// ── outbox (banking money plane) ────────────────────────────────────────────────
+
+/// `GET /api/admin/outbox/parked` — outbox rows the relay parked (needs-intervention).
+pub async fn parked_events(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::ParkedEventList>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let token = require_money_token(&st, &jar).await?;
+	let list = st.grpc.parked_events(&token).await.map_err(|s| ApiError::read(s, "parked events unavailable"))?;
+	Ok(Json(list.into()))
+}
+
+/// `POST /api/admin/outbox/unpark` — CSRF-checked: clear a park so the relay re-drives
+/// the event (the hub refuses compensated/dispatched rows).
+pub async fn unpark_event(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let Some(seq) = required(&parse_body(&body), "seq").and_then(|s| s.parse::<i64>().ok()) else {
+		return Err(ApiError::BadRequest("seq is required".into()));
+	};
+	st.grpc.unpark_event(&token, seq).await?;
+	Ok(Json(json!({ "ok": true })))
+}
+
 // ── cabinet (concierge platform config + banking read-only kill-switch) ─────────
 
 /// `GET /api/admin/cabinet` — platform config (concierge) + the money-plane read-only

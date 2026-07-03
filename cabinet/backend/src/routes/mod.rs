@@ -73,6 +73,8 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/admin/valuation/post", post(admin::post_valuation))
 		.route("/api/admin/valuation/settle", post(admin::settle_redemption))
 		.route("/api/admin/valuation/fail", post(admin::fail_redemption))
+		.route("/api/admin/outbox/parked", get(admin::parked_events))
+		.route("/api/admin/outbox/unpark", post(admin::unpark_event))
 		.route("/api/admin/cabinet", get(admin::cabinet_config))
 		.route("/api/admin/cabinet/maintenance", post(admin::set_maintenance))
 		.route("/api/admin/cabinet/read-only", post(admin::set_read_only))

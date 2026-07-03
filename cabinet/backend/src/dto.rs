@@ -496,10 +496,16 @@ impl From<bk::UserBalanceResponse> for UserBalance {
 	}
 }
 
+/// Per-rail liquidity plus the operator funding view (`treasury_*`/`onchain_*` are
+/// best-effort chain reads — empty means the rail is unconfigured or the read was
+/// unavailable, never an error).
 #[derive(Serialize)]
 pub struct RailLiquidity {
 	pub network: String,
 	pub custody: String,
+	pub treasury_address: String,
+	pub onchain_usdt: String,
+	pub onchain_gas: String,
 }
 
 /// The two-layer treasury picture (Treasury screen).
@@ -523,6 +529,9 @@ impl From<bk::Treasury> for Treasury {
 				.map(|r| RailLiquidity {
 					network: r.network,
 					custody: r.custody,
+					treasury_address: r.treasury_address,
+					onchain_usdt: r.onchain_usdt,
+					onchain_gas: r.onchain_gas,
 				})
 				.collect(),
 			bank: t.bank,
@@ -531,6 +540,49 @@ impl From<bk::Treasury> for Treasury {
 			fee_revenue: t.fee_revenue,
 			held_for_clients: t.held_for_clients,
 			reserved_for_withdrawals: t.reserved_for_withdrawals,
+		}
+	}
+}
+
+/// One outbox row the relay parked — the "money didn't move" set (Overview screen).
+/// `reason` is the relay's last error; a `compensated` row already ran its recovery and
+/// must never be unparked (the hub refuses).
+#[derive(Serialize)]
+pub struct ParkedEvent {
+	pub seq: String,
+	pub event_id: String,
+	pub aggregate: String,
+	pub aggregate_id: String,
+	pub kind: String,
+	pub reason: String,
+	pub parked_at: String,
+	pub compensated: bool,
+}
+
+impl From<bk::ParkedEvent> for ParkedEvent {
+	fn from(e: bk::ParkedEvent) -> Self {
+		Self {
+			seq: e.seq.to_string(),
+			event_id: e.event_id,
+			aggregate: e.aggregate,
+			aggregate_id: e.aggregate_id,
+			kind: e.kind,
+			reason: e.reason,
+			parked_at: e.parked_at.to_string(),
+			compensated: e.compensated,
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct ParkedEventList {
+	pub events: Vec<ParkedEvent>,
+}
+
+impl From<bk::ParkedEventList> for ParkedEventList {
+	fn from(l: bk::ParkedEventList) -> Self {
+		Self {
+			events: l.events.into_iter().map(ParkedEvent::from).collect(),
 		}
 	}
 }
