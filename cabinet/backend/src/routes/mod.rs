@@ -2,6 +2,7 @@ pub mod admin;
 pub mod auth;
 pub mod identity;
 pub mod money;
+pub mod platform;
 pub mod system;
 
 use std::time::Duration;
@@ -39,6 +40,7 @@ pub fn router(state: AppState) -> Router {
 	Router::new()
 		.route("/api/health", get(system::health))
 		.route("/api/mfe-registry", get(system::mfe_registry))
+		.route("/api/platform", get(platform::status))
 		.route("/api/auth/login", get(auth::login))
 		.route("/api/auth/callback", get(auth::callback))
 		.route("/api/auth/session", get(auth::session))
