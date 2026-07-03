@@ -11,14 +11,22 @@
 //!   - an abandoned `processing` withdrawal is surfaced by the reaper (alert-only, never
 //!     auto-voided), and an abandoned `queued` withdrawal is auto-cancelled (BANK-FAULT-04).
 
-use std::{sync::Arc, time::Duration};
+use std::{
+	sync::{
+		Arc,
+		atomic::{AtomicUsize, Ordering},
+	},
+	time::Duration,
+};
 
+use async_trait::async_trait;
 use domain::{
+	architecture::Gateway,
 	auth::AuthSubject,
 	balance::Party,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
-	withdrawals::WithdrawalState,
+	withdrawals::{WithdrawalEvent, WithdrawalState},
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
@@ -35,7 +43,7 @@ use piggybank_core::{
 		users::PgUsers,
 		withdrawals::PgWithdrawals,
 	},
-	ports::{RedemptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{BroadcastRequest, Custody, CustodyError, RedemptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -221,6 +229,94 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	assert_eq!(after_processing.state(), WithdrawalState::Processing, "the reaper never auto-voids a processing withdrawal");
 	let after_queued = h.withdrawals.find_by_id(queued.id()).await.unwrap().unwrap();
 	assert_eq!(after_queued.state(), WithdrawalState::Cancelled, "the abandoned queued withdrawal was refunded");
+}
+
+/// The broadcast-state guard: a `Dispatched` event unparked AFTER the withdrawal was
+/// failed (its clearing reservation voided, the user refunded) must be parked again —
+/// custody is never called, so the unpark-after-fail double-pay hazard (a real on-chain
+/// send with nothing locked behind it) is structurally impossible, not just a runbook
+/// discipline. The parked `Dispatched` row is injected to mirror the incident shape (a
+/// custody park), because a live one is only drainable while the row is `processing`.
+#[tokio::test]
+async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
+	let Some(h) = harness().await else { return };
+	let network = Network::Trc20;
+	let user = active_user(&h).await;
+	// Fund the claim on BEP20 and withdraw a gross no rail can cover, so the request is
+	// accepted-and-queued deterministically on the shared rails (same shape as the reaper
+	// test); the reserve then applies and its saga step is recorded.
+	let big = usdt("1000000000");
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, big)
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	let withdrawal = withdrawal_app::request_withdrawal(h.withdrawals.as_ref(), h.ledger.as_ref(), h.users.as_ref(), &h.notify, user, network, destination(network), big)
+		.await
+		.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+
+	// Operator dispatch, then fail (a confirmed not-broadcast) — the void refunds in full.
+	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
+	h.relay.drain().await;
+	withdrawal_app::fail_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
+	h.relay.drain().await;
+
+	// Inject the incident's parked `Dispatched` row for the now-failed withdrawal, then
+	// "recover" it the wrong way: unpark it as if an operator ran the SQL after the fail.
+	let event = WithdrawalEvent::Dispatched {
+		withdrawal_id: withdrawal.id(),
+		user,
+		network,
+		address: destination(network),
+		amount: withdrawal.amount(),
+		fee: withdrawal.fee(),
+	};
+	let event_id = Uuid::new_v4();
+	sqlx::query("INSERT INTO outbox (event_id, aggregate, aggregate_id, kind, payload, parked_at, last_error) VALUES ($1, 'withdrawals', $2, 'withdrawals', $3::jsonb, now(), 'custody rejected: treasury underfunded on-chain (test)')")
+		.bind(event_id)
+		.bind(withdrawal.id().raw())
+		.bind(serde_json::to_string(&event).unwrap())
+		.execute(&h.pool)
+		.await
+		.expect("inject the parked Dispatched row");
+	sqlx::query("UPDATE outbox SET parked_at = NULL, last_error = NULL WHERE event_id = $1")
+		.bind(event_id)
+		.execute(&h.pool)
+		.await
+		.expect("unpark the Dispatched row");
+
+	// Drain with a counting custody: the guard must park the event again without a send.
+	let broadcasts = Arc::new(AtomicUsize::new(0));
+	let relay = Relay::new(h.pool.clone(), h.ledger.clone(), Arc::new(CountingCustody { broadcasts: broadcasts.clone() }), h.notify.clone());
+	relay.drain().await;
+
+	let (is_dispatched, is_parked, last_error): (bool, bool, Option<String>) =
+		sqlx::query_as("SELECT dispatched_at IS NOT NULL, parked_at IS NOT NULL, last_error FROM outbox WHERE event_id = $1")
+			.bind(event_id)
+			.fetch_one(&h.pool)
+			.await
+			.expect("the re-parked row is still queryable");
+	assert!(!is_dispatched, "the unparked Dispatched event must never be marked dispatched");
+	assert!(is_parked, "the guard must park the event again");
+	assert!(last_error.is_some_and(|e| e.contains("not processing")), "the park reason names the state guard");
+	assert_eq!(broadcasts.load(Ordering::SeqCst), 0, "custody must never see a broadcast for a non-processing withdrawal");
+}
+
+/// A counting custody port adapter (no chain): every broadcast is recorded and refused, so
+/// a guard regression is observable as both a call count and a park-not-dispatch.
+struct CountingCustody {
+	broadcasts: Arc<AtomicUsize>,
+}
+
+impl Gateway for CountingCustody {}
+
+#[async_trait]
+impl Custody for CountingCustody {
+	async fn broadcast(&self, _request: &BroadcastRequest) -> Result<(), CustodyError> {
+		self.broadcasts.fetch_add(1, Ordering::SeqCst);
+		Err(CustodyError::Rejected("test custody refuses every broadcast".into()))
+	}
 }
 
 /// Push a withdrawal's last transition past the reaper's abandonment window.

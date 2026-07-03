@@ -325,6 +325,16 @@ impl Relay {
 				Ok(false) => return Outcome::park("withdrawal reserve never applied to the ledger (parked?) — refusing to broadcast".into()),
 				Err(err) => return Outcome::Retry(format!("reserve-applied check: {err}")),
 			}
+			// The withdrawal row must still be `processing`: a `Dispatched` event unparked
+			// AFTER the withdrawal was failed/cancelled (its reservation voided) would
+			// otherwise send real money with nothing locked behind it — the runbook's
+			// unpark-after-fail double-pay hazard, made structurally impossible here.
+			match withdrawal_state(&self.pool, row.aggregate_id).await {
+				Ok(Some(state)) if state == "processing" => {}
+				Ok(Some(state)) => return Outcome::park(format!("withdrawal is {state}, not processing — refusing to broadcast")),
+				Ok(None) => return Outcome::park("withdrawal row is missing — refusing to broadcast".into()),
+				Err(err) => return Outcome::Retry(format!("broadcast-state check: {err}")),
+			}
 		}
 		// Track applied legs so a park *after* an earlier leg posted (`applied > 0`) is flagged
 		// half-applied — the genuine residual a balance pre-check can't predict (a bare TB
@@ -762,6 +772,12 @@ async fn reserve_applied(pool: &PgPool, aggregate_id: Uuid) -> Result<bool, sqlx
 		.bind(&reserve_tid.to_be_bytes()[..])
 		.fetch_one(pool)
 		.await
+}
+
+/// The withdrawal row's current state — the broadcast Read-First's second guard (beside
+/// [`reserve_applied`]): only a `processing` withdrawal may broadcast.
+async fn withdrawal_state(pool: &PgPool, aggregate_id: Uuid) -> Result<Option<String>, sqlx::Error> {
+	sqlx::query_scalar("SELECT state FROM withdrawals WHERE id = $1").bind(aggregate_id).fetch_optional(pool).await
 }
 
 async fn record_saga_step(pool: &PgPool, event_id: Uuid, leg: i32, role: &str, transfer_id: u128) -> Result<(), sqlx::Error> {
