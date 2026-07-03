@@ -1,18 +1,25 @@
 "use client";
 
-import { Activity, RefreshCw, TriangleAlert } from "lucide-react";
+import { Activity, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
-import { fetchOverview } from "@/entities/admin/api/admin-client";
-import type { AdminOverview } from "@/shared/contracts/admin";
+import { fetchOverview, fetchParkedEvents, unparkEvent } from "@/entities/admin/api/admin-client";
+import type { AdminOverview, ParkedEvent } from "@/shared/contracts/admin";
+import { ago } from "@/views/admin/lib/format";
 import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
 
 export function OverviewView() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [parked, setParked] = useState<ParkedEvent[] | null>(null);
+  // Best-effort: a money plane that isn't connected renders as a muted hint, not an
+  // error banner — the fleet grid above must stay useful without it.
+  const [parkedHint, setParkedHint] = useState<string | null>(null);
+  const [unparkError, setUnparkError] = useState<string | null>(null);
+  const [unparking, setUnparking] = useState<string | null>(null);
 
   // Manual "Run health check" (event handler — may set state synchronously).
   const load = useCallback(() => {
@@ -37,10 +44,37 @@ export function OverviewView() {
         setError(null);
       })
       .catch((e: Error) => active && setError(e.message));
+    fetchParkedEvents()
+      .then((l) => {
+        if (!active) return;
+        setParked(l.events ?? []);
+        setParkedHint(null);
+      })
+      .catch((e: Error) => {
+        if (!active) return;
+        setParked([]);
+        setParkedHint(e.message);
+      });
     return () => {
       active = false;
     };
   }, []);
+
+  const unpark = async (seq: string) => {
+    setUnparking(seq);
+    setUnparkError(null);
+    try {
+      await unparkEvent(seq);
+      // Re-fetch both so the "Parked rows" KPI drops together with the list.
+      const [list, o] = await Promise.all([fetchParkedEvents(), fetchOverview()]);
+      setParked(list.events ?? []);
+      setOverview(o);
+    } catch (e) {
+      setUnparkError((e as Error).message);
+    } finally {
+      setUnparking(null);
+    }
+  };
 
   const healthy = overview?.services.filter((s) => s.status === "healthy").length ?? 0;
   const totalServices = overview?.services.length ?? 0;
@@ -117,6 +151,67 @@ export function OverviewView() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardContent className="space-y-4 py-5">
+          <div>
+            <h2 className="text-base font-semibold">Parked events</h2>
+            <p className="text-xs text-muted-foreground">Outbox rows the relay couldn&apos;t apply — fix the cause, then unpark to re-drive</p>
+          </div>
+          {unparkError && (
+            <p className="flex items-center gap-2 text-xs text-destructive">
+              <TriangleAlert className="size-3.5" /> {unparkError}
+            </p>
+          )}
+          {!parked ? (
+            <Skeleton className="h-16 w-full" />
+          ) : parkedHint ? (
+            <p className="text-sm text-muted-foreground">{parkedHint}</p>
+          ) : parked.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No parked events — the relay is clean.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="py-2 font-medium">Seq</th>
+                  <th className="py-2 font-medium">Event</th>
+                  <th className="py-2 font-medium">Reason</th>
+                  <th className="py-2 font-medium">Parked</th>
+                  <th className="py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {parked.map((e) => (
+                  <tr key={e.seq}>
+                    <td className="py-2.5 font-mono-tech text-xs text-muted-foreground">{e.seq}</td>
+                    <td className="py-2.5">
+                      <p className="font-medium">{e.kind}</p>
+                      <p className="font-mono-tech text-xs text-muted-foreground">
+                        {e.aggregate} · {e.aggregate_id}
+                      </p>
+                    </td>
+                    <td className="py-2.5 text-muted-foreground">
+                      <div className="max-w-[280px] truncate" title={e.reason}>
+                        {e.reason || "—"}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap py-2.5 text-muted-foreground">{ago(e.parked_at)}</td>
+                    <td className="py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {e.compensated && <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-xs font-medium text-main-mist">compensated</span>}
+                        <Button type="button" variant="outline" size="sm" disabled={e.compensated || unparking !== null} onClick={() => void unpark(e.seq)}>
+                          {unparking === e.seq ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                          Unpark
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
