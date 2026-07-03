@@ -204,7 +204,11 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   wedge the queue, and nothing is silently dropped. A park *after* an earlier leg of a
   multi-leg event posted is flagged half-applied (`compensated_at`); the
   [`reconciliation`](src/infrastructure/reconciliation.rs) job surfaces every parked row
-  for intervention (TB-reversal of the applied legs is still a follow-up).
+  for intervention (TB-reversal of the applied legs is still a follow-up). Parked rows
+  are operator-unparkable once the cause is fixed (`BalanceService.UnparkEvent`:
+  `parked_at` cleared **and** `attempts` reset — a retry-exhausted row would otherwise
+  re-park on first redelivery — then the relay is notified); a **compensated** row is
+  refused, since its recovery event already applied and re-driving would double-apply.
 - Deposits are idempotent by the `deposits.tx_ref` **gate** (`ON CONFLICT DO NOTHING` →
   emit the event only if newly inserted), so a re-record never double-credits.
 - A withdrawal's clearing reservation gets a **withdrawal-derived** id
@@ -315,6 +319,9 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
 | `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
+| `GetUserBalance` | operator | `require_permission` (RBAC matrix); resolves the CONCIERGE id first via the bridge mirror (`users.concierge_user_id`), then the banking id; unknown ⇒ `NOT_FOUND` | — |
+| `ListParkedEvents` | operator | `require_permission` (RBAC matrix) | — |
+| `UnparkEvent` | admin (`OutboxManage`) | `require_permission` (RBAC matrix) | parked ∧ not dispatched ∧ **not compensated** (the double-apply guard) |
 
 `require_permission` (`services::support`) is `is_access` + the pure RBAC matrix
 (`domain::authz::grants` — the single place the matrix is defined) over the caller's
