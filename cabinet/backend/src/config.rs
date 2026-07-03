@@ -43,6 +43,16 @@ pub struct Config {
 	pub posthog_host: Option<String>,
 }
 impl Config {
+	/// The browser-facing zone prefix the cabinet is mounted under (Next `basePath`),
+	/// derived from `auth_redirect_uri`'s path: `…/cabinet/api/auth/callback` → `/cabinet`
+	/// (empty when the app is served at the origin root). Redirects the BFF emits are
+	/// zone-internal paths — the Next rewrite strips the prefix on the way in but never
+	/// re-adds it on `Location` headers, so the BFF must.
+	pub fn zone_base_path(&self) -> &str {
+		let path_start = self.auth_redirect_uri.find("://").map(|i| i + 3).and_then(|host| self.auth_redirect_uri[host..].find('/').map(|p| host + p)).unwrap_or(0);
+		self.auth_redirect_uri[path_start..].strip_suffix("/api/auth/callback").unwrap_or("")
+	}
+
 	pub fn from_env() -> anyhow::Result<Self> {
 		let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
 		// Mirrors the frontend's cookie logic: explicit AUTH_COOKIE_SECURE wins, else
@@ -65,7 +75,7 @@ impl Config {
 			banking_issuance_token: opt("BANKING_ISSUANCE_TOKEN").map(IssuanceToken),
 			concierge_grpc_addr: std::env::var("CONCIERGE_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50061".to_string()),
 			google_client_id: opt("GOOGLE_CLIENT_ID"),
-			auth_redirect_uri: std::env::var("AUTH_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/api/auth/callback".to_string()),
+			auth_redirect_uri: std::env::var("AUTH_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/cabinet/api/auth/callback".to_string()),
 			cookie_secure,
 			mfe_registry_path: std::env::var("MFE_REGISTRY_PATH").unwrap_or_else(|_| "cabinet/frontend/mfe-registry.json".to_string()),
 			mfe_allowed_origins: opt("MFE_ALLOWED_ORIGINS")

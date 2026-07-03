@@ -18,9 +18,18 @@
   }
   h1,
   h2,
-  h3 {
+  h3,
+  .font-serif-display {
     font-family: var(--font-serif);
     letter-spacing: -0.02em;
+  }
+
+  /* Brand-label texture used by the shared uikit Header (wordmark + nav) —
+     mirrors the conductor's globals; candidates for upstreaming into uikit
+     tokens.css so every consumer gets them. */
+  .font-mono-tech {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 }
 

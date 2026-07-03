@@ -14,7 +14,9 @@ import { Sidebar } from "@/application/layout/sidebar";
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      <Header nav={CONDUCTOR_NAV} />
+      {/* Forced opaque: unlike the conductor's hero, app content sits directly
+          under the bar, so the 0–50px transparent scroll state would overlap. */}
+      <Header nav={CONDUCTOR_NAV} className="bg-main-black/90 backdrop-blur-md border-main-mist/10" />
       <div className="flex min-h-screen bg-background pt-24">
         <Sidebar />
         <main className="min-w-0 flex-1">{children}</main>

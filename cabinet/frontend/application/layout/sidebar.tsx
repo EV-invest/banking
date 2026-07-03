@@ -50,7 +50,7 @@ export function Sidebar() {
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
   return (
-    <aside className="sticky top-0 flex h-screen w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
+    <aside className="sticky top-24 flex h-[calc(100vh-6rem)] w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
       <Link href="/" aria-label="EV Investment — home" className="block">
         <Logo className="h-9 w-auto text-main-mist" />
       </Link>
