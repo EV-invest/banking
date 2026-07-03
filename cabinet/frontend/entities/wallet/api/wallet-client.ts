@@ -4,7 +4,7 @@
 
 import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
-import type { DepositAddress, Wallet, Withdrawal, WithdrawalList } from "@/shared/contracts";
+import type { DepositAddress, DepositList, Wallet, Withdrawal, WithdrawalList } from "@/shared/contracts";
 
 async function getJson<T>(url: `/${string}`): Promise<T> {
   const res = await fetch(apiPath(url), { headers: { accept: "application/json" } });
@@ -23,6 +23,10 @@ export function fetchDepositAddress(network: string): Promise<DepositAddress> {
 
 export function fetchWithdrawals(): Promise<WithdrawalList> {
   return getJson<WithdrawalList>("/api/wallet/withdrawals");
+}
+
+export function fetchDeposits(): Promise<DepositList> {
+  return getJson<DepositList>("/api/wallet/deposits");
 }
 
 export async function submitWithdrawal(body: { network: string; address: string; amount: string }): Promise<Withdrawal> {
