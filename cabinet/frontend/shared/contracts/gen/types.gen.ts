@@ -10,6 +10,12 @@ export type ClientOptions = {
 export type BankingV1AdminBalanceRequest = {
     /**
      * user_id
+     *
+     * The target: the CONCIERGE user id (the handle the operator console carries from
+     * the identity plane's ListUsers) or the banking user id. Resolution is
+     * concierge-first via the bridge mirror (`users.concierge_user_id`), falling back
+     * to the banking id (existing money-plane callers stay valid); an id matching
+     * neither returns NOT_FOUND — never an authoritative zero.
      */
     user_id?: string;
 };
@@ -86,6 +92,38 @@ export type BankingV1CheckResponse = {
 };
 
 /**
+ * Deposit
+ *
+ * A confirmed on-chain deposit credited to the caller's unified balance.
+ */
+export type BankingV1Deposit = {
+    /**
+     * tx_ref
+     *
+     * on-chain transaction reference
+     */
+    tx_ref?: string;
+    /**
+     * network
+     *
+     * bep20 | trc20 | ton
+     */
+    network?: string;
+    /**
+     * amount
+     *
+     * credited decimal USDT
+     */
+    amount?: string;
+    /**
+     * created_at
+     *
+     * unix seconds the hub recorded the credit
+     */
+    created_at?: number | string;
+};
+
+/**
  * DepositAddress
  */
 export type BankingV1DepositAddress = {
@@ -103,6 +141,34 @@ export type BankingV1DepositAddress = {
      * confirmations before a deposit is credited
      */
     min_confirmations?: number;
+};
+
+/**
+ * DepositList
+ */
+export type BankingV1DepositList = {
+    /**
+     * deposits
+     */
+    deposits?: Array<BankingV1Deposit>;
+};
+
+/**
+ * DepositScanCursor
+ *
+ * Seconds since a rail's deposit watcher last advanced/touched its per-network scan
+ * cursor (refreshed only by a completed scan cycle, so age ≈ time since the last
+ * healthy cycle; thresholds are the consumer's concern).
+ */
+export type BankingV1DepositScanCursor = {
+    /**
+     * network
+     */
+    network?: string;
+    /**
+     * age_secs
+     */
+    age_secs?: number | string;
 };
 
 /**
@@ -358,6 +424,20 @@ export type BankingV1JwksResponse = {
 };
 
 /**
+ * ListDepositsRequest
+ */
+export type BankingV1ListDepositsRequest = {
+    [key: string]: never;
+};
+
+/**
+ * ListParkedEventsRequest
+ */
+export type BankingV1ListParkedEventsRequest = {
+    [key: string]: never;
+};
+
+/**
  * ListPositionsRequest
  */
 export type BankingV1ListPositionsRequest = {
@@ -482,6 +562,58 @@ export type BankingV1OperationsMode = {
 };
 
 /**
+ * ParkedEvent
+ *
+ * One parked outbox row. `reason` is the relay's last error; `parked_at` is unix
+ * seconds; `compensated` marks a half-applied event whose recovery already ran
+ * (never unparkable).
+ */
+export type BankingV1ParkedEvent = {
+    /**
+     * seq
+     */
+    seq?: number | string;
+    /**
+     * event_id
+     */
+    event_id?: string;
+    /**
+     * aggregate
+     */
+    aggregate?: string;
+    /**
+     * aggregate_id
+     */
+    aggregate_id?: string;
+    /**
+     * kind
+     */
+    kind?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+    /**
+     * parked_at
+     */
+    parked_at?: number | string;
+    /**
+     * compensated
+     */
+    compensated?: boolean;
+};
+
+/**
+ * ParkedEventList
+ */
+export type BankingV1ParkedEventList = {
+    /**
+     * events
+     */
+    events?: Array<BankingV1ParkedEvent>;
+};
+
+/**
  * Position
  *
  * A user's holding in one fund. `value = units × nav`; `pnl = value − cost_basis`
@@ -568,7 +700,9 @@ export type BankingV1PostFundValuationRequest = {
 /**
  * RailLiquidity
  *
- * Per-rail on-chain liquidity (the treasury / Layer 2).
+ * Per-rail on-chain liquidity (the treasury / Layer 2). The `treasury_*`/`onchain_*`
+ * fields are the operator funding view, read best-effort from the chain — empty means
+ * the rail is unconfigured or the read was unavailable, never an error.
  */
 export type BankingV1RailLiquidity = {
     /**
@@ -583,6 +717,24 @@ export type BankingV1RailLiquidity = {
      * liquid on-chain USDT held in this rail's custody wallet
      */
     custody?: string;
+    /**
+     * treasury_address
+     *
+     * the rail's hot wallet — fund USDT (liquidity) + gas here
+     */
+    treasury_address?: string;
+    /**
+     * onchain_usdt
+     *
+     * decimal USDT actually on-chain in the treasury wallet
+     */
+    onchain_usdt?: string;
+    /**
+     * onchain_gas
+     *
+     * decimal native units (BNB | TRX | TON) for gas
+     */
+    onchain_gas?: string;
 };
 
 /**
@@ -625,6 +777,14 @@ export type BankingV1ReadinessResponse = {
      * oldest_backlog_age_secs
      */
     oldest_backlog_age_secs?: number | string;
+    /**
+     * scan_cursors
+     *
+     * Per-rail deposit-scan diagnostics; only configured rails appear. A large age on
+     * a configured rail means the deposit scan is stalled — deposits confirm on-chain
+     * but are not credited. Diagnostics only: it does NOT gate `ready`.
+     */
+    scan_cursors?: Array<BankingV1DepositScanCursor>;
 };
 
 /**
@@ -1092,6 +1252,23 @@ export type BankingV1Treasury = {
      * of held_for_clients, locked by in-flight withdrawals
      */
     reserved_for_withdrawals?: string;
+};
+
+/**
+ * UnparkEventRequest
+ */
+export type BankingV1UnparkEventRequest = {
+    /**
+     * seq
+     */
+    seq?: number | string;
+};
+
+/**
+ * UnparkEventResponse
+ */
+export type BankingV1UnparkEventResponse = {
+    [key: string]: never;
 };
 
 /**
@@ -2370,6 +2547,35 @@ export type BankingV1BalanceServiceGetTreasuryResponses = {
 
 export type BankingV1BalanceServiceGetTreasuryResponse = BankingV1BalanceServiceGetTreasuryResponses[keyof BankingV1BalanceServiceGetTreasuryResponses];
 
+export type BankingV1BalanceServiceListParkedEventsData = {
+    body: BankingV1ListParkedEventsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/ListParkedEvents';
+};
+
+export type BankingV1BalanceServiceListParkedEventsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceListParkedEventsError = BankingV1BalanceServiceListParkedEventsErrors[keyof BankingV1BalanceServiceListParkedEventsErrors];
+
+export type BankingV1BalanceServiceListParkedEventsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1ParkedEventList;
+};
+
+export type BankingV1BalanceServiceListParkedEventsResponse = BankingV1BalanceServiceListParkedEventsResponses[keyof BankingV1BalanceServiceListParkedEventsResponses];
+
 export type BankingV1BalanceServiceListRedemptionQueueData = {
     body: BankingV1ListRedemptionQueueRequest;
     headers: {
@@ -2572,6 +2778,35 @@ export type BankingV1BalanceServiceSettleWithdrawalResponses = {
 };
 
 export type BankingV1BalanceServiceSettleWithdrawalResponse = BankingV1BalanceServiceSettleWithdrawalResponses[keyof BankingV1BalanceServiceSettleWithdrawalResponses];
+
+export type BankingV1BalanceServiceUnparkEventData = {
+    body: BankingV1UnparkEventRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/UnparkEvent';
+};
+
+export type BankingV1BalanceServiceUnparkEventErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceUnparkEventError = BankingV1BalanceServiceUnparkEventErrors[keyof BankingV1BalanceServiceUnparkEventErrors];
+
+export type BankingV1BalanceServiceUnparkEventResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1UnparkEventResponse;
+};
+
+export type BankingV1BalanceServiceUnparkEventResponse = BankingV1BalanceServiceUnparkEventResponses[keyof BankingV1BalanceServiceUnparkEventResponses];
 
 export type BankingV1FundsServiceCancelRedemptionData = {
     body: BankingV1CancelRedemptionRequest;
@@ -3094,6 +3329,35 @@ export type BankingV1WalletServiceGetWalletResponses = {
 };
 
 export type BankingV1WalletServiceGetWalletResponse = BankingV1WalletServiceGetWalletResponses[keyof BankingV1WalletServiceGetWalletResponses];
+
+export type BankingV1WalletServiceListDepositsData = {
+    body: BankingV1ListDepositsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.WalletService/ListDeposits';
+};
+
+export type BankingV1WalletServiceListDepositsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1WalletServiceListDepositsError = BankingV1WalletServiceListDepositsErrors[keyof BankingV1WalletServiceListDepositsErrors];
+
+export type BankingV1WalletServiceListDepositsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1DepositList;
+};
+
+export type BankingV1WalletServiceListDepositsResponse = BankingV1WalletServiceListDepositsResponses[keyof BankingV1WalletServiceListDepositsResponses];
 
 export type BankingV1WalletServiceListWithdrawalsData = {
     body: BankingV1ListWithdrawalsRequest;

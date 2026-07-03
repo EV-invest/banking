@@ -651,6 +651,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/ListParkedEvents": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "ListParkedEvents",
+        "description": "Operator (TreasuryRead): outbox rows the relay parked (needs-intervention).",
+        "operationId": "banking.v1.BalanceService.ListParkedEvents",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListParkedEventsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.ParkedEventList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/ListRedemptionQueue": {
       "post": {
         "tags": [
@@ -1057,6 +1116,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.SettleWithdrawalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/UnparkEvent": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "UnparkEvent",
+        "description": "Admin (OutboxManage): clear `parked_at` so the relay re-drives the event once the\n cause is fixed; refused for a compensated row — its recovery event already\n applied, so re-driving would double-apply.",
+        "operationId": "banking.v1.BalanceService.UnparkEvent",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.UnparkEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UnparkEventResponse"
                 }
               }
             }
@@ -2124,6 +2242,65 @@
         }
       }
     },
+    "/banking.v1.WalletService/ListDeposits": {
+      "post": {
+        "tags": [
+          "banking.v1.WalletService"
+        ],
+        "summary": "ListDeposits",
+        "description": "The caller's confirmed on-chain deposits, newest first.",
+        "operationId": "banking.v1.WalletService.ListDeposits",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListDepositsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.DepositList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.WalletService/ListWithdrawals": {
       "post": {
         "tags": [
@@ -3135,7 +3312,8 @@
         "properties": {
           "user_id": {
             "type": "string",
-            "title": "user_id"
+            "title": "user_id",
+            "description": "The target: the CONCIERGE user id (the handle the operator console carries from\n the identity plane's ListUsers) or the banking user id. Resolution is\n concierge-first via the bridge mirror (`users.concierge_user_id`), falling back\n to the banking id (existing money-plane callers stay valid); an id matching\n neither returns NOT_FOUND — never an authoritative zero."
           }
         },
         "title": "AdminBalanceRequest",
@@ -3207,6 +3385,38 @@
         "title": "CheckResponse",
         "additionalProperties": false
       },
+      "banking.v1.Deposit": {
+        "type": "object",
+        "properties": {
+          "tx_ref": {
+            "type": "string",
+            "title": "tx_ref",
+            "description": "on-chain transaction reference"
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "credited decimal USDT"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64",
+            "description": "unix seconds the hub recorded the credit"
+          }
+        },
+        "title": "Deposit",
+        "additionalProperties": false,
+        "description": "A confirmed on-chain deposit credited to the caller's unified balance."
+      },
       "banking.v1.DepositAddress": {
         "type": "object",
         "properties": {
@@ -3226,6 +3436,40 @@
         },
         "title": "DepositAddress",
         "additionalProperties": false
+      },
+      "banking.v1.DepositList": {
+        "type": "object",
+        "properties": {
+          "deposits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Deposit"
+            },
+            "title": "deposits"
+          }
+        },
+        "title": "DepositList",
+        "additionalProperties": false
+      },
+      "banking.v1.DepositScanCursor": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network"
+          },
+          "age_secs": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "age_secs",
+            "format": "int64"
+          }
+        },
+        "title": "DepositScanCursor",
+        "additionalProperties": false,
+        "description": "Seconds since a rail's deposit watcher last advanced/touched its per-network scan\n cursor (refreshed only by a completed scan cycle, so age ≈ time since the last\n healthy cycle; thresholds are the consumer's concern)."
       },
       "banking.v1.DisableUserRequest": {
         "type": "object",
@@ -3462,6 +3706,16 @@
         "title": "JwksResponse",
         "additionalProperties": false
       },
+      "banking.v1.ListDepositsRequest": {
+        "type": "object",
+        "title": "ListDepositsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListParkedEventsRequest": {
+        "type": "object",
+        "title": "ListParkedEventsRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListPositionsRequest": {
         "type": "object",
         "title": "ListPositionsRequest",
@@ -3573,6 +3827,68 @@
         "title": "OperationsMode",
         "additionalProperties": false
       },
+      "banking.v1.ParkedEvent": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "seq",
+            "format": "int64"
+          },
+          "event_id": {
+            "type": "string",
+            "title": "event_id"
+          },
+          "aggregate": {
+            "type": "string",
+            "title": "aggregate"
+          },
+          "aggregate_id": {
+            "type": "string",
+            "title": "aggregate_id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "parked_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "parked_at",
+            "format": "int64"
+          },
+          "compensated": {
+            "type": "boolean",
+            "title": "compensated"
+          }
+        },
+        "title": "ParkedEvent",
+        "additionalProperties": false,
+        "description": "One parked outbox row. `reason` is the relay's last error; `parked_at` is unix\n seconds; `compensated` marks a half-applied event whose recovery already ran\n (never unparkable)."
+      },
+      "banking.v1.ParkedEventList": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.ParkedEvent"
+            },
+            "title": "events"
+          }
+        },
+        "title": "ParkedEventList",
+        "additionalProperties": false
+      },
       "banking.v1.Position": {
         "type": "object",
         "properties": {
@@ -3667,11 +3983,26 @@
             "type": "string",
             "title": "custody",
             "description": "liquid on-chain USDT held in this rail's custody wallet"
+          },
+          "treasury_address": {
+            "type": "string",
+            "title": "treasury_address",
+            "description": "the rail's hot wallet — fund USDT (liquidity) + gas here"
+          },
+          "onchain_usdt": {
+            "type": "string",
+            "title": "onchain_usdt",
+            "description": "decimal USDT actually on-chain in the treasury wallet"
+          },
+          "onchain_gas": {
+            "type": "string",
+            "title": "onchain_gas",
+            "description": "decimal native units (BNB | TRX | TON) for gas"
           }
         },
         "title": "RailLiquidity",
         "additionalProperties": false,
-        "description": "Per-rail on-chain liquidity (the treasury / Layer 2)."
+        "description": "Per-rail on-chain liquidity (the treasury / Layer 2). The `treasury_*`/`onchain_*`\n fields are the operator funding view, read best-effort from the chain — empty means\n the rail is unconfigured or the read was unavailable, never an error."
       },
       "banking.v1.ReadinessRequest": {
         "type": "object",
@@ -3716,6 +4047,14 @@
             ],
             "title": "oldest_backlog_age_secs",
             "format": "int64"
+          },
+          "scan_cursors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.DepositScanCursor"
+            },
+            "title": "scan_cursors",
+            "description": "Per-rail deposit-scan diagnostics; only configured rails appear. A large age on\n a configured rail means the deposit scan is stalled — deposits confirm on-chain\n but are not credited. Diagnostics only: it does NOT gate `ready`."
           }
         },
         "title": "ReadinessResponse",
@@ -4193,6 +4532,26 @@
         "title": "Treasury",
         "additionalProperties": false,
         "description": "The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).\n Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset\n side) equals the sum of all claims — so client liabilities are the remainder beyond\n the fund's own capital and retained fees."
+      },
+      "banking.v1.UnparkEventRequest": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "seq",
+            "format": "int64"
+          }
+        },
+        "title": "UnparkEventRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.UnparkEventResponse": {
+        "type": "object",
+        "title": "UnparkEventResponse",
+        "additionalProperties": false
       },
       "banking.v1.UpdateProfileRequest": {
         "type": "object",
