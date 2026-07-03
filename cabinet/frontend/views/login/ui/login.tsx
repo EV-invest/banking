@@ -1,5 +1,6 @@
 import { Logo } from "@/application/layout/logo";
 import { safeReturnTo } from "@/features/auth/lib/return-to";
+import { apiPath } from "@/shared/config/base-path";
 
 const ERRORS: Record<string, string> = {
   denied: "Sign-in was cancelled.",
@@ -15,7 +16,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
   const message = error ? (ERRORS[error] ?? "Sign-in failed. Please try again.") : null;
   const dest = safeReturnTo(returnTo ?? null);
   // Full navigation (not a client route): the BFF redirects to Google.
-  const href = dest === "/" ? "/api/auth/login" : `/api/auth/login?returnTo=${encodeURIComponent(dest)}`;
+  const href = dest === "/" ? apiPath("/api/auth/login") : apiPath(`/api/auth/login?returnTo=${encodeURIComponent(dest)}`);
 
   return (
     <div className="flex min-h-screen">

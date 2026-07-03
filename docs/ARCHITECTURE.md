@@ -239,7 +239,11 @@ roots, and global tokens/uikit must cascade in.
   _Open item:_ prove multiple independent Dioxus instances per page before relying
   on it.
 - **Rejected:** Next.js Multi-Zones as the primary mechanism (path-only; can't
-  embed a widget). It may return later only for standalone legacy sub-sites.
+  embed a widget). It IS used one level up, in the sanctioned standalone-sub-site
+  form: the cabinet itself is mounted as a zone of the `site_conductor` domain
+  (`basePath: "/cabinet"`; the conductor rewrites `/cabinet/*` here — see
+  `cabinet/frontend/shared/config/base-path.ts`). Widget-level composition inside
+  cabinet pages stays custom-elements-only.
 
 **BFF (orthogonal).** The cabinet **backend** (`cabinet/backend`, axum) proxies
 browser HTTP to the hub's tonic backend (and the concierge identity plane) over gRPC, using

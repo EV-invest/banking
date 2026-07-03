@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { Logo } from "@/application/layout/logo";
+import { apiPath, withBasePath } from "@/shared/config/base-path";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { useSession } from "@/shared/lib/use-session";
@@ -129,7 +130,7 @@ function AccountChip() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/auth/session")
+    fetch(apiPath("/api/auth/session"))
       .then((r) => r.json() as Promise<{ authenticated: boolean; user?: { email: string } }>)
       .then((s) => {
         if (!active) return;
@@ -138,7 +139,7 @@ function AccountChip() {
           // Cookie present but the server-side session is gone (e.g. a restart): the proxy
           // let us through on cookie presence, so bounce to a fresh sign-in.
           setEmail(null);
-          window.location.href = "/login";
+          window.location.href = withBasePath("/login");
         }
       })
       .catch(() => {
@@ -151,8 +152,8 @@ function AccountChip() {
   }, []);
 
   async function signOut() {
-    await fetch("/api/auth/logout", { method: "POST", headers: csrfHeader() });
-    window.location.href = "/loggedout";
+    await fetch(apiPath("/api/auth/logout"), { method: "POST", headers: csrfHeader() });
+    window.location.href = withBasePath("/loggedout");
   }
 
   return (
