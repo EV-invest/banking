@@ -27,6 +27,7 @@ use domain::{
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
 	infrastructure::{
+		custody::StubCustody,
 		db,
 		deposits::PgDeposits,
 		ledger::{self, TbLedger},
@@ -138,6 +139,7 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
 		user,
 		network,
@@ -147,13 +149,23 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 	.await
 	.unwrap();
 	if first.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &h.notify, first.id()).await.unwrap();
+		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, first.id()).await.unwrap();
 	}
-	let second = withdrawal_app::request_withdrawal(h.withdrawals.as_ref(), h.ledger.as_ref(), h.users.as_ref(), &h.notify, user, network, destination, usdt("100"))
-		.await
-		.expect("the second request passes the Read-First — TB lags the undrained outbox");
+	let second = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&StubCustody,
+		&h.notify,
+		user,
+		network,
+		destination,
+		usdt("100"),
+	)
+	.await
+	.expect("the second request passes the Read-First — TB lags the undrained outbox");
 	if second.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &h.notify, second.id()).await.unwrap();
+		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, second.id()).await.unwrap();
 	}
 
 	h.relay.drain().await;

@@ -78,6 +78,7 @@ impl WalletService for WalletSvc {
 			self.state.withdrawals.as_ref(),
 			self.state.ledger.as_ref(),
 			self.state.users.as_ref(),
+			self.state.custody.as_ref(),
 			&self.state.relay_notify,
 			user,
 			network,

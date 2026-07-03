@@ -85,7 +85,7 @@ impl BalanceService for BalanceSvc {
 	async fn dispatch_withdrawal(&self, request: Request<pb::DispatchWithdrawalRequest>) -> Result<Response<pb::DispatchWithdrawalResponse>, Status> {
 		require_permission(&self.state, &request, Permission::WithdrawalDispatch).await?;
 		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
-		withdrawal_app::dispatch_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
+		withdrawal_app::dispatch_withdrawal(self.state.withdrawals.as_ref(), self.state.custody.as_ref(), &self.state.relay_notify, id)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(pb::DispatchWithdrawalResponse {}))

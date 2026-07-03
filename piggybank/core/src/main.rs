@@ -179,7 +179,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		custody_by_network.insert(Network::Ton, ton_custody.clone());
 	}
 	let custody: Arc<dyn Custody> = Arc::new(MultiChainCustody::new(custody_by_network, Arc::new(StubCustody)));
-	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody, relay_notify.clone());
+	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
 
 	// Recovery jobs, on the relay's dedicated pool so their periodic scans don't compete
 	// with request traffic. Reconciliation watches the PG-vs-TB invariants and surfaces any
@@ -286,6 +286,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		nav,
 		positions,
 		deposit_addresses,
+		custody,
 		relay_notify,
 		Arc::from(config.admin_subjects.clone()),
 	);

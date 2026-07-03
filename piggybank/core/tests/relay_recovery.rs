@@ -175,6 +175,7 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
 		processing_user,
 		network,
@@ -203,6 +204,7 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
 		queued_user,
 		short_network,
@@ -250,14 +252,26 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	let withdrawal = withdrawal_app::request_withdrawal(h.withdrawals.as_ref(), h.ledger.as_ref(), h.users.as_ref(), &h.notify, user, network, destination(network), big)
-		.await
-		.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&StubCustody,
+		&h.notify,
+		user,
+		network,
+		destination(network),
+		big,
+	)
+	.await
+	.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 
 	// Operator dispatch, then fail (a confirmed not-broadcast) — the void refunds in full.
-	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
+	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, withdrawal.id())
+		.await
+		.unwrap();
 	h.relay.drain().await;
 	withdrawal_app::fail_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
 	h.relay.drain().await;

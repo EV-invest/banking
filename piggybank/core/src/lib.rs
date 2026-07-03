@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
-use ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
+use ports::{Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 
@@ -67,6 +67,9 @@ pub struct AppState {
 	pub positions: Arc<dyn FundPositionReader>,
 	/// Per-user deposit-address provisioning (stub HD derivation behind a port).
 	pub deposit_addresses: Arc<dyn DepositAddresses>,
+	/// The custody gateway (the same registry the relay broadcasts through) — read-only
+	/// here: the withdrawal handlers gate dispatch on its on-chain treasury liquidity.
+	pub custody: Arc<dyn Custody>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
 	/// User ids permitted to call admin RPCs (config allowlist; see [`config`]).
@@ -88,6 +91,7 @@ impl AppState {
 		nav: Arc<dyn NavMarks>,
 		positions: Arc<dyn FundPositionReader>,
 		deposit_addresses: Arc<dyn DepositAddresses>,
+		custody: Arc<dyn Custody>,
 		relay_notify: Arc<Notify>,
 		admin_subjects: Arc<[String]>,
 	) -> Self {
@@ -104,6 +108,7 @@ impl AppState {
 			nav,
 			positions,
 			deposit_addresses,
+			custody,
 			relay_notify,
 			admin_subjects,
 		}

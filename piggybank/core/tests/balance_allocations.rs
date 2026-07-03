@@ -622,6 +622,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 		withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		users_dyn.as_ref(),
+		&StubCustody,
 		&h.notify,
 		user,
 		network,
