@@ -7,7 +7,10 @@
 //! no-op, so the saga's two-phase ledger behaviour (reserve → settle/void) is what's
 //! under test.
 
-use std::sync::Arc;
+use std::{
+	collections::HashMap,
+	sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
 use domain::{
@@ -24,6 +27,7 @@ use piggybank_core::{
 		custody::StubCustody,
 		db,
 		deposits::PgDeposits,
+		dispatcher::Dispatcher,
 		ledger::{self, TbLedger},
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
@@ -41,6 +45,7 @@ const BASE58: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwx
 const BASE64URL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 struct Harness {
+	pool: PgPool,
 	deposits: PgDeposits,
 	ledger: Arc<dyn Ledger>,
 	withdrawals: Arc<dyn WithdrawalRepository>,
@@ -71,6 +76,7 @@ async fn harness() -> Option<Harness> {
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	Some(Harness {
 		deposits: PgDeposits::new(pool.clone()),
+		pool,
 		ledger,
 		withdrawals,
 		users,
@@ -513,6 +519,65 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 	h.relay.drain().await;
 }
 
+/// The dispatcher worker drains the accept-and-queue backlog: a queued withdrawal is
+/// dispatched exactly once when BOTH gates pass (TB rail + on-chain treasury), stays
+/// queued while the treasury is short on-chain, and a second sweep no-ops (the state is
+/// no longer `queued`; dispatch itself is idempotent).
+#[tokio::test]
+async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	// TON keeps this test's dispatchable row off the BEP20 rail other tests queue on; the
+	// baseline all-rails-short custody view keeps THEIR queued rows out of this sweep.
+	let network = Network::Ton;
+	deposit(&h, user, Network::Bep20, "100").await;
+	// A small top-up so the TB TON gate covers the net without dwarfing the shared rail.
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("60")).await.unwrap();
+	h.relay.drain().await;
+
+	let custody = Arc::new(TestCustody::short_everywhere());
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		custody.as_ref(),
+		&h.notify,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues the request");
+	h.relay.drain().await;
+
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+
+	// On-chain still short — the sweep leaves everything queued.
+	assert_eq!(dispatcher.sweep().await.unwrap(), 0, "an on-chain-short rail dispatches nothing");
+	let still_queued = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(still_queued.state(), WithdrawalState::Queued, "still queued (and cancellable) while the treasury is short");
+
+	// The treasury is topped up on-chain — the next sweep dispatches it.
+	custody.set(network, TreasuryView::OnChain(usdt("1000000000")));
+	assert!(dispatcher.sweep().await.unwrap() >= 1, "a topped-up rail dispatches the queued withdrawal");
+	let processing = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(processing.state(), WithdrawalState::Processing, "the dispatcher moved it to processing");
+	h.relay.drain().await;
+
+	// A second sweep no-ops for this withdrawal — it is no longer queued.
+	dispatcher.sweep().await.unwrap();
+	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(after.state(), WithdrawalState::Processing, "a second sweep does not re-dispatch");
+
+	// Settle so the shared rails aren't left with a dangling in-flight reservation.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+}
+
 #[tokio::test]
 async fn deposit_address_is_stable_per_user_and_network() {
 	let Some(h) = harness().await else { return };
@@ -542,14 +607,26 @@ enum TreasuryView {
 }
 
 struct TestCustody {
-	views: std::sync::Mutex<std::collections::HashMap<Network, TreasuryView>>,
+	views: Mutex<HashMap<Network, TreasuryView>>,
 }
 
 impl TestCustody {
 	fn with_view(network: Network, view: TreasuryView) -> Self {
 		Self {
-			views: std::sync::Mutex::new(std::collections::HashMap::from([(network, view)])),
+			views: Mutex::new(HashMap::from([(network, view)])),
 		}
+	}
+
+	/// Every rail short on-chain (`OnChain(0)`) — the dispatcher test's baseline, so a
+	/// concurrently-queued withdrawal from a parallel test can never be swept up by it.
+	fn short_everywhere() -> Self {
+		Self {
+			views: Mutex::new(Network::ALL.iter().map(|network| (*network, TreasuryView::OnChain(Usdt::ZERO))).collect()),
+		}
+	}
+
+	fn set(&self, network: Network, view: TreasuryView) {
+		self.views.lock().unwrap().insert(network, view);
 	}
 }
 

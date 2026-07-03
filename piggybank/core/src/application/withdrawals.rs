@@ -4,10 +4,12 @@
 //! `request_withdrawal` is a command with a **two-part Read-First**: it gates on the
 //! user being active (the KYC/freeze seam), confirms the **available** unified claim
 //! (posted − already-reserved) covers the gross (user solvency; the TB non-negative
-//! flag is the backstop), then checks the **chosen rail's liquidity** (treasury) — if
-//! the rail can cover the net it dispatches immediately, otherwise the withdrawal is
-//! accepted and left `Queued` for the treasury worker (`dispatch_withdrawal`) to send
-//! once the rail is topped up. `settle`/`fail` are the operator/watcher-driven
+//! flag is the backstop), then checks the **chosen rail's liquidity** — the min of the
+//! TB rail accounting balance and the custody adapter's real on-chain treasury view —
+//! and dispatches immediately when it covers the net, otherwise the withdrawal is
+//! accepted and left `Queued` for the [`Dispatcher`](crate::infrastructure::dispatcher)
+//! worker (or the admin `dispatch_withdrawal`) to send once the rail is topped up.
+//! `settle`/`fail` are the operator/watcher-driven
 //! completions (admin-gated at the boundary), standing in for a chain watcher + custody
 //! confirmation callback; `cancel` (user) refunds a still-queued withdrawal. The
 //! cardinal rule — fail (void) only when the broadcast certainly did not land — is why

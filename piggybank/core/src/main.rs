@@ -26,6 +26,7 @@ use piggybank_core::{
 		db,
 		deposit_watcher::DepositWatcher,
 		deposits::PgDeposits,
+		dispatcher::Dispatcher,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
@@ -184,9 +185,11 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// Recovery jobs, on the relay's dedicated pool so their periodic scans don't compete
 	// with request traffic. Reconciliation watches the PG-vs-TB invariants and surfaces any
 	// parked outbox row (TB wins, alert-only); the reaper owns the timeout for abandoned
-	// sagas (alert on stuck `processing` withdrawals; auto-resolve the safe `queued` ones).
+	// sagas (alert on stuck `processing` withdrawals; auto-resolve the safe `queued` ones);
+	// the dispatcher drains the accept-and-queue backlog once a rail is topped up.
 	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
-	let reaper = Reaper::new(relay_pool, withdrawals.clone(), redemptions.clone(), relay_notify.clone());
+	let reaper = Reaper::new(relay_pool.clone(), withdrawals.clone(), redemptions.clone(), relay_notify.clone());
+	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
 
 	// ── cross-plane lifecycle bridge consumer (one-way concierge → banking) ─────
 	// Pull concierge `UserLifecycleEvent`s and mirror them onto the `users` control
@@ -310,6 +313,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		relay_done,
 		reconciliation_done,
 		reaper_done,
+		dispatcher_done,
 		bridge_done,
 		watcher_done,
 		withdrawal_watcher_done,
@@ -329,6 +333,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		branch(&shutdown, "relay", infallible(relay.run(shutdown.clone()))),
 		branch(&shutdown, "reconciliation", infallible(reconciliation.run(shutdown.clone()))),
 		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
+		branch(&shutdown, "dispatcher", infallible(dispatcher.run(shutdown.clone()))),
 		branch(&shutdown, "bridge", infallible(run_bridge(bridge, shutdown.clone()))),
 		branch(&shutdown, "deposit watcher", infallible(run_watcher(deposit_watcher, shutdown.clone()))),
 		branch(&shutdown, "withdrawal watcher", infallible(run_withdrawal_watcher(withdrawal_watcher, shutdown.clone()))),
@@ -360,6 +365,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.and(relay_done)
 		.and(reconciliation_done)
 		.and(reaper_done)
+		.and(dispatcher_done)
 		.and(bridge_done)
 		.and(watcher_done)
 		.and(withdrawal_watcher_done)
