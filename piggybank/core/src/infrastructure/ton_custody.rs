@@ -35,7 +35,7 @@ use uuid::Uuid;
 use crate::{
 	config::TonConfig,
 	infrastructure::ton_rpc::{RpcError, TonRpc},
-	ports::custody::{BroadcastRequest, Custody, CustodyError},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
 };
 
 /// Seconds a signed external message stays valid (`valid_until = now + this`). Generous so
@@ -340,6 +340,15 @@ impl Custody for TonCustody {
 		let raw = self.rpc.jetton_wallet(&treasury, &self.usdt_master).await.map_err(read_err)?.map(|w| w.balance).unwrap_or(0);
 		let usdt = Usdt::from_onchain(Network::Ton, raw).map_err(|e| CustodyError::Unavailable(format!("ton treasury balance not representable: {e}")))?;
 		Ok(Some(usdt))
+	}
+
+	async fn treasury_funding(&self, network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
+		let address = self.treasury_address().await?;
+		// `treasury_liquidity` already renders a missing jetton wallet as ZERO (an
+		// unfunded treasury, not an error); a failed read degrades to None. TON is 9-dp.
+		let onchain_usdt = self.treasury_liquidity(network).await.ok().flatten();
+		let onchain_gas = self.rpc.balance(&address).await.ok().map(|nanoton| format_native_units(nanoton, 9));
+		Ok(Some(TreasuryFunding { address, onchain_usdt, onchain_gas }))
 	}
 }
 

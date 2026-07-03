@@ -28,7 +28,7 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::bsc_rpc::{BscRpc, RpcError},
-	ports::custody::{BroadcastRequest, Custody, CustodyError},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
 };
 
 /// No-op custody: logs and returns success. An operator supplies the real on-chain tx ref
@@ -81,6 +81,13 @@ impl Custody for MultiChainCustody {
 		// (operator-settled), not report a zero that would freeze its dispatches.
 		match self.by_network.get(&network) {
 			Some(adapter) => adapter.treasury_liquidity(network).await,
+			None => Ok(None),
+		}
+	}
+
+	async fn treasury_funding(&self, network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
+		match self.by_network.get(&network) {
+			Some(adapter) => adapter.treasury_funding(network).await,
 			None => Ok(None),
 		}
 	}
@@ -316,6 +323,15 @@ impl Custody for ChainCustody {
 		let usdt = self.rpc.erc20_balance(&self.usdt_contract, &treasury).await.map_err(read_err)?;
 		// BEP20 USDT is 18-dp — already base units.
 		Ok(Some(Usdt::from_base_units(usdt)))
+	}
+
+	async fn treasury_funding(&self, network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
+		let address = self.treasury_address().await?;
+		// Balance reads degrade to None (the address alone is still fundable); only an
+		// address-resolution failure errors — the rail is then genuinely unavailable.
+		let onchain_usdt = self.treasury_liquidity(network).await.ok().flatten();
+		let onchain_gas = self.rpc.bnb_balance(&address).await.ok().map(|wei| format_native_units(wei, 18));
+		Ok(Some(TreasuryFunding { address, onchain_usdt, onchain_gas }))
 	}
 }
 

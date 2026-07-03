@@ -34,7 +34,7 @@ use uuid::Uuid;
 use crate::{
 	config::TronConfig,
 	infrastructure::tron_rpc::{RefBlockParams, TronRpc, TronRpcError},
-	ports::custody::{BroadcastRequest, Custody, CustodyError},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
 };
 
 /// Extra solidified-time that must pass beyond a stored tx's `expiration` before it is
@@ -300,6 +300,17 @@ impl Custody for TronCustody {
 		let state = self.rpc.account_state(&treasury).await.map_err(read_err)?;
 		let usdt = Usdt::from_onchain(Network::Trc20, state.trc20(&self.usdt_contract)).map_err(|e| CustodyError::Unavailable(format!("tron treasury balance not representable: {e}")))?;
 		Ok(Some(usdt))
+	}
+
+	async fn treasury_funding(&self, _network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
+		let address = self.treasury_address().await?;
+		// One indexed read carries TRX + every TRC20 balance; a failed read degrades both
+		// balance fields to None (the address alone is still fundable). TRX is 6-dp (SUN).
+		let (onchain_usdt, onchain_gas) = match self.rpc.account_state(&address).await {
+			Ok(state) => (Usdt::from_onchain(Network::Trc20, state.trc20(&self.usdt_contract)).ok(), Some(format_native_units(state.trx, 6))),
+			Err(_) => (None, None),
+		};
+		Ok(Some(TreasuryFunding { address, onchain_usdt, onchain_gas }))
 	}
 }
 
