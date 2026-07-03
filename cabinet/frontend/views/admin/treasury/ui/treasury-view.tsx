@@ -1,12 +1,12 @@
 "use client";
 
 import { TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { fetchTreasury } from "@/entities/admin/api/admin-client";
-import type { Treasury } from "@/shared/contracts/admin";
+import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
 import { usd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
@@ -14,6 +14,12 @@ const RAIL_LABELS: Record<string, string> = {
   bep20: "BEP20 · BNB Chain",
   trc20: "TRC20 · TRON",
   ton: "TON · Open Network",
+};
+
+const GAS_SYMBOLS: Record<string, string> = {
+  bep20: "BNB",
+  trc20: "TRX",
+  ton: "TON",
 };
 
 export function TreasuryView() {
@@ -56,7 +62,7 @@ export function TreasuryView() {
           {treasury ? (
             <>
               {treasury.rails.map((rail) => (
-                <MoneyCard key={rail.network} label={RAIL_LABELS[rail.network] ?? rail.network} value={rail.custody} loading={false} />
+                <MoneyCard key={rail.network} label={RAIL_LABELS[rail.network] ?? rail.network} value={rail.custody} loading={false} footer={<RailFunding rail={rail} />} />
               ))}
               <MoneyCard label="Bank · USD" value={treasury.bank} hint="off-ramp · FX" loading={false} />
             </>
@@ -74,14 +80,54 @@ export function TreasuryView() {
   );
 }
 
-function MoneyCard({ label, value, hint, loading }: { label: string; value: string | undefined; hint?: string; loading: boolean }) {
+function MoneyCard({ label, value, hint, loading, footer }: { label: string; value: string | undefined; hint?: string; loading: boolean; footer?: ReactNode }) {
   return (
     <Card>
       <CardContent className="space-y-1 py-5">
         <p className="text-xs text-muted-foreground">{label || "…"}</p>
         {loading ? <Skeleton className="mt-1 h-8 w-28" /> : <p className="text-3xl font-semibold tabular-nums">{usd(value)}</p>}
         {hint && !loading && <p className="text-xs text-main-accent-t2">{hint}</p>}
+        {footer && !loading && footer}
       </CardContent>
     </Card>
   );
+}
+
+/** The rail's hot-wallet funding picture — address + on-chain USDT/gas, "—" when the
+ * treasury read was unavailable (the hub degrades to empty, never fails). */
+function RailFunding({ rail }: { rail: RailLiquidity }) {
+  return (
+    <div className="space-y-1 border-t border-border pt-2">
+      {rail.treasury_address ? (
+        <p className="font-mono-tech text-xs text-muted-foreground" title={rail.treasury_address}>
+          {shortAddr(rail.treasury_address)}
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">— · custody unconfigured</p>
+      )}
+      <FundingRow label="On-chain USDT" value={rail.onchain_usdt ? qty(rail.onchain_usdt) : undefined} />
+      <FundingRow label="Gas" value={rail.onchain_gas ? `${qty(rail.onchain_gas)} ${GAS_SYMBOLS[rail.network] ?? ""}`.trimEnd() : undefined} />
+    </div>
+  );
+}
+
+function FundingRow({ label, value }: { label: string; value: string | undefined }) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="tabular-nums">{value ?? "—"}</span>
+    </div>
+  );
+}
+
+function shortAddr(address: string): string {
+  return address.length > 18 ? `${address.slice(0, 8)}…${address.slice(-6)}` : address;
+}
+
+/** A native-unit decimal string → grouped display; 6 dp so a thin gas balance
+ * (e.g. 0.005 BNB) doesn't round to nothing. */
+function qty(value: string): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return value;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
 }
