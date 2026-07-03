@@ -3,13 +3,14 @@
 import { BadgeCheck, Home, Landmark, LayoutGrid, LineChart, ListChecks, LogOut, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import { Logo } from "@/application/layout/logo";
 import { apiPath, withBasePath } from "@/shared/config/base-path";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
-import { useSession } from "@/shared/lib/use-session";
+import { useProfile } from "@/shared/lib/use-profile";
+import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
 
 interface NavItem {
   href: string;
@@ -121,35 +122,29 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-// Account chip bound to the BFF session. Behind the auth gate this is always a real user;
-// a dropped/stale session (cookie present, server-side session gone) bounces to /login.
+// Account chip bound to the BFF session (shared `useSession` — one fetch per page load).
+// Behind the auth gate this is always a real user; a dropped/stale session (cookie
+// present, server-side session gone) bounces to /login. The display name prefers the
+// profile store's preferred/legal name, falling back to the email heuristic until it
+// resolves.
 function AccountChip() {
   const pathname = usePathname();
-  const [email, setEmail] = useState<string | null | undefined>(undefined);
+  const session = useSession();
+  const profile = useProfile();
   const onProfile = pathname.startsWith("/profile");
 
+  // undefined = still loading ("…"), null = no usable session (neutral chip).
+  const email = session === null ? undefined : (session.user?.email ?? null);
+  const dead = session !== null && session !== SESSION_UNAVAILABLE && !session.authenticated;
+
   useEffect(() => {
-    let active = true;
-    fetch(apiPath("/api/auth/session"))
-      .then((r) => r.json() as Promise<{ authenticated: boolean; user?: { email: string } }>)
-      .then((s) => {
-        if (!active) return;
-        if (s.authenticated && s.user) setEmail(s.user.email);
-        else {
-          // Cookie present but the server-side session is gone (e.g. a restart): the proxy
-          // let us through on cookie presence, so bounce to a fresh sign-in.
-          setEmail(null);
-          window.location.href = withBasePath("/login");
-        }
-      })
-      .catch(() => {
-        // Transient failure — keep the chip neutral; don't force a redirect on a blip.
-        if (active) setEmail(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    // Cookie present but the server-side session is gone (e.g. a restart): the proxy
+    // let us through on cookie presence, so bounce to a fresh sign-in. A transient
+    // fetch failure (SESSION_UNAVAILABLE) keeps the chip neutral — no redirect on a blip.
+    if (dead) window.location.href = withBasePath("/login");
+  }, [dead]);
+
+  const name = profile?.preferred_name || profile?.legal_name || displayName(email);
 
   async function signOut() {
     await fetch(apiPath("/api/auth/logout"), { method: "POST", headers: csrfHeader() });
@@ -165,7 +160,7 @@ function AccountChip() {
       >
         <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initialsOf(email)}</span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-main-mist">{displayName(email)}</p>
+          <p className="truncate text-[13px] font-semibold text-main-mist">{name}</p>
           <p className="flex items-center gap-[5px] text-[11px] font-medium text-main-accent-t1">
             <BadgeCheck className="size-3" /> Verified
           </p>
