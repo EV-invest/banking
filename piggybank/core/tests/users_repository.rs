@@ -7,18 +7,24 @@
 
 use domain::{
 	auth::AuthSubject,
-	users::{Email, UserStatus},
+	users::{ConciergeUserId, Email, UserId, UserStatus},
 };
 use piggybank_core::{
 	infrastructure::{db, users::PgUsers},
 	ports::UserRepository,
 };
+use sqlx::PgPool;
+use uuid::Uuid;
 
-async fn repo() -> Option<PgUsers> {
+async fn pool() -> Option<PgPool> {
 	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
 	let pool = db::connect(&url).await.expect("connect to Postgres");
 	db::migrate(&pool).await.expect("apply migrations");
-	Some(PgUsers::new(pool))
+	Some(pool)
+}
+
+async fn repo() -> Option<PgUsers> {
+	Some(PgUsers::new(pool().await?))
 }
 
 fn unique_subject() -> AuthSubject {
@@ -90,4 +96,51 @@ async fn revoke_and_disable_persist() {
 	let after = repo.find_by_id(user.id()).await.unwrap().unwrap();
 	assert_eq!(after.status(), UserStatus::Disabled);
 	assert_eq!(after.token_version(), 1);
+}
+
+/// The bridge mirror is the admin-balance resolution seam: a row the bridge CREATED
+/// consumer provisioned (`concierge_user_id` set) must resolve by its CONCIERGE id to
+/// the banking `user_id` (and by the banking id — the fallback existing money-plane
+/// callers use), while an id known to neither resolver misses both ways — the
+/// `GetUserBalance` handler's NOT_FOUND path, never an authoritative zero.
+#[tokio::test]
+async fn issuance_resolves_by_concierge_id_and_unknown_ids_miss() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let repo = PgUsers::new(pool.clone());
+
+	// Mirror the bridge CREATED insert (infrastructure/bridge.rs) — a concierge-provisioned row.
+	let banking_id = Uuid::new_v4();
+	let concierge_id = Uuid::new_v4();
+	sqlx::query(
+		"INSERT INTO users (id, auth_subject, concierge_user_id, email, email_verified, kyc_level, role, last_lifecycle_sequence) \
+		 VALUES ($1, $2, $3, $4, true, 0, 'investor', 1)",
+	)
+	.bind(banking_id)
+	.bind(format!("itest-{}", Uuid::new_v4()))
+	.bind(concierge_id)
+	.bind(format!("bridge{}@example.com", Uuid::new_v4().simple()))
+	.execute(&pool)
+	.await
+	.expect("insert the bridge-mirrored row");
+
+	let by_concierge = repo
+		.resolve_issuance_by_concierge_id(ConciergeUserId::from_raw(concierge_id))
+		.await
+		.unwrap()
+		.expect("the bridged row resolves by concierge id");
+	assert_eq!(by_concierge.user_id.raw(), banking_id, "the concierge id maps to the banking user id");
+	assert!(!by_concierge.disabled);
+
+	let by_banking = repo
+		.resolve_issuance_by_banking_id(UserId::from_raw(banking_id))
+		.await
+		.unwrap()
+		.expect("the same row resolves by banking id");
+	assert_eq!(by_banking.user_id.raw(), banking_id);
+
+	let unknown = Uuid::new_v4();
+	assert!(repo.resolve_issuance_by_concierge_id(ConciergeUserId::from_raw(unknown)).await.unwrap().is_none());
+	assert!(repo.resolve_issuance_by_banking_id(UserId::from_raw(unknown)).await.unwrap().is_none());
 }
