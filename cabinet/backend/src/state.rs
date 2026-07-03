@@ -203,6 +203,10 @@ impl Grpc {
 		Ok(self.wallet().list_withdrawals(bearer(token, bk::ListWithdrawalsRequest {})?).await?.into_inner())
 	}
 
+	pub async fn list_deposits(&self, token: &str) -> Result<bk::DepositList, Status> {
+		Ok(self.wallet().list_deposits(bearer(token, bk::ListDepositsRequest {})?).await?.into_inner())
+	}
+
 	pub async fn subscribe(&self, token: &str, req: bk::SubscribeRequest) -> Result<bk::Subscription, Status> {
 		Ok(self.funds().subscribe(bearer(token, req)?).await?.into_inner())
 	}

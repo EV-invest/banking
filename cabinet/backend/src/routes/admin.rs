@@ -76,6 +76,18 @@ pub async fn overview(State(st): State<AppState>, jar: CookieJar) -> Result<Json
 		parked_rows: readiness.as_ref().map(|r| r.parked_rows.to_string()).unwrap_or_else(|| "0".into()),
 		backlog: readiness.as_ref().map(|r| r.backlog.to_string()).unwrap_or_else(|| "0".into()),
 		oldest_backlog_age_secs: readiness.as_ref().map(|r| r.oldest_backlog_age_secs.to_string()).unwrap_or_else(|| "0".into()),
+		deposit_scan: readiness
+			.as_ref()
+			.map(|r| {
+				r.scan_cursors
+					.iter()
+					.map(|c| dto::DepositScan {
+						network: c.network.clone(),
+						age_secs: c.age_secs.to_string(),
+					})
+					.collect()
+			})
+			.unwrap_or_default(),
 	}))
 }
 

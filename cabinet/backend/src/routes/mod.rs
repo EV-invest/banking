@@ -49,6 +49,7 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/wallet/deposit-address", get(money::deposit_address))
 		.route("/api/wallet/withdrawals", get(money::list_withdrawals).post(money::request_withdrawal))
 		.route("/api/wallet/withdrawals/cancel", post(money::cancel_withdrawal))
+		.route("/api/wallet/deposits", get(money::list_deposits))
 		.route("/api/funds/nav", get(money::fund_nav))
 		.route("/api/funds/positions", get(money::list_positions))
 		.route("/api/funds/redemptions", get(money::list_redemptions))

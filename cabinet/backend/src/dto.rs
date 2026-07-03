@@ -253,6 +253,38 @@ impl From<bk::WithdrawalList> for WithdrawalList {
 	}
 }
 
+#[derive(Serialize)]
+pub struct Deposit {
+	pub tx_ref: String,
+	pub network: String,
+	pub amount: String,
+	pub created_at: String,
+}
+
+impl From<bk::Deposit> for Deposit {
+	fn from(d: bk::Deposit) -> Self {
+		Self {
+			tx_ref: d.tx_ref,
+			network: d.network,
+			amount: d.amount,
+			created_at: d.created_at.to_string(),
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct DepositList {
+	pub deposits: Vec<Deposit>,
+}
+
+impl From<bk::DepositList> for DepositList {
+	fn from(l: bk::DepositList) -> Self {
+		Self {
+			deposits: l.deposits.into_iter().map(Deposit::from).collect(),
+		}
+	}
+}
+
 // ── piggybank: funds (the service currency) ──────────────────────────────────
 
 #[derive(Serialize)]
@@ -385,6 +417,14 @@ pub struct FleetService {
 	pub detail: String,
 }
 
+/// Per-rail deposit scan-cursor age from Readiness — a growing age means deposits are
+/// confirming on-chain but not being credited.
+#[derive(Serialize)]
+pub struct DepositScan {
+	pub network: String,
+	pub age_secs: String,
+}
+
 #[derive(Serialize)]
 pub struct AdminOverview {
 	pub services: Vec<FleetService>,
@@ -392,6 +432,7 @@ pub struct AdminOverview {
 	pub parked_rows: String,
 	pub backlog: String,
 	pub oldest_backlog_age_secs: String,
+	pub deposit_scan: Vec<DepositScan>,
 }
 
 /// A user row in the operator user list.
