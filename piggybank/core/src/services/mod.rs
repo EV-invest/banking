@@ -52,7 +52,7 @@ pub mod wallet;
 /// orchestrator/LB — they are infrastructure probes, not data services.
 pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Output = ()>) -> Result<(), tonic::transport::Error> {
 	let auth = grpc_auth_layer(state.authorizer.for_class(TokenClass::Client));
-	let health = Health::new(state.pool.clone(), state.ledger.clone());
+	let health = Health::new(state.pool.clone(), state.ledger.clone(), state.configured_networks.clone());
 	Server::builder()
 		// grpc-web rides HTTP/1.1; required for the GrpcWebLayer to translate.
 		.accept_http1(true)
