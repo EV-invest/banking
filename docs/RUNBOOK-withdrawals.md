@@ -6,6 +6,26 @@ on-chain: …"). Background: [`piggybank/core/PATTERNS.md`](../piggybank/core/PA
 §Withdraw + §Relay safety. The **cardinal rule** governs everything below: *never void a
 withdrawal once its broadcast may have reached the chain* — that double-pays.
 
+## Operator surfaces
+
+The admin console's **Withdrawals** screen (`/admin/withdrawals`) lists every withdrawal
+awaiting action (`queued` / `processing`) with per-row **Dispatch**, **Settle** (mined tx
+hash required) and **Fail** (double-pay warning; the hub refuses while a broadcast row
+exists). The same RPCs by hand, when the console is down or you are scripting:
+
+```sh
+# Mint an admin money token (subject must hold admin/owner in banking):
+grpcurl -plaintext -d '{"user_id":"<banking-user-uuid>"}' localhost:50052 banking.v1.AuthService/IssueUserToken
+TOKEN=…
+
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{}' localhost:50051 banking.v1.BalanceService/ListWithdrawalQueue
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{"withdrawal_id":"<id>"}' localhost:50051 banking.v1.BalanceService/DispatchWithdrawal
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{"withdrawal_id":"<id>","tx_ref":"0x…"}' localhost:50051 banking.v1.BalanceService/SettleWithdrawal
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{"withdrawal_id":"<id>","reason":"…"}' localhost:50051 banking.v1.BalanceService/FailWithdrawal
+```
+
+(Ports: 50051 = core gRPC, 50052 = auth; adjust to your deployment.)
+
 Since the dispatch gate (`min(TB rail, on-chain treasury)`) and the dispatcher worker
 landed, this park is a rare check-then-act residue (the on-chain balance dropped between
 the dispatch-time read and the broadcast), not the norm — but the recovery below stays
@@ -79,6 +99,32 @@ this (`cancel` is legal only from `Queued`) — correct per the cardinal rule, n
 - The reaper's "STUCK processing withdrawal" `error!` stops firing for this id.
 
 ---
+
+## Dead keys (KEK epoch) — diagnostics & rotation
+
+A key sealed under a different `WALLET_KEK` than the signer booted with is **provably
+dead**: funds on its address can never be moved. The signer refuses to boot on a
+whole-database mismatch (the `kek_sentinel`); per-key casualties surface as:
+
+- the **Dead-key signings** counter on the admin Overview (any non-zero = stranded funds);
+- `PROVABLY DEAD KEY` `error!` lines in the signer / hub logs;
+- the signer's diagnostics RPC (loopback; needs the hub's service token in prod):
+
+```sh
+grpcurl -plaintext -H "authorization: Bearer $SERVICE_TOKEN" -d '{}' localhost:50053 signer.v1.SignerService/GetKeyHealth
+```
+
+Recovery: rotate the affected user's address so FUTURE deposits are safe (funds already
+on the dead address are unrecoverable — do not promise otherwise):
+
+```sh
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{"user_id":"<uuid>","network":"bep20"}' \
+  localhost:50051 banking.v1.BalanceService/RotateDepositAddress
+```
+
+The signer archives the dead row (`superseded_at`), mints a fresh keypair (unseal-probed
+before it is served), and the hub cache refreshes — `GetDepositAddress` serves the new
+address immediately. Rotation is **refused for a healthy key**.
 
 ## Incident log
 

@@ -257,6 +257,13 @@
             export TIGERBEETLE_ADDRESS="''${TIGERBEETLE_ADDRESS:-127.0.0.1:3033}"
             export TIGERBEETLE_CLUSTER_ID="''${TIGERBEETLE_CLUSTER_ID:-0}"
             export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-http://127.0.0.1:50053}"
+            # BSC_RPC_URL (set it in piggybank/core/.env) — free public endpoints all have
+            # sharp edges for the on-chain workers: publicnode paywalls eth_getLogs, drpc's
+            # free tier rate-limits the deposit scan away, and dataseed.bnbchain.org rejects
+            # wide eth_getLogs ranges (fine once the scan cursor rides the chain head, fatal
+            # for a cold-start backfill). For anything beyond a demo use a KEYED provider
+            # (e.g. a free-tier Alchemy/QuickNode/Ankr key) so getLogs + balance polling
+            # survive a real scan cycle.
             # Cross-plane lifecycle bridge consumer (one-way concierge → banking). Both vars
             # must be set together or the consumer doesn't run; BRIDGE_SERVICE_TOKEN must match
             # the concierge plane's value. The concierge plane serves UserEvents on :50061.
