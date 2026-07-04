@@ -433,6 +433,9 @@ pub struct AdminOverview {
 	pub backlog: String,
 	pub oldest_backlog_age_secs: String,
 	pub deposit_scan: Vec<DepositScan>,
+	/// Signer unseal failures on money-moving paths since the hub booted — any non-zero
+	/// value means a provably dead key (KEK epoch) was asked to sign; funds are stranded.
+	pub unseal_failures: String,
 }
 
 /// A user row in the operator user list.
@@ -506,6 +509,9 @@ pub struct RailLiquidity {
 	pub treasury_address: String,
 	pub onchain_usdt: String,
 	pub onchain_gas: String,
+	/// The rail's sweep gas-station wallet — fund native coin here (never USDT).
+	pub gas_station_address: String,
+	pub gas_station_gas: String,
 }
 
 /// The two-layer treasury picture (Treasury screen).
@@ -532,6 +538,8 @@ impl From<bk::Treasury> for Treasury {
 					treasury_address: r.treasury_address,
 					onchain_usdt: r.onchain_usdt,
 					onchain_gas: r.onchain_gas,
+					gas_station_address: r.gas_station_address,
+					gas_station_gas: r.gas_station_gas,
 				})
 				.collect(),
 			bank: t.bank,
@@ -615,6 +623,47 @@ impl From<bk::RedemptionQueue> for RedemptionQueue {
 					email: i.email,
 					service: i.service,
 					units: i.units,
+					created_at: i.created_at.to_string(),
+				})
+				.collect(),
+		}
+	}
+}
+
+/// One withdrawal awaiting operator action (admin Withdrawals screen).
+#[derive(Serialize)]
+pub struct WithdrawalQueueItem {
+	pub withdrawal_id: String,
+	pub user_id: String,
+	pub email: String,
+	pub network: String,
+	pub address: String,
+	pub amount: String,
+	pub net_amount: String,
+	pub state: String,
+	pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct WithdrawalQueue {
+	pub items: Vec<WithdrawalQueueItem>,
+}
+
+impl From<bk::WithdrawalQueue> for WithdrawalQueue {
+	fn from(q: bk::WithdrawalQueue) -> Self {
+		Self {
+			items: q
+				.items
+				.into_iter()
+				.map(|i| WithdrawalQueueItem {
+					withdrawal_id: i.withdrawal_id,
+					user_id: i.user_id,
+					email: i.email,
+					network: i.network,
+					address: i.address,
+					amount: i.amount,
+					net_amount: i.net_amount,
+					state: i.state,
 					created_at: i.created_at.to_string(),
 				})
 				.collect(),

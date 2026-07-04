@@ -335,6 +335,36 @@ impl Grpc {
 		Ok(self.balance().fail_redemption(bearer(token, req)?).await?.into_inner())
 	}
 
+	pub async fn withdrawal_queue(&self, token: &str) -> Result<bk::WithdrawalQueue, Status> {
+		Ok(self.balance().list_withdrawal_queue(bearer(token, bk::ListWithdrawalQueueRequest {})?).await?.into_inner())
+	}
+
+	pub async fn dispatch_withdrawal(&self, token: &str, withdrawal_id: &str) -> Result<(), Status> {
+		let req = bk::DispatchWithdrawalRequest {
+			withdrawal_id: withdrawal_id.to_string(),
+		};
+		self.balance().dispatch_withdrawal(bearer(token, req)?).await?;
+		Ok(())
+	}
+
+	pub async fn settle_withdrawal(&self, token: &str, withdrawal_id: &str, tx_ref: &str) -> Result<(), Status> {
+		let req = bk::SettleWithdrawalRequest {
+			withdrawal_id: withdrawal_id.to_string(),
+			tx_ref: tx_ref.to_string(),
+		};
+		self.balance().settle_withdrawal(bearer(token, req)?).await?;
+		Ok(())
+	}
+
+	pub async fn fail_withdrawal(&self, token: &str, withdrawal_id: &str, reason: &str) -> Result<(), Status> {
+		let req = bk::FailWithdrawalRequest {
+			withdrawal_id: withdrawal_id.to_string(),
+			reason: reason.to_string(),
+		};
+		self.balance().fail_withdrawal(bearer(token, req)?).await?;
+		Ok(())
+	}
+
 	pub async fn parked_events(&self, token: &str) -> Result<bk::ParkedEventList, Status> {
 		Ok(self.balance().list_parked_events(bearer(token, bk::ListParkedEventsRequest {})?).await?.into_inner())
 	}
