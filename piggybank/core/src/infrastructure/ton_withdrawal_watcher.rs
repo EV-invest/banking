@@ -62,6 +62,10 @@ use crate::{
 const SETTLE_LOOKBACK_SECS: i64 = 3600;
 /// Cap on outgoing transfers pulled per scan — well above any realistic in-flight depth.
 const OUTGOING_LIMIT: u32 = 256;
+/// Grace (unix seconds) past a send's `valid_until` before a still-unmatched advanced send is
+/// treated as genuinely bounced/stuck (an `error!` for Sentry) rather than merely not-yet-indexed
+/// (a `warn!`). Absorbs indexer lag after the send's own window has already closed.
+const BOUNCE_GRACE_SECS: u64 = 120;
 
 pub struct TonWithdrawalWatcher {
 	pool: PgPool,
@@ -131,10 +135,20 @@ impl TonWithdrawalWatcher {
 			for p in &advanced {
 				match settlements.get(&p.withdrawal_id) {
 					Some(tx_hash) => self.settle(p.withdrawal_id, tx_hash).await,
+					// A bounced send (USDT back in treasury, the user's reserve still held) needs an
+					// operator `fail`; not-yet-indexed is transient. Once the send's own validity
+					// window has comfortably closed the transfer can no longer be "still landing", so
+					// a missing match is a real stuck payout worth a Sentry error — parity with the
+					// BEP20 watcher's revert alert. Before that, stay at warn to avoid alerting on lag.
+					None if now_unix() > (p.valid_until.max(0) as u64).saturating_add(BOUNCE_GRACE_SECS) => error!(
+						withdrawal_id = %p.withdrawal_id,
+						seqno = p.signed_seqno,
+						"ton withdrawal watcher: treasury seqno advanced but NO matching outgoing USDT transfer after the send window closed — likely bounced/stuck, needs operator review (not auto-failed)"
+					),
 					None => warn!(
 						withdrawal_id = %p.withdrawal_id,
 						seqno = p.signed_seqno,
-						"ton withdrawal watcher: treasury seqno advanced but no unambiguous matching outgoing USDT transfer — NOT settling (bounced, not-yet-indexed, or a same-amount sibling is ambiguous); reaper/operator backstops"
+						"ton withdrawal watcher: treasury seqno advanced but no unambiguous matching outgoing USDT transfer yet — NOT settling (bounced, not-yet-indexed, or a same-amount sibling is ambiguous); reaper/operator backstops"
 					),
 				}
 			}
@@ -307,6 +321,11 @@ fn plan_settlements(advanced: &[&PendingBroadcast], outgoing: &[JettonDeposit], 
 		}
 	}
 	settlements
+}
+
+/// Current unix time in seconds.
+fn now_unix() -> u64 {
+	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 #[derive(Debug, thiserror::Error)]
