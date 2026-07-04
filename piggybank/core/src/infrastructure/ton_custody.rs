@@ -43,6 +43,10 @@ use crate::{
 /// residual (the reaper alerts on a stuck `processing` withdrawal).
 const VALID_WINDOW_SECS: u64 = 300;
 
+/// The reserved sweep gas-station wallet id (shared with the sweep): a TON-only account whose
+/// funding view rides along on the treasury screen so an operator funds the RIGHT wallet.
+const GAS_STATION: Uuid = Uuid::from_u128(1);
+
 pub struct TonCustody {
 	pool: PgPool,
 	rpc: TonRpc,
@@ -51,12 +55,19 @@ pub struct TonCustody {
 	usdt_master: String,
 	forward_ton_amount: u64,
 	msg_value: u64,
+	/// Whether the rail is on testnet — carried into the signer so address-form/network
+	/// selection stays consistent with the deposit addresses the operator funds.
+	is_testnet: bool,
+	/// The wallet contract version (`v4r2` today) the signer derives + signs against.
+	wallet_version: String,
 	/// The treasury hot wallet's TON address (the withdrawal source), resolved once and
 	/// cached. Funds — USDT to send, TON for gas — are deposited here out-of-band.
 	treasury: OnceCell<String>,
 	/// The treasury's USDT jetton wallet (the internal-message destination), resolved once
 	/// from the indexer and cached.
 	treasury_jetton_wallet: OnceCell<String>,
+	/// The sweep gas-station's TON address, resolved once for the operator funding view.
+	gas_station: OnceCell<String>,
 }
 
 impl TonCustody {
@@ -69,8 +80,11 @@ impl TonCustody {
 			usdt_master: config.usdt_master.clone(),
 			forward_ton_amount: config.forward_ton_amount,
 			msg_value: config.msg_value,
+			is_testnet: config.is_testnet,
+			wallet_version: config.wallet_version.clone(),
 			treasury: OnceCell::new(),
 			treasury_jetton_wallet: OnceCell::new(),
+			gas_station: OnceCell::new(),
 		}
 	}
 
@@ -98,6 +112,34 @@ impl TonCustody {
 					return Err(CustodyError::Rejected(format!("treasury address is not fundable (kind={})", response.address_kind)));
 				}
 				info!(treasury = %response.address, "ton custody: treasury hot wallet — fund it with USDT (liquidity) + TON (gas)");
+				Ok(response.address)
+			})
+			.await
+			.cloned()
+	}
+
+	/// The sweep gas-station's TON address, resolved once via `ProvisionAddress` (the reserved
+	/// [`GAS_STATION`] id) and cached — read-only, for the operator funding view.
+	async fn gas_station_address(&self) -> Result<String, CustodyError> {
+		self.gas_station
+			.get_or_try_init(|| async {
+				let mut request = Request::new(ProvisionAddressRequest {
+					user_id: GAS_STATION.to_string(),
+					network: "ton".to_owned(),
+				});
+				if let Some(token) = &self.service_token {
+					request = token.authorize(request);
+				}
+				let response = self
+					.signer
+					.clone()
+					.provision_address(request)
+					.await
+					.map_err(|s| CustodyError::Unavailable(format!("resolve gas-station address: {}", s.message())))?
+					.into_inner();
+				if response.address_kind != "derived" {
+					return Err(CustodyError::Rejected(format!("gas-station address is not fundable (kind={})", response.address_kind)));
+				}
 				Ok(response.address)
 			})
 			.await
@@ -257,8 +299,8 @@ impl TonCustody {
 			msg_value: self.msg_value,
 			seqno,
 			valid_until,
-			is_testnet: false,
-			wallet_version: String::new(),
+			is_testnet: self.is_testnet,
+			wallet_version: self.wallet_version.clone(),
 		});
 		if let Some(token) = &self.service_token {
 			signer_request = token.authorize(signer_request);
@@ -275,7 +317,13 @@ impl TonCustody {
 	}
 
 	/// Submit a signed BoC. A transport failure is retryable (nothing reached the chain); a
-	/// toncenter rejection parks the withdrawal for intervention.
+	/// toncenter rejection parks the withdrawal for intervention — EXCEPT on a re-broadcast, where a
+	/// "duplicate / already known / external message not accepted" reply means the stored send
+	/// already landed (the wallet's seqno advanced past it, so the contract rejects the now-stale
+	/// message). Parking a paid-out withdrawal would invite a double-pay, so that is idempotent
+	/// success (the confirmation watcher settles it on the proven outgoing transfer); an expired
+	/// re-broadcast is likewise safe here — the withdrawal stays `processing` and the watcher
+	/// re-signs it at its seqno. Mirrors the BEP20 custody's `already_accepted`/`nonce too low`.
 	async fn submit(&self, boc: &str, rebroadcast: bool, withdrawal_id: Uuid) -> Result<(), CustodyError> {
 		match self.rpc.send_message(boc).await {
 			Ok(()) => {
@@ -283,6 +331,10 @@ impl TonCustody {
 				Ok(())
 			}
 			Err(RpcError::Transport(detail)) => Err(CustodyError::Unavailable(detail)),
+			Err(RpcError::Rpc(msg)) if rebroadcast && is_already_processed(&msg) => {
+				info!(%withdrawal_id, reason = %msg, "ton custody: stored message already processed — idempotent re-broadcast");
+				Ok(())
+			}
 			Err(RpcError::Rpc(msg)) => {
 				warn!(reason = %msg, "ton custody: toncenter rejected the message — parking");
 				Err(CustodyError::Rejected(msg))
@@ -328,9 +380,14 @@ impl Custody for TonCustody {
 			// feeds `next_seqno`'s MAX(nonce) and would wedge every later send above a slot
 			// nothing will ever fill. Re-broadcasts are NOT discarded — a rejection there can
 			// mean "already accepted".
-			Err(CustodyError::Rejected(msg)) => {
-				self.discard_tx(request.withdrawal_id).await?;
-				Err(CustodyError::Rejected(msg))
+			Err(err @ CustodyError::Rejected(_)) => {
+				// Best-effort: free the burned seqno so the next withdrawal doesn't sign above a
+				// hole. If the discard itself fails, keep the ORIGINAL reject reason (a masking
+				// Unavailable would hide why it parked and would re-broadcast the rejected bytes).
+				if let Err(discard) = self.discard_tx(request.withdrawal_id).await {
+					warn!(withdrawal_id = %request.withdrawal_id, "ton custody: could not free the rejected first-send's seqno (manual gap repair needed): {discard}");
+				}
+				Err(err)
 			}
 			other => other,
 		}
@@ -351,13 +408,19 @@ impl Custody for TonCustody {
 		// unfunded treasury, not an error); a failed read degrades to None. TON is 9-dp.
 		let onchain_usdt = self.treasury_liquidity(network).await.ok().flatten();
 		let onchain_gas = self.rpc.balance(&address).await.ok().map(|nanoton| format_native_units(nanoton, 9));
+		// The gas station rides along best-effort — it must be visible so the operator funds the
+		// RIGHT wallet for the sweep's gas drops — but its failure never hides the treasury view.
+		let gas_station_address = self.gas_station_address().await.ok();
+		let gas_station_gas = match &gas_station_address {
+			Some(gas_station) => self.rpc.balance(gas_station).await.ok().map(|nanoton| format_native_units(nanoton, 9)),
+			None => None,
+		};
 		Ok(Some(TreasuryFunding {
 			address,
 			onchain_usdt,
 			onchain_gas,
-			// No gas-station view wired on this rail yet — the sweep still logs it at boot.
-			gas_station_address: None,
-			gas_station_gas: None,
+			gas_station_address,
+			gas_station_gas,
 		}))
 	}
 }
@@ -373,4 +436,30 @@ fn read_err(err: RpcError) -> CustodyError {
 
 fn db_unavailable(err: sqlx::Error) -> CustodyError {
 	CustodyError::Unavailable(format!("custody db: {err}"))
+}
+
+/// toncenter replies (on a RE-broadcast only) that mean the stored message already landed: a
+/// duplicate, or the wallet's seqno advanced past it so the contract rejected the now-stale
+/// external message. Re-sending stored bytes is idempotent, so these are success, not a park.
+fn is_already_processed(msg: &str) -> bool {
+	let m = msg.to_lowercase();
+	m.contains("duplicate")
+		|| m.contains("already known")
+		|| m.contains("already exists")
+		|| m.contains("external message not accepted")
+		|| m.contains("not accepted by smart")
+}
+
+#[cfg(test)]
+mod tests {
+	use super::is_already_processed;
+
+	#[test]
+	fn recognises_already_processed_rebroadcast_responses() {
+		assert!(is_already_processed("duplicate message"));
+		assert!(is_already_processed("ALREADY KNOWN"));
+		assert!(is_already_processed("external message not accepted by smart contract"));
+		assert!(!is_already_processed("insufficient balance"));
+		assert!(!is_already_processed("cannot serialize message"));
+	}
 }
