@@ -177,7 +177,7 @@ function DepositPanel({ wallet }: { wallet: Wallet | null }) {
   // TON's raw `workchain:hex` form is valid but wallet-hostile — show the friendly
   // non-bounceable UQ… form (an uninitialized deposit wallet bounces EQ… sends).
   const rawAddress = address?.address ?? "";
-  const displayAddress = network === "ton" ? (tonFriendlyAddress(rawAddress) ?? rawAddress) : rawAddress;
+  const displayAddress = network === "ton" ? (tonFriendlyAddress(rawAddress, { testnet: address?.is_testnet }) ?? rawAddress) : rawAddress;
 
   const copy = () => {
     if (!displayAddress) return;

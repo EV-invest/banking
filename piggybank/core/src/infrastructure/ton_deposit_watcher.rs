@@ -6,7 +6,7 @@
 //! contract; we attribute it via toncenter's server-side `owner_address` filter on the
 //! decoded `/jetton/transfers` feed (no client-side address decoding, no `eth_getLogs`).
 //! Each transfer is recorded via [`record_deposit`](crate::application::balance::record_deposit)
-//! — idempotent by the on-chain `transaction_hash`, so a re-scan never double-credits — and
+//! — idempotent by `transaction_hash:user`, so a re-scan never double-credits — and
 //! the relay then posts `Dr wallet:ton / Cr user-claim`; the watcher never touches
 //! TigerBeetle, so money is still written last, in the relay.
 //!
@@ -139,7 +139,14 @@ impl TonDepositWatcher {
 		if amount.is_zero() {
 			return Ok(());
 		}
-		let tx_ref = TxRef::parse(&transfer.tx_hash).map_err(|e| WatcherError::Decode(e.to_string()))?;
+		// Disambiguate per recipient like the BEP20/TRC20 watchers: `deposits.tx_ref` is a global
+		// key, so compose the on-chain transaction hash with the credited user. In practice each
+		// incoming jetton transfer is its own transaction on the recipient's jetton wallet (so the
+		// hash is already unique), but the user id makes two transfers under one hash — an indexer
+		// quirk — impossible to collapse across users. The user id (a 36-char uuid) keeps the key
+		// well under `TxRef`'s length cap regardless of the indexer's hash encoding, and is stable
+		// across re-scans (the address→user map is fixed), so idempotency holds.
+		let tx_ref = TxRef::parse(&format!("{}:{user}", transfer.tx_hash)).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;

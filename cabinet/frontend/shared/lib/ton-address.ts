@@ -6,14 +6,19 @@
 
 const RAW_RE = /^(-?\d+):([0-9a-fA-F]{64})$/;
 
-export function tonFriendlyAddress(raw: string, opts?: { bounceable?: boolean }): string | null {
+export function tonFriendlyAddress(raw: string, opts?: { bounceable?: boolean; testnet?: boolean }): string | null {
   const m = RAW_RE.exec(raw);
   if (!m) return null; // non-TON / already-friendly input — caller falls back to raw
   const workchain = Number(m[1]);
   if (workchain < -128 || workchain > 127) return null; // must fit the int8 slot
 
   const bytes = new Uint8Array(36);
-  bytes[0] = opts?.bounceable ? 0x11 : 0x51;
+  // Base tag: bounceable 0x11 / non-bounceable 0x51. TEP-2's test-only flag sets bit 0x80
+  // (→ 0x91 bounceable-test / 0xD1 non-bounceable-test); the CRC below is over the tagged bytes,
+  // so a testnet address serializes to a different checksummed string than its mainnet twin.
+  let tag = opts?.bounceable ? 0x11 : 0x51;
+  if (opts?.testnet) tag |= 0x80;
+  bytes[0] = tag;
   bytes[1] = workchain & 0xff; // int8: 0 → 0x00, -1 → 0xff
   for (let i = 0; i < 32; i++) bytes[2 + i] = parseInt(m[2]!.slice(i * 2, i * 2 + 2), 16);
   const crc = crc16Xmodem(bytes.subarray(0, 34));

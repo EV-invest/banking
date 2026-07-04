@@ -163,6 +163,7 @@ pub struct DepositAddress {
 	pub network: String,
 	pub address: String,
 	pub min_confirmations: u32,
+	pub is_testnet: bool,
 }
 
 impl From<bk::DepositAddress> for DepositAddress {
@@ -171,6 +172,7 @@ impl From<bk::DepositAddress> for DepositAddress {
 			network: d.network,
 			address: d.address,
 			min_confirmations: d.min_confirmations,
+			is_testnet: d.is_testnet,
 		}
 	}
 }

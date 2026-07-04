@@ -10,9 +10,10 @@
 //!
 //! Everything else mirrors the BEP20 watcher: credit each transfer via
 //! [`record_deposit`](crate::application::balance::record_deposit) — idempotent by the on-chain
-//! `transaction_id`, so a re-scan never double-credits — and the relay posts the money (the
-//! watcher never touches TigerBeetle). USDT on Tron is **6-dp**, so credits scale through
-//! [`Usdt::from_onchain`] (a 10^12 difference from BEP20's 18-dp).
+//! `transaction_id:to` (a single Tron tx can pay several of our addresses, so the recipient
+//! disambiguates like BEP20's `txhash:logindex`), so a re-scan never double-credits — and the
+//! relay posts the money (the watcher never touches TigerBeetle). USDT on Tron is **6-dp**, so
+//! credits scale through [`Usdt::from_onchain`] (a 10^12 difference from BEP20's 18-dp).
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -34,6 +35,13 @@ use crate::{
 		tron_rpc::{Trc20Transfer, TronRpc},
 	},
 };
+
+/// Milliseconds re-scanned below the cursor each cycle, to absorb indexer lag — the analogue
+/// of the BEP20 watcher's confirmation depth and the TON watcher's `LOOKBACK_SECS`. Without
+/// it, a transfer the indexer solidifies with a `block_timestamp` just below an already-
+/// advanced watermark (out-of-order/backfill lag) would be skipped forever. The overlap is
+/// harmless: `record_deposit` dedupes by `tx_ref`.
+const LOOKBACK_MS: i64 = 120_000;
 
 pub struct TronDepositWatcher {
 	pool: PgPool,
@@ -91,7 +99,11 @@ impl TronDepositWatcher {
 			// older transfers unfetched while ANOTHER address's newer transfer advances the
 			// global watermark past them — skipped forever. Paging until a short raw page
 			// makes the post-loop watermark advance safe for every address.
-			let mut address_from = cursor;
+			//
+			// Start a `LOOKBACK_MS` window below the cursor so a transfer the indexer surfaced
+			// just under the watermark (indexing lag) is still picked up — the credit is
+			// idempotent by `tx_ref`, so refetching the overlap costs nothing.
+			let mut address_from = cursor.saturating_sub(LOOKBACK_MS).max(0);
 			loop {
 				let page = self
 					.rpc
@@ -129,7 +141,13 @@ impl TronDepositWatcher {
 		if amount.is_zero() {
 			return Ok(()); // a legal but meaningless zero-value transfer — not a deposit.
 		}
-		let tx_ref = TxRef::parse(&transfer.transaction_id).map_err(|e| WatcherError::Decode(e.to_string()))?;
+		// Disambiguate per recipient: `deposits.tx_ref` is a GLOBAL primary key, but one Tron
+		// transaction can pay several of our derived addresses (an exchange batching TRC20
+		// withdrawals, a multisend). Keying on the bare `transaction_id` would credit the first
+		// recipient and silently drop the rest on the shared-key conflict. `to` is the queried
+		// address (the feed is scanned per-address with `only_to`), so `{tx}:{to}` is unique per
+		// credited recipient and stable across re-scans — the analogue of BEP20's `{tx}:{logindex}`.
+		let tx_ref = TxRef::parse(&format!("{}:{}", transfer.transaction_id, transfer.to)).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;

@@ -141,6 +141,14 @@ export type BankingV1DepositAddress = {
      * confirmations before a deposit is credited
      */
     min_confirmations?: number;
+    /**
+     * is_testnet
+     *
+     * Whether this rail is on testnet — the client uses it to render the correct address
+     * form (e.g. TON's testnet-tagged user-friendly address). Only meaningful per rail; false
+     * for a mainnet rail.
+     */
+    is_testnet?: boolean;
 };
 
 /**

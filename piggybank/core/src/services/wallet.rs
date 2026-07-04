@@ -28,6 +28,11 @@ impl WalletSvc {
 	pub fn new(state: AppState) -> Self {
 		Self { state }
 	}
+	/// Whether a rail's deposit addresses are testnet-tagged. Only TON has a distinct testnet
+	/// address form; the other rails' addresses are network-agnostic on the wire.
+	fn rail_is_testnet(&self, network: Network) -> bool {
+		matches!(network, Network::Ton) && self.state.ton_is_testnet
+	}
 }
 
 #[tonic::async_trait]
@@ -52,7 +57,7 @@ impl WalletService for WalletSvc {
 				pending_withdrawal: wallet.balance.pending_withdrawal.to_decimal_string(),
 				total: wallet.balance.total.to_decimal_string(),
 			}),
-			deposit_addresses: wallet.deposit_addresses.iter().map(deposit_rail_to_proto).collect(),
+			deposit_addresses: wallet.deposit_addresses.iter().map(|rail| deposit_rail_to_proto(rail, self.rail_is_testnet(rail.network))).collect(),
 			withdrawable: wallet.withdrawable.iter().map(withdrawable_to_proto).collect(),
 		}))
 	}
@@ -70,6 +75,7 @@ impl WalletService for WalletSvc {
 			network: network.as_str().to_owned(),
 			address: address.map(|a| a.as_str().to_owned()).unwrap_or_default(),
 			min_confirmations: network.min_confirmations(),
+			is_testnet: self.rail_is_testnet(network),
 		}))
 	}
 
@@ -122,11 +128,12 @@ impl WalletService for WalletSvc {
 	}
 }
 
-fn deposit_rail_to_proto(rail: &wallet_app::DepositRail) -> pb::DepositAddress {
+fn deposit_rail_to_proto(rail: &wallet_app::DepositRail, is_testnet: bool) -> pb::DepositAddress {
 	pb::DepositAddress {
 		network: rail.network.as_str().to_owned(),
 		address: rail.address.as_ref().map(|address| address.as_str().to_owned()).unwrap_or_default(),
 		min_confirmations: rail.network.min_confirmations(),
+		is_testnet,
 	}
 }
 
