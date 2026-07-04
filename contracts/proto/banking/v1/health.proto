@@ -38,6 +38,11 @@ message ReadinessResponse {
   // a configured rail means the deposit scan is stalled — deposits confirm on-chain
   // but are not credited. Diagnostics only: it does NOT gate `ready`.
   repeated DepositScanCursor scan_cursors = 7;
+  // Signer unseal failures seen on money-moving paths (sweep / withdrawal signing)
+  // since this instance booted. Any non-zero value means a PROVABLY DEAD key (the
+  // KEK-epoch bug class) was asked to sign — funds on its address cannot move.
+  // Diagnostics only: it does NOT gate `ready`.
+  uint64 unseal_failures = 8;
 }
 
 // Seconds since a rail's deposit watcher last advanced/touched its per-network scan

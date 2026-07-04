@@ -86,6 +86,9 @@ impl HealthService for Health {
 			backlog,
 			oldest_backlog_age_secs,
 			scan_cursors,
+			// Any non-zero value is a dead-key alarm (funds stranded); surfaced on the
+			// admin Overview. Not part of `ready` — the healthy keys must keep serving.
+			unseal_failures: crate::infrastructure::telemetry::unseal_failures(),
 		}))
 	}
 }

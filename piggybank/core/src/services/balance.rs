@@ -20,7 +20,7 @@ use crate::{
 	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
 	services::{
 		funds::redemption_to_proto,
-		support::{map_err, optional, parse_redemption_id, parse_withdrawal_id, require_permission, unix_now},
+		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, require_permission, unix_now},
 	},
 };
 
@@ -50,6 +50,8 @@ impl BalanceService for BalanceSvc {
 					treasury_address: r.treasury_address.unwrap_or_default(),
 					onchain_usdt: r.onchain_usdt.map(Usdt::to_decimal_string).unwrap_or_default(),
 					onchain_gas: r.onchain_gas.unwrap_or_default(),
+					gas_station_address: r.gas_station_address.unwrap_or_default(),
+					gas_station_gas: r.gas_station_gas.unwrap_or_default(),
 				})
 				.collect(),
 			bank: t.bank.to_decimal_string(),
@@ -228,5 +230,40 @@ impl BalanceService for BalanceSvc {
 			Some((true, _)) => Err(Status::failed_precondition("event already dispatched")),
 			_ => Err(Status::not_found("parked event")),
 		}
+	}
+
+	async fn list_withdrawal_queue(&self, request: Request<pb::ListWithdrawalQueueRequest>) -> Result<Response<pb::WithdrawalQueue>, Status> {
+		require_permission(&self.state, &request, Permission::WithdrawalSettle).await?;
+		let queued = self.state.withdrawals.list_actionable().await.map_err(map_err)?;
+		Ok(Response::new(pb::WithdrawalQueue {
+			items: queued
+				.into_iter()
+				.map(|w| pb::WithdrawalQueueItem {
+					withdrawal_id: w.id.to_string(),
+					user_id: w.user_id.to_string(),
+					email: w.email,
+					network: w.network.as_str().to_owned(),
+					address: w.address,
+					amount: w.amount.to_decimal_string(),
+					net_amount: w.net_amount.to_decimal_string(),
+					state: w.state,
+					created_at: w.created_at,
+				})
+				.collect(),
+		}))
+	}
+
+	async fn rotate_deposit_address(&self, request: Request<pb::RotateDepositAddressRequest>) -> Result<Response<pb::RotateDepositAddressResponse>, Status> {
+		require_permission(&self.state, &request, Permission::DepositAddressRotate).await?;
+		let req = request.get_ref();
+		let user = parse_user_id(&req.user_id)?;
+		let network = Network::parse(&req.network).map_err(map_err)?;
+		let address = self.state.deposit_addresses.rotate(user, network).await.map_err(map_err)?;
+		// WARN on success on purpose: a rotation is a recovery event worth an audit trail —
+		// the old address is permanently unspendable and users may still hold it.
+		tracing::warn!(user_id = %req.user_id, network = %req.network, new_address = %address.as_str(), "rotated a dead deposit address");
+		Ok(Response::new(pb::RotateDepositAddressResponse {
+			address: address.as_str().to_owned(),
+		}))
 	}
 }

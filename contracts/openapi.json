@@ -769,6 +769,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/ListWithdrawalQueue": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "ListWithdrawalQueue",
+        "description": "Admin (WithdrawalSettle): the cross-user queue of withdrawals awaiting operator\n action, oldest first — `queued` (awaiting liquidity/dispatch) and `processing`\n (broadcast in flight: settle with the mined tx ref, or fail ONLY if nothing\n reached the chain). The admin Withdrawals screen's clear-the-queue surface.",
+        "operationId": "banking.v1.BalanceService.ListWithdrawalQueue",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListWithdrawalQueueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.WithdrawalQueue"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/PostFundValuation": {
       "post": {
         "tags": [
@@ -880,6 +939,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.RecordDepositResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/RotateDepositAddress": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "RotateDepositAddress",
+        "description": "Admin (DepositAddressRotate): supersede a user's PROVABLY DEAD deposit address\n (the signer can no longer unseal its key — the KEK-epoch casualty class) with a\n freshly minted keypair, and refresh the hub's address cache. The signer refuses\n to rotate a key that still unseals. Funds already on the old address remain\n unrecoverable; this restores the user's ability to receive FUTURE deposits.",
+        "operationId": "banking.v1.BalanceService.RotateDepositAddress",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RotateDepositAddressRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RotateDepositAddressResponse"
                 }
               }
             }
@@ -1129,7 +1247,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "UnparkEvent",
-        "description": "Admin (OutboxManage): clear `parked_at` so the relay re-drives the event once the\n cause is fixed; refused for a compensated row — its recovery event already\n applied, so re-driving would double-apply.",
+        "description": "Admin (OutboxManage): clear `parked_at` so the relay re-drives the event once the\n cause is fixed; refused for a compensated row — it parked half-applied with\n compensation owed, so re-driving would re-apply the legs that already posted.",
         "operationId": "banking.v1.BalanceService.UnparkEvent",
         "parameters": [
           {
@@ -3757,6 +3875,11 @@
         "title": "ListSessionsResponse",
         "additionalProperties": false
       },
+      "banking.v1.ListWithdrawalQueueRequest": {
+        "type": "object",
+        "title": "ListWithdrawalQueueRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListWithdrawalsRequest": {
         "type": "object",
         "title": "ListWithdrawalsRequest",
@@ -3873,7 +3996,7 @@
         },
         "title": "ParkedEvent",
         "additionalProperties": false,
-        "description": "One parked outbox row. `reason` is the relay's last error; `parked_at` is unix\n seconds; `compensated` marks a half-applied event whose recovery already ran\n (never unparkable)."
+        "description": "One parked outbox row. `reason` is the relay's last error; `parked_at` is unix\n seconds; `compensated` marks a half-applied event that is owed compensation\n (never unparkable)."
       },
       "banking.v1.ParkedEventList": {
         "type": "object",
@@ -3998,6 +4121,16 @@
             "type": "string",
             "title": "onchain_gas",
             "description": "decimal native units (BNB | TRX | TON) for gas"
+          },
+          "gas_station_address": {
+            "type": "string",
+            "title": "gas_station_address",
+            "description": "The rail's sweep GAS-STATION wallet — a separate account paying the gas drops\n that consolidate user deposits into the treasury. Fund the native coin here,\n never USDT. Empty when the rail has no gas-station view."
+          },
+          "gas_station_gas": {
+            "type": "string",
+            "title": "gas_station_gas",
+            "description": "the gas station's native-coin balance"
           }
         },
         "title": "RailLiquidity",
@@ -4055,6 +4188,15 @@
             },
             "title": "scan_cursors",
             "description": "Per-rail deposit-scan diagnostics; only configured rails appear. A large age on\n a configured rail means the deposit scan is stalled — deposits confirm on-chain\n but are not credited. Diagnostics only: it does NOT gate `ready`."
+          },
+          "unseal_failures": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "unseal_failures",
+            "format": "int64",
+            "description": "Signer unseal failures seen on money-moving paths (sweep / withdrawal signing)\n since this instance booted. Any non-zero value means a PROVABLY DEAD key (the\n KEK-epoch bug class) was asked to sign — funds on its address cannot move.\n Diagnostics only: it does NOT gate `ready`."
           }
         },
         "title": "ReadinessResponse",
@@ -4298,6 +4440,35 @@
           }
         },
         "title": "RevokeTokensResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.RotateDepositAddressRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "the affected user (UUID)"
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton"
+          }
+        },
+        "title": "RotateDepositAddressRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.RotateDepositAddressResponse": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "address",
+            "description": "the NEW fundable deposit address"
+          }
+        },
+        "title": "RotateDepositAddressResponse",
         "additionalProperties": false
       },
       "banking.v1.SeedCapitalRequest": {
@@ -4831,6 +5002,73 @@
         },
         "title": "WithdrawalList",
         "additionalProperties": false
+      },
+      "banking.v1.WithdrawalQueue": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.WithdrawalQueueItem"
+            },
+            "title": "items"
+          }
+        },
+        "title": "WithdrawalQueue",
+        "additionalProperties": false
+      },
+      "banking.v1.WithdrawalQueueItem": {
+        "type": "object",
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "title": "withdrawal_id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | trc20 | ton"
+          },
+          "address": {
+            "type": "string",
+            "title": "address",
+            "description": "destination on-chain address"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "gross decimal USDT debited from the user"
+          },
+          "net_amount": {
+            "type": "string",
+            "title": "net_amount",
+            "description": "amount − fee — what ships on-chain"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "queued | processing"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          }
+        },
+        "title": "WithdrawalQueueItem",
+        "additionalProperties": false,
+        "description": "One withdrawal awaiting operator action. `email` is the mirrored identity email\n (may be empty if the bridge hasn't populated it); `created_at` is unix seconds."
       },
       "concierge.v1.AdminUserSummary": {
         "type": "object",

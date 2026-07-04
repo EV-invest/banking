@@ -263,9 +263,12 @@ impl TonCustody {
 		if let Some(token) = &self.service_token {
 			signer_request = token.authorize(signer_request);
 		}
-		let response = self.signer.clone().sign_jetton_transfer(signer_request).await.map_err(|s| match s.code() {
-			tonic::Code::Unavailable | tonic::Code::DeadlineExceeded => CustodyError::Unavailable(format!("signer: {}", s.message())),
-			_ => CustodyError::Rejected(format!("signer: {}", s.message())),
+		let response = self.signer.clone().sign_jetton_transfer(signer_request).await.map_err(|s| {
+			super::telemetry::note_signer_error("withdrawal", "treasury", s.message());
+			match s.code() {
+				tonic::Code::Unavailable | tonic::Code::DeadlineExceeded => CustodyError::Unavailable(format!("signer: {}", s.message())),
+				_ => CustodyError::Rejected(format!("signer: {}", s.message())),
+			}
 		})?;
 		let response = response.into_inner();
 		Ok((response.signed_boc, response.msg_hash))
@@ -348,7 +351,14 @@ impl Custody for TonCustody {
 		// unfunded treasury, not an error); a failed read degrades to None. TON is 9-dp.
 		let onchain_usdt = self.treasury_liquidity(network).await.ok().flatten();
 		let onchain_gas = self.rpc.balance(&address).await.ok().map(|nanoton| format_native_units(nanoton, 9));
-		Ok(Some(TreasuryFunding { address, onchain_usdt, onchain_gas }))
+		Ok(Some(TreasuryFunding {
+			address,
+			onchain_usdt,
+			onchain_gas,
+			// No gas-station view wired on this rail yet — the sweep still logs it at boot.
+			gas_station_address: None,
+			gas_station_gas: None,
+		}))
 	}
 }
 

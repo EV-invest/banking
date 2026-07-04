@@ -92,6 +92,10 @@ pub enum Permission {
 	UserRevoke,
 	/// Disable a user's money-plane account directly (independent of the bridge freeze).
 	UserSuspend,
+	/// Supersede a user's PROVABLY DEAD deposit-address key (a KEK-epoch casualty —
+	/// the signer can no longer unseal it) with a freshly minted keypair. Recovery
+	/// only: the signer refuses to rotate a healthy key.
+	DepositAddressRotate,
 }
 
 /// The role→permission policy (pure). The money-plane RBAC matrix, read as separation

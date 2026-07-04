@@ -24,4 +24,13 @@ pub trait DepositAddresses: Gateway {
 	/// the on-chain image of the key), so the rail is presented as unavailable rather than
 	/// surfacing an address that cannot receive funds.
 	async fn address(&self, user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError>;
+
+	/// Supersede the user's key-backed address on `network` with a freshly minted
+	/// keypair — recovery for a PROVABLY DEAD key (the signer can no longer unseal
+	/// it). Returns the NEW fundable address; the backend refuses to rotate a key
+	/// that is still healthy. Backends without a rotating key store reject.
+	async fn rotate(&self, user: UserId, network: Network) -> Result<WalletAddress, DomainError> {
+		let _ = (user, network);
+		Err(DomainError::Validation("deposit-address rotation is not supported by this backend".into()))
+	}
 }

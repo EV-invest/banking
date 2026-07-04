@@ -57,6 +57,13 @@ pub struct TreasuryFunding {
 	/// Native-coin gas balance, pre-rendered in whole units (BNB/TRX/TON differ in
 	/// decimals, so the adapter formats it — see [`format_native_units`]).
 	pub onchain_gas: Option<String>,
+	/// The rail's sweep **gas-station** wallet — a SEPARATE account that pays the gas
+	/// drops consolidating user deposits into the treasury. Fund it with the native
+	/// coin ONLY (never USDT). `None` when the rail has no gas-station view — before
+	/// this was surfaced, an operator once funded the wrong wallet mid-incident.
+	pub gas_station_address: Option<String>,
+	/// The gas station's native-coin balance, formatted like `onchain_gas`.
+	pub gas_station_gas: Option<String>,
 }
 /// Render a native-coin amount (`units` at `decimals`) as a decimal string with the
 /// fraction's trailing zeros trimmed — the gas-balance display format.

@@ -25,7 +25,7 @@ use domain::{
 	users::UserId,
 };
 use evbanking_auth::ServiceTokenSource;
-use evbanking_contracts::signer::v1::{ProvisionAddressRequest, signer_service_client::SignerServiceClient};
+use evbanking_contracts::signer::v1::{ProvisionAddressRequest, RotateAddressRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
 use tonic::{Request, transport::Channel};
 
@@ -68,8 +68,14 @@ impl SignerDepositAddresses {
 			.into_inner();
 		let address = WalletAddress::parse(network, &response.address)?;
 		let derived = response.address_kind == KIND_DERIVED;
-		let kind = if derived { KIND_DERIVED } else { "placeholder" };
+		self.cache(user, network, &address, derived).await?;
+		Ok((address, derived))
+	}
 
+	/// Upsert the hub's watch-only cache row — the address `GetDepositAddress` serves
+	/// and the deposit watcher / sweep read.
+	async fn cache(&self, user: UserId, network: Network, address: &WalletAddress, derived: bool) -> Result<(), DomainError> {
+		let kind = if derived { KIND_DERIVED } else { "placeholder" };
 		sqlx::query(
 			"INSERT INTO user_deposit_addresses (user_id, network, address, address_kind) VALUES ($1, $2, $3, $4) \
 			 ON CONFLICT (user_id, network) DO UPDATE SET address = EXCLUDED.address, address_kind = EXCLUDED.address_kind",
@@ -81,7 +87,7 @@ impl SignerDepositAddresses {
 		.execute(&self.pool)
 		.await
 		.map_err(repo_err)?;
-		Ok((address, derived))
+		Ok(())
 	}
 }
 
@@ -107,6 +113,37 @@ impl DepositAddresses for SignerDepositAddresses {
 		// call and re-derives from its stored key thereafter (idempotent per user+network).
 		let (address, derived) = self.provision_and_cache(user, network).await?;
 		Ok(derived.then_some(address))
+	}
+
+	async fn rotate(&self, user: UserId, network: Network) -> Result<WalletAddress, DomainError> {
+		let mut request = Request::new(RotateAddressRequest {
+			user_id: user.raw().to_string(),
+			network: network.as_str().to_owned(),
+		});
+		if let Some(token) = &self.service_token {
+			request = token.authorize(request);
+		}
+		let response = self
+			.client
+			.clone()
+			.rotate_address(request)
+			.await
+			.map_err(|status| match status.code() {
+				// The signer's refusals (healthy key / nothing to rotate) are operator
+				// input errors, not infrastructure faults.
+				tonic::Code::FailedPrecondition | tonic::Code::InvalidArgument => DomainError::Validation(format!("signer refused rotation: {}", status.message())),
+				_ => DomainError::Repository(format!("signer rotation failed: {}", status.message())),
+			})?
+			.into_inner();
+		let address = WalletAddress::parse(network, &response.address)?;
+		let derived = response.address_kind == KIND_DERIVED;
+		// Refresh the cache IMMEDIATELY: the fast path in `address` short-circuits on a
+		// cached derived row, so without this the hub would keep serving the dead address.
+		self.cache(user, network, &address, derived).await?;
+		if !derived {
+			return Err(DomainError::Repository("rotated address is not derived (signer reported a placeholder)".into()));
+		}
+		Ok(address)
 	}
 }
 

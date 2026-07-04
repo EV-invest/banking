@@ -27,6 +27,10 @@ pub struct RailLiquidity {
 	pub onchain_usdt: Option<Usdt>,
 	/// Native-coin gas balance (BNB/TRX/TON), pre-rendered by the adapter.
 	pub onchain_gas: Option<String>,
+	/// The rail's sweep gas-station wallet — fund the native coin here (never USDT).
+	pub gas_station_address: Option<String>,
+	/// The gas station's native-coin balance, pre-rendered by the adapter.
+	pub gas_station_gas: Option<String>,
 }
 
 /// The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
@@ -90,9 +94,9 @@ pub async fn treasury(ledger: &dyn Ledger, custody: &dyn Custody) -> Result<Trea
 			tracing::debug!(%network, "treasury funding view unavailable: {err}");
 			None
 		});
-		let (treasury_address, onchain_usdt, onchain_gas) = match funding {
-			Some(f) => (Some(f.address), f.onchain_usdt, f.onchain_gas),
-			None => (None, None, None),
+		let (treasury_address, onchain_usdt, onchain_gas, gas_station_address, gas_station_gas) = match funding {
+			Some(f) => (Some(f.address), f.onchain_usdt, f.onchain_gas, f.gas_station_address, f.gas_station_gas),
+			None => (None, None, None, None, None),
 		};
 		rails.push(RailLiquidity {
 			network,
@@ -100,6 +104,8 @@ pub async fn treasury(ledger: &dyn Ledger, custody: &dyn Custody) -> Result<Trea
 			treasury_address,
 			onchain_usdt,
 			onchain_gas,
+			gas_station_address,
+			gas_station_gas,
 		});
 	}
 	let bank = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::BankCustody).await?.posted);

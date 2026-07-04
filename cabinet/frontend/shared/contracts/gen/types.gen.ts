@@ -481,6 +481,13 @@ export type BankingV1ListSessionsResponse = {
 };
 
 /**
+ * ListWithdrawalQueueRequest
+ */
+export type BankingV1ListWithdrawalQueueRequest = {
+    [key: string]: never;
+};
+
+/**
  * ListWithdrawalsRequest
  */
 export type BankingV1ListWithdrawalsRequest = {
@@ -565,7 +572,7 @@ export type BankingV1OperationsMode = {
  * ParkedEvent
  *
  * One parked outbox row. `reason` is the relay's last error; `parked_at` is unix
- * seconds; `compensated` marks a half-applied event whose recovery already ran
+ * seconds; `compensated` marks a half-applied event that is owed compensation
  * (never unparkable).
  */
 export type BankingV1ParkedEvent = {
@@ -735,6 +742,20 @@ export type BankingV1RailLiquidity = {
      * decimal native units (BNB | TRX | TON) for gas
      */
     onchain_gas?: string;
+    /**
+     * gas_station_address
+     *
+     * The rail's sweep GAS-STATION wallet — a separate account paying the gas drops
+     * that consolidate user deposits into the treasury. Fund the native coin here,
+     * never USDT. Empty when the rail has no gas-station view.
+     */
+    gas_station_address?: string;
+    /**
+     * gas_station_gas
+     *
+     * the gas station's native-coin balance
+     */
+    gas_station_gas?: string;
 };
 
 /**
@@ -785,6 +806,15 @@ export type BankingV1ReadinessResponse = {
      * but are not credited. Diagnostics only: it does NOT gate `ready`.
      */
     scan_cursors?: Array<BankingV1DepositScanCursor>;
+    /**
+     * unseal_failures
+     *
+     * Signer unseal failures seen on money-moving paths (sweep / withdrawal signing)
+     * since this instance booted. Any non-zero value means a PROVABLY DEAD key (the
+     * KEK-epoch bug class) was asked to sign — funds on its address cannot move.
+     * Diagnostics only: it does NOT gate `ready`.
+     */
+    unseal_failures?: number | string;
 };
 
 /**
@@ -1020,6 +1050,36 @@ export type BankingV1RevokeTokensResponse = {
      * token_version
      */
     token_version?: number | string;
+};
+
+/**
+ * RotateDepositAddressRequest
+ */
+export type BankingV1RotateDepositAddressRequest = {
+    /**
+     * user_id
+     *
+     * the affected user (UUID)
+     */
+    user_id?: string;
+    /**
+     * network
+     *
+     * bep20 | trc20 | ton
+     */
+    network?: string;
+};
+
+/**
+ * RotateDepositAddressResponse
+ */
+export type BankingV1RotateDepositAddressResponse = {
+    /**
+     * address
+     *
+     * the NEW fundable deposit address
+     */
+    address?: string;
 };
 
 /**
@@ -1555,6 +1615,71 @@ export type BankingV1WithdrawalList = {
      * withdrawals
      */
     withdrawals?: Array<BankingV1Withdrawal>;
+};
+
+/**
+ * WithdrawalQueue
+ */
+export type BankingV1WithdrawalQueue = {
+    /**
+     * items
+     */
+    items?: Array<BankingV1WithdrawalQueueItem>;
+};
+
+/**
+ * WithdrawalQueueItem
+ *
+ * One withdrawal awaiting operator action. `email` is the mirrored identity email
+ * (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.
+ */
+export type BankingV1WithdrawalQueueItem = {
+    /**
+     * withdrawal_id
+     */
+    withdrawal_id?: string;
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * network
+     *
+     * bep20 | trc20 | ton
+     */
+    network?: string;
+    /**
+     * address
+     *
+     * destination on-chain address
+     */
+    address?: string;
+    /**
+     * amount
+     *
+     * gross decimal USDT debited from the user
+     */
+    amount?: string;
+    /**
+     * net_amount
+     *
+     * amount − fee — what ships on-chain
+     */
+    net_amount?: string;
+    /**
+     * state
+     *
+     * queued | processing
+     */
+    state?: string;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
 };
 
 /**
@@ -2605,6 +2730,35 @@ export type BankingV1BalanceServiceListRedemptionQueueResponses = {
 
 export type BankingV1BalanceServiceListRedemptionQueueResponse = BankingV1BalanceServiceListRedemptionQueueResponses[keyof BankingV1BalanceServiceListRedemptionQueueResponses];
 
+export type BankingV1BalanceServiceListWithdrawalQueueData = {
+    body: BankingV1ListWithdrawalQueueRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/ListWithdrawalQueue';
+};
+
+export type BankingV1BalanceServiceListWithdrawalQueueErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceListWithdrawalQueueError = BankingV1BalanceServiceListWithdrawalQueueErrors[keyof BankingV1BalanceServiceListWithdrawalQueueErrors];
+
+export type BankingV1BalanceServiceListWithdrawalQueueResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1WithdrawalQueue;
+};
+
+export type BankingV1BalanceServiceListWithdrawalQueueResponse = BankingV1BalanceServiceListWithdrawalQueueResponses[keyof BankingV1BalanceServiceListWithdrawalQueueResponses];
+
 export type BankingV1BalanceServicePostFundValuationData = {
     body: BankingV1PostFundValuationRequest;
     headers: {
@@ -2662,6 +2816,35 @@ export type BankingV1BalanceServiceRecordDepositResponses = {
 };
 
 export type BankingV1BalanceServiceRecordDepositResponse = BankingV1BalanceServiceRecordDepositResponses[keyof BankingV1BalanceServiceRecordDepositResponses];
+
+export type BankingV1BalanceServiceRotateDepositAddressData = {
+    body: BankingV1RotateDepositAddressRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/RotateDepositAddress';
+};
+
+export type BankingV1BalanceServiceRotateDepositAddressErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceRotateDepositAddressError = BankingV1BalanceServiceRotateDepositAddressErrors[keyof BankingV1BalanceServiceRotateDepositAddressErrors];
+
+export type BankingV1BalanceServiceRotateDepositAddressResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1RotateDepositAddressResponse;
+};
+
+export type BankingV1BalanceServiceRotateDepositAddressResponse = BankingV1BalanceServiceRotateDepositAddressResponses[keyof BankingV1BalanceServiceRotateDepositAddressResponses];
 
 export type BankingV1BalanceServiceSeedCapitalData = {
     body: BankingV1SeedCapitalRequest;
