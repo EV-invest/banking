@@ -18,8 +18,9 @@ use std::sync::{
 
 use domain::{money::Network, users::UserId};
 use evbanking_contracts::signer::v1::{
-	ProvisionAddressRequest, ProvisionAddressResponse, SignErc20TransferRequest, SignErc20TransferResponse, SignJettonTransferRequest, SignNativeTransferRequest, SignNativeTransferResponse,
-	SignTonTransferRequest, SignTrc20TransferRequest, SignTrxTransferRequest, SignedTonTxResponse, SignedTronTxResponse,
+	GetKeyHealthRequest, GetKeyHealthResponse, ProvisionAddressRequest, ProvisionAddressResponse, RotateAddressRequest, SignErc20TransferRequest, SignErc20TransferResponse,
+	SignJettonTransferRequest, SignNativeTransferRequest, SignNativeTransferResponse, SignTonTransferRequest, SignTrc20TransferRequest, SignTrxTransferRequest, SignedTonTxResponse,
+	SignedTronTxResponse,
 	signer_service_client::SignerServiceClient,
 	signer_service_server::{SignerService, SignerServiceServer},
 };
@@ -82,6 +83,14 @@ impl SignerService for FakeSigner {
 
 	async fn sign_ton_transfer(&self, _request: tonic::Request<SignTonTransferRequest>) -> Result<tonic::Response<SignedTonTxResponse>, tonic::Status> {
 		Err(tonic::Status::unimplemented("sign_ton_transfer is not exercised by the deposit-address gating test"))
+	}
+
+	async fn get_key_health(&self, _request: tonic::Request<GetKeyHealthRequest>) -> Result<tonic::Response<GetKeyHealthResponse>, tonic::Status> {
+		Err(tonic::Status::unimplemented("get_key_health is not exercised by the deposit-address gating test"))
+	}
+
+	async fn rotate_address(&self, _request: tonic::Request<RotateAddressRequest>) -> Result<tonic::Response<ProvisionAddressResponse>, tonic::Status> {
+		Err(tonic::Status::unimplemented("rotate_address is not exercised by the deposit-address gating test"))
 	}
 }
 

@@ -5,7 +5,21 @@
 
 import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
-import type { AdminOverview, AdminUserList, AdminUserProfile, CabinetConfig, FundNav, OperationsMode, PlatformConfig, Redemption, RedemptionQueue, Treasury, UserBalance } from "@/shared/contracts/admin";
+import type {
+  AdminOverview,
+  AdminUserList,
+  AdminUserProfile,
+  CabinetConfig,
+  FundNav,
+  OperationsMode,
+  ParkedEventList,
+  PlatformConfig,
+  Redemption,
+  RedemptionQueue,
+  Treasury,
+  UserBalance,
+  WithdrawalQueue,
+} from "@/shared/contracts/admin";
 
 async function getJson<T>(url: `/${string}`): Promise<T> {
   const res = await fetch(apiPath(url), { headers: { accept: "application/json" } });
@@ -27,6 +41,11 @@ async function postJson<T>(url: `/${string}`, body: unknown): Promise<T> {
 
 // ── overview ──────────────────────────────────────────────────────────────────
 export const fetchOverview = (): Promise<AdminOverview> => getJson("/api/admin/overview");
+
+// ── outbox ────────────────────────────────────────────────────────────────────
+export const fetchParkedEvents = (): Promise<ParkedEventList> => getJson("/api/admin/outbox/parked");
+
+export const unparkEvent = (seq: string): Promise<{ ok: boolean }> => postJson("/api/admin/outbox/unpark", { seq });
 
 // ── users ─────────────────────────────────────────────────────────────────────
 export interface UserFilters {
@@ -73,6 +92,17 @@ export const postValuation = (body: { service: string; aum: string; override: bo
 export const settleRedemption = (redemptionId: string): Promise<Redemption> => postJson("/api/admin/valuation/settle", { redemption_id: redemptionId });
 
 export const failRedemption = (redemptionId: string): Promise<Redemption> => postJson("/api/admin/valuation/fail", { redemption_id: redemptionId });
+
+// ── withdrawals (operator queue + actions) ───────────────────────────────────────
+export const fetchWithdrawalQueue = (): Promise<WithdrawalQueue> => getJson("/api/admin/withdrawals/queue");
+
+export const dispatchWithdrawal = (withdrawalId: string): Promise<{ ok: boolean }> => postJson("/api/admin/withdrawals/dispatch", { withdrawal_id: withdrawalId });
+
+export const settleWithdrawal = (withdrawalId: string, txRef: string): Promise<{ ok: boolean }> =>
+  postJson("/api/admin/withdrawals/settle", { withdrawal_id: withdrawalId, tx_ref: txRef });
+
+export const failWithdrawal = (withdrawalId: string, reason: string): Promise<{ ok: boolean }> =>
+  postJson("/api/admin/withdrawals/fail", { withdrawal_id: withdrawalId, reason });
 
 // ── cabinet (platform config + read-only kill-switch) ───────────────────────────
 export const fetchCabinet = (): Promise<CabinetConfig> => getJson("/api/admin/cabinet");

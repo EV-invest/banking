@@ -14,7 +14,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use domain::{architecture::Gateway, money::Network};
+use domain::{
+	architecture::Gateway,
+	money::{Network, Usdt},
+};
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignErc20TransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -23,9 +26,13 @@ use tonic::{Request, transport::Channel};
 use tracing::{info, warn};
 use uuid::Uuid;
 
+/// The reserved sweep gas-station wallet id (see `sweep.rs` — same convention): a
+/// BNB-only account whose funding view rides along on the treasury screen.
+const GAS_STATION: Uuid = Uuid::from_u128(1);
+
 use crate::{
 	infrastructure::bsc_rpc::{BscRpc, RpcError},
-	ports::custody::{BroadcastRequest, Custody, CustodyError},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
 };
 
 /// No-op custody: logs and returns success. An operator supplies the real on-chain tx ref
@@ -72,6 +79,22 @@ impl Custody for MultiChainCustody {
 	async fn broadcast(&self, request: &BroadcastRequest) -> Result<(), CustodyError> {
 		self.by_network.get(&request.network).unwrap_or(&self.fallback).broadcast(request).await
 	}
+
+	async fn treasury_liquidity(&self, network: Network) -> Result<Option<Usdt>, CustodyError> {
+		// An unwired rail has no chain view (`None`) — it must behave like the stub
+		// (operator-settled), not report a zero that would freeze its dispatches.
+		match self.by_network.get(&network) {
+			Some(adapter) => adapter.treasury_liquidity(network).await,
+			None => Ok(None),
+		}
+	}
+
+	async fn treasury_funding(&self, network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
+		match self.by_network.get(&network) {
+			Some(adapter) => adapter.treasury_funding(network).await,
+			None => Ok(None),
+		}
+	}
 }
 
 /// Real BSC custody: sign via the signer's treasury key, broadcast via the node.
@@ -86,6 +109,8 @@ pub struct ChainCustody {
 	/// The treasury hot wallet's address (the withdrawal source), resolved once via the
 	/// signer and cached. Funds — USDT to send, BNB for gas — are deposited here out-of-band.
 	treasury_address: OnceCell<String>,
+	/// The sweep gas-station's address, resolved once for the operator funding view.
+	gas_station_address: OnceCell<String>,
 }
 
 impl ChainCustody {
@@ -99,6 +124,7 @@ impl ChainCustody {
 			usdt_contract,
 			gas_limit,
 			treasury_address: OnceCell::new(),
+			gas_station_address: OnceCell::new(),
 		}
 	}
 
@@ -127,6 +153,34 @@ impl ChainCustody {
 					return Err(CustodyError::Rejected(format!("treasury address is not fundable (kind={})", response.address_kind)));
 				}
 				info!(treasury = %response.address, "chain custody: treasury hot wallet — fund it with USDT (liquidity) + BNB (gas)");
+				Ok(response.address)
+			})
+			.await
+			.cloned()
+	}
+
+	/// The sweep gas-station's address, resolved once via `ProvisionAddress` (the
+	/// reserved [`GAS_STATION`] id) and cached — read-only, for the funding view.
+	async fn gas_station_address(&self) -> Result<String, CustodyError> {
+		self.gas_station_address
+			.get_or_try_init(|| async {
+				let mut request = Request::new(ProvisionAddressRequest {
+					user_id: GAS_STATION.to_string(),
+					network: "bep20".to_owned(),
+				});
+				if let Some(token) = &self.service_token {
+					request = token.authorize(request);
+				}
+				let response = self
+					.signer
+					.clone()
+					.provision_address(request)
+					.await
+					.map_err(|s| CustodyError::Unavailable(format!("resolve gas-station address: {}", s.message())))?
+					.into_inner();
+				if response.address_kind != "derived" {
+					return Err(CustodyError::Rejected(format!("gas-station address is not fundable (kind={})", response.address_kind)));
+				}
 				Ok(response.address)
 			})
 			.await
@@ -220,9 +274,12 @@ impl ChainCustody {
 		if let Some(token) = &self.service_token {
 			signer_request = token.authorize(signer_request);
 		}
-		let response = self.signer.clone().sign_erc20_transfer(signer_request).await.map_err(|s| match s.code() {
-			tonic::Code::Unavailable | tonic::Code::DeadlineExceeded => CustodyError::Unavailable(format!("signer: {}", s.message())),
-			_ => CustodyError::Rejected(format!("signer: {}", s.message())),
+		let response = self.signer.clone().sign_erc20_transfer(signer_request).await.map_err(|s| {
+			super::telemetry::note_signer_error("withdrawal", "treasury", s.message());
+			match s.code() {
+				tonic::Code::Unavailable | tonic::Code::DeadlineExceeded => CustodyError::Unavailable(format!("signer: {}", s.message())),
+				_ => CustodyError::Rejected(format!("signer: {}", s.message())),
+			}
 		})?;
 		let response = response.into_inner();
 		Ok((response.raw_tx, response.tx_hash))
@@ -297,6 +354,36 @@ impl Custody for ChainCustody {
 			}
 			other => other,
 		}
+	}
+
+	async fn treasury_liquidity(&self, _network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let treasury = self.treasury_address().await?;
+		let usdt = self.rpc.erc20_balance(&self.usdt_contract, &treasury).await.map_err(read_err)?;
+		// BEP20 USDT is 18-dp — already base units.
+		Ok(Some(Usdt::from_base_units(usdt)))
+	}
+
+	async fn treasury_funding(&self, network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
+		let address = self.treasury_address().await?;
+		// Balance reads degrade to None (the address alone is still fundable); only an
+		// address-resolution failure errors — the rail is then genuinely unavailable.
+		let onchain_usdt = self.treasury_liquidity(network).await.ok().flatten();
+		let onchain_gas = self.rpc.bnb_balance(&address).await.ok().map(|wei| format_native_units(wei, 18));
+		// The gas station rides along best-effort: it must be visible on the treasury
+		// screen so the operator funds the RIGHT wallet, but its failure must never
+		// hide the treasury view itself.
+		let gas_station_address = self.gas_station_address().await.ok();
+		let gas_station_gas = match &gas_station_address {
+			Some(gas_station) => self.rpc.bnb_balance(gas_station).await.ok().map(|wei| format_native_units(wei, 18)),
+			None => None,
+		};
+		Ok(Some(TreasuryFunding {
+			address,
+			onchain_usdt,
+			onchain_gas,
+			gas_station_address,
+			gas_station_gas,
+		}))
 	}
 }
 

@@ -9,16 +9,27 @@
 //!     marked dispatched — so it stays queryable and is surfaced by reconciliation
 //!     (BANK-FAULT-01 / BANK-ARCH-05);
 //!   - an abandoned `processing` withdrawal is surfaced by the reaper (alert-only, never
-//!     auto-voided), and an abandoned `queued` withdrawal is auto-cancelled (BANK-FAULT-04).
+//!     auto-voided), and an abandoned `queued` withdrawal is auto-cancelled (BANK-FAULT-04);
+//!   - `outbox::unpark` re-drives an open park (`parked_at` cleared, `attempts` reset)
+//!     and refuses compensated/dispatched rows — and an unpark composes with the
+//!     broadcast-state guard rather than bypassing it.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+	sync::{
+		Arc,
+		atomic::{AtomicUsize, Ordering},
+	},
+	time::Duration,
+};
 
+use async_trait::async_trait;
 use domain::{
+	architecture::{DomainEvent, Gateway},
 	auth::AuthSubject,
-	balance::Party,
+	balance::{LedgerEvent, Party},
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
-	withdrawals::WithdrawalState,
+	withdrawals::{WithdrawalEvent, WithdrawalState},
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
@@ -27,6 +38,7 @@ use piggybank_core::{
 		db,
 		deposits::PgDeposits,
 		ledger::{self, TbLedger},
+		outbox,
 		reaper::Reaper,
 		reconciliation::Reconciliation,
 		redemptions::PgRedemptions,
@@ -35,7 +47,7 @@ use piggybank_core::{
 		users::PgUsers,
 		withdrawals::PgWithdrawals,
 	},
-	ports::{RedemptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{BroadcastRequest, Custody, CustodyError, RedemptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -167,7 +179,9 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		processing_user,
 		network,
 		destination(network),
@@ -195,7 +209,9 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		queued_user,
 		short_network,
 		destination(short_network),
@@ -221,6 +237,272 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	assert_eq!(after_processing.state(), WithdrawalState::Processing, "the reaper never auto-voids a processing withdrawal");
 	let after_queued = h.withdrawals.find_by_id(queued.id()).await.unwrap().unwrap();
 	assert_eq!(after_queued.state(), WithdrawalState::Cancelled, "the abandoned queued withdrawal was refunded");
+}
+
+/// The broadcast-state guard: a `Dispatched` event unparked AFTER the withdrawal was
+/// failed (its clearing reservation voided, the user refunded) must be parked again —
+/// custody is never called, so the unpark-after-fail double-pay hazard (a real on-chain
+/// send with nothing locked behind it) is structurally impossible, not just a runbook
+/// discipline. The parked `Dispatched` row is injected to mirror the incident shape (a
+/// custody park), because a live one is only drainable while the row is `processing`.
+#[tokio::test]
+async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
+	let Some(h) = harness().await else { return };
+	let network = Network::Trc20;
+	let user = active_user(&h).await;
+	// Fund the claim on BEP20 and withdraw a gross no rail can cover, so the request is
+	// accepted-and-queued deterministically on the shared rails (same shape as the reaper
+	// test); the reserve then applies and its saga step is recorded.
+	let big = usdt("1000000000");
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, big)
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&StubCustody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		big,
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+
+	// Operator dispatch, then fail (a confirmed not-broadcast) — the void refunds in full.
+	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, withdrawal.id())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	withdrawal_app::fail_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
+	h.relay.drain().await;
+
+	// Inject the incident's parked `Dispatched` row for the now-failed withdrawal, then
+	// unpark it through the operator API the console uses — proving the unpark path
+	// composes with the broadcast-state guard rather than bypassing it.
+	let event = WithdrawalEvent::Dispatched {
+		withdrawal_id: withdrawal.id(),
+		user,
+		network,
+		address: destination(network),
+		amount: withdrawal.amount(),
+		fee: withdrawal.fee(),
+	};
+	let event_id = Uuid::new_v4();
+	let seq: i64 = sqlx::query_scalar(
+		"INSERT INTO outbox (event_id, aggregate, aggregate_id, kind, payload, parked_at, last_error) VALUES ($1, 'withdrawals', $2, 'withdrawals', $3::jsonb, now(), 'custody rejected: treasury underfunded on-chain (test)') RETURNING seq",
+	)
+	.bind(event_id)
+	.bind(withdrawal.id().raw())
+	.bind(serde_json::to_string(&event).unwrap())
+	.fetch_one(&h.pool)
+	.await
+	.expect("inject the parked Dispatched row");
+	assert!(outbox::unpark(&h.pool, seq).await.expect("unpark"), "an open (uncompensated) park must unpark");
+
+	// Drain with a counting custody: the guard must park the event again without a send.
+	let broadcasts = Arc::new(AtomicUsize::new(0));
+	let relay = Relay::new(h.pool.clone(), h.ledger.clone(), Arc::new(CountingCustody { broadcasts: broadcasts.clone() }), h.notify.clone());
+	relay.drain().await;
+
+	let (is_dispatched, is_parked, last_error): (bool, bool, Option<String>) =
+		sqlx::query_as("SELECT dispatched_at IS NOT NULL, parked_at IS NOT NULL, last_error FROM outbox WHERE event_id = $1")
+			.bind(event_id)
+			.fetch_one(&h.pool)
+			.await
+			.expect("the re-parked row is still queryable");
+	assert!(!is_dispatched, "the unparked Dispatched event must never be marked dispatched");
+	assert!(is_parked, "the guard must park the event again");
+	assert!(last_error.is_some_and(|e| e.contains("not processing")), "the park reason names the state guard");
+	assert_eq!(broadcasts.load(Ordering::SeqCst), 0, "custody must never see a broadcast for a non-processing withdrawal");
+}
+
+/// The never-void rule, enforced at the void itself: a `Failed` event for a withdrawal
+/// custody already acted on (its `withdrawal_broadcasts` row exists, so the transfer
+/// may have landed on-chain) must PARK, not void — the clearing reservation stays
+/// locked for the operator instead of refunding a user who may also be paid on-chain.
+#[tokio::test]
+async fn a_fail_void_parks_when_a_broadcast_row_exists() {
+	let Some(h) = harness().await else { return };
+	let network = Network::Bep20;
+	let user = active_user(&h).await;
+	let claim = domain::balance::LedgerAccountKey::UserClaim(user);
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	// Seed the rail so the request auto-dispatches to `processing` (fail is only legal
+	// from there — the shape of a real broadcast-then-operator-fail incident).
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
+	h.relay.drain().await;
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&StubCustody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Processing, "a liquid rail auto-dispatches to processing");
+	h.relay.drain().await;
+	let reserved = h.ledger.balance(&claim).await.unwrap();
+	assert_eq!(Usdt::from_base_units(reserved.locked), usdt("50"), "the gross is reserved before the fail");
+
+	// Custody acted: the signed transaction was persisted before the send (the adapters'
+	// crash-safety record). The stub custody records nothing, so inject the row.
+	sqlx::query("INSERT INTO withdrawal_broadcasts (withdrawal_id, network, nonce, raw_tx, tx_hash) VALUES ($1, 'bep20', 0, '0xdead', '0xbeef')")
+		.bind(withdrawal.id().raw())
+		.execute(&h.pool)
+		.await
+		.expect("inject the broadcast row");
+
+	// An operator fails it anyway (mistaken "confirmed not-broadcast") — the relay must
+	// refuse the void and park the Failed event.
+	withdrawal_app::fail_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
+	h.relay.drain().await;
+
+	let (is_dispatched, is_parked, last_error): (bool, bool, Option<String>) =
+		sqlx::query_as("SELECT dispatched_at IS NOT NULL, parked_at IS NOT NULL, last_error FROM outbox WHERE aggregate_id = $1 ORDER BY seq DESC LIMIT 1")
+			.bind(withdrawal.id().raw())
+			.fetch_one(&h.pool)
+			.await
+			.expect("the Failed row is queryable");
+	assert!(!is_dispatched, "the guarded Failed event must never be marked dispatched");
+	assert!(is_parked, "the Failed event parks when a broadcast row exists");
+	assert!(last_error.is_some_and(|e| e.contains("refusing to void")), "the park reason names the never-void guard");
+
+	// The clearing pending was NOT voided — the gross stays locked for the operator.
+	let after = h.ledger.balance(&claim).await.unwrap();
+	assert_eq!(Usdt::from_base_units(after.locked), usdt("50"), "the reservation survives the refused void");
+}
+
+/// The operator unpark path end to end: a parked row — here a retry-exhausted but valid
+/// deposit event, injected atomically already-parked so no concurrent drain touches it
+/// first — is cleared by `outbox::unpark` (`parked_at` NULL **and** `attempts` reset to
+/// 0; a retry-exhausted row would otherwise re-park on its first redelivery, making the
+/// feature a no-op) with `last_error` kept for forensics, and the relay then re-queries
+/// the outbox (no in-memory floor) and dispatches it.
+#[tokio::test]
+async fn an_unparked_event_is_re_driven_and_dispatched() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let event = LedgerEvent::Deposited {
+		party: Party::User(user),
+		network: Network::Bep20,
+		amount: usdt("25"),
+	};
+	let seq: i64 = sqlx::query_scalar(
+		"INSERT INTO outbox (event_id, aggregate, aggregate_id, kind, payload, parked_at, attempts, last_error) \
+		 VALUES ($1, 'deposit', $2, $3, $4::jsonb, now(), 25, 'retryable exhausted after 25 attempts (test)') RETURNING seq",
+	)
+	.bind(Uuid::new_v4())
+	.bind(Uuid::new_v4())
+	.bind(LedgerEvent::KIND)
+	.bind(serde_json::to_string(&event).unwrap())
+	.fetch_one(&h.pool)
+	.await
+	.expect("inject the retry-exhausted parked deposit row");
+
+	assert!(outbox::unpark(&h.pool, seq).await.expect("unpark"), "an open park must unpark");
+
+	let (attempts, last_error): (i32, Option<String>) = sqlx::query_as("SELECT attempts, last_error FROM outbox WHERE seq = $1")
+		.bind(seq)
+		.fetch_one(&h.pool)
+		.await
+		.expect("the unparked row is queryable");
+	assert_eq!(attempts, 0, "attempts must reset or a retry-exhausted row re-parks on first redelivery");
+	assert!(last_error.is_some(), "the old park reason stays for forensics");
+
+	// The deposit is valid, so the re-drive dispatches it. (A parallel test's drain may
+	// race us to the row — the terminal assertion holds either way.)
+	h.relay.drain().await;
+	let (is_dispatched, is_parked): (bool, bool) = sqlx::query_as("SELECT dispatched_at IS NOT NULL, parked_at IS NOT NULL FROM outbox WHERE seq = $1")
+		.bind(seq)
+		.fetch_one(&h.pool)
+		.await
+		.expect("the re-driven row is queryable");
+	assert!(is_dispatched, "the unparked event must be re-driven to dispatched");
+	assert!(!is_parked, "the unparked valid event must not re-park");
+}
+
+/// The unpark guards. A **compensated** park must refuse — its recovery event already
+/// applied, so re-driving would double-apply (the money bug the guard exists for) — and
+/// stay parked; a dispatched row has nothing to re-drive; an unknown seq reports as
+/// such. `unpark_refusal` distinguishes the three so the service can answer with
+/// FAILED_PRECONDITION vs NOT_FOUND precisely.
+#[tokio::test]
+async fn unpark_refuses_compensated_and_dispatched_rows() {
+	let Some(h) = harness().await else { return };
+	let compensated_seq: i64 = sqlx::query_scalar(
+		"INSERT INTO outbox (event_id, aggregate, aggregate_id, kind, payload, parked_at, last_error) \
+		 VALUES ($1, 'withdrawals', $2, 'withdrawals', '\"not-a-withdrawal-event\"'::jsonb, now(), 'half-applied (test)') RETURNING seq",
+	)
+	.bind(Uuid::new_v4())
+	.bind(Uuid::new_v4())
+	.fetch_one(&h.pool)
+	.await
+	.expect("inject the parked row");
+	outbox::mark_compensated(&h.pool, compensated_seq).await.expect("mark compensated");
+
+	assert!(!outbox::unpark(&h.pool, compensated_seq).await.expect("unpark refuses"), "a compensated park must never unpark");
+	assert_eq!(
+		outbox::unpark_refusal(&h.pool, compensated_seq).await.expect("refusal read"),
+		Some((false, true)),
+		"the refusal names compensation"
+	);
+	let still_parked: bool = sqlx::query_scalar("SELECT parked_at IS NOT NULL FROM outbox WHERE seq = $1")
+		.bind(compensated_seq)
+		.fetch_one(&h.pool)
+		.await
+		.expect("the compensated row is queryable");
+	assert!(still_parked, "a refused unpark leaves the row parked");
+
+	let dispatched_seq: i64 = sqlx::query_scalar(
+		"INSERT INTO outbox (event_id, aggregate, aggregate_id, kind, payload, dispatched_at) \
+		 VALUES ($1, 'withdrawals', $2, 'withdrawals', '\"not-a-withdrawal-event\"'::jsonb, now()) RETURNING seq",
+	)
+	.bind(Uuid::new_v4())
+	.bind(Uuid::new_v4())
+	.fetch_one(&h.pool)
+	.await
+	.expect("inject the dispatched row");
+	assert!(
+		!outbox::unpark(&h.pool, dispatched_seq).await.expect("unpark refuses"),
+		"a dispatched row has nothing to re-drive"
+	);
+	assert_eq!(outbox::unpark_refusal(&h.pool, dispatched_seq).await.expect("refusal read"), Some((true, false)));
+
+	// An unknown seq: the service's NOT_FOUND arm (bigserial never issues -1).
+	assert!(!outbox::unpark(&h.pool, -1).await.expect("unpark refuses"));
+	assert_eq!(outbox::unpark_refusal(&h.pool, -1).await.expect("refusal read"), None);
+}
+
+/// A counting custody port adapter (no chain): every broadcast is recorded and refused, so
+/// a guard regression is observable as both a call count and a park-not-dispatch.
+struct CountingCustody {
+	broadcasts: Arc<AtomicUsize>,
+}
+
+impl Gateway for CountingCustody {}
+
+#[async_trait]
+impl Custody for CountingCustody {
+	async fn broadcast(&self, _request: &BroadcastRequest) -> Result<(), CustodyError> {
+		self.broadcasts.fetch_add(1, Ordering::SeqCst);
+		Err(CustodyError::Rejected("test custody refuses every broadcast".into()))
+	}
 }
 
 /// Push a withdrawal's last transition past the reaper's abandonment window.

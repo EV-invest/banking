@@ -8,13 +8,14 @@
 
 use domain::money::Network;
 use evbanking_contracts::signer::v1::{
-	ProvisionAddressRequest, ProvisionAddressResponse, SignErc20TransferRequest, SignErc20TransferResponse, SignJettonTransferRequest, SignNativeTransferRequest, SignNativeTransferResponse,
-	SignTonTransferRequest, SignTrc20TransferRequest, SignTrxTransferRequest, SignedTonTxResponse, SignedTronTxResponse, signer_service_server::SignerService,
+	DeadKey, GetKeyHealthRequest, GetKeyHealthResponse, ProvisionAddressRequest, ProvisionAddressResponse, RotateAddressRequest, SignErc20TransferRequest, SignErc20TransferResponse,
+	SignJettonTransferRequest, SignNativeTransferRequest, SignNativeTransferResponse, SignTonTransferRequest, SignTrc20TransferRequest, SignTrxTransferRequest, SignedTonTxResponse,
+	SignedTronTxResponse, signer_service_server::SignerService,
 };
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{evm_tx, key_vault::Vault, policy::SignerPolicy, provision, secrets::WalletSecrets, ton_tx, tron_tx};
+use crate::{evm_tx, kek_guard::short_fp, key_vault::Vault, policy::SignerPolicy, provision, secrets::WalletSecrets, ton_tx, tron_tx};
 
 /// The reserved wallet id for the treasury hot wallet. Real user ids are random v4 UUIDs
 /// (never nil), so the treasury shares the `(user_id, network)` store without a schema
@@ -74,7 +75,10 @@ impl Signer {
 			.await?
 			.ok_or_else(|| Status::failed_precondition("sending wallet is not provisioned"))?;
 		let opened = self.vault.open(provision::chain_of(network), &sealed.id.to_string(), &sealed.sealed_key).map_err(|err| {
-			tracing::warn!(error = %err, %wallet_id, %network, "could not unseal the signing key");
+			// ERROR, not WARN: an unopenable key at sign time means funds are already
+			// stranded on its address (the KEK-epoch bug class). GetKeyHealth lists it;
+			// RotateAddress restores the user's ability to receive future deposits.
+			tracing::error!(error = %err, %wallet_id, %network, "could not unseal the signing key — PROVABLY DEAD KEY, funds on its address cannot move");
 			Status::internal("could not unseal the signing key")
 		})?;
 		Ok(zeroize::Zeroizing::new(<[u8; 32]>::try_from(opened.as_slice()).map_err(|_| {
@@ -244,6 +248,79 @@ impl SignerService for Signer {
 		)
 		.map_err(ton_sign_status)?;
 		Ok(Response::new(signed_ton_response(signed)))
+	}
+
+	// === KEK-epoch diagnostics & recovery ======================================
+	async fn get_key_health(&self, _request: Request<GetKeyHealthRequest>) -> Result<Response<GetKeyHealthResponse>, Status> {
+		let fp = self.vault.fingerprint();
+		let rows = self.secrets.active_epoch_rows().await?;
+		let total_keys = rows.len() as u64;
+		let mut dead_keys = Vec::new();
+		for row in rows {
+			let reason = match &row.kek_fp {
+				Some(stamped) if stamped.as_slice() == fp => continue,
+				Some(stamped) => format!("sealed under a different KEK epoch (fp {}, current {})", short_fp(stamped), short_fp(&fp)),
+				// Pre-epoch row: probe it now; a survivor is stamped (healed) in place.
+				None => match self.vault.open(provision::chain_of(row.network), &row.id.to_string(), &row.sealed_key) {
+					Ok(_) => {
+						self.secrets.stamp_kek_fp(row.id, &fp).await?;
+						continue;
+					}
+					Err(_) => "cannot unseal under the current KEK".to_owned(),
+				},
+			};
+			dead_keys.push(DeadKey {
+				wallet_id: row.id.to_string(),
+				user_id: row.user_id.to_string(),
+				network: row.network.as_str().to_owned(),
+				address: row.address,
+				created_at: row.created_at,
+				reason,
+			});
+		}
+		Ok(Response::new(GetKeyHealthResponse {
+			healthy_keys: total_keys - dead_keys.len() as u64,
+			total_keys,
+			dead_keys,
+			kek_fingerprint: short_fp(&fp),
+		}))
+	}
+
+	async fn rotate_address(&self, request: Request<RotateAddressRequest>) -> Result<Response<ProvisionAddressResponse>, Status> {
+		let req = request.into_inner();
+		let user_id = Uuid::parse_str(&req.user_id).map_err(|_| Status::invalid_argument("user_id must be a UUID"))?;
+		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
+
+		let sealed = self
+			.secrets
+			.find_sealed(user_id, network)
+			.await?
+			.ok_or_else(|| Status::failed_precondition("no active key for this (user, network) — nothing to rotate; provisioning will mint one"))?;
+		// Rotation is a recovery tool for a provably dead key ONLY: a key that still
+		// unseals keeps its address (rotating it would orphan a perfectly good key and
+		// silently retire the address users may already be depositing to).
+		if self.vault.open(provision::chain_of(network), &sealed.id.to_string(), &sealed.sealed_key).is_ok() {
+			return Err(Status::failed_precondition("key is healthy under the current KEK — rotation refused"));
+		}
+
+		let old_address = self.secrets.find_address(user_id, network).await?.unwrap_or_default();
+		if !self.secrets.supersede(user_id, network).await? {
+			// Lost a race with a concurrent rotation — fall through: provision below
+			// returns whatever active key now exists.
+			tracing::warn!(%user_id, %network, "rotate: row already superseded by a concurrent rotation");
+		}
+		let provisioned = provision::provision(&self.vault, &self.secrets, user_id, network).await?;
+		tracing::warn!(
+			%user_id,
+			%network,
+			%old_address,
+			new_address = %provisioned.address,
+			"rotated a dead deposit key — the OLD address stays unspendable forever; only future deposits to the new address are safe"
+		);
+		Ok(Response::new(ProvisionAddressResponse {
+			address: provisioned.address,
+			address_kind: provisioned.kind.to_owned(),
+		}))
 	}
 }
 

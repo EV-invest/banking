@@ -13,7 +13,7 @@ use domain::{
 	authz::Permission,
 	balance::LedgerAccountKey,
 	money::Usdt,
-	users::{ProfileFields, User},
+	users::{ConciergeUserId, ProfileFields, User, UserId},
 };
 use evbanking_contracts::banking::v1::{self as pb, users_service_server::UsersService};
 use tonic::{Request, Response, Status};
@@ -98,8 +98,25 @@ impl UsersService for UsersSvc {
 
 	async fn get_user_balance(&self, request: Request<pb::AdminBalanceRequest>) -> Result<Response<pb::UserBalanceResponse>, Status> {
 		require_permission(&self.state, &request, Permission::UserBalanceRead).await?;
-		let target = parse_user_id(&request.get_ref().user_id)?;
-		// Any user's single unified claim, read live from TigerBeetle (Read-First).
+		let raw = parse_user_id(&request.get_ref().user_id)?.raw();
+		// The operator console carries CONCIERGE ids (the identity plane's ListUsers) while
+		// money-plane callers (the redemption queue) carry banking ids — resolve concierge-
+		// first via the bridge mirror, then fall back to the banking id; an id matching
+		// neither is NOT_FOUND, never an authoritative zero. `disabled`/`token_version` on
+		// the target are deliberately ignored: an operator must be able to inspect a
+		// frozen/disabled user's balance.
+		let target = match self.state.users.resolve_issuance_by_concierge_id(ConciergeUserId::from_raw(raw)).await.map_err(map_err)? {
+			Some(target) => target.user_id,
+			None =>
+				self.state
+					.users
+					.resolve_issuance_by_banking_id(UserId::from_raw(raw))
+					.await
+					.map_err(map_err)?
+					.ok_or_else(|| Status::not_found("user"))?
+					.user_id,
+		};
+		// The user's single unified claim, read live from TigerBeetle (Read-First).
 		let balance = self
 			.state
 			.ledger

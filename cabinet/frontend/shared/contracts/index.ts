@@ -20,6 +20,8 @@ export type {
   BankingV1DepositAddress as DepositAddress,
   BankingV1Withdrawal as Withdrawal,
   BankingV1WithdrawalList as WithdrawalList,
+  BankingV1Deposit as Deposit,
+  BankingV1DepositList as DepositList,
   BankingV1RequestWithdrawalRequest as RequestWithdrawalRequest,
   BankingV1CancelWithdrawalRequest as CancelWithdrawalRequest,
   BankingV1UserBalanceResponse as UserBalanceResponse,

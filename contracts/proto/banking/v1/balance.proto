@@ -54,13 +54,60 @@ service BalanceService {
   // (Est. cash = units × current NAV is computed client-side from the posted NAV.)
   rpc ListRedemptionQueue(ListRedemptionQueueRequest) returns (RedemptionQueue);
 
+  // Admin (WithdrawalSettle): the cross-user queue of withdrawals awaiting operator
+  // action, oldest first — `queued` (awaiting liquidity/dispatch) and `processing`
+  // (broadcast in flight: settle with the mined tx ref, or fail ONLY if nothing
+  // reached the chain). The admin Withdrawals screen's clear-the-queue surface.
+  rpc ListWithdrawalQueue(ListWithdrawalQueueRequest) returns (WithdrawalQueue);
+
   // Operator (TreasuryRead): the money-plane operations mode (the read-only kill-switch).
   rpc GetOperationsMode(GetOperationsModeRequest) returns (OperationsMode);
 
   // Admin (OperationsManage): toggle read-only mode. When on, every user money mutation
   // (withdraw / subscribe / redeem) is rejected — "pause deposits & withdrawals".
   rpc SetOperationsMode(SetOperationsModeRequest) returns (OperationsMode);
+
+  // Operator (TreasuryRead): outbox rows the relay parked (needs-intervention).
+  rpc ListParkedEvents(ListParkedEventsRequest) returns (ParkedEventList);
+
+  // Admin (OutboxManage): clear `parked_at` so the relay re-drives the event once the
+  // cause is fixed; refused for a compensated row — it parked half-applied with
+  // compensation owed, so re-driving would re-apply the legs that already posted.
+  rpc UnparkEvent(UnparkEventRequest) returns (UnparkEventResponse);
+
+  // Admin (DepositAddressRotate): supersede a user's PROVABLY DEAD deposit address
+  // (the signer can no longer unseal its key — the KEK-epoch casualty class) with a
+  // freshly minted keypair, and refresh the hub's address cache. The signer refuses
+  // to rotate a key that still unseals. Funds already on the old address remain
+  // unrecoverable; this restores the user's ability to receive FUTURE deposits.
+  rpc RotateDepositAddress(RotateDepositAddressRequest) returns (RotateDepositAddressResponse);
 }
+
+message ListParkedEventsRequest {}
+
+// One parked outbox row. `reason` is the relay's last error; `parked_at` is unix
+// seconds; `compensated` marks a half-applied event that is owed compensation
+// (never unparkable).
+message ParkedEvent {
+  int64 seq = 1;
+  string event_id = 2;
+  string aggregate = 3;
+  string aggregate_id = 4;
+  string kind = 5;
+  string reason = 6;
+  int64 parked_at = 7;
+  bool compensated = 8;
+}
+
+message ParkedEventList {
+  repeated ParkedEvent events = 1;
+}
+
+message UnparkEventRequest {
+  int64 seq = 1;
+}
+
+message UnparkEventResponse {}
 
 message ListRedemptionQueueRequest {}
 
@@ -79,6 +126,26 @@ message RedemptionQueue {
   repeated RedemptionQueueItem items = 1;
 }
 
+message ListWithdrawalQueueRequest {}
+
+// One withdrawal awaiting operator action. `email` is the mirrored identity email
+// (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.
+message WithdrawalQueueItem {
+  string withdrawal_id = 1;
+  string user_id = 2;
+  string email = 3;
+  string network = 4;     // bep20 | trc20 | ton
+  string address = 5;     // destination on-chain address
+  string amount = 6;      // gross decimal USDT debited from the user
+  string net_amount = 7;  // amount − fee — what ships on-chain
+  string state = 8;       // queued | processing
+  int64 created_at = 9;
+}
+
+message WithdrawalQueue {
+  repeated WithdrawalQueueItem items = 1;
+}
+
 message GetOperationsModeRequest {}
 
 message OperationsMode {
@@ -91,10 +158,20 @@ message SetOperationsModeRequest {
 
 message GetTreasuryRequest {}
 
-// Per-rail on-chain liquidity (the treasury / Layer 2).
+// Per-rail on-chain liquidity (the treasury / Layer 2). The `treasury_*`/`onchain_*`
+// fields are the operator funding view, read best-effort from the chain — empty means
+// the rail is unconfigured or the read was unavailable, never an error.
 message RailLiquidity {
-  string network = 1;  // bep20 | trc20 | ton
-  string custody = 2;  // liquid on-chain USDT held in this rail's custody wallet
+  string network = 1;           // bep20 | trc20 | ton
+  string custody = 2;           // liquid on-chain USDT held in this rail's custody wallet
+  string treasury_address = 3;  // the rail's hot wallet — fund USDT (liquidity) + gas here
+  string onchain_usdt = 4;      // decimal USDT actually on-chain in the treasury wallet
+  string onchain_gas = 5;       // decimal native units (BNB | TRX | TON) for gas
+  // The rail's sweep GAS-STATION wallet — a separate account paying the gas drops
+  // that consolidate user deposits into the treasury. Fund the native coin here,
+  // never USDT. Empty when the rail has no gas-station view.
+  string gas_station_address = 6;
+  string gas_station_gas = 7;   // the gas station's native-coin balance
 }
 
 // The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
@@ -156,6 +233,15 @@ message PostFundValuationRequest {
   string service = 1;   // the fund/service id
   string aum = 2;       // decimal USDT — the fund's total assets under management
   bool override = 3;    // bypass the NAV-move safety guard (operator confirmed)
+}
+
+message RotateDepositAddressRequest {
+  string user_id = 1;  // the affected user (UUID)
+  string network = 2;  // bep20 | trc20 | ton
+}
+
+message RotateDepositAddressResponse {
+  string address = 1;  // the NEW fundable deposit address
 }
 
 message SettleRedemptionRequest {

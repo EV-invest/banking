@@ -186,7 +186,17 @@ impl TronRpc {
 			request = request.header("TRON-PRO-API-KEY", key);
 		}
 		let response = request.send().await.map_err(|e| TronRpcError::Transport(format!("{path}: request failed: {e}")))?;
+		let status = response.status();
 		let value: Value = response.json().await.map_err(|e| TronRpcError::Transport(format!("{path}: bad json: {e}")))?;
+		// The indexed `/v1/*` surface signals errors with an HTTP STATUS (rate-limit 403, bad key
+		// 401, 5xx) and a body that has no top-level `Error` — those bodies decode cleanly, so
+		// without a status check a throttled deposit scan silently looks like "no new deposits" and
+		// a throttled sweep reads zero balances (funds left stranded). The `/wallet/*` methods
+		// answer 200 with the error in-body (checked next), so 200 is never a failure there.
+		if !status.is_success() {
+			let detail = value.get("Error").and_then(Value::as_str).map(str::to_owned).unwrap_or_else(|| value.to_string());
+			return Err(TronRpcError::Rpc(format!("{path}: {status}: {detail}")));
+		}
 		// `/wallet` surfaces signal validation errors inline (handled per-method); an explicit
 		// top-level `Error` string is always a hard failure.
 		if let Some(err) = value.get("Error").and_then(Value::as_str) {

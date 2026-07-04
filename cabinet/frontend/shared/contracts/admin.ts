@@ -30,6 +30,8 @@ export interface AdminOverview {
   parked_rows: string;
   backlog: string;
   oldest_backlog_age_secs: string;
+  /** Signer unseal failures since hub boot — non-zero means a dead key was asked to sign (funds stranded). */
+  unseal_failures: string;
 }
 
 // ── users ─────────────────────────────────────────────────────────────────────
@@ -75,10 +77,32 @@ export interface UserBalance {
   as_of: string;
 }
 
+// ── outbox ────────────────────────────────────────────────────────────────────
+export interface ParkedEvent {
+  seq: string;
+  event_id: string;
+  aggregate: string;
+  aggregate_id: string;
+  kind: string;
+  reason: string;
+  parked_at: string;
+  compensated: boolean;
+}
+
+export interface ParkedEventList {
+  events: ParkedEvent[];
+}
+
 // ── treasury ──────────────────────────────────────────────────────────────────
 export interface RailLiquidity {
   network: string;
   custody: string;
+  treasury_address: string;
+  onchain_usdt: string;
+  onchain_gas: string;
+  /** The rail's sweep gas-station wallet — fund native coin here (never USDT). Empty when unwired. */
+  gas_station_address: string;
+  gas_station_gas: string;
 }
 
 export interface Treasury {
@@ -121,6 +145,23 @@ export interface Redemption {
   nav: string;
   cash: string;
   state: string;
+}
+
+// ── withdrawals (operator queue) ─────────────────────────────────────────────────
+export interface WithdrawalQueueItem {
+  withdrawal_id: string;
+  user_id: string;
+  email: string;
+  network: string;
+  address: string;
+  amount: string;
+  net_amount: string;
+  state: string;
+  created_at: string;
+}
+
+export interface WithdrawalQueue {
+  items: WithdrawalQueueItem[];
 }
 
 // ── cabinet (platform config + money-plane read-only) ───────────────────────────

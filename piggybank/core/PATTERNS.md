@@ -139,8 +139,14 @@ admin `RecordDeposit` gate (idempotent by `tx_ref`), the stand-in for a chain wa
 gross (user solvency) and gates on the account being active (KYC/freeze), then records the
 aggregate. It starts **`Queued`**, with the gross reserved as a pending `Dr user:<uuid> /
 Cr clearing` — independent of any rail. The chosen rail's liquidity is the **treasury's**
-job: if it can cover the net the withdrawal is dispatched immediately, otherwise it stays
-`Queued` until the treasury tops the rail up (accept-and-queue).
+job, and the dispatch gate is **`min(TB rail, on-chain treasury)`**: the TB `wallet:<net>`
+balance alone over-counts (it includes confirmed deposits still on users' derived
+addresses, which the treasury hot wallet cannot spend), so the gate also reads the custody
+adapter's real on-chain treasury USDT (`Custody::treasury_liquidity`; `None` = no chain
+view = TB-only, the stub rails). If the effective liquidity covers the net the withdrawal
+is dispatched immediately, otherwise it stays `Queued` until the rail is topped up
+(accept-and-queue). A treasury read **failure degrades to `Queued`, never a refusal** —
+acceptance and the clearing reserve must not depend on a flaky chain node.
 
 | event | → state | relay ops |
 | --- | --- | --- |
@@ -150,11 +156,16 @@ job: if it can cover the net the withdrawal is dispatched immediately, otherwise
 | `Failed` (never landed) | `Failed` | **void** the clearing pending — refund in full |
 | `Cancelled` (still queued) | `Cancelled` | **void** the clearing pending — refund in full |
 
-`DispatchWithdrawal` (the treasury worker), `SettleWithdrawal` and `FailWithdrawal` are
-operator/worker-driven **admin** RPCs on `BalanceService`; `CancelWithdrawal` is the user's
-own (a queued withdrawal only). The cardinal rule — **never void once the broadcast may
-have reached the chain** (that double-pays) — is why `Fail` is legal only from `Processing`
-and `Cancel` only from `Queued`. The fee leg is omitted when the fee is zero (TB rejects a
+The treasury worker is the [`dispatcher`](src/infrastructure/dispatcher.rs) (see
+[Recovery jobs](#reconciliation--reaper--dispatcher-recovery-jobs)); `DispatchWithdrawal`
+is its manual override — it refuses (leaving the withdrawal `Queued`, still cancellable)
+when the rail treasury provably lacks the net on-chain. `SettleWithdrawal` and
+`FailWithdrawal` are operator/watcher-driven **admin** RPCs on `BalanceService`;
+`CancelWithdrawal` is the user's own (a queued withdrawal only). The cardinal rule —
+**never void once the broadcast may have reached the chain** (that double-pays) — is why
+`Fail` is legal only from `Processing` and `Cancel` only from `Queued`. The incident
+runbook for a stuck/parked withdrawal is
+[`docs/RUNBOOK-withdrawals.md`](../../docs/RUNBOOK-withdrawals.md). The fee leg is omitted when the fee is zero (TB rejects a
 zero-amount transfer); the policy enforces `min_withdrawal > fee` and the net must be
 representable at the chain's precision (no dust leaves). The global invariant holds at
 settle: `user` falls by `gross`, `wallet:<net>` by `net`, `fee` rises by `fee`, and
@@ -193,7 +204,11 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   wedge the queue, and nothing is silently dropped. A park *after* an earlier leg of a
   multi-leg event posted is flagged half-applied (`compensated_at`); the
   [`reconciliation`](src/infrastructure/reconciliation.rs) job surfaces every parked row
-  for intervention (TB-reversal of the applied legs is still a follow-up).
+  for intervention (TB-reversal of the applied legs is still a follow-up). Parked rows
+  are operator-unparkable once the cause is fixed (`BalanceService.UnparkEvent`:
+  `parked_at` cleared **and** `attempts` reset — a retry-exhausted row would otherwise
+  re-park on first redelivery — then the relay is notified); a **compensated** row is
+  refused, since its recovery event already applied and re-driving would double-apply.
 - Deposits are idempotent by the `deposits.tx_ref` **gate** (`ON CONFLICT DO NOTHING` →
   emit the event only if newly inserted), so a re-record never double-credits.
 - A withdrawal's clearing reservation gets a **withdrawal-derived** id
@@ -239,15 +254,25 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   closes the over-withdrawal race where a double-submit (TB lags the committed-but-undrained
   reserve, so the second request passes the optimistic Read-First) would otherwise broadcast
   real money with nothing locked. The `saga_steps` insert is therefore load-bearing, not
-  best-effort: a failed insert retries the whole (idempotent) event.
-- **On-chain treasury Read-First (custody).** The application's rail-liquidity check reads
-  the TigerBeetle `wallet:<net>` accounting balance, which can diverge from the hot wallet's
-  real on-chain balance (a lagging sweep, an out-of-band spend). So each custody adapter also
-  Read-Firsts the **real** treasury balance (USDT to send + native gas) before it allocates a
-  nonce/seqno or signs; a shortfall **parks** (`Rejected`) rather than retrying, so an
-  underfunded rail can't wedge the single-worker drain. On BSC and TON a node rejection
-  of a *first-ever* send additionally frees its stored nonce/seqno (`discard_tx`) so the
-  sequence never gaps at a slot nothing will fill.
+  best-effort: a failed insert retries the whole (idempotent) event. Beside it sits the
+  **broadcast-state guard**: the withdrawal row must still be `processing`, or the
+  `Dispatched` event is parked (never sent). This makes unparking a `Dispatched` event
+  *after* the withdrawal was failed/cancelled — a broadcast against a voided reservation,
+  the unpark-after-fail double-pay hazard — structurally impossible rather than a runbook
+  discipline.
+- **On-chain treasury Read-First (custody).** The dispatch gate already min-s the TB
+  accounting balance with the adapter's on-chain treasury read (`treasury_liquidity`,
+  USDT-only), so an underfunded rail normally queues instead of ever reaching custody. But
+  the gate is check-then-act — the on-chain balance can still drop between the dispatch-time
+  read and the broadcast (a parallel withdrawal, an out-of-band spend, a gas-only
+  shortfall). So each custody adapter **also** Read-Firsts the **real** treasury balance
+  (USDT to send + native gas) before it allocates a nonce/seqno or signs — the last-line
+  backstop behind the gate; a shortfall **parks** (`Rejected`) rather than retrying, so an
+  underfunded rail can't wedge the single-worker drain. That residual park is rare,
+  operator-visible (reconciliation), and recovered via
+  [`docs/RUNBOOK-withdrawals.md`](../../docs/RUNBOOK-withdrawals.md). On BSC and TON a node
+  rejection of a *first-ever* send additionally frees its stored nonce/seqno (`discard_tx`)
+  so the sequence never gaps at a slot nothing will fill.
 - **Provable death before re-sign (TRON/TON).** A nonce-free rail (TRON, TON) can only
   re-sign a stuck send once it is *provably* dead, never merely past its local-clock
   expiration: TRON waits until the **solidified** head's timestamp is past the tx expiration
@@ -294,6 +319,9 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
 | `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
+| `GetUserBalance` | operator | `require_permission` (RBAC matrix); resolves the CONCIERGE id first via the bridge mirror (`users.concierge_user_id`), then the banking id; unknown ⇒ `NOT_FOUND` | — |
+| `ListParkedEvents` | operator | `require_permission` (RBAC matrix) | — |
+| `UnparkEvent` | admin (`OutboxManage`) | `require_permission` (RBAC matrix) | parked ∧ not dispatched ∧ **not compensated** (the double-apply guard) |
 
 `require_permission` (`services::support`) is `is_access` + the pure RBAC matrix
 (`domain::authz::grants` — the single place the matrix is defined) over the caller's
@@ -312,10 +340,10 @@ banking only mirrors the gating slice. The gate fails CLOSED (UNAVAILABLE) if th
 be read. Cancel/read RPCs are intentionally NOT gated, so a frozen user can still unwind
 queued positions.
 
-## Reconciliation + reaper (recovery jobs)
+## Reconciliation + reaper + dispatcher (recovery jobs)
 
-TB always wins; both jobs are **read-mostly** and run as `select!` branches of the
-composition root next to the relay, on the relay's dedicated pool.
+TB always wins; the jobs run as `join!` branches of the composition root next to the
+relay, on the relay's dedicated pool.
 
 [`reconciliation`](src/infrastructure/reconciliation.rs) (`Reconciliation::scan`) asserts
 and **alerts** (Sentry-shipped `error!`, no auto-write) on: the **global** posted
@@ -334,6 +362,15 @@ signal may fail it); a **`queued` withdrawal** is **auto-cancelled** (never broa
 safe full refund); a **`queued` redemption** is **auto-failed** (internal claim→claim →
 safe). Max age is 24h (config seam: `Reaper::with_max_age`).
 
+[`dispatcher`](src/infrastructure/dispatcher.rs) (`Dispatcher::sweep`, every 30s) is the
+treasury worker: it re-checks every `queued` withdrawal against **both** liquidity gates —
+the TB rail balance and `Custody::treasury_liquidity` — and dispatches the covered ones
+(idempotently, via the same row-locked command as the admin RPC), so a rail top-up
+self-heals the queue within one interval. A treasury read `Err` skips that cycle (the
+automatic path stays conservative; the operator RPC may still exercise judgment). Together
+with the reaper this brackets accept-and-queue: dispatched within ~30s of a top-up, or
+auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
+
 ## Tests
 
 `domain` unit tests cover the money + NAV math (incl. the `mul_div` overflow bound and the
@@ -346,9 +383,14 @@ subscribe minting at seed + fractional NAV pricing + staleness/Read-First; redee
 **auto-settle when liquid**, **short fund → queue → top-up → settle at settle-NAV (profit)**,
 **short settle parks without burning or paying**, cancel returns the units; and the
 withdrawal reserve→settle with fee, fail→refund, short-rail queue→dispatch→settle, queued
-cancel→refund). `piggybank/core/tests/relay_recovery.rs` proves a parked event lands in the
-distinct `parked_at` state (never marked dispatched), stays queryable, and is surfaced by
-`Reconciliation::scan`, and that `Reaper::sweep` alerts on a stuck `processing` withdrawal
-(never auto-voids it) while auto-cancelling an abandoned `queued` one. They skip when
-`DATABASE_URL` is unset or TB is unreachable. Drive the relay deterministically with
-`Relay::drain`, and the recovery jobs with `Reconciliation::scan` / `Reaper::sweep`.
+cancel→refund; the on-chain dispatch gate's three arms — short treasury queues despite a
+liquid TB rail, liquid treasury dispatches, read failure degrades to queued — plus the
+refused admin dispatch and the `Dispatcher::sweep` both-gates flow, driven by a test
+`Custody` adapter with a configurable treasury view). `piggybank/core/tests/relay_recovery.rs`
+proves a parked event lands in the distinct `parked_at` state (never marked dispatched),
+stays queryable, and is surfaced by `Reconciliation::scan`; that `Reaper::sweep` alerts on
+a stuck `processing` withdrawal (never auto-voids it) while auto-cancelling an abandoned
+`queued` one; and that an unparked `Dispatched` event for a failed withdrawal is re-parked
+by the broadcast-state guard, never sent. They skip when `DATABASE_URL` is unset or TB is
+unreachable. Drive the relay deterministically with `Relay::drain`, and the recovery jobs
+with `Reconciliation::scan` / `Reaper::sweep` / `Dispatcher::sweep`.

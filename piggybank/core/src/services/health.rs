@@ -10,8 +10,8 @@
 
 use std::{sync::Arc, time::Duration};
 
-use domain::balance::LedgerAccountKey;
-use evbanking_contracts::banking::v1::{CheckRequest, CheckResponse, ReadinessRequest, ReadinessResponse, health_service_server::HealthService};
+use domain::{balance::LedgerAccountKey, money::Network};
+use evbanking_contracts::banking::v1::{CheckRequest, CheckResponse, DepositScanCursor, ReadinessRequest, ReadinessResponse, health_service_server::HealthService};
 use sqlx::PgPool;
 use tonic::{Request, Response, Status};
 
@@ -28,11 +28,14 @@ const BACKLOG_AGE_LIMIT: Duration = Duration::from_secs(120);
 pub struct Health {
 	pool: PgPool,
 	ledger: Arc<dyn Ledger>,
+	/// The rails with a running deposit watcher — only their scan cursors are reported
+	/// (a stale row of a since-de-configured rail would otherwise read as a stall).
+	configured_networks: Arc<[Network]>,
 }
 
 impl Health {
-	pub fn new(pool: PgPool, ledger: Arc<dyn Ledger>) -> Self {
-		Self { pool, ledger }
+	pub fn new(pool: PgPool, ledger: Arc<dyn Ledger>, configured_networks: Arc<[Network]>) -> Self {
+		Self { pool, ledger, configured_networks }
 	}
 }
 
@@ -60,6 +63,21 @@ impl HealthService for Health {
 
 		let ready = db_ok && ledger_ok && depth.is_some() && parked_rows == 0 && oldest_backlog_age_secs <= BACKLOG_AGE_LIMIT.as_secs();
 
+		// Deposit-scan diagnostics: seconds since each configured rail's watcher last
+		// completed a scan cycle (`set_cursor` refreshes `updated_at` only on success,
+		// so age ≈ time since the last healthy cycle; thresholds are the consumer's
+		// concern). Best-effort and deliberately NOT part of the `ready` conjunction —
+		// a dead DB already fails `db_ok`, so this read must never be the reason
+		// readiness errors, and one stalled chain RPC must not drain the instance.
+		let networks: Vec<String> = self.configured_networks.iter().map(|n| n.as_str().to_owned()).collect();
+		let scan_cursors =
+			sqlx::query_as::<_, (String, i64)>("SELECT network, GREATEST(EXTRACT(EPOCH FROM (now() - updated_at)), 0)::bigint FROM deposit_scan_cursor WHERE network = ANY($1)")
+				.bind(&networks)
+				.fetch_all(&self.pool)
+				.await
+				.map(|rows| rows.into_iter().map(|(network, age_secs)| DepositScanCursor { network, age_secs: age_secs as u64 }).collect())
+				.unwrap_or_default();
+
 		Ok(Response::new(ReadinessResponse {
 			ready,
 			db_ok,
@@ -67,6 +85,10 @@ impl HealthService for Health {
 			parked_rows,
 			backlog,
 			oldest_backlog_age_secs,
+			scan_cursors,
+			// Any non-zero value is a dead-key alarm (funds stranded); surfaced on the
+			// admin Overview. Not part of `ready` — the healthy keys must keep serving.
+			unseal_failures: crate::infrastructure::telemetry::unseal_failures(),
 		}))
 	}
 }

@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use domain::{
 	architecture::{Reader, Repository},
 	error::DomainError,
-	money::TxRef,
+	money::{Network, TxRef, Usdt},
 	users::UserId,
 	withdrawals::{Withdrawal, WithdrawalId},
 };
@@ -49,4 +49,27 @@ pub trait WithdrawalRepository: Repository<Aggregate = Withdrawal> + Reader<Aggr
 
 	/// A user's withdrawals (projection), newest first.
 	async fn list_by_user(&self, user: UserId) -> Result<Vec<Withdrawal>, DomainError>;
+
+	/// The cross-user queue of withdrawals awaiting operator action, oldest first —
+	/// the admin Withdrawals screen's clear-the-queue surface.
+	async fn list_actionable(&self) -> Result<Vec<QueuedWithdrawal>, DomainError>;
+}
+/// A lightweight cross-user row for the operator withdrawal queue: a withdrawal
+/// awaiting action — `queued` (awaiting liquidity/dispatch) or `processing`
+/// (broadcast in flight: settle with the mined tx, fail only if nothing landed).
+pub struct QueuedWithdrawal {
+	pub id: WithdrawalId,
+	pub user_id: UserId,
+	/// Mirrored identity email (may be empty if the bridge hasn't populated it).
+	pub email: String,
+	pub network: Network,
+	/// Destination on-chain address, as stored.
+	pub address: String,
+	/// Gross debited from the user.
+	pub amount: Usdt,
+	/// What ships on-chain (gross − fee).
+	pub net_amount: Usdt,
+	pub state: String,
+	/// Unix seconds the withdrawal was requested.
+	pub created_at: i64,
 }

@@ -45,10 +45,10 @@ impl WithdrawalPolicy {
 		Usdt::from_base_units(1_000_000_000_000_000_000)
 	}
 
-	/// The smallest gross withdrawal accepted (10 USDT) — necessarily above the fee,
+	/// The smallest gross withdrawal accepted (2 USDT) — necessarily above the fee,
 	/// so the on-chain net is always positive.
 	pub const fn minimum(_network: Network) -> Usdt {
-		Usdt::from_base_units(10_000_000_000_000_000_000)
+		Usdt::from_base_units(2_000_000_000_000_000_000)
 	}
 }
 
@@ -445,7 +445,7 @@ mod tests {
 
 	#[test]
 	fn amount_below_minimum_is_rejected() {
-		let err = Withdrawal::request(WithdrawalId::new(), user(), Network::Ton, addr(Network::Ton), gross("5"), fee(Network::Ton)).unwrap_err();
+		let err = Withdrawal::request(WithdrawalId::new(), user(), Network::Ton, addr(Network::Ton), gross("1"), fee(Network::Ton)).unwrap_err();
 		assert!(matches!(err, DomainError::Validation(_)));
 	}
 

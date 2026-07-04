@@ -19,7 +19,10 @@ use domain::{
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::{infrastructure::outbox, ports::WithdrawalRepository};
+use crate::{
+	infrastructure::outbox,
+	ports::{WithdrawalRepository, withdrawals::QueuedWithdrawal},
+};
 
 const SELECT_BY_ID: &str = "SELECT id, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE id = $1";
 const SELECT_BY_ID_FOR_UPDATE: &str = "SELECT id, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE id = $1 FOR UPDATE";
@@ -222,5 +225,33 @@ impl WithdrawalRepository for PgWithdrawals {
 			.await
 			.map_err(repo_err)?;
 		rows.into_iter().map(WithdrawalRow::into_domain).collect()
+	}
+
+	async fn list_actionable(&self) -> Result<Vec<QueuedWithdrawal>, DomainError> {
+		let rows = sqlx::query_as::<_, (Uuid, Uuid, Option<String>, String, String, String, String, String, i64)>(
+			"SELECT w.id, w.user_id, u.email, w.network, w.address, w.amount, w.fee, w.state, EXTRACT(EPOCH FROM w.created_at)::BIGINT \
+			 FROM withdrawals w LEFT JOIN users u ON u.id = w.user_id \
+			 WHERE w.state IN ('queued', 'processing') ORDER BY w.created_at ASC",
+		)
+		.fetch_all(&self.pool)
+		.await
+		.map_err(repo_err)?;
+		rows.into_iter()
+			.map(|(id, user_id, email, network, address, amount, fee, state, created_at)| {
+				let amount = Usdt::from_base_units(amount.parse::<u128>().map_err(|_| DomainError::Repository("malformed withdrawal amount".into()))?);
+				let fee = Usdt::from_base_units(fee.parse::<u128>().map_err(|_| DomainError::Repository("malformed withdrawal fee".into()))?);
+				Ok(QueuedWithdrawal {
+					id: WithdrawalId::from_raw(id),
+					user_id: UserId::from_raw(user_id),
+					email: email.unwrap_or_default(),
+					network: Network::parse(&network)?,
+					address,
+					amount,
+					net_amount: amount.checked_sub(fee).unwrap_or(Usdt::ZERO),
+					state,
+					created_at,
+				})
+			})
+			.collect()
 	}
 }

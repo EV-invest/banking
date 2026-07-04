@@ -203,6 +203,10 @@ impl Grpc {
 		Ok(self.wallet().list_withdrawals(bearer(token, bk::ListWithdrawalsRequest {})?).await?.into_inner())
 	}
 
+	pub async fn list_deposits(&self, token: &str) -> Result<bk::DepositList, Status> {
+		Ok(self.wallet().list_deposits(bearer(token, bk::ListDepositsRequest {})?).await?.into_inner())
+	}
+
 	pub async fn subscribe(&self, token: &str, req: bk::SubscribeRequest) -> Result<bk::Subscription, Status> {
 		Ok(self.funds().subscribe(bearer(token, req)?).await?.into_inner())
 	}
@@ -329,6 +333,46 @@ impl Grpc {
 			redemption_id: redemption_id.to_string(),
 		};
 		Ok(self.balance().fail_redemption(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn withdrawal_queue(&self, token: &str) -> Result<bk::WithdrawalQueue, Status> {
+		Ok(self.balance().list_withdrawal_queue(bearer(token, bk::ListWithdrawalQueueRequest {})?).await?.into_inner())
+	}
+
+	pub async fn dispatch_withdrawal(&self, token: &str, withdrawal_id: &str) -> Result<(), Status> {
+		let req = bk::DispatchWithdrawalRequest {
+			withdrawal_id: withdrawal_id.to_string(),
+		};
+		self.balance().dispatch_withdrawal(bearer(token, req)?).await?;
+		Ok(())
+	}
+
+	pub async fn settle_withdrawal(&self, token: &str, withdrawal_id: &str, tx_ref: &str) -> Result<(), Status> {
+		let req = bk::SettleWithdrawalRequest {
+			withdrawal_id: withdrawal_id.to_string(),
+			tx_ref: tx_ref.to_string(),
+		};
+		self.balance().settle_withdrawal(bearer(token, req)?).await?;
+		Ok(())
+	}
+
+	pub async fn fail_withdrawal(&self, token: &str, withdrawal_id: &str, reason: &str) -> Result<(), Status> {
+		let req = bk::FailWithdrawalRequest {
+			withdrawal_id: withdrawal_id.to_string(),
+			reason: reason.to_string(),
+		};
+		self.balance().fail_withdrawal(bearer(token, req)?).await?;
+		Ok(())
+	}
+
+	pub async fn parked_events(&self, token: &str) -> Result<bk::ParkedEventList, Status> {
+		Ok(self.balance().list_parked_events(bearer(token, bk::ListParkedEventsRequest {})?).await?.into_inner())
+	}
+
+	pub async fn unpark_event(&self, token: &str, seq: i64) -> Result<(), Status> {
+		let req = bk::UnparkEventRequest { seq };
+		self.balance().unpark_event(bearer(token, req)?).await?;
+		Ok(())
 	}
 
 	pub async fn operations_mode(&self, token: &str) -> Result<bk::OperationsMode, Status> {

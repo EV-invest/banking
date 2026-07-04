@@ -163,6 +163,7 @@ pub struct DepositAddress {
 	pub network: String,
 	pub address: String,
 	pub min_confirmations: u32,
+	pub is_testnet: bool,
 }
 
 impl From<bk::DepositAddress> for DepositAddress {
@@ -171,6 +172,7 @@ impl From<bk::DepositAddress> for DepositAddress {
 			network: d.network,
 			address: d.address,
 			min_confirmations: d.min_confirmations,
+			is_testnet: d.is_testnet,
 		}
 	}
 }
@@ -249,6 +251,38 @@ impl From<bk::WithdrawalList> for WithdrawalList {
 	fn from(l: bk::WithdrawalList) -> Self {
 		Self {
 			withdrawals: l.withdrawals.into_iter().map(Withdrawal::from).collect(),
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct Deposit {
+	pub tx_ref: String,
+	pub network: String,
+	pub amount: String,
+	pub created_at: String,
+}
+
+impl From<bk::Deposit> for Deposit {
+	fn from(d: bk::Deposit) -> Self {
+		Self {
+			tx_ref: d.tx_ref,
+			network: d.network,
+			amount: d.amount,
+			created_at: d.created_at.to_string(),
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct DepositList {
+	pub deposits: Vec<Deposit>,
+}
+
+impl From<bk::DepositList> for DepositList {
+	fn from(l: bk::DepositList) -> Self {
+		Self {
+			deposits: l.deposits.into_iter().map(Deposit::from).collect(),
 		}
 	}
 }
@@ -385,6 +419,14 @@ pub struct FleetService {
 	pub detail: String,
 }
 
+/// Per-rail deposit scan-cursor age from Readiness — a growing age means deposits are
+/// confirming on-chain but not being credited.
+#[derive(Serialize)]
+pub struct DepositScan {
+	pub network: String,
+	pub age_secs: String,
+}
+
 #[derive(Serialize)]
 pub struct AdminOverview {
 	pub services: Vec<FleetService>,
@@ -392,6 +434,10 @@ pub struct AdminOverview {
 	pub parked_rows: String,
 	pub backlog: String,
 	pub oldest_backlog_age_secs: String,
+	pub deposit_scan: Vec<DepositScan>,
+	/// Signer unseal failures on money-moving paths since the hub booted — any non-zero
+	/// value means a provably dead key (KEK epoch) was asked to sign; funds are stranded.
+	pub unseal_failures: String,
 }
 
 /// A user row in the operator user list.
@@ -455,10 +501,19 @@ impl From<bk::UserBalanceResponse> for UserBalance {
 	}
 }
 
+/// Per-rail liquidity plus the operator funding view (`treasury_*`/`onchain_*` are
+/// best-effort chain reads — empty means the rail is unconfigured or the read was
+/// unavailable, never an error).
 #[derive(Serialize)]
 pub struct RailLiquidity {
 	pub network: String,
 	pub custody: String,
+	pub treasury_address: String,
+	pub onchain_usdt: String,
+	pub onchain_gas: String,
+	/// The rail's sweep gas-station wallet — fund native coin here (never USDT).
+	pub gas_station_address: String,
+	pub gas_station_gas: String,
 }
 
 /// The two-layer treasury picture (Treasury screen).
@@ -482,6 +537,11 @@ impl From<bk::Treasury> for Treasury {
 				.map(|r| RailLiquidity {
 					network: r.network,
 					custody: r.custody,
+					treasury_address: r.treasury_address,
+					onchain_usdt: r.onchain_usdt,
+					onchain_gas: r.onchain_gas,
+					gas_station_address: r.gas_station_address,
+					gas_station_gas: r.gas_station_gas,
 				})
 				.collect(),
 			bank: t.bank,
@@ -490,6 +550,49 @@ impl From<bk::Treasury> for Treasury {
 			fee_revenue: t.fee_revenue,
 			held_for_clients: t.held_for_clients,
 			reserved_for_withdrawals: t.reserved_for_withdrawals,
+		}
+	}
+}
+
+/// One outbox row the relay parked — the "money didn't move" set (Overview screen).
+/// `reason` is the relay's last error; a `compensated` row already ran its recovery and
+/// must never be unparked (the hub refuses).
+#[derive(Serialize)]
+pub struct ParkedEvent {
+	pub seq: String,
+	pub event_id: String,
+	pub aggregate: String,
+	pub aggregate_id: String,
+	pub kind: String,
+	pub reason: String,
+	pub parked_at: String,
+	pub compensated: bool,
+}
+
+impl From<bk::ParkedEvent> for ParkedEvent {
+	fn from(e: bk::ParkedEvent) -> Self {
+		Self {
+			seq: e.seq.to_string(),
+			event_id: e.event_id,
+			aggregate: e.aggregate,
+			aggregate_id: e.aggregate_id,
+			kind: e.kind,
+			reason: e.reason,
+			parked_at: e.parked_at.to_string(),
+			compensated: e.compensated,
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct ParkedEventList {
+	pub events: Vec<ParkedEvent>,
+}
+
+impl From<bk::ParkedEventList> for ParkedEventList {
+	fn from(l: bk::ParkedEventList) -> Self {
+		Self {
+			events: l.events.into_iter().map(ParkedEvent::from).collect(),
 		}
 	}
 }
@@ -522,6 +625,47 @@ impl From<bk::RedemptionQueue> for RedemptionQueue {
 					email: i.email,
 					service: i.service,
 					units: i.units,
+					created_at: i.created_at.to_string(),
+				})
+				.collect(),
+		}
+	}
+}
+
+/// One withdrawal awaiting operator action (admin Withdrawals screen).
+#[derive(Serialize)]
+pub struct WithdrawalQueueItem {
+	pub withdrawal_id: String,
+	pub user_id: String,
+	pub email: String,
+	pub network: String,
+	pub address: String,
+	pub amount: String,
+	pub net_amount: String,
+	pub state: String,
+	pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct WithdrawalQueue {
+	pub items: Vec<WithdrawalQueueItem>,
+}
+
+impl From<bk::WithdrawalQueue> for WithdrawalQueue {
+	fn from(q: bk::WithdrawalQueue) -> Self {
+		Self {
+			items: q
+				.items
+				.into_iter()
+				.map(|i| WithdrawalQueueItem {
+					withdrawal_id: i.withdrawal_id,
+					user_id: i.user_id,
+					email: i.email,
+					network: i.network,
+					address: i.address,
+					amount: i.amount,
+					net_amount: i.net_amount,
+					state: i.state,
 					created_at: i.created_at.to_string(),
 				})
 				.collect(),

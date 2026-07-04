@@ -13,11 +13,13 @@
 //!   service     — gRPC driving adapter
 //!   provision   — the provisioning use case (keygen → seal → store)
 //!   key_vault   — the crypto core (XChaCha20-Poly1305 envelope + per-curve keygen)
+//!   kek_guard   — boot-time KEK-epoch enforcement (sentinel + per-row fingerprints)
 //!   secrets     — the `wallet_secrets` driven store (signer's own database)
 
 pub mod config;
 pub mod error;
 pub mod evm_tx;
+pub mod kek_guard;
 pub mod key_vault;
 pub mod policy;
 pub mod provision;

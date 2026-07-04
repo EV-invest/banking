@@ -26,6 +26,7 @@ use piggybank_core::{
 		db,
 		deposit_watcher::DepositWatcher,
 		deposits::PgDeposits,
+		dispatcher::Dispatcher,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
@@ -146,8 +147,8 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// rail falls through to the no-op stub (an operator settles manually), so unconfigured dev/CI
 	// is unaffected — same gate per chain as its deposit watcher.
 	let mut custody_by_network: HashMap<Network, Arc<dyn Custody>> = HashMap::new();
-	if let Some(bsc) = &config.bsc {
-		let chain_custody = ChainCustody::new(
+	let bsc_custody: Option<Arc<ChainCustody>> = config.bsc.as_ref().map(|bsc| {
+		Arc::new(ChainCustody::new(
 			pool.clone(),
 			BscRpc::new(bsc.rpc_url.clone()),
 			SignerServiceClient::new(signer_channel.clone()),
@@ -155,48 +156,40 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 			bsc.chain_id,
 			bsc.usdt_contract.clone(),
 			bsc.gas_limit,
-		);
-		// Resolve + log the treasury hot wallet at boot so the operator can fund it (USDT for
-		// liquidity, BNB for gas) before any withdrawal settles. Best-effort: if the signer isn't
-		// up yet it resolves on the first withdrawal instead — boot is never blocked on it.
-		if let Err(err) = chain_custody.treasury_address().await {
-			tracing::warn!("could not resolve the treasury address at boot (resolves on first withdrawal): {err}");
-		}
-		custody_by_network.insert(Network::Bep20, Arc::new(chain_custody));
+		))
+	});
+	if let Some(bsc_custody) = &bsc_custody {
+		custody_by_network.insert(Network::Bep20, bsc_custody.clone());
 	}
-	if let Some(tron) = &config.tron {
-		let tron_custody = TronCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), tron);
-		if let Err(err) = tron_custody.treasury_address().await {
-			tracing::warn!("could not resolve the tron treasury address at boot (resolves on first withdrawal): {err}");
-		}
-		custody_by_network.insert(Network::Trc20, Arc::new(tron_custody));
+	let tron_custody: Option<Arc<TronCustody>> = config
+		.tron
+		.as_ref()
+		.map(|tron| Arc::new(TronCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), tron)));
+	if let Some(tron_custody) = &tron_custody {
+		custody_by_network.insert(Network::Trc20, tron_custody.clone());
 	}
 	// --- TON custody (jetton USDT) ---
 	// One shared `Arc<TonCustody>` — the registry broadcasts through it, and the withdrawal
 	// watcher reuses it to re-sign a stuck expired send at the same seqno (only the key-holder
 	// path can do that safely). Held so the watcher (built below) can clone it.
-	let ton_custody: Option<Arc<TonCustody>> = match &config.ton {
-		Some(ton) => {
-			let ton_custody = Arc::new(TonCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton));
-			// Resolve + log the treasury at boot so the operator funds it (USDT + TON) before any
-			// withdrawal settles. Best-effort — resolves on the first withdrawal otherwise.
-			if let Err(err) = ton_custody.treasury_address().await {
-				tracing::warn!("could not resolve the TON treasury address at boot (resolves on first withdrawal): {err}");
-			}
-			custody_by_network.insert(Network::Ton, ton_custody.clone());
-			Some(ton_custody)
-		}
-		None => None,
-	};
+	let ton_custody: Option<Arc<TonCustody>> = config
+		.ton
+		.as_ref()
+		.map(|ton| Arc::new(TonCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton)));
+	if let Some(ton_custody) = &ton_custody {
+		custody_by_network.insert(Network::Ton, ton_custody.clone());
+	}
 	let custody: Arc<dyn Custody> = Arc::new(MultiChainCustody::new(custody_by_network, Arc::new(StubCustody)));
-	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody, relay_notify.clone());
+	let relay = Relay::new(relay_pool.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
 
 	// Recovery jobs, on the relay's dedicated pool so their periodic scans don't compete
 	// with request traffic. Reconciliation watches the PG-vs-TB invariants and surfaces any
 	// parked outbox row (TB wins, alert-only); the reaper owns the timeout for abandoned
-	// sagas (alert on stuck `processing` withdrawals; auto-resolve the safe `queued` ones).
+	// sagas (alert on stuck `processing` withdrawals; auto-resolve the safe `queued` ones);
+	// the dispatcher drains the accept-and-queue backlog once a rail is topped up.
 	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
-	let reaper = Reaper::new(relay_pool, withdrawals.clone(), redemptions.clone(), relay_notify.clone());
+	let reaper = Reaper::new(relay_pool.clone(), withdrawals.clone(), redemptions.clone(), relay_notify.clone());
+	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
 
 	// ── cross-plane lifecycle bridge consumer (one-way concierge → banking) ─────
 	// Pull concierge `UserLifecycleEvent`s and mirror them onto the `users` control
@@ -256,10 +249,12 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// watcher, and (opt-in) sweep. Each runs only when TRON_RPC_URL is set; their own pool clones
 	// keep the polling reads off the request path.
 	let tron_deposit_watcher = config.tron.as_ref().map(|tron| TronDepositWatcher::new(pool.clone(), relay_notify.clone(), tron));
-	let tron_withdrawal_watcher = config
-		.tron
-		.as_ref()
-		.map(|tron| TronWithdrawalWatcher::new(pool.clone(), withdrawals.clone(), relay_notify.clone(), tron));
+	// The confirmation watcher shares the custody adapter so it can re-drive a stuck (expired,
+	// unlanded) send — TRON has no nonce, so nothing else could recover it. Wired like the TON one.
+	let tron_withdrawal_watcher = match (&config.tron, &tron_custody) {
+		(Some(tron), Some(tron_custody)) => Some(TronWithdrawalWatcher::new(pool.clone(), tron_custody.clone(), withdrawals.clone(), relay_notify.clone(), tron)),
+		_ => None,
+	};
 	let tron_sweep = match (&config.tron, &config.tron_sweep) {
 		(Some(tron), Some(sweep_config)) => Some(TronSweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), tron, sweep_config.clone())),
 		_ => None,
@@ -296,8 +291,11 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		nav,
 		positions,
 		deposit_addresses,
+		custody,
+		Arc::from(config.configured_networks()),
 		relay_notify,
 		Arc::from(config.admin_subjects.clone()),
+		config.ton.as_ref().is_some_and(|ton| ton.is_testnet),
 	);
 
 	tracing::info!(core = %config.grpc_addr, auth = %config.auth_grpc_addr, "piggybank listening");
@@ -319,6 +317,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		relay_done,
 		reconciliation_done,
 		reaper_done,
+		dispatcher_done,
 		bridge_done,
 		watcher_done,
 		withdrawal_watcher_done,
@@ -329,6 +328,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		ton_watcher_done,
 		ton_withdrawal_watcher_done,
 		ton_sweep_done,
+		treasury_resolve_done,
 	) = tokio::join!(
 		await_signal(shutdown.clone()),
 		branch(&shutdown, "core gRPC server", services::serve(config.grpc_addr, state, shutdown.clone().cancelled_owned())),
@@ -337,6 +337,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		branch(&shutdown, "relay", infallible(relay.run(shutdown.clone()))),
 		branch(&shutdown, "reconciliation", infallible(reconciliation.run(shutdown.clone()))),
 		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
+		branch(&shutdown, "dispatcher", infallible(dispatcher.run(shutdown.clone()))),
 		branch(&shutdown, "bridge", infallible(run_bridge(bridge, shutdown.clone()))),
 		branch(&shutdown, "deposit watcher", infallible(run_watcher(deposit_watcher, shutdown.clone()))),
 		branch(&shutdown, "withdrawal watcher", infallible(run_withdrawal_watcher(withdrawal_watcher, shutdown.clone()))),
@@ -355,6 +356,11 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 			infallible(run_ton_withdrawal_watcher(ton_withdrawal_watcher, shutdown.clone()))
 		),
 		branch(&shutdown, "ton sweep", infallible(run_ton_sweep(ton_sweep, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"treasury resolve",
+			infallible(resolve_treasuries(bsc_custody, tron_custody, ton_custody, shutdown.clone()))
+		),
 	);
 	let () = signal;
 	// The first error (if any) becomes the process result; a clean shutdown is `Ok`.
@@ -363,6 +369,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.and(relay_done)
 		.and(reconciliation_done)
 		.and(reaper_done)
+		.and(dispatcher_done)
 		.and(bridge_done)
 		.and(watcher_done)
 		.and(withdrawal_watcher_done)
@@ -373,6 +380,49 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.and(ton_watcher_done)
 		.and(ton_withdrawal_watcher_done)
 		.and(ton_sweep_done)
+		.and(treasury_resolve_done)
+}
+
+/// Resolve + log each configured rail's treasury hot wallet so the operator can fund it
+/// (USDT for liquidity, native coin for gas) before any withdrawal settles. Runs as its own
+/// `join!` branch because the signer verifies the hub's service token against the auth
+/// listener — which only binds inside the `join!` — so an inline boot-time resolve always
+/// failed `Unavailable` and the funding log line never printed. Retries with capped
+/// exponential backoff; each adapter's `OnceCell` makes success sticky (repeat calls are
+/// free), and once every configured rail is resolved the branch idles until shutdown.
+async fn resolve_treasuries(bsc: Option<Arc<ChainCustody>>, tron: Option<Arc<TronCustody>>, ton: Option<Arc<TonCustody>>, shutdown: CancellationToken) {
+	const MAX_BACKOFF: Duration = Duration::from_secs(30);
+	let mut backoff = Duration::from_millis(500);
+	loop {
+		let mut unresolved = false;
+		if let Some(bsc) = &bsc
+			&& let Err(err) = bsc.treasury_address().await
+		{
+			tracing::warn!("could not resolve the BEP20 treasury address (retrying in {backoff:?}): {err}");
+			unresolved = true;
+		}
+		if let Some(tron) = &tron
+			&& let Err(err) = tron.treasury_address().await
+		{
+			tracing::warn!("could not resolve the Tron treasury address (retrying in {backoff:?}): {err}");
+			unresolved = true;
+		}
+		if let Some(ton) = &ton
+			&& let Err(err) = ton.treasury_address().await
+		{
+			tracing::warn!("could not resolve the TON treasury address (retrying in {backoff:?}): {err}");
+			unresolved = true;
+		}
+		if !unresolved {
+			shutdown.cancelled().await;
+			return;
+		}
+		tokio::select! {
+			() = shutdown.cancelled() => return,
+			() = tokio::time::sleep(backoff) => {},
+		}
+		backoff = (backoff * 2).min(MAX_BACKOFF);
+	}
 }
 
 /// Run one composition-root branch to completion, mapping any error to `anyhow`, then cancel

@@ -5,11 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, CardHeader, CardTitle, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@evinvest/uikit";
 
-import { cancelWithdrawal, fetchDepositAddress, fetchWallet, fetchWithdrawals, submitWithdrawal } from "@/entities/wallet/api/wallet-client";
-import type { DepositAddress, NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
+import { cancelWithdrawal, fetchDepositAddress, fetchDeposits, fetchWallet, fetchWithdrawals, submitWithdrawal } from "@/entities/wallet/api/wallet-client";
+import type { Deposit, DepositAddress, NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { tonFriendlyAddress } from "@/shared/lib/ton-address";
 import { DepositQr } from "@/views/wallet/ui/deposit-qr";
-import { formatUsdt, fromBaseUnits, NETWORKS, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
+import { formatUsdt, fromBaseUnits, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 // Clearly-visible active tab. The uikit default active state is `bg-background` — invisible
@@ -19,6 +20,12 @@ const TAB_TRIGGER = "data-[state=active]:bg-main-accent-t1/15 data-[state=active
 // Per-rail withdraw options for the selected network (fee, min, instant liquidity).
 function withdrawableFor(wallet: Wallet | null, network: string): NetworkWithdrawable | undefined {
   return (wallet?.withdrawable ?? []).find((w) => w.network === network);
+}
+
+// The rails on offer come from the wallet response — the hub serves only rails with a
+// running on-chain watcher, so an unconfigured network never shows a dead tab here.
+function networksOf(entries: { network?: string }[] | undefined): string[] {
+  return (entries ?? []).map((e) => e.network ?? "").filter(Boolean);
 }
 
 export function WalletView() {
@@ -85,7 +92,7 @@ export function WalletView() {
         </TabsList>
 
         <TabsContent value="deposit" className="pt-6">
-          <DepositPanel />
+          <DepositPanel wallet={wallet} />
         </TabsContent>
         <TabsContent value="withdraw" className="pt-6">
           <WithdrawPanel wallet={wallet} onDone={load} />
@@ -113,10 +120,10 @@ function Stat({ label, value, loading, emphasis, hint }: { label: string; value:
   );
 }
 
-function NetworkPicker({ value, onChange }: { value: string; onChange: (n: string) => void }) {
+function NetworkPicker({ networks, value, onChange }: { networks: string[]; value: string; onChange: (n: string) => void }) {
   return (
     <div className="inline-flex rounded-lg border border-border p-1">
-      {NETWORKS.map((network) => (
+      {networks.map((network) => (
         <button
           key={network}
           type="button"
@@ -130,13 +137,25 @@ function NetworkPicker({ value, onChange }: { value: string; onChange: (n: strin
   );
 }
 
-function DepositPanel() {
-  const [network, setNetwork] = useState<string>(NETWORKS[0]);
+function PanelSkeleton() {
+  return (
+    <div className="max-w-xl space-y-5">
+      <Skeleton className="h-10 w-60" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
+
+function DepositPanel({ wallet }: { wallet: Wallet | null }) {
+  const networks = networksOf(wallet?.deposit_addresses);
+  const [selected, setSelected] = useState<string | null>(null);
+  const network = selected ?? networks[0];
   const [address, setAddress] = useState<DepositAddress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (!network) return;
     let active = true;
     fetchDepositAddress(network)
       .then((a) => active && setAddress(a))
@@ -149,22 +168,30 @@ function DepositPanel() {
   // Reset the displayed address/error in the (event-handler) network switch, not the
   // effect, so the effect performs no synchronous state update.
   const selectNetwork = (next: string) => {
-    setNetwork(next);
+    setSelected(next);
     setAddress(null);
     setError(null);
     setCopied(false);
   };
 
+  // TON's raw `workchain:hex` form is valid but wallet-hostile — show the friendly
+  // non-bounceable UQ… form (an uninitialized deposit wallet bounces EQ… sends).
+  const rawAddress = address?.address ?? "";
+  const displayAddress = network === "ton" ? (tonFriendlyAddress(rawAddress, { testnet: address?.is_testnet }) ?? rawAddress) : rawAddress;
+
   const copy = () => {
-    if (!address?.address) return;
-    void navigator.clipboard.writeText(address.address);
+    if (!displayAddress) return;
+    void navigator.clipboard.writeText(displayAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
+  if (wallet === null) return <PanelSkeleton />;
+  if (!network) return <p className="text-sm text-muted-foreground">No deposit rails are available right now — check back soon.</p>;
+
   return (
     <div className="max-w-xl space-y-5">
-      <NetworkPicker value={network} onChange={selectNetwork} />
+      <NetworkPicker networks={networks} value={network} onChange={selectNetwork} />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Your {networkLabel(network)} deposit address</CardTitle>
@@ -178,13 +205,13 @@ function DepositPanel() {
               </div>
               <Skeleton className="h-10 w-full" />
             </>
-          ) : address.address ? (
+          ) : displayAddress ? (
             <>
               <div className="flex justify-center">
-                <DepositQr value={address.address} />
+                <DepositQr value={displayAddress} />
               </div>
               <div className="flex items-center gap-2">
-                <code className="flex-1 break-all rounded-md border border-border bg-main-surface px-3 py-2 text-sm">{address.address}</code>
+                <code className="flex-1 break-all rounded-md border border-border bg-main-surface px-3 py-2 text-sm">{displayAddress}</code>
                 <Button type="button" variant="outline" size="icon" onClick={copy} aria-label="Copy address">
                   {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 </Button>
@@ -207,10 +234,24 @@ function DepositPanel() {
   );
 }
 
+// What the user reviewed, frozen at the "Review" click — Confirm submits exactly this
+// even if a wallet refetch changes the live selection underneath the open confirm.
+interface ReviewedWithdrawal {
+  network: string;
+  address: string;
+  amount: string;
+  fee: string | undefined;
+  instant: string | undefined;
+  rails: string; // the rail list at review time — a changed list voids the review
+}
+
 function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () => void }) {
-  const [network, setNetwork] = useState<string>(NETWORKS[0]);
+  const networks = networksOf(wallet?.withdrawable);
+  const [selected, setSelected] = useState<string | null>(null);
+  const network = selected ?? networks[0] ?? "";
   const [address, setAddress] = useState("");
   const [amount, setAmount] = useState("");
+  const [confirming, setConfirming] = useState<ReviewedWithdrawal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Withdrawal | null>(null);
@@ -221,12 +262,18 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
   const youReceive = subUsdt(amount, opts?.withdrawal_fee); // decimal string
   const queuedUnits = amountUnits - toBaseUnits(opts?.instant); // > 0 ⇒ partly queued
 
+  // A wallet refetch that changes the rail list invalidates an open review — the
+  // snapshot may point at a rail that no longer exists (guarded render-time reset).
+  const rails = networks.join(",");
+  if (confirming && confirming.rails !== rails) setConfirming(null);
+
   const submit = async () => {
+    if (submitting || !confirming) return;
     setSubmitting(true);
     setError(null);
     setDone(null);
     try {
-      const withdrawal = await submitWithdrawal({ network, address, amount });
+      const withdrawal = await submitWithdrawal({ network: confirming.network, address: confirming.address, amount: confirming.amount });
       setDone(withdrawal);
       setAddress("");
       setAmount("");
@@ -235,14 +282,25 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
       setError((e as Error).message);
     } finally {
       setSubmitting(false);
+      setConfirming(null);
     }
   };
 
-  const valid = address.trim().length > 0 && amountUnits > 0n;
+  const valid = network !== "" && address.trim().length > 0 && amountUnits > 0n;
+
+  if (wallet === null) return <PanelSkeleton />;
+  if (networks.length === 0) return <p className="text-sm text-muted-foreground">No withdrawal rails are available right now — check back soon.</p>;
 
   return (
     <div className="max-w-xl space-y-5">
-      <NetworkPicker value={network} onChange={setNetwork} />
+      <NetworkPicker
+        networks={networks}
+        value={network}
+        onChange={(n) => {
+          setSelected(n);
+          setConfirming(null);
+        }}
+      />
 
       {done && (
         <Alert>
@@ -267,17 +325,40 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
         <CardContent className="space-y-4">
           <label className="block space-y-1.5">
             <span className="text-sm">Destination address</span>
-            <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder={`${networkLabel(network)} address`} spellCheck={false} />
+            <Input
+              value={address}
+              onChange={(e) => {
+                setAddress(e.target.value);
+                setConfirming(null);
+              }}
+              placeholder={`${networkLabel(network)} address`}
+              spellCheck={false}
+            />
           </label>
 
           <label className="block space-y-1.5">
             <span className="flex items-center justify-between text-sm">
               <span>Amount</span>
-              <button type="button" className="text-xs text-main-accent-t1 hover:underline" onClick={() => setAmount(opts?.withdrawable ?? "0")}>
+              <button
+                type="button"
+                className="text-xs text-main-accent-t1 hover:underline"
+                onClick={() => {
+                  setAmount(opts?.withdrawable ?? "0");
+                  setConfirming(null);
+                }}
+              >
                 Available {formatUsdt(opts?.withdrawable)} · Max
               </button>
             </span>
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" />
+            <Input
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setConfirming(null);
+              }}
+              inputMode="decimal"
+              placeholder="0.00"
+            />
           </label>
 
           <div className="space-y-1 rounded-lg border border-border bg-main-surface p-3 text-sm">
@@ -289,14 +370,48 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
               </p>
             )}
             <p className="pt-1 text-xs text-muted-foreground">
-              Minimum {formatUsdt(opts?.min_withdrawal)} USDT · instant on {networkLabel(network)}: {formatUsdt(opts?.instant)} USDT.
+              Minimum {formatUsdt(opts?.min_withdrawal)} USDT. Up to {formatUsdt(opts?.instant)} USDT pays out instantly on {networkLabel(network)}; anything above that is
+              queued until the rail is topped up.
             </p>
           </div>
 
-          <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={!valid || submitting} onClick={submit}>
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpFromLine className="size-4" />}
-            Review &amp; withdraw
-          </Button>
+          {!confirming ? (
+            <Button
+              type="button"
+              className={cn("w-full", TEAL_CTA)}
+              disabled={!valid || submitting}
+              onClick={() => setConfirming({ network, address, amount, fee: opts?.withdrawal_fee, instant: opts?.instant, rails })}
+            >
+              <ArrowUpFromLine className="size-4" />
+              Review withdrawal
+            </Button>
+          ) : (
+            <div className="space-y-3 rounded-lg border border-main-accent-t1/40 bg-main-accent-t1/[0.06] p-4">
+              <p className="text-sm font-semibold">Confirm withdrawal</p>
+              <div className="space-y-1 text-sm">
+                <Row label="Network" value={networkLabel(confirming.network)} />
+                <Row label="Amount" value={`${formatUsdt(confirming.amount)} USDT`} />
+                <Row label="Network fee" value={`${formatUsdt(confirming.fee)} USDT`} />
+                <Row label="You will receive" value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} strong />
+              </div>
+              <p className="break-all font-mono-tech text-xs text-muted-foreground">To {confirming.address}</p>
+              {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
+                <p className="text-xs text-main-accent-t3">
+                  ~{formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant)))} USDT exceeds instant {networkLabel(confirming.network)}{" "}
+                  liquidity and will be queued until the rail is topped up.
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button type="button" className={cn("flex-1", TEAL_CTA)} disabled={submitting} onClick={submit}>
+                  {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpFromLine className="size-4" />}
+                  Confirm withdrawal
+                </Button>
+                <Button type="button" variant="outline" disabled={submitting} onClick={() => setConfirming(null)}>
+                  Back
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -316,6 +431,7 @@ const STATUS_STYLES: Record<string, string> = {
   queued: "bg-main-accent-t3/15 text-main-accent-t3",
   processing: "bg-main-accent-t1/15 text-main-accent-t1",
   completed: "bg-main-accent-t2/15 text-main-accent-t2",
+  credited: "bg-main-accent-t2/15 text-main-accent-t2",
   failed: "bg-main-accent-t4/15 text-main-accent-t4",
   cancelled: "bg-muted text-muted-foreground",
 };
@@ -325,14 +441,25 @@ function StatusPill({ state }: { state: string | undefined }) {
   return <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLES[key] ?? "bg-muted text-muted-foreground")}>{key}</span>;
 }
 
+function depositDate(unixSecs: string | number | undefined): string {
+  const t = Number(unixSecs ?? 0);
+  if (!t) return "";
+  return new Date(t * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function ActivityPanel() {
-  const [items, setItems] = useState<Withdrawal[] | null>(null);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[] | null>(null);
+  const [deposits, setDeposits] = useState<Deposit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetchWithdrawals()
-      .then((list) => setItems(list.withdrawals ?? []))
+    Promise.all([fetchWithdrawals(), fetchDeposits()])
+      .then(([w, d]) => {
+        setWithdrawals(w.withdrawals ?? []);
+        setDeposits(d.deposits ?? []);
+        setError(null);
+      })
       .catch((e: Error) => setError(e.message));
   }, []);
 
@@ -351,13 +478,19 @@ function ActivityPanel() {
   };
 
   if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (!items) return <Skeleton className="h-40 w-full" />;
-  if (items.length === 0) {
+  if (!withdrawals || !deposits) return <Skeleton className="h-40 w-full" />;
+
+  // One merged feed. Withdrawals carry no timestamp on the wire, so a strict time
+  // interleave isn't possible: withdrawals keep the hub's newest-first order on top
+  // (they hold the actionable queued/processing rows), then deposits newest-first.
+  const sortedDeposits = [...deposits].sort((a, b) => Number(b.created_at ?? 0) - Number(a.created_at ?? 0));
+
+  if (withdrawals.length === 0 && deposits.length === 0) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
           <ArrowDownToLine className="size-6" />
-          <p className="text-sm">No withdrawals yet.</p>
+          <p className="text-sm">No deposits or withdrawals yet.</p>
         </CardContent>
       </Card>
     );
@@ -365,13 +498,13 @@ function ActivityPanel() {
   return (
     <Card>
       <CardContent className="divide-y divide-border p-0">
-        {items.map((w) => {
+        {withdrawals.map((w) => {
           const id = w.id ?? "";
           return (
-            <div key={id} className="flex items-center justify-between gap-4 px-4 py-3">
+            <div key={`w-${id}`} className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="min-w-0 space-y-0.5">
                 <p className="text-sm">
-                  <span className="font-medium">{formatUsdt(w.amount)} USDT</span> <span className="text-muted-foreground">to {shortAddress(w.address)}</span>
+                  <span className="font-medium">−{formatUsdt(w.amount)} USDT</span> <span className="text-muted-foreground">to {shortAddress(w.address)}</span>
                 </p>
                 <p className="font-mono-tech text-xs text-muted-foreground">
                   {networkLabel(w.network)}
@@ -390,6 +523,25 @@ function ActivityPanel() {
             </div>
           );
         })}
+        {sortedDeposits.map((d, i) => (
+          // tx_ref alone can be missing (or repeat for multi-output txs) — suffix with
+          // created_at + position so React keys stay unique.
+          <div key={`d-${d.tx_ref ?? ""}-${d.created_at ?? ""}-${i}`} className="flex items-center justify-between gap-4 px-4 py-3">
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-sm">
+                <span className="font-medium">+{formatUsdt(d.amount)} USDT</span> <span className="text-muted-foreground">deposit</span>
+              </p>
+              <p className="font-mono-tech text-xs text-muted-foreground">
+                {networkLabel(d.network)}
+                {d.tx_ref ? ` · ${shortAddress(d.tx_ref)}` : ""}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="text-xs text-muted-foreground">{depositDate(d.created_at)}</span>
+              <StatusPill state="credited" />
+            </div>
+          </div>
+        ))}
       </CardContent>
     </Card>
   );

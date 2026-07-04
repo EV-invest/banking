@@ -76,6 +76,19 @@ pub async fn overview(State(st): State<AppState>, jar: CookieJar) -> Result<Json
 		parked_rows: readiness.as_ref().map(|r| r.parked_rows.to_string()).unwrap_or_else(|| "0".into()),
 		backlog: readiness.as_ref().map(|r| r.backlog.to_string()).unwrap_or_else(|| "0".into()),
 		oldest_backlog_age_secs: readiness.as_ref().map(|r| r.oldest_backlog_age_secs.to_string()).unwrap_or_else(|| "0".into()),
+		deposit_scan: readiness
+			.as_ref()
+			.map(|r| {
+				r.scan_cursors
+					.iter()
+					.map(|c| dto::DepositScan {
+						network: c.network.clone(),
+						age_secs: c.age_secs.to_string(),
+					})
+					.collect()
+			})
+			.unwrap_or_default(),
+		unseal_failures: readiness.as_ref().map(|r| r.unseal_failures.to_string()).unwrap_or_else(|| "0".into()),
 	}))
 }
 
@@ -256,6 +269,94 @@ pub async fn fail_redemption(State(st): State<AppState>, jar: CookieJar, headers
 		return Err(ApiError::BadRequest("redemption_id is required".into()));
 	};
 	Ok(Json(st.grpc.fail_redemption(&token, &id).await?.into()))
+}
+
+// ── withdrawals (banking money plane, operator actions) ────────────────────────
+
+/// `GET /api/admin/withdrawals/queue` — cross-user withdrawals awaiting operator
+/// action (queued / processing), oldest first.
+pub async fn withdrawal_queue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::WithdrawalQueue>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let token = require_money_token(&st, &jar).await?;
+	let queue = st.grpc.withdrawal_queue(&token).await.map_err(|s| ApiError::read(s, "withdrawal queue unavailable"))?;
+	Ok(Json(queue.into()))
+}
+
+/// `POST /api/admin/withdrawals/dispatch` — dispatch a queued withdrawal whose rail
+/// now has liquidity.
+pub async fn dispatch_withdrawal(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let Some(id) = required(&parse_body(&body), "withdrawal_id") else {
+		return Err(ApiError::BadRequest("withdrawal_id is required".into()));
+	};
+	st.grpc.dispatch_withdrawal(&token, &id).await?;
+	Ok(Json(json!({ "ok": true })))
+}
+
+/// `POST /api/admin/withdrawals/settle` — settle a processing withdrawal with its
+/// mined on-chain tx reference.
+pub async fn settle_withdrawal(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let Some(id) = required(&v, "withdrawal_id") else {
+		return Err(ApiError::BadRequest("withdrawal_id is required".into()));
+	};
+	let Some(tx_ref) = required(&v, "tx_ref") else {
+		return Err(ApiError::BadRequest("tx_ref is required".into()));
+	};
+	st.grpc.settle_withdrawal(&token, &id, &tx_ref).await?;
+	Ok(Json(json!({ "ok": true })))
+}
+
+/// `POST /api/admin/withdrawals/fail` — fail a withdrawal that NEVER reached the
+/// chain (voids the reservation, refunding the user). The hub refuses when a
+/// broadcast row exists; the reason is an audit note.
+pub async fn fail_withdrawal(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let Some(id) = required(&v, "withdrawal_id") else {
+		return Err(ApiError::BadRequest("withdrawal_id is required".into()));
+	};
+	let reason = required(&v, "reason").unwrap_or_default();
+	st.grpc.fail_withdrawal(&token, &id, &reason).await?;
+	Ok(Json(json!({ "ok": true })))
+}
+
+// ── outbox (banking money plane) ────────────────────────────────────────────────
+
+/// `GET /api/admin/outbox/parked` — outbox rows the relay parked (needs-intervention).
+pub async fn parked_events(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::ParkedEventList>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let token = require_money_token(&st, &jar).await?;
+	let list = st.grpc.parked_events(&token).await.map_err(|s| ApiError::read(s, "parked events unavailable"))?;
+	Ok(Json(list.into()))
+}
+
+/// `POST /api/admin/outbox/unpark` — CSRF-checked: clear a park so the relay re-drives
+/// the event (the hub refuses compensated/dispatched rows).
+pub async fn unpark_event(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let Some(seq) = required(&parse_body(&body), "seq").and_then(|s| s.parse::<i64>().ok()) else {
+		return Err(ApiError::BadRequest("seq is required".into()));
+	};
+	st.grpc.unpark_event(&token, seq).await?;
+	Ok(Json(json!({ "ok": true })))
 }
 
 // ── cabinet (concierge platform config + banking read-only kill-switch) ─────────

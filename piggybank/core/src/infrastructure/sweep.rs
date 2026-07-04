@@ -135,6 +135,10 @@ impl Sweep {
 	async fn sweep_address(&self, user_id: Uuid, address: &str, treasury: &str, gas_station: &str) -> Result<(), SweepError> {
 		let usdt = self.rpc.erc20_balance(&self.usdt_contract, address).await.map_err(read_err)?;
 		if usdt < self.config.min_usdt {
+			// Drained: the consolidation mined (or the deposit was dust). Stamp the
+			// user's credited deposits so this address drops out of the scan until a
+			// NEW deposit is credited — the fix for the O(N)-every-cycle RPC melt.
+			self.mark_swept(user_id).await?;
 			return Ok(());
 		}
 		let gas_price = self.gas_price().await?;
@@ -209,7 +213,10 @@ impl Sweep {
 			.clone()
 			.sign_erc20_transfer(request)
 			.await
-			.map_err(|s| SweepError::Signer(format!("sweep {address}: {}", s.message())))?
+			.map_err(|s| {
+				super::telemetry::note_signer_error("sweep", address, s.message());
+				SweepError::Signer(format!("sweep {address}: {}", s.message()))
+			})?
 			.into_inner();
 		Ok((response.raw_tx, response.tx_hash))
 	}
@@ -233,7 +240,10 @@ impl Sweep {
 			.clone()
 			.sign_native_transfer(request)
 			.await
-			.map_err(|s| SweepError::Signer(format!("gas top-up {to}: {}", s.message())))?
+			.map_err(|s| {
+				super::telemetry::note_signer_error("gas top-up", "gas-station", s.message());
+				SweepError::Signer(format!("gas top-up {to}: {}", s.message()))
+			})?
 			.into_inner();
 		Ok((response.raw_tx, response.tx_hash))
 	}
@@ -280,11 +290,27 @@ impl Sweep {
 		.cloned()
 	}
 
+	/// Addresses that can still hold funds: a credited deposit exists that no sweep
+	/// cycle has yet observed drained. Everything else is skipped without an RPC —
+	/// the scan is O(active deposits), not O(all addresses ever provisioned).
 	async fn deposit_addresses(&self) -> Result<Vec<(Uuid, String)>, SweepError> {
-		sqlx::query_as::<_, (Uuid, String)>("SELECT user_id, address FROM user_deposit_addresses WHERE network = 'bep20' AND address_kind = 'derived'")
-			.fetch_all(&self.pool)
+		sqlx::query_as::<_, (Uuid, String)>(
+			"SELECT DISTINCT a.user_id, a.address FROM deposits d \
+			 JOIN user_deposit_addresses a ON a.user_id::text = d.party_id AND a.network = d.network \
+			 WHERE d.network = 'bep20' AND d.party_kind = 'user' AND d.swept_at IS NULL AND a.address_kind = 'derived'",
+		)
+		.fetch_all(&self.pool)
+		.await
+		.map_err(|e| SweepError::Db(e.to_string()))
+	}
+
+	async fn mark_swept(&self, user_id: Uuid) -> Result<(), SweepError> {
+		sqlx::query("UPDATE deposits SET swept_at = now() WHERE party_kind = 'user' AND party_id = $1 AND network = 'bep20' AND swept_at IS NULL")
+			.bind(user_id.to_string())
+			.execute(&self.pool)
 			.await
-			.map_err(|e| SweepError::Db(e.to_string()))
+			.map_err(|e| SweepError::Db(e.to_string()))?;
+		Ok(())
 	}
 }
 

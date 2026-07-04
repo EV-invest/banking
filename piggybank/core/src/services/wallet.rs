@@ -15,6 +15,7 @@ use tonic::{Request, Response, Status};
 use crate::{
 	AppState,
 	application::{wallet as wallet_app, withdrawals as withdrawal_app},
+	ports::deposits::DepositRecord,
 	services::support::{caller_id, map_err, parse_withdrawal_id, unfrozen_caller},
 };
 
@@ -26,6 +27,11 @@ pub struct WalletSvc {
 impl WalletSvc {
 	pub fn new(state: AppState) -> Self {
 		Self { state }
+	}
+	/// Whether a rail's deposit addresses are testnet-tagged. Only TON has a distinct testnet
+	/// address form; the other rails' addresses are network-agnostic on the wire.
+	fn rail_is_testnet(&self, network: Network) -> bool {
+		matches!(network, Network::Ton) && self.state.ton_is_testnet
 	}
 }
 
@@ -39,6 +45,7 @@ impl WalletService for WalletSvc {
 			self.state.nav.as_ref(),
 			self.state.withdrawals.as_ref(),
 			self.state.deposit_addresses.as_ref(),
+			&self.state.configured_networks,
 			user,
 		)
 		.await
@@ -50,7 +57,7 @@ impl WalletService for WalletSvc {
 				pending_withdrawal: wallet.balance.pending_withdrawal.to_decimal_string(),
 				total: wallet.balance.total.to_decimal_string(),
 			}),
-			deposit_addresses: wallet.deposit_addresses.iter().map(deposit_rail_to_proto).collect(),
+			deposit_addresses: wallet.deposit_addresses.iter().map(|rail| deposit_rail_to_proto(rail, self.rail_is_testnet(rail.network))).collect(),
 			withdrawable: wallet.withdrawable.iter().map(withdrawable_to_proto).collect(),
 		}))
 	}
@@ -58,13 +65,17 @@ impl WalletService for WalletSvc {
 	async fn get_deposit_address(&self, request: Request<pb::GetDepositAddressRequest>) -> Result<Response<pb::DepositAddress>, Status> {
 		let user = caller_id(&request)?;
 		let network = Network::parse(&request.get_ref().network).map_err(map_err)?;
-		let address = wallet_app::get_deposit_address(self.state.deposit_addresses.as_ref(), user, network).await.map_err(map_err)?;
+		let address = wallet_app::get_deposit_address(self.state.deposit_addresses.as_ref(), &self.state.configured_networks, user, network)
+			.await
+			.map_err(map_err)?;
 		// An empty `address` marks the rail unavailable: there is no fundable address yet
-		// (the underlying address is still a placeholder, never served as fundable).
+		// (the underlying address is still a placeholder — or the rail is unconfigured,
+		// in which case no address is ever provisioned).
 		Ok(Response::new(pb::DepositAddress {
 			network: network.as_str().to_owned(),
 			address: address.map(|a| a.as_str().to_owned()).unwrap_or_default(),
 			min_confirmations: network.min_confirmations(),
+			is_testnet: self.rail_is_testnet(network),
 		}))
 	}
 
@@ -78,7 +89,9 @@ impl WalletService for WalletSvc {
 			self.state.withdrawals.as_ref(),
 			self.state.ledger.as_ref(),
 			self.state.users.as_ref(),
+			self.state.custody.as_ref(),
 			&self.state.relay_notify,
+			&self.state.configured_networks,
 			user,
 			network,
 			address,
@@ -105,13 +118,22 @@ impl WalletService for WalletSvc {
 			withdrawals: withdrawals.iter().map(withdrawal_to_proto).collect(),
 		}))
 	}
+
+	async fn list_deposits(&self, request: Request<pb::ListDepositsRequest>) -> Result<Response<pb::DepositList>, Status> {
+		let user = caller_id(&request)?;
+		let deposits = wallet_app::list_deposits(self.state.deposits.as_ref(), user).await.map_err(map_err)?;
+		Ok(Response::new(pb::DepositList {
+			deposits: deposits.iter().map(deposit_to_proto).collect(),
+		}))
+	}
 }
 
-fn deposit_rail_to_proto(rail: &wallet_app::DepositRail) -> pb::DepositAddress {
+fn deposit_rail_to_proto(rail: &wallet_app::DepositRail, is_testnet: bool) -> pb::DepositAddress {
 	pb::DepositAddress {
 		network: rail.network.as_str().to_owned(),
 		address: rail.address.as_ref().map(|address| address.as_str().to_owned()).unwrap_or_default(),
 		min_confirmations: rail.network.min_confirmations(),
+		is_testnet,
 	}
 }
 
@@ -122,6 +144,15 @@ fn withdrawable_to_proto(rail: &wallet_app::NetworkWithdrawable) -> pb::NetworkW
 		instant: rail.instant.to_decimal_string(),
 		min_withdrawal: rail.min_withdrawal.to_decimal_string(),
 		withdrawal_fee: rail.withdrawal_fee.to_decimal_string(),
+	}
+}
+
+fn deposit_to_proto(deposit: &DepositRecord) -> pb::Deposit {
+	pb::Deposit {
+		tx_ref: deposit.tx_ref.as_str().to_owned(),
+		network: deposit.network.as_str().to_owned(),
+		amount: deposit.amount.to_decimal_string(),
+		created_at: deposit.created_at,
 	}
 }
 

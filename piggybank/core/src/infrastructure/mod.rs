@@ -16,6 +16,8 @@
 //!   clearing vs in-flight withdrawals, parked-row surface); alert-only, TB wins.
 //! - [`reaper`] — the abandoned-saga sweep: alerts on stuck `processing` withdrawals
 //!   and auto-resolves the safe `queued` redemptions/withdrawals past a max age.
+//! - [`dispatcher`] — the treasury worker: re-checks `queued` withdrawals against both
+//!   liquidity gates (TB rail + on-chain treasury) and dispatches the covered ones.
 //! - [`telemetry`] — the observability adapter: the one seam that hands errors to
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
@@ -25,6 +27,7 @@ pub mod custody;
 pub mod db;
 pub mod deposit_watcher;
 pub mod deposits;
+pub mod dispatcher;
 pub mod ledger;
 pub mod nav;
 pub mod operations;

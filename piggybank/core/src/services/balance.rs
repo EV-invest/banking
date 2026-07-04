@@ -20,7 +20,7 @@ use crate::{
 	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
 	services::{
 		funds::redemption_to_proto,
-		support::{map_err, optional, parse_redemption_id, parse_withdrawal_id, require_permission, unix_now},
+		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, require_permission, unix_now},
 	},
 };
 
@@ -39,7 +39,7 @@ impl BalanceSvc {
 impl BalanceService for BalanceSvc {
 	async fn get_treasury(&self, request: Request<pb::GetTreasuryRequest>) -> Result<Response<pb::Treasury>, Status> {
 		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
-		let t = balance_app::treasury(self.state.ledger.as_ref()).await.map_err(map_err)?;
+		let t = balance_app::treasury(self.state.ledger.as_ref(), self.state.custody.as_ref()).await.map_err(map_err)?;
 		Ok(Response::new(pb::Treasury {
 			rails: t
 				.rails
@@ -47,6 +47,11 @@ impl BalanceService for BalanceSvc {
 				.map(|r| pb::RailLiquidity {
 					network: r.network.as_str().to_owned(),
 					custody: r.custody.to_decimal_string(),
+					treasury_address: r.treasury_address.unwrap_or_default(),
+					onchain_usdt: r.onchain_usdt.map(Usdt::to_decimal_string).unwrap_or_default(),
+					onchain_gas: r.onchain_gas.unwrap_or_default(),
+					gas_station_address: r.gas_station_address.unwrap_or_default(),
+					gas_station_gas: r.gas_station_gas.unwrap_or_default(),
 				})
 				.collect(),
 			bank: t.bank.to_decimal_string(),
@@ -85,7 +90,7 @@ impl BalanceService for BalanceSvc {
 	async fn dispatch_withdrawal(&self, request: Request<pb::DispatchWithdrawalRequest>) -> Result<Response<pb::DispatchWithdrawalResponse>, Status> {
 		require_permission(&self.state, &request, Permission::WithdrawalDispatch).await?;
 		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
-		withdrawal_app::dispatch_withdrawal(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
+		withdrawal_app::dispatch_withdrawal(self.state.withdrawals.as_ref(), self.state.custody.as_ref(), &self.state.relay_notify, id)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(pb::DispatchWithdrawalResponse {}))
@@ -179,5 +184,86 @@ impl BalanceService for BalanceSvc {
 			.await
 			.map_err(|_| Status::unavailable("internal error"))?;
 		Ok(Response::new(pb::OperationsMode { read_only }))
+	}
+
+	async fn list_parked_events(&self, request: Request<pb::ListParkedEventsRequest>) -> Result<Response<pb::ParkedEventList>, Status> {
+		require_permission(&self.state, &request, Permission::TreasuryRead).await?;
+		let rows = crate::infrastructure::outbox::parked_rows(&self.state.pool)
+			.await
+			.map_err(|_| Status::unavailable("internal error"))?;
+		Ok(Response::new(pb::ParkedEventList {
+			events: rows
+				.into_iter()
+				.map(|r| pb::ParkedEvent {
+					seq: r.seq,
+					event_id: r.event_id.to_string(),
+					aggregate: r.aggregate,
+					aggregate_id: r.aggregate_id.to_string(),
+					kind: r.kind,
+					reason: r.last_error.unwrap_or_default(),
+					parked_at: r.parked_at_unix,
+					compensated: r.compensated,
+				})
+				.collect(),
+		}))
+	}
+
+	async fn unpark_event(&self, request: Request<pb::UnparkEventRequest>) -> Result<Response<pb::UnparkEventResponse>, Status> {
+		require_permission(&self.state, &request, Permission::OutboxManage).await?;
+		let seq = request.get_ref().seq;
+		let unparked = crate::infrastructure::outbox::unpark(&self.state.pool, seq)
+			.await
+			.map_err(|_| Status::unavailable("internal error"))?;
+		if unparked {
+			self.state.relay_notify.notify_one();
+			return Ok(Response::new(pb::UnparkEventResponse {}));
+		}
+		// Refused — answer precisely: a compensated park is half-applied with compensation
+		// OWED (the relay stamps it at park time, before any recovery runs), so re-driving
+		// would re-apply the legs that already posted; a dispatched row has nothing to
+		// re-drive.
+		match crate::infrastructure::outbox::unpark_refusal(&self.state.pool, seq)
+			.await
+			.map_err(|_| Status::unavailable("internal error"))?
+		{
+			Some((_, true)) => Err(Status::failed_precondition("event parked half-applied — compensation is owed; unparking would double-apply")),
+			Some((true, _)) => Err(Status::failed_precondition("event already dispatched")),
+			_ => Err(Status::not_found("parked event")),
+		}
+	}
+
+	async fn list_withdrawal_queue(&self, request: Request<pb::ListWithdrawalQueueRequest>) -> Result<Response<pb::WithdrawalQueue>, Status> {
+		require_permission(&self.state, &request, Permission::WithdrawalSettle).await?;
+		let queued = self.state.withdrawals.list_actionable().await.map_err(map_err)?;
+		Ok(Response::new(pb::WithdrawalQueue {
+			items: queued
+				.into_iter()
+				.map(|w| pb::WithdrawalQueueItem {
+					withdrawal_id: w.id.to_string(),
+					user_id: w.user_id.to_string(),
+					email: w.email,
+					network: w.network.as_str().to_owned(),
+					address: w.address,
+					amount: w.amount.to_decimal_string(),
+					net_amount: w.net_amount.to_decimal_string(),
+					state: w.state,
+					created_at: w.created_at,
+				})
+				.collect(),
+		}))
+	}
+
+	async fn rotate_deposit_address(&self, request: Request<pb::RotateDepositAddressRequest>) -> Result<Response<pb::RotateDepositAddressResponse>, Status> {
+		require_permission(&self.state, &request, Permission::DepositAddressRotate).await?;
+		let req = request.get_ref();
+		let user = parse_user_id(&req.user_id)?;
+		let network = Network::parse(&req.network).map_err(map_err)?;
+		let address = self.state.deposit_addresses.rotate(user, network).await.map_err(map_err)?;
+		// WARN on success on purpose: a rotation is a recovery event worth an audit trail —
+		// the old address is permanently unspendable and users may still hold it.
+		tracing::warn!(user_id = %req.user_id, network = %req.network, new_address = %address.as_str(), "rotated a dead deposit address");
+		Ok(Response::new(pb::RotateDepositAddressResponse {
+			address: address.as_str().to_owned(),
+		}))
 	}
 }

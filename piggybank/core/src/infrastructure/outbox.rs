@@ -136,9 +136,9 @@ pub async fn record_failure(pool: &PgPool, seq: i64, error: &str) -> Result<(), 
 		.await?;
 	Ok(())
 }
-/// A parked outbox row, surfaced to reconciliation: enough to identify the stranded saga
-/// (`aggregate`/`aggregate_id`), why it parked (`last_error`), and whether it has already
-/// been compensated.
+/// A parked outbox row, surfaced to reconciliation and the operator console: enough to
+/// identify the stranded saga (`aggregate`/`aggregate_id`), why it parked (`last_error`),
+/// when (`parked_at_unix`), and whether it has already been compensated.
 #[derive(sqlx::FromRow)]
 pub struct ParkedRow {
 	pub seq: i64,
@@ -147,16 +147,41 @@ pub struct ParkedRow {
 	pub aggregate_id: Uuid,
 	pub kind: String,
 	pub last_error: Option<String>,
+	pub parked_at_unix: i64,
 	pub compensated: bool,
 }
 /// Scan every parked row (newest first) — the reconciliation job's parked-row leg. Cheap
 /// against the partial `outbox_parked_idx`; parked rows are an exceptional set.
 pub async fn parked_rows(pool: &PgPool) -> Result<Vec<ParkedRow>, sqlx::Error> {
 	sqlx::query_as::<_, ParkedRow>(
-		"SELECT seq, event_id, aggregate, aggregate_id, kind, last_error, compensated_at IS NOT NULL AS compensated FROM outbox WHERE parked_at IS NOT NULL ORDER BY parked_at DESC",
+		"SELECT seq, event_id, aggregate, aggregate_id, kind, last_error, EXTRACT(EPOCH FROM parked_at)::bigint AS parked_at_unix, compensated_at IS NOT NULL AS compensated \
+		 FROM outbox WHERE parked_at IS NOT NULL ORDER BY parked_at DESC",
 	)
 	.fetch_all(pool)
 	.await
+}
+/// Clear a parked row so the relay re-drives it — the operator's intervention once the
+/// park's cause (an underfunded treasury, a rejected broadcast) is fixed. `attempts`
+/// MUST reset with it: the relay re-parks a bounded retryable at `MAX_RETRYABLE_ATTEMPTS`,
+/// so a retry-exhausted row would otherwise re-park on its first redelivery. `last_error`
+/// is kept for forensics (the next attempt overwrites it). Refuses a dispatched row
+/// (nothing to re-drive) and a **compensated** one — its recovery event already applied,
+/// so re-driving would double-apply. Returns whether a row was unparked.
+pub async fn unpark(pool: &PgPool, seq: i64) -> Result<bool, sqlx::Error> {
+	let result = sqlx::query("UPDATE outbox SET parked_at = NULL, attempts = 0 WHERE seq = $1 AND parked_at IS NOT NULL AND dispatched_at IS NULL AND compensated_at IS NULL")
+		.bind(seq)
+		.execute(pool)
+		.await?;
+	Ok(result.rows_affected() > 0)
+}
+/// One row's terminal stamps — `(dispatched, compensated)` — read after a refused
+/// [`unpark`] so the caller can answer precisely (compensated vs dispatched vs not
+/// parked / unknown seq).
+pub async fn unpark_refusal(pool: &PgPool, seq: i64) -> Result<Option<(bool, bool)>, sqlx::Error> {
+	sqlx::query_as::<_, (bool, bool)>("SELECT dispatched_at IS NOT NULL, compensated_at IS NOT NULL FROM outbox WHERE seq = $1")
+		.bind(seq)
+		.fetch_optional(pool)
+		.await
 }
 /// The relay's pipeline depth, for the readiness probe: how many rows the relay has parked
 /// (`parked_at IS NOT NULL` — the canonical parked predicate, NOT `last_error IS NOT NULL`,

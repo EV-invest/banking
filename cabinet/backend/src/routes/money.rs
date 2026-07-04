@@ -52,6 +52,13 @@ pub async fn list_withdrawals(State(st): State<AppState>, jar: CookieJar) -> Res
 	Ok(Json(list.into()))
 }
 
+/// `GET /api/wallet/deposits` — the caller's confirmed on-chain deposits, newest first.
+pub async fn list_deposits(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::DepositList>, ApiError> {
+	let token = require_money_token(&st, &jar).await?;
+	let list = st.grpc.list_deposits(&token).await.map_err(|s| ApiError::read(s, "deposits unavailable"))?;
+	Ok(Json(list.into()))
+}
+
 /// `POST /api/wallet/withdrawals` — CSRF-checked: open a withdrawal of free balance.
 pub async fn request_withdrawal(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Withdrawal>, ApiError> {
 	if !verify_csrf(&st, &jar, &headers) {

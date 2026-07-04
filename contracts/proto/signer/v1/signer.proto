@@ -54,6 +54,21 @@ service SignerService {
   // gas-station topping up a user's wallet with TON before that wallet's USDT is swept.
   // A plain value transfer (no jetton body); self-deploys the sender on its first send.
   rpc SignTonTransfer(SignTonTransferRequest) returns (SignedTonTxResponse);
+
+  // === KEK-epoch diagnostics & recovery ======================================
+  // Walk every ACTIVE key and report the ones that are provably dead under the
+  // current KEK epoch (sealed under a different KEK — their funds cannot move).
+  // Read-only apart from healing pre-epoch rows' fingerprint stamps on a
+  // successful probe. Complements the boot sentinel: the sentinel catches a
+  // whole-database mismatch at startup; this catches per-row casualties.
+  rpc GetKeyHealth(GetKeyHealthRequest) returns (GetKeyHealthResponse);
+
+  // Supersede a PROVABLY DEAD key for (user, network): archive the old row and
+  // mint a fresh keypair, returning the new derived address. Refuses to rotate a
+  // key that still unseals — rotation is a recovery tool, not a re-keying tool.
+  // Funds on the OLD address remain unrecoverable; this only restores the user's
+  // ability to receive future deposits.
+  rpc RotateAddress(RotateAddressRequest) returns (ProvisionAddressResponse);
 }
 
 message ProvisionAddressRequest {
@@ -174,4 +189,29 @@ message SignedTonTxResponse {
   string msg_hash = 2;    // hex cell hash of the external message — the hub's tracking id
   uint64 seqno = 3;       // the seqno this message was signed at
   uint32 valid_until = 4; // the unix expiry it was signed with
+}
+
+// === KEK-epoch diagnostics & recovery ======================================
+
+message GetKeyHealthRequest {}
+
+message DeadKey {
+  string wallet_id = 1;  // the wallet_secrets row id
+  string user_id = 2;
+  string network = 3;
+  string address = 4;    // the (unspendable) deposit address the dead key backs
+  string created_at = 5; // when the key was sealed — dates the bad epoch
+  string reason = 6;     // operator-facing: why the key is considered dead
+}
+
+message GetKeyHealthResponse {
+  uint64 total_keys = 1;      // active (non-superseded) keys
+  uint64 healthy_keys = 2;    // keys whose fingerprint matches the current KEK epoch
+  repeated DeadKey dead_keys = 3;
+  string kek_fingerprint = 4; // short hex prefix identifying the current KEK epoch
+}
+
+message RotateAddressRequest {
+  string user_id = 1; // UUID
+  string network = 2; // "bep20" | "trc20" | "ton"
 }

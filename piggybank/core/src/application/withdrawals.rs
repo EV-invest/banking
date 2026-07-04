@@ -4,10 +4,12 @@
 //! `request_withdrawal` is a command with a **two-part Read-First**: it gates on the
 //! user being active (the KYC/freeze seam), confirms the **available** unified claim
 //! (posted − already-reserved) covers the gross (user solvency; the TB non-negative
-//! flag is the backstop), then checks the **chosen rail's liquidity** (treasury) — if
-//! the rail can cover the net it dispatches immediately, otherwise the withdrawal is
-//! accepted and left `Queued` for the treasury worker (`dispatch_withdrawal`) to send
-//! once the rail is topped up. `settle`/`fail` are the operator/watcher-driven
+//! flag is the backstop), then checks the **chosen rail's liquidity** — the min of the
+//! TB rail accounting balance and the custody adapter's real on-chain treasury view —
+//! and dispatches immediately when it covers the net, otherwise the withdrawal is
+//! accepted and left `Queued` for the [`Dispatcher`](crate::infrastructure::dispatcher)
+//! worker (or the admin `dispatch_withdrawal`) to send once the rail is topped up.
+//! `settle`/`fail` are the operator/watcher-driven
 //! completions (admin-gated at the boundary), standing in for a chain watcher + custody
 //! confirmation callback; `cancel` (user) refunds a still-queued withdrawal. The
 //! cardinal rule — fail (void) only when the broadcast certainly did not land — is why
@@ -21,8 +23,9 @@ use domain::{
 	withdrawals::{Withdrawal, WithdrawalId, WithdrawalPolicy},
 };
 use tokio::sync::Notify;
+use tracing::warn;
 
-use crate::ports::{UserRepository, WithdrawalRepository, ledger::Ledger};
+use crate::ports::{Custody, UserRepository, WithdrawalRepository, ledger::Ledger};
 
 /// The calling user withdraws `amount` (gross) of free balance to `address`. The fee
 /// is the per-network policy fee; the net (`amount − fee`) is what leaves on-chain.
@@ -31,12 +34,21 @@ pub async fn request_withdrawal(
 	withdrawals: &dyn WithdrawalRepository,
 	ledger: &dyn Ledger,
 	users: &dyn UserRepository,
+	custody: &dyn Custody,
 	relay: &Notify,
+	configured: &[Network],
 	user: UserId,
 	network: Network,
 	address: WalletAddress,
 	amount: Usdt,
 ) -> Result<Withdrawal, DomainError> {
+	// Rail gate — the withdrawable view no longer offers an unconfigured rail, but a
+	// direct API caller could otherwise queue a withdrawal that only a manual operator
+	// settle (the stub custody fallthrough) could ever ship. Pre-existing withdrawals
+	// on a since-de-configured rail stay listable/cancellable.
+	if !configured.contains(&network) {
+		return Err(DomainError::Validation(format!("{network} withdrawals are not available")));
+	}
 	// KYC/freeze gate — a disabled account may not move money out.
 	let account = users.find_by_id(user).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "user",
@@ -55,11 +67,25 @@ pub async fn request_withdrawal(
 	if Usdt::from_base_units(claim.available()) < amount {
 		return Err(DomainError::Validation("insufficient available balance to withdraw".into()));
 	}
-	// Read-First #2 — rail liquidity (treasury): if the chosen rail can cover the net
-	// now, dispatch to custody immediately; otherwise accept and leave it queued for the
-	// treasury worker to dispatch once the rail is topped up (accept-and-queue).
+	// Read-First #2 — rail liquidity: dispatchable liquidity is `min(TB rail, on-chain
+	// treasury)`. The TB `wallet:<net>` balance alone over-counts — it includes confirmed
+	// deposits still sitting on users' derived addresses, which the treasury hot wallet
+	// cannot spend. If the effective liquidity covers the net, dispatch to custody
+	// immediately; otherwise accept and leave it queued for the dispatcher to send once
+	// the rail is topped up (accept-and-queue). A treasury read failure also degrades to
+	// queued — acceptance and the clearing reserve NEVER depend on rail liquidity, so a
+	// flaky node must not refuse a user.
 	let rail_liquidity = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
-	if rail_liquidity >= withdrawal.net_amount() {
+	let dispatchable = match custody.treasury_liquidity(network).await {
+		Ok(Some(onchain)) => rail_liquidity.min(onchain) >= withdrawal.net_amount(),
+		// No chain view (stub / unwired rail) — the TB accounting balance is all there is.
+		Ok(None) => rail_liquidity >= withdrawal.net_amount(),
+		Err(err) => {
+			warn!(%network, "treasury liquidity read failed — accepting the withdrawal queued: {err}");
+			false
+		}
+	};
+	if dispatchable {
 		withdrawal.dispatch()?;
 	}
 	withdrawals.open(&mut withdrawal).await?;
@@ -67,9 +93,22 @@ pub async fn request_withdrawal(
 	Ok(withdrawal)
 }
 
-/// Dispatch a queued withdrawal to custody (treasury worker / admin): the chosen rail
-/// now has liquidity, so the relay broadcasts. Idempotent.
-pub async fn dispatch_withdrawal(withdrawals: &dyn WithdrawalRepository, relay: &Notify, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+/// Dispatch a queued withdrawal to custody (the dispatcher worker / admin): the chosen
+/// rail now has liquidity, so the relay broadcasts. Refused — left queued, still
+/// user-cancellable — when the rail treasury provably lacks the net on-chain (a dispatch
+/// would only park at the custody backstop). `None`/`Err` reads dispatch as before: the
+/// operator RPC is backed by human judgment, and stub rails stay operator-settled.
+/// Idempotent.
+pub async fn dispatch_withdrawal(withdrawals: &dyn WithdrawalRepository, custody: &dyn Custody, relay: &Notify, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+	let existing = withdrawals.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
+		entity: "withdrawal",
+		id: id.to_string(),
+	})?;
+	if let Ok(Some(onchain)) = custody.treasury_liquidity(existing.network()).await
+		&& onchain < existing.net_amount()
+	{
+		return Err(DomainError::Validation("rail treasury underfunded on-chain — withdrawal left queued".into()));
+	}
 	let withdrawal = withdrawals.dispatch(id).await?;
 	relay.notify_one();
 	Ok(withdrawal)

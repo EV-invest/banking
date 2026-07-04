@@ -13,6 +13,7 @@ use domain::{
 	balance::Party,
 	error::DomainError,
 	money::{Network, TxRef, Usdt},
+	users::UserId,
 };
 
 #[async_trait]
@@ -26,4 +27,17 @@ pub trait Deposits: Send + Sync {
 	/// once even under concurrent recorders. Returns `true` if newly recorded,
 	/// `false` for a duplicate.
 	async fn record(&self, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError>;
+
+	/// The caller's credited on-chain deposits, newest first — a projection read of
+	/// the idempotency-gate rows where `party_kind = 'user'`.
+	async fn list_by_user(&self, user: UserId) -> Result<Vec<DepositRecord>, DomainError>;
+}
+/// A credited on-chain deposit, read back from the idempotency-gate rows — a
+/// projection read model, not an aggregate.
+pub struct DepositRecord {
+	pub tx_ref: TxRef,
+	pub network: Network,
+	pub amount: Usdt,
+	/// Unix seconds the hub recorded the credit.
+	pub created_at: i64,
 }

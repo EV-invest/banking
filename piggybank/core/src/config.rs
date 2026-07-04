@@ -153,6 +153,7 @@ impl AppConfig {
 				poll_secs: parse_opt("BSC_POLL_SECS")?.unwrap_or(12),
 				start_block: parse_opt("BSC_DEPOSIT_START_BLOCK")?,
 				max_block_range: parse_opt("BSC_MAX_BLOCK_RANGE")?.unwrap_or(500),
+				logs_rpc_url: env::var("BSC_LOGS_RPC_URL").ok().filter(|s| !s.is_empty()),
 				chain_id: parse_opt("BSC_CHAIN_ID")?.unwrap_or(56),
 				gas_limit: parse_opt("BSC_GAS_LIMIT")?.unwrap_or(100_000),
 			}),
@@ -179,27 +180,49 @@ impl AppConfig {
 		// The on-chain TON seams run only when TON_API_URL is set (a toncenter v3 base URL).
 		// Everything else defaults — mainnet USDT jetton master, 6s poll.
 		let ton = match env::var("TON_API_URL").ok().filter(|s| !s.is_empty()) {
-			Some(api_url) => Some(TonConfig {
-				api_url,
-				api_key: env::var("TON_API_KEY").ok().filter(|s| !s.is_empty()),
-				usdt_master: env::var("TON_USDT_MASTER")
+			Some(api_url) => {
+				// Default the testnet flag from the URL (the testnet toncenter lives on a `testnet.`
+				// host), so it moves together with the endpoint. Fail LOUD on the dangerous mismatch —
+				// a testnet URL with the flag off would run against testnet while minting mainnet-
+				// tagged deposit addresses (the user is then shown a wrong-network address). Other
+				// combinations (a custom testnet proxy URL + explicit TON_IS_TESTNET=true) are honored.
+				let url_is_testnet = api_url.contains("testnet");
+				let is_testnet = env::var("TON_IS_TESTNET")
 					.ok()
 					.filter(|s| !s.is_empty())
-					.unwrap_or_else(|| "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs".to_string()),
-				poll_secs: parse_opt("TON_POLL_SECS")?.unwrap_or(6),
-				start_cursor: parse_opt("TON_DEPOSIT_START_UTIME")?,
-				is_testnet: env::var("TON_IS_TESTNET").map(|v| v == "true" || v == "1").unwrap_or(false),
-				wallet_version: env::var("TON_WALLET_VERSION").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "v4r2".to_string()),
-				forward_ton_amount: parse_opt("TON_FORWARD_TON_AMOUNT")?.unwrap_or(50_000_000),
-				msg_value: parse_opt("TON_MSG_VALUE")?.unwrap_or(100_000_000),
-			}),
+					.map(|v| v == "true" || v == "1")
+					.unwrap_or(url_is_testnet);
+				if url_is_testnet && !is_testnet {
+					anyhow::bail!("TON_API_URL ({api_url}) is a testnet endpoint but TON_IS_TESTNET is not true — user-facing TON deposit addresses would carry the mainnet tag for a testnet rail; set TON_IS_TESTNET=true");
+				}
+				Some(TonConfig {
+					api_url,
+					api_key: env::var("TON_API_KEY").ok().filter(|s| !s.is_empty()),
+					usdt_master: env::var("TON_USDT_MASTER")
+						.ok()
+						.filter(|s| !s.is_empty())
+						.unwrap_or_else(|| "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs".to_string()),
+					poll_secs: parse_opt("TON_POLL_SECS")?.unwrap_or(6),
+					start_cursor: parse_opt("TON_DEPOSIT_START_UTIME")?,
+					is_testnet,
+					wallet_version: env::var("TON_WALLET_VERSION").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "v4r2".to_string()),
+					forward_ton_amount: parse_opt("TON_FORWARD_TON_AMOUNT")?.unwrap_or(50_000_000),
+					msg_value: parse_opt("TON_MSG_VALUE")?.unwrap_or(100_000_000),
+				})
+			}
 			None => None,
 		};
 		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND a chain
-		// is configured — opt-in, never implied by the deposit/withdraw seams. `SWEEP_ENABLED`
-		// turns it on for every configured rail; an unconfigured rail simply has no sweep.
-		let sweep_enabled = env::var("SWEEP_ENABLED").map(|v| v == "true" || v == "1").unwrap_or(false);
-		let sweep = if sweep_enabled && bsc.is_some() {
+		// is configured — opt-in, never implied by the deposit/withdraw seams. `SWEEP_ENABLED` is
+		// the global default; a per-rail `<RAIL>_SWEEP_ENABLED` overrides it so a freshly-configured
+		// rail can run deposits+withdrawals WITHOUT arming its fund-moving sweep before its treasury
+		// and gas station are funded — the sequenced bring-up BEP20 used. An unset per-rail var
+		// inherits the global; an unconfigured rail simply has no sweep.
+		let sweep_enabled = bool_env("SWEEP_ENABLED", false);
+		let bsc_sweep_enabled = bool_env("BSC_SWEEP_ENABLED", sweep_enabled);
+		let tron_sweep_enabled = bool_env("TRON_SWEEP_ENABLED", sweep_enabled);
+		let ton_sweep_enabled = bool_env("TON_SWEEP_ENABLED", sweep_enabled);
+		let sweep = if bsc_sweep_enabled && bsc.is_some() {
 			Some(SweepConfig {
 				min_usdt: parse_opt("SWEEP_MIN_USDT")?.unwrap_or(1_000_000_000_000_000_000),
 				gas_drop_multiple: parse_opt("SWEEP_GAS_DROP_MULTIPLE")?.unwrap_or(3),
@@ -210,7 +233,7 @@ impl AppConfig {
 		} else {
 			None
 		};
-		let tron_sweep = if sweep_enabled && tron.is_some() {
+		let tron_sweep = if tron_sweep_enabled && tron.is_some() {
 			Some(TronSweepConfig {
 				min_usdt: parse_opt("TRON_SWEEP_MIN_USDT")?.unwrap_or(1_000_000),
 				min_trx_drop_sun: parse_opt("TRON_SWEEP_MIN_TRX_DROP_SUN")?.unwrap_or(30_000_000),
@@ -220,7 +243,7 @@ impl AppConfig {
 		} else {
 			None
 		};
-		let ton_sweep = if sweep_enabled && ton.is_some() {
+		let ton_sweep = if ton_sweep_enabled && ton.is_some() {
 			Some(TonSweepConfig {
 				min_usdt: parse_opt("TON_SWEEP_MIN_USDT")?.unwrap_or(1_000_000),
 				gas_topup_nano: parse_opt("TON_SWEEP_GAS_TOPUP_NANO")?.unwrap_or(100_000_000),
@@ -252,6 +275,21 @@ impl AppConfig {
 			ton,
 			ton_sweep,
 		})
+	}
+
+	/// The rails whose chain config is present — exactly the rails whose deposit watcher
+	/// runs (the same `BSC_RPC_URL`/`TRON_RPC_URL`/`TON_API_URL` gates as above). Only
+	/// configured rails are provisioned/served by the wallet surface: an address minted
+	/// for a rail no watcher scans would strand whatever is sent to it.
+	pub fn configured_networks(&self) -> Vec<Network> {
+		[
+			self.bsc.as_ref().map(|_| Network::Bep20),
+			self.tron.as_ref().map(|_| Network::Trc20),
+			self.ton.as_ref().map(|_| Network::Ton),
+		]
+		.into_iter()
+		.flatten()
+		.collect()
 	}
 }
 
@@ -289,6 +327,10 @@ pub struct BscConfig {
 	/// Max blocks per `eth_getLogs` call (`BSC_MAX_BLOCK_RANGE`); defaults to 500 to stay
 	/// within common provider range limits.
 	pub max_block_range: u64,
+	/// Dedicated endpoint for the deposit scan (`BSC_LOGS_RPC_URL`), when the main
+	/// `rpc_url` paywalls/throttles `eth_getLogs` (dataseed rejects it outright as of
+	/// 2026-07) but is otherwise a fine full node. `None` ⇒ the scan uses `rpc_url`.
+	pub logs_rpc_url: Option<String>,
 	/// Chain id for signing withdrawals (`BSC_CHAIN_ID`); 56 = BSC mainnet, 97 = testnet.
 	pub chain_id: u64,
 	/// Gas limit for an ERC-20 transfer withdrawal (`BSC_GAS_LIMIT`); defaults to 100_000 (a
@@ -381,8 +423,10 @@ pub struct TonConfig {
 	/// watcher tracks the cursor as a unix-time watermark (a globally-comparable value), not
 	/// a per-account logical time — see [`infrastructure::ton_deposit_watcher`].
 	pub start_cursor: Option<u64>,
-	/// Whether the rail is on TON testnet (`TON_IS_TESTNET`); selects the address tag for the
-	/// user-facing form (display-edge concern) and documents which base URL is in use.
+	/// Whether the rail is on TON testnet. Defaults from `TON_API_URL` (a `testnet.` host) and
+	/// can be set explicitly with `TON_IS_TESTNET`; a testnet URL with the flag off is rejected
+	/// (see [`AppConfig::from_env`]). Selects the user-facing address tag and is carried into the
+	/// signer so signing stays consistent with the addresses the operator funds.
 	pub is_testnet: bool,
 	/// The wallet contract version (`TON_WALLET_VERSION`); only `v4r2` is supported today.
 	pub wallet_version: String,
@@ -412,6 +456,14 @@ pub struct TonSweepConfig {
 	pub poll_secs: u64,
 }
 
+/// A boolean env var: `true`/`1` ⇒ true, anything else ⇒ false, unset/empty ⇒ `default`.
+fn bool_env(key: &str, default: bool) -> bool {
+	match env::var(key).ok().filter(|s| !s.is_empty()) {
+		Some(v) => v == "true" || v == "1",
+		None => default,
+	}
+}
+
 /// Parse an optional env var that, when present and non-empty, must be a valid `T`.
 fn parse_opt<T: std::str::FromStr>(key: &str) -> anyhow::Result<Option<T>>
 where
@@ -432,5 +484,70 @@ mod tests {
 			let addr: SocketAddr = raw.parse().expect("default addr parses");
 			assert!(addr.ip().is_loopback(), "{raw} must default to loopback, not all interfaces");
 		}
+	}
+
+	/// A minimal config with the given chain Options set — only the fields
+	/// `configured_networks` reads matter; the rest are inert placeholders.
+	fn config(bsc: bool, tron: bool, ton: bool) -> AppConfig {
+		AppConfig {
+			database_url: String::new(),
+			grpc_addr: DEFAULT_GRPC_ADDR.parse().unwrap(),
+			auth_grpc_addr: DEFAULT_AUTH_GRPC_ADDR.parse().unwrap(),
+			sentry_dsn: None,
+			posthog_key: None,
+			posthog_host: None,
+			app_env: "test".to_string(),
+			tigerbeetle_address: String::new(),
+			tigerbeetle_cluster_id: 0,
+			admin_subjects: Vec::new(),
+			signer_grpc_addr: String::new(),
+			db_max_connections: 1,
+			relay_db_max_connections: 1,
+			bridge: None,
+			bsc: bsc.then(|| BscConfig {
+				rpc_url: String::new(),
+				usdt_contract: String::new(),
+				confirmations: 1,
+				poll_secs: 1,
+				start_block: None,
+				max_block_range: 1,
+				logs_rpc_url: None,
+				chain_id: 1,
+				gas_limit: 1,
+			}),
+			sweep: None,
+			tron: tron.then(|| TronConfig {
+				rpc_url: String::new(),
+				usdt_contract: String::new(),
+				api_key: None,
+				poll_secs: 1,
+				start_timestamp: None,
+				fee_limit: 1,
+				expiration_secs: 1,
+				max_transfers_per_scan: 1,
+			}),
+			tron_sweep: None,
+			ton: ton.then(|| TonConfig {
+				api_url: String::new(),
+				api_key: None,
+				usdt_master: String::new(),
+				poll_secs: 1,
+				start_cursor: None,
+				is_testnet: false,
+				wallet_version: String::new(),
+				forward_ton_amount: 1,
+				msg_value: 1,
+			}),
+			ton_sweep: None,
+		}
+	}
+
+	#[test]
+	fn configured_networks_mirror_the_chain_config_options() {
+		assert!(config(false, false, false).configured_networks().is_empty());
+		assert_eq!(config(true, false, false).configured_networks(), [Network::Bep20]);
+		assert_eq!(config(false, true, false).configured_networks(), [Network::Trc20]);
+		assert_eq!(config(false, false, true).configured_networks(), [Network::Ton]);
+		assert_eq!(config(true, true, true).configured_networks(), [Network::Bep20, Network::Trc20, Network::Ton]);
 	}
 }

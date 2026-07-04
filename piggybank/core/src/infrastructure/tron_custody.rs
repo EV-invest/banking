@@ -19,7 +19,10 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use domain::{architecture::Gateway, money::Network};
+use domain::{
+	architecture::Gateway,
+	money::{Network, Usdt},
+};
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignTrc20TransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -31,7 +34,7 @@ use uuid::Uuid;
 use crate::{
 	config::TronConfig,
 	infrastructure::tron_rpc::{RefBlockParams, TronRpc, TronRpcError},
-	ports::custody::{BroadcastRequest, Custody, CustodyError},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
 };
 
 /// Extra solidified-time that must pass beyond a stored tx's `expiration` before it is
@@ -39,6 +42,10 @@ use crate::{
 /// tolerance; generous, because the cost of waiting is a minute of latency while the cost
 /// of a premature re-sign is a double payout.
 const EXPIRATION_MARGIN_MS: i64 = 60_000;
+
+/// The reserved sweep gas-station wallet id (shared with the sweep): a TRX-only account whose
+/// funding view rides along on the treasury screen so an operator funds the RIGHT wallet.
+const GAS_STATION: Uuid = Uuid::from_u128(1);
 
 pub struct TronCustody {
 	pool: PgPool,
@@ -48,6 +55,7 @@ pub struct TronCustody {
 	usdt_contract: String,
 	fee_limit: i64,
 	treasury_address: OnceCell<String>,
+	gas_station_address: OnceCell<String>,
 }
 impl TronCustody {
 	pub fn new(pool: PgPool, channel: Channel, service_token: Option<ServiceTokenSource>, config: &TronConfig) -> Self {
@@ -59,6 +67,7 @@ impl TronCustody {
 			usdt_contract: config.usdt_contract.clone(),
 			fee_limit: config.fee_limit,
 			treasury_address: OnceCell::new(),
+			gas_station_address: OnceCell::new(),
 		}
 	}
 
@@ -92,6 +101,34 @@ impl TronCustody {
 			.cloned()
 	}
 
+	/// The sweep gas-station's Tron address, resolved once via `ProvisionAddress` (the reserved
+	/// [`GAS_STATION`] id) and cached — read-only, for the operator funding view.
+	async fn gas_station_address(&self) -> Result<String, CustodyError> {
+		self.gas_station_address
+			.get_or_try_init(|| async {
+				let mut request = Request::new(ProvisionAddressRequest {
+					user_id: GAS_STATION.to_string(),
+					network: "trc20".to_owned(),
+				});
+				if let Some(token) = &self.service_token {
+					request = token.authorize(request);
+				}
+				let response = self
+					.signer
+					.clone()
+					.provision_address(request)
+					.await
+					.map_err(|s| CustodyError::Unavailable(format!("resolve gas-station address: {}", s.message())))?
+					.into_inner();
+				if response.address_kind != "derived" {
+					return Err(CustodyError::Rejected(format!("gas-station address is not fundable (kind={})", response.address_kind)));
+				}
+				Ok(response.address)
+			})
+			.await
+			.cloned()
+	}
+
 	async fn stored_tx(&self, withdrawal_id: Uuid) -> Result<Option<StoredTx>, CustodyError> {
 		let row: Option<(String, String, Option<i64>)> = sqlx::query_as("SELECT raw_tx, tx_hash, expiration FROM withdrawal_broadcasts WHERE withdrawal_id = $1 AND network = 'trc20'")
 			.bind(withdrawal_id)
@@ -119,19 +156,24 @@ impl TronCustody {
 		Ok(())
 	}
 
-	/// Replace a provably-dead (expired, never mined) broadcast with a freshly signed one. Only
-	/// ever reached after the on-chain check confirms the old txid is nowhere, so this can't
-	/// overwrite a live transaction.
-	async fn replace_tx(&self, withdrawal_id: Uuid, signed: &Signed) -> Result<(), CustodyError> {
-		sqlx::query("UPDATE withdrawal_broadcasts SET raw_tx = $2, tx_hash = $3, expiration = $4 WHERE withdrawal_id = $1")
+	/// Compare-and-swap a provably-dead (expired, never mined) broadcast to a freshly signed one,
+	/// but ONLY while it still holds `old_txid`. Returns whether the swap won. Two drivers can
+	/// reach the re-sign branch at once — the relay's still-retrying broadcast and the confirmation
+	/// watcher both funnel through [`resubmit`](Self::resubmit) against the same adapter — and each
+	/// signs its OWN distinct fresh tx. This atomic guarded UPDATE lets only ONE win; the loser must
+	/// NOT broadcast its tx, so the treasury can never pay a withdrawal twice. Cross-process safe
+	/// (a single conditional UPDATE), not just in-process.
+	async fn replace_tx(&self, withdrawal_id: Uuid, old_txid: &str, signed: &Signed) -> Result<bool, CustodyError> {
+		let result = sqlx::query("UPDATE withdrawal_broadcasts SET raw_tx = $2, tx_hash = $3, expiration = $4 WHERE withdrawal_id = $1 AND network = 'trc20' AND tx_hash = $5")
 			.bind(withdrawal_id)
 			.bind(&signed.raw_tx)
 			.bind(&signed.txid)
 			.bind(signed.expiration)
+			.bind(old_txid)
 			.execute(&self.pool)
 			.await
 			.map_err(db_unavailable)?;
-		Ok(())
+		Ok(result.rows_affected() > 0)
 	}
 
 	/// Sign the withdrawal's USDT transfer from the treasury key via the signer (empty
@@ -152,9 +194,12 @@ impl TronCustody {
 		if let Some(token) = &self.service_token {
 			signer_request = token.authorize(signer_request);
 		}
-		let response = self.signer.clone().sign_trc20_transfer(signer_request).await.map_err(|s| match s.code() {
-			tonic::Code::Unavailable | tonic::Code::DeadlineExceeded => CustodyError::Unavailable(format!("signer: {}", s.message())),
-			_ => CustodyError::Rejected(format!("signer: {}", s.message())),
+		let response = self.signer.clone().sign_trc20_transfer(signer_request).await.map_err(|s| {
+			super::telemetry::note_signer_error("withdrawal", "treasury", s.message());
+			match s.code() {
+				tonic::Code::Unavailable | tonic::Code::DeadlineExceeded => CustodyError::Unavailable(format!("signer: {}", s.message())),
+				_ => CustodyError::Rejected(format!("signer: {}", s.message())),
+			}
 		})?;
 		let response = response.into_inner();
 		Ok(Signed {
@@ -233,9 +278,31 @@ impl TronCustody {
 				warn!(withdrawal_id = %request.withdrawal_id, txid = %stored.txid, "tron custody: stored transaction provably dead (solidified past expiration, no receipt) — re-signing at a fresh ref-block");
 				self.ensure_treasury_funded(request).await?;
 				let signed = self.sign_fresh(request).await?;
-				self.replace_tx(request.withdrawal_id, &signed).await?;
-				self.submit(&signed.raw_tx, false).await
+				// CAS on the stored txid: if a concurrent driver (the relay's retrying broadcast, or
+				// another watcher poll) already re-signed this withdrawal, we lose the swap and MUST
+				// NOT broadcast our own freshly-signed tx — otherwise the treasury pays twice. The
+				// winner's tx is stored+broadcast; the next poll re-broadcasts it if still pending.
+				if self.replace_tx(request.withdrawal_id, &stored.txid, &signed).await? {
+					self.submit(&signed.raw_tx, false).await
+				} else {
+					info!(withdrawal_id = %request.withdrawal_id, "tron custody: another driver already re-signed this withdrawal — not broadcasting a second transaction");
+					Ok(())
+				}
 			}
+		}
+	}
+
+	/// Re-drive a `processing` withdrawal whose broadcast has not yet confirmed — called by the
+	/// confirmation watcher each poll for a not-yet-mined send. Within the stored tx's validity
+	/// window this re-broadcasts the SAME bytes (idempotent); once it is provably dead (the
+	/// solidified head is past its expiration with no receipt) it re-signs at a fresh ref-block.
+	/// A TRON tx EXPIRES (~60s) and has no nonce, so an expired-unlanded send can never mine — this
+	/// is what keeps such a withdrawal from wedging in `processing` forever. No stored tx ⇒ a no-op
+	/// (the dispatcher still owns the first send).
+	pub async fn resubmit_stuck(&self, request: &BroadcastRequest) -> Result<(), CustodyError> {
+		match self.stored_tx(request.withdrawal_id).await? {
+			Some(stored) => self.resubmit(request, stored).await,
+			None => Ok(()),
 		}
 	}
 
@@ -290,6 +357,37 @@ impl Custody for TronCustody {
 		// never a freshly-signed one with a different txid.
 		self.store_tx(request.withdrawal_id, &signed).await?;
 		self.submit(&signed.raw_tx, false).await
+	}
+
+	async fn treasury_liquidity(&self, _network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let treasury = self.treasury_address().await?;
+		let state = self.rpc.account_state(&treasury).await.map_err(read_err)?;
+		let usdt = Usdt::from_onchain(Network::Trc20, state.trc20(&self.usdt_contract)).map_err(|e| CustodyError::Unavailable(format!("tron treasury balance not representable: {e}")))?;
+		Ok(Some(usdt))
+	}
+
+	async fn treasury_funding(&self, _network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
+		let address = self.treasury_address().await?;
+		// One indexed read carries TRX + every TRC20 balance; a failed read degrades both
+		// balance fields to None (the address alone is still fundable). TRX is 6-dp (SUN).
+		let (onchain_usdt, onchain_gas) = match self.rpc.account_state(&address).await {
+			Ok(state) => (Usdt::from_onchain(Network::Trc20, state.trc20(&self.usdt_contract)).ok(), Some(format_native_units(state.trx, 6))),
+			Err(_) => (None, None),
+		};
+		// The gas station rides along best-effort — it must be visible so the operator funds the
+		// RIGHT wallet for the sweep's TRX drops — but its failure never hides the treasury view.
+		let gas_station_address = self.gas_station_address().await.ok();
+		let gas_station_gas = match &gas_station_address {
+			Some(gas_station) => self.rpc.account_state(gas_station).await.ok().map(|state| format_native_units(state.trx, 6)),
+			None => None,
+		};
+		Ok(Some(TreasuryFunding {
+			address,
+			onchain_usdt,
+			onchain_gas,
+			gas_station_address,
+			gas_station_gas,
+		}))
 	}
 }
 

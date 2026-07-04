@@ -67,6 +67,8 @@ pub struct TonSweep {
 	usdt_master: String,
 	forward_ton_amount: u64,
 	msg_value: u64,
+	is_testnet: bool,
+	wallet_version: String,
 	config: TonSweepConfig,
 	treasury: OnceCell<String>,
 	gas_station: OnceCell<String>,
@@ -83,6 +85,8 @@ impl TonSweep {
 			usdt_master: ton.usdt_master.clone(),
 			forward_ton_amount: ton.forward_ton_amount,
 			msg_value: ton.msg_value,
+			is_testnet: ton.is_testnet,
+			wallet_version: ton.wallet_version.clone(),
 			config,
 			treasury: OnceCell::new(),
 			gas_station: OnceCell::new(),
@@ -134,6 +138,9 @@ impl TonSweep {
 			return Ok(());
 		};
 		if jetton_wallet.balance < self.config.min_usdt {
+			// Drained (consolidation mined, or dust): stamp the credited deposits so the
+			// address drops out of the scan until a NEW deposit is credited.
+			self.mark_swept(user_id).await?;
 			return Ok(());
 		}
 		let gas_needed = self.msg_value + GAS_HEADROOM_NANO;
@@ -165,12 +172,22 @@ impl TonSweep {
 		let drop = self.config.gas_topup_nano.max(gas_needed);
 		let valid_until = (now_unix() + VALID_WINDOW_SECS) as u32;
 		let boc = self.sign_native(address, drop, chain, valid_until).await?;
+		// Record the top-up time BEFORE sending so a slow/failed send still gets a grace backoff.
 		if let Ok(mut state) = self.state.lock() {
-			state.last_gas_seqno = Some(chain);
 			state.recent_topups.insert(address.to_owned(), Instant::now());
 		}
 		info!(%address, drop, "ton sweep: topping up gas for a deposit wallet");
-		self.broadcast(&boc, "gas", address).await;
+		// Advance the seqno gate ONLY on a confirmed toncenter acceptance. If it were set before the
+		// send (or on a failure), a non-landing top-up — an unfunded/undeployed gas station, a
+		// rejection — would never let the chain seqno advance past `last`, so the `chain <= last`
+		// gate above would early-return FOREVER: every future top-up frozen, no user wallet ever
+		// funded, all TON deposits stranded until a process restart. Gating on success keeps the
+		// rail self-healing (mirrors the EVM sweep, which re-reads the pending nonce each cycle).
+		if self.broadcast(&boc, "gas", address).await
+			&& let Ok(mut state) = self.state.lock()
+		{
+			state.last_gas_seqno = Some(chain);
+		}
 		Ok(())
 	}
 
@@ -190,8 +207,8 @@ impl TonSweep {
 			msg_value: self.msg_value,
 			seqno,
 			valid_until,
-			is_testnet: false,
-			wallet_version: String::new(),
+			is_testnet: self.is_testnet,
+			wallet_version: self.wallet_version.clone(),
 		});
 		if let Some(token) = &self.service_token {
 			request = token.authorize(request);
@@ -201,7 +218,10 @@ impl TonSweep {
 			.clone()
 			.sign_jetton_transfer(request)
 			.await
-			.map_err(|s| SweepError::Signer(format!("sweep {address}: {}", s.message())))?
+			.map_err(|s| {
+				super::telemetry::note_signer_error("sweep", address, s.message());
+				SweepError::Signer(format!("sweep {address}: {}", s.message()))
+			})?
 			.into_inner();
 		self.broadcast(&response.signed_boc, "sweep", address).await;
 		Ok(())
@@ -215,8 +235,8 @@ impl TonSweep {
 			amount: amount.to_string(),
 			seqno,
 			valid_until,
-			is_testnet: false,
-			wallet_version: String::new(),
+			is_testnet: self.is_testnet,
+			wallet_version: self.wallet_version.clone(),
 		});
 		if let Some(token) = &self.service_token {
 			request = token.authorize(request);
@@ -226,21 +246,37 @@ impl TonSweep {
 			.clone()
 			.sign_ton_transfer(request)
 			.await
-			.map_err(|s| SweepError::Signer(format!("gas top-up {to}: {}", s.message())))?
+			.map_err(|s| {
+				super::telemetry::note_signer_error("gas top-up", "gas-station", s.message());
+				SweepError::Signer(format!("gas top-up {to}: {}", s.message()))
+			})?
 			.into_inner();
 		Ok(response.signed_boc)
 	}
 
 	/// Broadcast a signed BoC, classifying the outcome per-address (never fails the whole
 	/// cycle): a transport blip retries next cycle, a toncenter rejection is a per-address
-	/// warning (or a loud alert if it reads like the sender is out of funds).
-	async fn broadcast(&self, boc: &str, kind: &str, address: &str) {
+	/// warning (or a loud alert if it reads like the sender is out of funds). Returns `true`
+	/// only when toncenter accepted the message — the gas-station seqno gate keys off this so a
+	/// failed top-up never wedges the rail.
+	async fn broadcast(&self, boc: &str, kind: &str, address: &str) -> bool {
 		match self.rpc.send_message(boc).await {
-			Ok(()) => info!(kind, %address, "ton sweep: broadcast message"),
-			Err(RpcError::Transport(detail)) => warn!(kind, %address, "ton sweep: transport error (retry next cycle): {detail}"),
-			Err(RpcError::Rpc(msg)) if msg.to_lowercase().contains("insufficient") || msg.to_lowercase().contains("balance") =>
-				error!(kind, %address, "ton sweep: SENDER MAY BE OUT OF FUNDS — fund the gas station (TON): {msg}"),
-			Err(RpcError::Rpc(msg)) => warn!(kind, %address, "ton sweep: toncenter rejected the message: {msg}"),
+			Ok(()) => {
+				info!(kind, %address, "ton sweep: broadcast message");
+				true
+			}
+			Err(RpcError::Transport(detail)) => {
+				warn!(kind, %address, "ton sweep: transport error (retry next cycle): {detail}");
+				false
+			}
+			Err(RpcError::Rpc(msg)) if msg.to_lowercase().contains("insufficient") || msg.to_lowercase().contains("balance") => {
+				error!(kind, %address, "ton sweep: SENDER MAY BE OUT OF FUNDS — fund the gas station (TON): {msg}");
+				false
+			}
+			Err(RpcError::Rpc(msg)) => {
+				warn!(kind, %address, "ton sweep: toncenter rejected the message: {msg}");
+				false
+			}
 		}
 	}
 
@@ -271,11 +307,26 @@ impl TonSweep {
 		.cloned()
 	}
 
+	/// Addresses that can still hold funds: a credited deposit exists that no sweep
+	/// cycle has yet observed drained — O(active deposits), not O(all addresses).
 	async fn deposit_addresses(&self) -> Result<Vec<(Uuid, String)>, SweepError> {
-		sqlx::query_as::<_, (Uuid, String)>("SELECT user_id, address FROM user_deposit_addresses WHERE network = 'ton' AND address_kind = 'derived'")
-			.fetch_all(&self.pool)
+		sqlx::query_as::<_, (Uuid, String)>(
+			"SELECT DISTINCT a.user_id, a.address FROM deposits d \
+			 JOIN user_deposit_addresses a ON a.user_id::text = d.party_id AND a.network = d.network \
+			 WHERE d.network = 'ton' AND d.party_kind = 'user' AND d.swept_at IS NULL AND a.address_kind = 'derived'",
+		)
+		.fetch_all(&self.pool)
+		.await
+		.map_err(|e| SweepError::Db(e.to_string()))
+	}
+
+	async fn mark_swept(&self, user_id: Uuid) -> Result<(), SweepError> {
+		sqlx::query("UPDATE deposits SET swept_at = now() WHERE party_kind = 'user' AND party_id = $1 AND network = 'ton' AND swept_at IS NULL")
+			.bind(user_id.to_string())
+			.execute(&self.pool)
 			.await
-			.map_err(|e| SweepError::Db(e.to_string()))
+			.map_err(|e| SweepError::Db(e.to_string()))?;
+		Ok(())
 	}
 }
 

@@ -10,6 +10,7 @@ use evbanking_auth::{Verifier, grpc_auth_layer};
 use evbanking_contracts::signer::v1::signer_service_server::SignerServiceServer;
 use piggybank_signer::{
 	config::{SignerConfig, TlsConfig, load_vault},
+	kek_guard,
 	policy::SignerPolicy,
 	secrets::WalletSecrets,
 	service::Signer,
@@ -41,6 +42,12 @@ async fn run() -> anyhow::Result<()> {
 		.context("failed to connect to the signer database")?;
 	sqlx::migrate!().run(&pool).await.context("failed to apply signer migrations")?;
 
+	let secrets = WalletSecrets::new(pool);
+	// KEK-epoch guard BEFORE any RPC can be served: a wrong-KEK boot dies here (loudly)
+	// instead of minting keys whose funds could never move. Per-row casualties are
+	// reported inside (ERROR) and via the GetKeyHealth diagnostics.
+	kek_guard::enforce(&vault, &secrets).await.context("KEK epoch guard refused to serve")?;
+
 	// The signer's independent spend policy — the second gate that holds even if the hub is
 	// compromised. No-op until an operator sets a cap/allowlist.
 	let policy = SignerPolicy::from_env().context("failed to load signer spend policy")?;
@@ -50,7 +57,7 @@ async fn run() -> anyhow::Result<()> {
 		tracing::warn!("signer spend policy inactive — no per-transfer cap or destination allowlist (set SIGNER_MAX_TRANSFER_USDT before scaling liquidity)");
 	}
 
-	let signer = Signer::new(vault, WalletSecrets::new(pool), policy);
+	let signer = Signer::new(vault, secrets, policy);
 
 	// Authenticate the seam: a stateless verifier accepts only the hub's service token
 	// (verified against the auth service's JWKS). Mounted as the choke point in front of

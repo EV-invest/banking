@@ -1,11 +1,15 @@
 //! Integration tests for key provisioning — real Postgres, no mocks (per the project
 //! rules). They run when `SIGNER_DATABASE_URL` (or `DATABASE_URL`) is set and skip
-//! otherwise. Each test uses a fresh `user_id`, so runs are isolated on shared infra.
+//! otherwise. Each test runs on its own throwaway database (see `common`), so keys
+//! sealed under the throwaway test KEK never pollute the dev signer DB — where the
+//! KEK-epoch diagnostics would (correctly) flag them as dead forever.
 //!
 //! What's under test end-to-end: the migration applies; provisioning is idempotent per
 //! (user, network); and a provisioned key round-trips through the DB — the sealed blob
 //! opens only under the correct `(chain, row-id)` AAD, and the recovered private key
 //! reproduces the stored public key (so the sealed secret really backs the address).
+
+mod common;
 
 use domain::money::Network;
 use piggybank_signer::{
@@ -13,19 +17,7 @@ use piggybank_signer::{
 	provision,
 	secrets::WalletSecrets,
 };
-use sqlx::PgPool;
 use uuid::Uuid;
-
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("SIGNER_DATABASE_URL")
-		.ok()
-		.or_else(|| std::env::var("DATABASE_URL").ok())
-		.filter(|s| !s.is_empty())?;
-	let pool = sqlx::postgres::PgPoolOptions::new().max_connections(2).connect(&url).await.expect("connect to Postgres");
-	// Applying the embedded migration here also proves it applies cleanly.
-	sqlx::migrate!().run(&pool).await.expect("apply signer migrations");
-	Some(pool)
-}
 
 fn test_vault() -> Vault {
 	Vault::from_hex(&hex::encode([9u8; 32])).unwrap()
@@ -41,10 +33,11 @@ fn chain_of(network: Network) -> Chain {
 
 #[tokio::test]
 async fn provisions_seals_and_round_trips_each_network() {
-	let Some(pool) = pool().await else {
+	let Some(db) = common::throwaway_db().await else {
 		eprintln!("DATABASE_URL/SIGNER_DATABASE_URL unset — skipping signer provisioning test");
 		return;
 	};
+	let pool = db.pool.clone();
 	let vault = test_vault();
 	let secrets = WalletSecrets::new(pool.clone());
 
@@ -89,5 +82,16 @@ async fn provisions_seals_and_round_trips_each_network() {
 		let wrong_chain = if matches!(chain, Chain::Ton) { Chain::BscBep20 } else { Chain::Ton };
 		assert!(vault.open(wrong_chain, &sealed.id.to_string(), &sealed.sealed_key).is_err());
 		assert!(vault.open(chain, &Uuid::new_v4().to_string(), &sealed.sealed_key).is_err());
+
+		// The provisioning path stamps the sealing KEK's fingerprint on the row.
+		let kek_fp: Option<Vec<u8>> = sqlx::query_scalar("SELECT kek_fp FROM wallet_secrets WHERE user_id = $1 AND network = $2")
+			.bind(user)
+			.bind(network.as_str())
+			.fetch_one(&pool)
+			.await
+			.expect("kek_fp");
+		assert_eq!(kek_fp.as_deref(), Some(&vault.fingerprint()[..]), "{network} row carries the KEK epoch stamp");
 	}
+
+	db.cleanup().await;
 }

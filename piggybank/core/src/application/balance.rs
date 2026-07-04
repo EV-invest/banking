@@ -12,13 +12,25 @@ use domain::{
 };
 use tokio::sync::Notify;
 
-use crate::ports::{Deposits, ledger::Ledger};
+use crate::ports::{Custody, Deposits, ledger::Ledger};
 
-/// Per-rail on-chain liquidity (the treasury / Layer 2). TigerBeetle-authoritative.
+/// Per-rail on-chain liquidity (the treasury / Layer 2). `custody` is
+/// TigerBeetle-authoritative; the funding fields are the operator's chain view,
+/// enriched best-effort — `None` when the rail is unconfigured or the read failed.
 pub struct RailLiquidity {
 	pub network: Network,
 	/// Liquid on-chain USDT the fund holds in this rail's custody wallet.
 	pub custody: Usdt,
+	/// The rail's treasury hot wallet — the operator funds USDT + gas here.
+	pub treasury_address: Option<String>,
+	/// USDT actually on-chain in the treasury hot wallet.
+	pub onchain_usdt: Option<Usdt>,
+	/// Native-coin gas balance (BNB/TRX/TON), pre-rendered by the adapter.
+	pub onchain_gas: Option<String>,
+	/// The rail's sweep gas-station wallet — fund the native coin here (never USDT).
+	pub gas_station_address: Option<String>,
+	/// The gas station's native-coin balance, pre-rendered by the adapter.
+	pub gas_station_gas: Option<String>,
 }
 
 /// The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
@@ -68,14 +80,33 @@ pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxR
 	Ok(recorded)
 }
 /// The treasury, read live from TigerBeetle (Read-First): per-rail liquidity plus the
-/// claims it backs.
-pub async fn treasury(ledger: &dyn Ledger) -> Result<Treasury, DomainError> {
+/// claims it backs. Each rail is enriched with the custody adapter's funding view
+/// (hot-wallet address + real on-chain USDT/gas) **best-effort** — an unwired rail or
+/// a chain-RPC failure leaves those fields `None`; the ledger read must never fail
+/// because a chain node is down.
+pub async fn treasury(ledger: &dyn Ledger, custody: &dyn Custody) -> Result<Treasury, DomainError> {
 	let mut rails = Vec::with_capacity(Network::ALL.len());
 	let mut total_custody = Usdt::ZERO;
 	for network in Network::ALL {
-		let custody = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
-		total_custody = total_custody.checked_add(custody).ok_or_else(|| DomainError::Repository("custody total overflow".into()))?;
-		rails.push(RailLiquidity { network, custody });
+		let rail_custody = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
+		total_custody = total_custody.checked_add(rail_custody).ok_or_else(|| DomainError::Repository("custody total overflow".into()))?;
+		let funding = custody.treasury_funding(network).await.unwrap_or_else(|err| {
+			tracing::debug!(%network, "treasury funding view unavailable: {err}");
+			None
+		});
+		let (treasury_address, onchain_usdt, onchain_gas, gas_station_address, gas_station_gas) = match funding {
+			Some(f) => (Some(f.address), f.onchain_usdt, f.onchain_gas, f.gas_station_address, f.gas_station_gas),
+			None => (None, None, None, None, None),
+		};
+		rails.push(RailLiquidity {
+			network,
+			custody: rail_custody,
+			treasury_address,
+			onchain_usdt,
+			onchain_gas,
+			gas_station_address,
+			gas_station_gas,
+		});
 	}
 	let bank = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::BankCustody).await?.posted);
 	let fund_capital = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::Fund).await?.posted);

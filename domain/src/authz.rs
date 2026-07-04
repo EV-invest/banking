@@ -85,11 +85,17 @@ pub enum Permission {
 	CapitalManage,
 	/// Toggle the money-plane operations mode (read-only kill-switch).
 	OperationsManage,
+	/// Unpark a parked outbox event so the relay re-drives it.
+	OutboxManage,
 	/// Revoke a user's money-plane tokens (banking's own defense-in-depth revoke;
 	/// identity-plane session revocation is concierge's, mirrored via the bridge).
 	UserRevoke,
 	/// Disable a user's money-plane account directly (independent of the bridge freeze).
 	UserSuspend,
+	/// Supersede a user's PROVABLY DEAD deposit-address key (a KEK-epoch casualty —
+	/// the signer can no longer unseal it) with a freshly minted keypair. Recovery
+	/// only: the signer refuses to rotate a healthy key.
+	DepositAddressRotate,
 }
 
 /// The role→permission policy (pure). The money-plane RBAC matrix, read as separation
@@ -140,9 +146,11 @@ mod tests {
 		assert!(grants(Role::Operator, Permission::UserBalanceRead));
 		assert!(!grants(Role::Operator, Permission::ValuationPost));
 		assert!(!grants(Role::Operator, Permission::RedemptionSettle));
+		assert!(!grants(Role::Operator, Permission::OutboxManage));
 		// Admin/Owner move money.
 		assert!(grants(Role::Admin, Permission::ValuationPost));
 		assert!(grants(Role::Owner, Permission::WithdrawalSettle));
+		assert!(grants(Role::Admin, Permission::OutboxManage));
 		// Investor holds nothing.
 		assert!(!grants(Role::Investor, Permission::TreasuryRead));
 	}

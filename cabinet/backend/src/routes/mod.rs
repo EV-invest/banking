@@ -2,6 +2,7 @@ pub mod admin;
 pub mod auth;
 pub mod identity;
 pub mod money;
+pub mod platform;
 pub mod system;
 
 use std::time::Duration;
@@ -39,6 +40,7 @@ pub fn router(state: AppState) -> Router {
 	Router::new()
 		.route("/api/health", get(system::health))
 		.route("/api/mfe-registry", get(system::mfe_registry))
+		.route("/api/platform", get(platform::status))
 		.route("/api/auth/login", get(auth::login))
 		.route("/api/auth/callback", get(auth::callback))
 		.route("/api/auth/session", get(auth::session))
@@ -49,6 +51,7 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/wallet/deposit-address", get(money::deposit_address))
 		.route("/api/wallet/withdrawals", get(money::list_withdrawals).post(money::request_withdrawal))
 		.route("/api/wallet/withdrawals/cancel", post(money::cancel_withdrawal))
+		.route("/api/wallet/deposits", get(money::list_deposits))
 		.route("/api/funds/nav", get(money::fund_nav))
 		.route("/api/funds/positions", get(money::list_positions))
 		.route("/api/funds/redemptions", get(money::list_redemptions))
@@ -72,6 +75,12 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/admin/valuation/post", post(admin::post_valuation))
 		.route("/api/admin/valuation/settle", post(admin::settle_redemption))
 		.route("/api/admin/valuation/fail", post(admin::fail_redemption))
+		.route("/api/admin/withdrawals/queue", get(admin::withdrawal_queue))
+		.route("/api/admin/withdrawals/dispatch", post(admin::dispatch_withdrawal))
+		.route("/api/admin/withdrawals/settle", post(admin::settle_withdrawal))
+		.route("/api/admin/withdrawals/fail", post(admin::fail_withdrawal))
+		.route("/api/admin/outbox/parked", get(admin::parked_events))
+		.route("/api/admin/outbox/unpark", post(admin::unpark_event))
 		.route("/api/admin/cabinet", get(admin::cabinet_config))
 		.route("/api/admin/cabinet/maintenance", post(admin::set_maintenance))
 		.route("/api/admin/cabinet/read-only", post(admin::set_read_only))

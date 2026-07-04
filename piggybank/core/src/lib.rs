@@ -24,9 +24,10 @@
 
 use std::sync::Arc;
 
+use domain::money::Network;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
-use ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
+use ports::{Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 
@@ -67,10 +68,21 @@ pub struct AppState {
 	pub positions: Arc<dyn FundPositionReader>,
 	/// Per-user deposit-address provisioning (stub HD derivation behind a port).
 	pub deposit_addresses: Arc<dyn DepositAddresses>,
+	/// The custody gateway (the same registry the relay broadcasts through) — read-only
+	/// here: the withdrawal handlers gate dispatch on its on-chain treasury liquidity.
+	pub custody: Arc<dyn Custody>,
+	/// The rails with a running on-chain watcher — the wallet surface presents
+	/// deposit/withdraw rails only for these, and the health probe reports scan-cursor
+	/// age only for these.
+	pub configured_networks: Arc<[Network]>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
 	/// User ids permitted to call admin RPCs (config allowlist; see [`config`]).
 	pub admin_subjects: Arc<[String]>,
+	/// Whether the TON rail is on testnet — surfaced on its deposit addresses so the client
+	/// renders the correct (testnet-tagged) user-friendly TON address. `false` when TON is
+	/// unconfigured or on mainnet. The other rails have no testnet-specific address form.
+	pub ton_is_testnet: bool,
 }
 
 impl AppState {
@@ -88,8 +100,11 @@ impl AppState {
 		nav: Arc<dyn NavMarks>,
 		positions: Arc<dyn FundPositionReader>,
 		deposit_addresses: Arc<dyn DepositAddresses>,
+		custody: Arc<dyn Custody>,
+		configured_networks: Arc<[Network]>,
 		relay_notify: Arc<Notify>,
 		admin_subjects: Arc<[String]>,
+		ton_is_testnet: bool,
 	) -> Self {
 		Self {
 			pool,
@@ -104,8 +119,11 @@ impl AppState {
 			nav,
 			positions,
 			deposit_addresses,
+			custody,
+			configured_networks,
 			relay_notify,
 			admin_subjects,
+			ton_is_testnet,
 		}
 	}
 

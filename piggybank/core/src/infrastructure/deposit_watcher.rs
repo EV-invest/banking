@@ -150,9 +150,12 @@ impl DepositWatcher {
 
 	async fn rpc(&self, method: &str, params: Value) -> Result<Value, WatcherError> {
 		let body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
+		// The scan's calls (blockNumber + getLogs) go to the logs endpoint when one is
+		// configured — free full nodes increasingly paywall eth_getLogs specifically,
+		// while the money-moving paths stay on the (reliable) main rpc_url.
 		let response: Value = self
 			.http
-			.post(&self.config.rpc_url)
+			.post(self.config.logs_rpc_url.as_deref().unwrap_or(&self.config.rpc_url))
 			.json(&body)
 			.send()
 			.await

@@ -7,7 +7,10 @@
 //! no-op, so the saga's two-phase ledger behaviour (reserve → settle/void) is what's
 //! under test.
 
-use std::sync::Arc;
+use std::{
+	collections::HashMap,
+	sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
 use domain::{
@@ -24,13 +27,14 @@ use piggybank_core::{
 		custody::StubCustody,
 		db,
 		deposits::PgDeposits,
+		dispatcher::Dispatcher,
 		ledger::{self, TbLedger},
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
 		users::PgUsers,
 		withdrawals::PgWithdrawals,
 	},
-	ports::{DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{BroadcastRequest, Custody, CustodyError, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -41,6 +45,7 @@ const BASE58: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwx
 const BASE64URL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 struct Harness {
+	pool: PgPool,
 	deposits: PgDeposits,
 	ledger: Arc<dyn Ledger>,
 	withdrawals: Arc<dyn WithdrawalRepository>,
@@ -71,6 +76,7 @@ async fn harness() -> Option<Harness> {
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	Some(Harness {
 		deposits: PgDeposits::new(pool.clone()),
+		pool,
 		ledger,
 		withdrawals,
 		users,
@@ -151,7 +157,9 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		user,
 		network,
 		destination(network),
@@ -194,7 +202,9 @@ async fn withdraw_fail_voids_and_refunds_in_full() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		user,
 		network,
 		destination(network),
@@ -224,7 +234,9 @@ async fn withdraw_below_minimum_is_rejected() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		user,
 		network,
 		destination(network),
@@ -247,7 +259,9 @@ async fn withdraw_beyond_available_is_rejected_read_first() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		user,
 		network,
 		destination(network),
@@ -271,7 +285,9 @@ async fn a_disabled_user_cannot_withdraw() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		user,
 		network,
 		destination(network),
@@ -300,7 +316,9 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		user,
 		Network::Ton,
 		destination(Network::Ton),
@@ -315,7 +333,9 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	// The treasury tops up the TON rail past the net; the worker then dispatches it.
 	balance_app::seed_fund_capital(&h.deposits, &h.notify, Network::Ton, big).await.unwrap();
 	h.relay.drain().await;
-	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, withdrawal.id())
+		.await
+		.unwrap();
 	assert_eq!(dispatched.state(), WithdrawalState::Processing, "a funded rail dispatches");
 	h.relay.drain().await;
 
@@ -342,7 +362,9 @@ async fn a_queued_withdrawal_can_be_cancelled_and_refunds() {
 		h.withdrawals.as_ref(),
 		h.ledger.as_ref(),
 		h.users.as_ref(),
+		&StubCustody,
 		&h.notify,
+		&Network::ALL,
 		user,
 		Network::Trc20,
 		destination(Network::Trc20),
@@ -363,6 +385,276 @@ async fn a_queued_withdrawal_can_be_cancelled_and_refunds() {
 	assert_eq!(refunded.available(), big, "the full balance is spendable again");
 }
 
+/// The dispatch gate is `min(TB rail, on-chain treasury)`: a treasury holding zero USDT
+/// on-chain queues the withdrawal even though the TB rail accounting looks liquid (it
+/// counts confirmed deposits still on users' derived addresses, which the treasury hot
+/// wallet cannot spend) — and the queued withdrawal stays user-cancellable (full refund).
+#[tokio::test]
+async fn an_onchain_short_treasury_queues_despite_a_liquid_tb_rail() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	let claim = LedgerAccountKey::UserClaim(user);
+	// The deposit credits the TB rail, so the accounting balance covers the net.
+	deposit(&h, user, network, "100").await;
+
+	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&custody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "an on-chain-short treasury queues, never dispatches");
+	h.relay.drain().await;
+	assert_eq!(bal(&h, &claim).await.locked, usdt("50"), "the clearing reserve holds the gross while queued");
+
+	// Queued = cancellable: the user gets the full gross back.
+	let cancelled = withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), user).await.unwrap();
+	assert_eq!(cancelled.state(), WithdrawalState::Cancelled);
+	h.relay.drain().await;
+	let refunded = bal(&h, &claim).await;
+	assert_eq!(refunded.locked, Usdt::ZERO, "nothing remains reserved");
+	assert_eq!(refunded.available(), usdt("100"), "the full balance is spendable again");
+}
+
+/// A treasury provably liquid on-chain (and a liquid TB rail) dispatches immediately.
+#[tokio::test]
+async fn an_onchain_liquid_treasury_dispatches_immediately() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+
+	let custody = TestCustody::with_view(network, TreasuryView::OnChain(usdt("1000000000")));
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&custody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Processing, "both liquidity sources cover the net — dispatched");
+	h.relay.drain().await;
+
+	// Settle so the shared rails aren't left with a dangling in-flight reservation.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+}
+
+/// A treasury read failure DEGRADES to accept-and-queue — never a refusal: acceptance
+/// and the clearing reserve must not depend on a flaky chain node.
+#[tokio::test]
+async fn a_treasury_read_failure_queues_and_never_rejects() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	let claim = LedgerAccountKey::UserClaim(user);
+	deposit(&h, user, network, "100").await;
+
+	let custody = TestCustody::with_view(network, TreasuryView::Unreachable);
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&custody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.expect("a chain-view outage must not refuse the user");
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "degrade to queued on a treasury read failure");
+	h.relay.drain().await;
+	assert_eq!(bal(&h, &claim).await.locked, usdt("50"), "the reserve is untouched by the degraded gate");
+
+	withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), user).await.unwrap();
+	h.relay.drain().await;
+}
+
+/// The operator dispatch RPC refuses a provably on-chain-short rail — the withdrawal
+/// stays queued (still cancellable) instead of marching into a custody park.
+#[tokio::test]
+async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+
+	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&custody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, &h.notify, withdrawal.id())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(_)), "an underfunded rail refuses the dispatch, got {err:?}");
+	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(after.state(), WithdrawalState::Queued, "a refused dispatch leaves the withdrawal queued");
+
+	withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), user).await.unwrap();
+	h.relay.drain().await;
+}
+
+/// The dispatcher worker drains the accept-and-queue backlog: a queued withdrawal is
+/// dispatched exactly once when BOTH gates pass (TB rail + on-chain treasury), stays
+/// queued while the treasury is short on-chain, and a second sweep no-ops (the state is
+/// no longer `queued`; dispatch itself is idempotent).
+#[tokio::test]
+async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	// TON keeps this test's dispatchable row off the BEP20 rail other tests queue on; the
+	// baseline all-rails-short custody view keeps THEIR queued rows out of this sweep.
+	let network = Network::Ton;
+	deposit(&h, user, Network::Bep20, "100").await;
+	// A small top-up so the TB TON gate covers the net without dwarfing the shared rail.
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("60")).await.unwrap();
+	h.relay.drain().await;
+
+	let custody = Arc::new(TestCustody::short_everywhere());
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		custody.as_ref(),
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues the request");
+	h.relay.drain().await;
+
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+
+	// On-chain still short — the sweep leaves everything queued.
+	assert_eq!(dispatcher.sweep().await.unwrap(), 0, "an on-chain-short rail dispatches nothing");
+	let still_queued = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(still_queued.state(), WithdrawalState::Queued, "still queued (and cancellable) while the treasury is short");
+
+	// The treasury is topped up on-chain — the next sweep dispatches it.
+	custody.set(network, TreasuryView::OnChain(usdt("1000000000")));
+	assert!(dispatcher.sweep().await.unwrap() >= 1, "a topped-up rail dispatches the queued withdrawal");
+	let processing = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(processing.state(), WithdrawalState::Processing, "the dispatcher moved it to processing");
+	h.relay.drain().await;
+
+	// A second sweep no-ops for this withdrawal — it is no longer queued.
+	dispatcher.sweep().await.unwrap();
+	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(after.state(), WithdrawalState::Processing, "a second sweep does not re-dispatch");
+
+	// Settle so the shared rails aren't left with a dangling in-flight reservation.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+}
+
+/// One sweep must account the liquidity it already dispatched: three queued
+/// withdrawals summing past the rail's on-chain treasury each pass a *static* gate
+/// (the balances only move when the relay settles), so an unaccounted sweep would
+/// dispatch all three and mass-park downstream. The dispatcher walks the backlog
+/// FIFO and deducts every dispatched net from the rail's remaining liquidity — only
+/// the oldest fits this sweep; the rest stay queued (and cancellable) for the next
+/// top-up. TRC20 keeps this test's rows off the rails the other dispatcher test tops
+/// up, and the ~50 on-chain cap keeps any parallel test's huge queued grosses out.
+#[tokio::test]
+async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Trc20;
+	deposit(&h, user, Network::Bep20, "200").await;
+	// The TB rail covers every net individually — the on-chain view is the binding
+	// budget, so what's proven is the running deduction, not a static shortfall.
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("200")).await.unwrap();
+	h.relay.drain().await;
+
+	let custody = Arc::new(TestCustody::short_everywhere());
+	let mut withdrawals = Vec::new();
+	for _ in 0..3 {
+		let withdrawal = withdrawal_app::request_withdrawal(
+			h.withdrawals.as_ref(),
+			h.ledger.as_ref(),
+			h.users.as_ref(),
+			custody.as_ref(),
+			&h.notify,
+			&Network::ALL,
+			user,
+			network,
+			destination(network),
+			usdt("50"),
+		)
+		.await
+		.unwrap();
+		assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues each request");
+		withdrawals.push(withdrawal);
+	}
+	h.relay.drain().await;
+
+	// Top up the treasury to cover exactly one net (49) — a static gate would let all
+	// three (net 147) through.
+	custody.set(network, TreasuryView::OnChain(usdt("50")));
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	dispatcher.sweep().await.unwrap();
+
+	let first = h.withdrawals.find_by_id(withdrawals[0].id()).await.unwrap().unwrap();
+	assert_eq!(first.state(), WithdrawalState::Processing, "the FIFO-first withdrawal fits the rail's liquidity");
+	for later in &withdrawals[1..] {
+		let after = h.withdrawals.find_by_id(later.id()).await.unwrap().unwrap();
+		assert_eq!(after.state(), WithdrawalState::Queued, "the rest exceed the remaining liquidity and stay queued");
+	}
+
+	// Settle the dispatched one and cancel the rest, so the shared rails aren't left
+	// with dangling in-flight reservations.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawals[0].id(), unique_tx_ref())
+		.await
+		.unwrap();
+	for later in &withdrawals[1..] {
+		withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, later.id(), user).await.unwrap();
+	}
+	h.relay.drain().await;
+}
+
 #[tokio::test]
 async fn deposit_address_is_stable_per_user_and_network() {
 	let Some(h) = harness().await else { return };
@@ -372,6 +664,64 @@ async fn deposit_address_is_stable_per_user_and_network() {
 		let second = h.deposit_addresses.address(user, network).await.unwrap().expect("stub yields a fundable address");
 		assert_eq!(first, second, "the cached deposit address is stable across reads");
 		assert_eq!(first.network(), network, "the address is for the requested network");
+	}
+}
+
+// ── Test-only custody with a configurable on-chain treasury view ────────────────
+// A `Custody` port adapter over no chain (Postgres/TigerBeetle stay real, per the
+// no-DB-mocks rule) — like `StubCustody`, but its `treasury_liquidity` serves a
+// per-rail view the test controls, so the dispatch gate's three arms (`Some`, `None`,
+// `Err`) are each drivable. Broadcasts are stub no-ops.
+
+/// One rail's on-chain treasury as the test custody reports it. A rail with no entry
+/// has no chain view at all (`Ok(None)`), like an unwired rail.
+#[derive(Clone, Copy)]
+enum TreasuryView {
+	/// The treasury holds this much spendable USDT on-chain.
+	OnChain(Usdt),
+	/// The chain read fails (node outage).
+	Unreachable,
+}
+
+struct TestCustody {
+	views: Mutex<HashMap<Network, TreasuryView>>,
+}
+
+impl TestCustody {
+	fn with_view(network: Network, view: TreasuryView) -> Self {
+		Self {
+			views: Mutex::new(HashMap::from([(network, view)])),
+		}
+	}
+
+	/// Every rail short on-chain (`OnChain(0)`) — the dispatcher test's baseline, so a
+	/// concurrently-queued withdrawal from a parallel test can never be swept up by it.
+	fn short_everywhere() -> Self {
+		Self {
+			views: Mutex::new(Network::ALL.iter().map(|network| (*network, TreasuryView::OnChain(Usdt::ZERO))).collect()),
+		}
+	}
+
+	fn set(&self, network: Network, view: TreasuryView) {
+		self.views.lock().unwrap().insert(network, view);
+	}
+}
+
+impl domain::architecture::Gateway for TestCustody {}
+
+#[async_trait]
+impl Custody for TestCustody {
+	async fn broadcast(&self, request: &BroadcastRequest) -> Result<(), CustodyError> {
+		let _ = request;
+		Ok(())
+	}
+
+	async fn treasury_liquidity(&self, network: Network) -> Result<Option<Usdt>, CustodyError> {
+		match self.views.lock().unwrap().get(&network) {
+			Some(TreasuryView::OnChain(balance)) => Ok(Some(*balance)),
+			Some(TreasuryView::Unreachable) => Err(CustodyError::Unavailable("test: chain view down".into())),
+			None => Ok(None),
+		}
 	}
 }
 
