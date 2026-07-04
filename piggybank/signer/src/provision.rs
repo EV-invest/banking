@@ -51,6 +51,17 @@ pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, ne
 	// another wallet's row. `id` is the row PK → also the future signing path's lookup.
 	let sealed = vault.seal(chain_of(network), &id.to_string(), &*generated.secret)?;
 
+	// Unseal-probe BEFORE the address can leave the signer: prove the blob opens under
+	// the current KEK and recovers the exact secret. A key that cannot be opened would
+	// otherwise surface only when a sweep/withdrawal tries to sign — with real funds
+	// already stranded on the address (the KEK-epoch incident this guards against).
+	let reopened = vault.open(chain_of(network), &id.to_string(), &sealed)?;
+	if reopened.as_slice() != &generated.secret[..] {
+		return Err(SignerError::Repository("unseal probe recovered different bytes than were sealed — refusing to provision".into()));
+	}
+	drop(reopened);
+
+	let kek_fp = vault.fingerprint();
 	secrets
 		.insert(&NewSecret {
 			id,
@@ -61,6 +72,7 @@ pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, ne
 			sealed_key: &sealed,
 			key_alg: generated.alg,
 			key_version: KEY_VERSION,
+			kek_fp: &kek_fp,
 		})
 		.await?;
 

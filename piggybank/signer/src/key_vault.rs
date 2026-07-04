@@ -83,6 +83,53 @@ impl Vault {
 		XChaCha20Poly1305::new(Key::from_slice(&*self.kek))
 	}
 
+	/// Domain-separated SHA-256 fingerprint of the KEK — identifies the KEK *epoch*
+	/// without revealing anything about the key (256-bit random key ⇒ preimage-hard).
+	/// Stamped on every sealed row and on the boot sentinel, so a blob sealed under a
+	/// different KEK is PROVABLY dead by comparison, not just "fails to decrypt".
+	pub fn fingerprint(&self) -> [u8; 32] {
+		use sha2::{Digest, Sha256};
+		let mut hasher = Sha256::new();
+		hasher.update(b"evbanking-wallet-kek-fp:v1");
+		hasher.update(*self.kek);
+		hasher.finalize().into()
+	}
+
+	/// Seal the fixed sentinel plaintext under this KEK. Stored once at first boot;
+	/// every later boot must [`verify_sentinel`](Self::verify_sentinel) it or the
+	/// signer refuses to serve — the guard that catches a swapped/lost KEK at startup
+	/// instead of at withdrawal time.
+	pub fn seal_sentinel(&self) -> Result<Vec<u8>, VaultError> {
+		let nonce_bytes = random_bytes::<24>();
+		let nonce = XNonce::from_slice(&nonce_bytes);
+		let ct = self
+			.cipher()
+			.encrypt(
+				nonce,
+				Payload {
+					msg: SENTINEL_PLAINTEXT,
+					aad: SENTINEL_AAD,
+				},
+			)
+			.map_err(|_| VaultError::Crypto)?;
+		let mut out = Vec::with_capacity(24 + ct.len());
+		out.extend_from_slice(&nonce_bytes);
+		out.extend_from_slice(&ct);
+		Ok(out)
+	}
+
+	/// Open a stored sentinel blob and check it recovers the expected plaintext.
+	/// Failure means the current KEK is not the KEK that sealed this database.
+	pub fn verify_sentinel(&self, blob: &[u8]) -> Result<(), VaultError> {
+		if blob.len() < 24 {
+			return Err(VaultError::Crypto);
+		}
+		let (nonce_bytes, ct) = blob.split_at(24);
+		let nonce = XNonce::from_slice(nonce_bytes);
+		let pt = self.cipher().decrypt(nonce, Payload { msg: ct, aad: SENTINEL_AAD }).map_err(|_| VaultError::Crypto)?;
+		if pt == SENTINEL_PLAINTEXT { Ok(()) } else { Err(VaultError::Crypto) }
+	}
+
 	/// Encrypt a private key. Stored blob layout: `nonce(24) || ciphertext+tag`.
 	/// `chain` + `wallet_id` are bound as AAD, so a blob cannot be silently
 	/// moved onto another wallet's row.
@@ -110,6 +157,11 @@ impl Vault {
 		Ok(Zeroizing::new(pt))
 	}
 }
+
+/// The sentinel's fixed plaintext + AAD. Distinct from every wallet AAD (`<chain>:<uuid>`),
+/// so a wallet blob can never masquerade as the sentinel or vice versa.
+const SENTINEL_PLAINTEXT: &[u8] = b"evbanking-kek-sentinel:v1";
+const SENTINEL_AAD: &[u8] = b"kek-sentinel";
 
 /// secp256k1 secret key. BSC/BEP20 and Tron/TRC20 share this curve.
 pub fn gen_secp256k1() -> Zeroizing<[u8; 32]> {
@@ -359,6 +411,26 @@ mod tests {
 		let ton = gen_ed25519();
 		let ton_blob = vault.seal(Chain::Ton, "wallet-42", &*ton).unwrap();
 		assert_eq!(&*vault.open(Chain::Ton, "wallet-42", &ton_blob).unwrap(), &ton[..]);
+	}
+
+	#[test]
+	fn sentinel_and_fingerprint_pin_the_kek_epoch() {
+		let vault = Vault::from_hex(&hex::encode([7u8; 32])).unwrap();
+		let other = Vault::from_hex(&hex::encode([8u8; 32])).unwrap();
+
+		// Fingerprint identifies the epoch: stable per KEK, different across KEKs.
+		assert_eq!(vault.fingerprint(), vault.fingerprint());
+		assert_ne!(vault.fingerprint(), other.fingerprint());
+
+		// The sentinel verifies only under the KEK that sealed it — the boot guard.
+		let blob = vault.seal_sentinel().unwrap();
+		assert!(vault.verify_sentinel(&blob).is_ok());
+		assert!(other.verify_sentinel(&blob).is_err());
+
+		// A wallet blob cannot masquerade as the sentinel (distinct AAD).
+		let sk = gen_secp256k1();
+		let wallet_blob = vault.seal(Chain::BscBep20, "wallet-42", &*sk).unwrap();
+		assert!(vault.verify_sentinel(&wallet_blob).is_err());
 	}
 
 	#[test]

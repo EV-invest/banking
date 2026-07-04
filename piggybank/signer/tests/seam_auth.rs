@@ -12,6 +12,8 @@
 //! server serves only the `Jwks` RPC (the verifier's sole dependency); tokens are minted
 //! locally with a throwaway test key so the test is self-contained.
 
+mod common;
+
 use evbanking_auth::{Verifier, VerifierConfig, grpc_auth_layer};
 use evbanking_contracts::{
 	banking::v1::{
@@ -23,7 +25,6 @@ use evbanking_contracts::{
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, get_current_timestamp};
 use piggybank_signer::{key_vault::Vault, secrets::WalletSecrets, service::Signer};
 use serde::Serialize;
-use sqlx::PgPool;
 use tonic::{
 	Request, Response, Status,
 	transport::{Endpoint, Server},
@@ -107,16 +108,6 @@ impl AuthService for JwksOnlyAuth {
 	}
 }
 
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("SIGNER_DATABASE_URL")
-		.ok()
-		.or_else(|| std::env::var("DATABASE_URL").ok())
-		.filter(|s| !s.is_empty())?;
-	let pool = sqlx::postgres::PgPoolOptions::new().max_connections(2).connect(&url).await.expect("connect to Postgres");
-	sqlx::migrate!().run(&pool).await.expect("apply signer migrations");
-	Some(pool)
-}
-
 fn ephemeral_addr() -> std::net::SocketAddr {
 	std::net::TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port").local_addr().expect("local addr")
 }
@@ -132,10 +123,11 @@ fn authorized(token: &str) -> Request<ProvisionAddressRequest> {
 
 #[tokio::test]
 async fn seam_rejects_unauthenticated_and_foreign_aud_accepts_service_token() {
-	let Some(pool) = pool().await else {
+	let Some(db) = common::throwaway_db().await else {
 		eprintln!("DATABASE_URL/SIGNER_DATABASE_URL unset — skipping signer seam-auth test");
 		return;
 	};
+	let pool = db.pool.clone();
 
 	// Stand up the in-process auth server (Jwks) and the real auth-layered signer server,
 	// then drive assertions — all as branches of one `select!` (no detached tasks). The
@@ -163,6 +155,8 @@ async fn seam_rejects_unauthenticated_and_foreign_aud_accepts_service_token() {
 		result = signer_server => result.expect("serve signer"),
 		() = assert_seam(SignerServiceClient::new(channel)) => {}
 	}
+
+	db.cleanup().await;
 }
 
 async fn assert_seam(mut client: SignerServiceClient<tonic::transport::Channel>) {
