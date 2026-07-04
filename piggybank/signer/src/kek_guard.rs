@@ -84,6 +84,10 @@ pub async fn enforce(vault: &Vault, secrets: &WalletSecrets) -> anyhow::Result<K
 	Ok(KekReport { active_keys, dead_keys })
 }
 
+/// First 8 hex chars — enough to tell epochs apart in logs without dumping hashes.
+pub fn short_fp(fp: &[u8]) -> String {
+	hex::encode(&fp[..fp.len().min(4)])
+}
 fn verify(vault: &Vault, boot_fp: &[u8; 32], stored_fp: &[u8], probe: &[u8], pinned_at: &str) -> anyhow::Result<()> {
 	if stored_fp != boot_fp {
 		anyhow::bail!(
@@ -104,9 +108,4 @@ fn verify(vault: &Vault, boot_fp: &[u8; 32], stored_fp: &[u8], probe: &[u8], pin
 
 fn boot_err(err: SignerError) -> anyhow::Error {
 	anyhow::anyhow!("KEK guard database access failed: {err}")
-}
-
-/// First 8 hex chars — enough to tell epochs apart in logs without dumping hashes.
-pub fn short_fp(fp: &[u8]) -> String {
-	hex::encode(&fp[..fp.len().min(4)])
 }

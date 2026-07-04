@@ -28,6 +28,10 @@ use chacha20poly1305::{
 };
 use zeroize::{Zeroize, Zeroizing};
 
+/// The sentinel's fixed plaintext + AAD. Distinct from every wallet AAD (`<chain>:<uuid>`),
+/// so a wallet blob can never masquerade as the sentinel or vice versa.
+const SENTINEL_PLAINTEXT: &[u8] = b"evbanking-kek-sentinel:v1";
+const SENTINEL_AAD: &[u8] = b"kek-sentinel";
 #[derive(Debug, thiserror::Error)]
 pub enum VaultError {
 	#[error("decrypt/encrypt failed (wrong KEK, tampered blob, or wrong chain/id)")]
@@ -157,11 +161,6 @@ impl Vault {
 		Ok(Zeroizing::new(pt))
 	}
 }
-
-/// The sentinel's fixed plaintext + AAD. Distinct from every wallet AAD (`<chain>:<uuid>`),
-/// so a wallet blob can never masquerade as the sentinel or vice versa.
-const SENTINEL_PLAINTEXT: &[u8] = b"evbanking-kek-sentinel:v1";
-const SENTINEL_AAD: &[u8] = b"kek-sentinel";
 
 /// secp256k1 secret key. BSC/BEP20 and Tron/TRC20 share this curve.
 pub fn gen_secp256k1() -> Zeroizing<[u8; 32]> {
