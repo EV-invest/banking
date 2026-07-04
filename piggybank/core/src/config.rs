@@ -153,6 +153,7 @@ impl AppConfig {
 				poll_secs: parse_opt("BSC_POLL_SECS")?.unwrap_or(12),
 				start_block: parse_opt("BSC_DEPOSIT_START_BLOCK")?,
 				max_block_range: parse_opt("BSC_MAX_BLOCK_RANGE")?.unwrap_or(500),
+				logs_rpc_url: env::var("BSC_LOGS_RPC_URL").ok().filter(|s| !s.is_empty()),
 				chain_id: parse_opt("BSC_CHAIN_ID")?.unwrap_or(56),
 				gas_limit: parse_opt("BSC_GAS_LIMIT")?.unwrap_or(100_000),
 			}),
@@ -304,6 +305,10 @@ pub struct BscConfig {
 	/// Max blocks per `eth_getLogs` call (`BSC_MAX_BLOCK_RANGE`); defaults to 500 to stay
 	/// within common provider range limits.
 	pub max_block_range: u64,
+	/// Dedicated endpoint for the deposit scan (`BSC_LOGS_RPC_URL`), when the main
+	/// `rpc_url` paywalls/throttles `eth_getLogs` (dataseed rejects it outright as of
+	/// 2026-07) but is otherwise a fine full node. `None` ⇒ the scan uses `rpc_url`.
+	pub logs_rpc_url: Option<String>,
 	/// Chain id for signing withdrawals (`BSC_CHAIN_ID`); 56 = BSC mainnet, 97 = testnet.
 	pub chain_id: u64,
 	/// Gas limit for an ERC-20 transfer withdrawal (`BSC_GAS_LIMIT`); defaults to 100_000 (a
