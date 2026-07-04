@@ -249,10 +249,12 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// watcher, and (opt-in) sweep. Each runs only when TRON_RPC_URL is set; their own pool clones
 	// keep the polling reads off the request path.
 	let tron_deposit_watcher = config.tron.as_ref().map(|tron| TronDepositWatcher::new(pool.clone(), relay_notify.clone(), tron));
-	let tron_withdrawal_watcher = config
-		.tron
-		.as_ref()
-		.map(|tron| TronWithdrawalWatcher::new(pool.clone(), withdrawals.clone(), relay_notify.clone(), tron));
+	// The confirmation watcher shares the custody adapter so it can re-drive a stuck (expired,
+	// unlanded) send — TRON has no nonce, so nothing else could recover it. Wired like the TON one.
+	let tron_withdrawal_watcher = match (&config.tron, &tron_custody) {
+		(Some(tron), Some(tron_custody)) => Some(TronWithdrawalWatcher::new(pool.clone(), tron_custody.clone(), withdrawals.clone(), relay_notify.clone(), tron)),
+		_ => None,
+	};
 	let tron_sweep = match (&config.tron, &config.tron_sweep) {
 		(Some(tron), Some(sweep_config)) => Some(TronSweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), tron, sweep_config.clone())),
 		_ => None,
@@ -293,6 +295,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		Arc::from(config.configured_networks()),
 		relay_notify,
 		Arc::from(config.admin_subjects.clone()),
+		config.ton.as_ref().is_some_and(|ton| ton.is_testnet),
 	);
 
 	tracing::info!(core = %config.grpc_addr, auth = %config.auth_grpc_addr, "piggybank listening");

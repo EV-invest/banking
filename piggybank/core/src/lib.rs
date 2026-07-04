@@ -79,6 +79,10 @@ pub struct AppState {
 	pub relay_notify: Arc<Notify>,
 	/// User ids permitted to call admin RPCs (config allowlist; see [`config`]).
 	pub admin_subjects: Arc<[String]>,
+	/// Whether the TON rail is on testnet — surfaced on its deposit addresses so the client
+	/// renders the correct (testnet-tagged) user-friendly TON address. `false` when TON is
+	/// unconfigured or on mainnet. The other rails have no testnet-specific address form.
+	pub ton_is_testnet: bool,
 }
 
 impl AppState {
@@ -100,6 +104,7 @@ impl AppState {
 		configured_networks: Arc<[Network]>,
 		relay_notify: Arc<Notify>,
 		admin_subjects: Arc<[String]>,
+		ton_is_testnet: bool,
 	) -> Self {
 		Self {
 			pool,
@@ -118,6 +123,7 @@ impl AppState {
 			configured_networks,
 			relay_notify,
 			admin_subjects,
+			ton_is_testnet,
 		}
 	}
 

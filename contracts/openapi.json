@@ -3550,6 +3550,11 @@
             "type": "integer",
             "title": "min_confirmations",
             "description": "confirmations before a deposit is credited"
+          },
+          "is_testnet": {
+            "type": "boolean",
+            "title": "is_testnet",
+            "description": "Whether this rail is on testnet — the client uses it to render the correct address\n form (e.g. TON's testnet-tagged user-friendly address). Only meaningful per rail; false\n for a mainnet rail."
           }
         },
         "title": "DepositAddress",

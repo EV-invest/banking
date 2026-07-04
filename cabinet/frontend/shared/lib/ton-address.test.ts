@@ -16,6 +16,16 @@ test("the TON docs vector encodes to both friendly forms", () => {
   assert.equal(tonFriendlyAddress(RAW, { bounceable: false }), tonFriendlyAddress(RAW));
 });
 
+test("the testnet flag (0x80) yields the test-only forms", () => {
+  // TEP-2 test-only tags: 0xD1 non-bounceable-test (`0Q…`), 0x91 bounceable-test (`kQ…`) —
+  // a different checksummed string than the mainnet twin, so a testnet rail can't display a
+  // mainnet-tagged address. Prefixes cross-checked against TON's test-only address forms.
+  assert.equal(tonFriendlyAddress(RAW, { testnet: true }), "0QDKbjIcfM6ezt8KjKJJLshZJJSqX7XOA4ff-W72r5gqPleK");
+  assert.equal(tonFriendlyAddress(RAW, { bounceable: true, testnet: true }), "kQDKbjIcfM6ezt8KjKJJLshZJJSqX7XOA4ff-W72r5gqPgpP");
+  // A false/absent flag is the mainnet form (unchanged).
+  assert.equal(tonFriendlyAddress(RAW, { testnet: false }), tonFriendlyAddress(RAW));
+});
+
 test("workchain -1 encodes as int8 0xff", () => {
   const friendly = tonFriendlyAddress(`-1:${RAW.slice(2)}`);
   assert.ok(friendly);

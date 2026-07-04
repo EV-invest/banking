@@ -76,6 +76,10 @@ message DepositAddress {
   string network = 1;
   string address = 2;
   uint32 min_confirmations = 3;  // confirmations before a deposit is credited
+  // Whether this rail is on testnet — the client uses it to render the correct address
+  // form (e.g. TON's testnet-tagged user-friendly address). Only meaningful per rail; false
+  // for a mainnet rail.
+  bool is_testnet = 4;
 }
 
 message RequestWithdrawalRequest {
