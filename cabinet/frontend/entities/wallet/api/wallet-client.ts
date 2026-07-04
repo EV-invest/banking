@@ -2,11 +2,12 @@
 // shapes are the proto-derived types from `@/shared/contracts`. Mutations carry the
 // CSRF double-submit header. No tokens are ever seen here — the BFF holds them.
 
+import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import type { DepositAddress, Wallet, Withdrawal, WithdrawalList } from "@/shared/contracts";
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { accept: "application/json" } });
+async function getJson<T>(url: `/${string}`): Promise<T> {
+  const res = await fetch(apiPath(url), { headers: { accept: "application/json" } });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(data.error ?? `request failed (${res.status})`);
   return data;
@@ -25,7 +26,7 @@ export function fetchWithdrawals(): Promise<WithdrawalList> {
 }
 
 export async function submitWithdrawal(body: { network: string; address: string; amount: string }): Promise<Withdrawal> {
-  const res = await fetch("/api/wallet/withdrawals", {
+  const res = await fetch(apiPath("/api/wallet/withdrawals"), {
     method: "POST",
     headers: { "content-type": "application/json", ...csrfHeader() },
     body: JSON.stringify(body),
@@ -36,7 +37,7 @@ export async function submitWithdrawal(body: { network: string; address: string;
 }
 
 export async function cancelWithdrawal(withdrawalId: string): Promise<Withdrawal> {
-  const res = await fetch("/api/wallet/withdrawals/cancel", {
+  const res = await fetch(apiPath("/api/wallet/withdrawals/cancel"), {
     method: "POST",
     headers: { "content-type": "application/json", ...csrfHeader() },
     body: JSON.stringify({ withdrawal_id: withdrawalId }),

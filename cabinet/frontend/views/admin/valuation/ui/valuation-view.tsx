@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
 import { failRedemption, fetchRedemptionQueue, postValuation, settleRedemption } from "@/entities/admin/api/admin-client";
+import { apiPath } from "@/shared/config/base-path";
 import type { FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { ago, usd } from "@/views/admin/lib/format";
@@ -17,7 +18,7 @@ const DEFAULT_FUND = "quy-nhon-fund";
 // Read the current fund NAV (units_outstanding drives the derived-NAV preview and the
 // queue's est-cash), via the existing self-service money route.
 async function fetchFundNav(service: string): Promise<FundNav> {
-  const res = await fetch(`/api/funds/nav?service=${encodeURIComponent(service)}`, { headers: { accept: "application/json" } });
+  const res = await fetch(apiPath(`/api/funds/nav?service=${encodeURIComponent(service)}`), { headers: { accept: "application/json" } });
   const data = (await res.json().catch(() => ({}))) as FundNav & { error?: string };
   if (!res.ok) throw new Error(data.error ?? `nav unavailable (${res.status})`);
   return data;

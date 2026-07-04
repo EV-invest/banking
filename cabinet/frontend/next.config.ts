@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 
+import { BASE_PATH } from "./shared/config/base-path";
 import { staticSecurityHeaders } from "./shared/config/security";
 
 // The BFF now lives in a separate Rust service (`cabinet/backend`). The browser
@@ -10,6 +11,13 @@ const BACKEND = process.env.CABINET_BACKEND_URL ?? "http://127.0.0.1:4000";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Multi-zone mount: the cabinet lives under the conductor's domain at
+  // /cabinet. basePath prefixes every page AND /_next asset with it, so nothing
+  // collides with the conductor's own routes/assets; the conductor rewrites
+  // /cabinet/* to this deployment. The rewrite source below is basePath-aware
+  // (externally it matches /cabinet/api/*); hand-built browser URLs go through
+  // shared/config/base-path.ts.
+  basePath: BASE_PATH,
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${BACKEND}/api/:path*` }];
   },

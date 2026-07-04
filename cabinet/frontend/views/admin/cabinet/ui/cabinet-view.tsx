@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
 import { fetchCabinet, setAnnouncement, setFeatureFlag, setMaintenance, setReadOnly } from "@/entities/admin/api/admin-client";
+import { apiPath } from "@/shared/config/base-path";
 import type { CabinetConfig, FeatureFlag } from "@/shared/contracts/admin";
 import { AdminHeader, StatusDot, Toggle } from "@/views/admin/ui/shell";
 
@@ -26,7 +27,7 @@ export function CabinetView() {
     fetchCabinet()
       .then((c) => active && setConfig(c))
       .catch((e: Error) => active && setError(e.message));
-    fetch("/api/mfe-registry", { headers: { accept: "application/json" } })
+    fetch(apiPath("/api/mfe-registry"), { headers: { accept: "application/json" } })
       .then((r) => r.json() as Promise<MfeEntry[]>)
       .then((m) => active && setMfes(Array.isArray(m) ? m : []))
       .catch(() => active && setMfes([]));

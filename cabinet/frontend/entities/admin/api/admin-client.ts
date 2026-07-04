@@ -3,18 +3,19 @@
 // the CSRF double-submit header. No tokens are seen here — the BFF holds them and the
 // owning plane re-checks the operator's role.
 
+import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import type { AdminOverview, AdminUserList, AdminUserProfile, CabinetConfig, FundNav, OperationsMode, PlatformConfig, Redemption, RedemptionQueue, Treasury, UserBalance } from "@/shared/contracts/admin";
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { accept: "application/json" } });
+async function getJson<T>(url: `/${string}`): Promise<T> {
+  const res = await fetch(apiPath(url), { headers: { accept: "application/json" } });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) throw new Error(data.error ?? `request failed (${res.status})`);
   return data;
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+async function postJson<T>(url: `/${string}`, body: unknown): Promise<T> {
+  const res = await fetch(apiPath(url), {
     method: "POST",
     headers: { "content-type": "application/json", ...csrfHeader() },
     body: JSON.stringify(body),

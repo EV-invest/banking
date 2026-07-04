@@ -7,13 +7,14 @@
 
 import { useEffect, useState } from "react";
 
+import { apiPath } from "@/shared/config/base-path";
 import type { SessionInfo } from "@/shared/contracts/admin";
 
 export function useSession(): SessionInfo | null {
   const [session, setSession] = useState<SessionInfo | null>(null);
   useEffect(() => {
     let active = true;
-    fetch("/api/auth/session")
+    fetch(apiPath("/api/auth/session"))
       .then((r) => r.json() as Promise<SessionInfo>)
       .then((s) => active && setSession(s))
       .catch(() => active && setSession({ authenticated: false }));

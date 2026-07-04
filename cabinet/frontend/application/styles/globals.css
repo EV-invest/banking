@@ -3,8 +3,11 @@
 @import "@evinvest/uikit/styles/tokens.css";
 
 /* The shared UI kit ships compiled; point Tailwind at its dist so the classes
-   baked into @evinvest/uikit components are generated. */
-@source "../../../node_modules/@evinvest/uikit/dist";
+   baked into @evinvest/uikit components are generated. Deps hoist to the REPO
+   ROOT node_modules (npm workspaces) — four levels up from this file, not
+   three; the old path silently matched nothing, so dist-only classes (e.g. the
+   uikit Header's lockup sizing) were never emitted. */
+@source "../../../../node_modules/@evinvest/uikit/dist";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -18,9 +21,18 @@
   }
   h1,
   h2,
-  h3 {
+  h3,
+  .font-serif-display {
     font-family: var(--font-serif);
     letter-spacing: -0.02em;
+  }
+
+  /* Brand-label texture used by the shared uikit Header (wordmark + nav) —
+     mirrors the conductor's globals; candidates for upstreaming into uikit
+     tokens.css so every consumer gets them. */
+  .font-mono-tech {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 }
 

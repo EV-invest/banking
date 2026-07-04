@@ -91,7 +91,7 @@ pub async fn callback(State(st): State<AppState>, jar: CookieJar, headers: Heade
 				.add(st.cookies.server_cookie(st.cookies.session.clone(), id, max_age))
 				.add(st.cookies.readable_cookie(st.cookies.csrf.clone(), csrf, max_age));
 			let jar = clear_tx(&st, jar);
-			(jar, Redirect::to(&safe_return_to(Some(&tx.return_to))))
+			(jar, Redirect::to(&format!("{}{}", st.config.zone_base_path(), safe_return_to(Some(&tx.return_to)))))
 		}
 		Err(e) => {
 			// Surface the upstream gRPC status server-side; the user only sees `?error=exchange`.
@@ -147,8 +147,11 @@ fn clear_session(state: &AppState, jar: CookieJar) -> CookieJar {
 }
 
 /// Abort the callback: clear the tx cookie and bounce to `/login?error=…`.
+/// Zone-prefixed: the Next rewrite strips the basePath inbound but Location
+/// headers pass through untouched, so a bare `/login` would exit the zone.
 fn fail(state: &AppState, jar: CookieJar, reason: &str) -> (CookieJar, Redirect) {
-	(clear_tx(state, jar), Redirect::to(&format!("/login?error={reason}")))
+	let base = state.config.zone_base_path();
+	(clear_tx(state, jar), Redirect::to(&format!("{base}/login?error={reason}")))
 }
 
 /// Best-effort client IP for the device metadata stored on the refresh-token family.
