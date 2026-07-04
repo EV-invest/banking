@@ -180,27 +180,49 @@ impl AppConfig {
 		// The on-chain TON seams run only when TON_API_URL is set (a toncenter v3 base URL).
 		// Everything else defaults — mainnet USDT jetton master, 6s poll.
 		let ton = match env::var("TON_API_URL").ok().filter(|s| !s.is_empty()) {
-			Some(api_url) => Some(TonConfig {
-				api_url,
-				api_key: env::var("TON_API_KEY").ok().filter(|s| !s.is_empty()),
-				usdt_master: env::var("TON_USDT_MASTER")
+			Some(api_url) => {
+				// Default the testnet flag from the URL (the testnet toncenter lives on a `testnet.`
+				// host), so it moves together with the endpoint. Fail LOUD on the dangerous mismatch —
+				// a testnet URL with the flag off would run against testnet while minting mainnet-
+				// tagged deposit addresses (the user is then shown a wrong-network address). Other
+				// combinations (a custom testnet proxy URL + explicit TON_IS_TESTNET=true) are honored.
+				let url_is_testnet = api_url.contains("testnet");
+				let is_testnet = env::var("TON_IS_TESTNET")
 					.ok()
 					.filter(|s| !s.is_empty())
-					.unwrap_or_else(|| "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs".to_string()),
-				poll_secs: parse_opt("TON_POLL_SECS")?.unwrap_or(6),
-				start_cursor: parse_opt("TON_DEPOSIT_START_UTIME")?,
-				is_testnet: env::var("TON_IS_TESTNET").map(|v| v == "true" || v == "1").unwrap_or(false),
-				wallet_version: env::var("TON_WALLET_VERSION").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "v4r2".to_string()),
-				forward_ton_amount: parse_opt("TON_FORWARD_TON_AMOUNT")?.unwrap_or(50_000_000),
-				msg_value: parse_opt("TON_MSG_VALUE")?.unwrap_or(100_000_000),
-			}),
+					.map(|v| v == "true" || v == "1")
+					.unwrap_or(url_is_testnet);
+				if url_is_testnet && !is_testnet {
+					anyhow::bail!("TON_API_URL ({api_url}) is a testnet endpoint but TON_IS_TESTNET is not true — user-facing TON deposit addresses would carry the mainnet tag for a testnet rail; set TON_IS_TESTNET=true");
+				}
+				Some(TonConfig {
+					api_url,
+					api_key: env::var("TON_API_KEY").ok().filter(|s| !s.is_empty()),
+					usdt_master: env::var("TON_USDT_MASTER")
+						.ok()
+						.filter(|s| !s.is_empty())
+						.unwrap_or_else(|| "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs".to_string()),
+					poll_secs: parse_opt("TON_POLL_SECS")?.unwrap_or(6),
+					start_cursor: parse_opt("TON_DEPOSIT_START_UTIME")?,
+					is_testnet,
+					wallet_version: env::var("TON_WALLET_VERSION").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "v4r2".to_string()),
+					forward_ton_amount: parse_opt("TON_FORWARD_TON_AMOUNT")?.unwrap_or(50_000_000),
+					msg_value: parse_opt("TON_MSG_VALUE")?.unwrap_or(100_000_000),
+				})
+			}
 			None => None,
 		};
 		// The sweep moves user funds on-chain, so it runs only when explicitly enabled AND a chain
-		// is configured — opt-in, never implied by the deposit/withdraw seams. `SWEEP_ENABLED`
-		// turns it on for every configured rail; an unconfigured rail simply has no sweep.
-		let sweep_enabled = env::var("SWEEP_ENABLED").map(|v| v == "true" || v == "1").unwrap_or(false);
-		let sweep = if sweep_enabled && bsc.is_some() {
+		// is configured — opt-in, never implied by the deposit/withdraw seams. `SWEEP_ENABLED` is
+		// the global default; a per-rail `<RAIL>_SWEEP_ENABLED` overrides it so a freshly-configured
+		// rail can run deposits+withdrawals WITHOUT arming its fund-moving sweep before its treasury
+		// and gas station are funded — the sequenced bring-up BEP20 used. An unset per-rail var
+		// inherits the global; an unconfigured rail simply has no sweep.
+		let sweep_enabled = bool_env("SWEEP_ENABLED", false);
+		let bsc_sweep_enabled = bool_env("BSC_SWEEP_ENABLED", sweep_enabled);
+		let tron_sweep_enabled = bool_env("TRON_SWEEP_ENABLED", sweep_enabled);
+		let ton_sweep_enabled = bool_env("TON_SWEEP_ENABLED", sweep_enabled);
+		let sweep = if bsc_sweep_enabled && bsc.is_some() {
 			Some(SweepConfig {
 				min_usdt: parse_opt("SWEEP_MIN_USDT")?.unwrap_or(1_000_000_000_000_000_000),
 				gas_drop_multiple: parse_opt("SWEEP_GAS_DROP_MULTIPLE")?.unwrap_or(3),
@@ -211,7 +233,7 @@ impl AppConfig {
 		} else {
 			None
 		};
-		let tron_sweep = if sweep_enabled && tron.is_some() {
+		let tron_sweep = if tron_sweep_enabled && tron.is_some() {
 			Some(TronSweepConfig {
 				min_usdt: parse_opt("TRON_SWEEP_MIN_USDT")?.unwrap_or(1_000_000),
 				min_trx_drop_sun: parse_opt("TRON_SWEEP_MIN_TRX_DROP_SUN")?.unwrap_or(30_000_000),
@@ -221,7 +243,7 @@ impl AppConfig {
 		} else {
 			None
 		};
-		let ton_sweep = if sweep_enabled && ton.is_some() {
+		let ton_sweep = if ton_sweep_enabled && ton.is_some() {
 			Some(TonSweepConfig {
 				min_usdt: parse_opt("TON_SWEEP_MIN_USDT")?.unwrap_or(1_000_000),
 				gas_topup_nano: parse_opt("TON_SWEEP_GAS_TOPUP_NANO")?.unwrap_or(100_000_000),
@@ -401,8 +423,10 @@ pub struct TonConfig {
 	/// watcher tracks the cursor as a unix-time watermark (a globally-comparable value), not
 	/// a per-account logical time — see [`infrastructure::ton_deposit_watcher`].
 	pub start_cursor: Option<u64>,
-	/// Whether the rail is on TON testnet (`TON_IS_TESTNET`); selects the address tag for the
-	/// user-facing form (display-edge concern) and documents which base URL is in use.
+	/// Whether the rail is on TON testnet. Defaults from `TON_API_URL` (a `testnet.` host) and
+	/// can be set explicitly with `TON_IS_TESTNET`; a testnet URL with the flag off is rejected
+	/// (see [`AppConfig::from_env`]). Selects the user-facing address tag and is carried into the
+	/// signer so signing stays consistent with the addresses the operator funds.
 	pub is_testnet: bool,
 	/// The wallet contract version (`TON_WALLET_VERSION`); only `v4r2` is supported today.
 	pub wallet_version: String,
@@ -430,6 +454,14 @@ pub struct TonSweepConfig {
 	pub topup_grace_secs: u64,
 	/// Seconds between sweep cycles (`TON_SWEEP_POLL_SECS`); defaults to 30.
 	pub poll_secs: u64,
+}
+
+/// A boolean env var: `true`/`1` ⇒ true, anything else ⇒ false, unset/empty ⇒ `default`.
+fn bool_env(key: &str, default: bool) -> bool {
+	match env::var(key).ok().filter(|s| !s.is_empty()) {
+		Some(v) => v == "true" || v == "1",
+		None => default,
+	}
 }
 
 /// Parse an optional env var that, when present and non-empty, must be a valid `T`.
@@ -479,6 +511,7 @@ mod tests {
 				poll_secs: 1,
 				start_block: None,
 				max_block_range: 1,
+				logs_rpc_url: None,
 				chain_id: 1,
 				gas_limit: 1,
 			}),
