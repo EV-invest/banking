@@ -36,8 +36,19 @@ impl TonRpc {
 	/// outgoing message both deploys it (StateInit attached) and runs at seqno 0.
 	pub async fn seqno(&self, address: &str) -> Result<u64, RpcError> {
 		let body = json!({ "address": address, "method": "seqno", "stack": [] });
-		let value = self.post("runGetMethod", &body).await?;
-		Ok(decode_seqno(&value))
+		match self.post("runGetMethod", &body).await {
+			Ok(value) => Ok(decode_seqno(&value)),
+			// An undeployed / inactive wallet has no get-methods: toncenter answers runGetMethod
+			// with a non-2xx ("account not active" / method-not-found), which `read_json` turns
+			// into an `Rpc` error BEFORE `decode_seqno` (which handles the 200-with-exit_code shape)
+			// could see it. That case is seqno 0 — the wallet's FIRST outgoing message deploys it
+			// (StateInit attached) and runs at seqno 0 — so a fresh treasury/deposit wallet must not
+			// be dead-on-arrival here. A transient error mis-classified as inactive can only cause a
+			// rejected (never a double) send: the wallet ignores a wrong-seqno message and the
+			// watcher re-drives.
+			Err(RpcError::Rpc(msg)) if is_inactive_account(&msg) => Ok(0),
+			Err(err) => Err(err),
+		}
 	}
 
 	/// The sender's jetton wallet (address + jetton balance) for `owner` under `master`,
@@ -187,6 +198,20 @@ pub enum RpcError {
 	Rpc(String),
 }
 
+/// toncenter answers a `runGetMethod` against an uninitialized / inactive account with a
+/// non-2xx (no get-methods to run), which surfaces as an [`RpcError::Rpc`]. Recognise those so
+/// [`TonRpc::seqno`] can treat them as seqno 0 (the wallet's first send deploys it). Kept narrow
+/// — rate-limit / server errors do NOT match, so they still propagate as retryable failures.
+fn is_inactive_account(msg: &str) -> bool {
+	let m = msg.to_lowercase();
+	m.contains("not active")
+		|| m.contains("uninitialized")
+		|| m.contains("not initialized")
+		|| m.contains("account not found")
+		|| m.contains("method not found")
+		|| m.contains("cannot run get method")
+}
+
 /// Decode a `runGetMethod` "seqno" result. A successful call has `exit_code == 0` and a
 /// single num on the stack; anything else (undeployed wallet, missing stack) is seqno `0`.
 fn decode_seqno(value: &Value) -> u64 {
@@ -327,5 +352,15 @@ mod tests {
 	fn decodes_account_balance() {
 		assert_eq!(decode_balance(&json!({ "accounts": [{ "balance": "100000000" }] })), Some(100_000_000));
 		assert_eq!(decode_balance(&json!({ "accounts": [] })), None);
+	}
+
+	#[test]
+	fn inactive_account_errors_map_to_seqno_zero_but_transient_ones_do_not() {
+		assert!(is_inactive_account("runGetMethod: 404: account not active"));
+		assert!(is_inactive_account("runGetMethod: 409: method not found"));
+		assert!(is_inactive_account("cannot run get method on an uninitialized account"));
+		// Transient / infrastructure errors must still propagate (retry), NOT read as seqno 0.
+		assert!(!is_inactive_account("runGetMethod: 429: too many requests"));
+		assert!(!is_inactive_account("runGetMethod: 500: internal server error"));
 	}
 }
