@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 
+import { apiPath } from "@/shared/config/base-path";
 import type { PlatformStatus } from "@/shared/contracts/platform";
 
 const RETRY_MS = 60_000;
@@ -19,7 +20,7 @@ function fetchPlatform(): Promise<PlatformStatus | null> {
   // Serving the cache here (not in the hook) closes the render→effect race: a consumer
   // whose effect runs after another consumer's fetch resolved still syncs its state.
   if (cached) return Promise.resolve(cached);
-  inflight ??= fetch("/api/platform")
+  inflight ??= fetch(apiPath("/api/platform"))
     .then((r) => (r.ok ? (r.json() as Promise<PlatformStatus>) : null))
     .then((p) => {
       cached = p;
