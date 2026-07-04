@@ -126,11 +126,17 @@ export function OverviewView() {
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi label="Services healthy" value={overview ? `${healthy}/${totalServices}` : undefined} tone="text-main-accent-t2" />
         <Kpi label="Parked rows" value={overview?.parked_rows} hint="Money the relay couldn't apply" tone={overview && overview.parked_rows !== "0" ? "text-destructive" : undefined} />
         <Kpi label="Dispatch backlog" value={overview?.backlog} hint="Undispatched outbox rows" />
         <Kpi label="Oldest backlog" value={overview ? `${overview.oldest_backlog_age_secs}s` : undefined} hint="Age of the oldest undispatched row" />
+        <Kpi
+          label="Dead-key signings"
+          value={overview?.unseal_failures}
+          hint="Signer couldn't unseal a key — funds stranded"
+          tone={overview && overview.unseal_failures !== "0" ? "text-destructive" : undefined}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

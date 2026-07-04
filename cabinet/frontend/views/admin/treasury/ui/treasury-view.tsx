@@ -107,6 +107,20 @@ function RailFunding({ rail }: { rail: RailLiquidity }) {
       )}
       <FundingRow label="On-chain USDT" value={rail.onchain_usdt ? qty(rail.onchain_usdt) : undefined} />
       <FundingRow label="Gas" value={rail.onchain_gas ? `${qty(rail.onchain_gas)} ${GAS_SYMBOLS[rail.network] ?? ""}`.trimEnd() : undefined} />
+      {rail.gas_station_address && (
+        <>
+          <p className="pt-1 text-xs text-muted-foreground">
+            Gas station <span className="text-main-accent-t2">(fund {GAS_SYMBOLS[rail.network] ?? "gas"} here — pays sweep gas drops)</span>
+          </p>
+          <p className="font-mono-tech text-xs text-muted-foreground" title={rail.gas_station_address}>
+            {shortAddr(rail.gas_station_address)}
+          </p>
+          <FundingRow
+            label="Gas station balance"
+            value={rail.gas_station_gas ? `${qty(rail.gas_station_gas)} ${GAS_SYMBOLS[rail.network] ?? ""}`.trimEnd() : undefined}
+          />
+        </>
+      )}
     </div>
   );
 }

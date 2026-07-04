@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeCheck, Home, Landmark, LayoutGrid, LineChart, ListChecks, LogOut, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowUpFromLine, BadgeCheck, Home, Landmark, LayoutGrid, LineChart, ListChecks, LogOut, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
@@ -41,6 +41,7 @@ const ADMIN: NavItem[] = [
   { href: "/admin/users", label: "Users", icon: UsersRound, active: (p) => p.startsWith("/admin/users") },
   { href: "/admin/cabinet", label: "Cabinet", icon: PanelsTopLeft, active: (p) => p.startsWith("/admin/cabinet") },
   { href: "/admin/treasury", label: "Treasury", icon: Landmark, active: (p) => p.startsWith("/admin/treasury") },
+  { href: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpFromLine, active: (p) => p.startsWith("/admin/withdrawals") },
   { href: "/admin/valuation", label: "Valuation & redemptions", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
 ];
 
