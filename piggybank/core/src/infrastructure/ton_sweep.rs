@@ -13,9 +13,10 @@
 //!      station, so the leftover Toncoin returns to the station rather than stranding.
 //!
 //! **Idempotency (no double-send), no extra persistence — like the EVM sweep:**
-//!   - the jetton move is signed at the user wallet's current `seqno` and is deterministic
-//!     (query_id fixed), so a re-sign of an unconfirmed sweep is the *same* message — a
-//!     stale re-broadcast the wallet silently rejects once its seqno has advanced;
+//!   - the jetton move is signed at the user wallet's current `seqno`; a re-sign of an
+//!     unconfirmed sweep carries a fresh validity window (not byte-identical), but the wallet's
+//!     strict-seqno rule accepts at most ONE message per seqno, so once the seqno has advanced
+//!     the stale twin is silently rejected — no double-sweep;
 //!   - the **on-chain jetton balance is the truth** — once a sweep lands, the wallet reads
 //!     zero and drops out, so nothing re-sweeps.
 //!
@@ -161,10 +162,18 @@ impl TonSweep {
 			return Ok(());
 		}
 		// One station send in flight at a time: a future seqno would be dropped (not queued)
-		// on TON, so wait until the chain seqno advances past our last top-up before sending.
+		// on TON, so wait until the chain seqno advances past our last top-up before sending —
+		// BUT only while that last send is still live. A top-up toncenter accepted (200) yet that
+		// never landed (station briefly unfunded, network congestion) leaves the chain seqno
+		// un-advanced; without the freshness bound the `chain <= last` gate would then early-return
+		// FOREVER — every future top-up frozen, no user wallet funded, all TON deposits stranded
+		// until a restart. Past `VALID_WINDOW_SECS` that send has provably expired (can never take
+		// the seqno), so re-open and re-send at the same seqno; TON's strict-seqno rule still lands
+		// at most one. Mirrors the withdrawal path's expired-send re-sign.
 		let chain = self.rpc.seqno(gas_station).await.map_err(read_err)?;
 		if let Ok(state) = self.state.lock()
 			&& state.last_gas_seqno.is_some_and(|last| chain <= last)
+			&& state.last_gas_at.is_some_and(|at| at.elapsed() < Duration::from_secs(VALID_WINDOW_SECS))
 		{
 			return Ok(());
 		}
@@ -187,6 +196,7 @@ impl TonSweep {
 			&& let Ok(mut state) = self.state.lock()
 		{
 			state.last_gas_seqno = Some(chain);
+			state.last_gas_at = Some(Instant::now());
 		}
 		Ok(())
 	}
@@ -335,6 +345,10 @@ struct GasState {
 	/// The seqno of our last gas-station send. A new top-up waits until the chain advances
 	/// past it (TON drops, not queues, a future seqno), so only one is in flight.
 	last_gas_seqno: Option<u64>,
+	/// When that last send went out. Bounds the wait: a top-up toncenter accepted but that
+	/// never landed expires after `VALID_WINDOW_SECS`, so once this is that old the gate must
+	/// re-open (re-send at the same seqno) rather than freeze forever behind a dead send.
+	last_gas_at: Option<Instant>,
 	/// Last time a top-up was sent to an address — a best-effort grace against pile-ups.
 	recent_topups: HashMap<String, Instant>,
 }

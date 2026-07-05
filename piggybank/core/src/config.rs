@@ -159,10 +159,18 @@ impl AppConfig {
 			}),
 			None => None,
 		};
-		// The Tron rail: same no-op-when-unconfigured stance as BSC, gated on TRON_RPC_URL. The
-		// TronGrid REST endpoint serves both `/wallet/*` and the indexed `/v1/accounts/*`.
+		// TRC20 is FROZEN pending an energy-staking gas model — see EV-invest/banking#31. Burning
+		// TRX per transfer (~15-30 TRX ≈ $2-5) loses money against the flat withdrawal fee, so the
+		// whole rail is off: forcing `tron = None` here (regardless of TRON_RPC_URL) disables the
+		// deposit/withdrawal watchers, the sweep, custody, the wallet's TRC20 deposit/withdraw UI,
+		// and `configured_networks()` in one place. Re-enable = drop this `TRC20_FROZEN` gate once
+		// #31 lands. The TRON seams below stay compiled (a byte-for-byte mirror of BEP20/TON), just
+		// never constructed.
+		const TRC20_FROZEN: bool = true;
+		// Same no-op-when-unconfigured stance as BSC, gated on TRON_RPC_URL (TronGrid REST serves
+		// both `/wallet/*` and the indexed `/v1/accounts/*`) — but short-circuited while frozen.
 		let tron = match env::var("TRON_RPC_URL").ok().filter(|s| !s.is_empty()) {
-			Some(rpc_url) => Some(TronConfig {
+			Some(rpc_url) if !TRC20_FROZEN => Some(TronConfig {
 				rpc_url,
 				usdt_contract: env::var("TRON_USDT_CONTRACT")
 					.ok()
@@ -175,18 +183,23 @@ impl AppConfig {
 				expiration_secs: parse_opt("TRON_EXPIRATION_SECS")?.unwrap_or(60),
 				max_transfers_per_scan: parse_opt("TRON_MAX_TRANSFERS")?.unwrap_or(200),
 			}),
-			None => None,
+			_ => None, // unconfigured OR frozen (TRC20_FROZEN) ⇒ rail off
 		};
 		// The on-chain TON seams run only when TON_API_URL is set (a toncenter v3 base URL).
 		// Everything else defaults — mainnet USDT jetton master, 6s poll.
 		let ton = match env::var("TON_API_URL").ok().filter(|s| !s.is_empty()) {
 			Some(api_url) => {
 				// Default the testnet flag from the URL (the testnet toncenter lives on a `testnet.`
-				// host), so it moves together with the endpoint. Fail LOUD on the dangerous mismatch —
-				// a testnet URL with the flag off would run against testnet while minting mainnet-
-				// tagged deposit addresses (the user is then shown a wrong-network address). Other
-				// combinations (a custom testnet proxy URL + explicit TON_IS_TESTNET=true) are honored.
+				// host), so it moves together with the endpoint. Fail LOUD on EITHER dangerous
+				// mismatch against the standard toncenter hosts, because the flag drives the
+				// user-facing deposit-address tag and a wrong tag points the user at the wrong
+				// network (a stranded, uncredited deposit):
+				//   - a testnet URL with the flag off ⇒ testnet rail minting MAINNET-tagged addresses;
+				//   - the mainnet host with the flag on ⇒ mainnet rail minting TESTNET-tagged addresses.
+				// A CUSTOM endpoint (neither the mainnet nor the testnet toncenter host) is trusted to
+				// the explicit TON_IS_TESTNET — that is the custom-testnet-proxy escape hatch.
 				let url_is_testnet = api_url.contains("testnet");
+				let url_is_mainnet_host = api_url.contains("toncenter.com") && !url_is_testnet;
 				let is_testnet = env::var("TON_IS_TESTNET")
 					.ok()
 					.filter(|s| !s.is_empty())
@@ -194,6 +207,9 @@ impl AppConfig {
 					.unwrap_or(url_is_testnet);
 				if url_is_testnet && !is_testnet {
 					anyhow::bail!("TON_API_URL ({api_url}) is a testnet endpoint but TON_IS_TESTNET is not true — user-facing TON deposit addresses would carry the mainnet tag for a testnet rail; set TON_IS_TESTNET=true");
+				}
+				if url_is_mainnet_host && is_testnet {
+					anyhow::bail!("TON_API_URL ({api_url}) is the mainnet toncenter host but TON_IS_TESTNET is true — user-facing TON deposit addresses would carry the testnet tag for a mainnet rail; unset TON_IS_TESTNET or point TON_API_URL at a testnet/custom endpoint");
 				}
 				Some(TonConfig {
 					api_url,

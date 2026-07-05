@@ -226,17 +226,20 @@ impl TonCustody {
 		Ok(())
 	}
 
-	/// The next treasury seqno: `max(chain seqno, highest stored ton seqno + 1)` — monotonic
-	/// even if several withdrawals are in flight before the first lands, and it catches up to
-	/// the chain after a restart. Scoped to `network = 'ton'`.
-	async fn next_seqno(&self, treasury: &str) -> Result<u64, CustodyError> {
+	/// The next treasury seqno plan: the wallet's current on-chain `chain` seqno, and the `next`
+	/// seqno to sign at — `max(chain, highest stored ton seqno + 1)`, monotonic even if several
+	/// withdrawals are in flight before the first lands, and catching up to the chain after a
+	/// restart. Both are returned so the caller can tell a FUTURE (queued) seqno (`next > chain`)
+	/// from the next-in-line one (`next == chain`): a toncenter rejection means opposite things
+	/// for the two. Scoped to `network = 'ton'`.
+	async fn next_seqno(&self, treasury: &str) -> Result<SeqnoPlan, CustodyError> {
 		let chain = self.rpc.seqno(treasury).await.map_err(read_err)?;
 		let local_max: Option<i64> = sqlx::query_scalar("SELECT MAX(nonce) FROM withdrawal_broadcasts WHERE network = 'ton'")
 			.fetch_one(&self.pool)
 			.await
 			.map_err(db_unavailable)?;
 		let local_next = local_max.map(|n| n as u64 + 1).unwrap_or(0);
-		Ok(chain.max(local_next))
+		Ok(SeqnoPlan { chain, next: chain.max(local_next) })
 	}
 
 	/// On-chain Read-First before signing: the treasury's USDT jetton wallet must hold the
@@ -367,7 +370,8 @@ impl Custody for TonCustody {
 			.to_onchain(Network::Ton)
 			.map_err(|e| CustodyError::Rejected(format!("amount not representable on TON: {e}")))?;
 		self.ensure_treasury_funded(&treasury, amount).await?;
-		let seqno = self.next_seqno(&treasury).await?;
+		let plan = self.next_seqno(&treasury).await?;
+		let seqno = plan.next;
 		let valid_until = (now_unix() + VALID_WINDOW_SECS) as u32;
 		let (boc, msg_hash) = self.sign(request, &treasury, &treasury_jetton_wallet, amount, seqno, valid_until).await?;
 
@@ -375,10 +379,27 @@ impl Custody for TonCustody {
 		// seqno), never a freshly-signed one.
 		self.store_tx(request.withdrawal_id, seqno, valid_until, &boc, &msg_hash).await?;
 		match self.submit(&boc, false, request.withdrawal_id).await {
-			// The node refused this FIRST send synchronously — the message never entered the
-			// network, so free its stored seqno (mirrors BSC's `discard_tx`): a lingering row
-			// feeds `next_seqno`'s MAX(nonce) and would wedge every later send above a slot
-			// nothing will ever fill. Re-broadcasts are NOT discarded — a rejection there can
+			Err(CustodyError::Rejected(reason)) if plan.next > plan.chain => {
+				// A FUTURE (queued) seqno: an earlier withdrawal is still in flight, so the wallet's
+				// seqno hasn't reached this one. TON DROPS an out-of-order external message (EVM would
+				// queue a future nonce in the mempool), so toncenter's "external message not accepted"
+				// here is not a real rejection — it just isn't this send's turn. KEEP the stored row
+				// (do NOT discard) and report success: the `ton_withdrawal_watcher` re-broadcasts it
+				// once the chain seqno reaches it (its `advance_next_in_line`). Discarding would delete
+				// the row the watcher needs and wedge the withdrawal in `processing` forever.
+				info!(
+					withdrawal_id = %request.withdrawal_id,
+					seqno,
+					chain = plan.chain,
+					%reason,
+					"ton custody: queued behind an in-flight send (future seqno) — the watcher will broadcast it at its turn"
+				);
+				Ok(())
+			}
+			// A next-in-line send (`next == chain`) the node refused synchronously — the message
+			// never entered the network, so free its stored seqno (mirrors BSC's `discard_tx`): a
+			// lingering row feeds `next_seqno`'s MAX(nonce) and would wedge every later send above a
+			// slot nothing will ever fill. Re-broadcasts are NOT discarded — a rejection there can
 			// mean "already accepted".
 			Err(err @ CustodyError::Rejected(_)) => {
 				// Best-effort: free the burned seqno so the next withdrawal doesn't sign above a
@@ -423,6 +444,14 @@ impl Custody for TonCustody {
 			gas_station_gas,
 		}))
 	}
+}
+
+/// The seqno decision for a first send: the wallet's current on-chain seqno and the seqno the
+/// message was signed at. `next > chain` marks a queued (future) send whose toncenter "not
+/// accepted" is benign; `next == chain` is next-in-line, where the same reply is a real refusal.
+struct SeqnoPlan {
+	chain: u64,
+	next: u64,
 }
 
 fn now_unix() -> u64 {
