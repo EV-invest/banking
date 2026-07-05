@@ -225,8 +225,8 @@ fn now_unix() -> u64 {
 
 #[derive(Debug, thiserror::Error)]
 enum WatcherError {
-	#[error("rpc: {0}")]
-	Rpc(String),
+	// A per-owner RPC failure no longer propagates as a WatcherError — the scan skips that owner
+	// and continues (see `scan_once`), so the only cycle-fatal errors are DB, decode and credit.
 	#[error("decode: {0}")]
 	Decode(String),
 	#[error("credit: {0}")]
