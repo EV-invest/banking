@@ -108,11 +108,18 @@ impl TonDepositWatcher {
 			// makes the post-loop watermark advance safe for every owner.
 			let mut owner_from = from;
 			loop {
-				let page = self
-					.rpc
-					.incoming_jetton_transfers(owner, &self.config.usdt_master, owner_from, PAGE_LIMIT)
-					.await
-					.map_err(|e| WatcherError::Rpc(e.to_string()))?;
+				let page = match self.rpc.incoming_jetton_transfers(owner, &self.config.usdt_master, owner_from, PAGE_LIMIT).await {
+					Ok(page) => page,
+					Err(err) => {
+						// One owner's fetch failing MUST NOT abort the whole cycle: a `?` here froze the
+						// entire TON rail on a single unparseable stored address (indexer 422) — the
+						// cursor never advanced and NO user's deposits were seen. Skip just this owner;
+						// a transiently-failed valid owner is re-scanned within the LOOKBACK_SECS window
+						// next cycle, and a permanently-bad address is never a real deposit target.
+						warn!(owner, "ton deposit watcher: owner scan failed, skipping this owner this cycle: {err}");
+						break;
+					}
+				};
 				for transfer in &page.transfers {
 					self.credit(*user, network, transfer).await?;
 					high = high.max(transfer.now);

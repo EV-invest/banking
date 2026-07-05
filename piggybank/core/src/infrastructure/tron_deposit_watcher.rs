@@ -105,11 +105,16 @@ impl TronDepositWatcher {
 			// idempotent by `tx_ref`, so refetching the overlap costs nothing.
 			let mut address_from = cursor.saturating_sub(LOOKBACK_MS).max(0);
 			loop {
-				let page = self
-					.rpc
-					.incoming_trc20(address, &self.usdt_contract, address_from, self.max_transfers)
-					.await
-					.map_err(|e| WatcherError::Rpc(e.to_string()))?;
+				let page = match self.rpc.incoming_trc20(address, &self.usdt_contract, address_from, self.max_transfers).await {
+					Ok(page) => page,
+					Err(err) => {
+						// One address's fetch failing MUST NOT abort the whole cycle and freeze the rail
+						// for every other user (a `?` here would). Skip just this address; a transiently
+						// failed one is re-scanned within the LOOKBACK_MS window next cycle.
+						warn!(address, "tron deposit watcher: address scan failed, skipping this address this cycle: {err}");
+						break;
+					}
+				};
 				for transfer in &page.transfers {
 					self.credit(*user, network, transfer).await?;
 					high_watermark = high_watermark.max(transfer.block_timestamp);
@@ -118,10 +123,14 @@ impl TronDepositWatcher {
 					break;
 				}
 				if page.max_timestamp <= address_from {
-					// A full page that cannot advance the window (one timestamp). Defer: the
-					// unmoved cursor re-scans next cycle; crediting is idempotent by tx id.
-					warn!(address, "tron deposit watcher: full page without time progress — deferring scan");
-					return Ok(());
+					// A full page whose rows all share one timestamp, so time-paging can't advance
+					// within THIS address. The fetched page was credited; break to the NEXT address
+					// rather than `return`ing out of the whole cycle, which would starve every later
+					// address forever (the cursor never advances, so each cycle re-hits this same page
+					// first). The LOOKBACK_MS window re-scans this address next cycle; credit is
+					// idempotent by tx id.
+					warn!(address, "tron deposit watcher: full page without time progress — skipping this address for the cycle");
+					break;
 				}
 				// Resume AT the newest raw timestamp (inclusive): boundary rows are refetched
 				// and deduped, filtered rows still advance the window.
