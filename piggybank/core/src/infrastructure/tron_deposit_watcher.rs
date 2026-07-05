@@ -137,6 +137,17 @@ impl TronDepositWatcher {
 	}
 
 	async fn credit(&self, user: UserId, network: Network, transfer: &Trc20Transfer) -> Result<(), WatcherError> {
+		// Defence in depth: the scan already filters by `contract_address`, but a node that ignored
+		// the filter must never credit a non-USDT token as USDT. Skip ONLY on a NON-EMPTY, clearly
+		// different token: `token_info.address` can be absent (decodes to ""), and dropping those —
+		// or advancing the watermark past them — would silently lose a real deposit the server filter
+		// already vouched for. An empty token ⇒ trust the filter; compare case-insensitively so a
+		// non-canonical `TRON_USDT_CONTRACT` casing doesn't reject every row (canonical base58 is the
+		// documented form). Only a populated token that genuinely differs is skipped.
+		if !transfer.token.is_empty() && !transfer.token.eq_ignore_ascii_case(&self.usdt_contract) {
+			warn!(user = %user, tx = %transfer.transaction_id, token = %transfer.token, "tron deposit watcher: transfer contract does not match USDT — skipping");
+			return Ok(());
+		}
 		let amount = Usdt::from_onchain(network, transfer.value).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {
 			return Ok(()); // a legal but meaningless zero-value transfer — not a deposit.
@@ -146,7 +157,11 @@ impl TronDepositWatcher {
 		// withdrawals, a multisend). Keying on the bare `transaction_id` would credit the first
 		// recipient and silently drop the rest on the shared-key conflict. `to` is the queried
 		// address (the feed is scanned per-address with `only_to`), so `{tx}:{to}` is unique per
-		// credited recipient and stable across re-scans — the analogue of BEP20's `{tx}:{logindex}`.
+		// credited recipient and stable across re-scans. NOTE: this is weaker than BEP20's
+		// `{tx}:{logindex}` in one pathological case — two TRC20 Transfer events to the SAME address
+		// in ONE transaction (a looping contract) share `{tx}:{to}` and only the first is credited.
+		// The `/v1` trc20 feed exposes no per-event index to append; a normal wallet deposit is one
+		// Transfer per tx, so this is an accepted edge, not a real deposit path.
 		let tx_ref = TxRef::parse(&format!("{}:{}", transfer.transaction_id, transfer.to)).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
 			.await
