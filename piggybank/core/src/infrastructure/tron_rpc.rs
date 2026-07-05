@@ -197,6 +197,16 @@ impl TronRpc {
 			let detail = value.get("Error").and_then(Value::as_str).map(str::to_owned).unwrap_or_else(|| value.to_string());
 			return Err(TronRpcError::Rpc(format!("{path}: {status}: {detail}")));
 		}
+		// The indexed `/v1/*` surface ALSO signals errors with HTTP 200 + `{"success": false, ...}`
+		// (a bad/over-quota key, an internal indexer error), body otherwise well-formed. Without
+		// this, `decode_*` reads it as an empty `data` — "no transfers / zero balance" — and the
+		// scan advances as if clean, dropping a real deposit whose window falls out of lookback. An
+		// unactivated account is `success:true, data:[]`, so this only fires on genuine failures.
+		// The `/wallet/*` methods carry no `success` field, so this never mis-fires there.
+		if value.get("success").and_then(Value::as_bool) == Some(false) {
+			let detail = value.pointer("/error").and_then(Value::as_str).map(str::to_owned).unwrap_or_else(|| value.to_string());
+			return Err(TronRpcError::Rpc(format!("{path}: success=false: {detail}")));
+		}
 		// `/wallet` surfaces signal validation errors inline (handled per-method); an explicit
 		// top-level `Error` string is always a hard failure.
 		if let Some(err) = value.get("Error").and_then(Value::as_str) {
@@ -251,9 +261,13 @@ fn decode_account_state(response: &Value) -> AccountState {
 /// receipt yields its block number and whether the contract execution succeeded (`SUCCESS`).
 fn decode_receipt(info: &Value) -> Option<TronReceipt> {
 	let block_number = info.get("blockNumber").and_then(Value::as_u64)?;
-	// A pure-TRX transfer has no `receipt.result`; a contract call does. Absent ⇒ treat as success
-	// (the tx is in a block); present ⇒ require SUCCESS (a reverted call moved no tokens).
-	let success = info.pointer("/receipt/result").and_then(Value::as_str).is_none_or(|r| r == "SUCCESS");
+	// Every txid the settle path checks is a TRC20 (`TriggerSmartContract`) call, which ALWAYS
+	// carries a `receipt.result` (`SUCCESS`/`REVERT`/`OUT_OF_ENERGY`). Require it present AND
+	// `SUCCESS`: an absent or other result is NOT settled (it alerts as reverted) — the safe
+	// direction, matching BSC's receipt strictness. The provable-death re-sign gate reads only
+	// Some/None (a mined tx is Some regardless of `success`), so this never weakens its double-pay
+	// guard — it only makes the confirmation settle stricter.
+	let success = info.pointer("/receipt/result").and_then(Value::as_str).is_some_and(|r| r == "SUCCESS");
 	Some(TronReceipt { block_number, success })
 }
 
@@ -319,8 +333,13 @@ mod tests {
 		assert!(ok.success);
 		let reverted = decode_receipt(&json!({ "blockNumber": 100, "receipt": { "result": "REVERT" } })).unwrap();
 		assert!(!reverted.success);
-		// A native TRX transfer has no receipt.result — mined ⇒ success.
-		assert!(decode_receipt(&json!({ "blockNumber": 100 })).unwrap().success);
+		// A mined tx with NO `receipt.result` is not treated as a successful contract call — the
+		// settle path only ever checks TRC20 txids (which always carry a result), so an absent
+		// result is NOT settled (the safe direction). Still `Some` (mined), so the provable-death
+		// gate — which reads only Some/None — sees it as landed and never re-signs it.
+		let no_result = decode_receipt(&json!({ "blockNumber": 100 })).unwrap();
+		assert_eq!(no_result.block_number, 100);
+		assert!(!no_result.success);
 	}
 
 	#[test]
