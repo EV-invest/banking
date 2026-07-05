@@ -17,9 +17,13 @@
 //! **Cursor (deliberate divergence from per-account `lt`).** A single network-scoped row in
 //! `deposit_scan_cursor` holds a **unix-time** high-watermark (`transaction_now`), not a
 //! logical time. A logical time (`lt`) is monotonic only *per account*, so one network-wide
-//! `lt` cursor over many owners could skip a lagging owner's deposit; a wall-clock watermark
-//! is globally comparable, so it cannot. Each cycle re-scans a small `LOOKBACK_SECS` window
-//! below the watermark to absorb indexer lag — harmless, because crediting is idempotent.
+//! `lt` cursor over many owners would skip a lagging owner's deposit outright. A wall-clock
+//! watermark is globally comparable, so the only way it drops a deposit is if the indexer
+//! surfaces a final transaction MORE than `LOOKBACK_SECS` after its `transaction_now` while a
+//! busier owner has already pushed the watermark past it — i.e. the safety margin is exactly
+//! `LOOKBACK_SECS` of effective indexer lag, not infinite. It is set generously for that
+//! reason. Each cycle re-scans that window below the watermark; the overlap is idempotent
+//! (`record_deposit` dedupes by `transaction_hash`).
 
 use std::{sync::Arc, time::Duration};
 
@@ -46,9 +50,11 @@ use crate::{
 const PAGE_LIMIT: u32 = 128;
 
 /// Seconds re-scanned below the cursor each cycle, to absorb indexer lag (the indexer can
-/// surface a final transaction slightly after its `transaction_now`). The overlap is
-/// idempotent — `record_deposit` dedupes by `transaction_hash`.
-const LOOKBACK_SECS: u64 = 120;
+/// surface a final transaction after its `transaction_now`). This IS the safety margin against
+/// dropping a lagging owner's deposit (see the module docstring), so it is set well above
+/// toncenter's observed lag rather than at the bare minimum. The overlap is idempotent —
+/// `record_deposit` dedupes by `transaction_hash`.
+const LOOKBACK_SECS: u64 = 900;
 
 pub struct TonDepositWatcher {
 	pool: PgPool,
@@ -115,11 +121,15 @@ impl TonDepositWatcher {
 					break;
 				}
 				if page.max_now <= owner_from {
-					// A full page that cannot advance the window (all entries share the
-					// start second). Defer: the unmoved cursor re-scans next cycle, and
-					// crediting is idempotent by tx hash.
-					warn!(owner, "ton deposit watcher: full page without time progress — deferring scan");
-					return Ok(());
+					// A full page whose entries all share the start second, so time-paging can't
+					// advance within THIS owner (≥128 credits to one address in one second — a
+					// pathological case a time-cursor indexer genuinely can't page past). The 128
+					// fetched here were credited; break to the NEXT owner rather than `return`ing
+					// out of the whole cycle, which would starve every later owner forever (the
+					// cursor never advances, so each cycle re-hits this same stuck page first). The
+					// `LOOKBACK_SECS` window re-scans this owner next cycle; crediting is idempotent.
+					warn!(owner, "ton deposit watcher: full page without time progress — skipping this owner for the cycle");
+					break;
 				}
 				// Resume AT the newest raw time (inclusive): boundary entries are refetched
 				// and deduped, filtered rows still advance the window.
