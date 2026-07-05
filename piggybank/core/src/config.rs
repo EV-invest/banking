@@ -159,10 +159,18 @@ impl AppConfig {
 			}),
 			None => None,
 		};
-		// The Tron rail: same no-op-when-unconfigured stance as BSC, gated on TRON_RPC_URL. The
-		// TronGrid REST endpoint serves both `/wallet/*` and the indexed `/v1/accounts/*`.
+		// TRC20 is FROZEN pending an energy-staking gas model — see EV-invest/banking#31. Burning
+		// TRX per transfer (~15-30 TRX ≈ $2-5) loses money against the flat withdrawal fee, so the
+		// whole rail is off: forcing `tron = None` here (regardless of TRON_RPC_URL) disables the
+		// deposit/withdrawal watchers, the sweep, custody, the wallet's TRC20 deposit/withdraw UI,
+		// and `configured_networks()` in one place. Re-enable = drop this `TRC20_FROZEN` gate once
+		// #31 lands. The TRON seams below stay compiled (a byte-for-byte mirror of BEP20/TON), just
+		// never constructed.
+		const TRC20_FROZEN: bool = true;
+		// Same no-op-when-unconfigured stance as BSC, gated on TRON_RPC_URL (TronGrid REST serves
+		// both `/wallet/*` and the indexed `/v1/accounts/*`) — but short-circuited while frozen.
 		let tron = match env::var("TRON_RPC_URL").ok().filter(|s| !s.is_empty()) {
-			Some(rpc_url) => Some(TronConfig {
+			Some(rpc_url) if !TRC20_FROZEN => Some(TronConfig {
 				rpc_url,
 				usdt_contract: env::var("TRON_USDT_CONTRACT")
 					.ok()
@@ -175,7 +183,7 @@ impl AppConfig {
 				expiration_secs: parse_opt("TRON_EXPIRATION_SECS")?.unwrap_or(60),
 				max_transfers_per_scan: parse_opt("TRON_MAX_TRANSFERS")?.unwrap_or(200),
 			}),
-			None => None,
+			_ => None, // unconfigured OR frozen (TRC20_FROZEN) ⇒ rail off
 		};
 		// The on-chain TON seams run only when TON_API_URL is set (a toncenter v3 base URL).
 		// Everything else defaults — mainnet USDT jetton master, 6s poll.
