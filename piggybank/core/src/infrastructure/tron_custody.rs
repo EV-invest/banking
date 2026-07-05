@@ -37,11 +37,18 @@ use crate::{
 	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
 };
 
-/// Extra solidified-time that must pass beyond a stored tx's `expiration` before it is
-/// treated as provably dead (re-signable). Covers block-slot granularity and node clock
-/// tolerance; generous, because the cost of waiting is a minute of latency while the cost
-/// of a premature re-sign is a double payout.
-const EXPIRATION_MARGIN_MS: i64 = 60_000;
+/// Extra solidified-time that must pass beyond a stored tx's `expiration` before it is treated
+/// as provably dead (re-signable). Covers block-slot granularity, node clock tolerance, AND the
+/// cross-call inconsistency of a load-balanced endpoint: the provable-death gate reads the solid
+/// head and the receipt in two separate calls, which on an LB (e.g. TronGrid) can hit different
+/// backends — an advanced node reporting a solid head past expiration while a lagging node has not
+/// yet indexed the (solidified) block carrying the tx, returning no receipt. That false "dead"
+/// re-signs a still-landable tx → a double payout. The margin is the grace that lets a lagging
+/// receipt node catch up before we ever re-sign; set well above observed LB lag. For the strongest
+/// guarantee point `TRON_RPC_URL` at a single consistent full node rather than a load balancer.
+/// The cost of waiting is a few minutes of withdrawal latency; the cost of re-signing early is a
+/// double payout — so this is deliberately generous.
+const EXPIRATION_MARGIN_MS: i64 = 180_000;
 
 /// The reserved sweep gas-station wallet id (shared with the sweep): a TRX-only account whose
 /// funding view rides along on the treasury screen so an operator funds the RIGHT wallet.
