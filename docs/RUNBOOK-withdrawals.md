@@ -100,6 +100,30 @@ this (`cancel` is legal only from `Queued`) — correct per the cardinal rule, n
 
 ---
 
+## TON — a `processing` withdrawal with a kept broadcast row that isn't landing
+
+TON custody signs each withdrawal at a monotonic future seqno and lets the confirmation
+watcher re-broadcast it when the chain seqno reaches it (the v4R2 wallet DROPS an
+out-of-order seqno instead of queueing it, unlike an EVM mempool). So a `broadcast`'s
+first send at a **future** seqno gets toncenter's "external message not accepted" — which
+is benign (not this send's turn). Custody therefore **keeps** the `withdrawal_broadcasts`
+row and reports success rather than parking, and the watcher drains it in order.
+
+Residual to know about: the v4R2 contract fails the seqno check *before* the signature /
+subwallet checks, so at a future seqno a genuinely bad message (should never happen — the
+signer we trust produced it) is **indistinguishable** from a benign queued one and is also
+kept. It can never land (no double-pay — settle still requires a proven outgoing transfer),
+but it will sit in `processing`, and because the row exists the fail-void guard refuses to
+auto-void it (Step 1 → "a row exists ⇒ STOP"). To clear such a case:
+
+1. Read the stored send: `SELECT nonce AS seqno, expiration, tx_hash FROM withdrawal_broadcasts WHERE withdrawal_id = '<id>' AND network = 'ton';`
+2. Compare the treasury wallet's **current on-chain seqno** to the stored `seqno`. If the
+   chain seqno is already **past** the stored one and there is still **no** matching outgoing
+   USDT transfer of the net amount (the watcher's settle proof), the message provably never
+   applied — it is safe to `FailWithdrawal` (the reservation was never spent). If the chain
+   seqno has **not** reached it yet, it is simply still queued — wait (the reaper only
+   alerts; it never auto-fails).
+
 ## Dead keys (KEK epoch) — diagnostics & rotation
 
 A key sealed under a different `WALLET_KEK` than the signer booted with is **provably
