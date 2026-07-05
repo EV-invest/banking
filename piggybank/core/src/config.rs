@@ -182,11 +182,16 @@ impl AppConfig {
 		let ton = match env::var("TON_API_URL").ok().filter(|s| !s.is_empty()) {
 			Some(api_url) => {
 				// Default the testnet flag from the URL (the testnet toncenter lives on a `testnet.`
-				// host), so it moves together with the endpoint. Fail LOUD on the dangerous mismatch —
-				// a testnet URL with the flag off would run against testnet while minting mainnet-
-				// tagged deposit addresses (the user is then shown a wrong-network address). Other
-				// combinations (a custom testnet proxy URL + explicit TON_IS_TESTNET=true) are honored.
+				// host), so it moves together with the endpoint. Fail LOUD on EITHER dangerous
+				// mismatch against the standard toncenter hosts, because the flag drives the
+				// user-facing deposit-address tag and a wrong tag points the user at the wrong
+				// network (a stranded, uncredited deposit):
+				//   - a testnet URL with the flag off ⇒ testnet rail minting MAINNET-tagged addresses;
+				//   - the mainnet host with the flag on ⇒ mainnet rail minting TESTNET-tagged addresses.
+				// A CUSTOM endpoint (neither the mainnet nor the testnet toncenter host) is trusted to
+				// the explicit TON_IS_TESTNET — that is the custom-testnet-proxy escape hatch.
 				let url_is_testnet = api_url.contains("testnet");
+				let url_is_mainnet_host = api_url.contains("toncenter.com") && !url_is_testnet;
 				let is_testnet = env::var("TON_IS_TESTNET")
 					.ok()
 					.filter(|s| !s.is_empty())
@@ -194,6 +199,9 @@ impl AppConfig {
 					.unwrap_or(url_is_testnet);
 				if url_is_testnet && !is_testnet {
 					anyhow::bail!("TON_API_URL ({api_url}) is a testnet endpoint but TON_IS_TESTNET is not true — user-facing TON deposit addresses would carry the mainnet tag for a testnet rail; set TON_IS_TESTNET=true");
+				}
+				if url_is_mainnet_host && is_testnet {
+					anyhow::bail!("TON_API_URL ({api_url}) is the mainnet toncenter host but TON_IS_TESTNET is true — user-facing TON deposit addresses would carry the testnet tag for a mainnet rail; unset TON_IS_TESTNET or point TON_API_URL at a testnet/custom endpoint");
 				}
 				Some(TonConfig {
 					api_url,
