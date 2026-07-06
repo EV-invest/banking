@@ -90,7 +90,11 @@ impl Reconciliation {
 					error!(custody = %inv.custody, claims = %inv.claims, "reconciliation: CASH INVARIANT BROKEN — sum(custody) != sum(claims)");
 				}
 			}
-			Err(err) => warn!("reconciliation: cash-invariant read failed: {err}"),
+			// A read failure leaves custody/claims at 0, so `clean()` would read the cash leg
+			// as a trivially-satisfied `0 == 0`. Alert (not warn): a persistent failure — e.g.
+			// an oversized `lookup_accounts` at scale — silently disables the conservation
+			// check, and must not be mistaken for a transient TB blip that self-heals.
+			Err(err) => error!("reconciliation: CASH INVARIANT UNCHECKED — cash-invariant read failed, conservation not verified this pass: {err}"),
 		}
 
 		// (2) Clearing reservation vs the gross of in-flight withdrawals. `queued`/
