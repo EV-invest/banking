@@ -1,16 +1,12 @@
 "use client";
 
-import { ArrowUpFromLine, BadgeCheck, Home, Landmark, LayoutGrid, LineChart, ListChecks, LogOut, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowUpFromLine, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect } from "react";
+import type { ReactNode } from "react";
 
-import { Logo } from "@/application/layout/logo";
-import { useProfile } from "@/entities/user/model/profile-store";
-import { apiPath, withBasePath } from "@/shared/config/base-path";
 import { cn } from "@/shared/lib/cn";
-import { csrfHeader } from "@/shared/lib/csrf-client";
-import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
+import { useSession } from "@/shared/lib/use-session";
 
 interface NavItem {
   href: string;
@@ -52,11 +48,7 @@ export function Sidebar() {
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
   return (
-    <aside className="sticky top-24 flex h-[calc(100vh-6rem)] w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
-      <Link href="/" aria-label="EV Investment — home" className="block">
-        <Logo className="h-9 w-auto text-main-mist" />
-      </Link>
-
+    <aside className="sticky top-16 flex h-[calc(100vh-4rem)] w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
       <nav aria-label="Primary" className="flex flex-col gap-[18px]">
         <Group label="Fund">
           {FUND.map((item) => (
@@ -86,13 +78,9 @@ export function Sidebar() {
 
       <div className="flex-1" />
 
-      <div className="flex flex-col gap-3">
-        <nav aria-label="Secondary">
-          <NavLink item={{ href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") }} active={pathname.startsWith("/settings")} />
-        </nav>
-        <div className="h-px w-full bg-border" />
-        <AccountChip />
-      </div>
+      <nav aria-label="Secondary">
+        <NavLink item={{ href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") }} active={pathname.startsWith("/settings")} />
+      </nav>
     </aside>
   );
 }
@@ -121,77 +109,4 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       {item.label}
     </Link>
   );
-}
-
-// Account chip bound to the BFF session (shared `useSession` — one fetch per page load).
-// Behind the auth gate this is always a real user; a dropped/stale session (cookie
-// present, server-side session gone) bounces to /login. The display name prefers the
-// profile store's preferred/legal name, falling back to the email heuristic until it
-// resolves.
-function AccountChip() {
-  const pathname = usePathname();
-  const session = useSession();
-  const profile = useProfile();
-  const onProfile = pathname.startsWith("/profile");
-
-  // undefined = still loading ("…"), null = no usable session (neutral chip).
-  const email = session === null ? undefined : (session.user?.email ?? null);
-  const dead = session !== null && session !== SESSION_UNAVAILABLE && !session.authenticated;
-
-  useEffect(() => {
-    // Cookie present but the server-side session is gone (e.g. a restart): the proxy
-    // let us through on cookie presence, so bounce to a fresh sign-in. A transient
-    // fetch failure (SESSION_UNAVAILABLE) keeps the chip neutral — no redirect on a blip.
-    if (dead) window.location.href = withBasePath("/login");
-  }, [dead]);
-
-  const name = profile?.preferred_name || profile?.legal_name || displayName(email);
-
-  async function signOut() {
-    await fetch(apiPath("/api/auth/logout"), { method: "POST", headers: csrfHeader() });
-    window.location.href = withBasePath("/loggedout");
-  }
-
-  return (
-    <div className="flex items-center gap-2 border-t border-border pt-[14px]">
-      <Link
-        href="/profile"
-        aria-current={onProfile ? "page" : undefined}
-        className={cn("flex min-w-0 flex-1 items-center gap-[10px] rounded-lg px-1.5 py-1 transition-colors hover:bg-foreground/[0.04]", onProfile && "bg-main-surface")}
-      >
-        <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initialsOf(email)}</span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-main-mist">{name}</p>
-          <p className="flex items-center gap-[5px] text-[11px] font-medium text-main-accent-t1">
-            <BadgeCheck className="size-3" /> Verified
-          </p>
-        </div>
-      </Link>
-      <button type="button" onClick={signOut} aria-label="Sign out" className="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
-        <LogOut className="size-4" />
-      </button>
-    </div>
-  );
-}
-
-function displayName(email: string | null | undefined): string {
-  if (email === undefined) return "…";
-  if (!email) return "Account";
-  const handle = email.split("@")[0] ?? email;
-  const parts = handle.split(/[._-]+/).filter(Boolean);
-  const first = parts[0] ? cap(parts[0]) : handle;
-  const last = parts[1] ? `${parts[1][0]!.toUpperCase()}.` : "";
-  return [first, last].filter(Boolean).join(" ");
-}
-
-function initialsOf(email: string | null | undefined): string {
-  if (!email) return "EV";
-  const parts = (email.split("@")[0] ?? "").split(/[._-]+/).filter(Boolean);
-  const a = parts[0]?.[0] ?? email[0] ?? "E";
-  const b = parts[1]?.[0] ?? "";
-  return (a + b).toUpperCase();
-}
-
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }

@@ -59,5 +59,12 @@ function withCsp(res: NextResponse, csp: string): NextResponse {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  // "/" is listed explicitly: the negative-lookahead alone never matches the
+  // bare index (basePath is stripped before matching, leaving the root outside
+  // the pattern), so an unauthenticated visitor reached the (app) shell at the
+  // zone root while every sub-route correctly bounced to /login. Gate the index too.
+  // `mfe/` is excluded like `_next/static`: the public/mfe/* element-remote bundles
+  // are static assets the conductor injects even for anonymous visitors (the chip
+  // renders its own signed-out CTA), so they must be reachable without a session.
+  matcher: ["/", "/((?!api|_next/static|_next/image|favicon.ico|mfe/).*)"],
 };

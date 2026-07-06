@@ -11,13 +11,16 @@
     "lint": "eslint .",
     "check": "tsc --noEmit",
     "test": "node --test --experimental-strip-types 'shared/**/*.test.ts'",
-    "gen:api": "openapi-ts"
+    "gen:api": "openapi-ts",
+    "build:mfe": "node mfe/build.mjs && tailwindcss -i mfe/account-chip/mfe.css -o public/mfe/account-chip.css --minify",
+    "predev": "npm run build:mfe",
+    "prebuild": "npm run build:mfe"
   },
   "dependencies": {
     "@evinvest/analytics": "^0.1.2",
     "@evinvest/error-monitoring": "^0.1.0",
     "@evinvest/experiments": "^0.1.0",
-    "@evinvest/uikit": "^0.4.0",
+    "@evinvest/uikit": "^0.6.0",
     "@sentry/nextjs": "^10.58.0",
     "@sentry/node": "^10.58.0",
     "@sentry/react": "^10.58.0",
@@ -32,8 +35,10 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
     "@tailwindcss/postcss": "^4.1.14",
     "@types/node": "^24.7.0",
+    "esbuild": "^0.25.0",
     "@types/react": "^19.2.1",
     "@types/react-dom": "^19.2.1",
     "@hey-api/openapi-ts": "^0.98.1",

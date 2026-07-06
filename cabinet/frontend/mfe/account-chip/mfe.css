@@ -1,0 +1,11 @@
+/* Stylesheet for the account-chip element remote. It mounts into the host's LIGHT DOM, so
+   it must NOT ship preflight or fonts (the host already has them) — utilities only. Every
+   rule is pre-assigned to the low-priority `reamfe` cascade layer so the host's own styles
+   always win (the conductor also demotes /mfe/ stylesheets into this layer). Tokens come
+   from the same @evinvest/uikit source the app uses, so classes like `text-main-mist` /
+   `bg-main-accent-t1` / `border-border` resolve identically. */
+@import "tailwindcss/theme.css" layer(reamfe);
+@import "tailwindcss/utilities.css" layer(reamfe);
+@import "@evinvest/uikit/styles/tokens.css" layer(reamfe);
+
+@source "../../features/account-chip/ui/account-chip.tsx";
