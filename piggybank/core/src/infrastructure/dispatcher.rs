@@ -5,8 +5,12 @@
 //! every `queued` withdrawal against **both** liquidity gates — the TigerBeetle rail
 //! accounting balance AND the custody adapter's real on-chain treasury view — and
 //! dispatches the ones both cover, so a rail top-up self-heals the queue within one
-//! interval. The reaper's 24h auto-cancel of `queued` withdrawals remains the final
-//! backstop (the de-facto rail top-up SLA).
+//! interval. Before any dispatch it also honors the outflow policy gates the sync RPC
+//! boundary enforces — the global read-only kill-switch (skips the whole sweep) and the
+//! per-owner cross-plane freeze — failing closed, so the async path can't bypass an
+//! operator pause or an AML freeze on the accept-and-queue backlog. The reaper's 24h
+//! auto-cancel of `queued` withdrawals remains the final backstop (the de-facto rail
+//! top-up SLA).
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -23,6 +27,7 @@ use uuid::Uuid;
 
 use crate::{
 	application::withdrawals as withdrawal_app,
+	infrastructure::{bridge, operations},
 	ports::{Custody, WithdrawalRepository, ledger::Ledger},
 };
 
@@ -77,6 +82,19 @@ impl Dispatcher {
 	/// static check, dispatch in full, and mass-park at the custody backstop. What no
 	/// longer fits stays queued for the next top-up.
 	pub async fn sweep(&self) -> Result<usize, sqlx::Error> {
+		// The read-only kill-switch pauses ALL outflows, but its only synchronous gate is the
+		// user RPC boundary (`unfrozen_caller`). A withdrawal already `queued` when an operator
+		// flips read-only would otherwise keep dispatching here every interval — bypassing the
+		// switch on exactly the incident it exists for. Honor it on the async path too, failing
+		// closed: while paused, or if the flag can't be read, dispatch nothing this cycle.
+		match operations::is_read_only(&self.pool).await {
+			Ok(false) => {}
+			Ok(true) => return Ok(0),
+			Err(err) => {
+				warn!("dispatcher: read-only check failed — pausing this sweep (fail-closed): {err}");
+				return Ok(0);
+			}
+		}
 		let queued: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM withdrawals WHERE state = 'queued' ORDER BY created_at")
 			.fetch_all(&self.pool)
 			.await?;
@@ -95,6 +113,18 @@ impl Dispatcher {
 					continue;
 				}
 			};
+			// Cross-plane freeze / disable: a queued withdrawal whose owner was SUSPENDED (or
+			// disabled) must not be dispatched, even though it slipped past the sync gate at
+			// request time. Mirror `unfrozen_caller` — skip a frozen owner, and fail closed
+			// (skip this cycle) when the control-plane flag can't be read.
+			match bridge::is_frozen(&self.pool, withdrawal.user()).await {
+				Ok(false) => {}
+				Ok(true) => continue,
+				Err(err) => {
+					warn!(withdrawal_id = %id, "dispatcher: freeze check failed — skipping this cycle (fail-closed): {err}");
+					continue;
+				}
+			}
 			let net = withdrawal.net_amount();
 			let network = withdrawal.network();
 			let spent = in_flight.get(&network).copied().unwrap_or(Usdt::ZERO);

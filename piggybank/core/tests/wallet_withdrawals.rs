@@ -590,6 +590,66 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	h.relay.drain().await;
 }
 
+/// A queued withdrawal whose owner is frozen (a concierge SUSPENDED lifecycle event, or a
+/// disabled account) must NOT be dispatched by the async sweep, even with both liquidity
+/// gates satisfied. The read-only kill-switch and the cross-plane freeze are enforced at the
+/// sync RPC boundary (`unfrozen_caller`); the sweep re-checks the freeze so anything already
+/// in the accept-and-queue backlog can't bypass an AML hold within ~30s of a rail top-up.
+/// Lifting the freeze lets the very next sweep dispatch it — proving the freeze was the only
+/// thing holding an otherwise-dispatchable withdrawal.
+#[tokio::test]
+async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	// TON with a small top-up keeps this test's row off the rails other tests queue on and
+	// the shared TON rail out of a huge dispatch (mirrors the sibling dispatcher test).
+	let network = Network::Ton;
+	deposit(&h, user, Network::Bep20, "100").await;
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("60")).await.unwrap();
+	h.relay.drain().await;
+
+	let custody = Arc::new(TestCustody::short_everywhere());
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		custody.as_ref(),
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues the request");
+	h.relay.drain().await;
+
+	// Both liquidity gates now pass on-chain — only the freeze may hold it.
+	custody.set(network, TreasuryView::OnChain(usdt("1000000000")));
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+
+	// Freeze the owner (mirrors a concierge SUSPENDED: `frozen` set, status still active).
+	sqlx::query("UPDATE users SET frozen = TRUE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+	dispatcher.sweep().await.unwrap();
+	let held = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(held.state(), WithdrawalState::Queued, "a frozen owner's queued withdrawal is not dispatched by the sweep");
+
+	// Lift the freeze — the next sweep dispatches it, proving the freeze was the only hold.
+	sqlx::query("UPDATE users SET frozen = FALSE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+	assert!(dispatcher.sweep().await.unwrap() >= 1, "once unfrozen, the topped-up rail dispatches it");
+	let processing = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(processing.state(), WithdrawalState::Processing, "the dispatcher dispatched it once the freeze lifted");
+	h.relay.drain().await;
+
+	// Settle so the shared rails aren't left with a dangling in-flight reservation.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+}
+
 /// One sweep must account the liquidity it already dispatched: three queued
 /// withdrawals summing past the rail's on-chain treasury each pass a *static* gate
 /// (the balances only move when the relay settles), so an unaccounted sweep would
