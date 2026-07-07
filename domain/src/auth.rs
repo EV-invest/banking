@@ -19,7 +19,7 @@ use crate::error::DomainError;
 ///
 /// Serializes transparently as the bare string so the wire/storage shape is just
 /// the subject value.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct AuthSubject(String);
 

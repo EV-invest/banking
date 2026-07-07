@@ -48,7 +48,7 @@ pub trait Custody: Gateway {
 /// A rail treasury's funding view, read live from the chain: where the operator funds
 /// (`address`) and what is actually there. The balance fields degrade to `None` when
 /// their chain read fails — the address alone is still useful.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct TreasuryFunding {
 	/// The treasury hot wallet — fund USDT (liquidity) + native coin (gas) here.
 	pub address: String,
@@ -82,7 +82,7 @@ pub fn format_native_units(units: u128, decimals: u32) -> String {
 }
 /// A request to broadcast the on-chain leg of a withdrawal. `withdrawal_id` is the
 /// idempotency key the custodian MUST dedupe on.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct BroadcastRequest {
 	pub withdrawal_id: Uuid,
 	pub network: Network,

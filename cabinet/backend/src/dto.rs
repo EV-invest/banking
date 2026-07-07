@@ -139,7 +139,7 @@ impl From<cc::ListSessionsResponse> for SessionList {
 
 // ── piggybank: wallet ────────────────────────────────────────────────────────
 
-#[derive(Serialize, Default)]
+#[derive(Default, Serialize)]
 pub struct Balance {
 	pub available: String,
 	pub invested: String,

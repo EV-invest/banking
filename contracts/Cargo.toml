@@ -6,12 +6,12 @@ description = "gRPC wire contracts for the EV banking hub — generated tonic cl
 license = "BlueOak-1.0.0"
 publish = false
 
-[lints]
-workspace = true
-
 [dependencies]
 prost.workspace = true
 tonic.workspace = true
 
 [build-dependencies]
 tonic-build.workspace = true
+
+[lints]
+workspace = true

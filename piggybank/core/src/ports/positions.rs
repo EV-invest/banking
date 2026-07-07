@@ -23,7 +23,7 @@ pub trait FundPositionReader: Send + Sync {
 	async fn list(&self, user: UserId) -> Result<Vec<FundPosition>, DomainError>;
 }
 /// A per-(user, service) position projection.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct FundPosition {
 	pub service: ServiceId,
 	/// Net cash invested (average cost), for P&L against the current value.

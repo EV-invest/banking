@@ -15,7 +15,7 @@ use crate::{AuthError, Claims};
 /// at the verifier (distinct `aud` + `typ`), not by incidental downstream parsing:
 /// user-facing data services accept only [`Client`](TokenClass::Client) tokens; a
 /// genuinely inter-service surface accepts only [`Service`](TokenClass::Service).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TokenClass {
 	/// A client access token (`aud=banking-core`, `typ=access`) — the user data plane.
 	Client,

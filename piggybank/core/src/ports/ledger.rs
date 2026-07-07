@@ -53,7 +53,7 @@ pub trait Ledger: Gateway {
 }
 /// The reconciliation read of the cash plane's global double-entry invariant: the summed
 /// posted custody side and claims side. They must be equal (`balanced()`).
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct CashInvariant {
 	pub custody: u128,
 	pub claims: u128,
@@ -104,7 +104,7 @@ impl From<LedgerError> for DomainError {
 /// ledger, 18-dp shares for the Share ledger) — the gateway is currency-agnostic, so
 /// callers wrap into the typed `Usdt`/`Shares` at the boundary. Zero when the account
 /// doesn't exist yet.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct LedgerBalance {
 	/// The settled balance on the natural side (`credits − debits` for a claim).
 	pub posted: u128,
@@ -129,7 +129,7 @@ impl LedgerBalance {
 /// `amount` is in the ledger's base units (`Usdt`/`Shares` converted via `base_units()`
 /// by the relay); `reference` is stamped into `user_data_128` (the aggregate id) for
 /// reconciliation.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct LedgerTransfer {
 	pub id: u128,
 	pub debit: LedgerAccountKey,
@@ -140,7 +140,7 @@ pub struct LedgerTransfer {
 }
 
 /// Whether a [`PendingCompletion`] posts (commits) or voids (releases) the pending.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompletionKind {
 	Post,
 	Void,
@@ -148,7 +148,7 @@ pub enum CompletionKind {
 
 /// Completes a previously-created pending transfer. Carries the original accounts
 /// and amount so the adapter can re-issue the completion idempotently on retry.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct PendingCompletion {
 	/// The completion transfer's own deterministic id.
 	pub id: u128,

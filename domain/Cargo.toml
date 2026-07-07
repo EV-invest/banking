@@ -4,18 +4,18 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
-[lints]
-workspace = true
-
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom.workspace = true
 ev = { workspace = true, features = ["wasm"] }
-
-[dev-dependencies]
-serde_json.workspace = true
+getrandom.workspace = true
 
 [dependencies]
 ev.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

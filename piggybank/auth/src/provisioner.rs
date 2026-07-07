@@ -40,7 +40,7 @@ pub struct ProvisionRequest {
 }
 
 /// The snapshot core returns after provisioning/looking up a user.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ProvisionedUser {
 	pub user_id: String,
 	pub email: String,

@@ -55,7 +55,7 @@ impl WithdrawalPolicy {
 /// Lifecycle of a withdrawal. `Queued`/`Processing` are the in-flight states (the
 /// gross is reserved as a TB pending against `WithdrawalClearing`); the rest are
 /// terminal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WithdrawalState {
 	/// Accepted and reserved against the user's claim (into clearing), awaiting a
@@ -103,7 +103,7 @@ impl WithdrawalState {
 /// [`Withdrawal::rehydrate`] (load from the store, no events). The settle/fail
 /// commands each accumulate one event, drained by the repository into the event log
 /// + outbox in the same unit of work.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Withdrawal {
 	id: WithdrawalId,
 	user: UserId,
@@ -319,7 +319,7 @@ impl AggregateRoot for Withdrawal {
 /// (user, network, amount, fee, address) so the relay maps an event to its ledger
 /// ops and the custody broadcast with no extra read. Internally tagged so the stored
 /// JSON is self-describing.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WithdrawalEvent {
 	/// Accepted + reserved against the user's claim into clearing (relay: pending

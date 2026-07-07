@@ -26,7 +26,7 @@ pub trait NavMarks: Send + Sync {
 /// One operator valuation mark for a fund. NAV is derived (`aum / units_outstanding`)
 /// and frozen until the next mark; `posted_at_unix` is the age seam for the staleness
 /// guard, `posted_by` the operator subject (the trust seam).
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Valuation {
 	pub service: ServiceId,
 	pub aum: Usdt,

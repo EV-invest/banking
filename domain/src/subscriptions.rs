@@ -30,7 +30,7 @@ pub struct SubscriptionTag;
 /// The subscription aggregate — an immutable record of one mint. Construct via
 /// [`Subscription::open`] (raises [`SubscriptionEvent::Subscribed`]) or
 /// [`Subscription::rehydrate`] (load from the store, no events).
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Subscription {
 	id: SubscriptionId,
 	user: UserId,
@@ -126,7 +126,7 @@ impl AggregateRoot for Subscription {
 /// Facts raised by the [`Subscription`] aggregate. `Subscribed` carries everything the
 /// relay needs to post both legs (cash + mint) with no extra read. Internally tagged so
 /// the stored JSON is self-describing.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SubscriptionEvent {
 	/// Units minted (relay: `Dr UserClaim / Cr ServiceClaim` for `cash`, then

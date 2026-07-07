@@ -43,7 +43,7 @@ const MAX_SAGA_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// One reaper sweep's outcome — counts so the run loop and a test can assert without
 /// scraping logs.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct ReaperReport {
 	/// `processing` withdrawals past the max age — alerted, never auto-failed.
 	pub stuck_processing_withdrawals: usize,

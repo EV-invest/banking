@@ -23,7 +23,7 @@ const BASE58_ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmno
 const SCALE: u128 = 10u128.pow(CANONICAL_DECIMALS);
 /// The chains the fund custodies USDT on. The on-chain decimal scale differs per
 /// chain, which is the whole reason [`Usdt`] normalizes to a canonical unit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Network {
 	/// BNB Smart Chain — USDT has **18** decimals here (the canonical scale).
@@ -92,7 +92,7 @@ impl core::fmt::Display for Network {
 
 /// Tokens the fund handles. USDT only for now — a stablecoin we treat 1:1 across
 /// chains for *value* accounting (chain liquidity is tracked separately in custody).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Token {
 	Usdt,
@@ -108,7 +108,7 @@ impl Token {
 
 /// A token on a specific chain — the unit of *custody* (a wallet holds one of
 /// these). Distinct from [`Usdt`], which is canonical *value*.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct CryptoAsset {
 	pub token: Token,
 	pub network: Network,
@@ -125,7 +125,7 @@ impl CryptoAsset {
 /// **checked** (a money type must never silently wrap). Serializes as a **string**
 /// of base units — `serde_json` has no `u128` support, and a string is exact across
 /// JSON consumers (no float/`2^53` loss) for the event log.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Usdt(u128);
 impl Usdt {
 	pub const ZERO: Usdt = Usdt(0);
@@ -249,7 +249,7 @@ impl core::fmt::Display for Usdt {
 /// TigerBeetle ledger (`Ledger::Share`); deliberately a distinct newtype from [`Usdt`]
 /// so a unit count can never be added to or confused with a cash amount. Fractional
 /// at 18 dp, so `cash / NAV` floors to ≤ 1e-18 share of dust — no whole-share rounding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Shares(u128);
 impl Shares {
 	pub const ZERO: Shares = Shares(0);
@@ -295,7 +295,7 @@ impl Shares {
 /// NAV — the price of one whole share, in canonical 18-decimal USDT. Derived
 /// (`AUM / units_outstanding`), never stored in TigerBeetle (it is a price, not a
 /// balance). A distinct newtype so a price can't be mistaken for a cash amount.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Nav(u128);
 impl Nav {
 	/// The bootstrap price used for the first subscription into a fund (when no units
@@ -346,7 +346,7 @@ impl Nav {
 /// validate: structural per-chain checks on construction (format + alphabet), so a
 /// malformed address can't reach the custody layer. Full checksum verification is
 /// the custody/signing service's job (out of this scope) — this guards shape.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct WalletAddress {
 	network: Network,
 	value: String,
@@ -379,7 +379,7 @@ impl WalletAddress {
 
 /// An on-chain transaction reference (the deposit/withdrawal idempotency key). Opaque
 /// and trimmed; a deposit is recorded at most once per [`TxRef`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct TxRef(String);
 impl TxRef {

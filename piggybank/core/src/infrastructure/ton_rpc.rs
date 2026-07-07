@@ -171,7 +171,7 @@ pub struct JettonTransferPage {
 }
 
 /// One incoming jetton transfer the deposit watcher credits.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct JettonDeposit {
 	/// The transaction hash — the stable idempotency key for [`record_deposit`].
 	pub tx_hash: String,
@@ -182,7 +182,7 @@ pub struct JettonDeposit {
 }
 
 /// A user/treasury jetton wallet's address + balance (one `/jetton/wallets` row).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct JettonWallet {
 	pub address: String,
 	pub balance: u128,

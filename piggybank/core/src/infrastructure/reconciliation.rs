@@ -35,7 +35,7 @@ const SCAN_INTERVAL: Duration = Duration::from_secs(60);
 /// One reconciliation pass over the cash plane. The fields are raw 18-dp USDT base units
 /// and the parked-row count, so a caller (a test, the run loop) can assert on the outcome
 /// without scraping logs.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct ReconReport {
 	pub custody: u128,
 	pub claims: u128,

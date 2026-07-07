@@ -32,7 +32,7 @@ use crate::{
 /// A service's stable identity — its first-party service-token `sub` (e.g.
 /// `"trading"`, `"real-estate"`). Slug-shaped so it is safe in a logical account
 /// key and an authorization comparison.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ServiceId(String);
 
@@ -68,7 +68,7 @@ pub struct ValuationTag;
 /// A holder of value in (or a claim against) the fund — the party a deposit credits
 /// and a claim belongs to. Tagged for a self-describing JSON shape in event payloads
 /// and projections.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "id", rename_all = "snake_case")]
 pub enum Party {
 	/// The fund itself — its own unrestricted capital, and the custodian that holds
@@ -129,7 +129,7 @@ impl Party {
 /// Standalone ledger facts not tied to a Postgres aggregate — the fund's accounts
 /// live in TigerBeetle, so a deposit or a capital injection is recorded straight to
 /// the outbox for the relay to move. Internally tagged for a self-describing payload.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LedgerEvent {
 	/// Value arrived from outside (an on-chain deposit) and was credited to a party.
@@ -146,7 +146,7 @@ impl DomainEvent for LedgerEvent {
 /// A unit of value in TigerBeetle (`ledger`). Only same-ledger accounts transact, so
 /// a fund-unit transfer can never touch a cash account — the two planes can't imbalance
 /// each other (a stray cross-ledger pairing is a hard TB error, never a silent leak).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Ledger {
 	/// Canonical 18-dp USDT value ledger.
 	Usdt,
@@ -168,7 +168,7 @@ impl Ledger {
 }
 
 /// Account type (TigerBeetle `code`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AccountCode {
 	Fund,
 	CryptoWallet,
@@ -199,7 +199,7 @@ impl AccountCode {
 
 /// Which side an account's balance is normal on — drives the non-negative flag and
 /// how a posted/pending balance is computed from `debits`/`credits`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Normal {
 	/// Assets (custody): balance = `debits − credits`; guard with
 	/// `CreditsMustNotExceedDebits`.
@@ -211,7 +211,7 @@ pub enum Normal {
 
 /// Transfer type (TigerBeetle `code`) — classifies a money movement for audit and
 /// reconciliation. Never load-bearing for correctness, only for forensics.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransferCode {
 	SeedCapital,
 	Deposit,
@@ -256,7 +256,7 @@ impl TransferCode {
 /// TigerBeetle id (minted once, stored in the `tb_accounts` map) by the adapter.
 /// Carries everything the adapter needs to *create* the account correctly the first
 /// time: `ledger`, `code`, and the non-negative flag (all immutable in TB once set).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LedgerAccountKey {
 	/// The fund's own unrestricted capital (credit-normal, network-agnostic claim).
 	Fund,

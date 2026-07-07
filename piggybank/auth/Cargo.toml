@@ -6,9 +6,6 @@ description = "The hub's auth service + the shared, server-only verification flo
 license = "BlueOak-1.0.0"
 publish = false
 
-[lints]
-workspace = true
-
 [dependencies]
 anyhow.workspace = true
 ev = { workspace = true, features = ["error_monitoring"] }
@@ -27,3 +24,6 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+
+[lints]
+workspace = true

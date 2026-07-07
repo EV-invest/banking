@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The authenticated principal the cabinet surfaces to the browser (never a token).
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub struct User {
 	pub user_id: String,
 	pub email: String,
@@ -451,7 +451,7 @@ fn refreshed_session(prior: &Session, tokens: cc::TokenResponse) -> Session {
 	}
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct Session {
 	access_token: String,
 	access_expires_at: i64,

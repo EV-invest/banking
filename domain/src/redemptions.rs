@@ -36,7 +36,7 @@ pub struct RedemptionTag;
 /// Lifecycle of a redemption. `Queued` is in-flight (the units are reserved as a TB
 /// pending burn); the rest are terminal. Cancel/fail are legal **only while queued** —
 /// once `Completed`, the burn is posted and the cash paid, so neither may undo it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RedemptionState {
 	/// Accepted; units reserved (pending burn), awaiting fund liquidity to pay out.
@@ -73,7 +73,7 @@ impl RedemptionState {
 /// The redemption aggregate — the saga's coordinator. Construct via
 /// [`Redemption::request`] (raises [`RedemptionEvent::Requested`]) or
 /// [`Redemption::rehydrate`]. `nav`/`cash` are `None` until settle (settle-time pricing).
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Redemption {
 	id: RedemptionId,
 	user: UserId,
@@ -238,7 +238,7 @@ impl AggregateRoot for Redemption {
 /// Facts raised by the [`Redemption`] aggregate. Each carries the saga-relevant data
 /// (user, service, units; plus nav/cash at settle) so the relay maps an event to its
 /// ledger ops with no extra read. Internally tagged so the stored JSON is self-describing.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RedemptionEvent {
 	/// Accepted; reserve a pending burn `Dr SharesOutstanding / Cr UserShares` for `units`.

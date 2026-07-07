@@ -40,7 +40,7 @@ pub enum VaultError {
 	KeyLen,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Chain {
 	BscBep20,  // EVM, secp256k1
 	TronTrc20, // secp256k1 (same curve as EVM)
