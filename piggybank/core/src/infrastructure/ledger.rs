@@ -31,6 +31,12 @@ use crate::{
 const USDT_LEDGER_ID: i32 = 1;
 const CRYPTO_WALLET_CODE: i32 = 10;
 
+/// The TB client caps one `lookup_accounts` request at this many events; a larger request
+/// resolves to `Err(TooMuchData)` and returns none of the accounts (the client only merges
+/// multiple requests, it never splits one oversized one). `cash_invariant` chunks its id
+/// set by this so the global conservation check survives past the cap (see `cash_invariant`).
+const LOOKUP_ACCOUNTS_MAX: usize = 8189;
+
 /// Application-level deadline on a single TigerBeetle call. The TB client surfaces a
 /// *closed* connection, but a replica that accepts the connection yet stalls has no
 /// in-band failure — without this bound it would block the relay's single drain loop at an
@@ -291,22 +297,28 @@ impl Ledger for TbLedger {
 			ids.push(id);
 			is_custody.insert(id, *code == CRYPTO_WALLET_CODE);
 		}
-		let call = self
-			.tb
-			.client()
-			.lookup_accounts(&ids)
-			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
-		let accounts = deadline("lookup_accounts", call)
-			.await?
-			.map_err(|e| LedgerError::Unavailable(format!("lookup_accounts: {e:?}")))?;
+		// One `lookup_accounts` is capped at `LOOKUP_ACCOUNTS_MAX`; the cash plane grows
+		// one `UserClaim` account per user, so at scale this id set exceeds the cap. Chunk
+		// it and accumulate each side across pages — an unchunked read would fail wholesale
+		// and silently disable the only global conservation check.
 		let (mut custody, mut claims) = (0u128, 0u128);
-		for account in accounts {
-			if *is_custody.get(&account.id).unwrap_or(&false) {
-				// Custody is debit-normal: posted = debits − credits.
-				custody = custody.saturating_add(account.debits_posted.saturating_sub(account.credits_posted));
-			} else {
-				// Claims are credit-normal: posted = credits − debits.
-				claims = claims.saturating_add(account.credits_posted.saturating_sub(account.debits_posted));
+		for chunk in ids.chunks(LOOKUP_ACCOUNTS_MAX) {
+			let call = self
+				.tb
+				.client()
+				.lookup_accounts(chunk)
+				.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
+			let accounts = deadline("lookup_accounts", call)
+				.await?
+				.map_err(|e| LedgerError::Unavailable(format!("lookup_accounts: {e:?}")))?;
+			for account in accounts {
+				if *is_custody.get(&account.id).unwrap_or(&false) {
+					// Custody is debit-normal: posted = debits − credits.
+					custody = custody.saturating_add(account.debits_posted.saturating_sub(account.credits_posted));
+				} else {
+					// Claims are credit-normal: posted = credits − debits.
+					claims = claims.saturating_add(account.credits_posted.saturating_sub(account.debits_posted));
+				}
 			}
 		}
 		Ok(CashInvariant { custody, claims })
