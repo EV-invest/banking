@@ -41,19 +41,21 @@ traffic reaches it through the `cabinet` BFF, which proxies HTTP↔gRPC.
 Every app is a flake app. `nix run` resolves the repo root at runtime, so there's
 no need to enter the dev shell first.
 
-| Command | Brings up | Port |
-| ------- | --------- | ---- |
-| `nix run .#init` | one-shot env setup for a fresh clone (dev `.env` secrets, npm deps) | — |
-| `nix run .#dev` | everything: Postgres + TigerBeetle + Redis + piggybank + cabinet | — |
-| `nix run .#piggybank` | hub server: core gRPC + auth tasks (tonic-web) | `:50051` core · `:50052` auth |
-| `nix run .#cabinet` | Next.js host shell + BFF | 3000 |
-| `nix run .#db` | local Postgres (cluster under `.pg/`, trust auth) | 5433 |
-| `nix run .#tb` | local TigerBeetle (data under `.tb/`, single replica) | 3033 |
-| `nix run .#redis` | local Redis (central auth refresh-token store) | 6379 |
+| Command | Brings up |
+| ------- | --------- |
+| `nix run .#init` | one-shot env setup for a fresh clone (dev `.env` secrets, npm deps) |
+| `nix run .#dev` | everything: Postgres + TigerBeetle + Redis + piggybank + cabinet |
+| `nix run .#piggybank` | hub server: core gRPC + auth tasks (tonic-web) |
+| `nix run .#cabinet` | Next.js host shell + BFF |
+| `nix run .#db` | SHARED ev_invest Postgres (data under `~/.local/state/ev_invest/pg`) |
+| `nix run .#tb` | local TigerBeetle (data under `.tb/`, single replica) |
+| `nix run .#redis` | SHARED ev_invest Redis (central auth refresh-token store) |
 
-`.#dev` starts Postgres first and waits for it before launching the rest; one
-Ctrl-C tears the whole stack down. Per-area build, test, and layout details live
-in each folder's README — see the table above.
+Every port comes from ONE place — the `ports` attrset in `flake.nix`. Postgres
+and Redis are single instances shared by every ev_invest repo (database name ==
+app name); they start detached and survive dev-stack exits. `.#dev` ensures
+them, then owns the rest; one Ctrl-C tears down what it owns. Per-area build,
+test, and layout details live in each folder's README — see the table above.
 
 A dev shell with the full toolchain (Rust nightly + `wasm32`, Node, Postgres,
 TigerBeetle, Redis, protobuf) is auto-activated by `.envrc` +

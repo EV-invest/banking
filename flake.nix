@@ -25,9 +25,10 @@
         # ── ev_invest dev topology (single source of truth for ports) ───────
         # ONE postgres + ONE redis serve every sibling repo (concierge and
         # site_conductor mirror these values in their flakes); tigerbeetle is
-        # banking-only. Postgres database name == app name. gRPC planes cluster
-        # on 5005x, web UIs on 5006x (site_conductor: 50063/50064). Redis has no
-        # named dbs — numeric mapping: 0=banking, 1=concierge.
+        # banking-only. Postgres database name == app name. Banking's gRPC planes
+        # cluster on 5005x, web UIs on 5006x (site_conductor: 50063/50064);
+        # concierge lives on its own port. Redis has no named dbs — numeric
+        # mapping: 0=banking, 1=concierge.
         ports = {
           POSTGRES_PORT = "5432";
           REDIS_PORT = "6379";
@@ -35,13 +36,13 @@
           PIGGYBANK_CORE_PORT = "50051";
           PIGGYBANK_AUTH_PORT = "50052";
           SIGNER_PORT = "50053";
-          CONCIERGE_PORT = "50054";
+          CONCIERGE_PORT = "55670";
           CABINET_FRONTEND_PORT = "50061";
           CABINET_BACKEND_PORT = "50062";
         };
-        # Exported AFTER `.env` loads: the flake is authoritative for ports and
-        # port-derived addresses — `.env` files hold secrets, not topology.
-        portEnv = pkgs.lib.concatStrings (pkgs.lib.mapAttrsToList (n: v: "export ${n}=${v}\n") ports);
+        # DEFAULTS, not overrides: anything already set in the environment (or a
+        # sourced `.env`) wins — machines with non-standard ports stay working.
+        portEnv = pkgs.lib.concatStrings (pkgs.lib.mapAttrsToList (n: v: "export ${n}=\"\${${n}:-${v}}\"\n") ports);
 
         rs = v_flakes.rs { inherit pkgs rust; };
         github = v_flakes.github {
@@ -269,15 +270,15 @@
             set +a
 
             ${portEnv}
-            export DATABASE_URL="postgres://postgres@localhost:$POSTGRES_PORT/banking"
-            export GRPC_ADDR="0.0.0.0:$PIGGYBANK_CORE_PORT"
-            export AUTH_GRPC_ADDR="0.0.0.0:$PIGGYBANK_AUTH_PORT"
+            export DATABASE_URL="''${DATABASE_URL:-postgres://postgres@localhost:$POSTGRES_PORT/banking}"
+            export GRPC_ADDR="''${GRPC_ADDR:-0.0.0.0:$PIGGYBANK_CORE_PORT}"
+            export AUTH_GRPC_ADDR="''${AUTH_GRPC_ADDR:-0.0.0.0:$PIGGYBANK_AUTH_PORT}"
             export RUST_LOG="''${RUST_LOG:-info,piggybank_core=debug,evbanking_auth=debug}"
             # Central-only refresh-token store; harmless if unused (auth is scaffold).
-            export REDIS_URL="redis://127.0.0.1:$REDIS_PORT/0"
-            export TIGERBEETLE_ADDRESS="127.0.0.1:$TIGERBEETLE_PORT"
+            export REDIS_URL="''${REDIS_URL:-redis://127.0.0.1:$REDIS_PORT/0}"
+            export TIGERBEETLE_ADDRESS="''${TIGERBEETLE_ADDRESS:-127.0.0.1:$TIGERBEETLE_PORT}"
             export TIGERBEETLE_CLUSTER_ID="''${TIGERBEETLE_CLUSTER_ID:-0}"
-            export SIGNER_GRPC_ADDR="http://127.0.0.1:$SIGNER_PORT"
+            export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-http://127.0.0.1:$SIGNER_PORT}"
             # BSC_RPC_URL (set it in piggybank/core/.env) — free public endpoints all have
             # sharp edges for the on-chain workers: publicnode paywalls eth_getLogs, drpc's
             # free tier rate-limits the deposit scan away, and dataseed.bnbchain.org rejects
@@ -288,7 +289,7 @@
             # Cross-plane lifecycle bridge consumer (one-way concierge → banking). Both vars
             # must be set together or the consumer doesn't run; BRIDGE_SERVICE_TOKEN must match
             # the concierge plane's value. The concierge plane serves UserEvents on :50061.
-            export CONCIERGE_BRIDGE_ADDR="http://127.0.0.1:$CONCIERGE_PORT"
+            export CONCIERGE_BRIDGE_ADDR="''${CONCIERGE_BRIDGE_ADDR:-http://127.0.0.1:$CONCIERGE_PORT}"
             export BRIDGE_SERVICE_TOKEN="''${BRIDGE_SERVICE_TOKEN:-dev-bridge-token}"
             # Concierge→banking token-exchange seam: the BFF presents this on IssueUserToken to
             # mint the money-plane pair. Must match the cabinet-backend value below.
@@ -321,12 +322,12 @@
             set +a
 
             ${portEnv}
-            export SIGNER_DATABASE_URL="postgres://postgres@localhost:$POSTGRES_PORT/banking_signer"
+            export SIGNER_DATABASE_URL="''${SIGNER_DATABASE_URL:-postgres://postgres@localhost:$POSTGRES_PORT/banking_signer}"
             # Loopback: the seam is authenticated (service JWT) but a wider bind
             # also requires TLS (SIGNER_TLS_*). The hub↔signer seam is single-host in dev.
-            export SIGNER_GRPC_ADDR="127.0.0.1:$SIGNER_PORT"
+            export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-127.0.0.1:$SIGNER_PORT}"
             # The signer verifies the hub's service token against the auth service's JWKS.
-            export AUTH_JWKS_GRPC_ENDPOINT="http://127.0.0.1:$PIGGYBANK_AUTH_PORT"
+            export AUTH_JWKS_GRPC_ENDPOINT="''${AUTH_JWKS_GRPC_ENDPOINT:-http://127.0.0.1:$PIGGYBANK_AUTH_PORT}"
             # Dev-only KEK: ephemeral per boot when unset, so no key bytes live in the
             # repo. Production MUST inject a STABLE 32-byte KEK from a secrets store/KMS
             # (a rotating KEK can't open previously-sealed keys). Set WALLET_KEK in
@@ -363,12 +364,12 @@
             set +a
 
             ${portEnv}
-            export CABINET_BACKEND_BIND="0.0.0.0:$CABINET_BACKEND_PORT"
-            export PIGGYBANK_GRPC_ADDR="http://127.0.0.1:$PIGGYBANK_CORE_PORT"
-            export BANKING_AUTH_GRPC_ADDR="http://127.0.0.1:$PIGGYBANK_AUTH_PORT"
+            export CABINET_BACKEND_BIND="''${CABINET_BACKEND_BIND:-0.0.0.0:$CABINET_BACKEND_PORT}"
+            export PIGGYBANK_GRPC_ADDR="''${PIGGYBANK_GRPC_ADDR:-http://127.0.0.1:$PIGGYBANK_CORE_PORT}"
+            export BANKING_AUTH_GRPC_ADDR="''${BANKING_AUTH_GRPC_ADDR:-http://127.0.0.1:$PIGGYBANK_AUTH_PORT}"
             # Money-plane token-exchange seam — must match the piggybank hub's BANKING_ISSUANCE_TOKEN.
             export BANKING_ISSUANCE_TOKEN="''${BANKING_ISSUANCE_TOKEN:-dev-issuance-token}"
-            export CONCIERGE_GRPC_ADDR="http://127.0.0.1:$CONCIERGE_PORT"
+            export CONCIERGE_GRPC_ADDR="''${CONCIERGE_GRPC_ADDR:-http://127.0.0.1:$CONCIERGE_PORT}"
             # Registered with Google, so overridable from .env — but the default must
             # track the frontend port.
             export AUTH_REDIRECT_URI="''${AUTH_REDIRECT_URI:-http://localhost:$CABINET_FRONTEND_PORT/cabinet/api/auth/callback}"
@@ -389,7 +390,7 @@
             cd "$repo"
             [ -d node_modules/next ] || npm install
             ${portEnv}
-            export CABINET_BACKEND_URL="http://127.0.0.1:$CABINET_BACKEND_PORT"
+            export CABINET_BACKEND_URL="''${CABINET_BACKEND_URL:-http://127.0.0.1:$CABINET_BACKEND_PORT}"
             exec npm run dev --workspace @evbanking/cabinet -- --port "$CABINET_FRONTEND_PORT"
           '';
         };
