@@ -5,6 +5,8 @@
 // fixed allow-list. Runs in both environments (the server loader and the browser
 // RemoteElement) so the origin gate is enforced at injection time too.
 
+import { config } from "../../config.ts";
+
 import type { MfeEntry, MfeKind } from "./types";
 
 const KINDS: readonly MfeKind[] = ["component", "page"];
@@ -14,7 +16,7 @@ const KINDS: readonly MfeKind[] = ["component", "page"];
 // browser-readable NEXT_PUBLIC_ mirror lets RemoteElement re-check at injection
 // time, where only inlined NEXT_PUBLIC_ env is available.
 function extraAllowedOrigins(): string[] {
-  const raw = process.env.MFE_ALLOWED_ORIGINS ?? process.env.NEXT_PUBLIC_MFE_ALLOWED_ORIGINS ?? "";
+  const raw = config.mfeAllowedOrigins ?? config.public.mfeAllowedOrigins ?? "";
   return raw.split(/[\s,]+/).filter(Boolean);
 }
 

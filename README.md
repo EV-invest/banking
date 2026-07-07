@@ -43,10 +43,11 @@ no need to enter the dev shell first.
 
 | Command | Brings up | Port |
 | ------- | --------- | ---- |
+| `nix run .#init` | one-shot env setup for a fresh clone (dev `.env` secrets, npm deps) | — |
 | `nix run .#dev` | everything: Postgres + TigerBeetle + Redis + piggybank + cabinet | — |
 | `nix run .#piggybank` | hub server: core gRPC + auth tasks (tonic-web) | `:50051` core · `:50052` auth |
 | `nix run .#cabinet` | Next.js host shell + BFF | 3000 |
-| `nix run .#db` | local Postgres (cluster under `.pg/`, trust auth) | 5432 |
+| `nix run .#db` | local Postgres (cluster under `.pg/`, trust auth) | 5433 |
 | `nix run .#tb` | local TigerBeetle (data under `.tb/`, single replica) | 3033 |
 | `nix run .#redis` | local Redis (central auth refresh-token store) | 6379 |
 

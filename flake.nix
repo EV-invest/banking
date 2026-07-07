@@ -22,6 +22,26 @@
         });
         pre-commit-check = pre-commit-hooks.lib.${system}.run (v_flakes.files.preCommit { inherit pkgs; });
         pname = "ev_banking";
+        # ── ev_invest dev topology (single source of truth for ports) ───────
+        # ONE postgres + ONE redis serve every sibling repo (concierge and
+        # site_conductor mirror these values in their flakes); tigerbeetle is
+        # banking-only. Postgres database name == app name. gRPC planes cluster
+        # on 5005x, web UIs on 5006x (site_conductor: 50063/50064). Redis has no
+        # named dbs — numeric mapping: 0=banking, 1=concierge.
+        ports = {
+          POSTGRES_PORT = "5432";
+          REDIS_PORT = "6379";
+          TIGERBEETLE_PORT = "3033";
+          PIGGYBANK_CORE_PORT = "50051";
+          PIGGYBANK_AUTH_PORT = "50052";
+          SIGNER_PORT = "50053";
+          CONCIERGE_PORT = "50054";
+          CABINET_FRONTEND_PORT = "50061";
+          CABINET_BACKEND_PORT = "50062";
+        };
+        # Exported AFTER `.env` loads: the flake is authoritative for ports and
+        # port-derived addresses — `.env` files hold secrets, not topology.
+        portEnv = pkgs.lib.concatStrings (pkgs.lib.mapAttrsToList (n: v: "export ${n}=${v}\n") ports);
 
         rs = v_flakes.rs { inherit pkgs rust; };
         github = v_flakes.github {
@@ -248,15 +268,16 @@
             fi
             set +a
 
-            export DATABASE_URL="''${DATABASE_URL:-postgres://postgres@localhost:5432/ev_banking}"
-            export GRPC_ADDR="''${GRPC_ADDR:-0.0.0.0:50051}"
-            export AUTH_GRPC_ADDR="''${AUTH_GRPC_ADDR:-0.0.0.0:50052}"
+            ${portEnv}
+            export DATABASE_URL="postgres://postgres@localhost:$POSTGRES_PORT/banking"
+            export GRPC_ADDR="0.0.0.0:$PIGGYBANK_CORE_PORT"
+            export AUTH_GRPC_ADDR="0.0.0.0:$PIGGYBANK_AUTH_PORT"
             export RUST_LOG="''${RUST_LOG:-info,piggybank_core=debug,evbanking_auth=debug}"
             # Central-only refresh-token store; harmless if unused (auth is scaffold).
-            export REDIS_URL="''${REDIS_URL:-redis://127.0.0.1:6379}"
-            export TIGERBEETLE_ADDRESS="''${TIGERBEETLE_ADDRESS:-127.0.0.1:3033}"
+            export REDIS_URL="redis://127.0.0.1:$REDIS_PORT/0"
+            export TIGERBEETLE_ADDRESS="127.0.0.1:$TIGERBEETLE_PORT"
             export TIGERBEETLE_CLUSTER_ID="''${TIGERBEETLE_CLUSTER_ID:-0}"
-            export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-http://127.0.0.1:50053}"
+            export SIGNER_GRPC_ADDR="http://127.0.0.1:$SIGNER_PORT"
             # BSC_RPC_URL (set it in piggybank/core/.env) — free public endpoints all have
             # sharp edges for the on-chain workers: publicnode paywalls eth_getLogs, drpc's
             # free tier rate-limits the deposit scan away, and dataseed.bnbchain.org rejects
@@ -267,7 +288,7 @@
             # Cross-plane lifecycle bridge consumer (one-way concierge → banking). Both vars
             # must be set together or the consumer doesn't run; BRIDGE_SERVICE_TOKEN must match
             # the concierge plane's value. The concierge plane serves UserEvents on :50061.
-            export CONCIERGE_BRIDGE_ADDR="''${CONCIERGE_BRIDGE_ADDR:-http://127.0.0.1:50061}"
+            export CONCIERGE_BRIDGE_ADDR="http://127.0.0.1:$CONCIERGE_PORT"
             export BRIDGE_SERVICE_TOKEN="''${BRIDGE_SERVICE_TOKEN:-dev-bridge-token}"
             # Concierge→banking token-exchange seam: the BFF presents this on IssueUserToken to
             # mint the money-plane pair. Must match the cabinet-backend value below.
@@ -299,12 +320,13 @@
             fi
             set +a
 
-            export SIGNER_DATABASE_URL="''${SIGNER_DATABASE_URL:-postgres://postgres@localhost:5432/ev_banking_signer}"
-            # Loopback by default: the seam is authenticated (service JWT) but a wider bind
+            ${portEnv}
+            export SIGNER_DATABASE_URL="postgres://postgres@localhost:$POSTGRES_PORT/banking_signer"
+            # Loopback: the seam is authenticated (service JWT) but a wider bind
             # also requires TLS (SIGNER_TLS_*). The hub↔signer seam is single-host in dev.
-            export SIGNER_GRPC_ADDR="''${SIGNER_GRPC_ADDR:-127.0.0.1:50053}"
+            export SIGNER_GRPC_ADDR="127.0.0.1:$SIGNER_PORT"
             # The signer verifies the hub's service token against the auth service's JWKS.
-            export AUTH_JWKS_GRPC_ENDPOINT="''${AUTH_JWKS_GRPC_ENDPOINT:-http://127.0.0.1:50052}"
+            export AUTH_JWKS_GRPC_ENDPOINT="http://127.0.0.1:$PIGGYBANK_AUTH_PORT"
             # Dev-only KEK: ephemeral per boot when unset, so no key bytes live in the
             # repo. Production MUST inject a STABLE 32-byte KEK from a secrets store/KMS
             # (a rotating KEK can't open previously-sealed keys). Set WALLET_KEK in
@@ -340,12 +362,16 @@
             fi
             set +a
 
-            export CABINET_BACKEND_BIND="''${CABINET_BACKEND_BIND:-0.0.0.0:4000}"
-            export PIGGYBANK_GRPC_ADDR="''${PIGGYBANK_GRPC_ADDR:-http://127.0.0.1:50051}"
-            export BANKING_AUTH_GRPC_ADDR="''${BANKING_AUTH_GRPC_ADDR:-http://127.0.0.1:50052}"
+            ${portEnv}
+            export CABINET_BACKEND_BIND="0.0.0.0:$CABINET_BACKEND_PORT"
+            export PIGGYBANK_GRPC_ADDR="http://127.0.0.1:$PIGGYBANK_CORE_PORT"
+            export BANKING_AUTH_GRPC_ADDR="http://127.0.0.1:$PIGGYBANK_AUTH_PORT"
             # Money-plane token-exchange seam — must match the piggybank hub's BANKING_ISSUANCE_TOKEN.
             export BANKING_ISSUANCE_TOKEN="''${BANKING_ISSUANCE_TOKEN:-dev-issuance-token}"
-            export CONCIERGE_GRPC_ADDR="''${CONCIERGE_GRPC_ADDR:-http://127.0.0.1:50061}"
+            export CONCIERGE_GRPC_ADDR="http://127.0.0.1:$CONCIERGE_PORT"
+            # Registered with Google, so overridable from .env — but the default must
+            # track the frontend port.
+            export AUTH_REDIRECT_URI="''${AUTH_REDIRECT_URI:-http://localhost:$CABINET_FRONTEND_PORT/cabinet/api/auth/callback}"
             export RUST_LOG="''${RUST_LOG:-info,cabinet_backend=debug}"
             exec cargo run -p cabinet-backend
           '';
@@ -362,8 +388,9 @@
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo"
             [ -d node_modules/next ] || npm install
-            export CABINET_BACKEND_URL="''${CABINET_BACKEND_URL:-http://127.0.0.1:4000}"
-            exec npm run dev --workspace @evbanking/cabinet
+            ${portEnv}
+            export CABINET_BACKEND_URL="http://127.0.0.1:$CABINET_BACKEND_PORT"
+            exec npm run dev --workspace @evbanking/cabinet -- --port "$CABINET_FRONTEND_PORT"
           '';
         };
 
@@ -412,55 +439,72 @@
           text = ''exec bash "$(git rev-parse --show-toplevel)/contracts/concierge-pin-check.sh"'';
         };
 
-        # ── local Redis ─────────────────────────────────────────────────────
-        # The CENTRAL auth refresh-token store only — never a per-service cache.
-        # Ephemeral dev instance under .redis/ (gitignored).
+        # ── shared Redis (ensure-running) ───────────────────────────────────
+        # ONE instance for all ev_invest repos (numeric dbs: 0=banking, 1=concierge),
+        # daemonized under the user state dir so no repo's dev-stack exit can yank it
+        # out from under the siblings. Stop: redis-cli -p $REDIS_PORT shutdown nosave
         runRedis = pkgs.writeShellApplication {
           name = "run-redis";
-          runtimeInputs = with pkgs; [ redis git ];
+          runtimeInputs = with pkgs; [ redis coreutils ];
           text = ''
-            repo="$(git rev-parse --show-toplevel)"
-            mkdir -p "$repo/.redis"
-            echo "Redis ready on 127.0.0.1:''${REDIS_PORT:-6379}"
-            exec redis-server --port "''${REDIS_PORT:-6379}" --dir "$repo/.redis" --save "" --appendonly no
+            ${portEnv}
+            state="''${XDG_STATE_HOME:-$HOME/.local/state}/ev_invest"
+            mkdir -p "$state/redis"
+            if ! redis-cli -p "$REDIS_PORT" ping >/dev/null 2>&1; then
+              redis-server --port "$REDIS_PORT" --dir "$state/redis" --save "" --appendonly no \
+                --daemonize yes --logfile "$state/redis/log"
+            fi
+            echo "redis ready on 127.0.0.1:$REDIS_PORT"
           '';
         };
 
-        # ── local Postgres ──────────────────────────────────────────────────
-        # Project-local dev database under .pg/ (gitignored). First run initdb's a
-        # trust-auth cluster and creates the databases (`ev_banking` for the hub and
-        # `ev_banking_signer` for the signer's wallet_secrets); later runs just start it.
+        # ── shared Postgres (ensure-running) ────────────────────────────────
+        # ONE trust-auth cluster for all ev_invest repos, under the user state dir —
+        # NOT the repo. Started detached (same reasoning as redis above); each repo's
+        # runner only ensures its own databases exist (database name == app name).
+        # Stop: pg_ctl -D ~/.local/state/ev_invest/pg/data stop
         runPostgres = pkgs.writeShellApplication {
           name = "run-postgres";
-          runtimeInputs = with pkgs; [ postgresql git coreutils gnugrep ];
+          runtimeInputs = with pkgs; [ postgresql coreutils gnugrep util-linux ];
           text = ''
-            repo="$(git rev-parse --show-toplevel)"
-            export PGDATA="$repo/.pg/data"
-            sockets="$repo/.pg/sockets"
-            port="''${PGPORT:-5432}"
-            dbs="''${PGDATABASES:-ev_banking ev_banking_signer}"
-
+            ${portEnv}
+            state="''${XDG_STATE_HOME:-$HOME/.local/state}/ev_invest"
+            export PGDATA="$state/pg/data"
+            sockets="$state/pg/sockets"
+            dbs="''${PGDATABASES:-banking banking_signer}"
             mkdir -p "$sockets"
-            if [ ! -s "$PGDATA/PG_VERSION" ]; then
-              echo "initialising postgres cluster in $PGDATA"
-              initdb --username=postgres --auth=trust --pgdata="$PGDATA" >/dev/null
+
+            # Serialize sibling repos racing to first-boot the shared cluster.
+            exec 9>"$state/pg.lock"
+            flock 9
+
+            if ! pg_isready --host="$sockets" --port="$POSTGRES_PORT" --quiet; then
+              # TCP answering while our socket is silent = some OTHER cluster owns
+              # the port — refuse rather than silently use the wrong database.
+              if pg_isready --host=127.0.0.1 --port="$POSTGRES_PORT" --quiet; then
+                echo "error: 127.0.0.1:$POSTGRES_PORT serves a postgres that is not the shared ev_invest cluster" >&2
+                exit 1
+              fi
+              if [ ! -s "$PGDATA/PG_VERSION" ]; then
+                echo "initialising shared postgres cluster in $PGDATA"
+                initdb --username=postgres --auth=trust --pgdata="$PGDATA" >/dev/null
+              fi
+              chmod 0700 "$PGDATA"
+              # 9>&- : the daemon must NOT inherit the lock fd, or it holds the
+              # flock for its lifetime and every later ensure-run blocks forever.
+              pg_ctl -D "$PGDATA" -l "$state/pg/log" -o "-k $sockets -h 127.0.0.1 -p $POSTGRES_PORT" start 9>&-
             fi
-            chmod 0700 "$PGDATA"
+            exec 9>&-
 
-            (
-              until pg_isready --host="$sockets" --port="$port" --quiet; do sleep 0.2; done
-              for db in $dbs; do
-                if ! psql --host="$sockets" --port="$port" --username=postgres --dbname=postgres \
-                       --tuples-only --no-align \
-                       --command "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
-                  createdb --host="$sockets" --port="$port" --username=postgres "$db"
-                  echo "created database '$db'"
-                fi
-              done
-              echo "postgres ready on 127.0.0.1:$port (databases: $dbs, user 'postgres', trust auth)"
-            ) &
-
-            exec postgres -D "$PGDATA" -k "$sockets" -h 127.0.0.1 -p "$port"
+            for db in $dbs; do
+              if ! psql --host="$sockets" --port="$POSTGRES_PORT" --username=postgres --dbname=postgres \
+                     --tuples-only --no-align \
+                     --command "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
+                createdb --host="$sockets" --port="$POSTGRES_PORT" --username=postgres "$db"
+                echo "created database '$db'"
+              fi
+            done
+            echo "postgres ready on 127.0.0.1:$POSTGRES_PORT (databases ensured: $dbs)"
           '';
         };
 
@@ -472,9 +516,10 @@
           name = "run-tigerbeetle";
           runtimeInputs = [ tigerbeetleBin pkgs.git ];
           text = ''
+            ${portEnv}
             repo="$(git rev-parse --show-toplevel)"
             export TB_DATA="$repo/.tb/data"
-            port="''${TBPORT:-3033}"
+            port="$TIGERBEETLE_PORT"
             cluster_id="''${TBCLUSTER:-0}"
             data_file="$TB_DATA/''${cluster_id}_0.tigerbeetle"
 
@@ -489,15 +534,66 @@
           '';
         };
 
+        # ── one-shot env init ───────────────────────────────────────────────
+        # `nix run .#init` — everything a fresh clone needs beyond what the run
+        # scripts already self-provision lazily (postgres cluster, TB data file,
+        # databases): generated dev secrets in the gitignored .env files, npm deps,
+        # and the TB client link. Idempotent: existing .env files are left alone.
+        runInit = pkgs.writeShellApplication {
+          name = "run-init";
+          runtimeInputs = with pkgs; [ git openssl nodejs coreutils ];
+          text = ''
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo"
+
+            ${linkTbClient}
+            echo '✓ .tb-client link'
+
+            # A stable KEK: the flake's per-boot random default can't reopen keys
+            # sealed on a previous boot (the signer's KEK epoch guard refuses).
+            if [ ! -f piggybank/signer/.env ]; then
+              {
+                echo '# generated by nix run .#init — dev-only secrets, gitignored'
+                echo "WALLET_KEK=$(openssl rand -hex 32)"
+              } > piggybank/signer/.env
+              echo '✓ piggybank/signer/.env (persistent dev WALLET_KEK)'
+            else
+              echo '· piggybank/signer/.env exists, leaving as is'
+            fi
+
+            # Without a signing key the auth service boots inert (no token issuance,
+            # so no money routes in the cabinet) — generate a dev Ed25519 keypair.
+            if [ ! -f piggybank/core/.env ]; then
+              key="$(openssl genpkey -algorithm ed25519)"
+              x="$(printf '%s\n' "$key" | openssl pkey -pubout -outform DER | tail -c 32 | basenc --base64url | tr -d '=')"
+              {
+                echo '# generated by nix run .#init — dev-only secrets, gitignored'
+                printf 'AUTH_SIGNING_KEY_PEM="%s"\n' "$key"
+                echo 'AUTH_SIGNING_KID=local-dev'
+                printf 'AUTH_JWKS_JSON=%s{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"local-dev","x":"%s","alg":"EdDSA","use":"sig"}]}%s\n' "'" "$x" "'"
+              } > piggybank/core/.env
+              echo '✓ piggybank/core/.env (dev Ed25519 signing key + JWKS)'
+            else
+              echo '· piggybank/core/.env exists, leaving as is'
+            fi
+
+            [ -d node_modules/next ] || npm install
+            echo '✓ npm deps'
+
+            echo 'init done — nix run .#dev brings the stack up'
+          '';
+        };
+
         # ── full dev orchestrator ───────────────────────────────────────────
-        # `nix run .#dev` → Postgres + TigerBeetle + Redis + signer + piggybank +
-        # cabinet-backend + cabinet. Postgres starts first, then the rest. A single trap
-        # tears the whole tree down on exit. (Concierge, the identity plane, lives in its
-        # own repo — start it there for the auth/profile/session flows.)
+        # `nix run .#dev` → ensures the SHARED postgres + redis (detached, survive
+        # this stack), then owns TigerBeetle + signer + piggybank + cabinet-backend +
+        # cabinet; a single trap tears the owned tree down on exit. (Concierge, the
+        # identity plane, lives in its own repo — start it there.)
         runDev = pkgs.writeShellApplication {
           name = "run-dev";
-          runtimeInputs = with pkgs; [ postgresql git coreutils ];
+          runtimeInputs = with pkgs; [ coreutils ];
           text = ''
+            ${portEnv}
             pids=()
             cleanup() {
               echo; echo "shutting down dev stack…"
@@ -506,24 +602,21 @@
             }
             trap cleanup EXIT INT TERM
 
-            echo "▶ postgres"
-            ${runPostgres}/bin/run-postgres & pids+=($!)
+            echo "▶ postgres (shared)"
+            ${runPostgres}/bin/run-postgres
+            echo "▶ redis (shared)"
+            ${runRedis}/bin/run-redis
 
-            echo "  waiting for postgres on 127.0.0.1:''${PGPORT:-5432}…"
-            until pg_isready --host=127.0.0.1 --port="''${PGPORT:-5432}" --quiet; do sleep 0.3; done
-
-            echo "▶ tigerbeetle"
+            echo "▶ tigerbeetle (:$TIGERBEETLE_PORT)"
             ${runTigerbeetle}/bin/run-tigerbeetle & pids+=($!)
-            echo "▶ redis"
-            ${runRedis}/bin/run-redis & pids+=($!)
 
-            echo "▶ signer    (:50053)"
+            echo "▶ signer    (:$SIGNER_PORT)"
             ${runSigner}/bin/run-signer & pids+=($!)
-            echo "▶ piggybank (:50051 core / :50052 auth)"
+            echo "▶ piggybank (:$PIGGYBANK_CORE_PORT core / :$PIGGYBANK_AUTH_PORT auth)"
             ${runPiggybank}/bin/run-piggybank & pids+=($!)
-            echo "▶ cabinet-backend (:4000, BFF)"
+            echo "▶ cabinet-backend (:$CABINET_BACKEND_PORT, BFF)"
             ${runCabinetBackend}/bin/run-cabinet-backend & pids+=($!)
-            echo "▶ cabinet   (:3000)"
+            echo "▶ cabinet   (:$CABINET_FRONTEND_PORT)"
             ${runCabinet}/bin/run-cabinet & pids+=($!)
 
             wait
@@ -531,19 +624,21 @@
         };
       in
       {
+        # `nix run .#init`           → one-shot env setup for a fresh clone (dev .env secrets, npm deps, TB client link)
         # `nix run .#dev`            → everything (postgres + tigerbeetle + redis + signer + piggybank + cabinet-backend + cabinet)
         # `nix run .#piggybank`      → hub server: core gRPC + auth tasks (applies DB migrations on boot; needs DB + TB + signer: `.#db`/`.#tb`/`.#signer`, or `.#dev`)
         # `nix run .#signer`         → key vault: generates+seals chain keys (applies its own DB migrations on boot; needs DB: `.#db`, or `.#dev`)
         # `nix run .#cabinet-backend`→ cabinet BFF (:4000; needs piggybank on :50051; identity flows need concierge on :50061 from its own repo)
         # `nix run .#cabinet`        → Next.js host shell (:3000, proxies /api/* to the cabinet backend on :4000)
-        # `nix run .#db`             → local Postgres only (creates ev_banking + ev_banking_signer)
-        # `nix run .#tb`        → local TigerBeetle only
-        # `nix run .#redis`     → local Redis (central auth store) only
+        # `nix run .#db`             → ensure the SHARED ev_invest Postgres is up (+ this repo's databases)
+        # `nix run .#tb`        → local TigerBeetle only (banking-only, repo-local data)
+        # `nix run .#redis`     → ensure the SHARED ev_invest Redis is up
         # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
         # `nix run .#concierge-pin-check` → assert the concierge contract pin is an ancestor of origin/main + bytes match
         # Author new migrations with the sqlx CLI (in the dev shell):
         #   sqlx migrate add --source piggybank/core/migrations --sequential <name>
         apps = {
+          init = { type = "app"; program = "${runInit}/bin/run-init"; };
           dev = { type = "app"; program = "${runDev}/bin/run-dev"; };
           piggybank = { type = "app"; program = "${runPiggybank}/bin/run-piggybank"; };
           signer = { type = "app"; program = "${runSigner}/bin/run-signer"; };

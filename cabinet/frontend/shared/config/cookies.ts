@@ -2,11 +2,13 @@
 // BFF sets. Lives in shared so both the session entity and the auth feature bind
 // to the same cookie identity without cross-importing each other.
 
+import { config } from "../../config.ts";
+
 // `__Host-` cookies require the Secure attribute, which browsers reject over plain
 // http://localhost. So in dev (no Secure) we drop the prefix; in production the
 // cookies are `__Host-`-prefixed and Secure. Toggle explicitly with
 // AUTH_COOKIE_SECURE, else infer from NODE_ENV.
-const SECURE = process.env.AUTH_COOKIE_SECURE ? process.env.AUTH_COOKIE_SECURE === "true" : process.env.NODE_ENV === "production";
+const SECURE = config.authCookieSecure;
 const PREFIX = SECURE ? "__Host-" : "";
 
 export const COOKIES = {

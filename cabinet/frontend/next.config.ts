@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 
+import { config } from "./config";
 import { BASE_PATH } from "./shared/config/base-path";
 import { staticSecurityHeaders } from "./shared/config/security";
 
@@ -7,7 +8,7 @@ import { staticSecurityHeaders } from "./shared/config/security";
 // keeps calling same-origin `/api/*`; Next proxies those to the backend so the
 // `__Host-`/HttpOnly session cookie + CSRF model stays same-origin. In production the
 // same apex domain routes `/api/*` to the backend (this rewrite is the dev/local form).
-const BACKEND = process.env.CABINET_BACKEND_URL ?? "http://127.0.0.1:4000";
+const BACKEND = config.backendUrl;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

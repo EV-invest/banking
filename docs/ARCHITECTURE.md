@@ -345,16 +345,22 @@ authorization matrix: [`piggybank/core/PATTERNS.md`](../piggybank/core/PATTERNS.
 
 ## Run matrix
 
-| `nix run .#`          | What                                                                            | Port                          |
-| --------------------- | ------------------------------------------------------------------------------- | ----------------------------- |
-| `dev`                 | postgres + tigerbeetle + redis + signer + piggybank + cabinet-backend + cabinet | —                             |
-| `piggybank`           | hub server: core gRPC + auth tasks (tonic-web)                                  | `:50051` core / `:50052` auth |
-| `cabinet-backend`     | cabinet BFF (axum) → piggybank (money) + concierge (identity)                   | `:4000`                       |
-| `cabinet`             | Next.js host shell (proxies `/api/*` → `:4000`)                                 | `:3000`                       |
-| `db` / `tb` / `redis` | local Postgres / TigerBeetle / Redis                                            | `:5432` / `:3033` / `:6379`   |
+| `nix run .#`          | What                                                                            |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `init`                | one-shot env setup for a fresh clone (dev `.env` secrets, npm deps)             |
+| `dev`                 | postgres + tigerbeetle + redis + signer + piggybank + cabinet-backend + cabinet |
+| `piggybank`           | hub server: core gRPC + auth tasks (tonic-web)                                  |
+| `cabinet-backend`     | cabinet BFF (axum) → piggybank (money) + concierge (identity)                   |
+| `cabinet`             | Next.js host shell (proxies `/api/*` → the BFF)                                 |
+| `db` / `tb` / `redis` | SHARED ev_invest Postgres / local TigerBeetle / SHARED Redis                    |
 
-Identity flows additionally need the **concierge** runner (`:50061`), started from the
-sibling `concierge` repo — banking's flake orchestrates only this repo's processes.
+Every port lives in ONE place — the `ports` attrset in [`flake.nix`](../flake.nix):
+gRPC planes cluster on 5005x, web UIs on 5006x. Postgres and Redis are single
+instances shared by every ev_invest repo (data under `~/.local/state/ev_invest/`,
+database name == app name); TigerBeetle is banking-only.
+
+Identity flows additionally need the **concierge** runner (`CONCIERGE_PORT`), started
+from the sibling `concierge` repo — banking's flake orchestrates only this repo's processes.
 
 Control-plane migrations live in `piggybank/core/migrations/` and are **applied by
 the hub on boot** (idempotent). Author new ones with the sqlx CLI (in the dev shell),

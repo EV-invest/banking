@@ -10,6 +10,23 @@ const eslintConfig = [
     // built (minified) element-remote bundles — neither is hand-written, don't lint.
     ignores: [".next/**", "node_modules/**", "dist/**", "public/mfe/**", "shared/contracts/gen/**"],
   },
+  {
+    // All env access is centralised in config.ts; everything else imports the
+    // typed `config` object instead of reaching into process.env. Tests exercise
+    // env-driven config paths, so they may set process.env; the mfe/build.mjs
+    // esbuild `define` names process.env.NODE_ENV as a replace token, not a read.
+    ignores: ["config.ts", "**/*.test.ts", "mfe/build.mjs"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "process",
+          property: "env",
+          message: "Read env through the typed `config` object (config.ts), not process.env.",
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

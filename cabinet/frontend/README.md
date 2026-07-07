@@ -45,7 +45,7 @@ See [`.env.example`](./.env.example) for the full env surface.
 ## Dev
 
 ```
-nix run .#cabinet           # this app on :3000 (proxies /api/* → cabinet backend on :4000)
-nix run .#cabinet-backend   # the BFF on :4000 (needs piggybank on :50051)
+nix run .#cabinet           # this app (proxies /api/* → the cabinet backend)
+nix run .#cabinet-backend   # the BFF (needs piggybank; ports: flake.nix `ports`)
 nix run .#dev               # full stack: postgres + tigerbeetle + redis + signer + piggybank + cabinet-backend + cabinet
 ```

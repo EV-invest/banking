@@ -29,12 +29,12 @@ cookies and CSRF behave exactly as before the BFF moved out of Next.
 
 ## Run
 
-`nix run .#cabinet-backend` (listens on `127.0.0.1:4000`). It needs the piggybank hub on
-`:50051` (`nix run .#piggybank`, or `.#dev`); identity flows additionally need the concierge
-runner on `:50061`, started from the sibling `concierge` repo. Config defaults live in
-`.env.example` (copy to `.env`); any value already in the environment wins.
+`nix run .#cabinet-backend`. It needs the piggybank hub (`nix run .#piggybank`, or
+`.#dev`); identity flows additionally need the concierge runner, started from the
+sibling `concierge` repo. Every port comes from the flake's `ports` attrset;
+secrets live in `.env.example` (copy to `.env`).
 
-> **Network segmentation.** `CABINET_BACKEND_BIND` defaults to loopback (`127.0.0.1:4000`)
+> **Network segmentation.** `CABINET_BACKEND_BIND` stays loopback-reachable only
 > because this process holds every user's tokens and its only request-auth is the session
 > cookie. It must be reached **only** through the frontend's same-origin `/api/*` reverse
 > proxy. Widen the bind (`0.0.0.0`) only behind an upstream firewall that keeps `/api/*` off
@@ -64,7 +64,7 @@ wired and contract-tested, but exercising it live needs real Google credentials.
 setup:
 
 1. **Google Cloud Console → Credentials → OAuth client ID → Web application.** Add
-   `http://localhost:3000/api/auth/callback` as an Authorized redirect URI (it must match
+   `http://localhost:$CABINET_FRONTEND_PORT/cabinet/api/auth/callback` as an Authorized redirect URI (it must match
    `AUTH_REDIRECT_URI` here *and* the `redirect_uri` concierge sends to Google). Note the
    client id + secret.
 2. **concierge** (the secret lives only here) — in its `.env`: `GOOGLE_CLIENT_ID`,
@@ -74,16 +74,15 @@ setup:
    `Exchange` returns `NotConfigured`.
 3. **this BFF** — in its `.env`: `GOOGLE_CLIENT_ID` (the same *public* id), unchanged
    `AUTH_REDIRECT_URI`, `AUTH_COOKIE_SECURE=false` (http://localhost rejects `__Host-`+Secure),
-   `CONCIERGE_GRPC_ADDR=http://127.0.0.1:50061`, and — to mint the money pair —
-   `BANKING_AUTH_GRPC_ADDR=http://127.0.0.1:50052` plus a `BANKING_ISSUANCE_TOKEN` that
+   plus a `BANKING_ISSUANCE_TOKEN` that
    **matches the banking core's** `BANKING_ISSUANCE_TOKEN` (the shared concierge→banking seam token).
 
 Run, then sign in:
 
-1. `nix run .#db` (this repo) and concierge's Postgres; start the concierge runner (`:50061`)
-   and the piggybank hub (`nix run .#piggybank` — core `:50051` + auth `:50052`).
-2. `nix run .#cabinet-backend` (`:4000`) and the frontend (`:3000`, which rewrites `/api/*` here).
-3. Open `http://localhost:3000`, sign in, complete Google consent.
+1. `nix run .#db` (the shared Postgres); start the concierge runner (from its repo)
+   and the piggybank hub (`nix run .#piggybank`).
+2. `nix run .#cabinet-backend` and the frontend (which rewrites `/api/*` here).
+3. Open the frontend (`http://localhost:$CABINET_FRONTEND_PORT`), sign in, complete Google consent.
 4. Verify: `GET /api/auth/session` returns `authenticated`; concierge's `users` table has the
    row and `user_outbox` has its `CREATED` event (the banking plane pulls it over the bridge);
    once the bridge mirrors the user, the money routes (e.g. `GET /api/wallet`) serve a real

@@ -16,11 +16,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const IN_PRODUCTION = process.env.NODE_ENV === "production";
+import { config } from "../../config.ts";
+
+const IN_PRODUCTION = config.isProduction;
 // `next dev` only (never build/start, never the test runner where NODE_ENV is
 // unset): React + Turbopack use eval() in development for HMR and callstack
 // reconstruction, so the strict no-eval CSP would break the dev server.
-const IN_DEVELOPMENT = process.env.NODE_ENV === "development";
+const IN_DEVELOPMENT = config.isDevelopment;
 
 // Absolute-URL origins of MFE bundles, read once from the same registry the BFF
 // serves. Relative scriptUrls (e.g. "/mfe/x.js") are same-origin and covered by
@@ -39,7 +41,7 @@ function mfeOrigins(): string[] {
     // A missing/invalid registry must not crash header construction; same-origin
     // remotes still load under 'self', and a misconfigured CSP fails closed.
   }
-  for (const o of splitList(process.env.MFE_ALLOWED_ORIGINS)) origins.add(o);
+  for (const o of splitList(config.mfeAllowedOrigins)) origins.add(o);
   return [...origins];
 }
 
@@ -48,9 +50,9 @@ function mfeOrigins(): string[] {
 // observability endpoints are env-driven and contribute nothing when unset.
 function connectOrigins(): string[] {
   const origins = new Set<string>(mfeOrigins());
-  const posthog = absoluteOrigin(process.env.NEXT_PUBLIC_POSTHOG_HOST);
+  const posthog = absoluteOrigin(config.public.posthogHost);
   if (posthog) origins.add(posthog);
-  const sentry = absoluteOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN);
+  const sentry = absoluteOrigin(config.public.sentryDsn);
   if (sentry) origins.add(sentry);
   return [...origins];
 }
