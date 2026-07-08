@@ -4,5 +4,5 @@ import type { ReactNode } from "react";
 // login is an edge-to-edge two-panel, logged-out centers a card. No app shell here; the
 // sidebar belongs to the signed-in `(app)` route group.
 export default function AuthLayout({ children }: { children: ReactNode }) {
-  return <div className="min-h-screen bg-background">{children}</div>;
+  return <div className="min-h-[calc(100dvh-var(--ev-shell-offset,0px))] bg-background">{children}</div>;
 }
