@@ -48,7 +48,7 @@ export function Sidebar() {
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
   return (
-    <aside className="sticky top-16 flex h-[calc(100vh-4rem)] w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
+    <aside className="sticky top-[var(--ev-shell-offset,0px)] flex h-[calc(100dvh-var(--ev-shell-offset,0px))] w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
       <nav aria-label="Primary" className="flex flex-col gap-[18px]">
         <Group label="Fund">
           {FUND.map((item) => (

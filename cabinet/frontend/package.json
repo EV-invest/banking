@@ -20,7 +20,7 @@
     "@evinvest/analytics": "^0.1.2",
     "@evinvest/error-monitoring": "^0.1.0",
     "@evinvest/experiments": "^0.1.0",
-    "@evinvest/uikit": "^0.6.0",
+    "@evinvest/uikit": "^0.7.0",
     "@sentry/nextjs": "^10.58.0",
     "@sentry/node": "^10.58.0",
     "@sentry/react": "^10.58.0",

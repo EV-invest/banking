@@ -19,7 +19,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
   const href = dest === "/" ? apiPath("/api/auth/login") : apiPath(`/api/auth/login?returnTo=${encodeURIComponent(dest)}`);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))]">
       {/* brand panel */}
       <aside className="relative hidden w-[600px] shrink-0 flex-col justify-between overflow-hidden bg-main-brand p-16 lg:flex">
         {/* big soft teal wash */}
