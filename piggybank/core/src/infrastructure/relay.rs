@@ -295,6 +295,21 @@ impl Relay {
 				"redeem_payout" => (&transfer.debit, Some(())),
 				_ => continue,
 			};
+			// Delivery is at-least-once, and legs apply as separate TB calls — a redelivery
+			// may re-plan an event whose guarded leg already posted (a later leg, or the
+			// leg's own saga-step insert, failed transiently). The re-read balance then
+			// already reflects this leg's outflow, so re-checking it against the full
+			// amount double-counts the event's own move and spuriously parks a partially-
+			// applied settle. TB is the authority on "already applied" (the saga step may
+			// have failed to record): an existing transfer re-submits as `Exists`, so its
+			// guard is vacuous — skip it.
+			match self.ledger.transfer_exists(op.transfer_id).await {
+				Ok(true) => continue,
+				Ok(false) => {}
+				Err(LedgerError::Unavailable(err)) => return Outcome::Retry(err),
+				Err(LedgerError::Retryable(err)) => return Outcome::RetryBounded(err),
+				Err(err) => return Outcome::park(format!("settle applied-leg check: {err}")),
+			}
 			match self.ledger.balance(guarded).await {
 				Ok(balance) => {
 					let have = if liquidity.is_some() { balance.available() } else { balance.posted };

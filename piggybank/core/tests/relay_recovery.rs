@@ -17,7 +17,7 @@
 use std::{
 	sync::{
 		Arc,
-		atomic::{AtomicUsize, Ordering},
+		atomic::{AtomicBool, AtomicUsize, Ordering},
 	},
 	time::Duration,
 };
@@ -26,7 +26,7 @@ use async_trait::async_trait;
 use domain::{
 	architecture::{DomainEvent, Gateway},
 	auth::AuthSubject,
-	balance::{LedgerEvent, Party},
+	balance::{LedgerAccountKey, LedgerEvent, Party, TransferCode},
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
 	withdrawals::{WithdrawalEvent, WithdrawalState},
@@ -47,7 +47,10 @@ use piggybank_core::{
 		users::PgUsers,
 		withdrawals::PgWithdrawals,
 	},
-	ports::{BroadcastRequest, Custody, CustodyError, RedemptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{
+		BroadcastRequest, Custody, CustodyError, RedemptionRepository, UserRepository, WithdrawalRepository,
+		ledger::{CashInvariant, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
+	},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -487,6 +490,131 @@ async fn unpark_refuses_compensated_and_dispatched_rows() {
 	// An unknown seq: the service's NOT_FOUND arm (bigserial never issues -1).
 	assert!(!outbox::unpark(&h.pool, -1).await.expect("unpark refuses"));
 	assert_eq!(outbox::unpark_refusal(&h.pool, -1).await.expect("refusal read"), None);
+}
+
+/// Issue #37 — the settle liquidity pre-check must be idempotent w.r.t. the event's own
+/// already-applied legs. A transient failure on the fee leg leaves the withdrawal settle
+/// half-applied (clearing posted, net disbursed) with the row undispatched; the redelivery
+/// re-reads the rail balance, which now already reflects the disburse's own outflow, and —
+/// whenever the rail held between `net` and `2·net` — used to compare that post-outflow
+/// balance against the full net and spuriously park (with `applied_legs = 0`, hiding the
+/// half-applied state), stranding the fee in clearing with every `UnparkEvent` re-parking.
+/// The redelivery must instead recognize the applied legs and complete the fee.
+#[tokio::test]
+async fn a_redelivered_half_applied_settle_completes_instead_of_parking() {
+	let Some(h) = harness().await else { return };
+	let network = Network::Bep20;
+	let user = active_user(&h).await;
+	// The gross dwarfs anything parallel tests leave on the shared rail, so once the
+	// disburse leg drains the net back out the rail holds ≈ base + fee < net — the
+	// issue's `[net, 2·net)` trigger window, hit deterministically.
+	let gross = usdt("1000000000000000");
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, gross)
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&StubCustody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		gross,
+	)
+	.await
+	.unwrap();
+	assert_eq!(
+		withdrawal.state(),
+		WithdrawalState::Processing,
+		"the deposit makes the rail liquid, so the request auto-dispatches"
+	);
+	h.relay.drain().await;
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+
+	// Half-apply the settle: this withdrawal's fee leg fails once, transiently, after the
+	// clearing posted and the net disbursed — the drain stops to retry, the row stays
+	// undispatched. This is the redelivery state from the issue.
+	let flaky_ledger = Arc::new(FailFeeLegOnce {
+		inner: h.ledger.clone(),
+		target: withdrawal.id().raw().as_u128(),
+		tripped: AtomicBool::new(false),
+	});
+	let flaky_relay = Relay::new(h.pool.clone(), flaky_ledger.clone(), Arc::new(StubCustody), h.notify.clone());
+	flaky_relay.drain().await;
+	assert!(flaky_ledger.tripped.load(Ordering::SeqCst), "the injected fee-leg outage fired, leaving the settle half-applied");
+
+	// The redelivery through the normal relay: the pre-check re-reads the drained rail but
+	// must skip the guard for the already-applied disburse leg — completing the fee, not
+	// parking "liquidity insufficient at settle".
+	h.relay.drain().await;
+
+	let (is_dispatched, is_parked, last_error): (bool, bool, Option<String>) =
+		sqlx::query_as("SELECT dispatched_at IS NOT NULL, parked_at IS NOT NULL, last_error FROM outbox WHERE aggregate_id = $1 AND payload->>'type' = 'settled'")
+			.bind(withdrawal.id().raw())
+			.fetch_one(&h.pool)
+			.await
+			.expect("the settled outbox row is queryable");
+	assert!(is_dispatched, "a redelivered half-applied settle must complete, not park (last_error = {last_error:?})");
+	assert!(!is_parked, "no spurious liquidity park on redelivery");
+
+	// All three legs recorded — the fee reached fee-revenue instead of stranding in clearing.
+	let legs: i64 = sqlx::query_scalar("SELECT count(*) FROM saga_steps WHERE event_id = (SELECT event_id FROM outbox WHERE aggregate_id = $1 AND payload->>'type' = 'settled')")
+		.bind(withdrawal.id().raw())
+		.fetch_one(&h.pool)
+		.await
+		.expect("saga steps are queryable");
+	assert_eq!(legs, 3, "clearing post, disburse and fee all applied");
+}
+
+/// A fault-injecting decorator over the real TigerBeetle ledger (no mock — every delegated
+/// call hits TB): the target withdrawal's fee post fails once with a transient
+/// `Unavailable`, freezing its settle in the half-applied redelivery state.
+struct FailFeeLegOnce {
+	inner: Arc<dyn Ledger>,
+	target: u128,
+	tripped: AtomicBool,
+}
+
+impl Gateway for FailFeeLegOnce {}
+
+#[async_trait]
+impl Ledger for FailFeeLegOnce {
+	async fn ensure_account(&self, key: &LedgerAccountKey) -> Result<(), LedgerError> {
+		self.inner.ensure_account(key).await
+	}
+
+	async fn balance(&self, key: &LedgerAccountKey) -> Result<LedgerBalance, LedgerError> {
+		self.inner.balance(key).await
+	}
+
+	async fn transfer_exists(&self, id: u128) -> Result<bool, LedgerError> {
+		self.inner.transfer_exists(id).await
+	}
+
+	async fn post(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError> {
+		if transfer.code == TransferCode::WithdrawFee && transfer.reference == self.target && !self.tripped.swap(true, Ordering::SeqCst) {
+			return Err(LedgerError::Unavailable("injected fee-leg outage (test)".into()));
+		}
+		self.inner.post(transfer).await
+	}
+
+	async fn reserve(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError> {
+		self.inner.reserve(transfer).await
+	}
+
+	async fn complete(&self, completion: &PendingCompletion) -> Result<(), LedgerError> {
+		self.inner.complete(completion).await
+	}
+
+	async fn cash_invariant(&self) -> Result<CashInvariant, LedgerError> {
+		self.inner.cash_invariant().await
+	}
 }
 
 /// A counting custody port adapter (no chain): every broadcast is recorded and refused, so

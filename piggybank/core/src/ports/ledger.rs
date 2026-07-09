@@ -32,6 +32,13 @@ pub trait Ledger: Gateway {
 	/// Live balance for an account, normalized to its natural side (Read-First).
 	async fn balance(&self, key: &LedgerAccountKey) -> Result<LedgerBalance, LedgerError>;
 
+	/// Whether a transfer with this (deterministic, caller-assigned) id has already
+	/// applied. The relay's settle pre-check uses it to stay idempotent under
+	/// at-least-once delivery: a redelivered event's already-applied leg re-submits as
+	/// `Exists`, and the live balance already reflects its outflow — so its liquidity
+	/// guard must be skipped, not re-checked against the post-outflow balance.
+	async fn transfer_exists(&self, id: u128) -> Result<bool, LedgerError>;
+
 	/// Apply a posted transfer with an explicit amount. Ensures both accounts exist
 	/// first. Idempotent on the transfer `id` (a re-submit returns `Exists` ⇒ ok).
 	async fn post(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError>;
