@@ -229,7 +229,13 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   any leg is applied**: a short rail parks the whole settle atomically (nothing applied),
   recoverable by a rail top-up + reconciliation. (Concurrent withdrawals on one rail are
   the realistic trigger — each is dispatched against the same liquidity, since reserves go
-  to `clearing`, not the rail.)
+  to `clearing`, not the rail.) The guard is **idempotent under redelivery**: legs apply as
+  separate TB calls, so a transient failure after the disburse (the fee leg, or its own
+  saga-step insert) redelivers an event whose re-read rail balance already reflects the
+  disburse's own outflow — re-checking it would double-count and spuriously park a
+  half-applied settle. The pre-check therefore asks TB (`Ledger::transfer_exists`, the
+  authority — the saga step may have failed to record) whether the guarded leg's
+  deterministic id already applied, and skips its guard if so; the re-apply is `Exists`.
 - **No shutdown cascade on a DB blip.** The composition root cancels every sibling task when
   any branch returns, so the relay must not exit on a transient DB failure. `Relay::run`
   re-acquires the outbox advisory lock with capped backoff when the lock connection drops (or

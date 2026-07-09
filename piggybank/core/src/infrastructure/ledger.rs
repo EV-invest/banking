@@ -223,6 +223,18 @@ impl Ledger for TbLedger {
 		Ok(LedgerBalance { posted, pending, locked })
 	}
 
+	async fn transfer_exists(&self, id: u128) -> Result<bool, LedgerError> {
+		let call = self
+			.tb
+			.client()
+			.lookup_transfers(&[id])
+			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
+		let transfers = deadline("lookup_transfers", call)
+			.await?
+			.map_err(|e| LedgerError::Unavailable(format!("lookup_transfers: {e:?}")))?;
+		Ok(!transfers.is_empty())
+	}
+
 	async fn post(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError> {
 		let (debit_id, credit_id) = self.ensure_pair(&transfer.debit, &transfer.credit).await?;
 		let row = tb::Transfer {
