@@ -549,6 +549,13 @@ async fn a_redelivered_half_applied_settle_completes_instead_of_parking() {
 	flaky_relay.drain().await;
 	assert!(flaky_ledger.tripped.load(Ordering::SeqCst), "the injected fee-leg outage fired, leaving the settle half-applied");
 
+	// Self-check the trigger window, so amount drift can never make this test pass
+	// vacuously: the drained rail must sit below the net, i.e. a naïve re-check of the
+	// disburse guard WOULD spuriously park here.
+	let rail = h.ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await.unwrap();
+	let net = withdrawal.amount().checked_sub(withdrawal.fee()).unwrap();
+	assert!(rail.posted < net.base_units(), "precondition: the rail is short of the net after the disburse's own outflow");
+
 	// The redelivery through the normal relay: the pre-check re-reads the drained rail but
 	// must skip the guard for the already-applied disburse leg — completing the fee, not
 	// parking "liquidity insufficient at settle".
