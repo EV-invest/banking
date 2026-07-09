@@ -236,7 +236,6 @@ async fn get_wallet_presents_only_configured_rails() {
 		.serve(addr);
 	let channel = Endpoint::from_shared(format!("http://{addr}")).expect("endpoint").connect_lazy();
 	let addresses = SignerDepositAddresses::new(pool.clone(), SignerServiceClient::new(channel), None);
-	let withdrawals = PgWithdrawals::new(pool.clone());
 	let positions = PgFundPositions::new(pool.clone());
 	let nav = PgNav::new(pool.clone());
 	let users = PgUsers::new(pool.clone());
@@ -245,7 +244,7 @@ async fn get_wallet_presents_only_configured_rails() {
 	tokio::select! {
 		result = server => result.expect("serve fake signer"),
 		() = async {
-			let wallet = wallet_app::get_wallet(ledger.as_ref(), &positions, &nav, &withdrawals, &addresses, &[Network::Bep20], user)
+			let wallet = wallet_app::get_wallet(ledger.as_ref(), &positions, &nav, &addresses, &[Network::Bep20], user)
 				.await
 				.expect("wallet");
 			assert_eq!(wallet.deposit_addresses.len(), 1, "exactly the configured rail is offered for deposit");

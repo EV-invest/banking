@@ -43,7 +43,6 @@ impl WalletService for WalletSvc {
 			self.state.ledger.as_ref(),
 			self.state.positions.as_ref(),
 			self.state.nav.as_ref(),
-			self.state.withdrawals.as_ref(),
 			self.state.deposit_addresses.as_ref(),
 			&self.state.configured_networks,
 			user,
