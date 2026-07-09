@@ -37,6 +37,9 @@ ed25519-dalek = "2"
 ev = { version = "0.2.1", package = "ev_lib", default-features = false, features = ["architecture"] }
 evbanking_auth = { path = "piggybank/auth" }
 evbanking_contracts = { path = "contracts" }
+# The shared verify-side flow (JWKS-cached local verification of concierge access
+# JWTs) — the BFF's request credential is the shell-set `ev_access` cookie.
+evconcierge_auth = { git = "https://github.com/EV-invest/concierge.git", rev = "15ad806b756052178594f957a2e841e155a1d713" }
 # The concierge identity plane's wire contracts, pulled in by git like any downstream
 # consumer. The cabinet backend (the cross-plane orchestrator) and now piggybank-core
 # (the one-way lifecycle bridge consumer) depend on it. Pinned to the rev that ships

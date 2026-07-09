@@ -506,18 +506,14 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-extra",
- "base64",
  "dotenvy",
  "ev_lib",
  "evbanking_contracts",
+ "evconcierge_auth",
  "evconcierge_contracts",
- "form_urlencoded",
- "getrandom 0.3.4",
  "prost",
- "redis",
  "serde",
  "serde_json",
- "sha2 0.10.9",
  "subtle",
  "time",
  "tokio",
@@ -1688,6 +1684,28 @@ dependencies = [
  "prost",
  "tonic",
  "tonic-build",
+]
+
+[[package]]
+name = "evconcierge_auth"
+version = "0.1.0"
+source = "git+https://github.com/EV-invest/concierge.git?rev=15ad806b756052178594f957a2e841e155a1d713#15ad806b756052178594f957a2e841e155a1d713"
+dependencies = [
+ "anyhow",
+ "ev_lib",
+ "evconcierge_contracts",
+ "http 1.4.2",
+ "jsonwebtoken",
+ "redis",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "subtle",
+ "thiserror 2.0.18",
+ "tokio",
+ "tonic",
+ "tower",
+ "uuid",
 ]
 
 [[package]]

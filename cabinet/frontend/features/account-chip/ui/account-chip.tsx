@@ -3,7 +3,7 @@
 import { BadgeCheck, LogOut } from "lucide-react";
 
 import { useProfile } from "@/entities/user/model/profile-store";
-import { apiPath, withBasePath } from "@/shared/config/base-path";
+import { withBasePath } from "@/shared/config/base-path";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { useSession } from "@/shared/lib/use-session";
@@ -36,7 +36,9 @@ function AuthedChip({ className, email }: { className?: string; email: string | 
   const name = profile?.preferred_name || profile?.legal_name || displayName(email);
 
   async function signOut() {
-    await fetch(apiPath("/api/auth/logout"), { method: "POST", headers: csrfHeader() });
+    // Shell-owned logout (site-root /api/auth): revokes the shared session and clears
+    // its cookies for every zone at once.
+    await fetch("/api/auth/logout", { method: "POST", headers: csrfHeader() });
     window.location.href = withBasePath("/loggedout");
   }
 

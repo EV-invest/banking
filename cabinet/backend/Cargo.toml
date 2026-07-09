@@ -15,17 +15,13 @@ path = "src/main.rs"
 anyhow.workspace = true
 axum.workspace = true
 axum-extra = { workspace = true, features = ["cookie"] }
-base64.workspace = true
 dotenvy.workspace = true
 ev = { workspace = true, features = ["analytics", "error_monitoring"] }
 evbanking_contracts.workspace = true
+evconcierge_auth.workspace = true
 evconcierge_contracts.workspace = true
-form_urlencoded.workspace = true
-getrandom.workspace = true
-redis.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 subtle.workspace = true
 time.workspace = true
 tokio = { workspace = true, features = ["full"] }

@@ -1,22 +1,24 @@
 //! The cabinet BFF — a standalone, stateless HTTP orchestration service.
 //!
-//! It is the cabinet's single auth/egress boundary: it runs the OAuth confidential-client
-//! flow, holds the user's session (and the concierge token pair) server-side, and proxies
-//! the browser's same-origin `/api/*` JSON requests to two gRPC planes — **concierge**
-//! (identity: OAuth, sessions, profile) and **piggybank** (money: wallet, funds, health).
-//! The Next.js frontend reaches it via a same-origin rewrite, so the browser only ever
-//! holds an opaque session cookie + a readable CSRF cookie.
+//! It is the cabinet's egress boundary: it proxies the browser's same-origin `/api/*`
+//! JSON requests to two gRPC planes — **concierge** (identity: profile/directory) and
+//! **piggybank** (money: wallet, funds, health). Auth is SHELL-owned: the concierge
+//! auth web surface (reached via the conductor's `/api/auth/*` on the shared origin)
+//! signs users in and sets the zone-shared `ev_access` JWT cookie; the BFF verifies
+//! that cookie locally against the concierge JWKS and, for money routes, mints the
+//! SEPARATE banking (`aud=banking-core`) pair for the verified subject. The cabinet
+//! runs no OAuth and holds no session.
 
 use std::sync::Arc;
 
 use anyhow::Context;
 use ev::error_monitoring::{self, Config as SentryConfig};
+use evconcierge_auth::{Verifier, VerifierConfig};
 
 mod config;
 mod cookies;
 mod dto;
 mod error;
-mod oauth;
 mod routes;
 mod session;
 mod state;
@@ -24,8 +26,7 @@ mod util;
 
 use config::Config;
 use cookies::CookieNames;
-use oauth::OAuthTxStore;
-use session::SessionStore;
+use session::BankingTokens;
 use state::{AppState, Grpc};
 
 // Sentry must be initialised before the async runtime starts — no `#[tokio::main]`.
@@ -72,10 +73,21 @@ async fn run(config: Config) -> anyhow::Result<()> {
 		"cabinet BFF listening"
 	);
 
+	// Local verification of the shell-set access JWT: the JWKS is cached from the
+	// concierge plane's public `Jwks` RPC (lazy — the first verify warms it), so no
+	// per-request round trip. Fails closed until the plane publishes keys.
+	let verifier = Verifier::try_new(VerifierConfig {
+		issuer: config.auth_issuer.clone(),
+		audiences: vec![config.auth_client_audience.clone()],
+		allowed_types: vec![evconcierge_auth::TokenType::Access],
+		jwks_grpc_endpoint: std::env::var("AUTH_JWKS_GRPC_ENDPOINT").unwrap_or_else(|_| config.concierge_grpc_addr.clone()),
+	})
+	.context("failed to build the access-token verifier")?;
+
 	let state = AppState {
 		cookies: Arc::new(CookieNames::new(config.cookie_secure)),
-		sessions: Arc::new(SessionStore::from_env().await.context("failed to initialize the session store")?),
-		oauth: Arc::new(OAuthTxStore::new()),
+		banking: Arc::new(BankingTokens::new()),
+		verifier,
 		grpc,
 		config: Arc::new(config),
 	};

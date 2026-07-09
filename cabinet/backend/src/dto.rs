@@ -7,52 +7,9 @@ use evbanking_contracts::banking::v1 as bk;
 use evconcierge_contracts::concierge::v1 as cc;
 use serde::Serialize;
 
-use crate::session::User;
-
 // ── /api/auth/session ────────────────────────────────────────────────────────
 // Note the camelCase principal: the old BFF mapped the proto `user_id` → `userId`
 // for this endpoint only (the session principal), unlike the snake_case passthroughs.
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionUser {
-	pub user_id: String,
-	pub email: String,
-	pub status: String,
-	/// The platform access role (investor/operator/admin/owner).
-	pub role: String,
-	/// Derived convenience for the frontend nav: any non-investor role opens the admin
-	/// console. Real per-screen authorization is still enforced server-side (the BFF
-	/// admin routes re-check permission and the plane re-checks the role).
-	pub is_admin: bool,
-}
-
-#[derive(Serialize)]
-pub struct SessionInfo {
-	pub authenticated: bool,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub user: Option<SessionUser>,
-}
-
-impl SessionInfo {
-	pub fn authenticated(user: User) -> Self {
-		let is_admin = !user.role.is_empty() && user.role != "investor";
-		Self {
-			authenticated: true,
-			user: Some(SessionUser {
-				user_id: user.user_id,
-				email: user.email,
-				status: user.status,
-				role: user.role,
-				is_admin,
-			}),
-		}
-	}
-
-	pub fn anonymous() -> Self {
-		Self { authenticated: false, user: None }
-	}
-}
 
 // ── concierge: user profile + sessions ───────────────────────────────────────
 
@@ -97,42 +54,6 @@ impl From<cc::UserProfile> for UserProfile {
 			timezone: p.timezone,
 			kyc_level: p.kyc_level,
 			role: p.role,
-		}
-	}
-}
-
-#[derive(Serialize)]
-pub struct Session {
-	pub id: String,
-	pub user_agent: String,
-	pub ip: String,
-	pub created_at: String,
-	pub last_seen: String,
-	pub current: bool,
-}
-
-impl From<cc::Session> for Session {
-	fn from(s: cc::Session) -> Self {
-		Self {
-			id: s.id,
-			user_agent: s.user_agent,
-			ip: s.ip,
-			created_at: s.created_at.to_string(),
-			last_seen: s.last_seen.to_string(),
-			current: s.current,
-		}
-	}
-}
-
-#[derive(Serialize)]
-pub struct SessionList {
-	pub sessions: Vec<Session>,
-}
-
-impl From<cc::ListSessionsResponse> for SessionList {
-	fn from(r: cc::ListSessionsResponse) -> Self {
-		Self {
-			sessions: r.sessions.into_iter().map(Session::from).collect(),
 		}
 	}
 }
@@ -721,41 +642,5 @@ impl From<cc::PlatformConfig> for PlatformConfig {
 				})
 				.collect(),
 		}
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use serde_json::json;
-
-	use super::SessionInfo;
-	use crate::session::User;
-
-	// `/api/auth/session` is the only endpoint with a camelCase principal (`userId`), and
-	// `user` is omitted entirely when anonymous. The browser's who-am-I (sidebar) depends on
-	// exactly this shape, so pin it.
-	#[test]
-	fn session_authenticated_shape() {
-		let user = User {
-			user_id: "u-1".into(),
-			email: "a@b.c".into(),
-			status: "active".into(),
-			role: "operator".into(),
-		};
-		let got = serde_json::to_value(SessionInfo::authenticated(user)).unwrap();
-		assert_eq!(
-			got,
-			json!({
-				"authenticated": true,
-				// A non-investor role opens the admin console nav; `isAdmin` is the derived flag.
-				"user": { "userId": "u-1", "email": "a@b.c", "status": "active", "role": "operator", "isAdmin": true }
-			})
-		);
-	}
-
-	#[test]
-	fn session_anonymous_omits_user() {
-		let got = serde_json::to_value(SessionInfo::anonymous()).unwrap();
-		assert_eq!(got, json!({ "authenticated": false }));
 	}
 }
