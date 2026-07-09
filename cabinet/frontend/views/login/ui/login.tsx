@@ -1,6 +1,6 @@
 import { Logo } from "@/application/layout/logo";
 import { safeReturnTo } from "@/features/auth/lib/return-to";
-import { apiPath } from "@/shared/config/base-path";
+import { withBasePath } from "@/shared/config/base-path";
 
 const ERRORS: Record<string, string> = {
   denied: "Sign-in was cancelled.",
@@ -15,8 +15,11 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
   const { error, returnTo } = await searchParams;
   const message = error ? (ERRORS[error] ?? "Sign-in failed. Please try again.") : null;
   const dest = safeReturnTo(returnTo ?? null);
-  // Full navigation (not a client route): the BFF redirects to Google.
-  const href = dest === "/" ? apiPath("/api/auth/login") : apiPath(`/api/auth/login?returnTo=${encodeURIComponent(dest)}`);
+  // Full navigation to the SHELL-owned login (site-root /api/auth, not the zone's
+  // BFF — the cabinet runs no OAuth); returnTo is site-root-relative, so it carries
+  // the zone prefix.
+  // safeReturnTo guarantees the leading slash withBasePath's type asks for.
+  const href = `/api/auth/login?returnTo=${encodeURIComponent(withBasePath(dest as `/${string}`))}`;
 
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))]">

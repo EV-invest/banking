@@ -7,7 +7,7 @@ use tonic::{
 	transport::{Channel, Endpoint},
 };
 
-use crate::{config::Config, cookies::CookieNames, oauth::OAuthTxStore, session::SessionStore};
+use crate::{config::Config, cookies::CookieNames, session::BankingTokens};
 
 /// Cap on establishing a TCP/TLS connection to an upstream plane: a black-holed or
 /// half-open replica must fail fast rather than wedge the awaiting request task.
@@ -25,9 +25,13 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct AppState {
 	pub config: Arc<Config>,
 	pub grpc: Grpc,
-	pub sessions: Arc<SessionStore>,
-	pub oauth: Arc<OAuthTxStore>,
+	/// The per-user banking money-pair cache (the one server-side state left — auth
+	/// is shell-owned and the request credential is the verified access-JWT cookie).
+	pub banking: Arc<BankingTokens>,
 	pub cookies: Arc<CookieNames>,
+	/// Local verifier for the shared concierge access JWT (JWKS-cached — no
+	/// per-request round trip).
+	pub verifier: evconcierge_auth::Verifier,
 }
 
 /// gRPC egress to both planes. Channels are lazily connected and cheap to clone, so a
@@ -52,10 +56,6 @@ impl Grpc {
 			concierge,
 			banking_issuance_token: banking_issuance_token.map(Arc::from),
 		})
-	}
-
-	fn auth(&self) -> cc::auth_service_client::AuthServiceClient<Channel> {
-		cc::auth_service_client::AuthServiceClient::new(self.concierge.clone())
 	}
 
 	fn banking_auth(&self) -> bk::auth_service_client::AuthServiceClient<Channel> {
@@ -95,42 +95,9 @@ impl Grpc {
 	}
 
 	// ── concierge identity plane ───────────────────────────────────────────────
-	pub async fn exchange(&self, req: cc::ExchangeRequest) -> Result<cc::TokenResponse, Status> {
-		Ok(self.auth().exchange(req).await?.into_inner())
-	}
-
-	pub async fn refresh(&self, refresh_token: &str) -> Result<cc::TokenResponse, Status> {
-		let req = cc::RefreshRequest {
-			refresh_token: refresh_token.to_string(),
-		};
-		Ok(self.auth().refresh(req).await?.into_inner())
-	}
-
-	pub async fn logout(&self, refresh_token: &str, revoke_all: bool) -> Result<(), Status> {
-		let req = cc::LogoutRequest {
-			refresh_token: refresh_token.to_string(),
-			revoke_all,
-		};
-		self.auth().logout(req).await?;
-		Ok(())
-	}
-
-	pub async fn list_sessions(&self, refresh_token: &str) -> Result<cc::ListSessionsResponse, Status> {
-		let req = cc::ListSessionsRequest {
-			refresh_token: refresh_token.to_string(),
-		};
-		Ok(self.auth().list_sessions(req).await?.into_inner())
-	}
-
-	pub async fn revoke_session(&self, refresh_token: &str, session_id: &str) -> Result<(), Status> {
-		let req = cc::RevokeSessionRequest {
-			refresh_token: refresh_token.to_string(),
-			session_id: session_id.to_string(),
-		};
-		self.auth().revoke_session(req).await?;
-		Ok(())
-	}
-
+	// The auth issuance RPCs (Exchange/Refresh/Logout/sessions) left with the OAuth
+	// flow — the shell-owned auth surface calls them; the BFF only forwards the
+	// verified user token to the directory.
 	pub async fn get_me(&self, token: &str) -> Result<cc::UserProfile, Status> {
 		Ok(self.directory().get_me(bearer(token, cc::GetMeRequest {})?).await?.into_inner())
 	}
@@ -161,17 +128,6 @@ impl Grpc {
 			refresh_token: refresh_token.to_string(),
 		};
 		Ok(self.banking_auth().refresh(req).await?.into_inner())
-	}
-
-	/// Revoke the money-plane refresh family on logout, so a sign-out drops the banking token
-	/// pair too (not just the concierge one). Best-effort, mirroring the concierge `logout`.
-	pub async fn logout_banking(&self, refresh_token: &str, revoke_all: bool) -> Result<(), Status> {
-		let req = bk::LogoutRequest {
-			refresh_token: refresh_token.to_string(),
-			revoke_all,
-		};
-		self.banking_auth().logout(req).await?;
-		Ok(())
 	}
 
 	// ── piggybank money plane ──────────────────────────────────────────────────

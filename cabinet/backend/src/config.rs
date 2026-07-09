@@ -22,12 +22,14 @@ pub struct Config {
 	/// `None` ⇒ no money-plane token is minted (money routes surface `NotConfigured`). Must
 	/// match `BANKING_ISSUANCE_TOKEN` on the banking auth side.
 	pub banking_issuance_token: Option<IssuanceToken>,
-	/// The concierge identity plane (OAuth/sessions/profile), e.g. `http://127.0.0.1:50061`.
+	/// The concierge identity plane (directory/profile), e.g. `http://127.0.0.1:50061`.
+	/// Also serves the JWKS the access-JWT verifier caches (auth is shell-owned; the
+	/// BFF only VERIFIES the shared `ev_access` cookie, it never runs OAuth).
 	pub concierge_grpc_addr: String,
-	/// Google OAuth2 public client id. `None` ⇒ `/api/auth/login` returns 503.
-	pub google_client_id: Option<String>,
-	/// The OAuth redirect URI registered with Google (the browser-facing callback URL).
-	pub auth_redirect_uri: String,
+	/// Issuer + audience the verifier expects on the shared access JWT. Must match
+	/// what the concierge plane stamps (its `AUTH_ISSUER` / `AUTH_CLIENT_AUDIENCE`).
+	pub auth_issuer: String,
+	pub auth_client_audience: String,
 	/// Whether cookies are `__Host-`-prefixed + `Secure` (production over HTTPS).
 	pub cookie_secure: bool,
 	/// Path to the microfrontend registry served at `/api/mfe-registry`.
@@ -43,16 +45,6 @@ pub struct Config {
 	pub posthog_host: Option<String>,
 }
 impl Config {
-	/// The browser-facing zone prefix the cabinet is mounted under (Next `basePath`),
-	/// derived from `auth_redirect_uri`'s path: `…/cabinet/api/auth/callback` → `/cabinet`
-	/// (empty when the app is served at the origin root). Redirects the BFF emits are
-	/// zone-internal paths — the Next rewrite strips the prefix on the way in but never
-	/// re-adds it on `Location` headers, so the BFF must.
-	pub fn zone_base_path(&self) -> &str {
-		let path_start = self.auth_redirect_uri.find("://").map(|i| i + 3).and_then(|host| self.auth_redirect_uri[host..].find('/').map(|p| host + p)).unwrap_or(0);
-		self.auth_redirect_uri[path_start..].strip_suffix("/api/auth/callback").unwrap_or("")
-	}
-
 	pub fn from_env() -> anyhow::Result<Self> {
 		let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
 		// Mirrors the frontend's cookie logic: explicit AUTH_COOKIE_SECURE wins, else
@@ -61,9 +53,9 @@ impl Config {
 			Some(v) => v == "true",
 			None => app_env == "production",
 		};
-		// Loopback by default: the BFF holds every user's tokens and its only request-auth
-		// is the session cookie, so it must sit behind the same-origin reverse proxy. Opt
-		// into a wider bind (e.g. 0.0.0.0:4000) only with an upstream firewall in place.
+		// Loopback by default: the BFF's request-auth is a bearer cookie, so it must sit
+		// behind the same-origin reverse proxy. Opt into a wider bind (e.g. 0.0.0.0:4000)
+		// only with an upstream firewall in place.
 		let bind_addr = std::env::var("CABINET_BACKEND_BIND")
 			.unwrap_or_else(|_| DEFAULT_BIND.to_string())
 			.parse()
@@ -74,8 +66,9 @@ impl Config {
 			banking_auth_grpc_addr: std::env::var("BANKING_AUTH_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50052".to_string()),
 			banking_issuance_token: opt("BANKING_ISSUANCE_TOKEN").map(IssuanceToken),
 			concierge_grpc_addr: std::env::var("CONCIERGE_GRPC_ADDR").unwrap_or_else(|_| "http://127.0.0.1:50061".to_string()),
-			google_client_id: opt("GOOGLE_CLIENT_ID"),
-			auth_redirect_uri: std::env::var("AUTH_REDIRECT_URI").unwrap_or_else(|_| "http://localhost:3000/cabinet/api/auth/callback".to_string()),
+			// Defaults mirror the concierge plane's own (`assert_plane`-checked) values.
+			auth_issuer: std::env::var("AUTH_ISSUER").unwrap_or_else(|_| "https://auth.concierge.ev".to_string()),
+			auth_client_audience: std::env::var("AUTH_CLIENT_AUDIENCE").unwrap_or_else(|_| "concierge".to_string()),
 			cookie_secure,
 			mfe_registry_path: std::env::var("MFE_REGISTRY_PATH").unwrap_or_else(|_| "cabinet/frontend/mfe-registry.json".to_string()),
 			mfe_allowed_origins: opt("MFE_ALLOWED_ORIGINS")

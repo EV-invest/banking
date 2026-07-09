@@ -1,9 +1,11 @@
 "use client";
 
-// Browser-side session hook: fetches `/api/auth/session` (the BFF's who-am-I, which
-// never returns a token) so client components can read the principal — including the
-// platform `role` and the derived `isAdmin` used to gate the admin console nav.
-// Server-side authorization is still authoritative; this only shapes the UI.
+// Browser-side session hook: fetches the SHELL-owned `/api/auth/session` (site-root —
+// auth lives with the shell, not this zone; the response never returns a token, and
+// the call transparently refreshes the shared access-JWT cookie) so client components
+// can read the principal — including the platform `role` and the derived `isAdmin`
+// used to gate the admin console nav. Server-side authorization is still
+// authoritative; this only shapes the UI.
 //
 // A module-level cache dedupes the fetch: every consumer on a page (sidebar, account
 // chip, admin gate) shares ONE request. Only resolved responses are cached — a fetch
@@ -12,7 +14,6 @@
 
 import { useEffect, useState } from "react";
 
-import { apiPath } from "@/shared/config/base-path";
 import type { SessionInfo } from "@/shared/contracts/admin";
 
 /// A fetch/parse failure — same shape as a server-resolved "not signed in", but
@@ -26,7 +27,7 @@ function fetchSession(): Promise<SessionInfo> {
   // Serving the cache here (not in the hook) closes the render→effect race: a consumer
   // whose effect runs after another consumer's fetch resolved still syncs its state.
   if (cached) return Promise.resolve(cached);
-  inflight ??= fetch(apiPath("/api/auth/session"))
+  inflight ??= fetch("/api/auth/session")
     .then((r) => r.json() as Promise<SessionInfo>)
     .then((s) => {
       cached = s;

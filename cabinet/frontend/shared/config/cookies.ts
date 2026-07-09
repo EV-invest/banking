@@ -1,26 +1,18 @@
-// App-wide cookie configuration: the names and base options for every cookie the
-// BFF sets. Lives in shared so both the session entity and the auth feature bind
-// to the same cookie identity without cross-importing each other.
+// The auth cookie names this zone READS — they are minted by the shell-owned auth
+// surface (concierge, behind the conductor's /api/auth rewrites), never set here.
+// The proxy middleware gates on `session`; `csrf-client.ts` reads `csrf` for the
+// double-submit header.
 
 import { config } from "../../config.ts";
 
 // `__Host-` cookies require the Secure attribute, which browsers reject over plain
-// http://localhost. So in dev (no Secure) we drop the prefix; in production the
-// cookies are `__Host-`-prefixed and Secure. Toggle explicitly with
-// AUTH_COOKIE_SECURE, else infer from NODE_ENV.
+// http://localhost. So in dev (no Secure) the shell drops the prefix; in production
+// the cookies are `__Host-`-prefixed and Secure. Toggle explicitly with
+// AUTH_COOKIE_SECURE, else infer from NODE_ENV — must match the shell's setting.
 const SECURE = config.authCookieSecure;
 const PREFIX = SECURE ? "__Host-" : "";
 
 export const COOKIES = {
   session: `${PREFIX}ev_session`,
   csrf: `${PREFIX}ev_csrf`,
-  oauthTx: `${PREFIX}ev_oauth_tx`,
 } as const;
-
-/** Base cookie options for the server-side, HttpOnly cookies. */
-export const cookieBase = {
-  httpOnly: true,
-  secure: SECURE,
-  sameSite: "lax" as const,
-  path: "/",
-};

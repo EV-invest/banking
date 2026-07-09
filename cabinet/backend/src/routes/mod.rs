@@ -1,5 +1,4 @@
 pub mod admin;
-pub mod auth;
 pub mod identity;
 pub mod money;
 pub mod platform;
@@ -14,16 +13,13 @@ use axum::{
 	routing::{get, post},
 };
 use axum_extra::extract::cookie::CookieJar;
+use evconcierge_auth::Claims;
 use serde_json::Value;
 use subtle::ConstantTimeEq;
 use tonic::Status;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 
-use crate::{
-	error::ApiError,
-	session::{MoneyToken, User},
-	state::AppState,
-};
+use crate::{error::ApiError, session::MoneyToken, state::AppState};
 
 /// Outer per-request deadline: a handler that is still awaiting an upstream plane past
 /// this bound is aborted and the response becomes a 504, so a wedged plane can never hold
@@ -41,12 +37,7 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/health", get(system::health))
 		.route("/api/mfe-registry", get(system::mfe_registry))
 		.route("/api/platform", get(platform::status))
-		.route("/api/auth/login", get(auth::login))
-		.route("/api/auth/callback", get(auth::callback))
-		.route("/api/auth/session", get(auth::session))
-		.route("/api/auth/logout", post(auth::logout))
 		.route("/api/users", get(identity::get_me).patch(identity::update_profile))
-		.route("/api/sessions", get(identity::list_sessions).delete(identity::revoke_session))
 		.route("/api/wallet", get(money::get_wallet))
 		.route("/api/wallet/deposit-address", get(money::deposit_address))
 		.route("/api/wallet/withdrawals", get(money::list_withdrawals).post(money::request_withdrawal))
@@ -91,48 +82,54 @@ pub fn router(state: AppState) -> Router {
 		.layer(TraceLayer::new_for_http())
 }
 
-/// The opaque session id from the request's session cookie.
-pub fn session_id(state: &AppState, jar: &CookieJar) -> Option<String> {
-	jar.get(&state.cookies.session).map(|c| c.value().to_string())
+/// The verified concierge identity for a request: the shared `ev_access` JWT cookie
+/// (set by the shell-owned auth surface) checked locally against the concierge JWKS.
+/// Auth is shell-owned — the BFF runs no OAuth and holds no session; this cookie IS
+/// the request's credential. Returns the raw token (for forwarding as a bearer) plus
+/// its verified claims.
+pub async fn require_identity(state: &AppState, jar: &CookieJar) -> Result<(String, Claims), ApiError> {
+	let token = jar.get(&state.cookies.access).map(|c| c.value().to_string()).ok_or(ApiError::Unauthenticated)?;
+	let claims = state.verifier.verify(&token).await.map_err(|_| ApiError::Unauthenticated)?;
+	Ok((token, claims))
 }
 
-/// The fresh **concierge** identity-plane access token for an authenticated request, or
-/// `Unauthenticated`. Money RPCs must NOT use this — see [`require_money_token`].
+/// The verified **concierge** identity-plane access token for an authenticated request,
+/// or `Unauthenticated`. Money RPCs must NOT use this — see [`require_money_token`].
 pub async fn require_token(state: &AppState, jar: &CookieJar) -> Result<String, ApiError> {
-	let id = session_id(state, jar).ok_or(ApiError::Unauthenticated)?;
-	state.sessions.access_token(&id, &state.grpc).await.ok_or(ApiError::Unauthenticated)
+	Ok(require_identity(state, jar).await?.0)
 }
 
 /// The fresh **banking** (`aud=banking-core`) access token for a money-plane RPC. The two
 /// planes are cryptographically separated, so the BFF forwards the banking token here and
 /// the concierge token to identity — never one plane's token to the other. The banking pair
-/// is minted via the concierge→banking exchange seam (`IssueUserToken`); when none can be
-/// obtained (issuance unconfigured, or the bridge hasn't mirrored the user yet) this
-/// surfaces `NotConfigured` (503) rather than forwarding the wrong-plane token, which the
-/// money verifier would reject on issuer/audience.
+/// is minted via the concierge→banking exchange seam (`IssueUserToken`) for the VERIFIED
+/// JWT subject — the signature check above is what stops a forged cookie from minting
+/// money-plane tokens for an arbitrary id. When none can be obtained (issuance
+/// unconfigured, or the bridge hasn't mirrored the user yet) this surfaces
+/// `NotConfigured` (503) rather than forwarding the wrong-plane token, which the money
+/// verifier would reject on issuer/audience.
 pub async fn require_money_token(state: &AppState, jar: &CookieJar) -> Result<String, ApiError> {
-	let id = session_id(state, jar).ok_or(ApiError::Unauthenticated)?;
-	match state.sessions.money_token(&id, &state.grpc).await {
+	let (_token, claims) = require_identity(state, jar).await?;
+	match state.banking.token_for(&claims.sub, &state.grpc).await {
 		MoneyToken::Token(token) => Ok(token),
 		MoneyToken::NotIssued => Err(ApiError::NotConfigured),
-		MoneyToken::NoSession => Err(ApiError::Unauthenticated),
 	}
 }
 
-/// Coarse admin gate for the console routes: the live session must belong to a
+/// Coarse admin gate for the console routes: the verified caller must hold a
 /// non-investor role. This is defense in depth — the owning plane re-checks the
 /// SPECIFIC permission and returns `PermissionDenied` (→ 403) if the role is
 /// insufficient for that action; here we only cheaply reject a plain investor before
-/// any upstream call. Returns the admin principal (the handler may branch on the exact
-/// role). Role is captured at login into the server-side session, so this needs no
-/// upstream round trip.
-pub async fn require_admin(state: &AppState, jar: &CookieJar) -> Result<User, ApiError> {
-	let id = session_id(state, jar).ok_or(ApiError::Unauthenticated)?;
-	let (user, _csrf) = state.sessions.ensure_fresh(&id, &state.grpc).await.ok_or(ApiError::Unauthenticated)?;
-	if user.role.is_empty() || user.role == "investor" {
+/// any privileged call. The JWT stays role-free on purpose, so the role comes from the
+/// concierge directory per admin request (admin traffic is low; the lookup is one
+/// local-plane RPC).
+pub async fn require_admin(state: &AppState, jar: &CookieJar) -> Result<(), ApiError> {
+	let (token, _claims) = require_identity(state, jar).await?;
+	let me = state.grpc.get_me(&token).await.map_err(|_| ApiError::Unauthenticated)?;
+	if me.role.is_empty() || me.role == "investor" {
 		return Err(ApiError::Grpc(Status::permission_denied("admin access required")));
 	}
-	Ok(user)
+	Ok(())
 }
 
 /// CSRF double-submit: the `x-ev-csrf` header must equal the readable `ev_csrf` cookie.

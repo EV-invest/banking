@@ -370,9 +370,6 @@
             # Money-plane token-exchange seam — must match the piggybank hub's BANKING_ISSUANCE_TOKEN.
             export BANKING_ISSUANCE_TOKEN="''${BANKING_ISSUANCE_TOKEN:-dev-issuance-token}"
             export CONCIERGE_GRPC_ADDR="''${CONCIERGE_GRPC_ADDR:-http://127.0.0.1:$CONCIERGE_PORT}"
-            # Registered with Google, so overridable from .env — but the default must
-            # track the frontend port.
-            export AUTH_REDIRECT_URI="''${AUTH_REDIRECT_URI:-http://localhost:$CABINET_FRONTEND_PORT/cabinet/api/auth/callback}"
             export RUST_LOG="''${RUST_LOG:-info,cabinet_backend=debug}"
             exec cargo run -p cabinet-backend
           '';
