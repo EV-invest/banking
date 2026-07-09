@@ -2,10 +2,13 @@
 //! withdrawal options.
 //!
 //! The user has **one** network-agnostic claim; the wallet presents it segmented by
-//! lifecycle. Read-First: `available` comes live from TigerBeetle (the authoritative
-//! data plane); `invested` is the sum of active stakes and `pending_withdrawal` the sum
-//! of queued/in-flight withdrawals (Postgres projections). Network re-enters only as a
-//! transaction attribute: a per-rail deposit address and a per-rail withdrawable view
+//! lifecycle. Read-First: `available`, `pending_withdrawal`, and the cash side of `total`
+//! all come live from the **same** TigerBeetle claim balance (the authoritative data
+//! plane) — `available = posted − reserved`, `pending_withdrawal = reserved`, so
+//! `available + pending_withdrawal == posted` by construction and the figures cannot
+//! drift. `invested` is the sum of active stakes (a Postgres projection valued at NAV).
+//! Network re-enters only as a transaction attribute: a per-rail deposit address and a
+//! per-rail withdrawable view
 //! (`instant = min(available, rail liquidity)`, the accept-and-queue degradation hint).
 //!
 //! Only **configured** rails (those with a running on-chain watcher) are presented or
@@ -18,19 +21,24 @@ use domain::{
 	error::DomainError,
 	money::{Nav, Network, Shares, Usdt, WalletAddress},
 	users::UserId,
-	withdrawals::{WithdrawalPolicy, WithdrawalState},
+	withdrawals::WithdrawalPolicy,
 };
 
-use crate::ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, WithdrawalRepository, deposits::DepositRecord, ledger::Ledger};
+use crate::ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, deposits::DepositRecord, ledger::Ledger};
 
 /// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
-/// non-negative; `total = available + invested + pending_withdrawal`.
+/// non-negative; `total = available + invested + pending_withdrawal`. `available` and
+/// `pending_withdrawal` are two views of the same claim (`posted − reserved` and
+/// `reserved`), so their sum is the claim's `posted` by construction — never a moment
+/// where they diverge and `total` double-counts an in-flight withdrawal.
 pub struct WalletBalance {
 	/// Free, spendable now (claim posted − reserved).
 	pub available: Usdt,
 	/// Held in fund units, valued at the current NAV (`Σ units × NAV`).
 	pub invested: Usdt,
-	/// Locked by queued/in-flight withdrawals (sum of their gross).
+	/// Reserved by in-flight withdrawals (the claim's `reserved` = Σ gross the relay has
+	/// locked). Read from the ledger, not the `withdrawals` projection, so it stays in
+	/// lockstep with `available` off one balance read.
 	pub pending_withdrawal: Usdt,
 	/// `available + invested + pending_withdrawal` — the user's whole position.
 	pub total: Usdt,
@@ -70,15 +78,22 @@ pub async fn get_wallet(
 	ledger: &dyn Ledger,
 	positions: &dyn FundPositionReader,
 	nav: &dyn NavMarks,
-	withdrawals: &dyn WithdrawalRepository,
 	deposit_addresses: &dyn DepositAddresses,
 	configured: &[Network],
 	user: UserId,
 ) -> Result<Wallet, DomainError> {
 	// Layer 1 — the single unified claim. The ledger speaks raw base units; wrap into
-	// the typed `Usdt` at this boundary.
+	// the typed `Usdt` at this boundary. `available` and `pending_withdrawal` are the two
+	// sides of this one balance (`posted − reserved` and `reserved`), so they can never
+	// disagree about an in-flight withdrawal — the reserve (`Dr user / Cr clearing`
+	// pending) is the only thing that locks a claim, and it moves both fields together.
 	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
 	let available = Usdt::from_base_units(claim.available());
+	// Sourced from `reserved`, NOT the `withdrawals` table: the projection counted a row
+	// the instant it was created, while the ledger reserve applies asynchronously — so the
+	// two summed as if simultaneously consistent and `total` transiently (or permanently,
+	// if a reserve parked) overstated the claim by the gross.
+	let pending_withdrawal = Usdt::from_base_units(claim.locked);
 
 	// invested = the value of the user's fund positions: live units × current NAV.
 	let mut invested = Usdt::ZERO;
@@ -92,17 +107,11 @@ pub async fn get_wallet(
 		invested = invested.checked_add(value).ok_or_else(|| DomainError::Repository("invested total overflow".into()))?;
 	}
 
-	// pending_withdrawal = the gross of queued/in-flight withdrawals (projection).
-	let user_withdrawals = withdrawals.list_by_user(user).await?;
-	let pending_withdrawal = user_withdrawals
-		.iter()
-		.filter(|w| matches!(w.state(), WithdrawalState::Queued | WithdrawalState::Processing))
-		.try_fold(Usdt::ZERO, |acc, w| acc.checked_add(w.amount()))
-		.ok_or_else(|| DomainError::Repository("pending withdrawal total overflow".into()))?;
-
-	let total = available
+	// total is the whole claim (its settled `posted`, which still carries the reserved
+	// gross as a pending debit until the withdrawal settles) plus invested — one balance
+	// read, so `total == available + pending_withdrawal + invested` by construction.
+	let total = Usdt::from_base_units(claim.posted)
 		.checked_add(invested)
-		.and_then(|sum| sum.checked_add(pending_withdrawal))
 		.ok_or_else(|| DomainError::Repository("wallet total overflow".into()))?;
 
 	let balance = WalletBalance {
