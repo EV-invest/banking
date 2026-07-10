@@ -132,15 +132,17 @@
         # Official precompiled server binary. nixpkgs' tigerbeetle lags behind and
         # a cluster evicts any client released after it (client_release_too_high) —
         # the server must be >= the 0.17.6 client built below. The release binaries
-        # are static (zig-built), so they run on NixOS unpatched.
-        tigerbeetleBin =
+        # are static (zig-built), so they run on NixOS unpatched. Parametrized by
+        # target system (fetch+unzip runs anywhere): `new-replica` below ships the
+        # binary matching a remote host's arch, not the local one.
+        tigerbeetleBinFor = targetSystem:
           let
             dist = {
               x86_64-linux = { file = "tigerbeetle-x86_64-linux.zip"; hash = "sha256-butV+rwsBnpLCCOV9KNzvCNCC8QbG/AR7ZRnl+Uyl7Y="; };
               aarch64-linux = { file = "tigerbeetle-aarch64-linux.zip"; hash = "sha256-JmsczIvW67WTrK0iCEDHcu9lhMyK84ZvhIs+lgL2bAs="; };
               x86_64-darwin = { file = "tigerbeetle-universal-macos.zip"; hash = "sha256-83nhQqHYu6PPKu4rH6rjD/J3hJinhXQ6b7C4hZ9//v8="; };
               aarch64-darwin = { file = "tigerbeetle-universal-macos.zip"; hash = "sha256-83nhQqHYu6PPKu4rH6rjD/J3hJinhXQ6b7C4hZ9//v8="; };
-            }.${system};
+            }.${targetSystem};
           in
           pkgs.stdenvNoCC.mkDerivation {
             pname = "tigerbeetle-bin";
@@ -159,6 +161,7 @@
               install -m755 tigerbeetle $out/bin/
             '';
           };
+        tigerbeetleBin = tigerbeetleBinFor system;
 
         # Builds the native C client library + header so the official tigerbeetle
         # Rust crate can link against them. The output is the src/clients/rust/
@@ -532,6 +535,138 @@
           '';
         };
 
+        # ── prod replica move: rpi5 → VPS ───────────────────────────────────
+        # `nix run .#new-replica -- --host <ssh> --replica <i>` — moves replica i
+        # of the PROD cluster (deploy/tigerbeetle.nix) onto a possibly non-NixOS
+        # host. Rebuilds the data file with `tigerbeetle recover` — NEVER format:
+        # a re-formatted replica false-nacks prepares it already acknowledged and
+        # can destroy committed data. Preconditions assert the runbook order
+        # (deploy/tigerbeetle.nix edited → ~/nix mirror rebuilt → this app), then:
+        # ship the arch-matched static binary, recover from the survivors, install
+        # a plain systemd unit, and rolling-restart the rpi5 survivors one at a
+        # time (quorum = 2 of 3 — never two replicas down at once).
+        runNewReplica =
+          let
+            deploy = import ./deploy/tigerbeetle.nix;
+            n = builtins.length deploy.addresses;
+            portOf = a: pkgs.lib.last (pkgs.lib.splitString ":" a);
+            # Replica i binds any-address on its own port, dials peers at their
+            # canonical addresses — same shape the rpi5 units use.
+            bindCsv = i: pkgs.lib.concatStringsSep ","
+              (pkgs.lib.imap0 (j: a: if j == i then "0.0.0.0:${portOf a}" else a) deploy.addresses);
+          in
+          pkgs.writeShellApplication {
+            name = "new-replica";
+            runtimeInputs = with pkgs; [ openssh coreutils ];
+            # SC2029/SC2087: every `ssh "$host" …` command and heredoc here
+            # expands client-side on purpose (the remote gets final values).
+            excludeShellChecks = [ "SC2029" "SC2087" ];
+            text = ''
+              usage() { echo "usage: new-replica --host <ssh-target, root-capable> --replica <i> [--rpi5 <ssh>]" >&2; exit 1; }
+              host="" replica="" rpi5="rpi5-ts"
+              while [ $# -gt 0 ]; do
+                case "$1" in
+                  --host) host="$2"; shift 2 ;;
+                  --replica) replica="$2"; shift 2 ;;
+                  --rpi5) rpi5="$2"; shift 2 ;;
+                  *) usage ;;
+                esac
+              done
+              [ -n "$host" ] && [ -n "$replica" ] || usage
+              [ "$replica" -ge 0 ] && [ "$replica" -lt ${toString n} ] || { echo "replica must be 0..$((${toString n} - 1))" >&2; exit 1; }
+
+              cluster_id=${deploy.clusterId}
+              csv=${pkgs.lib.concatStringsSep "," deploy.addresses}
+              bind_csv=(${pkgs.lib.concatMapStringsSep " " (i: ''"${bindCsv i}"'') (pkgs.lib.genList (x: x) n)})
+              data_file="/var/lib/tigerbeetle/''${cluster_id}_''${replica}.tigerbeetle"
+
+              runbook() {
+                cat >&2 <<EOF
+              aborting — required order for a replica move:
+                1. edit banking/deploy/tigerbeetle.nix: point addresses[$replica] at the new host
+                2. mirror in ~/nix hosts/rpi5/tigerbeetle.nix (addresses + drop $replica from localReplicas), rebuild rpi5
+                3. re-run: nix run .#new-replica -- --host $host --replica $replica
+              EOF
+                exit 1
+              }
+
+              # Replica i's data must have exactly one live home; an active unit on
+              # rpi5 means step 2 (drop from localReplicas + rebuild) didn't happen.
+              state=$(ssh "$rpi5" systemctl is-active "tigerbeetle-$replica.service" 2>/dev/null || true)
+              if [ "$state" = "active" ] || [ "$state" = "activating" ]; then
+                echo "tigerbeetle-$replica is still $state on $rpi5" >&2
+                runbook
+              fi
+
+              # Survivors must already be DEPLOYED with the current address list
+              # (their running processes are rolling-restarted at the end).
+              for j in $(seq 0 $((${toString n} - 1))); do
+                [ "$j" = "$replica" ] && continue
+                if ! unit=$(ssh "$rpi5" systemctl cat "tigerbeetle-$j.service" 2>/dev/null); then
+                  echo "note: tigerbeetle-$j not on $rpi5 (moved earlier?) — skipping its ExecStart check"
+                  continue
+                fi
+                expected="--addresses=''${bind_csv[$j]}"
+                case "$unit" in
+                  *"$expected"*) ;;
+                  *)
+                    echo "tigerbeetle-$j on $rpi5 does not carry $expected — the ~/nix mirror wasn't updated/rebuilt" >&2
+                    runbook
+                    ;;
+                esac
+              done
+
+              arch=$(ssh "$host" uname -m)
+              case "$arch" in
+                x86_64) bin="${tigerbeetleBinFor "x86_64-linux"}/bin/tigerbeetle" ;;
+                aarch64) bin="${tigerbeetleBinFor "aarch64-linux"}/bin/tigerbeetle" ;;
+                *) echo "unsupported target arch: $arch" >&2; exit 1 ;;
+              esac
+              echo "▶ shipping tigerbeetle 0.17.6 ($arch) to $host"
+              scp "$bin" "$host:/tmp/tigerbeetle-0.17.6"
+              ssh "$host" "install -m755 /tmp/tigerbeetle-0.17.6 /usr/local/bin/tigerbeetle && rm /tmp/tigerbeetle-0.17.6"
+
+              # A leftover data file is exactly the stale-replica amnesia hazard —
+              # never recover over it, never reuse it.
+              ssh "$host" "mkdir -p /var/lib/tigerbeetle && test ! -e $data_file" \
+                || { echo "$data_file already exists on $host — refusing to touch it" >&2; exit 1; }
+              echo "▶ recovering replica $replica from the survivors (this streams the full data file)"
+              ssh "$host" "/usr/local/bin/tigerbeetle recover --cluster=$cluster_id --addresses=$csv --replica=$replica --replica-count=${toString n} $data_file"
+
+              echo "▶ installing tigerbeetle-$replica.service on $host"
+              ssh "$host" "cat > /etc/systemd/system/tigerbeetle-$replica.service" <<EOF
+              [Unit]
+              Description=TigerBeetle replica $replica
+              After=network-online.target
+
+              [Service]
+              ExecStart=/usr/local/bin/tigerbeetle start --addresses=''${bind_csv[$replica]} $data_file
+              Restart=always
+              RestartSec=5s
+
+              [Install]
+              WantedBy=multi-user.target
+              EOF
+              ssh "$host" "systemctl daemon-reload && systemctl enable --now tigerbeetle-$replica.service"
+
+              # Survivors still dial replica $replica at its old address until
+              # restarted; one at a time, waiting for is-active, so quorum holds.
+              for j in $(seq 0 $((${toString n} - 1))); do
+                [ "$j" = "$replica" ] && continue
+                ssh "$rpi5" systemctl cat "tigerbeetle-$j.service" >/dev/null 2>&1 || continue
+                echo "▶ rolling restart: tigerbeetle-$j on $rpi5"
+                ssh "$rpi5" "printf ' ' | sudo -S systemctl restart tigerbeetle-$j.service"
+                ok=""
+                for _ in $(seq 1 30); do
+                  if [ "$(ssh "$rpi5" systemctl is-active "tigerbeetle-$j.service" 2>/dev/null || true)" = "active" ]; then ok=1; break; fi
+                  sleep 2
+                done
+                [ -n "$ok" ] || { echo "tigerbeetle-$j did not come back on $rpi5 — stopping the rollout (never two replicas down)" >&2; exit 1; }
+              done
+              echo "✓ replica $replica now serves from $host"
+            '';
+          };
+
         # ── one-shot env init ───────────────────────────────────────────────
         # `nix run .#init` — everything a fresh clone needs beyond what the run
         # scripts already self-provision lazily (postgres cluster, TB data file,
@@ -630,6 +765,7 @@
         # `nix run .#cabinet`        → Next.js host shell (:3000, proxies /api/* to the cabinet backend on :4000)
         # `nix run .#db`             → ensure the SHARED ev_invest Postgres is up (+ this repo's databases)
         # `nix run .#tb`        → local TigerBeetle only (banking-only, repo-local data)
+        # `nix run .#new-replica` → move a PROD cluster replica to another host (recover, never format)
         # `nix run .#redis`     → ensure the SHARED ev_invest Redis is up
         # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
         # `nix run .#concierge-pin-check` → assert the concierge contract pin is an ancestor of origin/main + bytes match
@@ -644,6 +780,7 @@
           cabinet = { type = "app"; program = "${runCabinet}/bin/run-cabinet"; };
           db = { type = "app"; program = "${runPostgres}/bin/run-postgres"; };
           tb = { type = "app"; program = "${runTigerbeetle}/bin/run-tigerbeetle"; };
+          new-replica = { type = "app"; program = "${runNewReplica}/bin/new-replica"; };
           redis = { type = "app"; program = "${runRedis}/bin/run-redis"; };
           gen-api = { type = "app"; program = "${runGenApi}/bin/run-gen-api"; };
           concierge-pin-check = { type = "app"; program = "${runConciergePinCheck}/bin/run-concierge-pin-check"; };
