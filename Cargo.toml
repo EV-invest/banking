@@ -81,6 +81,7 @@ tokio = "1.52.3"
 tokio-util = { version = "0.7.18", default-features = false }
 tonic = "0.13"
 tonic-build = "0.13"
+tonic-health = "0.13"
 tonic-web = "0.13"
 tonlib-core = "0.26"
 tower = "0.5.3"

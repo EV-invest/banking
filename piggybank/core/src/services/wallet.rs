@@ -28,6 +28,7 @@ impl WalletSvc {
 	pub fn new(state: AppState) -> Self {
 		Self { state }
 	}
+
 	/// Whether a rail's deposit addresses are testnet-tagged. Only TON has a distinct testnet
 	/// address form; the other rails' addresses are network-agnostic on the wire.
 	fn rail_is_testnet(&self, network: Network) -> bool {
@@ -56,7 +57,11 @@ impl WalletService for WalletSvc {
 				pending_withdrawal: wallet.balance.pending_withdrawal.to_decimal_string(),
 				total: wallet.balance.total.to_decimal_string(),
 			}),
-			deposit_addresses: wallet.deposit_addresses.iter().map(|rail| deposit_rail_to_proto(rail, self.rail_is_testnet(rail.network))).collect(),
+			deposit_addresses: wallet
+				.deposit_addresses
+				.iter()
+				.map(|rail| deposit_rail_to_proto(rail, self.rail_is_testnet(rail.network)))
+				.collect(),
 			withdrawable: wallet.withdrawable.iter().map(withdrawable_to_proto).collect(),
 		}))
 	}

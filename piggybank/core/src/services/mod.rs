@@ -53,10 +53,16 @@ pub mod wallet;
 pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Output = ()>) -> Result<(), tonic::transport::Error> {
 	let auth = grpc_auth_layer(state.authorizer.for_class(TokenClass::Client));
 	let health = Health::new(state.pool.clone(), state.ledger.clone(), state.configured_networks.clone());
+	// k8s gRPC probes speak only the standard grpc.health.v1.Health protocol —
+	// serve it alongside the richer banking.v1.HealthService (deep PG/TB readiness
+	// for the BFF). Process-level SERVING is exactly what the kubelet asks of it.
+	let (health_reporter, std_health) = tonic_health::server::health_reporter();
+	health_reporter.set_service_status("", tonic_health::ServingStatus::Serving).await;
 	Server::builder()
 		// grpc-web rides HTTP/1.1; required for the GrpcWebLayer to translate.
 		.accept_http1(true)
 		.layer(ServiceBuilder::new().layer(TraceLayer::new_for_grpc()).layer(GrpcWebLayer::new()).into_inner())
+		.add_service(std_health)
 		.add_service(HealthServiceServer::new(health))
 		.add_service(auth.layer(UsersServiceServer::new(UsersSvc::new(state.clone()))))
 		.add_service(auth.layer(BalanceServiceServer::new(BalanceSvc::new(state.clone()))))
