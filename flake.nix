@@ -48,7 +48,10 @@
         github = v_flakes.github {
           inherit pkgs pname rs;
           enable = true;
+          # Public repo → public Cachix (`ev-invest`); pull deps + push built paths.
+          cache = { cachix = "ev-invest"; };
           lastSupportedVersion = "nightly-2026-05-12";
+          containerRelease = { registry = "ghcr.io/ev-invest"; };
           gitignore.extra = ''
             ## Local Postgres
             .pg/
@@ -210,6 +213,151 @@
             ln -s "${tigerbeetleClient}" "$tb_client_dir"
           fi
         '';
+
+        # ── production binaries + OCI images ────────────────────────────────
+        # Lean toolchain for release image builds: rustc + cargo + std only, keeping
+        # the fat dev toolchain out of the release closure (mirrors site_conductor).
+        rustBuild = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal);
+        rustPlatformBuild = pkgs.makeRustPlatform { cargo = rustBuild; rustc = rustBuild; };
+        buildSrc = pkgs.lib.cleanSourceWith {
+          src = ./.;
+          # .cargo holds dev-only accelerators (sccache/mold) the hermetic sandbox
+          # lacks; .tb-client is recreated in-sandbox below.
+          filter = path: _type:
+            ! builtins.elem (baseNameOf path) [ "target" "node_modules" ".next" ".turbo" ".tb-client" ".tb" ".redis" ".pg" ".direnv" ".git" ".cargo" "tmp" "docs" "result" ];
+        };
+        # ONE derivation for all three service binaries — they share the workspace
+        # dep graph, so separate buildRustPackage calls would triple the CI compile.
+        bankingBins = rustPlatformBuild.buildRustPackage {
+          pname = "${pname}-bins";
+          version = (builtins.fromTOML (builtins.readFile ./piggybank/core/Cargo.toml)).package.version;
+          src = buildSrc;
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            # evconcierge_* is a rev-pinned public git dep — builtin fetchGit needs no hash.
+            allowBuiltinFetchGit = true;
+          };
+          postPatch = "ln -sfn ${tigerbeetleClient} .tb-client";
+          cargoBuildFlags = [ "-p" "piggybank-core" "-p" "piggybank-signer" "-p" "cabinet-backend" ];
+          nativeBuildInputs = with pkgs; [ protobuf pkg-config ];
+          buildInputs = [ pkgs.openssl ];
+          PROTOC = "${pkgs.protobuf}/bin/protoc";
+          doCheck = false;
+        };
+
+        # ── cabinet production image (Next.js standalone, npm workspace build) ──
+        cabinetApp = pkgs.buildNpmPackage {
+          pname = "${pname}-cabinet";
+          version = (builtins.fromJSON (builtins.readFile ./cabinet/frontend/package.json)).version;
+          src = buildSrc;
+          # build node_modules straight from the root package-lock.json — no FOD hash to drift.
+          npmDeps = pkgs.importNpmLock { npmRoot = ./.; };
+          npmConfigHook = pkgs.importNpmLock.npmConfigHook;
+          env = {
+            NEXT_TELEMETRY_DISABLED = "1";
+            # next.config rewrites resolve at BUILD time (routes-manifest.json), so the
+            # BFF's in-cluster service DNS is baked here; matches the contract below.
+            CABINET_BACKEND_URL = "http://ev-banking-cabinet-backend:50062";
+          };
+          buildPhase = ''
+            runHook preBuild
+            npm run build --workspace @evbanking/cabinet
+            runHook postBuild
+          '';
+          # Monorepo standalone layout: server.js lands under the workspace subdir.
+          installPhase = ''
+            runHook preInstall
+            test -f cabinet/frontend/.next/standalone/cabinet/frontend/server.js \
+              || { echo "standalone server.js not at the expected monorepo path" >&2; find cabinet/frontend/.next/standalone -maxdepth 3 -name server.js >&2; exit 1; }
+            mkdir -p $out
+            cp -r cabinet/frontend/.next/standalone/. $out/
+            cp -r cabinet/frontend/.next/static $out/cabinet/frontend/.next/static
+            cp -r cabinet/frontend/public $out/cabinet/frontend/public
+            runHook postInstall
+          '';
+          dontNpmInstall = true;
+        };
+
+        # The BFF serves /api/mfe-registry from this file; env points at the image path.
+        mfeRegistryRoot = pkgs.runCommand "mfe-registry" { } ''
+          mkdir -p $out
+          cp ${./cabinet/frontend/mfe-registry.json} $out/mfe-registry.json
+        '';
+
+        tbProd = import ./deploy/tigerbeetle.nix;
+        # Secret env (signing key, JWKS, issuance/bridge tokens, WALLET_KEK) arrives
+        # via the k8s Secrets gitops/k3s own — never baked into contracts or images.
+        containerStd = v_flakes.container.implement {
+          inherit pkgs pname;
+          containers.piggybank = {
+            port = 50051;
+            # gRPC-only server: gitops swaps these httpGet probes for native `grpc`
+            # probes; the path is a required contract placeholder.
+            healthPath = "/";
+            criticality = "normal";
+            entrypoint = [ "/bin/piggybank" ];
+            contents = [ bankingBins ];
+            env = {
+              DATABASE_URL = "postgres://evinvest@10.42.0.1:5432/banking";
+              REDIS_URL = "redis://10.42.0.1:6379/0";
+              GRPC_ADDR = "0.0.0.0:50051";
+              AUTH_GRPC_ADDR = "0.0.0.0:50052";
+              TIGERBEETLE_ADDRESS = pkgs.lib.concatStringsSep "," tbProd.addresses;
+              TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
+              # The signer runs as a loopback sidecar in this pod (non-loopback binds
+              # demand TLS — signer/src/config.rs), mirroring the dev seam.
+              SIGNER_GRPC_ADDR = "http://127.0.0.1:50053";
+              CONCIERGE_BRIDGE_ADDR = "http://concierge:55670";
+              AUTH_SIGNING_KID = "prod-1";
+              APP_ENV = "production";
+              RUST_LOG = "info";
+            };
+          };
+          containers.signer = {
+            # Image-only contract: gitops mounts this as the piggybank pod's sidecar
+            # (reusing this env) and gives it no probes of its own.
+            port = 50053;
+            healthPath = "/";
+            criticality = "normal";
+            entrypoint = [ "/bin/signer" ];
+            contents = [ bankingBins ];
+            env = {
+              SIGNER_DATABASE_URL = "postgres://evinvest@10.42.0.1:5432/banking_signer";
+              SIGNER_GRPC_ADDR = "127.0.0.1:50053";
+              AUTH_JWKS_GRPC_ENDPOINT = "http://127.0.0.1:50052";
+              APP_ENV = "production";
+              RUST_LOG = "info";
+            };
+          };
+          containers.cabinet-backend = {
+            port = 50062;
+            healthPath = "/api/health";
+            criticality = "normal";
+            entrypoint = [ "/bin/cabinet-backend" ];
+            contents = [ bankingBins mfeRegistryRoot ];
+            env = {
+              CABINET_BACKEND_BIND = "0.0.0.0:50062";
+              PIGGYBANK_GRPC_ADDR = "http://ev-banking-piggybank:50051";
+              BANKING_AUTH_GRPC_ADDR = "http://ev-banking-piggybank:50052";
+              CONCIERGE_GRPC_ADDR = "http://concierge:55670";
+              MFE_REGISTRY_PATH = "/mfe-registry.json";
+              APP_ENV = "production";
+              RUST_LOG = "info";
+            };
+          };
+          containers.cabinet = {
+            port = 50061;
+            # basePath mount: the zone answers under /cabinet (3xx from / counts as probe success).
+            healthPath = "/cabinet";
+            criticality = "normal";
+            entrypoint = [ "${pkgs.nodejs}/bin/node" "${cabinetApp}/cabinet/frontend/server.js" ];
+            contents = [ pkgs.nodejs cabinetApp ];
+            workingDir = "${cabinetApp}/cabinet/frontend";
+            imageEnv = [ "PORT=50061" "HOSTNAME=0.0.0.0" "NODE_ENV=production" ];
+            # Runtime reads (proxy.ts CSP etc.) — the rewrite itself is baked at build.
+            env.CABINET_BACKEND_URL = "http://ev-banking-cabinet-backend:50062";
+          };
+        };
 
         # ── proto → OpenAPI → TS codegen plugin ─────────────────────────────
         # protoc-gen-connect-openapi as a pinned release binary (same approach as the
@@ -755,6 +903,33 @@
             wait
           '';
         };
+
+        # ── bump latest remote vX.Y.Z tag and push: `.#publish major|minor|patch` ──
+        runPublish = pkgs.writeShellApplication {
+          name = "publish";
+          runtimeInputs = with pkgs; [ git ];
+          text = ''
+                        part="''${1:-}"
+                        case "$part" in major|minor|patch) ;; *) echo "usage: nix run .#publish -- major|minor|patch" >&2; exit 1 ;; esac
+                        [ -z "$(git status --porcelain)" ] || { echo "uncommitted changes — commit or stash first" >&2; exit 1; }
+
+                        git fetch --tags --force origin >/dev/null 2>&1
+                        last="$(git tag -l 'v*' --sort=-v:refname | head -n1)"
+                        ver="''${last#v}"; [ -n "$ver" ] || ver="0.0.0"
+                        IFS=. read -r ma mi pa <<EOF
+            $ver
+            EOF
+                        case "$part" in
+                          major) ma=$((ma+1)); mi=0; pa=0 ;;
+                          minor) mi=$((mi+1)); pa=0 ;;
+                          patch) pa=$((pa+1)) ;;
+                        esac
+                        next="v$ma.$mi.$pa"
+                        echo "$last → $next"
+                        git tag "$next"
+                        git push origin "$next"
+          '';
+        };
       in
       {
         # `nix run .#init`           → one-shot env setup for a fresh clone (dev .env secrets, npm deps, TB client link)
@@ -784,7 +959,14 @@
           redis = { type = "app"; program = "${runRedis}/bin/run-redis"; };
           gen-api = { type = "app"; program = "${runGenApi}/bin/run-gen-api"; };
           concierge-pin-check = { type = "app"; program = "${runConciergePinCheck}/bin/run-concierge-pin-check"; };
+          publish = { type = "app"; program = "${runPublish}/bin/publish"; };
         };
+
+        packages = {
+          default = bankingBins;
+        } // containerStd.packages;
+
+        containers = containerStd.containers;
 
         devShells.default =
           with pkgs;

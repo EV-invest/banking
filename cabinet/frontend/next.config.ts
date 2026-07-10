@@ -12,6 +12,9 @@ const BACKEND = config.backendUrl;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Self-contained production server (.next/standalone) — the container runs
+  // `node server.js` without an `npm install` (mirrors the conductor's setup).
+  output: "standalone",
   // Multi-zone mount: the cabinet lives under the conductor's domain at
   // /cabinet. basePath prefixes every page AND /_next asset with it, so nothing
   // collides with the conductor's own routes/assets; the conductor rewrites
