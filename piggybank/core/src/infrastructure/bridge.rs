@@ -57,7 +57,11 @@ impl BridgeConsumer {
 		let mut client = UserEventsClient::new(self.channel.clone());
 		loop {
 			if let Err(err) = self.drain(&mut client).await {
-				warn!("bridge: pull/apply cycle failed, retrying next poll: {err}");
+				let hint = match err.downcast_ref::<tonic::Status>() {
+					Some(s) if s.code() == tonic::Code::Unavailable => " (is concierge running?)",
+					_ => "",
+				};
+				warn!("bridge: pull/apply cycle failed, retrying next poll{hint}: {err}");
 			}
 			tokio::select! {
 				() = shutdown.cancelled() => {
