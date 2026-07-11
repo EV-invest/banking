@@ -12,10 +12,10 @@ name = "piggybank"
 path = "src/main.rs"
 
 [dependencies]
-hex = { workspace = true }
-reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 async-trait.workspace = true
 clap.workspace = true
+hex = { workspace = true }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 
 color-eyre.workspace = true
 domain.workspace = true

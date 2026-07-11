@@ -5,7 +5,8 @@
 # var fails the boot loudly. TIGERBEETLE_ADDRESS/TIGERBEETLE_CLUSTER_ID stay in
 # the container env (flake-computed from deploy/tigerbeetle.nix, read via the
 # settings env aliases; required fields, so absence still fails the boot). The
-# on-chain rails (BSC/TRON/TON) are NOT here — env-gated, deliberately absent.
+# on-chain rails (BSC/TRON/TON) are NOT here — env-gated: TON_API_URL rides the
+# contract env, TON_API_KEY the k8s Secret; main.rs refuses a rail-less prod boot.
 {
   database_url.env = "DATABASE_URL";
   grpc_addr = "0.0.0.0:50051";

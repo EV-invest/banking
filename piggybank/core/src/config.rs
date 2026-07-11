@@ -16,7 +16,8 @@ const DEFAULT_AUTH_GRPC_ADDR: &str = "127.0.0.1:50052";
 /// (`#[settings(use_env = true)]` aliases each field to its SHOUTY name).
 ///
 /// The on-chain rails (BSC/TRON/TON + sweeps) live in [`Rails`], on their
-/// original env-based conditional construction — deliberately absent in prod.
+/// original env-based conditional construction; production boot-asserts the
+/// rail set in `main.rs` (at least one rail, TON mainnet keyed).
 #[derive(Clone, Debug, v_macros::LiveSettings, v_macros::MyConfigPrimitives, v_macros::Settings, SmartDefault)]
 #[settings(use_env = true)]
 pub struct AppConfig {
@@ -72,8 +73,9 @@ pub struct AppConfig {
 }
 
 /// The on-chain rail configs, kept on their original env-based conditional
-/// construction (a rail runs only when its endpoint var is set) — deliberately
-/// absent in prod today, so they are NOT part of the boot-asserted [`AppConfig`].
+/// construction (a rail runs only when its endpoint var is set), so they are
+/// NOT part of the boot-asserted [`AppConfig`] — production instead asserts
+/// the rail set in `main.rs` (a rail-less prod boot is refused).
 #[derive(Clone, Debug)]
 pub struct Rails {
 	/// The on-chain BSC config. `None` (no `BSC_RPC_URL`) leaves every on-chain seam — the

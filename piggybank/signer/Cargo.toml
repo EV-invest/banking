@@ -12,6 +12,7 @@ name = "signer"
 path = "src/main.rs"
 
 [dependencies]
+base64.workspace = true
 chacha20poly1305 = { workspace = true }
 ed25519-dalek = { workspace = true }
 hex = { workspace = true }
@@ -20,7 +21,6 @@ num-bigint = { workspace = true }
 sha3 = { workspace = true }
 tonlib-core = { workspace = true }
 zeroize = { workspace = true }
-base64.workspace = true
 
 color-eyre.workspace = true
 domain.workspace = true

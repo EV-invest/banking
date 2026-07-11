@@ -306,6 +306,9 @@
             env = {
               DATABASE_URL = "postgres://evinvest@10.42.0.1:5432/banking";
               REDIS_URL = "redis://10.42.0.1:6379/0";
+              # TON mainnet rail gate (Rails::from_env). TON_API_KEY arrives via the
+              # k8s Secret; main.rs refuses a prod boot with the rail set empty.
+              TON_API_URL = "https://toncenter.com/api/v3";
               TIGERBEETLE_ADDRESS = pkgs.lib.concatStringsSep "," tbProd.addresses;
               TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
               AUTH_SIGNING_KID = "prod-1";

@@ -94,7 +94,7 @@ fn main() -> color_eyre::Result<()> {
 
 async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	// The on-chain rails keep their env-based conditional construction — a rail
-	// runs only when its endpoint var is set (deliberately absent in prod today).
+	// runs only when its endpoint var is set. Production asserts the rail set below.
 	let rails = Rails::from_env().context("failed to load the on-chain rail configuration")?;
 
 	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
@@ -115,6 +115,24 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 			std::env::var("REDIS_URL").is_ok_and(|v| !v.is_empty()),
 			"production requires REDIS_URL (refresh-token state must survive restarts)"
 		);
+		// Deposits are the product: a rail-less prod hub would boot healthy and
+		// quietly serve no deposit path (the exact incident this guards against).
+		ensure!(
+			!rails.configured_networks().is_empty(),
+			"production requires at least one on-chain deposit rail (set BSC_RPC_URL and/or TON_API_URL)"
+		);
+		// TRON stays out of this sweep while TRC20_FROZEN forces it off.
+		for (gate, missing) in [("BSC_RPC_URL", rails.bsc.is_none()), ("TON_API_URL", rails.ton.is_none())] {
+			if missing {
+				tracing::error!("on-chain rail unconfigured in production: {gate} is unset — its deposits/withdrawals/custody are off");
+			}
+		}
+		if let Some(ton) = &rails.ton {
+			ensure!(
+				ton.api_key.is_some() || ton.is_testnet,
+				"production TON mainnet requires TON_API_KEY — the anonymous toncenter tier is rate-limited below the watcher's poll cadence"
+			);
+		}
 	}
 
 	// ── driven infrastructure ─────────────────────────────────────────────────
