@@ -21,6 +21,28 @@ function optional(name: string): string | undefined {
   return process.env[name] || undefined;
 }
 
+// Touches every getter (recursing into `public`), so a required var missing at
+// runtime fails at server start — not mid-request. Called from
+// instrumentation.ts `register()`; no-op during `next build`, whose env is
+// deliberately partial.
+export function assertConfig(): void {
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
+  const touch = (obj: object): void => {
+    for (const key of Object.keys(obj)) {
+      const v = (obj as Record<string, unknown>)[key];
+      if (v && typeof v === "object") touch(v);
+    }
+  };
+  try {
+    touch(config);
+  } catch (e) {
+    // Next swallows instrumentation throws into per-request 500s; a server
+    // missing config must die (→ CrashLoopBackOff → auto-rollback), not limp.
+    console.error(e);
+    process.exit(1);
+  }
+}
+
 export const config = {
   // Where next.config.ts rewrites same-origin /api/* to (the Rust BFF). No
   // default: topology is owned by flake.nix, which always exports it.

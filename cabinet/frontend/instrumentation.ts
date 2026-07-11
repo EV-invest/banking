@@ -6,8 +6,12 @@ import {
   register as initMonitoring,
   captureRequestError,
 } from "@evinvest/error-monitoring/next";
+import { assertConfig } from "@/config";
 
 export function register() {
+  // Fail the boot, not the request: a required var missing throws here,
+  // before the server accepts traffic.
+  assertConfig();
   return initMonitoring();
 }
 
