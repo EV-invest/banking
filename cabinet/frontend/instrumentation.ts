@@ -6,12 +6,16 @@ import {
   register as initMonitoring,
   captureRequestError,
 } from "@evinvest/error-monitoring/next";
-import { assertConfig } from "@/config";
 
-export function register() {
+export async function register() {
   // Fail the boot, not the request: a required var missing throws here,
-  // before the server accepts traffic.
-  assertConfig();
+  // before the server accepts traffic. Gated on NEXT_RUNTIME (statically
+  // inlined) so config.ts — and its process.exit — stays out of the Edge
+  // bundle Next also compiles this file into.
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { assertConfig } = await import("@/config");
+    assertConfig();
+  }
   return initMonitoring();
 }
 
