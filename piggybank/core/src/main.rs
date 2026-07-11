@@ -133,6 +133,10 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 				"production TON mainnet requires TON_API_KEY — the anonymous toncenter tier is rate-limited below the watcher's poll cadence"
 			);
 		}
+		ensure!(
+			std::env::var("SERVICE_TOKEN").is_ok_and(|v| !v.is_empty()),
+			"production requires SERVICE_TOKEN (the hub→signer bearer) — without it deposit-address provisioning and custody fail Unauthenticated"
+		);
 	}
 
 	// ── driven infrastructure ─────────────────────────────────────────────────
