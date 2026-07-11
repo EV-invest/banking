@@ -7,7 +7,13 @@
 //! `pg_advisory_lock` and only drains while held, so a second core instance blocks on
 //! the lock and never touches the outbox (see `OUTBOX_LOCK_KEY`); losing the lock's
 //! connection re-enters that acquisition (with backoff) rather than exiting, so a DB
-//! blip never cascades into a whole-process teardown.
+//! blip never cascades into a whole-process teardown. The lock's liveness is re-probed
+//! on its own connection before **every** dispatched row (a session lock lives exactly
+//! as long as its backend), so a backend reaped mid-catch-up stops the drain within one
+//! row instead of leaving a lockless relay racing the standby that inherited the lock —
+//! the probe narrows the lockless window to a single dispatch, it cannot close it (a
+//! reap *between* probe and dispatch still overlaps one row; full closure needs a
+//! fencing token, a follow-up).
 //! Delivery is
 //! at-least-once, so every op is idempotent: ledger transfer ids are deterministic
 //! (a posted transfer uses the event id; a reservation's pending uses an
@@ -123,11 +129,12 @@ impl Relay {
 	/// exponential backoff (a standby may legitimately win it first — we then block on it,
 	/// which is exactly the singleton hand-off working).
 	///
-	/// Graceful shutdown is cooperative: cancellation is only observed at the wait points
-	/// *between* drains and during the lock/backoff waits, never mid-`drain`. Each `drain`
-	/// iteration runs to completion before exit (it is already crash-safe to stop between
-	/// rows), so an in-flight dispatch is never torn down partway — a deploy/restart leaves
-	/// the outbox in the same clean state a graceful drain does.
+	/// Graceful shutdown is cooperative: cancellation is observed during the lock/backoff
+	/// waits, at the wait points between drains, and at every batch boundary inside a
+	/// drain — never mid-batch. Each batch runs to completion before exit (it is already
+	/// crash-safe to stop between rows), so an in-flight dispatch is never torn down
+	/// partway, and a multi-minute catch-up backlog can no longer delay a deploy past the
+	/// current batch.
 	pub async fn run(self, shutdown: CancellationToken) {
 		const MAX_BACKOFF: Duration = Duration::from_secs(30);
 		let mut backoff = Duration::from_millis(500);
@@ -151,7 +158,32 @@ impl Relay {
 			backoff = Duration::from_millis(500);
 			info!("relay: acquired the outbox lock — draining as the singleton worker");
 			loop {
-				let throttle = self.drain().await;
+				// Drain batch-by-batch so the singleton invariant is re-validated while
+				// catching up: `drain_batch` probes the lock connection before every row,
+				// and cancellation is observed here between batches. A long catch-up drain
+				// otherwise never re-checks the lock — a reaped idle backend releases it, a
+				// standby wins it, and two lockless drainers race the same `Dispatched`
+				// rows (the on-chain double-send).
+				let throttle = loop {
+					match self.drain_batch(Some(&mut lock)).await {
+						DrainStep::Drained => break false,
+						DrainStep::Throttle => break true,
+						DrainStep::LostLock => {
+							error!("relay: lost the outbox lock mid-drain — re-acquiring");
+							// Close, never drop: a drop returns the connection to the pool, and
+							// if the probe failed non-fatally (a cancelled query, not a dead
+							// backend) that pooled session would keep holding the advisory lock
+							// forever, wedging the re-acquisition below against ourselves.
+							let _ = lock.close().await;
+							continue 'acquire;
+						}
+						DrainStep::More =>
+							if shutdown.is_cancelled() {
+								info!("relay: shutdown requested — batch complete, stopping");
+								return;
+							},
+					}
+				};
 				if shutdown.is_cancelled() {
 					info!("relay: shutdown requested — drain iteration complete, stopping");
 					return;
@@ -170,6 +202,8 @@ impl Relay {
 				// lock with the dead session, so re-acquiring (not exiting) is the recovery.
 				if let Err(err) = sqlx::query("SELECT 1").execute(lock.as_mut()).await {
 					error!("relay: lost the outbox lock connection — re-acquiring: {err}");
+					// Same close-never-drop rule as the mid-drain fence above.
+					let _ = lock.close().await;
 					continue 'acquire;
 				}
 			}
@@ -196,62 +230,87 @@ impl Relay {
 	}
 
 	/// Drain the current backlog in `seq` order. Returns `true` if it stopped on a
-	/// transient failure (caller should back off before retrying). Public so
-	/// integration tests can apply committed events deterministically (one call
-	/// processes the whole backlog).
+	/// transient failure (caller should back off before retrying). Unfenced — no lock
+	/// probe between rows — so only for tests, which own the sole drainer by
+	/// construction; [`run`](Self::run) always drains through the fenced
+	/// [`drain_batch`](Self::drain_batch). Public so integration tests can apply
+	/// committed events deterministically (one call processes the whole backlog).
 	pub async fn drain(&self) -> bool {
 		loop {
-			let batch = match outbox::next_batch(&self.pool, 128).await {
-				Ok(batch) => batch,
-				Err(err) => {
-					warn!("relay: reading the outbox failed: {err}");
-					return true;
-				}
-			};
-			if batch.is_empty() {
-				return false;
+			match self.drain_batch(None).await {
+				DrainStep::Drained => return false,
+				DrainStep::Throttle => return true,
+				DrainStep::More => {}
+				DrainStep::LostLock => unreachable!("no fence connection was passed"),
 			}
-			let mut advanced = false;
-			for row in &batch {
-				match self.dispatch(row).await {
-					Outcome::Done => {
-						if let Err(err) = outbox::mark_dispatched(&self.pool, row.seq).await {
-							warn!(seq = row.seq, "relay: failed to mark dispatched (event will re-deliver): {err}");
-						}
-						advanced = true;
+		}
+	}
+
+	/// Apply at most one batch (128 rows) of the backlog in `seq` order, probing `fence`
+	/// — the lock-holding connection — before every row. A session advisory lock lives
+	/// exactly as long as its backend, so a successful probe proves this relay held the
+	/// lock *at probe time*; a failed one means Postgres already freed the lock (a
+	/// standby may be draining) and the caller must stop **immediately** — above all
+	/// before a custody broadcast, where a concurrent drainer is an on-chain
+	/// double-send. The probe narrows the lockless overlap from a whole catch-up drain
+	/// to the one dispatch in flight when the backend dies; closing that residual window
+	/// needs a fencing token checked at `mark_dispatched`, a follow-up. Public for the
+	/// integration tests that exercise the fence.
+	pub async fn drain_batch(&self, mut fence: Option<&mut PoolConnection<Postgres>>) -> DrainStep {
+		let batch = match outbox::next_batch(&self.pool, 128).await {
+			Ok(batch) => batch,
+			Err(err) => {
+				warn!("relay: reading the outbox failed: {err}");
+				return DrainStep::Throttle;
+			}
+		};
+		if batch.is_empty() {
+			return DrainStep::Drained;
+		}
+		let mut advanced = false;
+		for row in &batch {
+			if let Some(lock) = fence.as_mut()
+				&& let Err(err) = sqlx::query("SELECT 1").execute(lock.as_mut()).await
+			{
+				warn!(seq = row.seq, "relay: outbox lock probe failed before dispatch: {err}");
+				return DrainStep::LostLock;
+			}
+			match self.dispatch(row).await {
+				Outcome::Done => {
+					if let Err(err) = outbox::mark_dispatched(&self.pool, row.seq).await {
+						warn!(seq = row.seq, "relay: failed to mark dispatched (event will re-deliver): {err}");
 					}
-					Outcome::Park { reason, applied_legs } => {
-						self.park(row, &reason, applied_legs).await;
-						advanced = true;
+					advanced = true;
+				}
+				Outcome::Park { reason, applied_legs } => {
+					self.park(row, &reason, applied_legs).await;
+					advanced = true;
+				}
+				Outcome::Retry(reason) => {
+					warn!(seq = row.seq, "relay: transient failure (unbounded), retrying from here: {reason}");
+					if let Err(err) = outbox::record_failure(&self.pool, row.seq, &reason).await {
+						warn!(seq = row.seq, "relay: failed to record the retry attempt: {err}");
 					}
-					Outcome::Retry(reason) => {
-						warn!(seq = row.seq, "relay: transient failure (unbounded), retrying from here: {reason}");
+					return DrainStep::Throttle;
+				}
+				Outcome::RetryBounded(reason) => {
+					// A retryable that can never resolve (a completion whose pending was
+					// itself parked, so it is never found) must not wedge the single-worker
+					// queue forever — park it after a bound so later events keep flowing.
+					if row.attempts + 1 >= MAX_RETRYABLE_ATTEMPTS {
+						self.park(row, &format!("retryable exhausted after {} attempts: {reason}", row.attempts + 1), 0).await;
+						advanced = true;
+					} else {
 						if let Err(err) = outbox::record_failure(&self.pool, row.seq, &reason).await {
 							warn!(seq = row.seq, "relay: failed to record the retry attempt: {err}");
 						}
-						return true;
-					}
-					Outcome::RetryBounded(reason) => {
-						// A retryable that can never resolve (a completion whose pending was
-						// itself parked, so it is never found) must not wedge the single-worker
-						// queue forever — park it after a bound so later events keep flowing.
-						if row.attempts + 1 >= MAX_RETRYABLE_ATTEMPTS {
-							self.park(row, &format!("retryable exhausted after {} attempts: {reason}", row.attempts + 1), 0).await;
-							advanced = true;
-						} else {
-							if let Err(err) = outbox::record_failure(&self.pool, row.seq, &reason).await {
-								warn!(seq = row.seq, "relay: failed to record the retry attempt: {err}");
-							}
-							warn!(seq = row.seq, attempts = row.attempts + 1, "relay: retryable, retrying from here: {reason}");
-							return true;
-						}
+						warn!(seq = row.seq, attempts = row.attempts + 1, "relay: retryable, retrying from here: {reason}");
+						return DrainStep::Throttle;
 					}
 				}
 			}
-			if !advanced {
-				return false;
-			}
 		}
+		if advanced { DrainStep::More } else { DrainStep::Drained }
 	}
 
 	/// Park a non-retryable event into its distinct terminal state (NOT dispatched), so it
@@ -473,6 +532,20 @@ fn custody_to_ledger(err: CustodyError) -> LedgerError {
 		CustodyError::Unavailable(detail) => LedgerError::Unavailable(format!("custody unavailable: {detail}")),
 		CustodyError::Rejected(detail) => LedgerError::Conflict(format!("custody rejected: {detail}")),
 	}
+}
+
+/// One [`Relay::drain_batch`] step — how the caller decides to continue, idle, back
+/// off, or abandon the drain.
+pub enum DrainStep {
+	/// The backlog is empty (or nothing can advance) — idle until a nudge/poll.
+	Drained,
+	/// A full batch applied and more rows may remain — re-check shutdown, keep draining.
+	More,
+	/// Stopped on a transient failure — back off, then retry from the same `seq`.
+	Throttle,
+	/// The fence probe failed: the lock backend is gone and the session lock with it — a
+	/// standby may already be draining. Stop and re-acquire; **never** keep applying.
+	LostLock,
 }
 
 enum Outcome {

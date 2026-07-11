@@ -23,7 +23,7 @@ use piggybank_core::{
 		db,
 		deposits::PgDeposits,
 		ledger::{self, TbLedger},
-		relay::Relay,
+		relay::{DrainStep, Relay},
 		tigerbeetle::TigerBeetle,
 	},
 	ports::ledger::Ledger,
@@ -94,6 +94,52 @@ async fn only_one_relay_drains_under_the_outbox_lock() {
 	lock.close().await.expect("close the lock-holding connection");
 	let taken = standby.try_acquire_outbox_lock().await.expect("query the lock");
 	assert!(taken.is_some(), "once the holder's connection closes, a standby acquires the lock");
+	// `close()`, not drop: dropping returns the connection (lock still held) to the pool,
+	// which would wedge the re-acquisition below.
+	taken.unwrap().close().await.expect("close the standby's lock connection");
+
+	// The mid-drain fence (issue #38). The lock used to be validated only *between*
+	// drains: an idle-session reaper killing the lock backend mid-catch-up left a
+	// lockless relay draining while a standby rightfully took over — two concurrent
+	// drainers, the on-chain double-send window. `drain_batch` now probes the lock
+	// connection before every row, so a reaped backend stops the drain before the next
+	// row applies.
+	let mut lock = primary.acquire_outbox_lock().await.expect("primary re-takes the outbox lock");
+	let lock_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()").fetch_one(lock.as_mut()).await.expect("read the lock backend pid");
+
+	let party = Party::User(UserId::new());
+	let claim = party.claim_key();
+	let before = h.balance(&claim).await;
+	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref(), party, Network::Bep20, usdt("77")).await.unwrap();
+
+	sqlx::query("SELECT pg_terminate_backend($1)")
+		.bind(lock_pid)
+		.execute(&h.pool)
+		.await
+		.expect("reap the lock backend");
+	while sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = $1)")
+		.bind(lock_pid)
+		.fetch_one(&h.pool)
+		.await
+		.expect("poll for the reaped backend")
+	{
+		tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+	}
+
+	let step = primary.drain_batch(Some(&mut lock)).await;
+	assert!(matches!(step, DrainStep::LostLock), "a dead lock backend must stop the drain, not keep applying");
+	assert_eq!(h.balance(&claim).await, before, "no event may apply once the lock is lost");
+
+	// The reaped session released the lock — the standby takes over and applies the
+	// event exactly once.
+	let standby_lock = standby.try_acquire_outbox_lock().await.expect("query the lock");
+	assert!(standby_lock.is_some(), "the reaped session released the lock for a standby");
+	standby.drain().await;
+	assert_eq!(
+		h.balance(&claim).await.saturating_sub(before),
+		usdt("77").base_units(),
+		"the standby applied the deposit exactly once"
+	);
 }
 
 fn ledger_for(pool: &PgPool) -> Arc<dyn Ledger> {

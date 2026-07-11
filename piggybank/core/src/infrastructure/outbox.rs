@@ -88,8 +88,9 @@ pub struct OutboxRow {
 	pub attempts: i32,
 }
 /// The next drainable events in strict `seq` order: neither dispatched nor parked. No
-/// `SKIP LOCKED`: the relay is a lock-enforced singleton (`pg_advisory_lock`, see
-/// [`super::relay::Relay::run`]), so the order is total and a reservation's pending always
+/// `SKIP LOCKED`: the relay is a lock-enforced singleton (`pg_advisory_lock`, re-probed
+/// before every dispatched row — see [`super::relay::Relay::run`] and
+/// `Relay::drain_batch`), so the order is total and a reservation's pending always
 /// precedes its completion — `SKIP LOCKED` would let disjoint workers break that, so it is
 /// deliberately omitted. A *parked* row stays in the table (queryable by reconciliation /
 /// the reaper) but is excluded here so one non-retryable event can't wedge the queue.
