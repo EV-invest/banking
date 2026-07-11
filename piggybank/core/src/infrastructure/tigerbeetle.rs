@@ -21,8 +21,8 @@ impl TigerBeetle {
 	/// `cluster_id` is the cluster identifier (`0` for single-node dev).
 	/// `address` is the replica address in any form `tb::Client::new` accepts
 	/// (a bare `"3033"`, a `"127.0.0.1:3033"`, …).
-	pub fn connect(cluster_id: u128, address: &str) -> anyhow::Result<Self> {
-		let client = tb::Client::new(cluster_id, address).map_err(|status| anyhow::anyhow!("tigerbeetle client init failed: {status:?}"))?;
+	pub fn connect(cluster_id: u128, address: &str) -> color_eyre::Result<Self> {
+		let client = tb::Client::new(cluster_id, address).map_err(|status| color_eyre::eyre::eyre!("tigerbeetle client init failed: {status:?}"))?;
 		Ok(Self { client })
 	}
 

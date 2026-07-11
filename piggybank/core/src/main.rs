@@ -10,8 +10,8 @@
 
 use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
-use anyhow::Context;
 use clap::Parser;
+use color_eyre::eyre::{Context, ensure, eyre};
 use domain::money::Network;
 use ev::error_monitoring::{self, Config as SentryConfig};
 use evbanking_auth::{AuthConfig, AuthService, ServiceTokenSource, provisioner_channel};
@@ -65,7 +65,8 @@ struct Cli {
 }
 
 // Sentry must be initialised before the async runtime starts — no #[tokio::main].
-fn main() -> anyhow::Result<()> {
+fn main() -> color_eyre::Result<()> {
+	color_eyre::install()?;
 	dotenvy::dotenv().ok();
 
 	let cli = Cli::parse();
@@ -91,7 +92,7 @@ fn main() -> anyhow::Result<()> {
 		.block_on(run(config))
 }
 
-async fn run(config: AppConfig) -> anyhow::Result<()> {
+async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	// The on-chain rails keep their env-based conditional construction — a rail
 	// runs only when its endpoint var is set (deliberately absent in prod today).
 	let rails = Rails::from_env().context("failed to load the on-chain rail configuration")?;
@@ -102,15 +103,15 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// in-process fallback — restart-lossy, dev-only. Asserted BEFORE any infra
 	// dial so a misconfigured release dies instantly, not after a connect timeout.
 	if config.app_env == "production" {
-		anyhow::ensure!(
+		ensure!(
 			auth_config.signing.is_some(),
 			"production requires the auth signing triple (AUTH_SIGNING_KEY_PEM/AUTH_SIGNING_KID/AUTH_JWKS_JSON)"
 		);
-		anyhow::ensure!(
+		ensure!(
 			auth_config.issuance_token.is_some(),
 			"production requires BANKING_ISSUANCE_TOKEN (the BFF's IssueUserToken bearer) — without it every money route is NotConfigured"
 		);
-		anyhow::ensure!(
+		ensure!(
 			std::env::var("REDIS_URL").is_ok_and(|v| !v.is_empty()),
 			"production requires REDIS_URL (refresh-token state must survive restarts)"
 		);
@@ -451,12 +452,12 @@ async fn resolve_treasuries(bsc: Option<Arc<ChainCustody>>, tron: Option<Arc<Tro
 	}
 }
 
-/// Run one composition-root branch to completion, mapping any error to `anyhow`, then cancel
-/// the shared token so its peers start their graceful wind-down. It never returns early on a
-/// peer's cancellation — the branch's own future owns its draining (the gRPC servers via
-/// `serve_with_shutdown`, the loops via the token) — so `join!` over all branches drains them.
-async fn branch<E: std::fmt::Display>(shutdown: &CancellationToken, name: &str, fut: impl Future<Output = Result<(), E>>) -> anyhow::Result<()> {
-	let result = fut.await.map_err(|err| anyhow::anyhow!("{name} error: {err}"));
+/// Run one composition-root branch to completion, mapping any error to a `color_eyre` report,
+/// then cancel the shared token so its peers start their graceful wind-down. It never returns
+/// early on a peer's cancellation — the branch's own future owns its draining (the gRPC servers
+/// via `serve_with_shutdown`, the loops via the token) — so `join!` over all branches drains them.
+async fn branch<E: std::fmt::Display>(shutdown: &CancellationToken, name: &str, fut: impl Future<Output = Result<(), E>>) -> color_eyre::Result<()> {
+	let result = fut.await.map_err(|err| eyre!("{name} error: {err}"));
 	if let Err(err) = &result {
 		tracing::error!("{err}");
 	}
@@ -607,7 +608,7 @@ async fn await_signal(shutdown: CancellationToken) {
 /// pinned CA (`SIGNER_TLS_CA_PEM_FILE`) when set — the private-CA / mTLS case the
 /// architecture targets — else the public webpki roots. A client identity
 /// (`SIGNER_TLS_CLIENT_CERT_PEM_FILE` + `…KEY…`) presents the hub's certificate for mTLS.
-fn signer_client_tls() -> anyhow::Result<ClientTlsConfig> {
+fn signer_client_tls() -> color_eyre::Result<ClientTlsConfig> {
 	use std::env;
 
 	let mut tls = match env::var("SIGNER_TLS_CA_PEM_FILE").ok().filter(|s| !s.is_empty()) {

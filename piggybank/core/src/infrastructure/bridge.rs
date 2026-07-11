@@ -75,7 +75,7 @@ impl BridgeConsumer {
 
 	/// Drain the available backlog: repeatedly pull from the stored cursor and apply each
 	/// batch until the server returns no new rows (`next_position` unchanged).
-	async fn drain(&self, client: &mut UserEventsClient<Channel>) -> anyhow::Result<()> {
+	async fn drain(&self, client: &mut UserEventsClient<Channel>) -> color_eyre::Result<()> {
 		loop {
 			let after = self.cursor().await?;
 			let mut request = Request::new(PullUserLifecycleRequest {

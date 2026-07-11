@@ -41,9 +41,12 @@ pub struct SignerPolicy {
 }
 
 impl SignerPolicy {
-	pub fn from_env() -> anyhow::Result<Self> {
+	pub fn from_env() -> color_eyre::Result<Self> {
 		let max_transfer_usdt = match std::env::var("SIGNER_MAX_TRANSFER_USDT").ok().filter(|s| !s.is_empty()) {
-			Some(raw) => Some(raw.parse::<u64>().map_err(|_| anyhow::anyhow!("SIGNER_MAX_TRANSFER_USDT must be a whole number of USDT"))?),
+			Some(raw) => Some(
+				raw.parse::<u64>()
+					.map_err(|_| color_eyre::eyre::eyre!("SIGNER_MAX_TRANSFER_USDT must be a whole number of USDT"))?,
+			),
 			None => None,
 		};
 		let destination_allowlist = std::env::var("SIGNER_DESTINATION_ALLOWLIST")

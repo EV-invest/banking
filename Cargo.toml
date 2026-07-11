@@ -21,7 +21,6 @@ exclude = [".tb-client"]
 resolver = "3"
 
 [workspace.dependencies]
-anyhow = "1.0.102"
 async-trait = "0.1.89"
 # Browser-facing HTTP for the cabinet BFF (the rest of the workspace is gRPC-only).
 axum = "0.8"
@@ -29,6 +28,7 @@ axum-extra = "0.10"
 base64 = "0.22"
 chacha20poly1305 = "0.10"
 clap = { version = "4", features = ["derive", "env"] }
+color-eyre = "0.6"
 # Hub-internal crates. Other service repos depend on `evbanking_contracts` (and,
 # transitively, `evbanking_auth`) by git, so they get the wire stubs and the shared
 # auth verification flow from one place.

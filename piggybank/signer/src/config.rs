@@ -1,6 +1,6 @@
 use std::{env, net::SocketAddr};
 
-use anyhow::Context;
+use color_eyre::eyre::{Context, bail};
 use evbanking_auth::{TokenType, VerifierConfig};
 
 use crate::key_vault::Vault;
@@ -35,7 +35,7 @@ pub struct SignerConfig {
 	pub tls: Option<TlsConfig>,
 }
 impl SignerConfig {
-	pub fn from_env() -> anyhow::Result<Self> {
+	pub fn from_env() -> color_eyre::Result<Self> {
 		let database_url = env::var("SIGNER_DATABASE_URL").context("SIGNER_DATABASE_URL must be set")?;
 		let grpc_addr: SocketAddr = env::var("SIGNER_GRPC_ADDR")
 			.unwrap_or_else(|_| DEFAULT_GRPC_ADDR.to_string())
@@ -56,9 +56,7 @@ impl SignerConfig {
 		// Fail closed: a non-loopback bind in cleartext would expose the seam off-host, so
 		// the safe default (loopback) is the only case that may run without TLS.
 		if !grpc_addr.ip().is_loopback() && tls.is_none() {
-			anyhow::bail!(
-				"SIGNER_GRPC_ADDR {grpc_addr} is non-loopback but no TLS is configured — set SIGNER_TLS_CERT_PEM_FILE/SIGNER_TLS_KEY_PEM_FILE (mTLS recommended) or bind to loopback"
-			);
+			bail!("SIGNER_GRPC_ADDR {grpc_addr} is non-loopback but no TLS is configured — set SIGNER_TLS_CERT_PEM_FILE/SIGNER_TLS_KEY_PEM_FILE (mTLS recommended) or bind to loopback");
 		}
 
 		Ok(Self {
@@ -84,7 +82,7 @@ pub struct TlsConfig {
 /// KEK, so it can never silently run unable to seal/open. The KEK is injected from
 /// outside (secrets manager / KMS); it must never live in the DB, repo, or a config
 /// file next to the ciphertext.
-pub fn load_vault() -> anyhow::Result<Vault> {
+pub fn load_vault() -> color_eyre::Result<Vault> {
 	let kek_hex = env::var("WALLET_KEK").context("WALLET_KEK must be set (64 hex chars = 32 bytes), injected from a secrets store")?;
 	Vault::from_hex(&kek_hex).context("WALLET_KEK is not a valid 32-byte hex key")
 }
@@ -92,7 +90,7 @@ pub fn load_vault() -> anyhow::Result<Vault> {
 /// Load the server TLS material, if `SIGNER_TLS_CERT_PEM_FILE` and
 /// `SIGNER_TLS_KEY_PEM_FILE` are both set; the optional `SIGNER_TLS_CLIENT_CA_PEM_FILE`
 /// enables mTLS. Returns `None` when no cert/key is configured (loopback-only case).
-fn load_tls() -> anyhow::Result<Option<TlsConfig>> {
+fn load_tls() -> color_eyre::Result<Option<TlsConfig>> {
 	let (cert_file, key_file) = match (env::var("SIGNER_TLS_CERT_PEM_FILE").ok(), env::var("SIGNER_TLS_KEY_PEM_FILE").ok()) {
 		(Some(cert), Some(key)) if !cert.is_empty() && !key.is_empty() => (cert, key),
 		_ => return Ok(None),

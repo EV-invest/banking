@@ -80,7 +80,7 @@ pub enum RefreshStore {
 impl RefreshStore {
 	/// Back the store with Redis when `REDIS_URL` is set; otherwise keep the
 	/// in-process map (no-op-until-configured, so local/CI is unaffected).
-	pub async fn from_env() -> anyhow::Result<Self> {
+	pub async fn from_env() -> color_eyre::Result<Self> {
 		match std::env::var("REDIS_URL").ok().filter(|u| !u.is_empty()) {
 			Some(url) => Ok(Self::Redis(RedisRefreshStore::connect(&url).await?)),
 			None => Ok(Self::InProcess(InProcessRefreshStore::new())),
@@ -324,7 +324,7 @@ pub struct RedisRefreshStore {
 	conn: ConnectionManager,
 }
 impl RedisRefreshStore {
-	pub async fn connect(url: &str) -> anyhow::Result<Self> {
+	pub async fn connect(url: &str) -> color_eyre::Result<Self> {
 		let client = redis::Client::open(url)?;
 		let conn = client.get_connection_manager().await?;
 		Ok(Self { conn })

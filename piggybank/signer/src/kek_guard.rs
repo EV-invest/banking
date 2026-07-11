@@ -25,20 +25,20 @@ pub struct KekReport {
 
 /// Verify the database's KEK epoch against the boot KEK (fail-fast), then backfill
 /// per-row fingerprints. Call before serving any RPC.
-pub async fn enforce(vault: &Vault, secrets: &WalletSecrets) -> anyhow::Result<KekReport> {
+pub async fn enforce(vault: &Vault, secrets: &WalletSecrets) -> color_eyre::Result<KekReport> {
 	let fp = vault.fingerprint();
 
 	match secrets.sentinel().await.map_err(boot_err)? {
 		None => {
 			// First boot on this database: pin the epoch. Race-safe — if a concurrent
 			// racer pinned first, the re-read verifies against ITS row.
-			let probe = vault.seal_sentinel().map_err(|e| anyhow::anyhow!("could not seal the KEK sentinel: {e}"))?;
+			let probe = vault.seal_sentinel().map_err(|e| color_eyre::eyre::eyre!("could not seal the KEK sentinel: {e}"))?;
 			secrets.init_sentinel(&fp, &probe).await.map_err(boot_err)?;
 			let pinned = secrets
 				.sentinel()
 				.await
 				.map_err(boot_err)?
-				.ok_or_else(|| anyhow::anyhow!("KEK sentinel missing immediately after init"))?;
+				.ok_or_else(|| color_eyre::eyre::eyre!("KEK sentinel missing immediately after init"))?;
 			verify(vault, &fp, &pinned.kek_fp, &pinned.sealed_probe, &pinned.created_at)?;
 			tracing::info!(kek_fp = %short_fp(&fp), "KEK sentinel pinned — this database now belongs to this KEK epoch");
 		}
@@ -88,9 +88,9 @@ pub async fn enforce(vault: &Vault, secrets: &WalletSecrets) -> anyhow::Result<K
 pub fn short_fp(fp: &[u8]) -> String {
 	hex::encode(&fp[..fp.len().min(4)])
 }
-fn verify(vault: &Vault, boot_fp: &[u8; 32], stored_fp: &[u8], probe: &[u8], pinned_at: &str) -> anyhow::Result<()> {
+fn verify(vault: &Vault, boot_fp: &[u8; 32], stored_fp: &[u8], probe: &[u8], pinned_at: &str) -> color_eyre::Result<()> {
 	if stored_fp != boot_fp {
-		anyhow::bail!(
+		color_eyre::eyre::bail!(
 			"WALLET_KEK is NOT the KEK that sealed this database (sentinel pinned {pinned_at}, epoch fp {}, boot KEK fp {}). \
 			 Refusing to serve: every key this signer would mint or open under the wrong KEK strands real funds. \
 			 Restore the original WALLET_KEK; a lost KEK means the sealed keys are unrecoverable.",
@@ -99,13 +99,13 @@ fn verify(vault: &Vault, boot_fp: &[u8; 32], stored_fp: &[u8], probe: &[u8], pin
 		)
 	}
 	vault.verify_sentinel(probe).map_err(|_| {
-		anyhow::anyhow!(
+		color_eyre::eyre::eyre!(
 			"KEK fingerprint matches the sentinel (pinned {pinned_at}) but the sealed probe would not open — \
 			 the sentinel row is corrupt. Refusing to serve until an operator investigates."
 		)
 	})
 }
 
-fn boot_err(err: SignerError) -> anyhow::Error {
-	anyhow::anyhow!("KEK guard database access failed: {err}")
+fn boot_err(err: SignerError) -> color_eyre::eyre::Report {
+	color_eyre::eyre::eyre!("KEK guard database access failed: {err}")
 }

@@ -46,7 +46,7 @@ pub struct Grpc {
 	banking_issuance_token: Option<Arc<str>>,
 }
 impl Grpc {
-	pub fn connect_lazy(piggybank_addr: &str, banking_auth_addr: &str, concierge_addr: &str, banking_issuance_token: Option<String>) -> anyhow::Result<Self> {
+	pub fn connect_lazy(piggybank_addr: &str, banking_auth_addr: &str, concierge_addr: &str, banking_issuance_token: Option<String>) -> color_eyre::Result<Self> {
 		let piggybank = endpoint(piggybank_addr)?.connect_lazy();
 		let banking_auth = endpoint(banking_auth_addr)?.connect_lazy();
 		let concierge = endpoint(concierge_addr)?.connect_lazy();
@@ -343,7 +343,7 @@ impl Grpc {
 
 /// A lazily-connected upstream `Endpoint` with explicit connect + per-RPC deadlines, so a
 /// degraded plane fails fast instead of stalling the awaiting task indefinitely.
-fn endpoint(addr: &str) -> anyhow::Result<Endpoint> {
+fn endpoint(addr: &str) -> color_eyre::Result<Endpoint> {
 	Ok(Endpoint::from_shared(addr.to_string())?.connect_timeout(CONNECT_TIMEOUT).timeout(REQUEST_TIMEOUT))
 }
 

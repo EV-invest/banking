@@ -17,7 +17,7 @@
 
 use std::{future::Future, net::SocketAddr, sync::Arc};
 
-use anyhow::Context;
+use color_eyre::eyre::{Context, eyre};
 use evbanking_contracts::banking::v1::{
 	IssueUserTokenRequest, JwksRequest, JwksResponse, ListSessionsRequest, ListSessionsResponse, LogoutRequest, LogoutResponse, RefreshRequest, RevokeSessionRequest, RevokeSessionResponse,
 	Session, TokenResponse, UserSummary,
@@ -47,7 +47,7 @@ pub struct AuthService {
 impl AuthService {
 	/// Build the service from config and the [`Provisioner`] handle (core keeps the
 	/// receiver). Returns the [`Authorizer`] handle for core to authorize requests.
-	pub async fn try_new(config: AuthConfig, provisioner: Provisioner) -> anyhow::Result<(Self, Authorizer)> {
+	pub async fn try_new(config: AuthConfig, provisioner: Provisioner) -> color_eyre::Result<(Self, Authorizer)> {
 		let (tx, rx) = mpsc::channel(1024);
 		let grpc = AuthGrpc::build(config, provisioner).await?;
 		Ok((Self { authorize_rx: rx, grpc }, Authorizer::new(tx)))
@@ -56,7 +56,7 @@ impl AuthService {
 	/// Run the auth task: serve issuance gRPC on `addr` and answer core's authorize
 	/// requests over the in-process channel until `shutdown` fires (graceful: tonic
 	/// drains in-flight issuance requests) or the channel closes.
-	pub async fn run(self, addr: SocketAddr, shutdown: impl Future<Output = ()> + Send) -> anyhow::Result<()> {
+	pub async fn run(self, addr: SocketAddr, shutdown: impl Future<Output = ()> + Send) -> color_eyre::Result<()> {
 		let AuthService { mut authorize_rx, grpc } = self;
 		let authorizer = grpc.clone();
 		let issuance = Server::builder().add_service(AuthServiceServer::new(grpc)).serve_with_shutdown(addr, shutdown);
@@ -81,11 +81,11 @@ pub struct AuthGrpc {
 	engine: Arc<AuthEngine>,
 }
 impl AuthGrpc {
-	async fn build(config: AuthConfig, provisioner: Provisioner) -> anyhow::Result<Self> {
+	async fn build(config: AuthConfig, provisioner: Provisioner) -> color_eyre::Result<Self> {
 		let (signer, keyring, jwks) = match &config.signing {
 			Some(signing) => {
-				let signer = Signer::try_new(signing, &config).map_err(|e| anyhow::anyhow!("auth signer init failed: {e}"))?;
-				let (keyring, jwks) = load_jwks(signing).map_err(|e| anyhow::anyhow!("auth jwks load failed: {e}"))?;
+				let signer = Signer::try_new(signing, &config).map_err(|e| eyre!("auth signer init failed: {e}"))?;
+				let (keyring, jwks) = load_jwks(signing).map_err(|e| eyre!("auth jwks load failed: {e}"))?;
 				(Some(signer), keyring, jwks)
 			}
 			None => (None, JwksCache::new(), Vec::new()),

@@ -310,6 +310,16 @@
               TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
               AUTH_SIGNING_KID = "prod-1";
               RUST_LOG = "info";
+              # Transition compat: pre-LiveSettings images read topology from the
+              # Deployment env, and a rollback must land on a working pod. Values
+              # duplicate deploy/piggybank.nix EXACTLY (the settings env aliases
+              # beat the file, so any drift here would win — keep them identical).
+              # Drop once the fleet is confidently past pre-LiveSettings tags.
+              GRPC_ADDR = "0.0.0.0:50051";
+              AUTH_GRPC_ADDR = "0.0.0.0:50052";
+              SIGNER_GRPC_ADDR = "http://127.0.0.1:50053";
+              CONCIERGE_BRIDGE_ADDR = "http://concierge:55670";
+              APP_ENV = "production";
             };
           };
           containers.signer = {
@@ -334,7 +344,19 @@
             criticality = "normal";
             entrypoint = [ "/bin/cabinet-backend" "--config" "${cabinetBackendProdConfig}" ];
             contents = [ bankingBins mfeRegistryRoot ];
-            env.RUST_LOG = "info";
+            env = {
+              RUST_LOG = "info";
+              # Transition compat: pre-LiveSettings images read topology from the
+              # Deployment env, and a rollback must land on a working pod. Values
+              # duplicate deploy/cabinet-backend.nix EXACTLY. Drop once the fleet
+              # is confidently past pre-LiveSettings tags.
+              CABINET_BACKEND_BIND = "0.0.0.0:50062";
+              PIGGYBANK_GRPC_ADDR = "http://ev-banking-piggybank:50051";
+              BANKING_AUTH_GRPC_ADDR = "http://ev-banking-piggybank:50052";
+              CONCIERGE_GRPC_ADDR = "http://concierge:55670";
+              MFE_REGISTRY_PATH = "/mfe-registry.json";
+              APP_ENV = "production";
+            };
           };
           containers.cabinet = {
             port = 50061;

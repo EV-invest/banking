@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use anyhow::Context;
+use color_eyre::eyre::Context;
 use ev::error_monitoring::{self, Config as SentryConfig};
 use evconcierge_auth::{Verifier, VerifierConfig};
 
@@ -37,7 +37,8 @@ struct Cli {
 }
 
 // Sentry must be initialised before the async runtime starts — no `#[tokio::main]`.
-fn main() -> anyhow::Result<()> {
+fn main() -> color_eyre::Result<()> {
+	color_eyre::install()?;
 	dotenvy::dotenv().ok();
 
 	let cli = Cli::parse();
@@ -63,7 +64,7 @@ fn main() -> anyhow::Result<()> {
 		.block_on(run(config))
 }
 
-async fn run(config: AppConfig) -> anyhow::Result<()> {
+async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	// Product-analytics capture (native PostHog). A `None` key makes capture a silent
 	// no-op, so this is safe to construct unconfigured.
 	let _analytics = ev::analytics::Analytics::new(config.posthog_key.clone(), config.posthog_host.clone());

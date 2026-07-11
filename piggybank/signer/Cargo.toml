@@ -20,9 +20,9 @@ num-bigint = { workspace = true }
 sha3 = { workspace = true }
 tonlib-core = { workspace = true }
 zeroize = { workspace = true }
-
-anyhow.workspace = true
 base64.workspace = true
+
+color-eyre.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
 evbanking_auth.workspace = true

@@ -597,10 +597,10 @@ dependencies = [
 name = "cabinet-backend"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "axum",
  "axum-extra",
  "clap",
+ "color-eyre",
  "dotenvy",
  "ev_lib",
  "evbanking_contracts",
@@ -798,6 +798,33 @@ name = "cmov"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
+
+[[package]]
+name = "color-eyre"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5920befb47832a6d61ee3a3a846565cfa39b331331e68a3b1d1116630f2f26d"
+dependencies = [
+ "backtrace",
+ "color-spantrace",
+ "eyre",
+ "indenter",
+ "once_cell",
+ "owo-colors",
+ "tracing-error",
+]
+
+[[package]]
+name = "color-spantrace"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8b88ea9df13354b55bc7234ebcce36e6ef896aca2e42a15de9e10edce01b427"
+dependencies = [
+ "once_cell",
+ "owo-colors",
+ "tracing-core",
+ "tracing-error",
+]
 
 [[package]]
 name = "colorchoice"
@@ -1935,7 +1962,7 @@ dependencies = [
 name = "evbanking_auth"
 version = "0.1.0"
 dependencies = [
- "anyhow",
+ "color-eyre",
  "ev_lib",
  "evbanking_contracts",
  "http 1.4.2",
@@ -3942,6 +3969,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "owo-colors"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
+
+[[package]]
 name = "p256"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4113,9 +4146,9 @@ dependencies = [
 name = "piggybank-core"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "clap",
+ "color-eyre",
  "domain",
  "dotenvy",
  "ev_lib",
@@ -4146,9 +4179,9 @@ dependencies = [
 name = "piggybank-signer"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64",
  "chacha20poly1305",
+ "color-eyre",
  "domain",
  "dotenvy",
  "ed25519-dalek",

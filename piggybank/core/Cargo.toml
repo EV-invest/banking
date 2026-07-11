@@ -14,10 +14,10 @@ path = "src/main.rs"
 [dependencies]
 hex = { workspace = true }
 reqwest = { workspace = true, features = ["json", "rustls-tls"] }
-
-anyhow.workspace = true
 async-trait.workspace = true
 clap.workspace = true
+
+color-eyre.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
 ev = { workspace = true, features = ["analytics", "error_monitoring"] }

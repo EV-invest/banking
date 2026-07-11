@@ -5,7 +5,7 @@
 //! surface. A separate binary on purpose: the KEK and every plaintext key stay in
 //! this address space, so a hub compromise can't move money.
 
-use anyhow::Context;
+use color_eyre::eyre::Context;
 use evbanking_auth::{Verifier, grpc_auth_layer};
 use evbanking_contracts::signer::v1::signer_service_server::SignerServiceServer;
 use piggybank_signer::{
@@ -19,7 +19,8 @@ use sqlx::postgres::PgPoolOptions;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 use tower::Layer;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> color_eyre::Result<()> {
+	color_eyre::install()?;
 	dotenvy::dotenv().ok();
 	init_tracing();
 
@@ -30,7 +31,7 @@ fn main() -> anyhow::Result<()> {
 		.block_on(run())
 }
 
-async fn run() -> anyhow::Result<()> {
+async fn run() -> color_eyre::Result<()> {
 	let config = SignerConfig::from_env().context("failed to load signer configuration")?;
 	// Acquire the KEK before anything else — no point opening sockets if we can't seal.
 	let vault = load_vault()?;
@@ -82,7 +83,7 @@ async fn run() -> anyhow::Result<()> {
 
 /// Build the server TLS config from the loaded PEM material; a client-CA root upgrades
 /// it to mTLS so only the hub's pinned client certificate is accepted on the seam.
-fn server_tls(tls: &TlsConfig) -> anyhow::Result<ServerTlsConfig> {
+fn server_tls(tls: &TlsConfig) -> color_eyre::Result<ServerTlsConfig> {
 	let identity = Identity::from_pem(&tls.cert_pem, &tls.key_pem);
 	let mut config = ServerTlsConfig::new().identity(identity);
 	if let Some(ca) = &tls.client_ca_pem {

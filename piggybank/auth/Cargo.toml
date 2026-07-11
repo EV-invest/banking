@@ -7,7 +7,7 @@ license = "BlueOak-1.0.0"
 publish = false
 
 [dependencies]
-anyhow.workspace = true
+color-eyre.workspace = true
 ev = { workspace = true, features = ["error_monitoring"] }
 evbanking_contracts.workspace = true
 http.workspace = true

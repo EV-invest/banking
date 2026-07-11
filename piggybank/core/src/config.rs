@@ -103,7 +103,7 @@ pub struct Rails {
 	pub ton_sweep: Option<TonSweepConfig>,
 }
 impl Rails {
-	pub fn from_env() -> anyhow::Result<Self> {
+	pub fn from_env() -> color_eyre::Result<Self> {
 		// The on-chain seams run only when BSC_RPC_URL is set (the endpoint must support
 		// eth_getLogs for deposit scanning). Everything else has a sensible default —
 		// mainnet USDT, 15 confs.
@@ -171,12 +171,12 @@ impl Rails {
 					.map(|v| v == "true" || v == "1")
 					.unwrap_or(url_is_testnet);
 				if url_is_testnet && !is_testnet {
-					anyhow::bail!(
+					color_eyre::eyre::bail!(
 						"TON_API_URL ({api_url}) is a testnet endpoint but TON_IS_TESTNET is not true — user-facing TON deposit addresses would carry the mainnet tag for a testnet rail; set TON_IS_TESTNET=true"
 					);
 				}
 				if url_is_mainnet_host && is_testnet {
-					anyhow::bail!(
+					color_eyre::eyre::bail!(
 						"TON_API_URL ({api_url}) is the mainnet toncenter host but TON_IS_TESTNET is true — user-facing TON deposit addresses would carry the testnet tag for a mainnet rail; unset TON_IS_TESTNET or point TON_API_URL at a testnet/custom endpoint"
 					);
 				}
@@ -425,11 +425,11 @@ fn bool_env(key: &str, default: bool) -> bool {
 }
 
 /// Parse an optional env var that, when present and non-empty, must be a valid `T`.
-fn parse_opt<T: std::str::FromStr>(key: &str) -> anyhow::Result<Option<T>>
+fn parse_opt<T: std::str::FromStr>(key: &str) -> color_eyre::Result<Option<T>>
 where
 	T::Err: std::fmt::Display, {
 	match env::var(key).ok().filter(|s| !s.is_empty()) {
-		Some(raw) => raw.parse::<T>().map(Some).map_err(|e| anyhow::anyhow!("{key} must be a valid value: {e}")),
+		Some(raw) => raw.parse::<T>().map(Some).map_err(|e| color_eyre::eyre::eyre!("{key} must be a valid value: {e}")),
 		None => Ok(None),
 	}
 }
