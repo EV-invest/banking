@@ -17,6 +17,7 @@ reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 
 anyhow.workspace = true
 async-trait.workspace = true
+clap.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
 ev = { workspace = true, features = ["analytics", "error_monitoring"] }
@@ -24,6 +25,7 @@ evbanking_auth.workspace = true
 evbanking_contracts.workspace = true
 evconcierge_contracts.workspace = true
 serde_json.workspace = true
+smart-default.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "migrate"] }
 thiserror.workspace = true
 tigerbeetle.workspace = true
@@ -37,6 +39,7 @@ tower-http = { workspace = true, features = ["trace"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v4", "v5"] }
+v_utils.workspace = true
 
 [dev-dependencies]
 domain.workspace = true

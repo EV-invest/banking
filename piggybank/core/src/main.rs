@@ -11,6 +11,7 @@
 use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use anyhow::Context;
+use clap::Parser;
 use domain::money::Network;
 use ev::error_monitoring::{self, Config as SentryConfig};
 use evbanking_auth::{AuthConfig, AuthService, ServiceTokenSource, provisioner_channel};
@@ -18,7 +19,7 @@ use evbanking_contracts::signer::v1::signer_service_client::SignerServiceClient;
 use piggybank_core::{
 	AppState,
 	application::auth_sync,
-	config::AppConfig,
+	config::{self, AppConfig, Rails},
 	infrastructure::{
 		bridge::BridgeConsumer,
 		bsc_rpc::BscRpc,
@@ -57,11 +58,21 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{Certificate, ClientTlsConfig, Endpoint, Identity};
 
+#[derive(Parser)]
+struct Cli {
+	#[clap(flatten)]
+	settings_flags: config::SettingsFlags,
+}
+
 // Sentry must be initialised before the async runtime starts — no #[tokio::main].
 fn main() -> anyhow::Result<()> {
 	dotenvy::dotenv().ok();
 
-	let config = AppConfig::from_env().context("failed to load configuration")?;
+	let cli = Cli::parse();
+	// One snapshot at boot; hot reload is unused. A missing `{ env = "VAR" }` ref
+	// in the prod config fails HERE, before anything binds.
+	let settings = v_utils::utils::exit_on_error(config::LiveSettings::new(cli.settings_flags, Duration::from_secs(60)));
+	let config = v_utils::utils::exit_on_error(settings.config());
 
 	// Guard must stay alive for the duration of main — dropping it flushes events.
 	// `None` DSN → `init` returns `None`, so this binding is simply inert.
@@ -81,6 +92,30 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: AppConfig) -> anyhow::Result<()> {
+	// The on-chain rails keep their env-based conditional construction — a rail
+	// runs only when its endpoint var is set (deliberately absent in prod today).
+	let rails = Rails::from_env().context("failed to load the on-chain rail configuration")?;
+
+	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
+	// The auth crate's optional seams (absent ⇒ inert/fail-closed) are a dev/CI
+	// affordance; production must never boot inert. Same for the refresh store's
+	// in-process fallback — restart-lossy, dev-only. Asserted BEFORE any infra
+	// dial so a misconfigured release dies instantly, not after a connect timeout.
+	if config.app_env == "production" {
+		anyhow::ensure!(
+			auth_config.signing.is_some(),
+			"production requires the auth signing triple (AUTH_SIGNING_KEY_PEM/AUTH_SIGNING_KID/AUTH_JWKS_JSON)"
+		);
+		anyhow::ensure!(
+			auth_config.issuance_token.is_some(),
+			"production requires BANKING_ISSUANCE_TOKEN (the BFF's IssueUserToken bearer) — without it every money route is NotConfigured"
+		);
+		anyhow::ensure!(
+			std::env::var("REDIS_URL").is_ok_and(|v| !v.is_empty()),
+			"production requires REDIS_URL (refresh-token state must survive restarts)"
+		);
+	}
+
 	// ── driven infrastructure ─────────────────────────────────────────────────
 	// The hub applies pending control-plane migrations on boot (idempotent). New
 	// migration FILES are authored with the sqlx CLI (`sqlx migrate add …`), never
@@ -89,7 +124,8 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		.await
 		.context("failed to connect to the database")?;
 	db::migrate(&pool).await.context("failed to apply database migrations")?;
-	let tigerbeetle = Arc::new(TigerBeetle::connect(config.tigerbeetle_cluster_id, &config.tigerbeetle_address).context("failed to connect to TigerBeetle")?);
+	let tigerbeetle_cluster_id: u128 = config.tigerbeetle_cluster_id.parse().context("TIGERBEETLE_CLUSTER_ID must be an integer")?;
+	let tigerbeetle = Arc::new(TigerBeetle::connect(tigerbeetle_cluster_id, &config.tigerbeetle_address).context("failed to connect to TigerBeetle")?);
 
 	// The data-plane money gateway over TigerBeetle (it also holds the pool for the
 	// `tb_accounts` id-map — its own non-transactional concern). Seed the fund's
@@ -147,7 +183,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// rail falls through to the no-op stub (an operator settles manually), so unconfigured dev/CI
 	// is unaffected — same gate per chain as its deposit watcher.
 	let mut custody_by_network: HashMap<Network, Arc<dyn Custody>> = HashMap::new();
-	let bsc_custody: Option<Arc<ChainCustody>> = config.bsc.as_ref().map(|bsc| {
+	let bsc_custody: Option<Arc<ChainCustody>> = rails.bsc.as_ref().map(|bsc| {
 		Arc::new(ChainCustody::new(
 			pool.clone(),
 			BscRpc::new(bsc.rpc_url.clone()),
@@ -161,7 +197,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	if let Some(bsc_custody) = &bsc_custody {
 		custody_by_network.insert(Network::Bep20, bsc_custody.clone());
 	}
-	let tron_custody: Option<Arc<TronCustody>> = config
+	let tron_custody: Option<Arc<TronCustody>> = rails
 		.tron
 		.as_ref()
 		.map(|tron| Arc::new(TronCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), tron)));
@@ -172,7 +208,7 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// One shared `Arc<TonCustody>` — the registry broadcasts through it, and the withdrawal
 	// watcher reuses it to re-sign a stuck expired send at the same seqno (only the key-holder
 	// path can do that safely). Held so the watcher (built below) can clone it.
-	let ton_custody: Option<Arc<TonCustody>> = config
+	let ton_custody: Option<Arc<TonCustody>> = rails
 		.ton
 		.as_ref()
 		.map(|ton| Arc::new(TonCustody::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton)));
@@ -193,28 +229,22 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 
 	// ── cross-plane lifecycle bridge consumer (one-way concierge → banking) ─────
 	// Pull concierge `UserLifecycleEvent`s and mirror them onto the `users` control
-	// plane so money ops can be gated (a SUSPENDED user is frozen). Runs only when
-	// configured (CONCIERGE_BRIDGE_ADDR + BRIDGE_SERVICE_TOKEN); unconfigured dev/CI
-	// simply doesn't consume. The consumer holds its own pool clone so its polling
-	// reads don't compete with request traffic on the relay pool.
-	let bridge = match &config.bridge {
-		Some(bridge_config) => {
-			let endpoint = Endpoint::from_shared(bridge_config.concierge_addr.clone())
-				.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
-				.connect_timeout(Duration::from_secs(3))
-				.timeout(Duration::from_secs(10));
-			let channel = endpoint.connect_lazy();
-			Some(BridgeConsumer::new(
-				pool.clone(),
-				channel,
-				bridge_config.service_token.clone(),
-				Duration::from_secs(bridge_config.poll_secs),
-			))
-		}
-		None => {
-			tracing::info!("bridge: CONCIERGE_BRIDGE_ADDR/BRIDGE_SERVICE_TOKEN unset — not consuming concierge lifecycle events");
-			None
-		}
+	// plane so money ops can be gated (a SUSPENDED user is frozen). Always configured
+	// (the addr + shared token are boot-asserted config). The consumer holds its own
+	// pool clone so its polling reads don't compete with request traffic on the
+	// relay pool.
+	let bridge = {
+		let endpoint = Endpoint::from_shared(config.concierge_bridge_addr.clone())
+			.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
+			.connect_timeout(Duration::from_secs(3))
+			.timeout(Duration::from_secs(10));
+		let channel = endpoint.connect_lazy();
+		Some(BridgeConsumer::new(
+			pool.clone(),
+			channel,
+			config.bridge_service_token.clone(),
+			Duration::from_secs(config.bridge_poll_secs),
+		))
 	};
 
 	// ── auth service + user provisioning (in-process) ──────────────────────────
@@ -225,21 +255,18 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// each (idempotent by tx_ref); the relay then credits the user's claim. Runs only when
 	// BSC_RPC_URL is set — unconfigured dev/CI doesn't watch. Its own pool clone keeps the
 	// polling reads off the request path.
-	let deposit_watcher = config.bsc.clone().map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config));
+	let deposit_watcher = rails.bsc.clone().map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config));
 
 	// ── on-chain withdrawal confirmation watcher (BEP20 USDT) ──────────────────
 	// Auto-settle a broadcast withdrawal once its transaction confirms — the positive chain
 	// signal the reaper lacks (it can only alert on a stuck `processing` withdrawal). Same
 	// BSC gate; its own pool clone keeps the receipt reads off the request path.
-	let withdrawal_watcher = config
-		.bsc
-		.as_ref()
-		.map(|bsc| WithdrawalWatcher::new(pool.clone(), withdrawals.clone(), relay_notify.clone(), bsc));
+	let withdrawal_watcher = rails.bsc.as_ref().map(|bsc| WithdrawalWatcher::new(pool.clone(), withdrawals.clone(), relay_notify.clone(), bsc));
 
 	// ── treasury sweep (BEP20 USDT consolidation) ──────────────────────────────
 	// Move user deposit balances on-chain into the treasury (a gas station tops up gas
 	// first). Opt-in (BSC configured AND SWEEP_ENABLED); its own pool clone + signer channel.
-	let sweep = match (&config.bsc, &config.sweep) {
+	let sweep = match (&rails.bsc, &rails.sweep) {
 		(Some(bsc), Some(sweep_config)) => Some(Sweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), bsc, sweep_config.clone())),
 		_ => None,
 	};
@@ -248,14 +275,14 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// The Tron analogues of the BEP20 seams above: deposit watcher, withdrawal confirmation
 	// watcher, and (opt-in) sweep. Each runs only when TRON_RPC_URL is set; their own pool clones
 	// keep the polling reads off the request path.
-	let tron_deposit_watcher = config.tron.as_ref().map(|tron| TronDepositWatcher::new(pool.clone(), relay_notify.clone(), tron));
+	let tron_deposit_watcher = rails.tron.as_ref().map(|tron| TronDepositWatcher::new(pool.clone(), relay_notify.clone(), tron));
 	// The confirmation watcher shares the custody adapter so it can re-drive a stuck (expired,
 	// unlanded) send — TRON has no nonce, so nothing else could recover it. Wired like the TON one.
-	let tron_withdrawal_watcher = match (&config.tron, &tron_custody) {
+	let tron_withdrawal_watcher = match (&rails.tron, &tron_custody) {
 		(Some(tron), Some(tron_custody)) => Some(TronWithdrawalWatcher::new(pool.clone(), tron_custody.clone(), withdrawals.clone(), relay_notify.clone(), tron)),
 		_ => None,
 	};
-	let tron_sweep = match (&config.tron, &config.tron_sweep) {
+	let tron_sweep = match (&rails.tron, &rails.tron_sweep) {
 		(Some(tron), Some(sweep_config)) => Some(TronSweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), tron, sweep_config.clone())),
 		_ => None,
 	};
@@ -264,17 +291,16 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// Deposit watcher + withdrawal confirmation watcher run when TON_API_URL is set; the
 	// sweep additionally needs SWEEP_ENABLED. Each holds its own pool clone / signer channel,
 	// mirroring the BEP20 tasks; all are no-ops (idle branch) when unconfigured.
-	let ton_deposit_watcher = config.ton.clone().map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton));
-	let ton_withdrawal_watcher = match (&config.ton, &ton_custody) {
+	let ton_deposit_watcher = rails.ton.clone().map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton));
+	let ton_withdrawal_watcher = match (&rails.ton, &ton_custody) {
 		(Some(ton), Some(ton_custody)) => Some(TonWithdrawalWatcher::new(pool.clone(), ton_custody.clone(), withdrawals.clone(), relay_notify.clone(), ton)),
 		_ => None,
 	};
-	let ton_sweep = match (&config.ton, &config.ton_sweep) {
+	let ton_sweep = match (&rails.ton, &rails.ton_sweep) {
 		(Some(ton), Some(sweep_config)) => Some(TonSweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), ton, sweep_config.clone())),
 		_ => None,
 	};
 
-	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
 	let (provisioner, provision_rx) = provisioner_channel();
 	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).await.context("failed to build the auth service")?;
 
@@ -292,10 +318,10 @@ async fn run(config: AppConfig) -> anyhow::Result<()> {
 		positions,
 		deposit_addresses,
 		custody,
-		Arc::from(config.configured_networks()),
+		Arc::from(rails.configured_networks()),
 		relay_notify,
 		Arc::from(config.admin_subjects.clone()),
-		config.ton.as_ref().is_some_and(|ton| ton.is_testnet),
+		rails.ton.as_ref().is_some_and(|ton| ton.is_testnet),
 	);
 
 	tracing::info!(core = %config.grpc_addr, auth = %config.auth_grpc_addr, "piggybank listening");

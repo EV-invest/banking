@@ -285,6 +285,12 @@
         '';
 
         tbProd = import ./deploy/tigerbeetle.nix;
+        # Topology literals live in deploy/{piggybank,cabinet-backend}.nix (baked
+        # to JSON below); each contract env keeps only what the binary reads as
+        # env: the config's `{ env = ... }` refs plus the direct env seams (redis
+        # refresh store, signing kid, TigerBeetle identity via settings aliases).
+        piggybankProdConfig = pkgs.writeText "config.json" (builtins.toJSON (import ./deploy/piggybank.nix));
+        cabinetBackendProdConfig = pkgs.writeText "config.json" (builtins.toJSON (import ./deploy/cabinet-backend.nix));
         # Secret env (signing key, JWKS, issuance/bridge tokens, WALLET_KEK) arrives
         # via the k8s Secrets gitops/k3s own — never baked into contracts or images.
         containerStd = v_flakes.container.implement {
@@ -295,21 +301,14 @@
             # probes; the path is a required contract placeholder.
             healthPath = "/";
             criticality = "normal";
-            entrypoint = [ "/bin/piggybank" ];
+            entrypoint = [ "/bin/piggybank" "--config" "${piggybankProdConfig}" ];
             contents = [ bankingBins ];
             env = {
               DATABASE_URL = "postgres://evinvest@10.42.0.1:5432/banking";
               REDIS_URL = "redis://10.42.0.1:6379/0";
-              GRPC_ADDR = "0.0.0.0:50051";
-              AUTH_GRPC_ADDR = "0.0.0.0:50052";
               TIGERBEETLE_ADDRESS = pkgs.lib.concatStringsSep "," tbProd.addresses;
               TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
-              # The signer runs as a loopback sidecar in this pod (non-loopback binds
-              # demand TLS — signer/src/config.rs), mirroring the dev seam.
-              SIGNER_GRPC_ADDR = "http://127.0.0.1:50053";
-              CONCIERGE_BRIDGE_ADDR = "http://concierge:55670";
               AUTH_SIGNING_KID = "prod-1";
-              APP_ENV = "production";
               RUST_LOG = "info";
             };
           };
@@ -333,17 +332,9 @@
             port = 50062;
             healthPath = "/api/health";
             criticality = "normal";
-            entrypoint = [ "/bin/cabinet-backend" ];
+            entrypoint = [ "/bin/cabinet-backend" "--config" "${cabinetBackendProdConfig}" ];
             contents = [ bankingBins mfeRegistryRoot ];
-            env = {
-              CABINET_BACKEND_BIND = "0.0.0.0:50062";
-              PIGGYBANK_GRPC_ADDR = "http://ev-banking-piggybank:50051";
-              BANKING_AUTH_GRPC_ADDR = "http://ev-banking-piggybank:50052";
-              CONCIERGE_GRPC_ADDR = "http://concierge:55670";
-              MFE_REGISTRY_PATH = "/mfe-registry.json";
-              APP_ENV = "production";
-              RUST_LOG = "info";
-            };
+            env.RUST_LOG = "info";
           };
           containers.cabinet = {
             port = 50061;
@@ -445,6 +436,9 @@
             # Concierge→banking token-exchange seam: the BFF presents this on IssueUserToken to
             # mint the money-plane pair. Must match the cabinet-backend value below.
             export BANKING_ISSUANCE_TOKEN="''${BANKING_ISSUANCE_TOKEN:-dev-issuance-token}"
+            # LiveSettings has no Rust-side default for app_env (String field);
+            # dev topology is owned here, prod literals live in deploy/piggybank.nix.
+            export APP_ENV="''${APP_ENV:-development}"
             exec cargo run -p piggybank-core
           '';
         };
@@ -515,12 +509,18 @@
             set +a
 
             ${portEnv}
-            export CABINET_BACKEND_BIND="''${CABINET_BACKEND_BIND:-0.0.0.0:$CABINET_BACKEND_PORT}"
+            # Env aliases mirror AppConfig field names (LiveSettings `use_env`);
+            # dev topology is owned here, prod literals live in deploy/cabinet-backend.nix.
+            export BIND="''${BIND:-0.0.0.0:$CABINET_BACKEND_PORT}"
             export PIGGYBANK_GRPC_ADDR="''${PIGGYBANK_GRPC_ADDR:-http://127.0.0.1:$PIGGYBANK_CORE_PORT}"
             export BANKING_AUTH_GRPC_ADDR="''${BANKING_AUTH_GRPC_ADDR:-http://127.0.0.1:$PIGGYBANK_AUTH_PORT}"
             # Money-plane token-exchange seam — must match the piggybank hub's BANKING_ISSUANCE_TOKEN.
             export BANKING_ISSUANCE_TOKEN="''${BANKING_ISSUANCE_TOKEN:-dev-issuance-token}"
             export CONCIERGE_GRPC_ADDR="''${CONCIERGE_GRPC_ADDR:-http://127.0.0.1:$CONCIERGE_PORT}"
+            export AUTH_ISSUER="''${AUTH_ISSUER:-https://auth.concierge.ev}"
+            export AUTH_CLIENT_AUDIENCE="''${AUTH_CLIENT_AUDIENCE:-concierge}"
+            export MFE_REGISTRY_PATH="''${MFE_REGISTRY_PATH:-cabinet/frontend/mfe-registry.json}"
+            export APP_ENV="''${APP_ENV:-development}"
             export RUST_LOG="''${RUST_LOG:-info,cabinet_backend=debug}"
             exec cargo run -p cabinet-backend
           '';

@@ -7,7 +7,7 @@ use tonic::{
 	transport::{Channel, Endpoint},
 };
 
-use crate::{config::Config, cookies::CookieNames, session::BankingTokens};
+use crate::{config::AppConfig, cookies::CookieNames, session::BankingTokens};
 
 /// Cap on establishing a TCP/TLS connection to an upstream plane: a black-holed or
 /// half-open replica must fail fast rather than wedge the awaiting request task.
@@ -23,7 +23,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Shared application state, cheaply cloneable per request.
 #[derive(Clone)]
 pub struct AppState {
-	pub config: Arc<Config>,
+	pub config: Arc<AppConfig>,
 	pub grpc: Grpc,
 	/// The per-user banking money-pair cache (the one server-side state left — auth
 	/// is shell-owned and the request credential is the verified access-JWT cookie).

@@ -24,16 +24,27 @@ mod session;
 mod state;
 mod util;
 
-use config::Config;
+use clap::Parser;
+use config::AppConfig;
 use cookies::CookieNames;
 use session::BankingTokens;
 use state::{AppState, Grpc};
+
+#[derive(Parser)]
+struct Cli {
+	#[clap(flatten)]
+	settings_flags: config::SettingsFlags,
+}
 
 // Sentry must be initialised before the async runtime starts — no `#[tokio::main]`.
 fn main() -> anyhow::Result<()> {
 	dotenvy::dotenv().ok();
 
-	let config = Config::from_env().context("failed to load configuration")?;
+	let cli = Cli::parse();
+	// One snapshot at boot; hot reload is unused. A missing `{ env = "VAR" }` ref
+	// in the prod config fails HERE, before anything binds.
+	let settings = v_utils::utils::exit_on_error(config::LiveSettings::new(cli.settings_flags, std::time::Duration::from_secs(60)));
+	let config = v_utils::utils::exit_on_error(settings.config());
 
 	// Guard must stay alive for the duration of main — dropping it flushes events. A
 	// `None` DSN makes `init` return `None`, so this binding is simply inert.
@@ -52,7 +63,7 @@ fn main() -> anyhow::Result<()> {
 		.block_on(run(config))
 }
 
-async fn run(config: Config) -> anyhow::Result<()> {
+async fn run(config: AppConfig) -> anyhow::Result<()> {
 	// Product-analytics capture (native PostHog). A `None` key makes capture a silent
 	// no-op, so this is safe to construct unconfigured.
 	let _analytics = ev::analytics::Analytics::new(config.posthog_key.clone(), config.posthog_host.clone());
@@ -61,11 +72,11 @@ async fn run(config: Config) -> anyhow::Result<()> {
 		&config.piggybank_grpc_addr,
 		&config.banking_auth_grpc_addr,
 		&config.concierge_grpc_addr,
-		config.banking_issuance_token.as_ref().map(|t| t.0.clone()),
+		Some(config.banking_issuance_token.0.clone()),
 	)
 	.context("invalid gRPC address (PIGGYBANK_GRPC_ADDR / BANKING_AUTH_GRPC_ADDR / CONCIERGE_GRPC_ADDR)")?;
 
-	let bind_addr = config.bind_addr;
+	let bind_addr = config.bind;
 	tracing::info!(
 		bind = %bind_addr,
 		piggybank = %config.piggybank_grpc_addr,
@@ -85,7 +96,7 @@ async fn run(config: Config) -> anyhow::Result<()> {
 	.context("failed to build the access-token verifier")?;
 
 	let state = AppState {
-		cookies: Arc::new(CookieNames::new(config.cookie_secure)),
+		cookies: Arc::new(CookieNames::new(config.cookie_secure())),
 		banking: Arc::new(BankingTokens::new()),
 		verifier,
 		grpc,
