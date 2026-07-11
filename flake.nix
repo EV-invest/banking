@@ -625,7 +625,9 @@
             state="''${XDG_STATE_HOME:-$HOME/.local/state}/ev_invest"
             mkdir -p "$state/redis"
             if ! redis-cli -p "$REDIS_PORT" ping >/dev/null 2>&1; then
-              redis-server --port "$REDIS_PORT" --dir "$state/redis" --save "" --appendonly no \
+              # AOF on: auth sessions + refresh families live here, and without
+              # persistence every redis restart signs everyone out.
+              redis-server --port "$REDIS_PORT" --dir "$state/redis" --save "" --appendonly yes \
                 --daemonize yes --logfile "$state/redis/log"
             fi
             echo "redis ready on 127.0.0.1:$REDIS_PORT"
