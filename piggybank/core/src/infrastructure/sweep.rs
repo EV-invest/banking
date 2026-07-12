@@ -19,7 +19,10 @@
 //!     drops out, so nothing re-sweeps;
 //!   - the gas station's nonce is an in-memory monotonic counter (seeded from the chain), so
 //!     several top-ups in one cycle don't collide, plus a short in-memory grace so we don't
-//!     pile up top-ups to one address while the first confirms.
+//!     pile up top-ups to one address while the first confirms. A nonce whose top-up is not
+//!     known to have reached the mempool (signer failure, node rejection, transport failure)
+//!     is freed for the next cycle — a consumed-but-absent nonce would gap the sequence and
+//!     queue every later top-up behind a slot nothing fills, wedging the sweep until restart.
 //!
 //! Read-mostly and **opt-in** (`SWEEP_ENABLED`): it never touches TigerBeetle (the deposit
 //! was already credited; this only relocates the on-chain custody), and it is off unless the
@@ -165,14 +168,48 @@ impl Sweep {
 		}
 		let nonce = self.next_gas_nonce(gas_station).await?;
 		let drop = needed.saturating_mul(self.config.gas_drop_multiple).max(self.config.min_gas_drop_wei);
-		let (raw, hash) = self.sign_native(address, drop, nonce, gas_price).await?;
+		let (raw, hash) = match self.sign_native(address, drop, nonce, gas_price).await {
+			Ok(signed) => signed,
+			Err(err) => {
+				self.free_gas_nonce(nonce);
+				return Err(err);
+			}
+		};
 		// Record before broadcasting so a slow/failed send still dedups the next cycle.
 		if let Ok(mut state) = self.state.lock() {
 			state.recent_topups.insert(address.to_owned(), Instant::now());
 		}
 		info!(%address, drop, "sweep: topping up gas for a deposit address");
-		self.broadcast(&raw, &hash, "gas", address).await;
+		match self.broadcast(&raw, &hash, "gas", address).await {
+			Broadcast::Admitted => {}
+			Broadcast::Rejected => {
+				// In no mempool anywhere: free the slot and the grace, so the next cycle
+				// retries at once (the grace only exists to wait out a confirming tx).
+				self.free_gas_nonce(nonce);
+				if let Ok(mut state) = self.state.lock() {
+					state.recent_topups.remove(address);
+				}
+			}
+			// The send may have reached the node: free the slot (the allocator re-syncs from
+			// the chain's pending count if the tx did get through), but KEEP the grace — it
+			// is what stops a second drop to this address while the first may be confirming.
+			Broadcast::Ambiguous => self.free_gas_nonce(nonce),
+		}
 		Ok(())
+	}
+
+	/// Roll the in-memory high-water mark back for a top-up that is not known to have entered
+	/// the mempool, so the next cycle retries the same slot — the withdrawal path's
+	/// `discard_tx` discipline. Without this the chain's pending count stays pinned at the
+	/// gap while every later top-up signs above it into the queued pool, and the sweep wedges
+	/// for the life of the process. Safe even when a transport-ambiguous send actually got
+	/// through: [`next_gas_nonce`](Self::next_gas_nonce) never allocates below the chain's
+	/// pending count, so an admitted tx re-syncs the sequence, and at worst a duplicate
+	/// signing at the same nonce is classified idempotent at broadcast.
+	fn free_gas_nonce(&self, nonce: u64) {
+		if let Ok(mut state) = self.state.lock() {
+			state.free(nonce);
+		}
 	}
 
 	/// The next gas-station nonce: the chain's pending count, but never below our in-memory
@@ -181,9 +218,7 @@ impl Sweep {
 	async fn next_gas_nonce(&self, gas_station: &str) -> Result<u64, SweepError> {
 		let chain = self.rpc.pending_nonce(gas_station).await.map_err(read_err)?;
 		let mut state = self.state.lock().map_err(|_| SweepError::Config("sweep state mutex poisoned".into()))?;
-		let next = state.next_nonce.map_or(chain, |n| n.max(chain));
-		state.next_nonce = Some(next + 1);
-		Ok(next)
+		Ok(state.allocate(chain))
 	}
 
 	/// Live gas price, rounded UP to a whole gwei — stable across node wobble so a re-signed
@@ -250,15 +285,30 @@ impl Sweep {
 
 	/// Broadcast a signed transaction, classifying the outcome per-address (never fails the
 	/// whole cycle): an idempotent re-send is benign, a sender out of funds is a loud alert
-	/// (fund the gas station / treasury), a transport blip retries next cycle.
-	async fn broadcast(&self, raw_tx: &str, tx_hash: &str, kind: &str, address: &str) {
+	/// (fund the gas station / treasury), a transport blip retries next cycle. The returned
+	/// [`Broadcast`] lets the gas path decide whether the nonce it consumed must be freed.
+	async fn broadcast(&self, raw_tx: &str, tx_hash: &str, kind: &str, address: &str) -> Broadcast {
 		match self.rpc.send_raw_transaction(raw_tx).await {
-			Ok(hash) => info!(%hash, kind, %address, "sweep: broadcast transaction"),
-			Err(RpcError::Transport(detail)) => warn!(kind, %address, "sweep: transport error (retry next cycle): {detail}"),
-			Err(RpcError::Rpc(msg)) if is_idempotent(&msg) => info!(kind, %address, reason = %msg, "sweep: transaction already in flight — idempotent"),
-			Err(RpcError::Rpc(msg)) if msg.to_lowercase().contains("insufficient funds") =>
-				error!(kind, %address, %tx_hash, "sweep: SENDER OUT OF FUNDS — fund the gas station (BNB) / treasury: {msg}"),
-			Err(RpcError::Rpc(msg)) => warn!(kind, %address, "sweep: node rejected the transaction: {msg}"),
+			Ok(hash) => {
+				info!(%hash, kind, %address, "sweep: broadcast transaction");
+				Broadcast::Admitted
+			}
+			Err(RpcError::Transport(detail)) => {
+				warn!(kind, %address, "sweep: transport error (retry next cycle): {detail}");
+				Broadcast::Ambiguous
+			}
+			Err(RpcError::Rpc(msg)) if is_idempotent(&msg) => {
+				info!(kind, %address, reason = %msg, "sweep: transaction already in flight — idempotent");
+				Broadcast::Admitted
+			}
+			Err(RpcError::Rpc(msg)) if msg.to_lowercase().contains("insufficient funds") => {
+				error!(kind, %address, %tx_hash, "sweep: SENDER OUT OF FUNDS — fund the gas station (BNB) / treasury: {msg}");
+				Broadcast::Rejected
+			}
+			Err(RpcError::Rpc(msg)) => {
+				warn!(kind, %address, "sweep: node rejected the transaction: {msg}");
+				Broadcast::Rejected
+			}
 		}
 	}
 
@@ -318,16 +368,47 @@ impl Sweep {
 struct GasState {
 	/// In-memory monotonic next nonce for the gas station, so several top-ups in one cycle
 	/// get distinct nonces even when the node's pending count lags. Seeded/bumped from the
-	/// chain, never allowed to go backwards.
+	/// chain; only goes backwards via [`free`](Self::free) when an allocated nonce's
+	/// transaction never entered the mempool.
 	next_nonce: Option<u64>,
 	/// Last time a top-up was sent to an address — a best-effort grace so we don't pile up
 	/// top-ups while one confirms (in-memory; a restart may cost one extra harmless top-up).
 	recent_topups: HashMap<String, Instant>,
 }
+impl GasState {
+	/// Consume the next nonce: the chain's pending count, but never below the in-memory
+	/// high-water mark.
+	fn allocate(&mut self, chain: u64) -> u64 {
+		let next = self.next_nonce.map_or(chain, |n| n.max(chain));
+		self.next_nonce = Some(next + 1);
+		next
+	}
+
+	/// Return the most recently allocated nonce to the pool. Only the latest allocation can
+	/// be freed — an older one has live transactions signed above it, so re-opening it would
+	/// trade one gap for another.
+	fn free(&mut self, nonce: u64) {
+		if self.next_nonce == Some(nonce + 1) {
+			self.next_nonce = Some(nonce);
+		}
+	}
+}
+
+/// The classified outcome of a broadcast, as far as mempool admission is concerned.
+enum Broadcast {
+	/// In the mempool: accepted now, or an idempotent re-send of one already there.
+	Admitted,
+	/// The node synchronously rejected it — these bytes are in no mempool anywhere.
+	Rejected,
+	/// A transport failure: the send may or may not have reached the node.
+	Ambiguous,
+}
 
 /// Node responses that mean our transaction is already accounted for — a re-send is a no-op.
 /// `nonce too low` ⇒ it already mined; `already known` ⇒ already in the mempool;
-/// `replacement transaction underpriced` ⇒ the prior identical-nonce tx still stands.
+/// `replacement transaction underpriced` ⇒ the prior identical-nonce tx still stands (this
+/// also safely covers a *different* tx colliding at a reused nonce after an ambiguous send:
+/// the earlier tx stands, and the loser is simply retried on a later cycle).
 fn is_idempotent(msg: &str) -> bool {
 	let m = msg.to_lowercase();
 	m.contains("already known") || m.contains("known transaction") || m.contains("nonce too low") || m.contains("replacement transaction underpriced") || m.contains("already imported")
@@ -351,7 +432,7 @@ enum SweepError {
 
 #[cfg(test)]
 mod tests {
-	use super::is_idempotent;
+	use super::{GasState, is_idempotent};
 
 	#[test]
 	fn recognises_idempotent_broadcast_responses() {
@@ -360,5 +441,38 @@ mod tests {
 		assert!(is_idempotent("replacement transaction underpriced"));
 		assert!(!is_idempotent("insufficient funds for gas * price + value"));
 		assert!(!is_idempotent("execution reverted"));
+	}
+
+	#[test]
+	fn allocates_monotonic_nonces_from_the_chain() {
+		let mut state = GasState::default();
+		assert_eq!(state.allocate(10), 10);
+		assert_eq!(state.allocate(10), 11, "chain pending lags within a cycle — high-water mark wins");
+		assert_eq!(state.allocate(20), 20, "chain moved past us (external mining) — chain wins");
+	}
+
+	#[test]
+	fn freeing_a_failed_topup_retries_the_same_slot() {
+		let mut state = GasState::default();
+		let nonce = state.allocate(10);
+		state.free(nonce);
+		assert_eq!(state.allocate(10), nonce, "the freed nonce is reissued, not skipped");
+	}
+
+	#[test]
+	fn freed_nonce_resyncs_when_the_tx_was_admitted_after_all() {
+		let mut state = GasState::default();
+		let nonce = state.allocate(10);
+		state.free(nonce); // transport-ambiguous send that actually got through
+		assert_eq!(state.allocate(11), 11, "chain pending advanced — no duplicate allocation");
+	}
+
+	#[test]
+	fn only_the_latest_allocation_can_be_freed() {
+		let mut state = GasState::default();
+		let first = state.allocate(10);
+		let second = state.allocate(10);
+		state.free(first);
+		assert_eq!(state.allocate(10), second + 1, "an older nonce has live txs above it — freeing is a no-op");
 	}
 }
