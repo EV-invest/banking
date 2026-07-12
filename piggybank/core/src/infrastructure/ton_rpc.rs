@@ -67,12 +67,28 @@ impl TonRpc {
 	/// short (drained) page from a full one — and the raw max is the resume key that
 	/// still advances past filtered rows.
 	pub async fn incoming_jetton_transfers(&self, owner: &str, master: &str, start_now: u64, limit: u32) -> Result<JettonTransferPage, RpcError> {
+		self.jetton_transfers(owner, master, "in", start_now, limit).await
+	}
+
+	/// Outgoing jetton transfers FROM `owner` (decoded by the indexer), at or after the
+	/// `start_now` unix-time watermark, oldest first — the same paged shape as the incoming
+	/// feed, so the withdrawal watcher can drain past the cap. The watcher's settlement
+	/// proof: a treasury seqno advance only means the wallet processed *an* external message,
+	/// not that the internal jetton transfer landed (a bounce advances the seqno too). The
+	/// indexer only surfaces transfers whose transaction was not aborted, so a matching
+	/// non-aborted outgoing transfer of the expected amount is positive proof the USDT
+	/// actually left — the mirror of the deposit path, reusing the same tested decoder.
+	pub async fn outgoing_jetton_transfers(&self, owner: &str, master: &str, start_now: u64, limit: u32) -> Result<JettonTransferPage, RpcError> {
+		self.jetton_transfers(owner, master, "out", start_now, limit).await
+	}
+
+	async fn jetton_transfers(&self, owner: &str, master: &str, direction: &str, start_now: u64, limit: u32) -> Result<JettonTransferPage, RpcError> {
 		let start = start_now.to_string();
 		let limit = limit.to_string();
 		let query = [
 			("owner_address", owner),
 			("jetton_master", master),
-			("direction", "in"),
+			("direction", direction),
 			("start_utime", start.as_str()),
 			("sort", "asc"),
 			("limit", limit.as_str()),
@@ -86,28 +102,6 @@ impl TonRpc {
 			max_now: raw.iter().filter_map(|e| e.get("transaction_now").and_then(serde_json::Value::as_u64)).max().unwrap_or(0),
 			transfers: decode_jetton_transfers(&value),
 		})
-	}
-
-	/// Outgoing jetton transfers FROM `owner` (decoded by the indexer), at or after the
-	/// `start_now` unix-time watermark, oldest first. The withdrawal watcher's settlement
-	/// proof: a treasury seqno advance only means the wallet processed *an* external message,
-	/// not that the internal jetton transfer landed (a bounce advances the seqno too). The
-	/// indexer only surfaces transfers whose transaction was not aborted, so a matching
-	/// non-aborted outgoing transfer of the expected amount is positive proof the USDT
-	/// actually left — the mirror of the deposit path, reusing the same tested decoder.
-	pub async fn outgoing_jetton_transfers(&self, owner: &str, master: &str, start_now: u64, limit: u32) -> Result<Vec<JettonDeposit>, RpcError> {
-		let start = start_now.to_string();
-		let limit = limit.to_string();
-		let query = [
-			("owner_address", owner),
-			("jetton_master", master),
-			("direction", "out"),
-			("start_utime", start.as_str()),
-			("sort", "asc"),
-			("limit", limit.as_str()),
-		];
-		let value = self.get("jetton/transfers", &query).await?;
-		Ok(decode_jetton_transfers(&value))
 	}
 
 	/// The account's native Toncoin balance in nanotons (the gas the sweep checks before a
@@ -160,8 +154,8 @@ impl TonRpc {
 	}
 }
 
-/// One ascending page of incoming jetton transfers (see
-/// [`TonRpc::incoming_jetton_transfers`]).
+/// One ascending page of jetton transfers (see [`TonRpc::incoming_jetton_transfers`] /
+/// [`TonRpc::outgoing_jetton_transfers`]).
 pub struct JettonTransferPage {
 	pub transfers: Vec<JettonDeposit>,
 	/// Raw entries in the page BEFORE decode-filtering — the short-page (drained) test.
