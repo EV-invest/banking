@@ -7,7 +7,9 @@
 //! proportionally to the redeemed fraction (average cost) for P&L — dividing by the
 //! position's own projection-tracked `units` (decremented in the same locked tx), NOT a
 //! TigerBeetle balance that lags the async burn, so concurrent settles compound
-//! deterministically.
+//! deterministically. The reduction applies **exactly once** per redemption: a repeat
+//! settle of a completed redemption is a full no-op, and a settle that outruns the
+//! subscribe projection rolls back (`Conflict`) rather than skipping the reduction.
 
 use async_trait::async_trait;
 use domain::{
@@ -133,22 +135,30 @@ async fn load_for_update(conn: &mut PgConnection, id: RedemptionId) -> Result<Re
 /// tracked units — in one statement, under the row lock the caller already holds, so the
 /// ratio's denominator is the position's *own* `units` (not a relay-lagging TB balance) and
 /// back-to-back settles compound: `cost_basis ← trunc(cost_basis × (units − redeemed) /
-/// units)` then `units ← units − redeemed`. A no-op if the position row is absent (a holding
-/// minted outside subscribe, e.g. a test) or already at zero units (nothing left to reduce).
+/// units)` then `units ← units − redeemed`. The row must already track at least the redeemed
+/// units: the projection is written by the relay *after* the subscribe mint posts, so a
+/// settle admitted off the TB balance can outrun the first projection write — silently
+/// skipping the reduction here would let the projection then land the full basis over units
+/// already burned, a permanent overstate. The `Conflict` rolls the settle back; the
+/// redemption stays queued and is settleable (operator retry) once the projection lands.
 async fn reduce_cost_basis(conn: &mut PgConnection, redemption: &Redemption) -> Result<(), DomainError> {
-	sqlx::query(
+	let reduced = sqlx::query(
 		"UPDATE fund_positions SET \
-		 cost_basis = trunc(cost_basis::numeric * GREATEST(units::numeric - $3::numeric, 0) / units::numeric)::text, \
-		 units = GREATEST(units::numeric - $3::numeric, 0)::text, \
+		 cost_basis = trunc(cost_basis::numeric * (units::numeric - $3::numeric) / units::numeric)::text, \
+		 units = (units::numeric - $3::numeric)::text, \
 		 updated_at = now() \
-		 WHERE user_id = $1 AND service = $2 AND units::numeric > 0",
+		 WHERE user_id = $1 AND service = $2 AND units::numeric >= $3::numeric",
 	)
 	.bind(redemption.user().raw())
 	.bind(redemption.service().as_str())
 	.bind(redemption.units().base_units().to_string())
 	.execute(&mut *conn)
 	.await
-	.map_err(repo_err)?;
+	.map_err(repo_err)?
+	.rows_affected();
+	if reduced != 1 {
+		return Err(DomainError::Conflict("position projection has not caught up to the subscribe — retry the settle".into()));
+	}
 	Ok(())
 }
 
@@ -172,6 +182,11 @@ impl RedemptionRepository for PgRedemptions {
 	async fn settle(&self, id: RedemptionId, nav: Nav) -> Result<Redemption, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let mut redemption = load_for_update(&mut tx, id).await?;
+		// A repeat settle is a full no-op under the row lock: the aggregate transition is
+		// idempotent, but the proportional reduction below is not.
+		if redemption.state() == RedemptionState::Completed {
+			return Ok(redemption);
+		}
 		redemption.settle(nav)?;
 		// Lock this position's row so the proportional reduction (and its units decrement)
 		// serializes against concurrent settles on the same (user, service) — they compound

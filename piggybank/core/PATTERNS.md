@@ -115,8 +115,15 @@ settle). At settle the basis is reduced *proportionally* — `cost_basis ← cos
 TigerBeetle holding: the unit burn is posted by the relay *after* the settle tx commits, so a
 TB read lags it and back-to-back settles would each divide by the same gross pre-burn balance
 (under-reducing the basis). Tracking units on the projection makes concurrent/back-to-back
-settles compound deterministically. A per-investor `high_water_mark` column is reserved (no
-fee is charged in v1).
+settles compound deterministically. The reduction applies **exactly once** per redemption: a
+repeat `SettleRedemption` (documented idempotent) short-circuits on the already-`Completed`
+row before reducing, and a settle that outruns the relay's subscribe projection (the redeem
+is admitted off the TB balance, which the projection lags) **rolls back** with `Conflict` —
+redemption still `Queued`, settleable by the operator once the projection lands — rather
+than silently skip a reduction the projection would then overwrite into a permanently
+overstated basis. The auto-settle inside `Redeem` degrades that `Conflict` to re-reading and
+returning the redemption's actual state (queued, or a raced terminal) instead of an error. A
+per-investor `high_water_mark` column is reserved (no fee is charged in v1).
 
 ## User wallet — deposit & withdraw (`domain::withdrawals`, `WalletService`)
 
@@ -324,7 +331,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
-| `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
+| `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ (settle) position projection tracks ≥ the redeemed units |
 | `GetUserBalance` | operator | `require_permission` (RBAC matrix); resolves the CONCIERGE id first via the bridge mirror (`users.concierge_user_id`), then the banking id; unknown ⇒ `NOT_FOUND` | — |
 | `ListParkedEvents` | operator | `require_permission` (RBAC matrix) | — |
 | `UnparkEvent` | admin (`OutboxManage`) | `require_permission` (RBAC matrix) | parked ∧ not dispatched ∧ **not compensated** (the double-apply guard) |

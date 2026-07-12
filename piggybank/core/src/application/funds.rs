@@ -11,7 +11,7 @@ use domain::{
 	balance::{LedgerAccountKey, ServiceId, ValuationId},
 	error::DomainError,
 	money::{Nav, Shares, Usdt},
-	redemptions::{Redemption, RedemptionId},
+	redemptions::{Redemption, RedemptionId, RedemptionState},
 	subscriptions::{Subscription, SubscriptionId},
 	users::UserId,
 };
@@ -129,7 +129,17 @@ pub async fn request_redemption(
 	// the payout; else leave it queued for the treasury worker.
 	let fund = ledger.balance(&LedgerAccountKey::ServiceClaim(service)).await?;
 	if Usdt::from_base_units(fund.available()) >= cash_out {
-		return settle_redemption(redemptions, nav, relay, redemption.id(), now_unix).await;
+		// The settle can lose a race — to the relay's subscribe projection (rolled back,
+		// stays queued for the operator) or to a concurrent cancel/fail. The redemption
+		// was accepted either way, so a `Conflict` reports its actual current state
+		// rather than surfacing an error for an already-opened redemption.
+		return match settle_redemption(redemptions, nav, relay, redemption.id(), now_unix).await {
+			Err(DomainError::Conflict(_)) => redemptions.find_by_id(redemption.id()).await?.ok_or_else(|| DomainError::NotFound {
+				entity: "redemption",
+				id: redemption.id().to_string(),
+			}),
+			settled => settled,
+		};
 	}
 	Ok(redemption)
 }
@@ -139,12 +149,20 @@ pub async fn request_redemption(
 /// relay posts the burn then the payout, guarded by a Read-First check on the fund claim.
 /// The cost-basis reduction divides by the position's own projection-tracked units inside
 /// the locked settle tx — not a live TB holding, which lags the async burn — so back-to-back
-/// settles compound deterministically (BANK-MONEY-3).
+/// settles compound deterministically (BANK-MONEY-3), and it applies exactly once per
+/// redemption (see [`crate::infrastructure::redemptions`]).
 pub async fn settle_redemption(redemptions: &dyn RedemptionRepository, nav: &dyn NavMarks, relay: &Notify, id: RedemptionId, now_unix: i64) -> Result<Redemption, DomainError> {
 	let existing = redemptions.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "redemption",
 		id: id.to_string(),
 	})?;
+	// Completed is terminal, so this unlocked read is safe to short-circuit on: the
+	// documented-idempotent retry must not re-check NAV freshness (a mark gone stale
+	// since the real settle would fail it). Concurrent settles that both pass this
+	// pre-check serialize on the repo's row lock, where the same guard is authoritative.
+	if existing.state() == RedemptionState::Completed {
+		return Ok(existing);
+	}
 	let price = dealing_nav(nav, existing.service(), now_unix).await?;
 	let redemption = redemptions.settle(id, price).await?;
 	relay.notify_one();
