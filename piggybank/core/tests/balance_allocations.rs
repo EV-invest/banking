@@ -14,6 +14,7 @@ use std::sync::Arc;
 use domain::{
 	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
+	error::DomainError,
 	money::{Nav, Network, Shares, TxRef, Usdt, WalletAddress},
 	redemptions::RedemptionState,
 	subscriptions::{Subscription, SubscriptionId},
@@ -36,7 +37,7 @@ use piggybank_core::{
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		FundPositionReader, SubscriptionRepository, UserRepository,
+		FundPositionReader, RedemptionRepository, SubscriptionRepository, UserRepository,
 		ledger::{Ledger, LedgerError, LedgerTransfer},
 		nav::NavMarks,
 	},
@@ -438,9 +439,11 @@ async fn redeem_when_fund_is_liquid_auto_completes() {
 	assert_eq!(claim(&h, &user_claim).await, usdt("40"), "cash credited to the user");
 }
 
-/// Set a user up holding 100 units in a fund marked up to NAV 2 — so a full redemption
-/// values to 200 cash while the fund claim holds only 100 — then request it, returning the
-/// queued redemption id. Shared by the short-fund tests.
+/// Set a user up holding 100 units (subscribed with 100 cash at the seed NAV, so basis 100)
+/// in a fund marked up to `aum` — pick it so redeeming `units` prices above the fund's 100
+/// claim — then request that redemption, returning its queued id. Shared by the short-fund
+/// tests.
+#[allow(clippy::too_many_arguments)]
 async fn queued_short_redemption(
 	h: &Harness,
 	subs: &PgSubscriptions,
@@ -449,6 +452,8 @@ async fn queued_short_redemption(
 	user: UserId,
 	service: &ServiceId,
 	now: i64,
+	aum: &str,
+	units: &str,
 ) -> domain::redemptions::RedemptionId {
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
@@ -458,11 +463,10 @@ async fn queued_short_redemption(
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	// Mark up to NAV 2 (AUM 200 over 100 units) — a +100% move, so the operator forces it.
-	funds_app::post_fund_valuation(nav_repo, h.ledger.as_ref(), service.clone(), usdt("200"), "op", true)
-		.await
-		.unwrap();
-	let r = funds_app::request_redemption(reds, h.ledger.as_ref(), nav_repo, &h.notify, user, service.clone(), shares("100"), now)
+	// Any AUM over the 100-unit supply moves the NAV ≥ the fat-finger threshold here, so
+	// the operator forces the mark.
+	funds_app::post_fund_valuation(nav_repo, h.ledger.as_ref(), service.clone(), usdt(aum), "op", true).await.unwrap();
+	let r = funds_app::request_redemption(reds, h.ledger.as_ref(), nav_repo, &h.notify, user, service.clone(), shares(units), now)
 		.await
 		.unwrap();
 	assert_eq!(r.state(), RedemptionState::Queued, "a short fund queues the redemption");
@@ -483,7 +487,7 @@ async fn redeem_on_a_short_fund_queues_then_settles_with_profit() {
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
 	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
 
-	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now).await;
+	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now, "200", "100").await;
 	// Units are reserved (locked), not burned; no cash paid while queued.
 	assert_eq!(units(&h, &user_shares).await, shares("100"), "units still posted (reserved, not burned)");
 	assert_eq!(units_available(&h, &user_shares).await, Shares::ZERO, "units locked by the reservation");
@@ -519,7 +523,7 @@ async fn settling_a_short_fund_parks_without_burning_or_paying() {
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
 	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
 
-	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now).await;
+	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now, "200", "100").await;
 
 	// Settle while the fund is STILL short (100 < 200) — the relay's payout pre-check parks
 	// the whole event. Burn-first ordering means nothing is applied: no half-burn, no cash.
@@ -541,7 +545,7 @@ async fn cancelling_a_queued_redemption_returns_the_units() {
 	let now = now_unix();
 	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
 
-	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now).await;
+	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now, "200", "100").await;
 
 	// A non-owner cannot cancel.
 	assert!(funds_app::cancel_redemption(&reds, &h.notify, id, UserId::new()).await.is_err(), "only the owner may cancel");
@@ -738,4 +742,120 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 		shares("40"),
 		"TB holding agrees: 60 units burned"
 	);
+}
+
+// Issue #41 mode 1: `SettleRedemption` is documented idempotent, so a repeat settle (an
+// invited operator retry, or the loser of the auto-settle vs operator race) must leave the
+// cost-basis reduction applied exactly once. The old code re-ran the reduction on the no-op
+// transition: from basis 70 / units 70 after the real settle of 30 units, a repeat would
+// re-reduce to trunc(70 × 40/70) = 40 — and a repeat of a FULL redemption would zero the
+// basis under live units, showing the whole position as phantom profit. The repeat is
+// exercised at both layers: the application command (which short-circuits without the NAV
+// staleness check) and the row-locked repository settle (the race authority).
+#[tokio::test]
+async fn a_repeat_settle_reduces_the_cost_basis_exactly_once() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let positions = PgFundPositions::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let now = now_unix();
+
+	// AUM 400 → NAV 4, so the 30-unit redemption prices to 120 cash > the 100 fund claim
+	// and queues; top the fund up, then settle it — once for real.
+	let id = queued_short_redemption(&h, &subs, &reds, &nav_repo, user, &service, now, "400", "30").await;
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	funds_app::settle_redemption(&reds, &nav_repo, &h.notify, id, now).await.unwrap();
+	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("70")), "one settle: basis 100 → 70");
+	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("70")), "one settle: units 100 → 70");
+
+	// The application-layer retry: still Completed, the projection untouched — and no NAV
+	// staleness check, so an idempotent retry succeeds even long after the mark.
+	let repeat = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, id, now + funds_app::MAX_NAV_AGE_SECS + 100)
+		.await
+		.unwrap();
+	assert_eq!(repeat.state(), RedemptionState::Completed, "a repeat settle stays the idempotent no-op");
+
+	// The repository-layer retry (what a raced concurrent settle hits under the row lock).
+	let raced = reds.settle(id, Nav::SEED).await.unwrap();
+	assert_eq!(raced.state(), RedemptionState::Completed, "the locked repo settle is the same no-op");
+	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("70")), "repeat settles must not re-reduce the basis");
+	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("70")), "repeat settles must not re-decrement the units");
+}
+
+// Issue #41 mode 2: `fund_positions` is written by the relay AFTER the subscribe mint posts,
+// while the redeem is admitted off the TB balance — so a settle can outrun the position's
+// first projection write. The old reduction was a silent no-op on the absent row; the
+// projection then landed the full basis over units already burned — a permanent overstate.
+// The settle must instead refuse (`Conflict`, rolled back, still queued) until the projection
+// tracks the redeemed units, and the auto-settle inside the redeem request must degrade that
+// refusal to the accepted-and-queued redemption, not an error. Minting straight on the TB
+// ledger reproduces the projection-lag state deterministically.
+#[tokio::test]
+async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
+	let Some(h) = harness().await else { return };
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let positions = PgFundPositions::new(h.pool.clone());
+	let user = UserId::new();
+	let service = unique_service();
+	let now = now_unix();
+
+	// 100 units in TB with the projection row still absent — the mid-race state. The fund
+	// claim is liquid (100), so the redeem request will attempt the immediate auto-settle.
+	let mint = LedgerTransfer {
+		id: Uuid::new_v4().as_u128(),
+		debit: LedgerAccountKey::UserShares(service.clone(), user),
+		credit: LedgerAccountKey::SharesOutstanding(service.clone()),
+		amount: shares("100").base_units(),
+		code: TransferCode::ShareMint,
+		reference: 0,
+	};
+	h.ledger.post(&mint).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	// The auto-settle loses to the missing projection — the redeem is still accepted, queued.
+	let r = funds_app::request_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
+		.await
+		.unwrap();
+	assert_eq!(r.state(), RedemptionState::Queued, "the raced auto-settle degrades to accepted-and-queued");
+	h.relay.drain().await;
+
+	// An operator settle before the projection lands is refused and fully rolled back.
+	let err = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, r.id(), now).await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "projection lag refuses the settle, got {err:?}");
+	assert_eq!(reds.find_by_id(r.id()).await.unwrap().unwrap().state(), RedemptionState::Queued, "the refused settle rolled back");
+	assert!(cost_basis(&positions, user, &service).await.is_none(), "nothing written against the absent row");
+
+	// The projection lands (what the relay's `project_subscription` upsert would write)…
+	sqlx::query("INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5)")
+		.bind(user.raw())
+		.bind(service.as_str())
+		.bind(usdt("100").base_units().to_string())
+		.bind(shares("100").base_units().to_string())
+		.bind(Nav::SEED.base_units().to_string())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+
+	// …and the retried settle now applies exactly once, against the full denominator.
+	let settled = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, r.id(), now).await.unwrap();
+	assert_eq!(settled.state(), RedemptionState::Completed);
+	h.relay.drain().await;
+	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("70")), "reduced against the landed projection (100 → 70)");
+	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("70")), "tracked units decremented once (100 → 70)");
+	assert_eq!(
+		units(&h, &LedgerAccountKey::UserShares(service.clone(), user)).await,
+		shares("70"),
+		"TB holding agrees: 30 burned"
+	);
+	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(user)).await, usdt("30"), "the payout (30 × seed NAV) reached the user");
 }
