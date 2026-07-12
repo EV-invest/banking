@@ -60,8 +60,15 @@ use crate::{
 /// matching outgoing transfer — generous slack over the signed validity window so the
 /// indexer's decoded transfer is always in range.
 const SETTLE_LOOKBACK_SECS: i64 = 3600;
-/// Cap on outgoing transfers pulled per scan — well above any realistic in-flight depth.
-const OUTGOING_LIMIT: u32 = 256;
+/// Page size for the outgoing-transfer feed. The scan pages until the feed is drained — a
+/// hard per-scan cap starved auto-settle whenever one stuck advanced send anchored the
+/// window far enough back that more than one page of transfers lived inside it.
+const OUTGOING_PAGE_LIMIT: u32 = 256;
+/// Circuit breaker on pages drained per scan (64 × 256 = 16 384 transfers — far above any
+/// realistic anchored window, but bounds a buggy indexer feeding endless full pages).
+/// Hitting it truncates the NEWEST end, which is fail-to-settle safe: a missing transfer
+/// can only leave an amount group ambiguous, never mis-attribute a settle.
+const OUTGOING_MAX_PAGES: u32 = 64;
 /// Grace (unix seconds) past a send's `valid_until` before a still-unmatched advanced send is
 /// treated as genuinely bounced/stuck (an `error!` for Sentry) rather than merely not-yet-indexed
 /// (a `warn!`). Absorbs indexer lag after the send's own window has already closed.
@@ -121,11 +128,7 @@ impl TonWithdrawalWatcher {
 
 		if !advanced.is_empty() {
 			let start = advanced.iter().map(|p| p.valid_until).min().unwrap_or(0).saturating_sub(SETTLE_LOOKBACK_SECS).max(0) as u64;
-			let outgoing = self
-				.rpc
-				.outgoing_jetton_transfers(&treasury, &self.usdt_master, start, OUTGOING_LIMIT)
-				.await
-				.map_err(|e| WatcherError::Rpc(e.to_string()))?;
+			let outgoing = self.outgoing_since(&treasury, start).await?;
 			// Durable cross-scan dedup: a transfer already recorded as some withdrawal's settle
 			// tx must never be re-attributed on a later scan (the per-scan claim set can't see
 			// across scans, and the transfer lingers in the lookback window after the owner
@@ -190,6 +193,44 @@ impl TonWithdrawalWatcher {
 			Ok(_) => info!(%withdrawal_id, %tx_hash, "ton withdrawal watcher: proven outgoing USDT transfer — settled"),
 			Err(err) => warn!(%withdrawal_id, "ton withdrawal watcher: could not settle confirmed withdrawal (will retry next poll): {err}"),
 		}
+	}
+
+	/// Drain the treasury's outgoing-transfer feed from `start` to the head, page by page —
+	/// the deposit watcher's paging pattern. One old advanced-but-unsettled send (a bounced
+	/// withdrawal awaiting an operator `fail`) anchors `start` arbitrarily far back; with a
+	/// single asc-sorted capped page, the page then filled with the oldest transfers and
+	/// never reached recent ones, so newer genuinely-landed withdrawals were starved of
+	/// auto-settle. Boundary entries refetched by the inclusive resume key are deduped by
+	/// hash in [`plan_settlements`].
+	async fn outgoing_since(&self, treasury: &str, start: u64) -> Result<Vec<JettonDeposit>, WatcherError> {
+		let mut outgoing = Vec::new();
+		let mut from = start;
+		for _ in 0..OUTGOING_MAX_PAGES {
+			let page = self
+				.rpc
+				.outgoing_jetton_transfers(treasury, &self.usdt_master, from, OUTGOING_PAGE_LIMIT)
+				.await
+				.map_err(|e| WatcherError::Rpc(e.to_string()))?;
+			outgoing.extend(page.transfers);
+			if page.raw_len < OUTGOING_PAGE_LIMIT as usize {
+				return Ok(outgoing);
+			}
+			if page.max_now <= from {
+				// A full page whose entries all share the start second — time-paging cannot
+				// advance. Settling against the truncated set stays safe (a missing transfer can
+				// only leave a group ambiguous, never mis-attribute), so plan with what we have.
+				warn!(
+					from,
+					"ton withdrawal watcher: full outgoing page without time progress — planning against a truncated feed this scan"
+				);
+				return Ok(outgoing);
+			}
+			// Resume AT the newest raw time (inclusive): boundary entries are refetched and
+			// deduped downstream, filtered rows still advance the window.
+			from = page.max_now;
+		}
+		warn!(from, "ton withdrawal watcher: outgoing page cap reached — planning against a truncated feed this scan");
+		Ok(outgoing)
 	}
 
 	/// Which of `outgoing`'s tx hashes are ALREADY recorded as some TON withdrawal's settle
