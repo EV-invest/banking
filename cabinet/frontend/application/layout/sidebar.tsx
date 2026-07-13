@@ -42,13 +42,18 @@ const ADMIN: NavItem[] = [
 ];
 
 // The signed-in app shell's left rail (Figma cabinet sidebar). Persistent across the
-// `(app)` route group; auth is enforced upstream in `proxy.ts`.
+// `(app)` route group; auth is enforced upstream in `proxy.ts`. `fixed` (not `sticky`):
+// the rail is pinned to the viewport below the injected shell header and never moves with
+// the content scroll — the `(app)` layout reserves its 248px column via a matching left
+// padding (`--cabinet-rail-w`). `overflow-y-auto` is a safety valve only: the rail scrolls
+// internally solely when it can't fit (e.g. the admin nav on a short viewport), so nothing
+// gets clipped.
 export function Sidebar() {
   const pathname = usePathname();
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
   return (
-    <aside className="sticky top-[var(--ev-shell-offset,0px)] flex h-[calc(100dvh-var(--ev-shell-offset,0px))] w-[248px] shrink-0 flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
+    <aside className="fixed left-0 top-[var(--ev-shell-offset,0px)] flex h-[calc(100dvh-var(--ev-shell-offset,0px))] w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
       <nav aria-label="Primary" className="flex flex-col gap-[18px]">
         <Group label="Fund">
           {FUND.map((item) => (

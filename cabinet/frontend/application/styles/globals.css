@@ -11,6 +11,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+:root {
+  /* Width of the fixed app-shell rail (application/layout/sidebar.tsx). The
+     `(app)` layout reserves the same width as content padding; one source keeps
+     the two in lockstep. */
+  --cabinet-rail-w: 248px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
