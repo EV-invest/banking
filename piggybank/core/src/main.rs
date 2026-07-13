@@ -19,7 +19,7 @@ use evbanking_contracts::signer::v1::signer_service_client::SignerServiceClient;
 use piggybank_core::{
 	AppState,
 	application::auth_sync,
-	config::{self, AppConfig, Rails},
+	config::{self, Rails},
 	infrastructure::{
 		bridge::BridgeConsumer,
 		bsc_rpc::BscRpc,
@@ -70,9 +70,10 @@ fn main() -> color_eyre::Result<()> {
 	dotenvy::dotenv().ok();
 
 	let cli = Cli::parse();
-	// One snapshot at boot; hot reload is unused. A missing `{ env = "VAR" }` ref
-	// in the prod config fails HERE, before anything binds.
-	let settings = v_utils::utils::exit_on_error(config::LiveSettings::new(cli.settings_flags, Duration::from_secs(60)));
+	// The live handle drives hot reload (the admin allowlist is read through it at
+	// request time); the boot snapshot below feeds the infra that's built once. A
+	// missing `{ env = "VAR" }` ref in the prod config fails HERE, before anything binds.
+	let settings = Arc::new(v_utils::utils::exit_on_error(config::LiveSettings::new(cli.settings_flags, Duration::from_secs(60))));
 	let config = v_utils::utils::exit_on_error(settings.config());
 
 	// Guard must stay alive for the duration of main — dropping it flushes events.
@@ -89,10 +90,13 @@ fn main() -> color_eyre::Result<()> {
 		.enable_all()
 		.build()
 		.context("failed to build tokio runtime")?
-		.block_on(run(config))
+		.block_on(run(settings))
 }
 
-async fn run(config: AppConfig) -> color_eyre::Result<()> {
+async fn run(settings: Arc<config::LiveSettings>) -> color_eyre::Result<()> {
+	// Boot snapshot for the infra built once; the live `settings` handle is what
+	// AppState reads the admin allowlist through (hot-reloaded at request time).
+	let config = settings.config().context("failed to load configuration")?;
 	// The on-chain rails keep their env-based conditional construction — a rail
 	// runs only when its endpoint var is set. Production asserts the rail set below.
 	let rails = Rails::from_env().context("failed to load the on-chain rail configuration")?;
@@ -343,7 +347,7 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 		custody,
 		Arc::from(rails.configured_networks()),
 		relay_notify,
-		Arc::from(config.admin_subjects.clone()),
+		settings.clone(),
 		rails.ton.as_ref().is_some_and(|ton| ton.is_testnet),
 	);
 

@@ -77,8 +77,11 @@ pub struct AppState {
 	pub configured_networks: Arc<[Network]>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
-	/// User ids permitted to call admin RPCs (config allowlist; see [`config`]).
-	pub admin_subjects: Arc<[String]>,
+	/// The hot-reloadable settings handle (behind an `Arc` so cloning this state stays a
+	/// refcount bump — a naked `LiveSettings` clone allocs its path/flags). The admin
+	/// allowlist ([`is_admin`](AppState::is_admin)) reads through it live, so editing the
+	/// mounted config file applies without a restart.
+	pub settings: Arc<config::LiveSettings>,
 	/// Whether the TON rail is on testnet — surfaced on its deposit addresses so the client
 	/// renders the correct (testnet-tagged) user-friendly TON address. `false` when TON is
 	/// unconfigured or on mainnet. The other rails have no testnet-specific address form.
@@ -103,7 +106,7 @@ impl AppState {
 		custody: Arc<dyn Custody>,
 		configured_networks: Arc<[Network]>,
 		relay_notify: Arc<Notify>,
-		admin_subjects: Arc<[String]>,
+		settings: Arc<config::LiveSettings>,
 		ton_is_testnet: bool,
 	) -> Self {
 		Self {
@@ -122,13 +125,20 @@ impl AppState {
 			custody,
 			configured_networks,
 			relay_notify,
-			admin_subjects,
+			settings,
 			ton_is_testnet,
 		}
 	}
 
-	/// Whether `subject` (a token `sub`) is on the admin allowlist.
+	/// Whether `subject` (a token `sub`) is on the admin allowlist, read LIVE from the
+	/// hot-reloaded config so a mounted-file edit applies without a restart. A config-read
+	/// error grants no elevation (fail closed) — the caller's mirrored role still applies,
+	/// and LiveSettings serves the last-good value across a malformed edit, so this denies
+	/// only when the config was never readable.
 	pub fn is_admin(&self, subject: &str) -> bool {
-		self.admin_subjects.iter().any(|s| s == subject)
+		match self.settings.config() {
+			Ok(config) => config.admin_subjects.iter().any(|s| s == subject),
+			Err(_) => false,
+		}
 	}
 }
