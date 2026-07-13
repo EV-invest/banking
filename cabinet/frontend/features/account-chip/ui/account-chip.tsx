@@ -1,12 +1,15 @@
 "use client";
 
 import { BadgeCheck, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { useProfile } from "@/entities/user/model/profile-store";
+import { useProfile, useProfileSettled } from "@/entities/user/model/profile-store";
 import { withBasePath } from "@/shared/config/base-path";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
-import { useSession } from "@/shared/lib/use-session";
+import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
+
+import { clearIdentity, readIdentity, writeIdentity } from "../model/identity-cache";
 
 // The account chip, rendered as a cabinet microfrontend inside the conductor's shared
 // header (registered in site_conductor's mfe-registry as `cabinet.account`). It replaces
@@ -23,17 +26,70 @@ import { useSession } from "@/shared/lib/use-session";
 // a dropped session: an anonymous visitor on the public site must not be bounced to login.
 export function AccountChip({ className }: { className?: string }) {
   const session = useSession();
+  // Read once, at mount: the optimistic identity from the last visit.
+  const [identity] = useState(readIdentity);
+  const email = session?.user?.email ?? null;
 
-  if (session === null) return <ChipSkeleton className={className} />;
+  // Invalidate the cache only on a GENUINE signed-out result. A transient
+  // session-endpoint blip resolves to the frozen SESSION_UNAVAILABLE sentinel — treating
+  // that as sign-out would wipe the optimization and flash the CTA at a still-logged-in
+  // user on the next load.
+  const signedOut =
+    session !== null && !session.authenticated && session !== SESSION_UNAVAILABLE;
+  useEffect(() => {
+    if (signedOut) clearIdentity();
+  }, [signedOut]);
+
+  // Still loading: trust the cache if we have one (same tab ⇒ same user in practice) so
+  // the chip paints its final form now — but don't persist from here, the email isn't
+  // confirmed yet. Never the email-derived name.
+  if (session === null) {
+    return identity ? (
+      <AuthedChip
+        className={className}
+        email={identity.email}
+        seedName={identity.name}
+        persist={false}
+      />
+    ) : (
+      <ChipSkeleton className={className} />
+    );
+  }
   if (!session.authenticated) return <SignInCta className={className} />;
-  return <AuthedChip className={className} email={session.user?.email ?? null} />;
+  // Confirmed session: trust the seeded name only if it belongs to THIS account, so a
+  // same-tab account switch never paints (or re-persists) the previous user's name.
+  const seedName = identity?.email === email ? identity.name : null;
+  return <AuthedChip className={className} email={email} seedName={seedName} persist />;
 }
 
-function AuthedChip({ className, email }: { className?: string; email: string | null }) {
+function AuthedChip({
+  className,
+  email,
+  seedName,
+  persist,
+}: {
+  className?: string;
+  email: string | null;
+  seedName: string | null;
+  persist: boolean;
+}) {
   // The profile refines the label (preferred/legal name); it only fetches here, in the
-  // authenticated branch, and degrades to the email heuristic until it resolves.
+  // authenticated branch.
   const profile = useProfile();
-  const name = profile?.preferred_name || profile?.legal_name || displayName(email);
+  const settled = useProfileSettled();
+  const realName = profile?.preferred_name || profile?.legal_name || null;
+  // Resolution order: live profile name → the name seeded from last visit → (only once the
+  // fetch has settled without a preferred/legal name) the email heuristic. Showing the
+  // email-derived label while the profile is still loading is the flicker we avoid — it
+  // would visibly correct itself a beat later. Until a name is known, render a skeleton,
+  // not a name we'll replace.
+  const name = realName ?? seedName ?? (settled ? displayName(email) : null);
+
+  useEffect(() => {
+    // Persist only from a confirmed session (persist) and only real names, so the cache
+    // never holds a heuristic or a name that disagrees with its email.
+    if (persist && realName) writeIdentity({ email, name: realName });
+  }, [persist, email, realName]);
 
   async function signOut() {
     // Shell-owned logout (site-root /api/auth): revokes the shared session and clears
@@ -52,7 +108,11 @@ function AuthedChip({ className, email }: { className?: string; email: string | 
           {initialsOf(email)}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold text-main-mist">{name}</p>
+          {name ? (
+            <p className="truncate text-[13px] font-semibold text-main-mist">{name}</p>
+          ) : (
+            <span className="my-[3px] block h-3 w-24 animate-pulse rounded bg-foreground/10" aria-hidden />
+          )}
           <p className="flex items-center gap-[5px] text-[11px] font-medium text-main-accent-t1">
             <BadgeCheck className="size-3" /> Verified
           </p>
