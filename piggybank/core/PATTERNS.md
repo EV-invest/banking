@@ -16,10 +16,21 @@ reference. **Working with money — read this before touching the ledger.**
 ## Units
 
 One canonical internal unit: **18-decimal USDT base units** (`domain::money::Usdt`, a
-checked `u128`). On-chain decimals differ (BEP20 = 18, TRC20/TON = 6); the custody
+checked `u128`). On-chain decimals differ (BEP20 = 18, TRC20/TON/**Polygon** = 6); the custody
 edge ([`Usdt::from_onchain`]/[`to_onchain`]) scales by `10^12` and rejects sub-precision
 dust. Amounts cross gRPC and the event log as **strings** (proto3 has no `u128`;
 `serde_json` has no `u128`) — lossless and JS-safe.
+
+**Rails.** Two chain families back the same fungible USDT pool. **EVM** — BEP20 (BSC) and
+**Polygon (PoS)** — share one parameterized adapter set (`evm_rpc` + `ChainCustody`/`DepositWatcher`/
+`WithdrawalWatcher`/`Sweep`, one instance per rail keyed by `EvmConfig::network`): identical
+`eth_getLogs`/receipt/nonce/legacy-signing machinery, differing only in chain-id, USDT contract,
+token decimals (BEP20 18-dp vs Polygon 6-dp), and native gas coin (BNB vs POL). Each EVM rail's
+`withdrawal_broadcasts` nonce sequence is SQL-scoped by `network`, so the two never collide. **Non-EVM**
+— TRON (TRC20) and TON (jetton) — keep their own per-rail files (`tron_*`, `ton_*`) because their
+curves/tx formats/RPC shapes can't share the EVM path. A rail runs only when its endpoint env is set
+(`POLYGON_RPC_URL` for Polygon); its treasury + gas-station are per-network wallets the operator funds
+separately (USDT + native coin).
 
 ## Chart of accounts (`domain::balance`)
 
