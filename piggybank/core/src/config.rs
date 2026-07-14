@@ -15,7 +15,7 @@ const DEFAULT_AUTH_GRPC_ADDR: &str = "127.0.0.1:50052";
 /// presence at startup. Dev runs config-less from the flake-exported env
 /// (`#[settings(use_env = true)]` aliases each field to its SHOUTY name).
 ///
-/// The on-chain rails (BSC/TRON/TON + sweeps) live in [`Rails`], on their
+/// The on-chain rails (BSC/Polygon/TRON/TON + sweeps) live in [`Rails`], on their
 /// original env-based conditional construction; production boot-asserts the
 /// rail set in `main.rs` (at least one rail, TON mainnet keyed).
 #[derive(Clone, Debug, v_macros::LiveSettings, v_macros::MyConfigPrimitives, v_macros::Settings, SmartDefault)]
@@ -82,12 +82,19 @@ pub struct Rails {
 	/// deposit watcher, the withdrawal confirmation watcher, and real custody — un-run. See
 	/// [`infrastructure::deposit_watcher`](crate::infrastructure::deposit_watcher) and
 	/// [`infrastructure::withdrawal_watcher`](crate::infrastructure::withdrawal_watcher).
-	pub bsc: Option<BscConfig>,
+	pub bsc: Option<EvmConfig>,
 	/// The treasury sweep's config. `Some` only when BSC is configured AND `SWEEP_ENABLED`
 	/// is set — it moves user deposit balances on-chain into the treasury, so it is opt-in
 	/// (merely configuring deposits/withdrawals does not start it). See
 	/// [`infrastructure::sweep`](crate::infrastructure::sweep).
 	pub sweep: Option<SweepConfig>,
+	/// The on-chain Polygon (PoS) config — the second EVM rail. `None` (no `POLYGON_RPC_URL`) leaves
+	/// every Polygon seam un-run, the same no-op-when-unconfigured stance as BSC. Shares [`EvmConfig`]
+	/// and every EVM seam with BSC, distinguished only by `EvmConfig::network` (`Network::Polygon`).
+	pub polygon: Option<EvmConfig>,
+	/// The Polygon treasury sweep config. `Some` only when Polygon is configured AND its sweep is
+	/// enabled (`SWEEP_ENABLED` or `POLYGON_SWEEP_ENABLED`) — the same opt-in gate as the BSC sweep.
+	pub polygon_sweep: Option<SweepConfig>,
 	/// The on-chain Tron (TRC20) config. `None` (no `TRON_RPC_URL`) leaves every Tron seam — the
 	/// deposit watcher, the withdrawal confirmation watcher, and real custody — un-run, the same
 	/// no-op-when-unconfigured stance as BSC. See [`infrastructure::tron_rpc`](crate::infrastructure::tron_rpc).
@@ -110,7 +117,8 @@ impl Rails {
 		// eth_getLogs for deposit scanning). Everything else has a sensible default —
 		// mainnet USDT, 15 confs.
 		let bsc = match env::var("BSC_RPC_URL").ok().filter(|s| !s.is_empty()) {
-			Some(rpc_url) => Some(BscConfig {
+			Some(rpc_url) => Some(EvmConfig {
+				network: Network::Bep20,
 				rpc_url,
 				usdt_contract: env::var("BSC_USDT_CONTRACT")
 					.ok()
@@ -123,6 +131,29 @@ impl Rails {
 				logs_rpc_url: env::var("BSC_LOGS_RPC_URL").ok().filter(|s| !s.is_empty()),
 				chain_id: parse_opt("BSC_CHAIN_ID")?.unwrap_or(56),
 				gas_limit: parse_opt("BSC_GAS_LIMIT")?.unwrap_or(100_000),
+			}),
+			None => None,
+		};
+		// Polygon PoS — the SECOND EVM rail, sharing every EVM seam with BSC (deposit watcher,
+		// withdrawal watcher, custody, sweep) via `EvmConfig` + `Network::Polygon`. Runs only when
+		// POLYGON_RPC_URL is set (an `eth_getLogs`-capable endpoint), the same no-op-when-unconfigured
+		// stance as BSC. Defaults: mainnet native USDT (6-dp, unlike BSC 18-dp), chain-id 137, 128
+		// confirmations (Polygon probabilistic-finality reorgs run deeper than BSC).
+		let polygon = match env::var("POLYGON_RPC_URL").ok().filter(|s| !s.is_empty()) {
+			Some(rpc_url) => Some(EvmConfig {
+				network: Network::Polygon,
+				rpc_url,
+				usdt_contract: env::var("POLYGON_USDT_CONTRACT")
+					.ok()
+					.filter(|s| !s.is_empty())
+					.unwrap_or_else(|| "0xc2132D05D31c914a87C6611C10748AEb04B58e8F".to_string()),
+				confirmations: parse_opt("POLYGON_CONFIRMATIONS")?.unwrap_or(Network::Polygon.min_confirmations() as u64),
+				poll_secs: parse_opt("POLYGON_POLL_SECS")?.unwrap_or(6),
+				start_block: parse_opt("POLYGON_DEPOSIT_START_BLOCK")?,
+				max_block_range: parse_opt("POLYGON_MAX_BLOCK_RANGE")?.unwrap_or(500),
+				logs_rpc_url: env::var("POLYGON_LOGS_RPC_URL").ok().filter(|s| !s.is_empty()),
+				chain_id: parse_opt("POLYGON_CHAIN_ID")?.unwrap_or(137),
+				gas_limit: parse_opt("POLYGON_GAS_LIMIT")?.unwrap_or(100_000),
 			}),
 			None => None,
 		};
@@ -209,6 +240,7 @@ impl Rails {
 		let bsc_sweep_enabled = bool_env("BSC_SWEEP_ENABLED", sweep_enabled);
 		let tron_sweep_enabled = bool_env("TRON_SWEEP_ENABLED", sweep_enabled);
 		let ton_sweep_enabled = bool_env("TON_SWEEP_ENABLED", sweep_enabled);
+		let polygon_sweep_enabled = bool_env("POLYGON_SWEEP_ENABLED", sweep_enabled);
 		let sweep = if bsc_sweep_enabled && bsc.is_some() {
 			Some(SweepConfig {
 				min_usdt: parse_opt("SWEEP_MIN_USDT")?.unwrap_or(1_000_000_000_000_000_000),
@@ -216,6 +248,19 @@ impl Rails {
 				min_gas_drop_wei: parse_opt("SWEEP_MIN_GAS_DROP_WEI")?.unwrap_or(300_000_000_000_000),
 				topup_grace_secs: parse_opt("SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
 				poll_secs: parse_opt("SWEEP_POLL_SECS")?.unwrap_or(30),
+			})
+		} else {
+			None
+		};
+		// Polygon sweep reuses the EVM `SweepConfig` (same native-coin top-up gas model); only the
+		// `min_usdt` floor defaults to the 6-dp scale (1 USDT = 1e6 on-chain, vs BSC 1e18 @ 18-dp).
+		let polygon_sweep = if polygon_sweep_enabled && polygon.is_some() {
+			Some(SweepConfig {
+				min_usdt: parse_opt("POLYGON_SWEEP_MIN_USDT")?.unwrap_or(1_000_000),
+				gas_drop_multiple: parse_opt("POLYGON_SWEEP_GAS_DROP_MULTIPLE")?.unwrap_or(3),
+				min_gas_drop_wei: parse_opt("POLYGON_SWEEP_MIN_GAS_DROP_WEI")?.unwrap_or(300_000_000_000_000),
+				topup_grace_secs: parse_opt("POLYGON_SWEEP_TOPUP_GRACE_SECS")?.unwrap_or(60),
+				poll_secs: parse_opt("POLYGON_SWEEP_POLL_SECS")?.unwrap_or(30),
 			})
 		} else {
 			None
@@ -243,6 +288,8 @@ impl Rails {
 		Ok(Self {
 			bsc,
 			sweep,
+			polygon,
+			polygon_sweep,
 			tron,
 			tron_sweep,
 			ton,
@@ -257,6 +304,7 @@ impl Rails {
 	pub fn configured_networks(&self) -> Vec<Network> {
 		[
 			self.bsc.as_ref().map(|_| Network::Bep20),
+			self.polygon.as_ref().map(|_| Network::Polygon),
 			self.tron.as_ref().map(|_| Network::Trc20),
 			self.ton.as_ref().map(|_| Network::Ton),
 		]
@@ -266,51 +314,64 @@ impl Rails {
 	}
 }
 
-/// The on-chain BSC config, shared by the deposit watcher, the withdrawal confirmation
-/// watcher, and real custody. Present only when `BSC_RPC_URL` is set; the endpoint MUST
-/// support `eth_getLogs` (for deposit scanning).
+/// The on-chain EVM rail config (BEP20 / Polygon), shared by the deposit watcher, the withdrawal
+/// confirmation watcher, the sweep, and real custody. Present only when the rail's RPC URL is set
+/// (`BSC_RPC_URL` / `POLYGON_RPC_URL`); the endpoint MUST support `eth_getLogs` (for deposit
+/// scanning). The two EVM rails are two instances of this one config — `network` is the only field
+/// that structurally differs (it scopes the nonce sequence, keys, and deposit/withdrawal tag);
+/// the rest are per-rail chain parameters.
 #[derive(Clone, Debug)]
-pub struct BscConfig {
-	/// BSC JSON-RPC endpoint (`BSC_RPC_URL`). Switch this (+ `BSC_USDT_CONTRACT`) between
-	/// testnet and mainnet — the watcher logic is network-agnostic.
+pub struct EvmConfig {
+	/// Which EVM rail this config drives (`Network::Bep20` or `Network::Polygon`). Scopes the
+	/// persisted nonce sequence, the signer's deposit-address keys, and the `network` tag stamped
+	/// on every deposit/withdrawal — so the two EVM rails never share a nonce space or a key.
+	pub network: Network,
+	/// JSON-RPC endpoint (`BSC_RPC_URL` / `POLYGON_RPC_URL`). Switch this (+ the USDT contract)
+	/// between testnet and mainnet — the watcher logic is network-agnostic.
 	pub rpc_url: String,
-	/// The USDT (BEP20) contract address to watch (`BSC_USDT_CONTRACT`). Defaults to the BSC
-	/// mainnet USDT (`0x55d3…7955`, 18-dp); set it to the testnet token for a testnet run.
+	/// The USDT contract address to watch (`BSC_USDT_CONTRACT` / `POLYGON_USDT_CONTRACT`). Defaults
+	/// to the rail's mainnet USDT (BSC `0x55d3…7955`, 18-dp; Polygon `0xc213…58e8F`, 6-dp); set it
+	/// to the testnet token for a testnet run.
 	pub usdt_contract: String,
 	/// Confirmations to wait before crediting a deposit / settling a withdrawal
-	/// (`BSC_CONFIRMATIONS`); defaults to the domain's BEP20 value (15) — reorg safety.
+	/// (`BSC_CONFIRMATIONS` / `POLYGON_CONFIRMATIONS`); defaults to the domain's per-network value
+	/// (BEP20 15, Polygon 128) — reorg safety.
 	pub confirmations: u64,
 	/// Seconds between polls, for both the deposit scan and the withdrawal-receipt check
-	/// (`BSC_POLL_SECS`); defaults to 12.
+	/// (`BSC_POLL_SECS` / `POLYGON_POLL_SECS`); defaults to 12 (BSC) / 6 (Polygon, ~2s blocks).
 	pub poll_secs: u64,
-	/// First block to scan on a fresh cursor (`BSC_DEPOSIT_START_BLOCK`). `None` ⇒ start at
-	/// the current safe head (watch from now), ignoring pre-existing on-chain history.
+	/// First block to scan on a fresh cursor (`BSC_DEPOSIT_START_BLOCK` / `POLYGON_DEPOSIT_START_BLOCK`).
+	/// `None` ⇒ start at the current safe head (watch from now), ignoring pre-existing on-chain history.
 	pub start_block: Option<u64>,
-	/// Max blocks per `eth_getLogs` call (`BSC_MAX_BLOCK_RANGE`); defaults to 500 to stay
-	/// within common provider range limits.
+	/// Max blocks per `eth_getLogs` call (`BSC_MAX_BLOCK_RANGE` / `POLYGON_MAX_BLOCK_RANGE`);
+	/// defaults to 500 to stay within common provider range limits.
 	pub max_block_range: u64,
-	/// Dedicated endpoint for the deposit scan (`BSC_LOGS_RPC_URL`), when the main
-	/// `rpc_url` paywalls/throttles `eth_getLogs` (dataseed rejects it outright as of
-	/// 2026-07) but is otherwise a fine full node. `None` ⇒ the scan uses `rpc_url`.
+	/// Dedicated endpoint for the deposit scan (`BSC_LOGS_RPC_URL` / `POLYGON_LOGS_RPC_URL`), when
+	/// the main `rpc_url` paywalls/throttles `eth_getLogs` but is otherwise a fine full node.
+	/// `None` ⇒ the scan uses `rpc_url`.
 	pub logs_rpc_url: Option<String>,
-	/// Chain id for signing withdrawals (`BSC_CHAIN_ID`); 56 = BSC mainnet, 97 = testnet.
+	/// Chain id for signing withdrawals (`BSC_CHAIN_ID` / `POLYGON_CHAIN_ID`); 56 = BSC mainnet,
+	/// 97 = BSC testnet, 137 = Polygon mainnet, 80002 = Polygon Amoy testnet.
 	pub chain_id: u64,
-	/// Gas limit for an ERC-20 transfer withdrawal (`BSC_GAS_LIMIT`); defaults to 100_000 (a
-	/// USDT transfer is ~50–65k — the headroom is safe, and unused gas is refunded).
+	/// Gas limit for an ERC-20 transfer withdrawal (`BSC_GAS_LIMIT` / `POLYGON_GAS_LIMIT`); defaults
+	/// to 100_000 (a USDT transfer is ~50–65k — the headroom is safe, and unused gas is refunded).
 	pub gas_limit: u64,
 }
-/// Treasury-sweep economics. `Some` only when BSC is configured AND `SWEEP_ENABLED` is set
-/// (it moves user funds on-chain — opt-in). The chain params (rpc, USDT, chain id, the
-/// transfer gas limit) come from [`BscConfig`]; these knobs tune *when* and *how much*.
+/// EVM treasury-sweep economics (BEP20 / Polygon). `Some` only when the rail is configured AND its
+/// sweep is enabled (`SWEEP_ENABLED` or the per-rail override) — it moves user funds on-chain, so
+/// opt-in. The chain params (rpc, USDT, chain id, the transfer gas limit) come from [`EvmConfig`];
+/// these knobs tune *when* and *how much*. Reused by both EVM rails — only `min_usdt`'s default
+/// differs by the rail's on-chain precision (18-dp on BEP20, 6-dp on Polygon).
 #[derive(Clone, Debug)]
 pub struct SweepConfig {
-	/// Minimum USDT (18-dp base units) on a deposit address worth sweeping (`SWEEP_MIN_USDT`);
-	/// defaults to 1 USDT — below this the gas isn't worth it.
+	/// Minimum USDT (in the rail's ON-CHAIN raw units) on a deposit address worth sweeping
+	/// (`SWEEP_MIN_USDT` / `POLYGON_SWEEP_MIN_USDT`); defaults to 1 USDT (1e18 on BEP20 18-dp,
+	/// 1e6 on Polygon 6-dp) — below this the gas isn't worth it.
 	pub min_usdt: u128,
-	/// A BNB top-up sends `max(needed_gas × this, min_gas_drop_wei)` (`SWEEP_GAS_DROP_MULTIPLE`);
-	/// defaults to 3, so one top-up covers several future sweeps.
+	/// A native-coin (BNB/POL) top-up sends `max(needed_gas × this, min_gas_drop_wei)`
+	/// (`SWEEP_GAS_DROP_MULTIPLE`); defaults to 3, so one top-up covers several future sweeps.
 	pub gas_drop_multiple: u128,
-	/// Floor for a BNB top-up, in wei (`SWEEP_MIN_GAS_DROP_WEI`); defaults to 3e14 (0.0003 BNB).
+	/// Floor for a native-coin top-up, in wei (`SWEEP_MIN_GAS_DROP_WEI`); defaults to 3e14.
 	pub min_gas_drop_wei: u128,
 	/// Don't re-top-up the same address within this many seconds (`SWEEP_TOPUP_GRACE_SECS`);
 	/// defaults to 60 — long enough for a top-up to confirm before we'd consider another.
@@ -450,20 +511,24 @@ mod tests {
 
 	/// A minimal rails config with the given chain Options set — only the fields
 	/// `configured_networks` reads matter; the rest are inert placeholders.
-	fn config(bsc: bool, tron: bool, ton: bool) -> Rails {
+	fn config(bsc: bool, polygon: bool, tron: bool, ton: bool) -> Rails {
+		let evm = |network| EvmConfig {
+			network,
+			rpc_url: String::new(),
+			usdt_contract: String::new(),
+			confirmations: 1,
+			poll_secs: 1,
+			start_block: None,
+			max_block_range: 1,
+			logs_rpc_url: None,
+			chain_id: 1,
+			gas_limit: 1,
+		};
 		Rails {
-			bsc: bsc.then(|| BscConfig {
-				rpc_url: String::new(),
-				usdt_contract: String::new(),
-				confirmations: 1,
-				poll_secs: 1,
-				start_block: None,
-				max_block_range: 1,
-				logs_rpc_url: None,
-				chain_id: 1,
-				gas_limit: 1,
-			}),
+			bsc: bsc.then(|| evm(Network::Bep20)),
 			sweep: None,
+			polygon: polygon.then(|| evm(Network::Polygon)),
+			polygon_sweep: None,
 			tron: tron.then(|| TronConfig {
 				rpc_url: String::new(),
 				usdt_contract: String::new(),
@@ -492,10 +557,14 @@ mod tests {
 
 	#[test]
 	fn configured_networks_mirror_the_chain_config_options() {
-		assert!(config(false, false, false).configured_networks().is_empty());
-		assert_eq!(config(true, false, false).configured_networks(), [Network::Bep20]);
-		assert_eq!(config(false, true, false).configured_networks(), [Network::Trc20]);
-		assert_eq!(config(false, false, true).configured_networks(), [Network::Ton]);
-		assert_eq!(config(true, true, true).configured_networks(), [Network::Bep20, Network::Trc20, Network::Ton]);
+		assert!(config(false, false, false, false).configured_networks().is_empty());
+		assert_eq!(config(true, false, false, false).configured_networks(), [Network::Bep20]);
+		assert_eq!(config(false, true, false, false).configured_networks(), [Network::Polygon]);
+		assert_eq!(config(false, false, true, false).configured_networks(), [Network::Trc20]);
+		assert_eq!(config(false, false, false, true).configured_networks(), [Network::Ton]);
+		assert_eq!(
+			config(true, true, true, true).configured_networks(),
+			[Network::Bep20, Network::Polygon, Network::Trc20, Network::Ton]
+		);
 	}
 }

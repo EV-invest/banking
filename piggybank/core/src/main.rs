@@ -22,12 +22,12 @@ use piggybank_core::{
 	config::{self, AppConfig, Rails},
 	infrastructure::{
 		bridge::BridgeConsumer,
-		bsc_rpc::BscRpc,
 		custody::{ChainCustody, MultiChainCustody, StubCustody},
 		db,
 		deposit_watcher::DepositWatcher,
 		deposits::PgDeposits,
 		dispatcher::Dispatcher,
+		evm_rpc::EvmRpc,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
@@ -122,7 +122,11 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 			"production requires at least one on-chain deposit rail (set BSC_RPC_URL and/or TON_API_URL)"
 		);
 		// TRON stays out of this sweep while TRC20_FROZEN forces it off.
-		for (gate, missing) in [("BSC_RPC_URL", rails.bsc.is_none()), ("TON_API_URL", rails.ton.is_none())] {
+		for (gate, missing) in [
+			("BSC_RPC_URL", rails.bsc.is_none()),
+			("POLYGON_RPC_URL", rails.polygon.is_none()),
+			("TON_API_URL", rails.ton.is_none()),
+		] {
 			if missing {
 				tracing::error!("on-chain rail unconfigured in production: {gate} is unset — its deposits/withdrawals/custody are off");
 			}
@@ -208,8 +212,9 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	let mut custody_by_network: HashMap<Network, Arc<dyn Custody>> = HashMap::new();
 	let bsc_custody: Option<Arc<ChainCustody>> = rails.bsc.as_ref().map(|bsc| {
 		Arc::new(ChainCustody::new(
+			Network::Bep20,
 			pool.clone(),
-			BscRpc::new(bsc.rpc_url.clone()),
+			EvmRpc::new(bsc.rpc_url.clone()),
 			SignerServiceClient::new(signer_channel.clone()),
 			ServiceTokenSource::from_env(),
 			bsc.chain_id,
@@ -219,6 +224,23 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	});
 	if let Some(bsc_custody) = &bsc_custody {
 		custody_by_network.insert(Network::Bep20, bsc_custody.clone());
+	}
+	// Polygon (PoS) custody — the SECOND EVM rail, the same `ChainCustody` adapter as BSC,
+	// distinguished by its `Network::Polygon` (which scopes its own nonce sequence + treasury key).
+	let polygon_custody: Option<Arc<ChainCustody>> = rails.polygon.as_ref().map(|polygon| {
+		Arc::new(ChainCustody::new(
+			Network::Polygon,
+			pool.clone(),
+			EvmRpc::new(polygon.rpc_url.clone()),
+			SignerServiceClient::new(signer_channel.clone()),
+			ServiceTokenSource::from_env(),
+			polygon.chain_id,
+			polygon.usdt_contract.clone(),
+			polygon.gas_limit,
+		))
+	});
+	if let Some(polygon_custody) = &polygon_custody {
+		custody_by_network.insert(Network::Polygon, polygon_custody.clone());
 	}
 	let tron_custody: Option<Arc<TronCustody>> = rails
 		.tron
@@ -291,6 +313,23 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	// first). Opt-in (BSC configured AND SWEEP_ENABLED); its own pool clone + signer channel.
 	let sweep = match (&rails.bsc, &rails.sweep) {
 		(Some(bsc), Some(sweep_config)) => Some(Sweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), bsc, sweep_config.clone())),
+		_ => None,
+	};
+
+	// ── on-chain Polygon (PoS USDT) watchers + sweep ───────────────────────────
+	// The second EVM rail reuses the SAME `DepositWatcher` / `WithdrawalWatcher` / `Sweep` as BSC,
+	// each keyed by `EvmConfig::network` (Polygon), so their cursors/nonces/sweep scans stay disjoint
+	// from BSC's. Each runs only when POLYGON_RPC_URL is set; the sweep additionally needs its enable.
+	let polygon_deposit_watcher = rails
+		.polygon
+		.clone()
+		.map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config));
+	let polygon_withdrawal_watcher = rails
+		.polygon
+		.as_ref()
+		.map(|polygon| WithdrawalWatcher::new(pool.clone(), withdrawals.clone(), relay_notify.clone(), polygon));
+	let polygon_sweep = match (&rails.polygon, &rails.polygon_sweep) {
+		(Some(polygon), Some(sweep_config)) => Some(Sweep::new(pool.clone(), signer_channel.clone(), ServiceTokenSource::from_env(), polygon, sweep_config.clone())),
 		_ => None,
 	};
 
@@ -371,6 +410,9 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 		watcher_done,
 		withdrawal_watcher_done,
 		sweep_done,
+		polygon_watcher_done,
+		polygon_withdrawal_watcher_done,
+		polygon_sweep_done,
 		tron_watcher_done,
 		tron_withdrawal_watcher_done,
 		tron_sweep_done,
@@ -391,6 +433,13 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 		branch(&shutdown, "deposit watcher", infallible(run_watcher(deposit_watcher, shutdown.clone()))),
 		branch(&shutdown, "withdrawal watcher", infallible(run_withdrawal_watcher(withdrawal_watcher, shutdown.clone()))),
 		branch(&shutdown, "sweep", infallible(run_sweep(sweep, shutdown.clone()))),
+		branch(&shutdown, "polygon deposit watcher", infallible(run_watcher(polygon_deposit_watcher, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"polygon withdrawal watcher",
+			infallible(run_withdrawal_watcher(polygon_withdrawal_watcher, shutdown.clone()))
+		),
+		branch(&shutdown, "polygon sweep", infallible(run_sweep(polygon_sweep, shutdown.clone()))),
 		branch(&shutdown, "tron deposit watcher", infallible(run_tron_deposit_watcher(tron_deposit_watcher, shutdown.clone()))),
 		branch(
 			&shutdown,
@@ -408,7 +457,7 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 		branch(
 			&shutdown,
 			"treasury resolve",
-			infallible(resolve_treasuries(bsc_custody, tron_custody, ton_custody, shutdown.clone()))
+			infallible(resolve_treasuries(bsc_custody, polygon_custody, tron_custody, ton_custody, shutdown.clone()))
 		),
 	);
 	let () = signal;
@@ -423,6 +472,9 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 		.and(watcher_done)
 		.and(withdrawal_watcher_done)
 		.and(sweep_done)
+		.and(polygon_watcher_done)
+		.and(polygon_withdrawal_watcher_done)
+		.and(polygon_sweep_done)
 		.and(tron_watcher_done)
 		.and(tron_withdrawal_watcher_done)
 		.and(tron_sweep_done)
@@ -439,7 +491,7 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 /// failed `Unavailable` and the funding log line never printed. Retries with capped
 /// exponential backoff; each adapter's `OnceCell` makes success sticky (repeat calls are
 /// free), and once every configured rail is resolved the branch idles until shutdown.
-async fn resolve_treasuries(bsc: Option<Arc<ChainCustody>>, tron: Option<Arc<TronCustody>>, ton: Option<Arc<TonCustody>>, shutdown: CancellationToken) {
+async fn resolve_treasuries(bsc: Option<Arc<ChainCustody>>, polygon: Option<Arc<ChainCustody>>, tron: Option<Arc<TronCustody>>, ton: Option<Arc<TonCustody>>, shutdown: CancellationToken) {
 	const MAX_BACKOFF: Duration = Duration::from_secs(30);
 	let mut backoff = Duration::from_millis(500);
 	loop {
@@ -448,6 +500,12 @@ async fn resolve_treasuries(bsc: Option<Arc<ChainCustody>>, tron: Option<Arc<Tro
 			&& let Err(err) = bsc.treasury_address().await
 		{
 			tracing::warn!("could not resolve the BEP20 treasury address (retrying in {backoff:?}): {err}");
+			unresolved = true;
+		}
+		if let Some(polygon) = &polygon
+			&& let Err(err) = polygon.treasury_address().await
+		{
+			tracing::warn!("could not resolve the Polygon treasury address (retrying in {backoff:?}): {err}");
 			unresolved = true;
 		}
 		if let Some(tron) = &tron

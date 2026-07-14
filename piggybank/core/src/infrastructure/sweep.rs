@@ -6,10 +6,10 @@
 //! holding USDT, it signs an ERC-20 transfer **from that address** (the signer holds the
 //! key) to the treasury and broadcasts it — so deposits become treasury liquidity.
 //!
-//! **Gas.** A user address holds only USDT, and an ERC-20 transfer costs BNB. So a separate
-//! **gas station** account (its own reserved id ⇒ its own nonce sequence, independent of the
-//! treasury's — the withdrawal path is never raced for a nonce) tops the address up with a
-//! little BNB first; the next cycle, with gas present, sweeps the USDT.
+//! **Gas.** A user address holds only USDT, and an ERC-20 transfer costs native coin (BNB on
+//! BEP20, POL on Polygon). So a separate **gas station** account (its own reserved id ⇒ its own
+//! nonce sequence, independent of the treasury's — the withdrawal path is never raced for a nonce)
+//! tops the address up with a little native coin first; the next cycle, with gas present, sweeps the USDT.
 //!
 //! **Idempotency (no double-send), with no extra persistence.** Three on-chain facts carry it:
 //!   - the USDT sweep is signed at the address's **mined** (`latest`) nonce, so a re-sign of
@@ -24,11 +24,14 @@
 //!     is freed for the next cycle — a consumed-but-absent nonce would gap the sequence and
 //!     queue every later top-up behind a slot nothing fills, wedging the sweep until restart.
 //!
-//! Read-mostly and **opt-in** (`SWEEP_ENABLED`): it never touches TigerBeetle (the deposit
-//! was already credited; this only relocates the on-chain custody), and it is off unless the
-//! operator funds the gas station and turns it on. Scope: **BEP20 only**. A stuck
-//! underpriced transaction (no replacement-by-fee here) blocking a nonce is a known
-//! operational residual — manual intervention, like the reaper's stuck-withdrawal alert.
+//! Read-mostly and **opt-in** (`SWEEP_ENABLED`, or the per-rail `<RAIL>_SWEEP_ENABLED`): it never
+//! touches TigerBeetle (the deposit was already credited; this only relocates the on-chain custody),
+//! and it is off unless the operator funds the gas station and turns it on. Scope: the EVM rails
+//! (BEP20, Polygon) — one instance per rail, keyed by `network`. It operates in on-chain raw units
+//! throughout (moving the address's raw balance), so the per-rail `min_usdt` floor is expressed at
+//! the chain's own precision (18-dp on BEP20, 6-dp on Polygon). A stuck underpriced transaction (no
+//! replacement-by-fee here) blocking a nonce is a known operational residual — manual intervention,
+//! like the reaper's stuck-withdrawal alert.
 
 use std::{
 	collections::HashMap,
@@ -36,6 +39,7 @@ use std::{
 	time::{Duration, Instant},
 };
 
+use domain::money::Network;
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignErc20TransferRequest, SignNativeTransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -46,25 +50,26 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
-	config::{BscConfig, SweepConfig},
-	infrastructure::bsc_rpc::{BscRpc, RpcError},
+	config::{EvmConfig, SweepConfig},
+	infrastructure::evm_rpc::{EvmRpc, RpcError},
 };
 
 /// The reserved gas-station account id, distinct from the nil treasury: a wallet holding
-/// only BNB, used to top up user deposit addresses with gas. A separate account means a
-/// separate nonce sequence, so the sweep never races the withdrawal custody path.
+/// only native coin (BNB/POL), used to top up user deposit addresses with gas. A separate account
+/// means a separate nonce sequence, so the sweep never races the withdrawal custody path.
 const GAS_STATION: Uuid = Uuid::from_u128(1);
 
 /// 1 gwei in wei. Gas prices are rounded UP to a whole gwei so minor node-to-node wobble
 /// doesn't change a re-signed transaction's bytes (keeping the idempotent-re-sign property).
 const GWEI: u128 = 1_000_000_000;
 
-/// Gas for a plain native (BNB) value transfer.
+/// Gas for a plain native (BNB/POL) value transfer.
 const NATIVE_TRANSFER_GAS: u64 = 21_000;
 
 pub struct Sweep {
+	network: Network,
 	pool: PgPool,
-	rpc: BscRpc,
+	rpc: EvmRpc,
 	signer: SignerServiceClient<Channel>,
 	service_token: Option<ServiceTokenSource>,
 	usdt_contract: String,
@@ -76,15 +81,16 @@ pub struct Sweep {
 	state: Mutex<GasState>,
 }
 impl Sweep {
-	pub fn new(pool: PgPool, channel: Channel, service_token: Option<ServiceTokenSource>, bsc: &BscConfig, config: SweepConfig) -> Self {
+	pub fn new(pool: PgPool, channel: Channel, service_token: Option<ServiceTokenSource>, evm: &EvmConfig, config: SweepConfig) -> Self {
 		Self {
+			network: evm.network,
 			pool,
-			rpc: BscRpc::new(bsc.rpc_url.clone()),
+			rpc: EvmRpc::new(evm.rpc_url.clone()),
 			signer: SignerServiceClient::new(channel),
 			service_token,
-			usdt_contract: bsc.usdt_contract.clone(),
-			chain_id: bsc.chain_id,
-			transfer_gas_limit: bsc.gas_limit,
+			usdt_contract: evm.usdt_contract.clone(),
+			chain_id: evm.chain_id,
+			transfer_gas_limit: evm.gas_limit,
 			config,
 			treasury: OnceCell::new(),
 			gas_station: OnceCell::new(),
@@ -94,14 +100,16 @@ impl Sweep {
 
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!(
+			network = %self.network,
 			min_usdt = self.config.min_usdt,
 			poll_secs = self.config.poll_secs,
-			"sweep: consolidating BEP20 deposits into the treasury"
+			"sweep: consolidating EVM deposits into the treasury"
 		);
 		// Resolve + log the system wallets up front so the operator can fund the gas station
-		// with BNB (it pays the gas to move user USDT). Best-effort — retried each cycle.
+		// with native coin (it pays the gas to move user USDT). Best-effort — retried each cycle.
 		match (self.address(&self.treasury, Uuid::nil()).await, self.address(&self.gas_station, GAS_STATION).await) {
-			(Ok(treasury), Ok(gas_station)) => info!(%treasury, %gas_station, "sweep: fund the gas station with BNB — it pays gas to sweep user USDT into the treasury"),
+			(Ok(treasury), Ok(gas_station)) =>
+				info!(network = %self.network, %treasury, %gas_station, "sweep: fund the gas station with native coin (BNB/POL) — it pays gas to sweep user USDT into the treasury"),
 			_ => warn!("sweep: could not resolve the treasury/gas-station addresses yet (will retry each cycle)"),
 		}
 		loop {
@@ -146,7 +154,7 @@ impl Sweep {
 		}
 		let gas_price = self.gas_price().await?;
 		let needed = gas_price.saturating_mul(self.transfer_gas_limit as u128);
-		let bnb = self.rpc.bnb_balance(address).await.map_err(read_err)?;
+		let bnb = self.rpc.native_balance(address).await.map_err(read_err)?;
 		if bnb < needed {
 			// Not enough gas to move the USDT — top up from the gas station, sweep next cycle.
 			return self.top_up_gas(address, gas_station, needed, gas_price).await;
@@ -231,7 +239,7 @@ impl Sweep {
 	async fn sign_sweep(&self, user_id: Uuid, address: &str, treasury: &str, amount: u128, nonce: u64, gas_price: u128) -> Result<(String, String), SweepError> {
 		let mut request = Request::new(SignErc20TransferRequest {
 			from_user_id: user_id.to_string(), // the deposit address's owner — the signer holds its key
-			network: "bep20".to_owned(),
+			network: self.network.as_str().to_owned(),
 			token_contract: self.usdt_contract.clone(),
 			to_address: treasury.to_owned(),
 			amount: amount.to_string(),
@@ -259,7 +267,7 @@ impl Sweep {
 	async fn sign_native(&self, to: &str, amount: u128, nonce: u64, gas_price: u128) -> Result<(String, String), SweepError> {
 		let mut request = Request::new(SignNativeTransferRequest {
 			from_user_id: GAS_STATION.to_string(),
-			network: "bep20".to_owned(),
+			network: self.network.as_str().to_owned(),
 			to_address: to.to_owned(),
 			amount: amount.to_string(),
 			chain_id: self.chain_id,
@@ -302,7 +310,7 @@ impl Sweep {
 				Broadcast::Admitted
 			}
 			Err(RpcError::Rpc(msg)) if msg.to_lowercase().contains("insufficient funds") => {
-				error!(kind, %address, %tx_hash, "sweep: SENDER OUT OF FUNDS — fund the gas station (BNB) / treasury: {msg}");
+				error!(network = %self.network, kind, %address, %tx_hash, "sweep: SENDER OUT OF FUNDS — fund the gas station (BNB/POL) / treasury: {msg}");
 				Broadcast::Rejected
 			}
 			Err(RpcError::Rpc(msg)) => {
@@ -312,14 +320,14 @@ impl Sweep {
 		}
 	}
 
-	/// A system wallet's BEP20 address, resolved once via `ProvisionAddress` (`Uuid::nil()` =
-	/// treasury, [`GAS_STATION`] = gas station) and cached. A transient failure leaves the
-	/// cell empty so a later cycle retries.
+	/// A system wallet's on-chain address for this rail, resolved once via `ProvisionAddress`
+	/// (`Uuid::nil()` = treasury, [`GAS_STATION`] = gas station) and cached. A transient failure
+	/// leaves the cell empty so a later cycle retries.
 	async fn address(&self, cell: &OnceCell<String>, id: Uuid) -> Result<String, SweepError> {
 		cell.get_or_try_init(|| async {
 			let mut request = Request::new(ProvisionAddressRequest {
 				user_id: id.to_string(),
-				network: "bep20".to_owned(),
+				network: self.network.as_str().to_owned(),
 			});
 			if let Some(token) = &self.service_token {
 				request = token.authorize(request);
@@ -347,16 +355,18 @@ impl Sweep {
 		sqlx::query_as::<_, (Uuid, String)>(
 			"SELECT DISTINCT a.user_id, a.address FROM deposits d \
 			 JOIN user_deposit_addresses a ON a.user_id::text = d.party_id AND a.network = d.network \
-			 WHERE d.network = 'bep20' AND d.party_kind = 'user' AND d.swept_at IS NULL AND a.address_kind = 'derived'",
+			 WHERE d.network = $1 AND d.party_kind = 'user' AND d.swept_at IS NULL AND a.address_kind = 'derived'",
 		)
+		.bind(self.network.as_str())
 		.fetch_all(&self.pool)
 		.await
 		.map_err(|e| SweepError::Db(e.to_string()))
 	}
 
 	async fn mark_swept(&self, user_id: Uuid) -> Result<(), SweepError> {
-		sqlx::query("UPDATE deposits SET swept_at = now() WHERE party_kind = 'user' AND party_id = $1 AND network = 'bep20' AND swept_at IS NULL")
+		sqlx::query("UPDATE deposits SET swept_at = now() WHERE party_kind = 'user' AND party_id = $1 AND network = $2 AND swept_at IS NULL")
 			.bind(user_id.to_string())
+			.bind(self.network.as_str())
 			.execute(&self.pool)
 			.await
 			.map_err(|e| SweepError::Db(e.to_string()))?;

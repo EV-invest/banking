@@ -1,6 +1,6 @@
 //! A minimal toncenter v3 REST client for the TON custody adapter, the jetton deposit
 //! watcher, the withdrawal confirmation watcher, and the sweep — the handful of HTTP
-//! calls they need. The analog of [`bsc_rpc`](super::bsc_rpc), but TON is a REST +
+//! calls they need. The analog of [`evm_rpc`](super::evm_rpc), but TON is a REST +
 //! indexer chain (no `eth_*` JSON-RPC, no logs): deposits come pre-decoded from the
 //! indexer's `/jetton/transfers`, the wallet nonce is a `seqno` get-method, and a signed
 //! message is POSTed as a base64 BoC.
