@@ -45,7 +45,7 @@ export function subUsdt(a: string | undefined, b: string | undefined): string {
 
 // Display names only — the rails on offer come from `GET /api/wallet`, and an unlisted
 // network falls back to its upper-cased id, so a future rail needs no change here.
-const NETWORK_LABELS: Record<string, string> = { bep20: "BEP20", trc20: "TRC20", ton: "TON" };
+const NETWORK_LABELS: Record<string, string> = { bep20: "BEP20", trc20: "TRC20", ton: "TON", polygon: "Polygon" };
 
 export function networkLabel(network: string | undefined): string {
   return NETWORK_LABELS[network ?? ""] ?? (network ?? "").toUpperCase();
