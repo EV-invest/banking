@@ -1,8 +1,8 @@
 //! Shared money kernel — crypto value objects, all pure and wasm-safe.
 //!
 //! The fund accounts internally in a **single canonical unit**: 18-decimal USDT
-//! ("base units"), matching BEP20's on-chain scale. TRC20 and TON carry USDT at 6
-//! decimals on-chain, so amounts are scaled **up** by `10^12` when they enter the
+//! ("base units"), matching BEP20's on-chain scale. TRC20, TON, and Polygon carry
+//! USDT at 6 decimals on-chain, so amounts are scaled **up** by `10^12` when they enter the
 //! ledger and **down** (rejecting non-representable dust) when they leave. Keeping
 //! one canonical unit means the value ledger never has to reason about a token's
 //! on-chain scale; only the custody edge ([`Usdt::from_onchain`] /
@@ -32,17 +32,20 @@ pub enum Network {
 	Trc20,
 	/// The Open Network — USDT (jetton) has **6** decimals.
 	Ton,
+	/// Polygon PoS — an EVM chain (secp256k1/keccak addresses, account nonces, the same
+	/// JSON-RPC and legacy tx signing as BEP20), but USDT has **6** decimals here, not 18.
+	Polygon,
 }
 impl Network {
 	/// All supported networks, for boot-time account seeding and balance sweeps.
-	pub const ALL: [Network; 3] = [Network::Bep20, Network::Trc20, Network::Ton];
+	pub const ALL: [Network; 4] = [Network::Bep20, Network::Trc20, Network::Ton, Network::Polygon];
 
 	/// The token's decimal precision on this chain. The custody edge scales between
 	/// this and [`CANONICAL_DECIMALS`].
 	pub const fn onchain_decimals(self) -> u32 {
 		match self {
 			Self::Bep20 => 18,
-			Self::Trc20 | Self::Ton => 6,
+			Self::Trc20 | Self::Ton | Self::Polygon => 6,
 		}
 	}
 
@@ -53,7 +56,9 @@ impl Network {
 	}
 
 	/// Confirmations a watcher waits for before crediting/settling on this network
-	/// (reorg-safety): BEP20 ~15, TRC20 ~19 (SR rounds), TON a few. **Placeholder
+	/// (reorg-safety): BEP20 ~15, TRC20 ~19 (SR rounds), TON a few, Polygon ~128 (its
+	/// probabilistic-finality reorgs have historically run far deeper than BSC's — the
+	/// widely-used exchange standard; overridable via `POLYGON_CONFIRMATIONS`). **Placeholder
 	/// values** — a per-network ubiquitous-language fact, sibling to
 	/// [`WithdrawalPolicy`](crate::withdrawals::WithdrawalPolicy), kept here so every
 	/// `domain`-dependent consumer reuses one source rather than duplicating constants.
@@ -62,6 +67,7 @@ impl Network {
 			Self::Bep20 => 15,
 			Self::Trc20 => 19,
 			Self::Ton => 16,
+			Self::Polygon => 128,
 		}
 	}
 
@@ -70,6 +76,7 @@ impl Network {
 			Self::Bep20 => "bep20",
 			Self::Trc20 => "trc20",
 			Self::Ton => "ton",
+			Self::Polygon => "polygon",
 		}
 	}
 
@@ -79,6 +86,7 @@ impl Network {
 			"bep20" => Ok(Self::Bep20),
 			"trc20" => Ok(Self::Trc20),
 			"ton" => Ok(Self::Ton),
+			"polygon" => Ok(Self::Polygon),
 			other => Err(DomainError::Validation(format!("unknown network: {other}"))),
 		}
 	}
@@ -355,8 +363,8 @@ impl WalletAddress {
 	pub fn parse(network: Network, raw: &str) -> Result<Self, DomainError> {
 		let value = raw.trim();
 		let ok = match network {
-			// EVM: 0x + 40 hex.
-			Network::Bep20 => value.len() == 42 && value.starts_with("0x") && value[2..].bytes().all(|b| b.is_ascii_hexdigit()),
+			// EVM: 0x + 40 hex. BEP20 (BSC) and Polygon are both EVM chains sharing this form.
+			Network::Bep20 | Network::Polygon => value.len() == 42 && value.starts_with("0x") && value[2..].bytes().all(|b| b.is_ascii_hexdigit()),
 			// TRON base58check: 'T' + 33 base58 chars (34 total).
 			Network::Trc20 => value.len() == 34 && value.starts_with('T') && value.bytes().all(|b| BASE58_ALPHABET.contains(&b)),
 			// TON: 48-char user-friendly base64url, or raw `<wc>:<64 hex>`.
@@ -516,9 +524,15 @@ mod tests {
 		let raw_bep = 5_000_000_000_000_000_000; // 5 USDT @18dp
 		assert_eq!(Usdt::from_onchain(Network::Bep20, raw_bep).unwrap().base_units(), raw_bep);
 
+		// Polygon USDT is 6dp (an EVM chain, unlike BEP20's 18dp) — scales like TRC20/TON.
+		let one_pol = Usdt::from_onchain(Network::Polygon, 1_000_000).unwrap();
+		assert_eq!(one_pol.base_units(), 1_000_000_000_000_000_000);
+		assert_eq!(one_pol.to_onchain(Network::Polygon).unwrap(), 1_000_000);
+
 		// 1 canonical base unit cannot be expressed on a 6dp chain → dust rejected.
 		let dust = Usdt::from_base_units(1);
 		assert!(dust.to_onchain(Network::Trc20).is_err());
+		assert!(dust.to_onchain(Network::Polygon).is_err()); // Polygon is 6dp too
 		assert!(dust.to_onchain(Network::Bep20).is_ok()); // representable at 18dp
 	}
 
@@ -552,6 +566,10 @@ mod tests {
 		assert!(WalletAddress::parse(Network::Ton, "0:8d8c9d8a8e8b8c8d8e8f808182838485868788898a8b8c8d8e8f80818283848f").is_ok());
 		assert!(WalletAddress::parse(Network::Ton, "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N").is_ok());
 		assert!(WalletAddress::parse(Network::Ton, "nope").is_err());
+		// Polygon shares the EVM 0x-hex form with BEP20.
+		assert!(WalletAddress::parse(Network::Polygon, "0x52908400098527886E0F7030069857D2E4169EE7").is_ok());
+		assert!(WalletAddress::parse(Network::Polygon, "0xnothex").is_err());
+		assert!(WalletAddress::parse(Network::Polygon, "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8").is_err());
 		// A BEP20-shaped address is rejected for the wrong network.
 		assert!(WalletAddress::parse(Network::Trc20, "0x52908400098527886E0F7030069857D2E4169EE7").is_err());
 	}
@@ -577,6 +595,7 @@ mod tests {
 		assert_eq!(Network::Bep20.min_confirmations(), 15);
 		assert_eq!(Network::Trc20.min_confirmations(), 19);
 		assert_eq!(Network::Ton.min_confirmations(), 16);
+		assert_eq!(Network::Polygon.min_confirmations(), 128);
 		// Every supported rail has a positive reorg-safety threshold.
 		assert!(Network::ALL.iter().all(|net| net.min_confirmations() > 0));
 	}

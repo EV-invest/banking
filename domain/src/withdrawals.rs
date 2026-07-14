@@ -391,7 +391,7 @@ mod tests {
 
 	fn addr(network: Network) -> WalletAddress {
 		let raw = match network {
-			Network::Bep20 => "0x52908400098527886E0F7030069857D2E4169EE7",
+			Network::Bep20 | Network::Polygon => "0x52908400098527886E0F7030069857D2E4169EE7",
 			Network::Trc20 => "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",
 			Network::Ton => "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N",
 		};
