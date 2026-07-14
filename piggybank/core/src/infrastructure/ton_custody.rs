@@ -472,11 +472,7 @@ fn db_unavailable(err: sqlx::Error) -> CustodyError {
 /// external message. Re-sending stored bytes is idempotent, so these are success, not a park.
 fn is_already_processed(msg: &str) -> bool {
 	let m = msg.to_lowercase();
-	m.contains("duplicate")
-		|| m.contains("already known")
-		|| m.contains("already exists")
-		|| m.contains("external message not accepted")
-		|| m.contains("not accepted by smart")
+	m.contains("duplicate") || m.contains("already known") || m.contains("already exists") || m.contains("external message not accepted") || m.contains("not accepted by smart")
 }
 
 #[cfg(test)]
