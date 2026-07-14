@@ -42,9 +42,10 @@ pub enum VaultError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Chain {
-	BscBep20,  // EVM, secp256k1
-	TronTrc20, // secp256k1 (same curve as EVM)
-	Ton,       // ed25519
+	BscBep20,   // EVM, secp256k1
+	TronTrc20,  // secp256k1 (same curve as EVM)
+	Ton,        // ed25519
+	PolygonPos, // EVM, secp256k1 (Polygon PoS — same curve/address as BSC, its own sealing domain)
 }
 
 impl Chain {
@@ -53,6 +54,7 @@ impl Chain {
 			Chain::BscBep20 => b"bsc",
 			Chain::TronTrc20 => b"tron",
 			Chain::Ton => b"ton",
+			Chain::PolygonPos => b"polygon",
 		}
 	}
 }
