@@ -73,7 +73,7 @@ service SignerService {
 
 message ProvisionAddressRequest {
   string user_id = 1; // UUID
-  string network = 2; // "bep20" | "trc20" | "ton"
+  string network = 2; // "bep20" | "polygon" | "trc20" | "ton"
 }
 
 message ProvisionAddressResponse {
@@ -88,7 +88,7 @@ message ProvisionAddressResponse {
 message SignErc20TransferRequest {
   // The sending wallet: a user's UUID, or EMPTY for the treasury hot wallet.
   string from_user_id = 1;
-  string network = 2;        // "bep20"
+  string network = 2;        // "bep20" | "polygon"
   string token_contract = 3; // the ERC-20 token (e.g. USDT), 0x-hex 20-byte address
   string to_address = 4;     // recipient, 0x-hex 20-byte address
   string amount = 5;         // token base units, decimal string (fits u128)
@@ -106,7 +106,7 @@ message SignErc20TransferResponse {
 message SignNativeTransferRequest {
   // The sending wallet: a user's UUID, the gas-station UUID, or EMPTY for the treasury.
   string from_user_id = 1;
-  string network = 2;     // "bep20"
+  string network = 2;     // "bep20" | "polygon"
   string to_address = 3;  // recipient, 0x-hex 20-byte address
   string amount = 4;      // native (wei) base units, decimal string (fits u128)
   uint64 chain_id = 5;    // 56 = BSC mainnet, 97 = testnet
@@ -213,5 +213,5 @@ message GetKeyHealthResponse {
 
 message RotateAddressRequest {
   string user_id = 1; // UUID
-  string network = 2; // "bep20" | "trc20" | "ton"
+  string network = 2; // "bep20" | "polygon" | "trc20" | "ton"
 }
