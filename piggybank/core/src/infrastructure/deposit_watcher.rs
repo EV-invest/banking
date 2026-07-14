@@ -1,7 +1,7 @@
 //! On-chain deposit watcher — credits user balances from confirmed USDT transfers.
 //!
 //! A read-mostly background task (sibling to the [`bridge`](super::bridge) consumer): it
-//! polls the BSC JSON-RPC for ERC-20 `Transfer` logs of the USDT contract whose `to` is
+//! polls an EVM JSON-RPC for ERC-20 `Transfer` logs of the USDT contract whose `to` is
 //! one of our users' **derived** deposit addresses, waits `confirmations` blocks (reorg
 //! safety), and records each via [`record_deposit`](crate::application::balance::record_deposit)
 //! — idempotent by the on-chain `tx_ref` (`txhash:logindex`), so a re-scan never double-
@@ -13,9 +13,11 @@
 //! below `latest − confirmations` are scanned, so shallow reorgs are absorbed; a reorg
 //! deeper than `confirmations` is a known, out-of-scope residual (reconciliation territory).
 //!
-//! Scope today: **BEP20 only**. The `eth_getLogs` `to`-topic filter (an OR over the watched
-//! addresses) means the endpoint MUST support `eth_getLogs` — some public BSC nodes don't;
-//! point `BSC_RPC_URL` at one that does.
+//! Generic over the EVM rail — one instance per chain (BEP20, Polygon), keyed by
+//! `config.network`; the raw log value is scaled into canonical base units via
+//! [`Usdt::from_onchain`], so a 6-dp rail (Polygon) and an 18-dp rail (BEP20) credit correctly.
+//! The `eth_getLogs` `to`-topic filter (an OR over the watched addresses) means the endpoint
+//! MUST support `eth_getLogs` — some public nodes don't; point the rail's RPC URL at one that does.
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -30,7 +32,7 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use crate::{application::balance::record_deposit, config::BscConfig, infrastructure::deposits::PgDeposits};
+use crate::{application::balance::record_deposit, config::EvmConfig, infrastructure::deposits::PgDeposits};
 
 /// `keccak256("Transfer(address,address,uint256)")` — the ERC-20 Transfer event topic0.
 const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
@@ -42,11 +44,11 @@ pub struct DepositWatcher {
 	deposits: PgDeposits,
 	relay: Arc<Notify>,
 	http: reqwest::Client,
-	config: BscConfig,
+	config: EvmConfig,
 }
 
 impl DepositWatcher {
-	pub fn new(pool: PgPool, relay: Arc<Notify>, config: BscConfig) -> Self {
+	pub fn new(pool: PgPool, relay: Arc<Notify>, config: EvmConfig) -> Self {
 		let http = reqwest::Client::builder()
 			.timeout(Duration::from_secs(20))
 			.build()
@@ -65,7 +67,7 @@ impl DepositWatcher {
 	/// from the unchanged cursor — at-least-once, and crediting is idempotent, so nothing is
 	/// lost or double-counted.
 	pub async fn run(self, shutdown: CancellationToken) {
-		info!(rpc = %rpc_host(&self.config.rpc_url), contract = %self.config.usdt_contract, confirmations = self.config.confirmations, "deposit watcher: watching BEP20 USDT deposits");
+		info!(network = %self.config.network, rpc = %rpc_host(&self.config.rpc_url), contract = %self.config.usdt_contract, confirmations = self.config.confirmations, "deposit watcher: watching EVM USDT deposits");
 		loop {
 			if let Err(err) = self.scan_once().await {
 				warn!("deposit watcher: scan cycle failed, retrying next poll: {err}");
@@ -81,7 +83,7 @@ impl DepositWatcher {
 	}
 
 	async fn scan_once(&self) -> Result<(), WatcherError> {
-		let network = Network::Bep20;
+		let network = self.config.network;
 		let latest = self.block_number().await?;
 		let safe_head = latest.saturating_sub(self.config.confirmations);
 		let mut last_scanned = self.cursor(network, safe_head).await?;
@@ -215,9 +217,9 @@ impl DepositWatcher {
 struct Transfer {
 	/// Lowercase `0x…` 20-byte recipient address (the matched deposit address).
 	to: String,
-	/// Transferred value in raw on-chain units. For BEP20 USDT (18-dp) this equals the
-	/// canonical 18-dp base unit 1:1 — no scaling. (TRC20/TON are 6-dp; their watcher,
-	/// when added, must scale via the custody edge.)
+	/// Transferred value in raw on-chain units, scaled into canonical base units by
+	/// [`Usdt::from_onchain`] at the credit edge — 1:1 for BEP20 (18-dp), ×10^12 for
+	/// Polygon (6-dp).
 	value: u128,
 	tx_hash: String,
 	log_index: u64,

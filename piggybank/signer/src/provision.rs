@@ -90,12 +90,12 @@ pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, ne
 	Ok(ProvisionedAddress { address, kind })
 }
 
-/// The on-chain address for a stored/fresh public key, plus its kind. **BEP20** derives the real
-/// EVM address (EIP-55), **TRC20** the real Base58Check `T…` address, and **TON** the real v4R2
-/// wallet (StateInit hash) — all [`KIND_DERIVED`] (fundable).
+/// The on-chain address for a stored/fresh public key, plus its kind. **BEP20** and **Polygon**
+/// (both EVM) derive the real EVM address (EIP-55), **TRC20** the real Base58Check `T…` address,
+/// and **TON** the real v4R2 wallet (StateInit hash) — all [`KIND_DERIVED`] (fundable).
 fn render_address(network: Network, public_key: &[u8]) -> Result<(String, &'static str), SignerError> {
 	match network {
-		Network::Bep20 => {
+		Network::Bep20 | Network::Polygon => {
 			let address = evm_address(public_key).ok_or_else(|| SignerError::Repository("EVM address derivation failed for a stored secp256k1 key".into()))?;
 			Ok((address, KIND_DERIVED))
 		}
@@ -124,8 +124,8 @@ fn generate(network: Network) -> Generated {
 			let pubkey = ed25519_pubkey(&secret).to_vec();
 			Generated { alg: "ed25519", secret, pubkey }
 		}
-		// BEP20 and TRC20 share secp256k1.
-		Network::Bep20 | Network::Trc20 => {
+		// BEP20, TRC20, and Polygon share secp256k1 (Polygon is EVM, like BEP20).
+		Network::Bep20 | Network::Trc20 | Network::Polygon => {
 			let secret = gen_secp256k1();
 			let pubkey = secp256k1_pubkey(&secret);
 			Generated { alg: "secp256k1", secret, pubkey }
@@ -138,5 +138,6 @@ pub fn chain_of(network: Network) -> Chain {
 		Network::Bep20 => Chain::BscBep20,
 		Network::Trc20 => Chain::TronTrc20,
 		Network::Ton => Chain::Ton,
+		Network::Polygon => Chain::PolygonPos,
 	}
 }

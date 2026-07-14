@@ -134,7 +134,7 @@ message WithdrawalQueueItem {
   string withdrawal_id = 1;
   string user_id = 2;
   string email = 3;
-  string network = 4;     // bep20 | trc20 | ton
+  string network = 4;     // bep20 | polygon | trc20 | ton
   string address = 5;     // destination on-chain address
   string amount = 6;      // gross decimal USDT debited from the user
   string net_amount = 7;  // amount − fee — what ships on-chain
@@ -162,7 +162,7 @@ message GetTreasuryRequest {}
 // fields are the operator funding view, read best-effort from the chain — empty means
 // the rail is unconfigured or the read was unavailable, never an error.
 message RailLiquidity {
-  string network = 1;           // bep20 | trc20 | ton
+  string network = 1;           // bep20 | polygon | trc20 | ton
   string custody = 2;           // liquid on-chain USDT held in this rail's custody wallet
   string treasury_address = 3;  // the rail's hot wallet — fund USDT (liquidity) + gas here
   string onchain_usdt = 4;      // decimal USDT actually on-chain in the treasury wallet
@@ -189,7 +189,7 @@ message Treasury {
 }
 
 message SeedCapitalRequest {
-  string network = 1;  // bep20 | trc20 | ton — the rail the capital lands on
+  string network = 1;  // bep20 | polygon | trc20 | ton — the rail the capital lands on
   string amount = 2;   // decimal USDT
 }
 
@@ -197,7 +197,7 @@ message SeedCapitalResponse {}
 
 message RecordDepositRequest {
   string tx_ref = 1;      // the on-chain tx reference — the idempotency key
-  string network = 2;     // bep20 | trc20 | ton — the rail it arrived on
+  string network = 2;     // bep20 | polygon | trc20 | ton — the rail it arrived on
   string amount = 3;      // decimal USDT (canonical value, network-agnostic)
   // The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the
   // user UUID or service id (empty for piggybank, which credits the fund's capital).
@@ -237,7 +237,7 @@ message PostFundValuationRequest {
 
 message RotateDepositAddressRequest {
   string user_id = 1;  // the affected user (UUID)
-  string network = 2;  // bep20 | trc20 | ton
+  string network = 2;  // bep20 | polygon | trc20 | ton
 }
 
 message RotateDepositAddressResponse {

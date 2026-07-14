@@ -22,12 +22,12 @@
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
 pub mod bridge;
-pub mod bsc_rpc;
 pub mod custody;
 pub mod db;
 pub mod deposit_watcher;
 pub mod deposits;
 pub mod dispatcher;
+pub mod evm_rpc;
 pub mod ledger;
 pub mod nav;
 pub mod operations;

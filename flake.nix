@@ -453,6 +453,12 @@
             # for a cold-start backfill). For anything beyond a demo use a KEYED provider
             # (e.g. a free-tier Alchemy/QuickNode/Ankr key) so getLogs + balance polling
             # survive a real scan cycle.
+            # POLYGON_RPC_URL (also piggybank/core/.env) — the second EVM rail, same eth_getLogs
+            # caveat. Bring it up on Amoy testnet first: POLYGON_RPC_URL=<amoy endpoint>,
+            # POLYGON_CHAIN_ID=80002, POLYGON_USDT_CONTRACT=<your test ERC20>. Mainnet defaults
+            # (chain 137, native USDT 0xc213…58e8F @ 6-dp, 128 confs) need no override. Keep the
+            # fund-moving sweep off (POLYGON_SWEEP_ENABLED unset) until the treasury + gas station
+            # are funded with USDT + POL — see docs/RUNBOOK-polygon-rail.md.
             # Cross-plane lifecycle bridge consumer (one-way concierge → banking). Both vars
             # must be set together or the consumer doesn't run; BRIDGE_SERVICE_TOKEN must match
             # the concierge plane's value. The concierge plane serves UserEvents on :50061.

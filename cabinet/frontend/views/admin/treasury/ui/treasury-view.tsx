@@ -14,12 +14,14 @@ const RAIL_LABELS: Record<string, string> = {
   bep20: "BEP20 · BNB Chain",
   trc20: "TRC20 · TRON",
   ton: "TON · Open Network",
+  polygon: "Polygon · PoS",
 };
 
 const GAS_SYMBOLS: Record<string, string> = {
   bep20: "BNB",
   trc20: "TRX",
   ton: "TON",
+  polygon: "POL",
 };
 
 export function TreasuryView() {

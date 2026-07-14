@@ -42,7 +42,10 @@ use crate::{
 	application::withdrawals::settle_withdrawal,
 	config::TronConfig,
 	infrastructure::{tron_custody::TronCustody, tron_rpc::TronRpc},
-	ports::{WithdrawalRepository, custody::BroadcastRequest, custody::CustodyError},
+	ports::{
+		WithdrawalRepository,
+		custody::{BroadcastRequest, CustodyError},
+	},
 };
 
 pub struct TronWithdrawalWatcher {
@@ -145,7 +148,8 @@ impl TronWithdrawalWatcher {
 	async fn redrive(&self, pending: &TronPending) {
 		match self.custody.resubmit_stuck(&pending.request).await {
 			Ok(()) => {} // re-broadcast the stored bytes, or re-signed a provably-dead one (custody logs which).
-			Err(CustodyError::Unavailable(msg)) => info!(withdrawal_id = %pending.withdrawal_id, "tron withdrawal watcher: stuck send not yet re-drivable (waiting for solidification): {msg}"),
+			Err(CustodyError::Unavailable(msg)) =>
+				info!(withdrawal_id = %pending.withdrawal_id, "tron withdrawal watcher: stuck send not yet re-drivable (waiting for solidification): {msg}"),
 			Err(CustodyError::Rejected(msg)) => warn!(withdrawal_id = %pending.withdrawal_id, "tron withdrawal watcher: could not recover a stuck send (needs intervention): {msg}"),
 		}
 	}

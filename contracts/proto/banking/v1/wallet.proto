@@ -3,7 +3,7 @@ syntax = "proto3";
 package banking.v1;
 
 // WalletService — a user's own crypto wallet: one unified USDT balance, deposit
-// addresses, and withdrawals. Networks (BEP20/TRC20/TON) are a transaction attribute
+// addresses, and withdrawals. Networks (BEP20/Polygon/TRC20/TON) are a transaction attribute
 // (where you deposit / where a withdrawal ships), never a balance dimension — the user
 // holds a single fungible USDT balance, segmented by lifecycle.
 //
@@ -55,7 +55,7 @@ message Balance {
 // available balance (a request beyond `instant` is accepted and queued); `instant` is
 // the portion that ships without queueing = min(available, rail liquidity).
 message NetworkWithdrawable {
-  string network = 1;          // bep20 | trc20 | ton
+  string network = 1;          // bep20 | polygon | trc20 | ton
   string withdrawable = 2;     // max requestable on this rail (= available)
   string instant = 3;          // ships now without queueing
   string min_withdrawal = 4;   // smallest gross withdrawal accepted
@@ -69,7 +69,7 @@ message Wallet {
 }
 
 message GetDepositAddressRequest {
-  string network = 1;  // bep20 | trc20 | ton
+  string network = 1;  // bep20 | polygon | trc20 | ton
 }
 
 message DepositAddress {
@@ -83,7 +83,7 @@ message DepositAddress {
 }
 
 message RequestWithdrawalRequest {
-  string network = 1;  // bep20 | trc20 | ton — the rail to ship on
+  string network = 1;  // bep20 | polygon | trc20 | ton — the rail to ship on
   string address = 2;  // destination on-chain address (validated per network)
   string amount = 3;   // gross decimal USDT to debit (the fee is taken from this)
 }
@@ -99,7 +99,7 @@ message ListWithdrawalsRequest {}
 // also be cancelled (voided, refunded).
 message Withdrawal {
   string id = 1;
-  string network = 2;     // bep20 | trc20 | ton
+  string network = 2;     // bep20 | polygon | trc20 | ton
   string address = 3;     // destination address
   string amount = 4;      // gross debited from the user (decimal USDT)
   string fee = 5;         // network fee retained (decimal USDT)
@@ -117,7 +117,7 @@ message ListDepositsRequest {}
 // A confirmed on-chain deposit credited to the caller's unified balance.
 message Deposit {
   string tx_ref = 1;     // on-chain transaction reference
-  string network = 2;    // bep20 | trc20 | ton
+  string network = 2;    // bep20 | polygon | trc20 | ton
   string amount = 3;     // credited decimal USDT
   int64 created_at = 4;  // unix seconds the hub recorded the credit
 }

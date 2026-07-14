@@ -1,7 +1,7 @@
 //! A minimal TronGrid HTTP client for the Tron custody adapter (broadcast), the withdrawal
 //! confirmation watcher, the sweep, and the deposit watcher's TRC20 history reads. Tron's
 //! "JSON-RPC" is its own `/wallet/*` REST API (not Ethereum JSON-RPC), plus the indexed
-//! `/v1/accounts/...` surface for decoded balances and TRC20 transfers — so this mirrors `bsc_rpc`
+//! `/v1/accounts/...` surface for decoded balances and TRC20 transfers — so this mirrors `evm_rpc`
 //! in shape but speaks a different wire. Addresses cross the wire as Base58Check `T…`; amounts and
 //! ids are decimal/hex strings. Reading balances off the indexed account view keeps the 0x41/ABI
 //! address encoding entirely inside the signer (the only place that decodes Base58Check).

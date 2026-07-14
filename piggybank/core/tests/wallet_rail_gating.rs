@@ -56,7 +56,7 @@ const TON: &str = "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N";
 
 fn sample_address(network: Network) -> &'static str {
 	match network {
-		Network::Bep20 => BEP20,
+		Network::Bep20 | Network::Polygon => BEP20,
 		Network::Trc20 => TRC20,
 		Network::Ton => TON,
 	}
@@ -158,10 +158,14 @@ async fn assert_unconfigured_rail_gate(pool: &PgPool, addresses: &SignerDepositA
 	let configured = [Network::Bep20];
 	let user = UserId::new();
 
-	// The unconfigured rail: no address, ZERO signer provision calls, no cached row —
-	// the gate sits above the port, so no key is minted for a rail no watcher scans.
-	let unavailable = wallet_app::get_deposit_address(addresses, &configured, user, Network::Trc20).await.expect("gated read");
-	assert!(unavailable.is_none(), "an unconfigured rail must serve no address");
+	// The unconfigured rails: no address, ZERO signer provision calls, no cached row —
+	// the gate sits above the port, so no key is minted for a rail no watcher scans. Checked for
+	// both a non-EVM rail (Trc20) and the second EVM rail (Polygon), which is gated identically
+	// even though it shares BEP20's address shape.
+	for dead_rail in [Network::Trc20, Network::Polygon] {
+		let unavailable = wallet_app::get_deposit_address(addresses, &configured, user, dead_rail).await.expect("gated read");
+		assert!(unavailable.is_none(), "an unconfigured rail ({dead_rail}) must serve no address");
+	}
 	assert_eq!(provisions.load(Ordering::SeqCst), 0, "the signer must never be asked to provision a dead rail");
 	let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM user_deposit_addresses WHERE user_id = $1")
 		.bind(user.raw())

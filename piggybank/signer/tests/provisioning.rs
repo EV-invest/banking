@@ -28,6 +28,7 @@ fn chain_of(network: Network) -> Chain {
 		Network::Bep20 => Chain::BscBep20,
 		Network::Trc20 => Chain::TronTrc20,
 		Network::Ton => Chain::Ton,
+		Network::Polygon => Chain::PolygonPos,
 	}
 }
 
@@ -74,7 +75,8 @@ async fn provisions_seals_and_round_trips_each_network() {
 		// End-to-end: the recovered private key reproduces the stored public key.
 		let derived = match network {
 			Network::Ton => ed25519_pubkey(&seed).to_vec(),
-			Network::Bep20 | Network::Trc20 => secp256k1_pubkey(&seed),
+			// BEP20, TRC20, and Polygon all use secp256k1.
+			Network::Bep20 | Network::Trc20 | Network::Polygon => secp256k1_pubkey(&seed),
 		};
 		assert_eq!(derived, stored_pubkey, "{network} sealed key must back the stored public key");
 
@@ -82,6 +84,21 @@ async fn provisions_seals_and_round_trips_each_network() {
 		let wrong_chain = if matches!(chain, Chain::Ton) { Chain::BscBep20 } else { Chain::Ton };
 		assert!(vault.open(wrong_chain, &sealed.id.to_string(), &sealed.sealed_key).is_err());
 		assert!(vault.open(chain, &Uuid::new_v4().to_string(), &sealed.sealed_key).is_err());
+		// Domain separation between the two EVM rails is load-bearing: BSC and Polygon share the
+		// secp256k1 curve, so only the distinct KEK sealing tag keeps a Polygon blob from opening
+		// under the BSC domain (and vice-versa). Prove the tags actually separate them.
+		if matches!(chain, Chain::PolygonPos) {
+			assert!(
+				vault.open(Chain::BscBep20, &sealed.id.to_string(), &sealed.sealed_key).is_err(),
+				"a Polygon blob must not open under the BSC sealing domain"
+			);
+		}
+		if matches!(chain, Chain::BscBep20) {
+			assert!(
+				vault.open(Chain::PolygonPos, &sealed.id.to_string(), &sealed.sealed_key).is_err(),
+				"a BSC blob must not open under the Polygon sealing domain"
+			);
+		}
 
 		// The provisioning path stamps the sealing KEK's fingerprint on the row.
 		let kek_fp: Option<Vec<u8>> = sqlx::query_scalar("SELECT kek_fp FROM wallet_secrets WHERE user_id = $1 AND network = $2")

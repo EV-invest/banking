@@ -38,7 +38,7 @@ const TON: &str = "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N";
 
 fn sample_address(network: Network) -> &'static str {
 	match network {
-		Network::Bep20 => BEP20,
+		Network::Bep20 | Network::Polygon => BEP20,
 		Network::Trc20 => TRC20,
 		Network::Ton => TON,
 	}

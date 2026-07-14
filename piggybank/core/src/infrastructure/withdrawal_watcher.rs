@@ -20,27 +20,31 @@
 //!     backstop. Never auto-failed here.
 //!   - **not yet mined / not deep enough → wait.** Re-checked next poll.
 //!
-//! Scope: **BEP20 only** (the one rail [`ChainCustody`](super::custody::ChainCustody)
-//! broadcasts). Read-mostly; it never touches TigerBeetle — money is still written last,
-//! in the relay.
+//! Scope: the EVM rails (BEP20, Polygon) — one instance per rail that
+//! [`ChainCustody`](super::custody::ChainCustody) broadcasts, keyed by `network`. Read-mostly;
+//! it never touches TigerBeetle — money is still written last, in the relay.
 
 use std::{sync::Arc, time::Duration};
 
-use domain::{money::TxRef, withdrawals::WithdrawalId};
+use domain::{
+	money::{Network, TxRef},
+	withdrawals::WithdrawalId,
+};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{application::withdrawals::settle_withdrawal, config::BscConfig, infrastructure::bsc_rpc::BscRpc, ports::WithdrawalRepository};
+use crate::{application::withdrawals::settle_withdrawal, config::EvmConfig, infrastructure::evm_rpc::EvmRpc, ports::WithdrawalRepository};
 
 /// The withdrawal confirmation watcher. Holds its own pool clone (its polling reads stay
 /// off the request path), the withdrawal repository + relay `Notify` to drive the settle,
-/// and a BSC client for the confirmation reads.
+/// and an EVM client for the confirmation reads. One instance per EVM rail (`network`).
 pub struct WithdrawalWatcher {
+	network: Network,
 	pool: PgPool,
-	rpc: BscRpc,
+	rpc: EvmRpc,
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	relay: Arc<Notify>,
 	confirmations: u64,
@@ -48,10 +52,11 @@ pub struct WithdrawalWatcher {
 }
 
 impl WithdrawalWatcher {
-	pub fn new(pool: PgPool, withdrawals: Arc<dyn WithdrawalRepository>, relay: Arc<Notify>, config: &BscConfig) -> Self {
+	pub fn new(pool: PgPool, withdrawals: Arc<dyn WithdrawalRepository>, relay: Arc<Notify>, config: &EvmConfig) -> Self {
 		Self {
+			network: config.network,
 			pool,
-			rpc: BscRpc::new(config.rpc_url.clone()),
+			rpc: EvmRpc::new(config.rpc_url.clone()),
 			withdrawals,
 			relay,
 			confirmations: config.confirmations,
@@ -63,7 +68,7 @@ impl WithdrawalWatcher {
 	/// settle is idempotent and a settled withdrawal drops out of the `processing` set, so
 	/// nothing is double-settled or lost.
 	pub async fn run(self, shutdown: CancellationToken) {
-		info!(confirmations = self.confirmations, "withdrawal watcher: confirming broadcast BEP20 withdrawals");
+		info!(network = %self.network, confirmations = self.confirmations, "withdrawal watcher: confirming broadcast EVM withdrawals");
 		loop {
 			if let Err(err) = self.scan_once().await {
 				warn!("withdrawal watcher: scan cycle failed, retrying next poll: {err}");
@@ -94,12 +99,14 @@ impl WithdrawalWatcher {
 	/// of truth — a settled one leaves the set as its state moves to `completed`, so a
 	/// re-settle is never even attempted.
 	async fn pending_broadcasts(&self) -> Result<Vec<(Uuid, String)>, WatcherError> {
-		// Scoped to `network = 'bep20'` so a Tron/TON broadcast row in the shared table is never
-		// read as an EVM tx hash (its receipt lookup would be meaningless on this rail).
+		// Scoped to this rail's `network` so another rail's broadcast row in the shared table is
+		// never read as this chain's tx hash (its receipt lookup would be meaningless here) — and
+		// so the two EVM rails' confirmation watchers don't each try to settle the other's sends.
 		sqlx::query_as::<_, (Uuid, String)>(
 			"SELECT b.withdrawal_id, b.tx_hash FROM withdrawal_broadcasts b \
-			 JOIN withdrawals w ON w.id = b.withdrawal_id WHERE w.state = 'processing' AND b.network = 'bep20'",
+			 JOIN withdrawals w ON w.id = b.withdrawal_id WHERE w.state = 'processing' AND b.network = $1",
 		)
+		.bind(self.network.as_str())
 		.fetch_all(&self.pool)
 		.await
 		.map_err(|e| WatcherError::Db(e.to_string()))

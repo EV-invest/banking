@@ -1,18 +1,19 @@
-//! A minimal BSC JSON-RPC client for the chain custody adapter (broadcasts) and the
-//! withdrawal confirmation watcher — the handful of methods they need over HTTP. The
-//! deposit watcher keeps its own read-only client; this one carries the write-path calls
-//! (nonce, gas price, send raw transaction) plus the confirmation reads (block number,
-//! transaction receipt).
+//! A minimal EVM JSON-RPC client for the chain custody adapter (broadcasts) and the
+//! withdrawal confirmation watcher — the handful of methods they need over HTTP. Shared by
+//! every EVM rail (BEP20, Polygon): the calls are chain-agnostic (the rail's chain-id and
+//! contract are carried in the request, not the client). The deposit watcher keeps its own
+//! read-only client; this one carries the write-path calls (nonce, gas price, send raw
+//! transaction) plus the confirmation reads (block number, transaction receipt).
 
 use std::time::Duration;
 
 use serde_json::{Value, json};
 
-pub struct BscRpc {
+pub struct EvmRpc {
 	http: reqwest::Client,
 	url: String,
 }
-impl BscRpc {
+impl EvmRpc {
 	pub fn new(url: String) -> Self {
 		let http = reqwest::Client::builder()
 			.timeout(Duration::from_secs(20))
@@ -57,9 +58,9 @@ impl BscRpc {
 		decode_receipt(&value)
 	}
 
-	/// The account's native (BNB) balance in wei — the gas the sweep checks before moving a
-	/// deposit address's USDT (and the gas station tops up when it is short).
-	pub async fn bnb_balance(&self, address: &str) -> Result<u128, RpcError> {
+	/// The account's native-coin balance in wei (BNB on BEP20, POL on Polygon) — the gas the
+	/// sweep checks before moving a deposit address's USDT (and the gas station tops up when short).
+	pub async fn native_balance(&self, address: &str) -> Result<u128, RpcError> {
 		let value = self.call("eth_getBalance", json!([address, "latest"])).await?;
 		hex_to_u128(as_str(&value, "eth_getBalance")?).ok_or_else(|| RpcError::Rpc("eth_getBalance: unparseable".into()))
 	}

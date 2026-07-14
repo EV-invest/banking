@@ -97,7 +97,7 @@ fn unique_tx_ref() -> TxRef {
 /// A destination address valid for `network` (distinct from the user's own).
 fn destination(network: Network) -> WalletAddress {
 	let raw = match network {
-		Network::Bep20 => "0x52908400098527886E0F7030069857D2E4169EE7",
+		Network::Bep20 | Network::Polygon => "0x52908400098527886E0F7030069857D2E4169EE7",
 		Network::Trc20 => "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8",
 		Network::Ton => "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N",
 	};
@@ -186,6 +186,53 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 	assert_eq!(settled.locked, Usdt::ZERO, "nothing remains reserved");
 	// FeeRevenue is now a network-agnostic singleton shared across (parallel) tests, so
 	// assert this withdrawal credited *at least* its fee — concurrent tests only add more.
+	assert!(bal(&h, &fee_account).await.posted.checked_sub(fee_before).unwrap() >= usdt("1"), "the fee was retained");
+}
+
+/// Polygon is the second EVM rail but carries USDT at 6-dp (unlike BEP20's 18-dp), so this
+/// exercises the whole reserve → settle flow across the 6-dp `to_onchain(Polygon)` edge — the
+/// withdrawal net must be representable at 6 decimals, and the ledger legs still move canonical
+/// 18-dp `Usdt` (the ledger never sees the chain's precision).
+#[tokio::test]
+async fn withdraw_on_polygon_reserves_then_settles_and_retains_fee() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Polygon;
+	let claim = LedgerAccountKey::UserClaim(user);
+	let fee_account = LedgerAccountKey::FeeRevenue;
+
+	deposit(&h, user, network, "100").await;
+	let fee_before = bal(&h, &fee_account).await.posted;
+
+	let withdrawal = withdrawal_app::request_withdrawal(
+		h.withdrawals.as_ref(),
+		h.ledger.as_ref(),
+		h.users.as_ref(),
+		&StubCustody,
+		&h.notify,
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.net_amount(), usdt("49"));
+	h.relay.drain().await;
+
+	let reserved = bal(&h, &claim).await;
+	assert_eq!(reserved.locked, usdt("50"), "the gross is locked as a pending debit on Polygon too");
+	assert_eq!(reserved.available(), usdt("50"), "available drops by the reserved gross");
+
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	let settled = bal(&h, &claim).await;
+	assert_eq!(settled.posted, usdt("50"), "the gross left the user's claim");
+	assert_eq!(settled.locked, Usdt::ZERO, "nothing remains reserved");
 	assert!(bal(&h, &fee_account).await.posted.checked_sub(fee_before).unwrap() >= usdt("1"), "the fee was retained");
 }
 
@@ -847,7 +894,7 @@ fn derive_bytes(seed: &str, n: usize) -> Vec<u8> {
 fn derive_address(user: UserId, network: Network) -> WalletAddress {
 	let seed = format!("{user}:{network}");
 	let address = match network {
-		Network::Bep20 => {
+		Network::Bep20 | Network::Polygon => {
 			let bytes = derive_bytes(&seed, 20);
 			let mut s = String::from("0x");
 			for byte in bytes {
