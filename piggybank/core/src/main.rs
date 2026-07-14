@@ -27,7 +27,6 @@ use piggybank_core::{
 		deposit_watcher::DepositWatcher,
 		deposits::PgDeposits,
 		dispatcher::Dispatcher,
-		evm_rpc::EvmRpc,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		positions::PgFundPositions,
@@ -212,31 +211,23 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	let mut custody_by_network: HashMap<Network, Arc<dyn Custody>> = HashMap::new();
 	let bsc_custody: Option<Arc<ChainCustody>> = rails.bsc.as_ref().map(|bsc| {
 		Arc::new(ChainCustody::new(
-			Network::Bep20,
 			pool.clone(),
-			EvmRpc::new(bsc.rpc_url.clone()),
+			bsc,
 			SignerServiceClient::new(signer_channel.clone()),
 			ServiceTokenSource::from_env(),
-			bsc.chain_id,
-			bsc.usdt_contract.clone(),
-			bsc.gas_limit,
 		))
 	});
 	if let Some(bsc_custody) = &bsc_custody {
 		custody_by_network.insert(Network::Bep20, bsc_custody.clone());
 	}
 	// Polygon (PoS) custody — the SECOND EVM rail, the same `ChainCustody` adapter as BSC,
-	// distinguished by its `Network::Polygon` (which scopes its own nonce sequence + treasury key).
+	// distinguished by its `EvmConfig::network` (Polygon), which scopes its own nonce sequence + treasury key.
 	let polygon_custody: Option<Arc<ChainCustody>> = rails.polygon.as_ref().map(|polygon| {
 		Arc::new(ChainCustody::new(
-			Network::Polygon,
 			pool.clone(),
-			EvmRpc::new(polygon.rpc_url.clone()),
+			polygon,
 			SignerServiceClient::new(signer_channel.clone()),
 			ServiceTokenSource::from_env(),
-			polygon.chain_id,
-			polygon.usdt_contract.clone(),
-			polygon.gas_limit,
 		))
 	});
 	if let Some(polygon_custody) = &polygon_custody {

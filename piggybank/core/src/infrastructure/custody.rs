@@ -34,6 +34,7 @@ use uuid::Uuid;
 const GAS_STATION: Uuid = Uuid::from_u128(1);
 
 use crate::{
+	config::EvmConfig,
 	infrastructure::evm_rpc::{EvmRpc, RpcError},
 	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
 };
@@ -121,25 +122,16 @@ pub struct ChainCustody {
 }
 
 impl ChainCustody {
-	pub fn new(
-		network: Network,
-		pool: PgPool,
-		rpc: EvmRpc,
-		signer: SignerServiceClient<Channel>,
-		service_token: Option<ServiceTokenSource>,
-		chain_id: u64,
-		usdt_contract: String,
-		gas_limit: u64,
-	) -> Self {
+	pub fn new(pool: PgPool, evm: &EvmConfig, signer: SignerServiceClient<Channel>, service_token: Option<ServiceTokenSource>) -> Self {
 		Self {
-			network,
+			network: evm.network,
 			pool,
-			rpc,
+			rpc: EvmRpc::new(evm.rpc_url.clone()),
 			signer,
 			service_token,
-			chain_id,
-			usdt_contract,
-			gas_limit,
+			chain_id: evm.chain_id,
+			usdt_contract: evm.usdt_contract.clone(),
+			gas_limit: evm.gas_limit,
 			treasury_address: OnceCell::new(),
 			gas_station_address: OnceCell::new(),
 		}
@@ -288,12 +280,13 @@ impl ChainCustody {
 	/// Sign the withdrawal's USDT transfer from the treasury key via the signer (the signer
 	/// resolves the treasury key itself from the empty `from_user_id`).
 	async fn sign(&self, request: &BroadcastRequest, nonce: u64, gas_price: u128) -> Result<(String, String), CustodyError> {
+		let onchain_amount = onchain_transfer_amount(self.network, request.amount)?;
 		let mut signer_request = Request::new(SignErc20TransferRequest {
 			from_user_id: String::new(), // empty ⇒ treasury hot wallet
 			network: self.network.as_str().to_owned(),
 			token_contract: self.usdt_contract.clone(),
 			to_address: request.address.as_str().to_owned(),
-			amount: request.amount.base_units().to_string(),
+			amount: onchain_amount.to_string(),
 			chain_id: self.chain_id,
 			nonce,
 			gas_price: gas_price.to_string(),
@@ -421,6 +414,18 @@ impl Custody for ChainCustody {
 	}
 }
 
+/// The raw on-chain ERC-20 `transfer` value for a canonical withdrawal amount on `network`.
+/// The signer uses this integer VERBATIM (it does NOT rescale by decimals), so the canonical
+/// 18-dp amount must be scaled DOWN to the token's on-chain precision here: 1:1 for BEP20 (18-dp),
+/// ÷10^12 for Polygon (6-dp). Sending `base_units()` on a 6-dp rail would transfer 10^12× too much
+/// (an on-chain revert that wedges the nonce). Sub-precision dust — never representable at the
+/// chain's precision — is rejected (the withdrawal policy already bars it at request time).
+fn onchain_transfer_amount(network: Network, amount: Usdt) -> Result<u128, CustodyError> {
+	amount
+		.to_onchain(network)
+		.map_err(|e| CustodyError::Rejected(format!("withdrawal amount not representable on {network}: {e}")))
+}
+
 /// A read-path RPC failure (nonce/gas) is always retryable — nothing was sent.
 fn read_err(err: RpcError) -> CustodyError {
 	CustodyError::Unavailable(err.to_string())
@@ -438,7 +443,9 @@ fn already_accepted(msg: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-	use super::already_accepted;
+	use domain::money::{Network, Usdt};
+
+	use super::{already_accepted, onchain_transfer_amount};
 
 	#[test]
 	fn recognises_already_submitted_responses() {
@@ -448,5 +455,19 @@ mod tests {
 		assert!(already_accepted("transaction already imported"));
 		assert!(!already_accepted("insufficient funds for gas * price + value"));
 		assert!(!already_accepted("nonce too low"));
+	}
+
+	#[test]
+	fn signs_the_transfer_at_the_rail_on_chain_precision() {
+		// 50 USDT canonical (50e18 18-dp base units).
+		let fifty = Usdt::from_base_units(50_000_000_000_000_000_000);
+		// BEP20 USDT is 18-dp: the raw transfer value equals the canonical base units 1:1.
+		assert_eq!(onchain_transfer_amount(Network::Bep20, fifty).unwrap(), 50_000_000_000_000_000_000);
+		// Polygon USDT is 6-dp: the raw transfer value MUST be scaled down by 10^12 — the bug this
+		// guards is signing `base_units()` (50e18) against a 6-dp token, which would send 10^12× too much.
+		assert_eq!(onchain_transfer_amount(Network::Polygon, fifty).unwrap(), 50_000_000);
+		// Sub-precision dust (1 canonical base unit) is not representable on a 6-dp rail → rejected.
+		assert!(onchain_transfer_amount(Network::Polygon, Usdt::from_base_units(1)).is_err());
+		assert!(onchain_transfer_amount(Network::Bep20, Usdt::from_base_units(1)).is_ok());
 	}
 }
