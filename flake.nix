@@ -455,10 +455,15 @@
             # survive a real scan cycle.
             # POLYGON_RPC_URL (also piggybank/core/.env) — the second EVM rail, same eth_getLogs
             # caveat. Bring it up on Amoy testnet first: POLYGON_RPC_URL=<amoy endpoint>,
-            # POLYGON_CHAIN_ID=80002, POLYGON_USDT_CONTRACT=<your test ERC20>. Mainnet defaults
-            # (chain 137, native USDT 0xc213…58e8F @ 6-dp, 128 confs) need no override. Keep the
-            # fund-moving sweep off (POLYGON_SWEEP_ENABLED unset) until the treasury + gas station
-            # are funded with USDT + POL — see docs/RUNBOOK-polygon-rail.md.
+            # POLYGON_CHAIN_ID=80002, POLYGON_USDT_CONTRACT=<your test ERC20>. A testnet endpoint
+            # needs its matching POLYGON_CHAIN_ID (80002) — the default is mainnet 137, and a hub
+            # that mixes a testnet rail with a mainnet one refuses to boot (claims are network-
+            # agnostic, so a testnet deposit would withdraw as real USDT). Mainnet defaults
+            # (chain 137, native USDT 0xc213…58e8F @ 6-dp, 128 confs) need no override. Flip Amoy→
+            # mainnet on a FRESH database — the rail's state is keyed by network, not chain, so an
+            # in-place re-point is refused by the rail_chain_identity guard. Keep the fund-moving
+            # sweep off (POLYGON_SWEEP_ENABLED unset) until the treasury + gas station are funded
+            # with USDT + POL — see docs/RUNBOOK-polygon-rail.md.
             # Cross-plane lifecycle bridge consumer (one-way concierge → banking). Both vars
             # must be set together or the consumer doesn't run; BRIDGE_SERVICE_TOKEN must match
             # the concierge plane's value. The concierge plane serves UserEvents on :50061.
