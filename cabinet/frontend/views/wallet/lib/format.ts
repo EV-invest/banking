@@ -50,3 +50,13 @@ const NETWORK_LABELS: Record<string, string> = { bep20: "BEP20", trc20: "TRC20",
 export function networkLabel(network: string | undefined): string {
   return NETWORK_LABELS[network ?? ""] ?? (network ?? "").toUpperCase();
 }
+
+// The EVM rails share the exact same `0x…` address format, so one rail's deposit address is a
+// syntactically valid — but never credited — destination on the other. That collision is unique
+// to the EVM rails (TON/TRON addresses look nothing alike), so the deposit view calls it out by
+// name only for them.
+const EVM_RAILS = new Set(["bep20", "polygon"]);
+
+export function isEvmRail(network: string | undefined): boolean {
+  return EVM_RAILS.has(network ?? "");
+}

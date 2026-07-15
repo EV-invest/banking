@@ -10,7 +10,7 @@ import type { Deposit, DepositAddress, NetworkWithdrawable, Wallet, Withdrawal }
 import { cn } from "@/shared/lib/cn";
 import { tonFriendlyAddress } from "@/shared/lib/ton-address";
 import { DepositQr } from "@/views/wallet/ui/deposit-qr";
-import { formatUsdt, fromBaseUnits, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
+import { formatUsdt, fromBaseUnits, isEvmRail, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 // Clearly-visible active tab. The uikit default active state is `bg-background` — invisible
@@ -186,6 +186,10 @@ function DepositPanel({ wallet }: { wallet: Wallet | null }) {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  // Other EVM rails on offer: their `0x` deposit addresses look identical to this one, so a
+  // BEP20/Polygon mix-up sends to a valid-but-unwatched address. Name them explicitly.
+  const evmSiblings = isEvmRail(network) ? networks.filter((n) => n !== network && isEvmRail(n)).map(networkLabel) : [];
+
   if (wallet === null) return <PanelSkeleton />;
   if (!network) return <p className="text-sm text-muted-foreground">No deposit rails are available right now — check back soon.</p>;
 
@@ -228,7 +232,16 @@ function DepositPanel({ wallet }: { wallet: Wallet | null }) {
       <Alert>
         <TriangleAlert className="size-4 text-main-accent-t3" />
         <AlertTitle>Send only USDT on {networkLabel(network)}</AlertTitle>
-        <AlertDescription>Sending any other asset or using a different network will lose the funds permanently.</AlertDescription>
+        <AlertDescription>
+          Sending any other asset or using a different network will lose the funds permanently.
+          {evmSiblings.length > 0 && (
+            <>
+              {" "}
+              This {networkLabel(network)} address is <strong>not</strong> your {evmSiblings.join(" / ")} address — even though both start with <code>0x</code>. USDT
+              sent on {evmSiblings.join(" or ")} will not be credited.
+            </>
+          )}
+        </AlertDescription>
       </Alert>
     </div>
   );

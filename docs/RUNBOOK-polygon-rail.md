@@ -47,10 +47,18 @@ Sweep (opt-in, moves user funds on-chain — leave OFF until funded): `POLYGON_S
 
 ## Sequenced bring-up (testnet first)
 
+> **Precondition — never share a database between a testnet rail and a live mainnet rail.**
+> USDT claims are network-agnostic (one fungible pool across every rail — `0004_unified_balance`),
+> so a free Amoy deposit mints a claim that is withdrawable as **real** USDT on the live BEP20 rail,
+> and `sum(custody)==sum(claims)` stays clean because both legs inflate equally. Bring the Amoy rail
+> up on its **own** hub + database. A hub that configures a testnet rail alongside a mainnet one now
+> **refuses to boot** (`Rails::assert_single_realm`), but that guard is a backstop, not a licence to
+> point the two at one database.
+
 1. **Amoy testnet.** Set `POLYGON_RPC_URL=<amoy endpoint>`, `POLYGON_CHAIN_ID=80002`,
    `POLYGON_USDT_CONTRACT=<test ERC-20>`. Boot the hub; the log prints the resolved **Polygon
    treasury** and **gas-station** addresses (from the signer). Deposits + withdrawals are live;
-   the sweep is still off.
+   the sweep is still off. The hub records this rail's chain in `rail_chain_identity` on first boot.
 2. **Fund the treasury.** Send test USDT (liquidity to pay withdrawals) and a little POL (gas to
    sign them) to the treasury address. Withdrawals only dispatch once the on-chain treasury covers
    the net + gas — an underfunded rail *queues* (accept-and-queue), never fails.
@@ -61,15 +69,26 @@ Sweep (opt-in, moves user funds on-chain — leave OFF until funded): `POLYGON_S
    `POLYGON_SWEEP_ENABLED=true`. It consolidates user deposit balances into the treasury (topping
    up each address's gas from the station first). Only turn this on *after* the gas station holds
    POL, or every sweep cycle logs `SENDER OUT OF FUNDS`.
-5. **Mainnet.** Repeat 1–4 with the mainnet endpoint (drop the chain-id/contract overrides — the
-   defaults are mainnet). Fund with real USDT + POL. Keep the sweep off until the mainnet gas
+5. **Mainnet — on a fresh database.** Run steps 1–4 again with the mainnet endpoint (drop the
+   chain-id/contract overrides — the defaults are mainnet), against a **new** database. Do **not**
+   re-point the Amoy hub's `POLYGON_RPC_URL` at mainnet: the rail's state is keyed by the flat
+   network string `'polygon'`, which names a rail, not a chain, so it does **not** move with the
+   endpoint. The Amoy deposit cursor would resume at an Amoy block height (~10⁵ `eth_getLogs`
+   before the first mainnet credit) and the treasury nonce would seed from the Amoy high-water mark
+   (both chains share the treasury address), signing the first mainnet withdrawal into a nonce gap
+   that never mines. The hub now **refuses to boot** on this mismatch (`rail_chain_identity`); the
+   Amoy custody + claim legs in TigerBeetle are immutable, so there is no in-place DELETE that
+   repairs it. Fund the mainnet rail with real USDT + POL. Keep the sweep off until the mainnet gas
    station is funded.
 
 ## Safety notes
 
-- **Nonce isolation.** Polygon's account-nonce sequence lives in `withdrawal_broadcasts` scoped
-  `WHERE network = 'polygon'`, disjoint from BEP20's `'bep20'` scope. The two EVM rails can never
-  read or advance each other's nonces.
+- **Nonce isolation is per-rail, NOT per-chain.** Polygon's account-nonce sequence lives in
+  `withdrawal_broadcasts` scoped `WHERE network = 'polygon'`, disjoint from BEP20's `'bep20'` scope —
+  the two EVM rails can never read or advance each other's nonces. This does **not** isolate one rail
+  across two chains: the `'polygon'` scope is shared by Amoy and mainnet, so re-pointing the endpoint
+  (step 5) collides the nonce sequences of two different chains under one key. That is why the flip
+  requires a fresh database, enforced by the `rail_chain_identity` boot guard.
 - **Stuck / parked withdrawals** on Polygon recover exactly like BSC — see
   [`RUNBOOK-withdrawals.md`](./RUNBOOK-withdrawals.md). The cardinal rule holds: never void a
   withdrawal once its broadcast may have reached the chain.

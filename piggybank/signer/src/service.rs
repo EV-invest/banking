@@ -105,7 +105,7 @@ impl SignerService for Signer {
 
 	async fn sign_erc20_transfer(&self, request: Request<SignErc20TransferRequest>) -> Result<Response<SignErc20TransferResponse>, Status> {
 		let req = request.into_inner();
-		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
+		let network = require_evm(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let token = parse_evm_address(&req.token_contract).ok_or_else(|| Status::invalid_argument("token_contract must be a 0x 20-byte address"))?;
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
@@ -137,7 +137,7 @@ impl SignerService for Signer {
 
 	async fn sign_native_transfer(&self, request: Request<SignNativeTransferRequest>) -> Result<Response<SignNativeTransferResponse>, Status> {
 		let req = request.into_inner();
-		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
+		let network = require_evm(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let to = parse_evm_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a 0x 20-byte address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
@@ -168,7 +168,7 @@ impl SignerService for Signer {
 
 	async fn sign_trc20_transfer(&self, request: Request<SignTrc20TransferRequest>) -> Result<Response<SignedTronTxResponse>, Status> {
 		let req = request.into_inner();
-		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
+		let network = require_tron(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let token = parse_tron_address(&req.token_contract).ok_or_else(|| Status::invalid_argument("token_contract must be a base58 Tron address"))?;
 		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
@@ -187,7 +187,7 @@ impl SignerService for Signer {
 
 	async fn sign_trx_transfer(&self, request: Request<SignTrxTransferRequest>) -> Result<Response<SignedTronTxResponse>, Status> {
 		let req = request.into_inner();
-		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
+		let network = require_tron(&req.network)?;
 		let wallet_id = Self::resolve_wallet(&req.from_user_id)?;
 		let to = parse_tron_address(&req.to_address).ok_or_else(|| Status::invalid_argument("to_address must be a base58 Tron address"))?;
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
@@ -350,6 +350,31 @@ fn require_ton(raw: &str) -> Result<Network, Status> {
 	}
 }
 
+/// Parse the wire network and require an EVM rail — the ERC-20/native signers unseal a
+/// secp256k1 key and sign an EIP-155 legacy tx. The hub only ever passes its own EVM
+/// `network`, but the signer is a separate trust domain and must not trust the string: a TON
+/// network would feed an Ed25519 seed to `sign_legacy_tx` as a secp256k1 scalar (`from_slice`
+/// accepts almost any 32 bytes → a signature from an unrelated address), and TRC20 — the same
+/// curve — would sign from a Tron-scoped key the hub tracks at a different address.
+fn require_evm(raw: &str) -> Result<Network, Status> {
+	match Network::parse(raw) {
+		Ok(network @ (Network::Bep20 | Network::Polygon)) => Ok(network),
+		Ok(other) => Err(Status::invalid_argument(format!("EVM signer called with a non-EVM network: {other}"))),
+		Err(_) => Err(Status::invalid_argument(format!("unknown network: {raw}"))),
+	}
+}
+
+/// Parse the wire network and require a Tron rail — the TRC20/TRX signers unseal a secp256k1
+/// key and sign a Tron tx, so a TON network would feed an Ed25519 seed to the secp256k1 signer
+/// (the same curve-confusion hole `require_evm` guards on the EVM side).
+fn require_tron(raw: &str) -> Result<Network, Status> {
+	match Network::parse(raw) {
+		Ok(Network::Trc20) => Ok(Network::Trc20),
+		Ok(other) => Err(Status::invalid_argument(format!("Tron signer called with a non-Tron network: {other}"))),
+		Err(_) => Err(Status::invalid_argument(format!("unknown network: {raw}"))),
+	}
+}
+
 /// Log-then-withhold at a sign collapse point: the real cause goes to the server log, the
 /// wire keeps the fixed non-leaking message.
 fn sign_status<E: std::fmt::Display>(op: &'static str) -> impl Fn(E) -> Status {
@@ -386,7 +411,7 @@ fn parse_evm_address(value: &str) -> Option<[u8; 20]> {
 
 #[cfg(test)]
 mod tests {
-	use super::parse_evm_address;
+	use super::{parse_evm_address, require_evm, require_tron};
 
 	#[test]
 	fn parses_evm_addresses() {
@@ -398,5 +423,24 @@ mod tests {
 		// Wrong length / non-hex are rejected.
 		assert!(parse_evm_address("0x1234").is_none());
 		assert!(parse_evm_address("0xnothex0000000000000000000000000000000000").is_none());
+	}
+
+	#[test]
+	fn require_evm_admits_only_evm_rails() {
+		assert!(require_evm("bep20").is_ok());
+		assert!(require_evm("polygon").is_ok());
+		// TON is the curve-confusion case (Ed25519 seed → secp256k1); TRC20 shares the curve but
+		// is a Tron-scoped key at a different address. Both must be refused, along with junk.
+		assert!(require_evm("ton").is_err());
+		assert!(require_evm("trc20").is_err());
+		assert!(require_evm("bogus").is_err());
+	}
+
+	#[test]
+	fn require_tron_admits_only_tron() {
+		assert!(require_tron("trc20").is_ok());
+		assert!(require_tron("ton").is_err());
+		assert!(require_tron("bep20").is_err());
+		assert!(require_tron("bogus").is_err());
 	}
 }

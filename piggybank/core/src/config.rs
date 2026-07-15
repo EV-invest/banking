@@ -312,6 +312,34 @@ impl Rails {
 		.flatten()
 		.collect()
 	}
+
+	/// Refuse to boot a hub whose configured rails mix a testnet and a mainnet chain.
+	///
+	/// USDT claims are network-agnostic — one fungible pool across every rail (migration
+	/// `0004_unified_balance`), so a deposit on ANY rail mints a claim withdrawable on EVERY
+	/// other rail. Put a testnet rail and a mainnet rail on one hub and a free testnet deposit
+	/// becomes withdrawable as real mainnet USDT elsewhere; the `sum(custody)==sum(claims)`
+	/// invariant stays clean because both legs inflate equally. `Unknown` chains (local dev)
+	/// take no side. TRON is frozen off and never configured.
+	pub fn assert_single_realm(&self) -> color_eyre::Result<()> {
+		let realms = [
+			self.bsc.as_ref().map(|c| ("BSC", c.realm())),
+			self.polygon.as_ref().map(|c| ("Polygon", c.realm())),
+			self.ton.as_ref().map(|c| ("TON", if c.is_testnet { Realm::Testnet } else { Realm::Mainnet })),
+		];
+		let named = |want: Realm| -> Vec<&'static str> { realms.iter().flatten().filter(|(_, r)| *r == want).map(|(n, _)| *n).collect() };
+		let testnet = named(Realm::Testnet);
+		let mainnet = named(Realm::Mainnet);
+		color_eyre::eyre::ensure!(
+			testnet.is_empty() || mainnet.is_empty(),
+			"on-chain rails mix testnet and mainnet on one hub — testnet [{}] alongside mainnet [{}]. \
+			 USDT claims are network-agnostic (one pool across rails), so a free testnet deposit would be \
+			 withdrawable as real mainnet USDT on another rail. Run testnet rails on a separate hub + database.",
+			testnet.join(", "),
+			mainnet.join(", "),
+		);
+		Ok(())
+	}
 }
 
 /// The on-chain EVM rail config (BEP20 / Polygon), shared by the deposit watcher, the withdrawal
@@ -356,6 +384,28 @@ pub struct EvmConfig {
 	/// Gas limit for an ERC-20 transfer withdrawal (`BSC_GAS_LIMIT` / `POLYGON_GAS_LIMIT`); defaults
 	/// to 100_000 (a USDT transfer is ~50–65k — the headroom is safe, and unused gas is refunded).
 	pub gas_limit: u64,
+}
+impl EvmConfig {
+	/// This rail's chain reality for the single-realm boot check. Only the four chain ids the
+	/// project actually runs are classified; anything else (a local dev chain) is `Unknown` and
+	/// never trips the guard on its own.
+	fn realm(&self) -> Realm {
+		match self.chain_id {
+			56 | 137 => Realm::Mainnet,
+			97 | 80002 => Realm::Testnet,
+			_ => Realm::Unknown,
+		}
+	}
+}
+
+/// A configured rail's testnet/mainnet reality for [`Rails::assert_single_realm`]. `Unknown`
+/// (an unrecognized chain id — e.g. a local dev chain) is deliberately neither: it takes no
+/// side, so it can never pair with a real rail to trip the guard.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Realm {
+	Testnet,
+	Mainnet,
+	Unknown,
 }
 /// EVM treasury-sweep economics (BEP20 / Polygon). `Some` only when the rail is configured AND its
 /// sweep is enabled (`SWEEP_ENABLED` or the per-rail override) — it moves user funds on-chain, so
@@ -566,5 +616,66 @@ mod tests {
 			config(true, true, true, true).configured_networks(),
 			[Network::Bep20, Network::Polygon, Network::Trc20, Network::Ton]
 		);
+	}
+
+	/// Build a rails config with explicit per-rail chain reality; `None` leaves a rail off.
+	fn realmed(bsc_chain: Option<u64>, polygon_chain: Option<u64>, ton: Option<bool>) -> Rails {
+		let evm = |network, chain_id| EvmConfig {
+			network,
+			rpc_url: String::new(),
+			usdt_contract: String::new(),
+			confirmations: 1,
+			poll_secs: 1,
+			start_block: None,
+			max_block_range: 1,
+			logs_rpc_url: None,
+			chain_id,
+			gas_limit: 1,
+		};
+		let mut r = config(false, false, false, false);
+		r.bsc = bsc_chain.map(|c| evm(Network::Bep20, c));
+		r.polygon = polygon_chain.map(|c| evm(Network::Polygon, c));
+		r.ton = ton.map(|is_testnet| TonConfig {
+			api_url: String::new(),
+			api_key: None,
+			usdt_master: String::new(),
+			poll_secs: 1,
+			start_cursor: None,
+			is_testnet,
+			wallet_version: String::new(),
+			forward_ton_amount: 1,
+			msg_value: 1,
+		});
+		r
+	}
+
+	#[test]
+	fn single_realm_accepts_uniform_and_unconfigured_hubs() {
+		// All mainnet, all testnet, and no rails at all are each a coherent hub.
+		realmed(Some(56), Some(137), Some(false)).assert_single_realm().expect("all mainnet");
+		realmed(Some(97), Some(80002), Some(true)).assert_single_realm().expect("all testnet");
+		realmed(None, None, None).assert_single_realm().expect("no rails");
+		realmed(Some(56), None, None).assert_single_realm().expect("single mainnet rail");
+	}
+
+	#[test]
+	fn single_realm_rejects_a_testnet_rail_beside_a_mainnet_rail() {
+		// Polygon Amoy (80002) beside live BSC (56) — the exact runbook flip hazard.
+		let err = realmed(Some(56), Some(80002), None).assert_single_realm().unwrap_err().to_string();
+		assert!(err.contains("BSC"), "names the mainnet rail: {err}");
+		assert!(err.contains("Polygon"), "names the testnet rail: {err}");
+		// The cross-family case: TON testnet beside a BSC mainnet rail.
+		assert!(
+			realmed(Some(56), None, Some(true)).assert_single_realm().is_err(),
+			"testnet TON beside mainnet BSC must be refused"
+		);
+	}
+
+	#[test]
+	fn single_realm_ignores_unknown_chains() {
+		// A local dev chain (unrecognized id) takes no side, so it can't trip the guard even
+		// next to a real testnet rail.
+		realmed(Some(31337), None, Some(true)).assert_single_realm().expect("unknown + testnet");
+		realmed(Some(31337), Some(137), None).assert_single_realm().expect("unknown + mainnet");
 	}
 }
