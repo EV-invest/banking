@@ -99,6 +99,10 @@ async fn run(settings: Arc<config::LiveSettings>) -> color_eyre::Result<()> {
 	// The on-chain rails keep their env-based conditional construction — a rail
 	// runs only when its endpoint var is set. Production asserts the rail set below.
 	let rails = Rails::from_env().context("failed to load the on-chain rail configuration")?;
+	// Claims are network-agnostic, so a testnet rail sharing this hub with a mainnet rail lets a
+	// free testnet deposit be withdrawn as real mainnet USDT. Refuse such a mix in EVERY env (the
+	// dangerous flip happens in staging), before any infra is dialed.
+	rails.assert_single_realm()?;
 
 	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
 	// The auth crate's optional seams (absent ⇒ inert/fail-closed) are a dev/CI
@@ -154,6 +158,12 @@ async fn run(settings: Arc<config::LiveSettings>) -> color_eyre::Result<()> {
 		.await
 		.context("failed to connect to the database")?;
 	db::migrate(&pool).await.context("failed to apply database migrations")?;
+	// Refuse to boot an EVM rail whose persisted state belongs to a different chain (an endpoint
+	// re-pointed under a live rail — the Amoy→mainnet flip). Config-vs-persisted only, so a dead
+	// node is still a bootable rail. Must run after `migrate` (the table) and before any watcher.
+	for evm in [rails.bsc.as_ref(), rails.polygon.as_ref()].into_iter().flatten() {
+		db::bind_chain_identity(&pool, evm.network, evm.chain_id).await?;
+	}
 	let tigerbeetle_cluster_id: u128 = config.tigerbeetle_cluster_id.parse().context("TIGERBEETLE_CLUSTER_ID must be an integer")?;
 	let tigerbeetle = Arc::new(TigerBeetle::connect(tigerbeetle_cluster_id, &config.tigerbeetle_address).context("failed to connect to TigerBeetle")?);
 
