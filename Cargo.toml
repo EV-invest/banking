@@ -35,7 +35,7 @@ color-eyre = "0.6"
 domain = { path = "domain" }
 dotenvy = "0.15.7"
 ed25519-dalek = "2"
-ev = { version = "0.2.1", package = "ev_lib", default-features = false, features = ["architecture"] }
+ev = { version = "0.6.2", package = "ev_lib", default-features = false, features = ["architecture"] }
 evbanking_auth = { path = "piggybank/auth" }
 evbanking_contracts = { path = "contracts" }
 # The shared verify-side flow (JWKS-cached local verification of concierge access

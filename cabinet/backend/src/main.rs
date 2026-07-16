@@ -55,7 +55,8 @@ fn main() -> color_eyre::Result<()> {
 		traces_sample_rate: SentryConfig::traces_sample_rate_for(&config.app_env),
 	});
 
-	init_tracing();
+	// Held for the process lifetime — dropping flushes OTel logs/traces.
+	let _otel_guard = init_tracing(&config.app_env);
 
 	tokio::runtime::Builder::new_multi_thread()
 		.enable_all()
@@ -108,9 +109,22 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	axum::serve(listener, routes::router(state)).await.context("cabinet BFF HTTP server error")
 }
 
-fn init_tracing() {
+// Returns the OTel guard (flushes/shuts down on drop); bind it in `main`. `None`
+// when OTEL_EXPORTER_OTLP_ENDPOINT is unset — the layers are then inert.
+fn init_tracing(environment: &str) -> Option<ev::otel::Telemetry> {
 	use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,cabinet_backend=debug"));
-	tracing_subscriber::registry().with(filter).with(fmt::layer()).with(error_monitoring::tracing_layer()).init();
+	let (otel_guard, otel_layers) = ev::otel::telemetry(&ev::otel::Config {
+		environment: environment.to_string(),
+		traces_sample_rate: ev::otel::Config::traces_sample_rate_for(environment),
+	})
+	.unzip();
+	tracing_subscriber::registry()
+		.with(filter)
+		.with(fmt::layer().json())
+		.with(error_monitoring::tracing_layer())
+		.with(otel_layers)
+		.init();
+	otel_guard
 }

@@ -22,7 +22,8 @@ use tower::Layer;
 fn main() -> color_eyre::Result<()> {
 	color_eyre::install()?;
 	dotenvy::dotenv().ok();
-	init_tracing();
+	// Held for the process lifetime — dropping flushes OTel logs/traces.
+	let _otel_guard = init_tracing();
 
 	tokio::runtime::Builder::new_multi_thread()
 		.enable_all()
@@ -92,9 +93,19 @@ fn server_tls(tls: &TlsConfig) -> color_eyre::Result<ServerTlsConfig> {
 	Ok(config)
 }
 
-fn init_tracing() {
+// Returns the OTel guard (flushes/shuts down on drop); bind it in `main`. `None`
+// when OTEL_EXPORTER_OTLP_ENDPOINT is unset — the layers are then inert. Runs
+// before config load, so it reads APP_ENV directly for the sampling policy.
+fn init_tracing() -> Option<ev::otel::Telemetry> {
 	use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
+	let environment = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
 	let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,piggybank_signer=debug"));
-	tracing_subscriber::registry().with(filter).with(fmt::layer()).init();
+	let (otel_guard, otel_layers) = ev::otel::telemetry(&ev::otel::Config {
+		environment: environment.clone(),
+		traces_sample_rate: ev::otel::Config::traces_sample_rate_for(&environment),
+	})
+	.unzip();
+	tracing_subscriber::registry().with(filter).with(fmt::layer().json()).with(otel_layers).init();
+	otel_guard
 }

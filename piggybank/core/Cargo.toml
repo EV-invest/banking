@@ -20,7 +20,7 @@ reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 color-eyre.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
-ev = { workspace = true, features = ["analytics", "error_monitoring"] }
+ev = { workspace = true, features = ["analytics", "error_monitoring", "otel"] }
 evbanking_auth.workspace = true
 evbanking_contracts.workspace = true
 evconcierge_contracts.workspace = true
@@ -37,7 +37,7 @@ tonic-web.workspace = true
 tower.workspace = true
 tower-http = { workspace = true, features = ["trace"] }
 tracing.workspace = true
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"] }
 uuid = { workspace = true, features = ["v4", "v5"] }
 v_utils.workspace = true
 

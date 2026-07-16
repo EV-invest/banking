@@ -25,6 +25,7 @@ zeroize = { workspace = true }
 color-eyre.workspace = true
 domain.workspace = true
 dotenvy.workspace = true
+ev = { workspace = true, features = ["otel"] }
 evbanking_auth.workspace = true
 evbanking_contracts.workspace = true
 getrandom.workspace = true
@@ -36,7 +37,7 @@ tokio = { workspace = true, features = ["full"] }
 tonic = { workspace = true, features = ["tls-ring"] }
 tower.workspace = true
 tracing.workspace = true
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"] }
 uuid = { workspace = true, features = ["v4"] }
 
 [build-dependencies]
