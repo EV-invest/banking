@@ -9,6 +9,7 @@ import { fetchPositions } from "@/entities/fund/api/fund-client";
 import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
 import type { Position, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { displayName } from "@/views/profile/lib/format";
 
 const CARD = "rounded-[14px] border border-border bg-main-card";
@@ -19,13 +20,13 @@ const CARD = "rounded-[14px] border border-border bg-main-card";
 const EDITABLE = ["legal_name", "preferred_name", "phone", "date_of_birth", "nationality", "tax_residence", "residential_address", "language", "base_currency", "timezone"] as const;
 type Form = Record<(typeof EDITABLE)[number], string>;
 
-const SHOWN: { key: (typeof EDITABLE)[number]; label: string }[] = [
-  { key: "legal_name", label: "Legal name" },
+const SHOWN: { key: (typeof EDITABLE)[number]; label: string; tip?: TipKey }[] = [
+  { key: "legal_name", label: "Legal name", tip: "profile.field.legal-name" },
   { key: "preferred_name", label: "Preferred name" },
   { key: "phone", label: "Phone number" },
   { key: "date_of_birth", label: "Date of birth" },
-  { key: "nationality", label: "Nationality" },
-  { key: "tax_residence", label: "Tax residence" },
+  { key: "nationality", label: "Nationality", tip: "profile.field.nationality" },
+  { key: "tax_residence", label: "Tax residence", tip: "profile.field.tax-residence" },
   { key: "residential_address", label: "Residential address" },
 ];
 
@@ -150,8 +151,8 @@ export function ProfileView() {
             <p className="text-xs text-muted-foreground">Used for compliance and statements</p>
           </header>
           <div className="flex flex-wrap gap-[16px_18px]">
-            {SHOWN.map(({ key, label }) => (
-              <FieldBox key={key} label={label}>
+            {SHOWN.map(({ key, label, tip }) => (
+              <FieldBox key={key} label={label} tip={tip}>
                 {loading || !form ? (
                   <Skeleton className="h-[42px] w-full rounded-lg" />
                 ) : editing ? (
@@ -185,11 +186,14 @@ export function ProfileView() {
   );
 }
 
-function FieldBox({ label, trailing, children }: { label: string; trailing?: ReactNode; children: ReactNode }) {
+function FieldBox({ label, trailing, tip, children }: { label: string; trailing?: ReactNode; tip?: TipKey; children: ReactNode }) {
   return (
     <div className="min-w-[260px] flex-1">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {label}
+          {tip && <TipAnchor anchor={tip} />}
+        </span>
         {trailing}
       </div>
       {children}
@@ -206,6 +210,7 @@ function VerifiedTag() {
   return (
     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-main-accent-t1">
       <BadgeCheck className="size-3" /> Verified
+      <TipAnchor anchor="profile.email.verified" />
     </span>
   );
 }

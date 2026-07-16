@@ -10,6 +10,7 @@ import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
 import { publishProfile } from "@/entities/user/model/profile-store";
 import type { Session, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { TipAnchor } from "@/shared/tips";
 import { displayName } from "@/views/settings/lib/format";
 
 const CARD = "rounded-[14px] border border-border bg-main-card";
@@ -359,17 +360,23 @@ function SessionsSection({
               sub={metaOf(s, name)}
             >
               {s.current ? (
-                <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">This device</Badge>
+                <span className="flex items-center gap-1.5">
+                  <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">This device</Badge>
+                  <TipAnchor anchor="settings.sessions.this-device" />
+                </span>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => s.id && onRevoke(s.id)}
-                  className="border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
-                >
-                  Revoke
-                </Button>
+                <span className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => s.id && onRevoke(s.id)}
+                    className="border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
+                  >
+                    Revoke
+                  </Button>
+                  <TipAnchor anchor="settings.sessions.revoke" />
+                </span>
               )}
             </SettingRow>
           );
@@ -377,7 +384,7 @@ function SessionsSection({
       )}
 
       {!loading && hasOthers && (
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex items-center justify-end gap-1.5">
           <Button
             variant="outline"
             disabled={busy}
@@ -386,6 +393,7 @@ function SessionsSection({
           >
             {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />} Sign out all other devices
           </Button>
+          <TipAnchor anchor="settings.sessions.revoke-others" />
         </div>
       )}
     </section>

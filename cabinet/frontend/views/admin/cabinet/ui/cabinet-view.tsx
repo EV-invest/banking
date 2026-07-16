@@ -8,6 +8,7 @@ import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 import { fetchCabinet, setAnnouncement, setFeatureFlag, setMaintenance, setReadOnly } from "@/entities/admin/api/admin-client";
 import { apiPath } from "@/shared/config/base-path";
 import type { CabinetConfig, FeatureFlag } from "@/shared/contracts/admin";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { AdminHeader, StatusDot, Toggle } from "@/views/admin/ui/shell";
 
 interface MfeEntry {
@@ -110,8 +111,9 @@ export function CabinetView() {
                 <div key={f.key} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <p className="truncate font-mono-tech text-sm">{f.key}</p>
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
                       {f.rollout}% {f.description ? `· ${f.description}` : ""}
+                      <TipAnchor anchor="admin.cabinet.flags.rollout" />
                     </p>
                   </div>
                   <Toggle on={f.enabled} onChange={() => toggleFlag(f)} label={f.key} />
@@ -135,8 +137,9 @@ export function CabinetView() {
                 hint="Holding page on the cabinet (identity plane)"
                 on={config.platform.maintenance_mode}
                 onChange={toggleMaintenance}
+                tip="admin.cabinet.maintenance"
               />
-              <ToggleRow label="Read-only mode" hint="Pause deposits & withdrawals (money plane)" on={config.read_only} onChange={toggleReadOnly} />
+              <ToggleRow label="Read-only mode" hint="Pause deposits & withdrawals (money plane)" on={config.read_only} onChange={toggleReadOnly} tip="admin.cabinet.readonly" />
             </div>
           )}
         </Panel>
@@ -159,11 +162,14 @@ function Panel({ title, subtitle, children }: { title: string; subtitle: string;
   );
 }
 
-function ToggleRow({ label, hint, on, onChange }: { label: string; hint: string; on: boolean; onChange: (next: boolean) => void }) {
+function ToggleRow({ label, hint, on, onChange, tip }: { label: string; hint: string; on: boolean; onChange: (next: boolean) => void; tip?: TipKey }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div>
-        <p className="text-sm">{label}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm">{label}</p>
+          {tip && <TipAnchor anchor={tip} />}
+        </div>
         <p className="text-xs text-muted-foreground">{hint}</p>
       </div>
       <Toggle on={on} onChange={onChange} label={label} />
@@ -194,7 +200,7 @@ function AnnouncementForm({ config, onSaved, onError }: { config: CabinetConfig;
       <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Announcement title" />
       <Input value={body} onChange={(e) => setBody(e.target.value)} placeholder="Body" />
       <div className="flex items-center justify-between">
-        <ToggleRow label="Live" hint="Show the banner now" on={active} onChange={setActive} />
+        <ToggleRow label="Live" hint="Show the banner now" on={active} onChange={setActive} tip="admin.cabinet.announcement.live" />
       </div>
       <Button type="button" variant="outline" size="sm" disabled={saving} onClick={save}>
         Save announcement
