@@ -10,7 +10,6 @@
 
 use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
-use clap::Parser;
 use color_eyre::eyre::{Context, ensure, eyre};
 use domain::money::Network;
 use ev::error_monitoring::{self, Config as SentryConfig};
@@ -57,29 +56,21 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::{Certificate, ClientTlsConfig, Endpoint, Identity};
 
-#[derive(Parser)]
-struct Cli {
-	#[clap(flatten)]
-	settings_flags: config::SettingsFlags,
-}
-
 // Sentry must be initialised before the async runtime starts — no #[tokio::main].
 fn main() -> color_eyre::Result<()> {
 	color_eyre::install()?;
 	dotenvy::dotenv().ok();
 
-	let cli = Cli::parse();
-	// The live handle drives hot reload (the admin allowlist is read through it at
-	// request time); the boot snapshot below feeds the infra that's built once. A
-	// missing `{ env = "VAR" }` ref in the prod config fails HERE, before anything binds.
-	let settings = Arc::new(v_utils::utils::exit_on_error(config::LiveSettings::new(cli.settings_flags, Duration::from_secs(60))));
-	let config = v_utils::utils::exit_on_error(settings.config());
+	// One env read at boot; every missing/invalid variable fails HERE, in one
+	// aggregate error, before anything binds.
+	let config = config::AppConfig::from_env()?;
 
 	// Guard must stay alive for the duration of main — dropping it flushes events.
 	// `None` DSN → `init` returns `None`, so this binding is simply inert.
 	let _sentry_guard = error_monitoring::init(&SentryConfig {
 		dsn: config.sentry_dsn.clone(),
 		environment: config.app_env.clone(),
+		release: error_monitoring::release_name!().map(|r| r.into_owned()),
 		traces_sample_rate: SentryConfig::traces_sample_rate_for(&config.app_env),
 	});
 
@@ -90,13 +81,10 @@ fn main() -> color_eyre::Result<()> {
 		.enable_all()
 		.build()
 		.context("failed to build tokio runtime")?
-		.block_on(run(settings))
+		.block_on(run(config))
 }
 
-async fn run(settings: Arc<config::LiveSettings>) -> color_eyre::Result<()> {
-	// Boot snapshot for the infra built once; the live `settings` handle is what
-	// AppState reads the admin allowlist through (hot-reloaded at request time).
-	let config = settings.config().context("failed to load configuration")?;
+async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// The on-chain rails keep their env-based conditional construction — a rail
 	// runs only when its endpoint var is set. Production asserts the rail set below.
 	let rails = Rails::from_env().context("failed to load the on-chain rail configuration")?;
@@ -388,7 +376,7 @@ async fn run(settings: Arc<config::LiveSettings>) -> color_eyre::Result<()> {
 		custody,
 		Arc::from(rails.configured_networks()),
 		relay_notify,
-		settings.clone(),
+		config.admin_subjects.clone(),
 		rails.ton.as_ref().is_some_and(|ton| ton.is_testnet),
 	);
 

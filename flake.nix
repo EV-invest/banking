@@ -285,12 +285,6 @@
         '';
 
         tbProd = import ./deploy/tigerbeetle.nix;
-        # Topology literals live in deploy/{piggybank,cabinet-backend}.nix (baked
-        # to JSON below); each contract env keeps only what the binary reads as
-        # env: the config's `{ env = ... }` refs plus the direct env seams (redis
-        # refresh store, signing kid, TigerBeetle identity via settings aliases).
-        piggybankProdConfig = pkgs.writeText "config.json" (builtins.toJSON (import ./deploy/piggybank.nix));
-        cabinetBackendProdConfig = pkgs.writeText "config.json" (builtins.toJSON (import ./deploy/cabinet-backend.nix));
         # Secret env (signing key, JWKS, issuance/bridge tokens, WALLET_KEK) arrives
         # via the k8s Secrets gitops/k3s own — never baked into contracts or images.
         containerStd = v_flakes.container.implement {
@@ -301,7 +295,7 @@
             # probes; the path is a required contract placeholder.
             healthPath = "/";
             criticality = "normal";
-            entrypoint = [ "/bin/piggybank" "--config" "${piggybankProdConfig}" ];
+            entrypoint = [ "/bin/piggybank" ];
             contents = [ bankingBins ];
             env = {
               DATABASE_URL = "postgres://evinvest@10.42.0.1:5432/banking";
@@ -313,11 +307,9 @@
               TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
               AUTH_SIGNING_KID = "prod-1";
               RUST_LOG = "info";
-              # Transition compat: pre-LiveSettings images read topology from the
-              # Deployment env, and a rollback must land on a working pod. Values
-              # duplicate deploy/piggybank.nix EXACTLY (the settings env aliases
-              # beat the file, so any drift here would win — keep them identical).
-              # Drop once the fleet is confidently past pre-LiveSettings tags.
+              # The canonical prod topology (secret-free, committable): the binary
+              # reads env only (ev_lib::settings), and gitops' Deployment env
+              # carries the same values — keep the two in step.
               GRPC_ADDR = "0.0.0.0:50051";
               AUTH_GRPC_ADDR = "0.0.0.0:50052";
               SIGNER_GRPC_ADDR = "http://127.0.0.1:50053";
@@ -345,18 +337,20 @@
             port = 50062;
             healthPath = "/api/health";
             criticality = "normal";
-            entrypoint = [ "/bin/cabinet-backend" "--config" "${cabinetBackendProdConfig}" ];
+            entrypoint = [ "/bin/cabinet-backend" ];
             contents = [ bankingBins mfeRegistryRoot ];
             env = {
               RUST_LOG = "info";
-              # Transition compat: pre-LiveSettings images read topology from the
-              # Deployment env, and a rollback must land on a working pod. Values
-              # duplicate deploy/cabinet-backend.nix EXACTLY. Drop once the fleet
-              # is confidently past pre-LiveSettings tags.
+              # The canonical prod topology (secret-free, committable): the binary
+              # reads env only (ev_lib::settings), and gitops' Deployment env
+              # carries the same values — keep the two in step.
               CABINET_BACKEND_BIND = "0.0.0.0:50062";
               PIGGYBANK_GRPC_ADDR = "http://ev-banking-piggybank:50051";
               BANKING_AUTH_GRPC_ADDR = "http://ev-banking-piggybank:50052";
               CONCIERGE_GRPC_ADDR = "http://concierge:55670";
+              # Mirror the concierge plane's (assert_plane-checked) identity values.
+              AUTH_ISSUER = "https://auth.concierge.ev";
+              AUTH_CLIENT_AUDIENCE = "concierge";
               MFE_REGISTRY_PATH = "/mfe-registry.json";
               APP_ENV = "production";
             };
@@ -473,7 +467,7 @@
             # mint the money-plane pair. Must match the cabinet-backend value below.
             export BANKING_ISSUANCE_TOKEN="''${BANKING_ISSUANCE_TOKEN:-dev-issuance-token}"
             # LiveSettings has no Rust-side default for app_env (String field);
-            # dev topology is owned here, prod literals live in deploy/piggybank.nix.
+            # dev topology is owned here, prod literals live in the piggybank container env (containerStd).
             export APP_ENV="''${APP_ENV:-development}"
             exec cargo run -p piggybank-core
           '';
@@ -546,8 +540,8 @@
 
             ${portEnv}
             # Env aliases mirror AppConfig field names (LiveSettings `use_env`);
-            # dev topology is owned here, prod literals live in deploy/cabinet-backend.nix.
-            export BIND="''${BIND:-0.0.0.0:$CABINET_BACKEND_PORT}"
+            # dev topology is owned here, prod literals live in the cabinet-backend container env (containerStd).
+            export CABINET_BACKEND_BIND="''${CABINET_BACKEND_BIND:-0.0.0.0:$CABINET_BACKEND_PORT}"
             export PIGGYBANK_GRPC_ADDR="''${PIGGYBANK_GRPC_ADDR:-http://127.0.0.1:$PIGGYBANK_CORE_PORT}"
             export BANKING_AUTH_GRPC_ADDR="''${BANKING_AUTH_GRPC_ADDR:-http://127.0.0.1:$PIGGYBANK_AUTH_PORT}"
             # Money-plane token-exchange seam — must match the piggybank hub's BANKING_ISSUANCE_TOKEN.
