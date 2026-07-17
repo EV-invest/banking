@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, 
 import { cancelRedemption, fetchFundNav, fetchPositions, fetchRedemptions, submitRedeem, submitSubscribe } from "@/entities/fund/api/fund-client";
 import type { FundNav, Position, Redemption } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
@@ -97,16 +98,20 @@ function PositionCard({ position }: { position: Position }) {
           {nav?.stale && (
             <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
               <Clock className="size-3" /> Stale NAV
+              <TipAnchor anchor="invest.position.stale-nav" />
             </Badge>
           )}
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Stat label="Units" value={`${formatUnits(position.units)}`} />
-          <Stat label="NAV" value={`${formatUsdt(position.nav)} USDT`} />
-          <Stat label="Value" value={`${formatUsdt(position.value)} USDT`} emphasis />
+          <Stat label="Units" value={`${formatUnits(position.units)}`} tip="invest.position.units" />
+          <Stat label="NAV" value={`${formatUsdt(position.nav)} USDT`} tip="invest.position.nav" />
+          <Stat label="Value" value={`${formatUsdt(position.value)} USDT`} emphasis tip="invest.position.value" />
         </div>
         <div className="flex items-center justify-between rounded-lg border border-border bg-main-surface p-3 text-sm">
-          <span className="text-muted-foreground">Profit &amp; loss</span>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            Profit &amp; loss
+            <TipAnchor anchor="invest.position.pnl" />
+          </span>
           <span className={cn("flex items-center gap-1 font-semibold tabular-nums", pnlColor)}>
             <TrendingUp className={cn("size-4", loss && !flat && "rotate-180")} />
             {formatSignedUsdt(position.pnl)} USDT
@@ -138,10 +143,13 @@ function PositionsList({ positions }: { positions: Position[] | null }) {
   );
 }
 
-function Stat({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+function Stat({ label, value, emphasis, tip }: { label: string; value: string; emphasis?: boolean; tip?: TipKey }) {
   return (
     <div className="rounded-lg border border-border bg-main-surface p-4">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+        {tip && <TipAnchor anchor={tip} />}
+      </div>
       <p className={cn("tabular-nums", emphasis ? "text-2xl font-semibold" : "text-lg")}>{value}</p>
     </div>
   );
@@ -194,12 +202,18 @@ function SubscribePanel({ onDone }: { onDone: () => void }) {
       <Card>
         <CardContent className="space-y-4 pt-6">
           <label className="block space-y-1.5">
-            <span className="text-sm">Fund</span>
+            <span className="flex items-center gap-1.5 text-sm">
+              Fund
+              <TipAnchor anchor="invest.subscribe.fund" />
+            </span>
             <Input value={service} onChange={(e) => setService(e.target.value)} placeholder="fund id" spellCheck={false} />
           </label>
 
           <label className="block space-y-1.5">
-            <span className="text-sm">Amount</span>
+            <span className="flex items-center gap-1.5 text-sm">
+              Amount
+              <TipAnchor anchor="invest.subscribe.amount" />
+            </span>
             <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" />
           </label>
 
@@ -291,7 +305,10 @@ function RedeemRow({ position, onDone }: { position: Position; onDone: () => voi
         <div className="flex items-end gap-2">
           <label className="block flex-1 space-y-1.5">
             <span className="flex items-center justify-between text-sm">
-              <span>Units to redeem</span>
+              <span className="flex items-center gap-1.5">
+                Units to redeem
+                <TipAnchor anchor="invest.redeem.units" />
+              </span>
               <button type="button" className="text-xs text-main-accent-t1 hover:underline" onClick={() => setUnits(position.units ?? "0")}>
                 Max
               </button>
@@ -361,7 +378,7 @@ function ActivityPanel() {
   return (
     <Card>
       <CardContent className="divide-y divide-border p-0">
-        {items.map((r) => {
+        {items.map((r, i) => {
           const id = r.id ?? "";
           return (
             <div key={id} className="flex items-center justify-between gap-4 px-4 py-3">
@@ -374,11 +391,15 @@ function ActivityPanel() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <StatusPill state={r.state} />
+                {i === 0 && <TipAnchor anchor="invest.activity.status" />}
                 {r.state === "queued" && (
-                  <Button type="button" variant="outline" size="sm" disabled={busy === id} onClick={() => cancel(id)}>
-                    {busy === id ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
-                    Cancel
-                  </Button>
+                  <>
+                    <Button type="button" variant="outline" size="sm" disabled={busy === id} onClick={() => cancel(id)}>
+                      {busy === id ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+                      Cancel
+                    </Button>
+                    <TipAnchor anchor="invest.activity.cancel" />
+                  </>
                 )}
               </div>
             </div>

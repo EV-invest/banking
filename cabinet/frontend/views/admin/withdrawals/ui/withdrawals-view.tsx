@@ -7,6 +7,7 @@ import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
 import { dispatchWithdrawal, failWithdrawal, fetchWithdrawalQueue, settleWithdrawal } from "@/entities/admin/api/admin-client";
 import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
+import { TipAnchor } from "@/shared/tips";
 import { ago, usd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
@@ -82,9 +83,24 @@ export function WithdrawalsView() {
                 <thead>
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="px-5 py-3 font-medium">User</th>
-                    <th className="px-5 py-3 font-medium">Destination</th>
-                    <th className="px-5 py-3 font-medium">Gross / net</th>
-                    <th className="px-5 py-3 font-medium">State</th>
+                    <th className="px-5 py-3 font-medium">
+                      <span className="flex items-center gap-1.5">
+                        Destination
+                        <TipAnchor anchor="admin.withdrawals.destination" />
+                      </span>
+                    </th>
+                    <th className="px-5 py-3 font-medium">
+                      <span className="flex items-center gap-1.5">
+                        Gross / net
+                        <TipAnchor anchor="admin.withdrawals.gross-net" />
+                      </span>
+                    </th>
+                    <th className="px-5 py-3 font-medium">
+                      <span className="flex items-center gap-1.5">
+                        State
+                        <TipAnchor anchor="admin.withdrawals.state" />
+                      </span>
+                    </th>
                     <th className="px-5 py-3 font-medium">Age</th>
                     <th className="px-5 py-3 text-right font-medium">Actions</th>
                   </tr>
@@ -210,6 +226,7 @@ function WithdrawalRow({
                   spellCheck={false}
                   className="max-w-xl font-mono-tech text-xs"
                 />
+                <TipAnchor anchor="admin.withdrawals.settle.tx-hash" />
                 <Button type="button" size="sm" disabled={busy || !txRef.trim()} onClick={onSettle}>
                   {busy ? <Loader2 className="size-4 animate-spin" /> : null}
                   Confirm settle

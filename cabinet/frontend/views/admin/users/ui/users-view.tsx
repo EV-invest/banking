@@ -8,6 +8,7 @@ import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 import { fetchUser, fetchUserBalance, fetchUsers, reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
 import type { AdminUserProfile, AdminUserSummary, UserBalance } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ROLES, ago, statusTone, usd } from "@/views/admin/lib/format";
 import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
 
@@ -208,13 +209,16 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
 
         <Section title="Identity">
           <Row label="Joined" value={ago(summary.created_at)} />
-          <Row label="Token version" value={`v${profile?.token_version ?? summary.token_version}`} />
+          <Row label="Token version" value={`v${profile?.token_version ?? summary.token_version}`} tip="admin.users.identity.token-version" />
           <Row label="Balance" value={balance ? `${usd(balance.amount)} USDT` : "—"} />
         </Section>
 
         <Section title="Access & security">
           <label className="flex items-center justify-between gap-2 py-1 text-sm">
-            <span className="text-muted-foreground">Role</span>
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              Role
+              <TipAnchor anchor="admin.users.access.role" />
+            </span>
             <select
               value={role}
               disabled={busy === "role"}
@@ -229,7 +233,10 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
             </select>
           </label>
           <label className="flex items-center justify-between gap-2 py-1 text-sm">
-            <span className="text-muted-foreground">KYC level</span>
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              KYC level
+              <TipAnchor anchor="admin.users.access.kyc-level" />
+            </span>
             <input
               type="number"
               min={0}
@@ -246,7 +253,10 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
             {busy === "revoke" ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Revoke all sessions
           </Button>
-          <p className="pt-1 text-[11px] text-muted-foreground">Bumps token_version — invalidates every JWT issued to this user.</p>
+          <p className="flex items-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
+            Bumps token_version — invalidates every JWT issued to this user.
+            <TipAnchor anchor="admin.users.access.revoke-sessions" />
+          </p>
         </Section>
 
         <div className="flex gap-2">
@@ -266,6 +276,7 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
               <ShieldBan className="size-3.5" /> Suspend
             </Button>
           )}
+          <TipAnchor anchor="admin.users.status.suspend" className="self-center" />
         </div>
       </CardContent>
     </Card>
@@ -281,10 +292,13 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, tip }: { label: string; value: string; tip?: TipKey }) {
   return (
     <div className="flex items-center justify-between py-1 text-sm">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        {label}
+        {tip && <TipAnchor anchor={tip} />}
+      </span>
       <span className="tabular-nums">{value}</span>
     </div>
   );

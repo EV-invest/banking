@@ -7,6 +7,7 @@ import { Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { fetchTreasury } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { usd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
@@ -51,10 +52,10 @@ export function TreasuryView() {
       <section className="space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Layer 1 · Ledger — user claims (USDT)</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MoneyCard label="Claims · total (USDT)" value={treasury?.total_custody} hint="= on-chain custody · backed" loading={!treasury} />
-          <MoneyCard label="Held for clients" value={treasury?.held_for_clients} hint="user + service balances" loading={!treasury} />
-          <MoneyCard label="Fund capital" value={treasury?.fund_capital} hint="company's own" loading={!treasury} />
-          <MoneyCard label="Reserved · withdrawals" value={treasury?.reserved_for_withdrawals} hint="queued + in-flight (clearing)" loading={!treasury} />
+          <MoneyCard label="Claims · total (USDT)" value={treasury?.total_custody} hint="= on-chain custody · backed" loading={!treasury} tip="admin.treasury.layer1.claims-total" />
+          <MoneyCard label="Held for clients" value={treasury?.held_for_clients} hint="user + service balances" loading={!treasury} tip="admin.treasury.layer1.held-for-clients" />
+          <MoneyCard label="Fund capital" value={treasury?.fund_capital} hint="company's own" loading={!treasury} tip="admin.treasury.layer1.fund-capital" />
+          <MoneyCard label="Reserved · withdrawals" value={treasury?.reserved_for_withdrawals} hint="queued + in-flight (clearing)" loading={!treasury} tip="admin.treasury.layer1.reserved-withdrawals" />
         </div>
       </section>
 
@@ -66,7 +67,7 @@ export function TreasuryView() {
               {treasury.rails.map((rail) => (
                 <MoneyCard key={rail.network} label={RAIL_LABELS[rail.network] ?? rail.network} value={rail.custody} loading={false} footer={<RailFunding rail={rail} />} />
               ))}
-              <MoneyCard label="Bank · USD" value={treasury.bank} hint="off-ramp · FX" loading={false} />
+              <MoneyCard label="Bank · USD" value={treasury.bank} hint="off-ramp · FX" loading={false} tip="admin.treasury.bank" />
             </>
           ) : (
             Array.from({ length: 4 }).map((_, i) => <MoneyCard key={i} label="" value={undefined} loading />)
@@ -82,11 +83,14 @@ export function TreasuryView() {
   );
 }
 
-function MoneyCard({ label, value, hint, loading, footer }: { label: string; value: string | undefined; hint?: string; loading: boolean; footer?: ReactNode }) {
+function MoneyCard({ label, value, hint, loading, footer, tip }: { label: string; value: string | undefined; hint?: string; loading: boolean; footer?: ReactNode; tip?: TipKey }) {
   return (
     <Card>
       <CardContent className="space-y-1 py-5">
-        <p className="text-xs text-muted-foreground">{label || "…"}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs text-muted-foreground">{label || "…"}</p>
+          {tip && <TipAnchor anchor={tip} />}
+        </div>
         {loading ? <Skeleton className="mt-1 h-8 w-28" /> : <p className="text-3xl font-semibold tabular-nums">{usd(value)}</p>}
         {hint && !loading && <p className="text-xs text-main-accent-t2">{hint}</p>}
         {footer && !loading && footer}
@@ -101,9 +105,12 @@ function RailFunding({ rail }: { rail: RailLiquidity }) {
   return (
     <div className="space-y-1 border-t border-border pt-2">
       {rail.treasury_address ? (
-        <p className="font-mono-tech text-xs text-muted-foreground" title={rail.treasury_address}>
-          {shortAddr(rail.treasury_address)}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className="font-mono-tech text-xs text-muted-foreground" title={rail.treasury_address}>
+            {shortAddr(rail.treasury_address)}
+          </p>
+          <TipAnchor anchor="admin.treasury.rail.address" />
+        </div>
       ) : (
         <p className="text-xs text-muted-foreground">— · custody unconfigured</p>
       )}
@@ -111,8 +118,9 @@ function RailFunding({ rail }: { rail: RailLiquidity }) {
       <FundingRow label="Gas" value={rail.onchain_gas ? `${qty(rail.onchain_gas)} ${GAS_SYMBOLS[rail.network] ?? ""}`.trimEnd() : undefined} />
       {rail.gas_station_address && (
         <>
-          <p className="pt-1 text-xs text-muted-foreground">
+          <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
             Gas station <span className="text-main-accent-t2">(fund {GAS_SYMBOLS[rail.network] ?? "gas"} here — pays sweep gas drops)</span>
+            <TipAnchor anchor="admin.treasury.rail.gas-station" />
           </p>
           <p className="font-mono-tech text-xs text-muted-foreground" title={rail.gas_station_address}>
             {shortAddr(rail.gas_station_address)}

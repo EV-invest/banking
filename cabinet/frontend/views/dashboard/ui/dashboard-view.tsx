@@ -10,6 +10,7 @@ import { fetchPositions, fetchRedemptions } from "@/entities/fund/api/fund-clien
 import { fetchWallet, fetchWithdrawals } from "@/entities/wallet/api/wallet-client";
 import type { Position, Redemption, Wallet, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatMoney, formatPct, formatSignedMoney, num, shortAddress } from "@/views/dashboard/lib/format";
 
 const CARD = "rounded-[14px] border border-border bg-main-card";
@@ -82,13 +83,13 @@ export function DashboardView() {
 
       {/* stat strip */}
       <div className={cn(CARD, "flex flex-wrap items-stretch gap-x-7 gap-y-4 px-[26px] py-5")}>
-        <Stat label="Unrealized P&L" value={walletLoading || posLoading ? null : formatSignedMoney(pnlSum)} tone={pnlSum < 0 ? "loss" : "gain"} hint="across all positions" />
+        <Stat label="Unrealized P&L" value={walletLoading || posLoading ? null : formatSignedMoney(pnlSum)} tone={pnlSum < 0 ? "loss" : "gain"} hint="across all positions" tip="dashboard.stats.unrealized-pnl" />
         <Divider />
-        <Stat label="Available" value={walletLoading ? null : formatMoney(balance?.available)} hint="free to deploy" />
+        <Stat label="Available" value={walletLoading ? null : formatMoney(balance?.available)} hint="free to deploy" tip="dashboard.stats.available" />
         <Divider />
         <Stat label="Active strategies" value={posLoading ? null : String(pos.length)} hint="fund positions" />
         <Divider />
-        <Stat label="Net invested" value={posLoading ? null : formatMoney(netContributed)} hint="at cost basis" />
+        <Stat label="Net invested" value={posLoading ? null : formatMoney(netContributed)} hint="at cost basis" tip="dashboard.stats.net-invested" />
       </div>
 
       {/* operations */}
@@ -125,13 +126,17 @@ function PerfCard({ value, loading, allTimePct }: { value: string | undefined; l
     <div className={cn(CARD, "flex flex-1 flex-col gap-[18px] px-[22px] py-5")}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] font-medium text-main-accent-t1/85">PORTFOLIO VALUE</p>
+          <p className="flex items-center gap-1.5 text-[11px] font-medium text-main-accent-t1/85">
+            PORTFOLIO VALUE
+            <TipAnchor anchor="dashboard.performance.portfolio-value" />
+          </p>
           <div className="flex items-center gap-[14px]">
             {loading ? <Skeleton className="h-12 w-48" /> : <p className="text-[46px] font-semibold leading-none text-white tabular-nums">{formatMoney(value)}</p>}
             {allTimePct !== null && (
               <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold", down ? "bg-main-accent-t4/15 text-main-accent-t4" : "bg-main-accent-t3/15 text-main-accent-t3")}>
                 {down ? <TrendingDown className="size-3.5" /> : <TrendingUp className="size-3.5" />}
                 {formatPct(allTimePct)} all-time
+                <TipAnchor anchor="dashboard.performance.all-time-return" />
               </span>
             )}
           </div>
@@ -192,8 +197,9 @@ function MoveMoney() {
       </div>
       <div className="flex items-center gap-3 rounded-[10px] border border-border bg-main-surface px-[14px] py-3">
         <div className="min-w-0 flex-1">
-          <p id="auto-deploy-label" className="text-[13px] font-semibold text-main-mist">
+          <p id="auto-deploy-label" className="flex items-center gap-1.5 text-[13px] font-semibold text-main-mist">
             Auto-deploy idle cash
+            <TipAnchor anchor="dashboard.move-money.auto-deploy" />
           </p>
           <p className="text-[11px] text-muted-foreground">Available balance commits at end of day</p>
         </div>
@@ -216,7 +222,10 @@ function WhatIOwn({ allocations, total, loading }: { allocations: { name: string
   return (
     <div className={cn(CARD, "flex flex-col gap-4 px-[22px] py-5")}>
       <div className="flex items-center justify-between">
-        <p className="text-[15px] font-semibold text-white">Invested · what I own</p>
+        <p className="flex items-center gap-1.5 text-[15px] font-semibold text-white">
+          Invested · what I own
+          <TipAnchor anchor="dashboard.invested.allocation" />
+        </p>
         <p className="text-xs text-muted-foreground">
           {allocations.length} {allocations.length === 1 ? "strategy" : "strategies"}
         </p>
@@ -250,11 +259,14 @@ function WhatIOwn({ allocations, total, loading }: { allocations: { name: string
   );
 }
 
-function Stat({ label, value, tone, hint }: { label: string; value: string | null; tone?: "gain" | "loss"; hint: string }) {
+function Stat({ label, value, tone, hint, tip }: { label: string; value: string | null; tone?: "gain" | "loss"; hint: string; tip?: TipKey }) {
   const valueClass = tone === "gain" ? "text-main-accent-t2" : tone === "loss" ? "text-main-accent-t4" : "text-white";
   return (
     <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        {tip && <TipAnchor anchor={tip} />}
+      </div>
       {value === null ? <Skeleton className="h-6 w-20" /> : <p className={cn("text-[23px] font-semibold tabular-nums", valueClass)}>{value}</p>}
       <p className="text-[11px] text-muted-foreground">{hint}</p>
     </div>

@@ -9,6 +9,7 @@ import { failRedemption, fetchRedemptionQueue, postValuation, settleRedemption }
 import { apiPath } from "@/shared/config/base-path";
 import type { FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { TipAnchor } from "@/shared/tips";
 import { ago, usd } from "@/views/admin/lib/format";
 import { AdminHeader, Toggle } from "@/views/admin/ui/shell";
 
@@ -109,11 +110,17 @@ export function ValuationView() {
                 <Input value={service} onChange={(e) => setService(e.target.value)} onBlur={() => loadNav(service)} spellCheck={false} />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-sm text-muted-foreground">AUM (USDT)</span>
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  AUM (USDT)
+                  <TipAnchor anchor="admin.valuation.post.aum" />
+                </span>
                 <Input value={aum} onChange={(e) => setAum(e.target.value)} inputMode="decimal" placeholder="0.00" />
               </label>
               <div className="space-y-1.5">
-                <span className="text-sm text-muted-foreground">Derived NAV / share</span>
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  Derived NAV / share
+                  <TipAnchor anchor="admin.valuation.post.derived-nav" />
+                </span>
                 <div className="flex h-9 items-center rounded-md border border-main-accent-t1/40 bg-main-accent-t1/10 px-3 text-sm">
                   <span className="font-semibold text-main-accent-t1 tabular-nums">{derivedNav ? `$${derivedNav.toFixed(4)}` : "—"}</span>
                   {units > 0 && <span className="ml-2 text-xs text-muted-foreground">= AUM / {units.toLocaleString("en-US")} units</span>}
@@ -130,7 +137,10 @@ export function ValuationView() {
               <div className="flex items-center gap-2">
                 <Toggle on={override} onChange={setOverride} label="Override guard" />
                 <div className="text-sm">
-                  <p>Override guard</p>
+                  <p className="flex items-center gap-1.5">
+                    Override guard
+                    <TipAnchor anchor="admin.valuation.post.override" />
+                  </p>
                   <p className="text-xs text-muted-foreground">Allow a &gt;50% NAV move</p>
                 </div>
               </div>
@@ -164,7 +174,12 @@ export function ValuationView() {
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="px-5 py-3 font-medium">User</th>
                     <th className="px-5 py-3 font-medium">Units</th>
-                    <th className="px-5 py-3 font-medium">Est. cash</th>
+                    <th className="px-5 py-3 font-medium">
+                      <span className="flex items-center gap-1.5">
+                        Est. cash
+                        <TipAnchor anchor="admin.valuation.queue.est-cash" />
+                      </span>
+                    </th>
                     <th className="px-5 py-3 font-medium">Age</th>
                     <th className="px-5 py-3 text-right font-medium">Actions</th>
                   </tr>
@@ -183,19 +198,25 @@ export function ValuationView() {
                         <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at)}</td>
                         <td className="px-5 py-3">
                           <div className="flex justify-end gap-2">
-                            <Button type="button" variant="outline" size="sm" disabled={busy === item.redemption_id} onClick={() => act(settleRedemption, item.redemption_id)}>
-                              Settle
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                              disabled={busy === item.redemption_id}
-                              onClick={() => act(failRedemption, item.redemption_id)}
-                            >
-                              Fail
-                            </Button>
+                            <span className="inline-flex items-center gap-1">
+                              <Button type="button" variant="outline" size="sm" disabled={busy === item.redemption_id} onClick={() => act(settleRedemption, item.redemption_id)}>
+                                Settle
+                              </Button>
+                              <TipAnchor anchor="admin.valuation.queue.settle" />
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                disabled={busy === item.redemption_id}
+                                onClick={() => act(failRedemption, item.redemption_id)}
+                              >
+                                Fail
+                              </Button>
+                              <TipAnchor anchor="admin.valuation.queue.fail" />
+                            </span>
                           </div>
                         </td>
                       </tr>

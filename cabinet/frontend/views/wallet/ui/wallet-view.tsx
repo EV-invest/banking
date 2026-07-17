@@ -9,6 +9,7 @@ import { cancelWithdrawal, fetchDepositAddress, fetchDeposits, fetchWallet, fetc
 import type { Deposit, DepositAddress, NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { tonFriendlyAddress } from "@/shared/lib/ton-address";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { DepositQr } from "@/views/wallet/ui/deposit-qr";
 import { formatUsdt, fromBaseUnits, isEvmRail, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 
@@ -71,9 +72,9 @@ export function WalletView() {
             <WalletIcon className="size-10 text-main-accent-t1/60" />
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Stat label="Available" value={balance?.available} loading={!balance} emphasis />
-            <Stat label="Invested" value={balance?.invested} loading={!balance} hint="Held in fund units, valued at the current NAV." />
-            <Stat label="Pending withdrawal" value={balance?.pending_withdrawal} loading={!balance} />
+            <Stat label="Available" value={balance?.available} loading={!balance} emphasis tip="wallet.balance.available" />
+            <Stat label="Invested" value={balance?.invested} loading={!balance} tip="wallet.balance.invested" />
+            <Stat label="Pending withdrawal" value={balance?.pending_withdrawal} loading={!balance} tip="wallet.balance.pending-withdrawal" />
           </div>
         </CardContent>
       </Card>
@@ -105,10 +106,13 @@ export function WalletView() {
   );
 }
 
-function Stat({ label, value, loading, emphasis, hint }: { label: string; value: string | undefined; loading?: boolean; emphasis?: boolean; hint?: string }) {
+function Stat({ label, value, loading, emphasis, tip }: { label: string; value: string | undefined; loading?: boolean; emphasis?: boolean; tip?: TipKey }) {
   return (
-    <div className="rounded-lg border border-border bg-main-surface p-4" title={hint}>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+    <div className="rounded-lg border border-border bg-main-surface p-4">
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+        {tip && <TipAnchor anchor={tip} />}
+      </div>
       {loading ? (
         <Skeleton className="mt-1 h-7 w-24" />
       ) : (
@@ -195,10 +199,19 @@ function DepositPanel({ wallet }: { wallet: Wallet | null }) {
 
   return (
     <div className="max-w-xl space-y-5">
-      <NetworkPicker networks={networks} value={network} onChange={selectNetwork} />
+      <div className="space-y-1.5">
+        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          Network
+          <TipAnchor anchor="wallet.deposit.network" />
+        </span>
+        <NetworkPicker networks={networks} value={network} onChange={selectNetwork} />
+      </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Your {networkLabel(network)} deposit address</CardTitle>
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            Your {networkLabel(network)} deposit address
+            <TipAnchor anchor="wallet.deposit.address" />
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -306,14 +319,20 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
 
   return (
     <div className="max-w-xl space-y-5">
-      <NetworkPicker
-        networks={networks}
-        value={network}
-        onChange={(n) => {
-          setSelected(n);
-          setConfirming(null);
-        }}
-      />
+      <div className="space-y-1.5">
+        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          Network
+          <TipAnchor anchor="wallet.withdraw.network" />
+        </span>
+        <NetworkPicker
+          networks={networks}
+          value={network}
+          onChange={(n) => {
+            setSelected(n);
+            setConfirming(null);
+          }}
+        />
+      </div>
 
       {done && (
         <Alert>
@@ -337,7 +356,10 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
       <Card>
         <CardContent className="space-y-4">
           <label className="block space-y-1.5">
-            <span className="text-sm">Destination address</span>
+            <span className="flex items-center gap-1.5 text-sm">
+              Destination address
+              <TipAnchor anchor="wallet.withdraw.destination" />
+            </span>
             <Input
               value={address}
               onChange={(e) => {
@@ -375,8 +397,8 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
           </label>
 
           <div className="space-y-1 rounded-lg border border-border bg-main-surface p-3 text-sm">
-            <Row label="Network fee" value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} />
-            <Row label="You will receive" value={`${formatUsdt(youReceive)} USDT`} strong />
+            <Row label="Network fee" value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} tip="wallet.withdraw.network-fee" />
+            <Row label="You will receive" value={`${formatUsdt(youReceive)} USDT`} strong tip="wallet.withdraw.you-receive" />
             {queuedUnits > 0n && amountUnits > 0n && (
               <p className="pt-1 text-xs text-main-accent-t3">
                 ~{formatUsdt(fromBaseUnits(queuedUnits))} USDT exceeds instant {networkLabel(network)} liquidity and will be queued until the rail is topped up.
@@ -431,10 +453,13 @@ function WithdrawPanel({ wallet, onDone }: { wallet: Wallet | null; onDone: () =
   );
 }
 
-function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Row({ label, value, strong, tip }: { label: string; value: string; strong?: boolean; tip?: TipKey }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        {label}
+        {tip && <TipAnchor anchor={tip} />}
+      </span>
       <span className={cn("tabular-nums", strong && "font-semibold")}>{value}</span>
     </div>
   );

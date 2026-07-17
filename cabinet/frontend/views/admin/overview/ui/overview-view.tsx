@@ -7,6 +7,7 @@ import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { fetchOverview, fetchParkedEvents, unparkEvent } from "@/entities/admin/api/admin-client";
 import type { AdminOverview, ParkedEvent } from "@/shared/contracts/admin";
+import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ago } from "@/views/admin/lib/format";
 import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
 
@@ -128,14 +129,15 @@ export function OverviewView() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi label="Services healthy" value={overview ? `${healthy}/${totalServices}` : undefined} tone="text-main-accent-t2" />
-        <Kpi label="Parked rows" value={overview?.parked_rows} hint="Money the relay couldn't apply" tone={overview && overview.parked_rows !== "0" ? "text-destructive" : undefined} />
-        <Kpi label="Dispatch backlog" value={overview?.backlog} hint="Undispatched outbox rows" />
-        <Kpi label="Oldest backlog" value={overview ? `${overview.oldest_backlog_age_secs}s` : undefined} hint="Age of the oldest undispatched row" />
+        <Kpi label="Parked rows" value={overview?.parked_rows} hint="Money the relay couldn't apply" tone={overview && overview.parked_rows !== "0" ? "text-destructive" : undefined} tip="admin.overview.kpi.parked-rows" />
+        <Kpi label="Dispatch backlog" value={overview?.backlog} hint="Undispatched outbox rows" tip="admin.overview.kpi.dispatch-backlog" />
+        <Kpi label="Oldest backlog" value={overview ? `${overview.oldest_backlog_age_secs}s` : undefined} hint="Age of the oldest undispatched row" tip="admin.overview.kpi.oldest-backlog" />
         <Kpi
           label="Dead-key signings"
           value={overview?.unseal_failures}
           hint="Signer couldn't unseal a key — funds stranded"
           tone={overview && overview.unseal_failures !== "0" ? "text-destructive" : undefined}
+          tip="admin.overview.kpi.dead-key-signings"
         />
       </div>
 
@@ -214,7 +216,12 @@ export function OverviewView() {
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="py-2 font-medium">Seq</th>
                   <th className="py-2 font-medium">Event</th>
-                  <th className="py-2 font-medium">Reason</th>
+                  <th className="py-2 font-medium">
+                    <span className="flex items-center gap-1.5">
+                      Reason
+                      <TipAnchor anchor="admin.overview.parked.reason" />
+                    </span>
+                  </th>
                   <th className="py-2 font-medium">Parked</th>
                   <th className="py-2 font-medium" />
                 </tr>
@@ -237,7 +244,12 @@ export function OverviewView() {
                     <td className="whitespace-nowrap py-2.5 text-muted-foreground">{ago(e.parked_at)}</td>
                     <td className="py-2.5 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {e.compensated && <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-xs font-medium text-main-mist">compensated</span>}
+                        {e.compensated && (
+                          <span className="flex items-center gap-1.5 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-xs font-medium text-main-mist">
+                            compensated
+                            <TipAnchor anchor="admin.overview.parked.compensated" />
+                          </span>
+                        )}
                         {unparked.has(e.seq) && <span className="rounded-full bg-main-accent-t2/15 px-2 py-0.5 text-xs font-medium text-main-accent-t2">unparked</span>}
                         <Button
                           type="button"
@@ -249,6 +261,7 @@ export function OverviewView() {
                           {unparking === e.seq ? <Loader2 className="size-3.5 animate-spin" /> : null}
                           Unpark
                         </Button>
+                        <TipAnchor anchor="admin.overview.parked.unpark" />
                       </div>
                     </td>
                   </tr>
@@ -262,11 +275,14 @@ export function OverviewView() {
   );
 }
 
-function Kpi({ label, value, hint, tone }: { label: string; value: string | undefined; hint?: string; tone?: string }) {
+function Kpi({ label, value, hint, tone, tip }: { label: string; value: string | undefined; hint?: string; tone?: string; tip?: TipKey }) {
   return (
     <Card>
       <CardContent className="space-y-1 py-5">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+          {tip && <TipAnchor anchor={tip} />}
+        </div>
         {value === undefined ? <Skeleton className="mt-1 h-8 w-20" /> : <p className={`text-3xl font-semibold tabular-nums ${tone ?? ""}`}>{value}</p>}
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </CardContent>

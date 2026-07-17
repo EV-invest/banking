@@ -9,7 +9,7 @@ import {
 
 import { useSession } from "@/shared/lib/use-session";
 
-import { tips, type TipKey } from "./catalog";
+import { tips, type TipEntry, type TipKey } from "./catalog";
 
 export interface TipAnchorProps {
   /** The catalog key to render. Checked against the catalog at compile time. */
@@ -28,7 +28,7 @@ export interface TipAnchorProps {
  */
 export function TipAnchor({ anchor, className }: TipAnchorProps) {
   const session = useSession();
-  const entry = tips[anchor];
+  const entry: TipEntry = tips[anchor];
 
   if (entry.roles) {
     const role = session?.user?.role;
