@@ -1,75 +1,65 @@
 use std::{env, net::SocketAddr};
 
 use domain::money::Network;
-use smart_default::SmartDefault;
-use v_utils::macros as v_macros;
 
-/// Default gRPC binds: loopback, so the hub's internal data/auth seams are not exposed on
-/// every interface. A wider bind is an explicit opt-in that requires network segmentation
-/// (see `docs/ARCHITECTURE.md`).
-const DEFAULT_GRPC_ADDR: &str = "127.0.0.1:50051";
-const DEFAULT_AUTH_GRPC_ADDR: &str = "127.0.0.1:50052";
-
-/// Application configuration (LiveSettings). Prod runs `--config` on the baked
-/// `deploy/piggybank.nix` result — `{ env = "VAR" }` refs there assert the var's
-/// presence at startup. Dev runs config-less from the flake-exported env
-/// (`#[settings(use_env = true)]` aliases each field to its SHOUTY name).
-///
-/// The on-chain rails (BSC/Polygon/TRON/TON + sweeps) live in [`Rails`], on their
-/// original env-based conditional construction; production boot-asserts the
-/// rail set in `main.rs` (at least one rail, TON mainnet keyed).
-#[derive(Clone, Debug, v_macros::LiveSettings, v_macros::MyConfigPrimitives, v_macros::Settings, SmartDefault)]
-#[settings(use_env = true)]
-pub struct AppConfig {
-	pub database_url: String,
-	/// Core tonic gRPC listener address (the hub's data-plane services). Loopback by
-	/// default: an internal seam reached by the BFF (and same-host services). Opt into
-	/// a wider bind (e.g. 0.0.0.0:50051) only behind network segmentation.
-	#[default(DEFAULT_GRPC_ADDR.parse().unwrap())]
-	pub grpc_addr: SocketAddr,
-	/// Auth service gRPC listener address (token issuance routes for clients).
-	#[default(DEFAULT_AUTH_GRPC_ADDR.parse().unwrap())]
-	pub auth_grpc_addr: SocketAddr,
-	pub sentry_dsn: Option<String>,
-	/// PostHog project key for native product-analytics capture. `None` disables
-	/// capture (a silent no-op), so the same code runs unconfigured (local, CI).
-	pub posthog_key: Option<String>,
-	/// PostHog ingestion host; `None` falls back to the library default
-	/// (`https://us.i.posthog.com`).
-	pub posthog_host: Option<String>,
-	pub app_env: String,
-	/// TigerBeetle replica address (e.g. `"127.0.0.1:3033"` or a bare `"3033"`).
-	pub tigerbeetle_address: String,
-	/// TigerBeetle cluster id (a u128, so it rides as a string through every config
-	/// source — the settings flags layer has no u128 lane). `"0"` for single-node dev.
-	pub tigerbeetle_cluster_id: String,
-	/// Break-glass role override: subjects treated as `Owner` by the RBAC gate even
-	/// with no mirrored role — the bootstrap path before the identity plane grants
-	/// roles. Comma-separated (empty ⇒ no override).
-	#[serde(default)]
-	pub admin_subjects: Vec<String>,
-	/// Endpoint of the separate-process signer (the key vault), for deposit-address
-	/// provisioning over the `signer.v1` gRPC seam. The hub connects lazily, so this
-	/// only needs to resolve by the time the first address is provisioned.
-	pub signer_grpc_addr: String,
-	/// Max connections for the request-serving Postgres pool (the core gRPC handlers).
-	#[default(10)]
-	pub db_max_connections: u32,
-	/// Max connections for the outbox relay's own dedicated Postgres pool, so request
-	/// traffic and money dispatch can't exhaust each other. A small pool suffices since
-	/// the relay is a single-worker drainer (one drain connection + the lock-holding
-	/// connection).
-	#[default(3)]
-	pub relay_db_max_connections: u32,
-	/// The concierge plane's gRPC endpoint serving `UserEvents.PullUserLifecycle` —
-	/// the cross-plane lifecycle bridge the consumer pulls from.
-	pub concierge_bridge_addr: String,
-	/// The shared bridge service token (`authorization: Bearer …`), the same value
-	/// concierge verifies the pull against.
-	pub bridge_service_token: String,
-	/// Seconds between bridge pulls when the backlog is drained.
-	#[default(5)]
-	pub bridge_poll_secs: u64,
+ev::settings! {
+	/// Application configuration, read from the environment only (`dotenvy`
+	/// loads `.env` first in dev; prod values ride the container env — the
+	/// image's baked topology contract plus gitops' k8s Secret `envFrom`).
+	/// Every missing/invalid variable is reported in one aggregate error before
+	/// anything binds, and an empty string counts as unset.
+	///
+	/// The on-chain rails (BSC/Polygon/TRON/TON + sweeps) live in [`Rails`], on their
+	/// original env-based conditional construction; production boot-asserts the
+	/// rail set in `main.rs` (at least one rail, TON mainnet keyed).
+	pub struct AppConfig {
+		database_url: String,
+		/// Core tonic gRPC listener address (the hub's data-plane services). Loopback by
+		/// default: an internal seam reached by the BFF (and same-host services). Opt into
+		/// a wider bind (e.g. 0.0.0.0:50051) only behind network segmentation
+		/// (see `docs/ARCHITECTURE.md`).
+		grpc_addr: SocketAddr = "127.0.0.1:50051",
+		/// Auth service gRPC listener address (token issuance routes for clients).
+		auth_grpc_addr: SocketAddr = "127.0.0.1:50052",
+		sentry_dsn: Option<String>,
+		/// PostHog project key for native product-analytics capture. `None` disables
+		/// capture (a silent no-op), so the same code runs unconfigured (local, CI).
+		posthog_key: Option<String>,
+		/// PostHog ingestion host; `None` falls back to the library default
+		/// (`https://us.i.posthog.com`).
+		posthog_host: Option<String>,
+		app_env: String,
+		/// TigerBeetle replica address (e.g. `"127.0.0.1:3033"` or a bare `"3033"`).
+		tigerbeetle_address: String,
+		/// TigerBeetle cluster id (a u128, so it rides as a string — the wire has no
+		/// u128 lane).
+		tigerbeetle_cluster_id: String,
+		/// Break-glass role override: subjects treated as `Owner` by the RBAC gate even
+		/// with no mirrored role — the bootstrap path before the identity plane grants
+		/// roles. Comma-separated (empty ⇒ no override). Boot-time: a change applies via
+		/// redeploy (the gitops env edit is the audit trail).
+		admin_subjects: Vec<String> = "",
+		/// Endpoint of the separate-process signer (the key vault), for deposit-address
+		/// provisioning over the `signer.v1` gRPC seam. The hub connects lazily, so this
+		/// only needs to resolve by the time the first address is provisioned.
+		signer_grpc_addr: String,
+		/// Max connections for the request-serving Postgres pool (the core gRPC handlers).
+		db_max_connections: u32 = "10",
+		/// Max connections for the outbox relay's own dedicated Postgres pool, so request
+		/// traffic and money dispatch can't exhaust each other. A small pool suffices since
+		/// the relay is a single-worker drainer (one drain connection + the lock-holding
+		/// connection).
+		relay_db_max_connections: u32 = "3",
+		/// The concierge plane's gRPC endpoint serving `UserEvents.PullUserLifecycle` —
+		/// the cross-plane lifecycle bridge the consumer pulls from.
+		concierge_bridge_addr: String,
+		/// The shared bridge service token (`authorization: Bearer …`), the same value
+		/// concierge verifies the pull against.
+		#[secret]
+		bridge_service_token: String,
+		/// Seconds between bridge pulls when the backlog is drained.
+		bridge_poll_secs: u64 = "5",
+	}
 }
 
 /// The on-chain rail configs, kept on their original env-based conditional
@@ -553,10 +543,48 @@ mod tests {
 
 	#[test]
 	fn default_grpc_binds_are_loopback() {
-		for raw in [DEFAULT_GRPC_ADDR, DEFAULT_AUTH_GRPC_ADDR] {
-			let addr: SocketAddr = raw.parse().expect("default addr parses");
-			assert!(addr.ip().is_loopback(), "{raw} must default to loopback, not all interfaces");
+		let minimal: std::collections::HashMap<&str, &str> = [
+			("DATABASE_URL", "postgres://localhost/banking"),
+			("APP_ENV", "development"),
+			("TIGERBEETLE_ADDRESS", "3033"),
+			("TIGERBEETLE_CLUSTER_ID", "0"),
+			("SIGNER_GRPC_ADDR", "http://127.0.0.1:50053"),
+			("CONCIERGE_BRIDGE_ADDR", "http://127.0.0.1:55670"),
+			("BRIDGE_SERVICE_TOKEN", "test-bridge"),
+		]
+		.into_iter()
+		.collect();
+		let config = AppConfig::from_source(|var| minimal.get(var).map(|v| v.to_string())).expect("minimal env loads");
+		for addr in [config.grpc_addr, config.auth_grpc_addr] {
+			assert!(addr.ip().is_loopback(), "{addr} must default to loopback, not all interfaces");
 		}
+	}
+
+	/// The env surface IS the deploy contract (the flake image env + gitops
+	/// manifests use exactly these names) — a rename here must be deliberate.
+	#[test]
+	fn env_surface_matches_the_deploy_contract() {
+		assert_eq!(
+			AppConfig::var_names(),
+			vec![
+				"DATABASE_URL",
+				"GRPC_ADDR",
+				"AUTH_GRPC_ADDR",
+				"SENTRY_DSN",
+				"POSTHOG_KEY",
+				"POSTHOG_HOST",
+				"APP_ENV",
+				"TIGERBEETLE_ADDRESS",
+				"TIGERBEETLE_CLUSTER_ID",
+				"ADMIN_SUBJECTS",
+				"SIGNER_GRPC_ADDR",
+				"DB_MAX_CONNECTIONS",
+				"RELAY_DB_MAX_CONNECTIONS",
+				"CONCIERGE_BRIDGE_ADDR",
+				"BRIDGE_SERVICE_TOKEN",
+				"BRIDGE_POLL_SECS",
+			]
+		);
 	}
 
 	/// A minimal rails config with the given chain Options set — only the fields

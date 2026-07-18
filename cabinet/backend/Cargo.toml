@@ -14,16 +14,14 @@ path = "src/main.rs"
 [dependencies]
 axum.workspace = true
 axum-extra = { workspace = true, features = ["cookie"] }
-clap.workspace = true
 color-eyre.workspace = true
 dotenvy.workspace = true
-ev = { workspace = true, features = ["analytics", "error_monitoring", "otel"] }
+ev = { workspace = true, features = ["analytics", "error_monitoring", "otel", "settings"] }
 evbanking_contracts.workspace = true
 evconcierge_auth.workspace = true
 evconcierge_contracts.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-smart-default.workspace = true
 subtle.workspace = true
 time.workspace = true
 tokio = { workspace = true, features = ["full"] }
@@ -31,7 +29,6 @@ tonic.workspace = true
 tower-http = { workspace = true, features = ["timeout", "trace"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"] }
-v_utils.workspace = true
 
 [dev-dependencies]
 prost.workspace = true

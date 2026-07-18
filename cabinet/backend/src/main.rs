@@ -24,34 +24,26 @@ mod session;
 mod state;
 mod util;
 
-use clap::Parser;
 use config::AppConfig;
 use cookies::CookieNames;
 use session::BankingTokens;
 use state::{AppState, Grpc};
-
-#[derive(Parser)]
-struct Cli {
-	#[clap(flatten)]
-	settings_flags: config::SettingsFlags,
-}
 
 // Sentry must be initialised before the async runtime starts — no `#[tokio::main]`.
 fn main() -> color_eyre::Result<()> {
 	color_eyre::install()?;
 	dotenvy::dotenv().ok();
 
-	let cli = Cli::parse();
-	// One snapshot at boot; hot reload is unused. A missing `{ env = "VAR" }` ref
-	// in the prod config fails HERE, before anything binds.
-	let settings = v_utils::utils::exit_on_error(config::LiveSettings::new(cli.settings_flags, std::time::Duration::from_secs(60)));
-	let config = v_utils::utils::exit_on_error(settings.config());
+	// One env read at boot; every missing/invalid variable fails HERE, in one
+	// aggregate error, before anything binds.
+	let config = AppConfig::from_env()?;
 
 	// Guard must stay alive for the duration of main — dropping it flushes events. A
 	// `None` DSN makes `init` return `None`, so this binding is simply inert.
 	let _sentry_guard = error_monitoring::init(&SentryConfig {
 		dsn: config.sentry_dsn.clone(),
 		environment: config.app_env.clone(),
+		release: error_monitoring::release_name!().map(|r| r.into_owned()),
 		traces_sample_rate: SentryConfig::traces_sample_rate_for(&config.app_env),
 	});
 
