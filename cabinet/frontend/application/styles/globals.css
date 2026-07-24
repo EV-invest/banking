@@ -12,10 +12,14 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Width of the fixed app-shell rail (application/layout/sidebar.tsx). The
-     `(app)` layout reserves the same width as content padding; one source keeps
-     the two in lockstep. */
+  /* Width of the desktop app-shell rail (application/layout/sidebar.tsx). The
+     `(app)` layout reserves the same width as content padding above `lg`;
+     below that breakpoint the sidebar is hidden and a BottomNavbar replaces it. */
   --cabinet-rail-w: 248px;
+  /* Height of the mobile bottom nav bar (application/layout/bottom-navbar.tsx).
+     The `(app)` layout reserves matching padding-bottom below `lg` so content is
+     never occluded by the fixed bar. */
+  --cabinet-bottom-nav-h: 64px;
 }
 
 @layer base {
