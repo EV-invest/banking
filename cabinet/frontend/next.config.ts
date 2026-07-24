@@ -1,14 +1,28 @@
 import type { NextConfig } from "next";
 
-import { config } from "./config";
 import { BASE_PATH } from "./shared/config/base-path";
-import { staticSecurityHeaders } from "./shared/config/security";
 
-// The BFF now lives in a separate Rust service (`cabinet/backend`). The browser
-// keeps calling same-origin `/api/*`; Next proxies those to the backend so the
-// `__Host-`/HttpOnly session cookie + CSRF model stays same-origin. In production the
-// same apex domain routes `/api/*` to the backend (this rewrite is the dev/local form).
-const BACKEND = config.backendUrl;
+// This file deliberately reads its own env directly instead of routing
+// through ./config (backed by @evinvest/settings) or shared/config/security.ts
+// (which imports ./config for IN_PRODUCTION). Next's next-config-ts
+// transpiler bundles this file's static local imports into a single
+// next.config.compiled.js, so importing either — even lazily via a dynamic
+// import(), which the transpiler doesn't follow and which has no loader for
+// bare .ts paths at runtime — drags in @evinvest/settings, an ESM-only
+// package (its exports map has no "require" condition) that breaks
+// `next build` with ERR_PACKAGE_PATH_NOT_EXPORTED. Same class of problem as
+// the Sentry note below, same resolution: forgo full integration here.
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`missing required env var ${name}`);
+  return value;
+}
+// Where next dev/production proxies same-origin /api/* to the Rust BFF —
+// baked into routes-manifest.json at build time, so it must resolve
+// synchronously here (see shared/config/base-path.ts for the analogous
+// basePath note).
+const BACKEND = requiredEnv("CABINET_BACKEND_URL");
+const IN_PRODUCTION = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -25,10 +39,25 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${BACKEND}/api/:path*` }];
   },
-  // Request-invariant hardening on every response. The nonce-bearing CSP itself
-  // is set per-request in proxy.ts; see shared/config/security.ts.
+  // Request-invariant hardening on every response, mirroring
+  // shared/config/security.ts's staticSecurityHeaders() (kept in sync by
+  // hand — see the module comment above for why that helper can't be
+  // imported here). The nonce-bearing CSP itself is set per-request in
+  // proxy.ts, which imports shared/config/security.ts directly (a normal
+  // ESM runtime context, not this file's CJS-transpiled one).
   async headers() {
-    return [{ source: "/:path*", headers: staticSecurityHeaders() }];
+    const headers = [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    ];
+    if (IN_PRODUCTION) {
+      headers.push({
+        key: "Strict-Transport-Security",
+        value: "max-age=63072000; includeSubDomains; preload",
+      });
+    }
+    return [{ source: "/:path*", headers }];
   },
 };
 
