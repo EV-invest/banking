@@ -300,9 +300,19 @@
             env = {
               DATABASE_URL = "postgres://evinvest@10.42.0.1:5432/banking";
               REDIS_URL = "redis://10.42.0.1:6379/0";
-              # TON mainnet rail gate (Rails::from_env). TON_API_KEY arrives via the
-              # k8s Secret; main.rs refuses a prod boot with the rail set empty.
+              # On-chain rail gates (Rails::from_env). Per-rail API keys arrive via
+              # k8s Secrets; main.rs refuses a prod boot with every rail empty.
               TON_API_URL = "https://toncenter.com/api/v3";
+              # BSC (BEP20 USDT): split-provider — dataseed is a solid free full node
+              # for balances/nonce/broadcast but rejects eth_getLogs (-32005); drpc
+              # allows getLogs in 500-block chunks but throttles — the deposit scan
+              # alone goes to drpc. For anything serious: a keyed provider.
+              BSC_RPC_URL = "https://bsc-dataseed.bnbchain.org";
+              BSC_LOGS_RPC_URL = "https://bsc.drpc.org";
+              # Polygon (PoS USDT, 6-dp): official public RPC; drpc fallback for the
+              # deposit scan. Keyed provider (Alchemy/QuickNode) recommended past demo.
+              POLYGON_RPC_URL = "https://polygon-rpc.com";
+              POLYGON_LOGS_RPC_URL = "https://polygon.drpc.org";
               TIGERBEETLE_ADDRESS = pkgs.lib.concatStringsSep "," tbProd.addresses;
               TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
               AUTH_SIGNING_KID = "prod-1";
