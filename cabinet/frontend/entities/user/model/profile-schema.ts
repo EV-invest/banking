@@ -6,7 +6,7 @@
 import { z } from "zod";
 
 const NAME_MAX = Object.freeze({
-  legal_name: 128,
+  legal_name: 256,
   preferred_name: 64,
   nationality: 64,
   tax_residence: 64,
@@ -49,7 +49,22 @@ function dateOfBirthRule() {
   return z
     .string()
     .trim()
-    .refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "date_of_birth must be a valid YYYY-MM-DD date");
+    .refine(
+      (v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v),
+      "date_of_birth must be a valid YYYY-MM-DD date",
+    )
+    .refine(
+      (v) => {
+        if (!v) return true;
+        const y = Number(v.slice(0, 4));
+        const m = Number(v.slice(5, 7));
+        const d = Number(v.slice(8, 10));
+        if (y < 1900 || y > 2100) return false;
+        const date = new Date(y, m - 1, d);
+        return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+      },
+      "date_of_birth must be a real date between 1900 and 2100",
+    );
 }
 
 function addressRule() {
@@ -58,7 +73,7 @@ function addressRule() {
     .trim()
     .max(256, "residential_address must be at most 256 characters")
     .refine(
-      (v) => !v || ![...v].some((c) => c.charCodeAt(0) < 0x20 && c.charCodeAt(0) !== 0x0a),
+      (v) => !v || ![...v].some((c) => c.charCodeAt(0) < 0x20 || c === "" || (c.charCodeAt(0) >= 0x80 && c.charCodeAt(0) <= 0x9F)),
       "residential_address must not contain control characters",
     );
 }

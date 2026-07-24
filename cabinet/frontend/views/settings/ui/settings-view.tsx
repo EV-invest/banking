@@ -246,7 +246,6 @@ const LANGUAGES = [
 ];
 const CURRENCIES = [
   { value: "USD", label: "USD ($)" },
-  { value: "USDT", label: "USDT" },
   { value: "EUR", label: "EUR (€)" },
 ];
 const TIMEZONES = [
@@ -297,16 +296,36 @@ function GeneralSection({
           {loading ? <FieldSkeleton /> : <Input value={email ?? ""} readOnly className="border-border bg-main-surface text-muted-foreground" />}
         </Field>
         <Field label="Phone number">
-          {ready ? <Input value={form.phone} onChange={(e) => onChange("phone", e.target.value)} className="border-border bg-main-surface" /> : <FieldSkeleton />}
+          {ready ? (
+            <div className="min-w-0 flex-1">
+              <Input value={form.phone} onChange={(e) => onChange("phone", e.target.value)} className={fieldErrors.phone ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
+              {fieldErrors.phone && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.phone}</p>}
+            </div>
+          ) : <FieldSkeleton />}
         </Field>
         <Field label="Language">
-          {ready ? <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder="Select language" /> : <FieldSkeleton />}
+          {ready ? (
+            <div className="min-w-0 flex-1">
+              <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder="Select language" />
+              {fieldErrors.language && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.language}</p>}
+            </div>
+          ) : <FieldSkeleton />}
         </Field>
         <Field label="Base currency">
-          {ready ? <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={CURRENCIES} placeholder="Select currency" /> : <FieldSkeleton />}
+          {ready ? (
+            <div className="min-w-0 flex-1">
+              <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={CURRENCIES} placeholder="Select currency" />
+              {fieldErrors.base_currency && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.base_currency}</p>}
+            </div>
+          ) : <FieldSkeleton />}
         </Field>
         <Field label="Time zone">
-          {ready ? <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={TIMEZONES} placeholder="Select time zone" /> : <FieldSkeleton />}
+          {ready ? (
+            <div className="min-w-0 flex-1">
+              <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={TIMEZONES} placeholder="Select time zone" />
+              {fieldErrors.timezone && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.timezone}</p>}
+            </div>
+          ) : <FieldSkeleton />}
         </Field>
       </div>
     </section>

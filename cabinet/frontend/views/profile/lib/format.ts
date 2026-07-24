@@ -6,7 +6,7 @@
 const MAX_DISPLAY = 32;
 
 /** Truncate a profile/real name for display so an overlong value doesn't break
- *  the header or chip layout. Surrogate-pair-safe. */
+ *  the header or chip layout. */
 export function truncateName(name: string, max: number = MAX_DISPLAY): string {
   if (name.length <= max) return name;
   return `${name.slice(0, max - 1)}…`;
