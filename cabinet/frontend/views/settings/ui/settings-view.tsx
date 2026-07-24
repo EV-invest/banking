@@ -138,7 +138,7 @@ export function SettingsView() {
   }
 
   return (
-    <div className="flex flex-col gap-6 px-8 pb-10 pt-6">
+    <div className="flex flex-col gap-6 px-5 pb-10 pt-6 lg:px-8">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="font-sans text-2xl font-semibold text-foreground">Settings</h1>
@@ -165,8 +165,32 @@ export function SettingsView() {
 
       {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 
-      <div className="flex gap-6">
-        <nav aria-label="Settings sections" className="flex w-[212px] shrink-0 flex-col gap-1">
+      <div className="flex flex-col gap-5 lg:flex-row lg:gap-6">
+        {/* Mobile tab pills — below lg */}
+        <nav aria-label="Settings sections" className="flex gap-1.5 overflow-x-auto lg:hidden">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const active = section === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-current={active ? "page" : undefined}
+                onClick={() => setSection(item.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors",
+                  active ? "bg-main-accent-t1 font-semibold text-main-black" : "border border-border text-main-mist/80 hover:text-main-mist",
+                )}
+              >
+                <Icon className="size-4" />
+                {item.label === "Sessions & devices" ? "Sessions" : item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Desktop sidebar nav — lg+ only */}
+        <nav aria-label="Settings sections" className="hidden w-[212px] shrink-0 flex-col gap-1 lg:flex">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = section === item.id;
