@@ -8,10 +8,11 @@ import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger,
 import { fetchSessions, revokeSession } from "@/entities/session/api/sessions-client";
 import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
 import { publishProfile } from "@/entities/user/model/profile-store";
+import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { Session, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
-import { displayName } from "@/views/settings/lib/format";
+import { displayName, truncateName } from "@/views/settings/lib/format";
 
 const CARD = "rounded-[14px] border border-border bg-main-card";
 
@@ -46,6 +47,7 @@ export function SettingsView() {
   const [saved, setSaved] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [sessions, setSessions] = useState<Session[] | undefined>(undefined);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export function SettingsView() {
 
   const loading = profile === undefined;
   const email = profile?.email ?? null;
-  const name = (profile?.legal_name ?? "").trim() || displayName(email);
+  const name = truncateName((profile?.legal_name ?? "").trim()) || displayName(email);
   const dirty = !!form && !!profile && EDITABLE.some((k) => form[k] !== (profile[k] ?? ""));
 
   function set(key: keyof Form, value: string) {
@@ -87,6 +89,13 @@ export function SettingsView() {
   }
   async function save() {
     if (!form || saving) return;
+    const errors = validateProfileForm(form);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError("Please fix the highlighted fields");
+      return;
+    }
+    setFieldErrors({});
     setSaving(true);
     setError(null);
     try {
@@ -213,7 +222,7 @@ export function SettingsView() {
         </nav>
 
         <div className="min-w-0 flex-1">
-          {section === "general" && <GeneralSection loading={loading} form={form} email={email} verified={!!profile?.email_verified} onChange={set} />}
+          {section === "general" && <GeneralSection loading={loading} form={form} email={email} verified={!!profile?.email_verified} onChange={set} fieldErrors={fieldErrors} />}
           {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => setSection("sessions")} />}
           {section === "sessions" && (
             <SessionsSection
@@ -251,12 +260,14 @@ function GeneralSection({
   email,
   verified,
   onChange,
+  fieldErrors,
 }: {
   loading: boolean;
   form: Form | null;
   email: string | null;
   verified: boolean;
   onChange: (key: keyof Form, value: string) => void;
+  fieldErrors: Record<string, string>;
 }) {
   const ready = !loading && !!form;
   return (
@@ -267,10 +278,20 @@ function GeneralSection({
       </header>
       <div className="flex flex-wrap gap-[16px_18px]">
         <Field label="Legal name">
-          {ready ? <Input value={form.legal_name} onChange={(e) => onChange("legal_name", e.target.value)} className="border-border bg-main-surface" /> : <FieldSkeleton />}
+          {ready ? (
+            <div className="min-w-0 flex-1">
+              <Input value={form.legal_name} onChange={(e) => onChange("legal_name", e.target.value)} className={fieldErrors.legal_name ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
+              {fieldErrors.legal_name && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.legal_name}</p>}
+            </div>
+          ) : <FieldSkeleton />}
         </Field>
         <Field label="Preferred name">
-          {ready ? <Input value={form.preferred_name} onChange={(e) => onChange("preferred_name", e.target.value)} className="border-border bg-main-surface" /> : <FieldSkeleton />}
+          {ready ? (
+            <div className="min-w-0 flex-1">
+              <Input value={form.preferred_name} onChange={(e) => onChange("preferred_name", e.target.value)} className={fieldErrors.preferred_name ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
+              {fieldErrors.preferred_name && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.preferred_name}</p>}
+            </div>
+          ) : <FieldSkeleton />}
         </Field>
         <Field label="Email address" trailing={verified ? <VerifiedTag /> : undefined}>
           {loading ? <FieldSkeleton /> : <Input value={email ?? ""} readOnly className="border-border bg-main-surface text-muted-foreground" />}

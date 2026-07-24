@@ -82,8 +82,9 @@ function AuthedChip({
   // fetch has settled without a preferred/legal name) the email heuristic. Showing the
   // email-derived label while the profile is still loading is the flicker we avoid — it
   // would visibly correct itself a beat later. Until a name is known, render a skeleton,
-  // not a name we'll replace.
-  const name = realName ?? seedName ?? (settled ? displayName(email) : null);
+  // not a name we'll replace. Truncate long names so the chip doesn't push the central nav
+  // off-centre.
+  const name = truncate(realName ?? seedName ?? (settled ? displayName(email) : null));
 
   useEffect(() => {
     // Persist only from a confirmed session (persist) and only real names, so the cache
@@ -176,4 +177,11 @@ function initialsOf(email: string | null | undefined): string {
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Keep the chip label from pushing the central nav off-centre. */
+function truncate(s: string | null, max = 28): string | null {
+  if (!s) return s;
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
 }

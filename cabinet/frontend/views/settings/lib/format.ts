@@ -2,6 +2,18 @@
 // (the only real identity the BFF exposes today). Mirrors the sidebar AccountChip /
 // profile derivation so the name reads consistently across the shell.
 
+/** Max chars a display name takes up before ellipsis in the chip and headings. */
+const MAX_DISPLAY = 32;
+
+/** Truncate a profile/real name for display so an overlong value doesn't break
+ *  the header or chip layout. Surrogate-pair-safe. */
+export function truncateName(name: string, max: number = MAX_DISPLAY): string {
+  if (name.length <= max) return name;
+  // Walk grapheme clusters conservatively — slice at char boundary just inside max,
+  // then replace the last 3 chars with "…".
+  return `${name.slice(0, max - 1)}…`;
+}
+
 /** A human display name from an email handle: "ada.lovelace@x" → "Ada L." */
 export function displayName(email: string | null | undefined): string {
   if (email === undefined) return "…";

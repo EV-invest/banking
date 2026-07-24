@@ -7,10 +7,12 @@ import { Avatar, AvatarFallback, Button, Input, Skeleton } from "@evinvest/uikit
 
 import { fetchPositions } from "@/entities/fund/api/fund-client";
 import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
+import { publishProfile } from "@/entities/user/model/profile-store";
+import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { Position, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { displayName } from "@/views/profile/lib/format";
+import { displayName, truncateName } from "@/views/profile/lib/format";
 
 const CARD = "rounded-[14px] border border-border bg-main-card";
 
@@ -44,6 +46,7 @@ export function ProfileView() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchProfile()
@@ -63,7 +66,7 @@ export function ProfileView() {
   const loading = profile === undefined;
   const email = profile?.email ?? "";
   const legalName = (profile?.legal_name ?? "").trim();
-  const name = legalName || (loading ? "…" : displayName(email));
+  const name = truncateName(legalName) || (loading ? "…" : displayName(email));
   const invested = positions.reduce((s, p) => s + num(p.value), 0);
 
   function set(key: keyof Form, value: string) {
@@ -73,15 +76,24 @@ export function ProfileView() {
     if (profile) setForm(formFrom(profile));
     setEditing(false);
     setError(null);
+    setFieldErrors({});
   }
   async function save() {
     if (!form) return;
+    const errors = validateProfileForm(form);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError("Please fix the highlighted fields");
+      return;
+    }
+    setFieldErrors({});
     setSaving(true);
     setError(null);
     try {
       const updated = await saveProfile(form as UpdateProfileRequest);
       setProfile(updated);
       setForm(formFrom(updated));
+      publishProfile(updated); // the sidebar account chip picks up the new name live
       setEditing(false);
     } catch (e) {
       setError((e as Error).message);
@@ -156,7 +168,14 @@ export function ProfileView() {
                 {loading || !form ? (
                   <Skeleton className="h-[42px] w-full rounded-lg" />
                 ) : editing ? (
-                  <Input value={form[key]} onChange={(e) => set(key, e.target.value)} className="border-border bg-main-surface" />
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      value={form[key]}
+                      onChange={(e) => set(key, e.target.value)}
+                      className={fieldErrors[key] ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
+                    />
+                    {fieldErrors[key] && <p className="mt-1 text-[11px] text-destructive">{fieldErrors[key]}</p>}
+                  </div>
                 ) : (
                   <ReadValue value={profile?.[key]} />
                 )}
