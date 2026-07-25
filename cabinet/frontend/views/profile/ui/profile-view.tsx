@@ -220,9 +220,22 @@ function FieldBox({ label, trailing, tip, children }: { label: string; trailing?
   );
 }
 
+const MAX_DISPLAY_VALUE = 80;
+
 function ReadValue({ value, muted }: { value?: string; muted?: boolean }) {
-  const v = (value ?? "").trim();
-  return <div className={cn("flex min-h-[42px] items-center rounded-lg border border-border bg-main-surface px-[13px] py-[11px] text-[13px]", v && !muted ? "text-white" : "text-muted-foreground")}>{v || "—"}</div>;
+  const raw = (value ?? "").trim();
+  const v = raw.length > MAX_DISPLAY_VALUE ? `${raw.slice(0, MAX_DISPLAY_VALUE - 1)}…` : raw;
+  return (
+    <div
+      className={cn(
+        "flex min-h-[42px] items-center rounded-lg border border-border bg-main-surface px-[13px] py-[11px] text-[13px]",
+        v && !muted ? "text-white" : "text-muted-foreground",
+      )}
+      title={raw.length > MAX_DISPLAY_VALUE ? raw : undefined}
+    >
+      {v || "—"}
+    </div>
+  );
 }
 
 function VerifiedTag() {
