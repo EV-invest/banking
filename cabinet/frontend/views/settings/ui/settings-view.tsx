@@ -3,6 +3,8 @@
 import { BadgeCheck, Check, Laptop, Loader2, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
+import { PhoneNumber } from "@evinvest/types";
+import { usePhoneNumber } from "@evinvest/types/react";
 import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton } from "@evinvest/uikit";
 
 import { fetchSessions, revokeSession } from "@/entities/session/api/sessions-client";
@@ -298,8 +300,11 @@ function GeneralSection({
         <Field label="Phone number">
           {ready ? (
             <div className="min-w-0 flex-1">
-              <Input value={form.phone} onChange={(e) => onChange("phone", e.target.value)} className={fieldErrors.phone ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
-              {fieldErrors.phone && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.phone}</p>}
+              <PhoneField
+                initial={form.phone}
+                onChange={(v) => onChange("phone", v)}
+                error={fieldErrors.phone}
+              />
             </div>
           ) : <FieldSkeleton />}
         </Field>
@@ -562,6 +567,25 @@ function lastSeen(value: number | string | undefined): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `last active ${hrs}h ago`;
   return `last active ${Math.floor(hrs / 24)}d ago`;
+}
+
+/** Phone input wired to the `PhoneNumber` TypeObject via `usePhoneNumber`. */
+function PhoneField({ initial, onChange, error }: { initial: string; onChange: (v: string) => void; error?: string }) {
+  const { inputProps, value } = usePhoneNumber({ initial: initial || undefined });
+
+  useEffect(() => {
+    onChange(value ? PhoneNumber.raw(value) : "");
+  }, [value, onChange]);
+
+  return (
+    <>
+      <Input
+        {...inputProps}
+        className={error ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
+      />
+      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+    </>
+  );
 }
 
 function GoogleMark() {

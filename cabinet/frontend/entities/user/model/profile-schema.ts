@@ -4,6 +4,7 @@
 // An empty string clears the field (the wire contract's full-replace
 // semantics); validation only runs against non-empty values.
 import { z } from "zod";
+import { PhoneNumber } from "@evinvest/types";
 
 const NAME_MAX = Object.freeze({
   legal_name: 256,
@@ -36,12 +37,8 @@ function phoneRule() {
     .trim()
     .max(32, "phone must be at most 32 characters")
     .refine(
-      (v) => !v || /^[\d +()\-]+$/.test(v),
-      "phone may only contain digits, '+', '-', spaces, and parentheses",
-    )
-    .refine(
-      (v) => !v || (v.match(/\d/g)?.length ?? 0) >= 5,
-      "phone must contain at least 5 digits",
+      (v) => !v || PhoneNumber.parseInput(v) !== undefined,
+      "Enter a valid phone number starting with + or country code",
     );
 }
 
