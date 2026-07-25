@@ -3,6 +3,8 @@
 import { BadgeCheck, Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
+import { PhoneNumber } from "@evinvest/types";
+import { usePhoneNumber } from "@evinvest/types/react";
 import { Avatar, AvatarFallback, Button, Input, Skeleton } from "@evinvest/uikit";
 
 import { fetchPositions } from "@/entities/fund/api/fund-client";
@@ -168,16 +170,20 @@ export function ProfileView() {
                 {loading || !form ? (
                   <Skeleton className="h-[42px] w-full rounded-lg" />
                 ) : editing ? (
-                  <div className="min-w-0 flex-1">
-                    <Input
-                      value={form[key]}
-                      onChange={(e) => set(key, e.target.value)}
-                      className={fieldErrors[key] ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
-                    />
-                    {fieldErrors[key] && <p className="mt-1 text-[11px] text-destructive">{fieldErrors[key]}</p>}
-                  </div>
+                  key === "phone" ? (
+                    <PhoneField initial={form.phone} onChange={(v) => set("phone", v)} error={fieldErrors.phone} />
+                  ) : (
+                    <div className="min-w-0 flex-1">
+                      <Input
+                        value={form[key]}
+                        onChange={(e) => set(key, e.target.value)}
+                        className={fieldErrors[key] ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
+                      />
+                      {fieldErrors[key] && <p className="mt-1 text-[11px] text-destructive">{fieldErrors[key]}</p>}
+                    </div>
+                  )
                 ) : (
-                  <ReadValue value={profile?.[key]} />
+                  <ReadValue value={key === "phone" ? formatPhone(profile?.[key]) : profile?.[key]} />
                 )}
               </FieldBox>
             ))}
@@ -256,6 +262,31 @@ function SnapRow({ label, first, children }: { label: string; first?: boolean; c
         <div className="shrink-0">{children}</div>
       </div>
     </>
+  );
+}
+
+function formatPhone(raw?: string): string {
+  if (!raw) return "";
+  const pn = PhoneNumber.parseInput(raw) ?? PhoneNumber.fromUnsafe(raw);
+  return PhoneNumber.format(pn);
+}
+
+/** Phone input wired to the `PhoneNumber` TypeObject via `usePhoneNumber`. */
+function PhoneField({ initial, onChange, error }: { initial: string; onChange: (v: string) => void; error?: string }) {
+  const { inputProps, value } = usePhoneNumber({ initial: initial || undefined });
+
+  useEffect(() => {
+    onChange(value ? PhoneNumber.raw(value) : "");
+  }, [value, onChange]);
+
+  return (
+    <div className="min-w-0 flex-1">
+      <Input
+        {...inputProps}
+        className={error ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
+      />
+      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+    </div>
   );
 }
 
