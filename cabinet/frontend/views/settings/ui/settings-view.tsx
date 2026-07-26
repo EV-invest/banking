@@ -571,11 +571,19 @@ function lastSeen(value: number | string | undefined): string {
 
 /** Phone input wired to the `PhoneNumber` TypeObject via `usePhoneNumber`. */
 function PhoneField({ initial, onChange, error }: { initial: string; onChange: (v: string) => void; error?: string }) {
-  const { inputProps, value } = usePhoneNumber({ initial: initial || undefined });
+  const { inputProps, value, reset } = usePhoneNumber({ initial: initial || undefined });
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
+  // Propagate canonical value changes to the parent form state.
   useEffect(() => {
-    onChange(value ? PhoneNumber.raw(value) : "");
-  }, [value, onChange]);
+    onChangeRef.current(value ? PhoneNumber.raw(value) : "");
+  }, [value]);
+
+  // Sync external initial changes (e.g. after save reloads the profile).
+  useEffect(() => {
+    if (initial) reset(initial);
+  }, [initial, reset]);
 
   return (
     <>

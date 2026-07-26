@@ -1,7 +1,7 @@
 "use client";
 
 import { BadgeCheck, Loader2 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { PhoneNumber } from "@evinvest/types";
 import { usePhoneNumber } from "@evinvest/types/react";
@@ -273,11 +273,19 @@ function formatPhone(raw?: string): string {
 
 /** Phone input wired to the `PhoneNumber` TypeObject via `usePhoneNumber`. */
 function PhoneField({ initial, onChange, error }: { initial: string; onChange: (v: string) => void; error?: string }) {
-  const { inputProps, value } = usePhoneNumber({ initial: initial || undefined });
+  const { inputProps, value, reset } = usePhoneNumber({ initial: initial || undefined });
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
+  // Propagate canonical value changes to the parent form state.
   useEffect(() => {
-    onChange(value ? PhoneNumber.raw(value) : "");
-  }, [value, onChange]);
+    onChangeRef.current(value ? PhoneNumber.raw(value) : "");
+  }, [value]);
+
+  // Sync external initial changes (e.g. after save reloads the profile).
+  useEffect(() => {
+    if (initial) reset(initial);
+  }, [initial, reset]);
 
   return (
     <div className="min-w-0 flex-1">
