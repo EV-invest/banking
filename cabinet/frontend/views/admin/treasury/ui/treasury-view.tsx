@@ -1,9 +1,9 @@
 "use client";
 
-import { TriangleAlert } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { Check, Copy, TriangleAlert } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { fetchTreasury } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
@@ -102,34 +102,37 @@ function MoneyCard({ label, value, hint, loading, footer, tip }: { label: string
 /** The rail's hot-wallet funding picture — address + on-chain USDT/gas, "—" when the
  * treasury read was unavailable (the hub degrades to empty, never fails). */
 function RailFunding({ rail }: { rail: RailLiquidity }) {
+  const gasSymbol = GAS_SYMBOLS[rail.network] ?? "";
+
   return (
-    <div className="space-y-1 border-t border-border pt-2">
+    <div className="space-y-2 border-t border-border pt-2.5">
       {rail.treasury_address ? (
-        <div className="flex items-center gap-1.5">
-          <p className="font-mono-tech text-xs text-muted-foreground" title={rail.treasury_address}>
-            {shortAddr(rail.treasury_address)}
-          </p>
-          <TipAnchor anchor="admin.treasury.rail.address" />
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <p className="text-[11px] text-muted-foreground">Treasury</p>
+            <TipAnchor anchor="admin.treasury.rail.address" />
+          </div>
+          <CopyableAddress address={rail.treasury_address} />
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">— · custody unconfigured</p>
       )}
       <FundingRow label="On-chain USDT" value={rail.onchain_usdt ? qty(rail.onchain_usdt) : undefined} />
-      <FundingRow label="Gas" value={rail.onchain_gas ? `${qty(rail.onchain_gas)} ${GAS_SYMBOLS[rail.network] ?? ""}`.trimEnd() : undefined} />
+      <FundingRow label="Gas" value={rail.onchain_gas ? `${qty(rail.onchain_gas)} ${gasSymbol}`.trimEnd() : undefined} />
       {rail.gas_station_address && (
-        <>
-          <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-            Gas station <span className="text-main-accent-t2">(fund {GAS_SYMBOLS[rail.network] ?? "gas"} here — pays sweep gas drops)</span>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <p className="text-[11px] text-muted-foreground">
+              Gas station <span className="text-main-accent-t2">(fund {gasSymbol || "gas"} here — pays sweep gas drops)</span>
+            </p>
             <TipAnchor anchor="admin.treasury.rail.gas-station" />
-          </p>
-          <p className="font-mono-tech text-xs text-muted-foreground" title={rail.gas_station_address}>
-            {shortAddr(rail.gas_station_address)}
-          </p>
+          </div>
+          <CopyableAddress address={rail.gas_station_address} />
           <FundingRow
             label="Gas station balance"
-            value={rail.gas_station_gas ? `${qty(rail.gas_station_gas)} ${GAS_SYMBOLS[rail.network] ?? ""}`.trimEnd() : undefined}
+            value={rail.gas_station_gas ? `${qty(rail.gas_station_gas)} ${gasSymbol}`.trimEnd() : undefined}
           />
-        </>
+        </div>
       )}
     </div>
   );
@@ -144,8 +147,30 @@ function FundingRow({ label, value }: { label: string; value: string | undefined
   );
 }
 
-function shortAddr(address: string): string {
-  return address.length > 18 ? `${address.slice(0, 8)}…${address.slice(-6)}` : address;
+/** Address row with full address in a code block + copy button.
+ *  Follows the same pattern as wallet-view's deposit address. */
+function CopyableAddress({ address, label }: { address: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback(() => {
+    void navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [address]);
+
+  return (
+    <div className="space-y-1">
+      {label && <p className="text-[11px] text-muted-foreground">{label}</p>}
+      <div className="flex items-center gap-1.5">
+        <code className="flex-1 min-w-0 truncate rounded border border-border bg-main-surface px-2 py-1 font-mono-tech text-[11px] text-muted-foreground" title={address}>
+          {address}
+        </code>
+        <Button type="button" variant="outline" size="icon" onClick={copy} aria-label={`Copy ${label ?? "address"}`}>
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /** A native-unit decimal string → grouped display; 6 dp so a thin gas balance
