@@ -38,6 +38,10 @@ use uuid::Uuid;
 
 use crate::{application::withdrawals::settle_withdrawal, config::EvmConfig, infrastructure::evm_rpc::EvmRpc, ports::WithdrawalRepository};
 
+/// Max poll interval after repeated cycle failures, in seconds — the adaptive ceiling
+/// so a down or rate-limited endpoint isn't hammered at the normal cadence.
+const CYCLE_MAX_BACKOFF_SECS: u64 = 300;
+
 /// The withdrawal confirmation watcher. Holds its own pool clone (its polling reads stay
 /// off the request path), the withdrawal repository + relay `Notify` to drive the settle,
 /// and an EVM client for the confirmation reads. One instance per EVM rail (`network`).
@@ -67,18 +71,36 @@ impl WithdrawalWatcher {
 	/// Poll until `shutdown` is cancelled. A failed cycle is logged and retried next poll —
 	/// settle is idempotent and a settled withdrawal drops out of the `processing` set, so
 	/// nothing is double-settled or lost.
+	///
+	/// Consecutive failures ramp the poll interval exponentially (capped at
+	/// [`CYCLE_MAX_BACKOFF_SECS`]) so a down or rate-limited endpoint isn't hammered at the
+	/// normal cadence. A single successful cycle resets the backoff to `poll_secs`.
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!(network = %self.network, confirmations = self.confirmations, "withdrawal watcher: confirming broadcast EVM withdrawals");
+		let mut consecutive_failures: u64 = 0;
 		loop {
-			if let Err(err) = self.scan_once().await {
-				warn!("withdrawal watcher: scan cycle failed, retrying next poll: {err}");
-			}
+			let delay = match self.scan_once().await {
+				Ok(()) => {
+					consecutive_failures = 0;
+					self.poll
+				}
+				Err(err) => {
+					consecutive_failures += 1;
+					let backoff = if consecutive_failures > 1 {
+						(self.poll.as_secs() * 2u64.pow(consecutive_failures as u32 - 1)).min(CYCLE_MAX_BACKOFF_SECS)
+					} else {
+						self.poll.as_secs()
+					};
+					warn!("withdrawal watcher: scan cycle failed, retrying in {backoff}s (failure #{consecutive_failures}): {err}");
+					Duration::from_secs(backoff)
+				}
+			};
 			tokio::select! {
 				() = shutdown.cancelled() => {
 					info!("withdrawal watcher: shutdown requested — stopping");
 					return;
 				}
-				() = tokio::time::sleep(self.poll) => {}
+				() = tokio::time::sleep(delay) => {}
 			}
 		}
 	}
