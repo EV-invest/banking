@@ -45,6 +45,14 @@ const LOOKUP_ACCOUNTS_MAX: usize = 8189;
 /// deterministic, so a re-submit after recovery returns `Exists`.
 const TB_CALL_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Deadline for the `cash_invariant` bulk-read. Unlike hot-path calls (post, reserve,
+/// complete, balance) which each touch one or two accounts, the cash-plane scan reads
+/// every USDT-ledger account in chunks of [`LOOKUP_ACCOUNTS_MAX`]. On a Raspberry Pi
+/// with many user-claim accounts, one chunk's `lookup_accounts` can legitimately exceed
+/// [`TB_CALL_TIMEOUT`] — especially during sweep/compaction. This longer bound keeps
+/// the conservation check alive at scale without touching the hot-path timeout.
+const TB_CASH_INVARIANT_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// The TigerBeetle-backed [`Ledger`]. Holds the shared TB client and a Postgres pool
 /// for the `tb_accounts` id-map only (never an amount).
 pub struct TbLedger {
@@ -149,7 +157,7 @@ impl TbLedger {
 			.client()
 			.create_accounts(accounts)
 			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
-		let results = deadline("create_accounts", call)
+		let results = deadline("create_accounts", call, TB_CALL_TIMEOUT)
 			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("create_accounts: {e:?}")))?;
 		for result in results {
@@ -168,7 +176,7 @@ impl TbLedger {
 			.client()
 			.create_transfers(transfers)
 			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
-		let results = deadline("create_transfers", call)
+		let results = deadline("create_transfers", call, TB_CALL_TIMEOUT)
 			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("create_transfers: {e:?}")))?;
 		for result in results {
@@ -196,7 +204,7 @@ impl Ledger for TbLedger {
 			.client()
 			.lookup_accounts(&[id])
 			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
-		let accounts = deadline("lookup_accounts", call)
+		let accounts = deadline("lookup_accounts", call, TB_CALL_TIMEOUT)
 			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("lookup_accounts: {e:?}")))?;
 		let Some(account) = accounts.first() else {
@@ -229,7 +237,7 @@ impl Ledger for TbLedger {
 			.client()
 			.lookup_transfers(&[id])
 			.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
-		let transfers = deadline("lookup_transfers", call)
+		let transfers = deadline("lookup_transfers", call, TB_CALL_TIMEOUT)
 			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("lookup_transfers: {e:?}")))?;
 		Ok(!transfers.is_empty())
@@ -320,7 +328,7 @@ impl Ledger for TbLedger {
 				.client()
 				.lookup_accounts(chunk)
 				.map_err(|e| LedgerError::Unavailable(format!("tigerbeetle closed: {e:?}")))?;
-			let accounts = deadline("lookup_accounts", call)
+			let accounts = deadline("lookup_accounts", call, TB_CASH_INVARIANT_TIMEOUT)
 				.await?
 				.map_err(|e| LedgerError::Unavailable(format!("lookup_accounts: {e:?}")))?;
 			for account in accounts {
@@ -367,13 +375,13 @@ fn map_transfer_status(status: tb::CreateTransferStatus) -> Result<(), LedgerErr
 	}
 }
 
-/// Bound a single in-flight TigerBeetle call by [`TB_CALL_TIMEOUT`]; an elapsed deadline
-/// is reported as [`LedgerError::Unavailable`] (a stalled, not closed, replica), so the
-/// relay retries it rather than blocking its single drain loop on the hung `.await`.
-async fn deadline<F: std::future::Future>(op: &str, call: F) -> Result<F::Output, LedgerError> {
-	tokio::time::timeout(TB_CALL_TIMEOUT, call)
+/// Bound a single in-flight TigerBeetle call by `limit`; an elapsed deadline is reported
+/// as [`LedgerError::Unavailable`] (a stalled, not closed, replica), so the relay retries
+/// it rather than blocking its single drain loop on the hung `.await`.
+async fn deadline<F: std::future::Future>(op: &str, call: F, limit: Duration) -> Result<F::Output, LedgerError> {
+	tokio::time::timeout(limit, call)
 		.await
-		.map_err(|_| LedgerError::Unavailable(format!("{op}: timed out after {TB_CALL_TIMEOUT:?}")))
+		.map_err(|_| LedgerError::Unavailable(format!("{op}: timed out after {limit:?}")))
 }
 
 fn tb_account(id: u128, key: &LedgerAccountKey) -> tb::Account {
@@ -412,7 +420,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_stalled_tigerbeetle_call_elapses_to_unavailable() {
 		let stalled = std::future::pending::<()>();
-		let result = deadline("lookup_accounts", stalled).await;
+		let result = deadline("lookup_accounts", stalled, TB_CALL_TIMEOUT).await;
 		assert!(matches!(result, Err(LedgerError::Unavailable(_))), "a hung TB call must map to Unavailable, not hang");
 	}
 }
