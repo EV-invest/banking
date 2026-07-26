@@ -3,7 +3,7 @@
 import { BadgeCheck, Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { PhoneNumber } from "@evinvest/types";
+import { Email, PhoneNumber } from "@evinvest/types";
 import { usePhoneNumber } from "@evinvest/types/react";
 import { Avatar, AvatarFallback, Button, Input, Skeleton } from "@evinvest/uikit";
 
@@ -148,7 +148,7 @@ export function ProfileView() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
             {loading ? <Skeleton className="h-7 w-44" /> : <p className="text-[22px] font-semibold text-white">{name || "Account"}</p>}
-            {loading ? <Skeleton className="h-4 w-52" /> : <p className="truncate text-[13px] text-muted-foreground">{email || "Not signed in"}</p>}
+            {loading ? <Skeleton className="h-4 w-52" /> : <p className="truncate text-[13px] text-muted-foreground">{formatEmail(email) || "Not signed in"}</p>}
           </div>
           {!loading && profile?.email_verified && (
             <span className="mt-2.5 inline-flex items-center gap-1 rounded-full bg-main-accent-t1/15 px-[9px] py-1 text-[11px] font-semibold text-main-accent-t1">
@@ -188,7 +188,7 @@ export function ProfileView() {
               </FieldBox>
             ))}
             <FieldBox label="Email address" trailing={profile?.email_verified ? <VerifiedTag /> : undefined}>
-              {loading ? <Skeleton className="h-[42px] w-full rounded-lg" /> : <ReadValue value={email} muted />}
+              {loading ? <Skeleton className="h-[42px] w-full rounded-lg" /> : <ReadValue value={formatEmail(email)} muted />}
             </FieldBox>
           </div>
         </section>
@@ -269,6 +269,12 @@ function formatPhone(raw?: string): string {
   if (!raw) return "";
   const pn = PhoneNumber.parseInput(raw) ?? PhoneNumber.fromUnsafe(raw);
   return PhoneNumber.format(pn);
+}
+
+function formatEmail(raw?: string): string {
+  if (!raw) return "";
+  const e = Email.parseInput(raw) ?? Email.fromUnsafe(raw);
+  return Email.raw(e);
 }
 
 /** Phone input wired to the `PhoneNumber` TypeObject via `usePhoneNumber`. */

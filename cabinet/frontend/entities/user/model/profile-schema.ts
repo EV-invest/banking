@@ -4,7 +4,7 @@
 // An empty string clears the field (the wire contract's full-replace
 // semantics); validation only runs against non-empty values.
 import { z } from "zod";
-import { PhoneNumber } from "@evinvest/types";
+import { Email, PhoneNumber } from "@evinvest/types";
 
 const NAME_MAX = Object.freeze({
   legal_name: 256,
@@ -39,6 +39,17 @@ function phoneRule() {
     .refine(
       (v) => !v || PhoneNumber.parseInput(v) !== undefined,
       "Enter a valid phone number starting with + or country code",
+    );
+}
+
+function emailRule() {
+  return z
+    .string()
+    .trim()
+    .max(320, "email must be at most 320 characters")
+    .refine(
+      (v) => !v || Email.parseInput(v) !== undefined,
+      "Enter a valid email address",
     );
 }
 

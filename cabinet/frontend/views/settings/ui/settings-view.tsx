@@ -3,7 +3,7 @@
 import { BadgeCheck, Check, Laptop, Loader2, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
-import { PhoneNumber } from "@evinvest/types";
+import { Email, PhoneNumber } from "@evinvest/types";
 import { usePhoneNumber } from "@evinvest/types/react";
 import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton } from "@evinvest/uikit";
 
@@ -295,7 +295,7 @@ function GeneralSection({
           ) : <FieldSkeleton />}
         </Field>
         <Field label="Email address" trailing={verified ? <VerifiedTag /> : undefined}>
-          {loading ? <FieldSkeleton /> : <Input value={email ?? ""} readOnly className="border-border bg-main-surface text-muted-foreground" />}
+          {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-main-surface text-muted-foreground" />}
         </Field>
         <Field label="Phone number">
           {ready ? (
@@ -362,7 +362,7 @@ function SecuritySection({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[14px] text-white">Signed in with Google</p>
-          {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-[13px] text-muted-foreground">{email ?? "—"}</p>}
+          {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-[13px] text-muted-foreground">{formatEmail(email) || "—"}</p>}
         </div>
         <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">Connected</Badge>
       </div>
@@ -567,6 +567,12 @@ function lastSeen(value: number | string | undefined): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `last active ${hrs}h ago`;
   return `last active ${Math.floor(hrs / 24)}d ago`;
+}
+
+function formatEmail(raw?: string | null): string {
+  if (!raw) return "";
+  const e = Email.parseInput(raw) ?? Email.fromUnsafe(raw);
+  return Email.raw(e);
 }
 
 /** Phone input wired to the `PhoneNumber` TypeObject via `usePhoneNumber`. */
