@@ -43,6 +43,10 @@ use crate::{
 /// harmless: `record_deposit` dedupes by `tx_ref`.
 const LOOKBACK_MS: i64 = 120_000;
 
+/// Max poll interval after repeated cycle failures, in seconds — the adaptive ceiling
+/// so a rate-limited endpoint isn't hammered at the normal cadence.
+const CYCLE_MAX_BACKOFF_SECS: u64 = 300;
+
 pub struct TronDepositWatcher {
 	pool: PgPool,
 	deposits: PgDeposits,
@@ -70,18 +74,36 @@ impl TronDepositWatcher {
 
 	/// Poll until `shutdown` is cancelled. A failed cycle is logged and retried next poll from the
 	/// unchanged cursor — at-least-once, and crediting is idempotent, so nothing is lost or doubled.
+	///
+	/// Consecutive failures ramp the poll interval exponentially (capped at
+	/// [`CYCLE_MAX_BACKOFF_SECS`]) so a down or rate-limited endpoint isn't hammered at the
+	/// normal cadence. A single successful cycle resets the backoff to `poll_secs`.
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!(contract = %self.usdt_contract, "tron deposit watcher: watching TRC20 USDT deposits");
+		let mut consecutive_failures: u64 = 0;
 		loop {
-			if let Err(err) = self.scan_once().await {
-				warn!("tron deposit watcher: scan cycle failed, retrying next poll: {err}");
-			}
+			let delay = match self.scan_once().await {
+				Ok(()) => {
+					consecutive_failures = 0;
+					self.poll
+				}
+				Err(err) => {
+					consecutive_failures += 1;
+					let backoff = if consecutive_failures > 1 {
+						(self.poll.as_secs() * 2u64.pow(consecutive_failures as u32 - 1)).min(CYCLE_MAX_BACKOFF_SECS)
+					} else {
+						self.poll.as_secs()
+					};
+					warn!("tron deposit watcher: scan cycle failed, retrying in {backoff}s (failure #{consecutive_failures}): {err}");
+					Duration::from_secs(backoff)
+				}
+			};
 			tokio::select! {
 				() = shutdown.cancelled() => {
 					info!("tron deposit watcher: shutdown requested — stopping");
 					return;
 				}
-				() = tokio::time::sleep(self.poll) => {}
+				() = tokio::time::sleep(delay) => {}
 			}
 		}
 	}

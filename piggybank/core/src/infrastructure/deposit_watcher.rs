@@ -37,6 +37,18 @@ use crate::{application::balance::record_deposit, config::EvmConfig, infrastruct
 /// `keccak256("Transfer(address,address,uint256)")` — the ERC-20 Transfer event topic0.
 const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
+/// Max retries for a single RPC call (`eth_blockNumber` / `eth_getLogs`) when the
+/// error is retryable (rate-limit, timeout). Caps the total backoff within one scan
+/// cycle so a stuck endpoint doesn't stall the watcher forever.
+const RPC_MAX_RETRIES: u32 = 5;
+/// Base backoff in ms before the first retry.
+const RPC_BASE_BACKOFF_MS: u64 = 1000;
+/// Max backoff between retries — caps the exponential ramp.
+const RPC_MAX_BACKOFF_MS: u64 = 30_000;
+/// Max poll interval after repeated cycle failures, in seconds — the adaptive ceiling
+/// so a down endpoint isn't hammered at the normal cadence.
+const CYCLE_MAX_BACKOFF_SECS: u64 = 300;
+
 /// The on-chain deposit watcher task. Holds its own pool clone so its polling reads don't
 /// compete with request traffic, and the relay `Notify` so a credit dispatches promptly.
 pub struct DepositWatcher {
@@ -66,18 +78,36 @@ impl DepositWatcher {
 	/// Poll until `shutdown` is cancelled. A failed cycle is logged and retried next poll
 	/// from the unchanged cursor — at-least-once, and crediting is idempotent, so nothing is
 	/// lost or double-counted.
+	///
+	/// Consecutive failures ramp the poll interval exponentially (capped at
+	/// [`CYCLE_MAX_BACKOFF_SECS`]) so a down or rate-limited endpoint isn't hammered at the
+	/// normal cadence. A single successful cycle resets the backoff to `poll_secs`.
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!(network = %self.config.network, rpc = %rpc_host(&self.config.rpc_url), contract = %self.config.usdt_contract, confirmations = self.config.confirmations, "deposit watcher: watching EVM USDT deposits");
+		let mut consecutive_failures: u64 = 0;
 		loop {
-			if let Err(err) = self.scan_once().await {
-				warn!("deposit watcher: scan cycle failed, retrying next poll: {err}");
-			}
+			let delay = match self.scan_once().await {
+				Ok(()) => {
+					consecutive_failures = 0;
+					self.config.poll_secs
+				}
+				Err(err) => {
+					consecutive_failures += 1;
+					let backoff = if consecutive_failures > 1 {
+						(self.config.poll_secs * 2u64.pow(consecutive_failures as u32 - 1)).min(CYCLE_MAX_BACKOFF_SECS)
+					} else {
+						self.config.poll_secs
+					};
+					warn!("deposit watcher: scan cycle failed, retrying in {backoff}s (failure #{consecutive_failures}): {err}");
+					backoff
+				}
+			};
 			tokio::select! {
 				() = shutdown.cancelled() => {
 					info!("deposit watcher: shutdown requested — stopping");
 					return;
 				}
-				() = tokio::time::sleep(Duration::from_secs(self.config.poll_secs)) => {}
+				() = tokio::time::sleep(Duration::from_secs(delay)) => {}
 			}
 		}
 	}
@@ -150,11 +180,10 @@ impl DepositWatcher {
 		result.as_array().cloned().ok_or_else(|| WatcherError::Rpc("eth_getLogs: result is not an array".into()))
 	}
 
-	async fn rpc(&self, method: &str, params: Value) -> Result<Value, WatcherError> {
+	/// Issue a single JSON-RPC call — no retry, the raw transport. Used by the retry
+	/// loop in [`rpc`] and kept thin so the retry counter and backoff live above it.
+	async fn rpc_once(&self, method: &str, params: &Value) -> Result<Value, WatcherError> {
 		let body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
-		// The scan's calls (blockNumber + getLogs) go to the logs endpoint when one is
-		// configured — free full nodes increasingly paywall eth_getLogs specifically,
-		// while the money-moving paths stay on the (reliable) main rpc_url.
 		let response: Value = self
 			.http
 			.post(self.config.logs_rpc_url.as_deref().unwrap_or(&self.config.rpc_url))
@@ -169,6 +198,32 @@ impl DepositWatcher {
 			return Err(WatcherError::Rpc(format!("{method}: rpc error: {err}")));
 		}
 		response.get("result").cloned().ok_or_else(|| WatcherError::Rpc(format!("{method}: response had no result")))
+	}
+
+	/// Call `rpc_once` with exponential-backoff retry for transient errors (rate
+	/// limits, timeouts). Non-retryable errors fail immediately; retryable errors
+	/// back off 1s → 2s → 4s → 8s → 16s (capped at 30s), up to
+	/// [`RPC_MAX_RETRIES`] attempts total. The scan's calls (blockNumber +
+	/// getLogs) go to the logs endpoint when one is configured — free full nodes
+	/// increasingly paywall eth_getLogs specifically, while the money-moving paths
+	/// stay on the (reliable) main rpc_url.
+	async fn rpc(&self, method: &str, params: Value) -> Result<Value, WatcherError> {
+		let mut attempt: u32 = 0;
+		loop {
+			match self.rpc_once(method, &params).await {
+				Ok(val) => return Ok(val),
+				Err(e) => {
+					let msg = e.to_string();
+					if !is_retryable_rpc_error(&msg) || attempt >= RPC_MAX_RETRIES {
+						return Err(e);
+					}
+					attempt += 1;
+					let ms = (RPC_BASE_BACKOFF_MS * 2u64.pow(attempt - 1)).min(RPC_MAX_BACKOFF_MS);
+					tracing::warn!("deposit watcher: {method} retryable error (attempt {attempt}/{RPC_MAX_RETRIES}), backing off {ms}ms: {msg}");
+					tokio::time::sleep(Duration::from_millis(ms)).await;
+				}
+			}
+		}
 	}
 
 	// ── cursor + watched addresses (Postgres control plane) ───────────────────────
@@ -287,6 +342,15 @@ fn pad_topic(address_lower: &str) -> String {
 /// Host (and port) of the RPC URL, for logging without leaking an API key in the path.
 fn rpc_host(url: &str) -> &str {
 	url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or(url)
+}
+
+/// Whether an RPC error is transient and worth retrying with backoff.
+/// dRPC free-tier codes 15 (rate limit), 30 (timeout), and 35 (range) are the
+/// common patterns; transport errors (network hiccup, DNS, TCP reset) are also
+/// transient. Non-retryable errors (invalid params, method-not-found, parse)
+/// fail immediately so the poll cycle logs them and moves on.
+fn is_retryable_rpc_error(msg: &str) -> bool {
+	msg.contains("\"code\":15") || msg.contains("\"code\":30") || msg.contains("\"code\":35") || msg.contains("request failed")
 }
 
 #[derive(Debug, thiserror::Error)]

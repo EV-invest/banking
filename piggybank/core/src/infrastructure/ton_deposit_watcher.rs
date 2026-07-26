@@ -56,6 +56,10 @@ const PAGE_LIMIT: u32 = 128;
 /// `record_deposit` dedupes by `transaction_hash`.
 const LOOKBACK_SECS: u64 = 900;
 
+/// Max poll interval after repeated cycle failures, in seconds — the adaptive ceiling
+/// so a rate-limited endpoint isn't hammered at the normal cadence.
+const CYCLE_MAX_BACKOFF_SECS: u64 = 300;
+
 pub struct TonDepositWatcher {
 	pool: PgPool,
 	deposits: PgDeposits,
@@ -73,18 +77,36 @@ impl TonDepositWatcher {
 
 	/// Poll until `shutdown` is cancelled. A failed cycle is logged and retried next poll
 	/// from the unchanged cursor — at-least-once, and crediting is idempotent.
+	///
+	/// Consecutive failures ramp the poll interval exponentially (capped at
+	/// [`CYCLE_MAX_BACKOFF_SECS`]) so a down or rate-limited endpoint isn't hammered at the
+	/// normal cadence. A single successful cycle resets the backoff to `poll_secs`.
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!(master = %self.config.usdt_master, testnet = self.config.is_testnet, "ton deposit watcher: watching jetton USDT deposits");
+		let mut consecutive_failures: u64 = 0;
 		loop {
-			if let Err(err) = self.scan_once().await {
-				warn!("ton deposit watcher: scan cycle failed, retrying next poll: {err}");
-			}
+			let delay = match self.scan_once().await {
+				Ok(()) => {
+					consecutive_failures = 0;
+					self.config.poll_secs
+				}
+				Err(err) => {
+					consecutive_failures += 1;
+					let backoff = if consecutive_failures > 1 {
+						(self.config.poll_secs * 2u64.pow(consecutive_failures as u32 - 1)).min(CYCLE_MAX_BACKOFF_SECS)
+					} else {
+						self.config.poll_secs
+					};
+					warn!("ton deposit watcher: scan cycle failed, retrying in {backoff}s (failure #{consecutive_failures}): {err}");
+					backoff
+				}
+			};
 			tokio::select! {
 				() = shutdown.cancelled() => {
 					info!("ton deposit watcher: shutdown requested — stopping");
 					return;
 				}
-				() = tokio::time::sleep(Duration::from_secs(self.config.poll_secs)) => {}
+				() = tokio::time::sleep(Duration::from_secs(delay)) => {}
 			}
 		}
 	}
