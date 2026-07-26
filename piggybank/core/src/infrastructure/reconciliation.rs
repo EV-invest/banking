@@ -94,7 +94,10 @@ impl Reconciliation {
 			// as a trivially-satisfied `0 == 0`. Alert (not warn): a persistent failure — e.g.
 			// an oversized `lookup_accounts` at scale — silently disables the conservation
 			// check, and must not be mistaken for a transient TB blip that self-heals.
-			Err(err) => error!("reconciliation: CASH INVARIANT UNCHECKED — cash-invariant read failed, conservation not verified this pass: {err}"),
+			Err(err) => {
+				crate::infrastructure::telemetry::note_cash_invariant_read_failure();
+				error!("reconciliation: CASH INVARIANT UNCHECKED — cash-invariant read failed, conservation not verified this pass: {err}")
+			}
 		}
 
 		// (2) Clearing reservation vs the gross of in-flight withdrawals. `queued`/

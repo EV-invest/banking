@@ -44,3 +44,27 @@ pub fn note_signer_error(op: &'static str, wallet: &str, message: &str) -> bool 
 /// (sweep gas/consolidation, withdrawal signing). Surfaced on `Readiness` → the admin
 /// Overview, because each hit means funds are stranded on a dead-key address.
 static UNSEAL_FAILURES: AtomicU64 = AtomicU64::new(0);
+
+/// Process-lifetime count of reconciliation cash-invariant reads that timed out.
+/// A transient blip is harmless (the next 60s scan usually succeeds), but a rising
+/// count means the TigerBeetle bulk-`lookup_accounts` deadline is systematically
+/// too tight or the ledger is overloaded — surfacing a drift early avoids days of
+/// silent conservation-skip.
+static CASH_INVARIANT_TIMEOUTS: AtomicU64 = AtomicU64::new(0);
+
+/// Record a reconciliation cash-invariant read failure. Callers (the reconciliation
+/// job) already log at ERROR; this counter lets a dashboard/alert distinguish a one-off
+/// from a persistent failure without grep'ing logs.
+pub fn note_cash_invariant_read_failure() {
+	let total = CASH_INVARIANT_TIMEOUTS.fetch_add(1, Ordering::Relaxed) + 1;
+	tracing::warn!(
+		total,
+		"reconciliation: cash-invariant read failed — TigerBeetle lookup_accounts unavailable. If this count climbs, the ledger may be overloaded or TB_CASH_INVARIANT_TIMEOUT may need raising."
+	);
+}
+
+/// Total cash-invariant timeouts since process start. Surfaced on `Readiness` so the
+/// admin Overview can flag a degraded reconciliation path.
+pub fn cash_invariant_timeouts() -> u64 {
+	CASH_INVARIANT_TIMEOUTS.load(Ordering::Relaxed)
+}
