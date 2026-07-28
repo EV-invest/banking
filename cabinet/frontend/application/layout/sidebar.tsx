@@ -21,7 +21,7 @@ interface NavItem {
 const FUND: NavItem[] = [
   { href: "/", label: "Home", icon: Home, active: (p) => p === "/" },
   { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p.startsWith("/invest") },
-  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
+  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") || p.startsWith("/wallet") },
 ];
 
 const PRODUCTS = [

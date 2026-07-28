@@ -21,7 +21,7 @@ interface TabItem {
 const TABS: TabItem[] = [
   { href: "/", label: "Home", icon: Home, active: (p) => p === "/" },
   { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p.startsWith("/invest") && !p.startsWith("/invest/products") },
-  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
+  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") || p.startsWith("/wallet") },
   { href: "/invest", label: "Products", icon: LayoutGrid, active: (p) => p.startsWith("/invest") },
   { href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") },
 ];
