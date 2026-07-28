@@ -1,29 +1,38 @@
 "use client";
 
-import { BadgeCheck, Check, Laptop, Loader2, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
+import { BadgeCheck, Check, Laptop, Loader2, LogOut, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
+import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
-import { Email, PhoneNumber } from "@evinvest/types";
+import { PhoneNumber } from "@evinvest/types";
 import { usePhoneNumber } from "@evinvest/types/react";
-import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton } from "@evinvest/uikit";
+import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { fetchSessions, revokeSession } from "@/entities/session/api/sessions-client";
 import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
 import { publishProfile } from "@/entities/user/model/profile-store";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
+import { withBasePath } from "@/shared/config/base-path";
 import type { Session, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { csrfHeader } from "@/shared/lib/csrf-client";
 import { TipAnchor } from "@/shared/tips";
-import { displayName, truncateName } from "@/views/settings/lib/format";
+import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
+import { MobileAppBar } from "@/shared/ui/mobile-appbar";
+import { displayName, initialsOfName, truncateName } from "@/views/settings/lib/format";
 
-const CARD = "rounded-[14px] border border-border bg-main-card";
-
-// The investor settings surface (Figma `cabinet/settings`, node 481:250), wired to the
-// backend over the BFF. General edits the same core user record as the Profile page
-// (full-replace, so it carries every editable field); Security states the real auth model
-// (Google-managed) and surfaces live sessions; Sessions & devices lists and revokes the
-// real refresh-token families at the hub. Auth is Google-OAuth-only, so there are no
-// password/2FA/biometric controls — that part of the mock does not map to reality.
+// The investor settings surface, wired to the backend over the BFF. Two Figma frames,
+// one component: `cabinet/mobile/settings` (node 498:259) below `lg` — an app bar over a
+// stack of row cards, with Sessions pushed as its own screen — and `cabinet/settings`
+// (node 481:250) above it, a section rail beside the editing form.
+//
+// General edits the same core user record as the Profile page (full-replace, so the form
+// carries every editable field even where a breakpoint only shows some); Security states
+// the real auth model (Google-managed) and surfaces live sessions; Sessions & devices
+// lists and revokes the real refresh-token families at the hub. Auth is Google-OAuth-only
+// and there is no notification or theme store, so the mock's 2FA/biometric/password rows
+// and its Notifications and Preferences cards have no backing here — they are left out
+// rather than faked.
 
 const EDITABLE = ["legal_name", "preferred_name", "phone", "date_of_birth", "nationality", "tax_residence", "residential_address", "language", "base_currency", "timezone"] as const;
 type Form = Record<(typeof EDITABLE)[number], string>;
@@ -42,6 +51,8 @@ const NAV: { id: Section; label: string; icon: LucideIcon }[] = [
 
 export function SettingsView() {
   const [section, setSection] = useState<Section>("general");
+  // The mobile stack: the root screen, or Sessions pushed on top of it.
+  const [pushed, setPushed] = useState<"sessions" | null>(null);
 
   const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
   const [form, setForm] = useState<Form | null>(null);
@@ -148,97 +159,110 @@ export function SettingsView() {
     }
   }
 
+  const sessionsPanel = (titled: boolean) => (
+    <SessionsSection titled={titled} sessions={sessions} error={sessionsError} busy={busy} name={name} onRevoke={revoke} onRevokeOthers={revokeOthers} />
+  );
+
   return (
-    <div className="flex flex-col gap-6 px-5 pb-10 pt-6 lg:px-8">
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="font-sans text-2xl font-semibold text-foreground">Settings</h1>
-          <p className="text-[13px] text-muted-foreground">Manage your account, security and access</p>
-        </div>
-        {section === "general" && (
-          <div className="flex shrink-0 items-center gap-3">
-            {saved && (
-              <span className="inline-flex items-center gap-1 text-[13px] font-medium text-main-accent-t2">
-                <Check className="size-4" /> Saved
-              </span>
-            )}
+    <>
+      <MobileAppBar
+        title={pushed === "sessions" ? "Sessions & devices" : "Settings"}
+        onBack={pushed ? () => setPushed(null) : undefined}
+        right={
+          dirty ? (
             <button
               type="button"
               onClick={save}
-              disabled={loading || saving || !dirty}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90 disabled:opacity-50"
+              disabled={saving}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-main-accent-t1 px-3.5 py-1.5 text-[13px] font-semibold text-main-black disabled:opacity-50"
             >
-              {saving && <Loader2 className="size-4 animate-spin" />} Save changes
+              {saving && <Loader2 className="size-3.5 animate-spin" />} Save
             </button>
+          ) : pushed ? undefined : (
+            <InitialsAvatar initials={initialsOfName(name, email)} className="size-[34px] text-[13px]" />
+          )
+        }
+      />
+
+      <div className="flex flex-col gap-4 px-5 pb-6 pt-[18px] lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
+        {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
+        <div className="hidden items-center justify-between gap-4 lg:flex">
+          <div className="min-w-0">
+            <h1 className="font-sans text-2xl font-semibold text-foreground">Settings</h1>
+            <p className="text-[13px] text-muted-foreground">Manage your account, security and access</p>
           </div>
-        )}
-      </div>
-
-      {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-
-      <div className="flex flex-col gap-5 lg:flex-row lg:gap-6">
-        {/* Mobile tab pills — below lg */}
-        <nav aria-label="Settings sections" className="flex gap-1.5 overflow-x-auto lg:hidden">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            const active = section === item.id;
-            return (
+          {section === "general" && (
+            <div className="flex shrink-0 items-center gap-3">
+              {saved && (
+                <span className="inline-flex items-center gap-1 text-[13px] font-medium text-main-accent-t2">
+                  <Check className="size-4" /> Saved
+                </span>
+              )}
               <button
-                key={item.id}
                 type="button"
-                aria-current={active ? "page" : undefined}
-                onClick={() => setSection(item.id)}
-                className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors",
-                  active ? "bg-main-accent-t1 font-semibold text-main-black" : "border border-border text-main-mist/80 hover:text-main-mist",
-                )}
+                onClick={save}
+                disabled={loading || saving || !dirty}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90 disabled:opacity-50"
               >
-                <Icon className="size-4" />
-                {item.label === "Sessions & devices" ? "Sessions" : item.label}
+                {saving && <Loader2 className="size-4 animate-spin" />} Save changes
               </button>
-            );
-          })}
-        </nav>
-
-        {/* Desktop sidebar nav — lg+ only */}
-        <nav aria-label="Settings sections" className="hidden w-[212px] shrink-0 flex-col gap-1 lg:flex">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            const active = section === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                aria-current={active ? "page" : undefined}
-                onClick={() => setSection(item.id)}
-                className={cn(
-                  "flex items-center gap-[11px] rounded-lg px-3 py-[9px] text-sm transition-colors",
-                  active ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "text-main-mist/90 hover:bg-foreground/[0.04]",
-                )}
-              >
-                <Icon className="size-[18px]" />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="min-w-0 flex-1">
-          {section === "general" && <GeneralSection loading={loading} form={form} email={email} verified={!!profile?.email_verified} onChange={set} fieldErrors={fieldErrors} />}
-          {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => setSection("sessions")} />}
-          {section === "sessions" && (
-            <SessionsSection
-              sessions={sessions}
-              error={sessionsError}
-              busy={busy}
-              name={name}
-              onRevoke={revoke}
-              onRevokeOthers={revokeOthers}
-            />
+            </div>
           )}
         </div>
+
+        {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+        {saved && (
+          <p className="inline-flex items-center gap-1 text-[13px] font-medium text-main-accent-t2 lg:hidden">
+            <Check className="size-4" /> Saved
+          </p>
+        )}
+
+        {/* ── Mobile (Figma cabinet/mobile/settings) ───────────────────────── */}
+        <div className="flex flex-col gap-4 lg:hidden">
+          {pushed === "sessions" ? (
+            sessionsPanel(false)
+          ) : (
+            <>
+              <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
+              <AccountRowsCard loading={loading} form={form} email={email} fieldErrors={fieldErrors} onChange={set} />
+              <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => setPushed("sessions")} />
+              <SignOutButton />
+            </>
+          )}
+        </div>
+
+        {/* ── Desktop (Figma cabinet/settings) ─────────────────────────────── */}
+        <div className="hidden gap-6 lg:flex">
+          <nav aria-label="Settings sections" className="flex w-[212px] shrink-0 flex-col gap-1">
+            {NAV.map((item) => {
+              const Icon = item.icon;
+              const active = section === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setSection(item.id)}
+                  className={cn(
+                    "flex items-center gap-[11px] rounded-lg px-3 py-[9px] text-sm transition-colors",
+                    active ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "text-main-mist/90 hover:bg-foreground/[0.04]",
+                  )}
+                >
+                  <Icon className="size-[18px]" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="min-w-0 flex-1">
+            {section === "general" && <GeneralSection loading={loading} form={form} email={email} verified={!!profile?.email_verified} onChange={set} fieldErrors={fieldErrors} />}
+            {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => setSection("sessions")} />}
+            {section === "sessions" && sessionsPanel(true)}
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -254,6 +278,166 @@ const TIMEZONES = [
   { value: "Asia/Ho_Chi_Minh", label: "Asia / Ho Chi Minh" },
   { value: "UTC", label: "UTC" },
 ];
+
+function labelOf(options: { value: string; label: string }[], value: string): string {
+  return options.find((o) => o.value === value)?.label ?? value;
+}
+
+/* ── Mobile cards ──────────────────────────────────────────────────────── */
+
+/** `card-ProfileSummary` — the tap target into the full profile. */
+function ProfileSummaryCard({ loading, name, email, verified }: { loading: boolean; name: string; email: string | null; verified: boolean }) {
+  return (
+    <Link href="/profile" className={cn(CARD, "flex items-center gap-[13px] py-3.5 pl-3.5 pr-4 transition-colors active:bg-foreground/[0.04]")}>
+      <InitialsAvatar initials={initialsOfName(name, email)} className="size-[46px] text-[17px]" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        {loading ? (
+          <Skeleton className="h-4 w-32" />
+        ) : (
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[15px] font-semibold text-foreground">{name}</span>
+            {verified && <Pill icon={BadgeCheck}>Verified</Pill>}
+          </div>
+        )}
+        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-[12px] text-muted-foreground">{email ?? "Not signed in"}</span>}
+      </div>
+      <Chevron className="size-5" />
+    </Link>
+  );
+}
+
+/** `card-Account` — one tappable row per editable preference; tapping expands the editor in place. */
+function AccountRowsCard({
+  loading,
+  form,
+  email,
+  fieldErrors,
+  onChange,
+}: {
+  loading: boolean;
+  form: Form | null;
+  email: string | null;
+  fieldErrors: Record<string, string>;
+  onChange: (key: keyof Form, value: string) => void;
+}) {
+  const [open, setOpen] = useState<keyof Form | null>(null);
+  const ready = !loading && !!form;
+  const toggle = (key: keyof Form) => setOpen((k) => (k === key ? null : key));
+
+  return (
+    <ListCard>
+      {/* Email is the IdP's — displayed, never editable here. */}
+      <Row>
+        <span className="shrink-0 text-[14px] font-medium text-foreground">Email</span>
+        {loading ? <Skeleton className="h-3.5 w-36" /> : <RowValue>{email ?? "—"}</RowValue>}
+      </Row>
+      <Hairline />
+      <ExpandableRow label="Phone" value={form ? formatPhone(form.phone) : ""} loading={!ready} open={open === "phone"} onToggle={() => toggle("phone")}>
+        {form && <PhoneField initial={form.phone} onChange={(v) => onChange("phone", v)} error={fieldErrors.phone} />}
+      </ExpandableRow>
+      <Hairline />
+      <ExpandableRow label="Language" value={form ? labelOf(LANGUAGES, form.language) : ""} loading={!ready} open={open === "language"} onToggle={() => toggle("language")}>
+        {form && <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder="Select language" error={fieldErrors.language} />}
+      </ExpandableRow>
+      <Hairline />
+      <ExpandableRow label="Base currency" value={form ? labelOf(CURRENCIES, form.base_currency) : ""} loading={!ready} open={open === "base_currency"} onToggle={() => toggle("base_currency")}>
+        {form && <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={CURRENCIES} placeholder="Select currency" error={fieldErrors.base_currency} />}
+      </ExpandableRow>
+      <Hairline />
+      <ExpandableRow label="Time zone" value={form ? labelOf(TIMEZONES, form.timezone) : ""} loading={!ready} open={open === "timezone"} onToggle={() => toggle("timezone")}>
+        {form && <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={TIMEZONES} placeholder="Select time zone" error={fieldErrors.timezone} />}
+      </ExpandableRow>
+    </ListCard>
+  );
+}
+
+function ExpandableRow({
+  label,
+  value,
+  loading,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string;
+  value: string;
+  loading: boolean;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col">
+      <button type="button" onClick={onToggle} disabled={loading} aria-expanded={open} className="flex min-w-0 items-center justify-between gap-3 py-[13px] text-left">
+        <span className="shrink-0 text-[14px] font-medium text-foreground">{label}</span>
+        <span className="flex min-w-0 items-center gap-[7px]">
+          {loading ? <Skeleton className="h-3.5 w-28" /> : !open && <RowValue>{value || "—"}</RowValue>}
+          <Chevron className={cn("transition-transform", open && "rotate-90")} />
+        </span>
+      </button>
+      {open && <div className="pb-3.5">{children}</div>}
+    </div>
+  );
+}
+
+/** `card-Security`, restated for the real auth model: Google-managed sign-in + live sessions. */
+function MobileSecurityCard({
+  loading,
+  email,
+  sessions,
+  onOpenSessions,
+}: {
+  loading: boolean;
+  email: string | null;
+  sessions: Session[] | undefined;
+  onOpenSessions: () => void;
+}) {
+  return (
+    <ListCard>
+      <ListCardTitle>Security</ListCardTitle>
+      <Hairline />
+      <Row>
+        <RowLabel title="Signed in with Google" sub={loading ? "…" : (email ?? "—")} />
+        <Pill>Connected</Pill>
+      </Row>
+      <Hairline />
+      <button type="button" onClick={onOpenSessions} className="flex min-w-0 items-center justify-between gap-3 py-[13px] text-left">
+        <RowLabel title="Trusted sessions" sub="Devices signed in to your account" />
+        <span className="flex shrink-0 items-center gap-[7px]">
+          {sessions === undefined ? <Skeleton className="h-3.5 w-4" /> : <RowValue>{sessions.length}</RowValue>}
+          <Chevron />
+        </span>
+      </button>
+      <Hairline />
+      <p className="py-3 text-[11px] leading-relaxed text-muted-foreground">
+        Your password, two-factor authentication and recovery are configured in your Google Account.
+      </p>
+    </ListCard>
+  );
+}
+
+/** `btn-SignOut` — the shell-owned logout, mirroring the header account chip. */
+function SignOutButton() {
+  const [busy, setBusy] = useState(false);
+  async function signOut() {
+    setBusy(true);
+    // Site-root /api/auth: revokes the shared session and clears its cookies for every zone.
+    await fetch("/api/auth/logout", { method: "POST", headers: csrfHeader() });
+    window.location.href = withBasePath("/loggedout");
+  }
+  return (
+    <button
+      type="button"
+      onClick={signOut}
+      disabled={busy}
+      className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-border py-3.5 text-[14px] font-semibold text-destructive transition-colors active:bg-destructive/10 disabled:opacity-60"
+    >
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />} Sign out
+    </button>
+  );
+}
+
+/* ── Desktop sections ──────────────────────────────────────────────────── */
 
 function GeneralSection({
   loading,
@@ -273,10 +457,7 @@ function GeneralSection({
   const ready = !loading && !!form;
   return (
     <section className={cn(CARD, "px-6 py-[22px]")}>
-      <header className="mb-5">
-        <h2 className="text-[15px] font-semibold text-white">Account</h2>
-        <p className="text-xs text-muted-foreground">Your contact details and preferences</p>
-      </header>
+      <SectionHeader title="Account" sub="Your contact details and preferences" />
       <div className="flex flex-wrap gap-[16px_18px]">
         <Field label="Legal name">
           {ready ? (
@@ -295,42 +476,19 @@ function GeneralSection({
           ) : <FieldSkeleton />}
         </Field>
         <Field label="Email address" trailing={verified ? <VerifiedTag /> : undefined}>
-          {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-main-surface text-muted-foreground" />}
+          {loading ? <FieldSkeleton /> : <Input value={email ?? ""} readOnly className="border-border bg-main-surface text-muted-foreground" />}
         </Field>
         <Field label="Phone number">
-          {ready ? (
-            <div className="min-w-0 flex-1">
-              <PhoneField
-                initial={form.phone}
-                onChange={(v) => onChange("phone", v)}
-                error={fieldErrors.phone}
-              />
-            </div>
-          ) : <FieldSkeleton />}
+          {ready ? <PhoneField initial={form.phone} onChange={(v) => onChange("phone", v)} error={fieldErrors.phone} /> : <FieldSkeleton />}
         </Field>
         <Field label="Language">
-          {ready ? (
-            <div className="min-w-0 flex-1">
-              <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder="Select language" />
-              {fieldErrors.language && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.language}</p>}
-            </div>
-          ) : <FieldSkeleton />}
+          {ready ? <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder="Select language" error={fieldErrors.language} /> : <FieldSkeleton />}
         </Field>
         <Field label="Base currency">
-          {ready ? (
-            <div className="min-w-0 flex-1">
-              <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={CURRENCIES} placeholder="Select currency" />
-              {fieldErrors.base_currency && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.base_currency}</p>}
-            </div>
-          ) : <FieldSkeleton />}
+          {ready ? <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={CURRENCIES} placeholder="Select currency" error={fieldErrors.base_currency} /> : <FieldSkeleton />}
         </Field>
         <Field label="Time zone">
-          {ready ? (
-            <div className="min-w-0 flex-1">
-              <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={TIMEZONES} placeholder="Select time zone" />
-              {fieldErrors.timezone && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.timezone}</p>}
-            </div>
-          ) : <FieldSkeleton />}
+          {ready ? <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={TIMEZONES} placeholder="Select time zone" error={fieldErrors.timezone} /> : <FieldSkeleton />}
         </Field>
       </div>
     </section>
@@ -352,33 +510,33 @@ function SecuritySection({
   const summary = count === undefined ? "Loading active sessions…" : count === 1 ? "1 device currently signed in" : `${count} devices currently signed in`;
   return (
     <section className={cn(CARD, "px-6 py-[22px]")}>
-      <header className="mb-4">
-        <h2 className="text-[15px] font-semibold text-white">Security</h2>
-        <p className="text-xs text-muted-foreground">How you sign in and where your account is active</p>
-      </header>
+      <SectionHeader title="Security" sub="How you sign in and where your account is active" />
       <div className="flex items-center gap-3 rounded-xl border border-border bg-main-surface px-4 py-[14px]">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white">
           <GoogleMark />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[14px] text-white">Signed in with Google</p>
-          {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-[13px] text-muted-foreground">{formatEmail(email) || "—"}</p>}
+          {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-[13px] text-muted-foreground">{email ?? "—"}</p>}
         </div>
         <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">Connected</Badge>
       </div>
-      <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+      <p className="mb-1 mt-3 text-[13px] leading-relaxed text-muted-foreground">
         Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.
       </p>
-      <SettingRow title="Sessions &amp; devices" sub={summary} first>
+      <Hairline />
+      <Row>
+        <RowLabel title="Sessions & devices" sub={summary} />
         <Button variant="outline" size="sm" className="border-border" onClick={onManageSessions}>
           Manage
         </Button>
-      </SettingRow>
+      </Row>
     </section>
   );
 }
 
 function SessionsSection({
+  titled,
   sessions,
   error,
   busy,
@@ -386,6 +544,7 @@ function SessionsSection({
   onRevoke,
   onRevokeOthers,
 }: {
+  titled: boolean;
   sessions: Session[] | undefined;
   error: string | null;
   busy: boolean;
@@ -397,19 +556,25 @@ function SessionsSection({
   const list = sessions ?? [];
   const hasOthers = list.some((s) => !s.current);
   return (
-    <section className={cn(CARD, "px-6 py-[22px]")}>
-      <header className="mb-2">
-        <h2 className="text-[15px] font-semibold text-white">Sessions &amp; devices</h2>
-        <p className="text-xs text-muted-foreground">Where you&apos;re signed in — revoke anything you don&apos;t recognise</p>
-      </header>
+    <ListCard className="lg:px-6 lg:pb-[22px] lg:pt-2">
+      {titled ? (
+        <ListCardTitle sub="Where you're signed in — revoke anything you don't recognise">Sessions &amp; devices</ListCardTitle>
+      ) : (
+        <p className="pb-2 pt-3 text-[11px] font-medium text-muted-foreground">Where you&apos;re signed in — revoke anything you don&apos;t recognise</p>
+      )}
 
       {error && <p className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 
       {loading ? (
         [0, 1].map((i) => (
-          <SettingRow key={i} first={i === 0} leading={<Skeleton className="size-9 rounded-lg" />} title="" sub="">
-            <Skeleton className="h-8 w-20 rounded-md" />
-          </SettingRow>
+          <div key={i}>
+            {i > 0 && <Hairline />}
+            <div className="flex items-center gap-3 py-3.5">
+              <Skeleton className="size-9 shrink-0 rounded-lg" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-8 w-20 shrink-0 rounded-md" />
+            </div>
+          </div>
         ))
       ) : list.length === 0 ? (
         <p className="py-6 text-center text-[13px] text-muted-foreground">No active sessions.</p>
@@ -417,43 +582,49 @@ function SessionsSection({
         list.map((s, i) => {
           const { label, icon: Icon } = deviceOf(s.user_agent);
           return (
-            <SettingRow
-              key={s.id ?? i}
-              first={i === 0}
-              leading={
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-main-surface text-main-mist/90">
-                  <Icon className="size-[18px]" />
-                </span>
-              }
-              title={s.current ? `${label} · this device` : label}
-              sub={metaOf(s, name)}
-            >
-              {s.current ? (
-                <span className="flex items-center gap-1.5">
-                  <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">This device</Badge>
-                  <TipAnchor anchor="settings.sessions.this-device" />
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => s.id && onRevoke(s.id)}
-                    className="border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
-                  >
-                    Revoke
-                  </Button>
-                  <TipAnchor anchor="settings.sessions.revoke" />
-                </span>
-              )}
-            </SettingRow>
+            <div key={s.id ?? i}>
+              {i > 0 && <Hairline />}
+              {/* Device and action stack below `sm` — side by side, both the device label and
+                  the ip/last-seen meta were being clipped to an ellipsis on a phone. */}
+              <div className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-main-surface text-main-mist/90">
+                    <Icon className="size-[18px]" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-medium text-foreground">{label}</p>
+                    <p className="break-words text-[12px] leading-snug text-muted-foreground">{metaOf(s, name)}</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5 pl-12 sm:pl-0">
+                  {s.current ? (
+                    <>
+                      <Pill>This device</Pill>
+                      <TipAnchor anchor="settings.sessions.this-device" />
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => s.id && onRevoke(s.id)}
+                        className="border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
+                      >
+                        Revoke
+                      </Button>
+                      <TipAnchor anchor="settings.sessions.revoke" />
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           );
         })
       )}
 
       {!loading && hasOthers && (
-        <div className="mt-4 flex items-center justify-end gap-1.5">
+        <div className="mb-2 mt-3 flex items-center gap-1.5">
           <Button
             variant="outline"
             disabled={busy}
@@ -465,13 +636,23 @@ function SessionsSection({
           <TipAnchor anchor="settings.sessions.revoke-others" />
         </div>
       )}
-    </section>
+    </ListCard>
+  );
+}
+
+/** Desktop card header — `font-sans` because the global `h1,h2,h3` rule is the serif face. */
+function SectionHeader({ title, sub }: { title: string; sub: string }) {
+  return (
+    <header className="mb-4">
+      <h2 className="font-sans text-[15px] font-semibold tracking-normal text-white">{title}</h2>
+      <p className="text-xs text-muted-foreground">{sub}</p>
+    </header>
   );
 }
 
 function Field({ label, trailing, children }: { label: string; trailing?: ReactNode; children: ReactNode }) {
   return (
-    <div className="min-w-[260px] flex-1">
+    <div className="flex min-w-[260px] flex-1 flex-col">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">{label}</span>
         {trailing}
@@ -493,50 +674,37 @@ function VerifiedTag() {
   );
 }
 
-function ThemedSelect({ value, onChange, options, placeholder }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; placeholder: string }) {
-  return (
-    <Select value={value || undefined} onValueChange={onChange}>
-      <SelectTrigger className="w-full border-border bg-main-surface">
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function SettingRow({
-  title,
-  sub,
-  first,
-  leading,
-  children,
+function ThemedSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  error,
 }: {
-  title: ReactNode;
-  sub?: ReactNode;
-  first?: boolean;
-  leading?: ReactNode;
-  children: ReactNode;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  error?: string;
 }) {
   return (
-    <>
-      {!first && <div className="h-px bg-border" />}
-      <div className="flex items-center justify-between gap-4 py-[14px]">
-        <div className="flex min-w-0 items-center gap-3">
-          {leading}
-          <div className="min-w-0">
-            <p className="truncate text-[14px] text-white">{title}</p>
-            {sub && <p className="truncate text-[13px] text-muted-foreground">{sub}</p>}
-          </div>
-        </div>
-        <div className="shrink-0">{children}</div>
-      </div>
-    </>
+    <div className="min-w-0 flex-1">
+      <Select value={value || undefined} onValueChange={onChange}>
+        <SelectTrigger className="w-full border-border bg-main-surface">
+          {/* Not `SelectValue`: the uikit's renders the raw stored value, so the trigger
+              read "en" / "Asia/Ho_Chi_Minh" instead of the option label the design shows. */}
+          <span className={cn("truncate", !value && "text-muted-foreground")}>{value ? labelOf(options, value) : placeholder}</span>
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+    </div>
   );
 }
 
@@ -569,10 +737,10 @@ function lastSeen(value: number | string | undefined): string {
   return `last active ${Math.floor(hrs / 24)}d ago`;
 }
 
-function formatEmail(raw?: string | null): string {
+function formatPhone(raw: string): string {
   if (!raw) return "";
-  const e = Email.parseInput(raw) ?? Email.fromUnsafe(raw);
-  return Email.raw(e);
+  const pn = PhoneNumber.parseInput(raw) ?? PhoneNumber.fromUnsafe(raw);
+  return PhoneNumber.format(pn);
 }
 
 /** Phone input wired to the `PhoneNumber` TypeObject via `usePhoneNumber`. */
@@ -592,13 +760,10 @@ function PhoneField({ initial, onChange, error }: { initial: string; onChange: (
   }, [initial, reset]);
 
   return (
-    <>
-      <Input
-        {...inputProps}
-        className={error ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
-      />
+    <div className="min-w-0 flex-1">
+      <Input {...inputProps} className={error ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
       {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
-    </>
+    </div>
   );
 }
 
