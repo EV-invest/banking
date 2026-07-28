@@ -90,6 +90,10 @@ impl Grpc {
 		cc::platform_service_client::PlatformServiceClient::new(self.concierge.clone())
 	}
 
+	fn notifications(&self) -> cc::notification_service_client::NotificationServiceClient<Channel> {
+		cc::notification_service_client::NotificationServiceClient::new(self.concierge.clone())
+	}
+
 	fn concierge_health(&self) -> cc::health_service_client::HealthServiceClient<Channel> {
 		cc::health_service_client::HealthServiceClient::new(self.concierge.clone())
 	}
@@ -244,6 +248,38 @@ impl Grpc {
 
 	pub async fn platform_config(&self, token: &str) -> Result<cc::PlatformConfig, Status> {
 		Ok(self.platform().get_platform_config(bearer(token, cc::GetPlatformConfigRequest {})?).await?.into_inner())
+	}
+
+	// ── concierge notification plane ───────────────────────────────────────────
+	// All self-service: concierge resolves the subscriber from the forwarded user
+	// token, so the BFF never names a subscriber and cannot read another user's inbox.
+
+	pub async fn list_notifications(&self, token: &str, req: cc::ListNotificationsRequest) -> Result<cc::ListNotificationsResponse, Status> {
+		Ok(self.notifications().list_notifications(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn unread_notifications(&self, token: &str) -> Result<cc::GetUnreadCountResponse, Status> {
+		Ok(self.notifications().get_unread_count(bearer(token, cc::GetUnreadCountRequest {})?).await?.into_inner())
+	}
+
+	pub async fn mark_notifications_read(&self, token: &str, req: cc::MarkReadRequest) -> Result<cc::MarkReadResponse, Status> {
+		Ok(self.notifications().mark_read(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn notification_settings(&self, token: &str) -> Result<cc::NotificationSettings, Status> {
+		Ok(self
+			.notifications()
+			.get_notification_settings(bearer(token, cc::GetNotificationSettingsRequest {})?)
+			.await?
+			.into_inner())
+	}
+
+	pub async fn set_notification_channel(&self, token: &str, req: cc::SetChannelEnabledRequest) -> Result<cc::NotificationSettings, Status> {
+		Ok(self.notifications().set_channel_enabled(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn set_notification_topic(&self, token: &str, req: cc::SetTopicSubscriptionRequest) -> Result<cc::NotificationSettings, Status> {
+		Ok(self.notifications().set_topic_subscription(bearer(token, req)?).await?.into_inner())
 	}
 
 	pub async fn set_maintenance_mode(&self, token: &str, enabled: bool) -> Result<cc::PlatformConfig, Status> {

@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowUpFromLine, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowUpFromLine, Bell, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/model/notification-store";
 import { cn } from "@/shared/lib/cn";
 import { useSession } from "@/shared/lib/use-session";
 
@@ -51,6 +52,10 @@ export function Sidebar() {
   const pathname = usePathname();
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
+  // The rail is mounted on every signed-in screen, so it is the one place the unread
+  // count is polled from — every other consumer reads the shared store.
+  useUnreadCountPolling();
+  const unread = useUnreadCount();
   return (
     <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
       <nav aria-label="Primary" className="flex flex-col gap-[18px]">
@@ -82,7 +87,12 @@ export function Sidebar() {
 
       <div className="flex-1" />
 
-      <nav aria-label="Secondary">
+      <nav aria-label="Secondary" className="flex flex-col gap-1">
+        <NavLink
+          item={{ href: "/notifications", label: "Notifications", icon: Bell, active: (p) => p.startsWith("/notifications") }}
+          active={pathname.startsWith("/notifications")}
+          trailing={unread ? <UnreadPill count={unread} active={pathname.startsWith("/notifications")} /> : undefined}
+        />
         <NavLink item={{ href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") }} active={pathname.startsWith("/settings")} />
       </nav>
     </aside>
@@ -98,7 +108,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({ item, active, trailing }: { item: NavItem; active: boolean; trailing?: ReactNode }) {
   const Icon = item.icon;
   return (
     <Link
@@ -110,7 +120,23 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       )}
     >
       <Icon className="size-[18px]" />
-      {item.label}
+      <span className="flex-1">{item.label}</span>
+      {trailing}
     </Link>
+  );
+}
+
+// Capped at 99+ so a long-neglected inbox cannot widen the rail.
+function UnreadPill({ count, active }: { count: number; active: boolean }) {
+  return (
+    <span
+      aria-label={`${count} unread`}
+      className={cn(
+        "rounded-full px-[7px] py-0.5 text-[11px] font-semibold tabular-nums",
+        active ? "bg-main-black text-main-mist" : "bg-main-accent-t1/15 text-main-accent-t1",
+      )}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
   );
 }

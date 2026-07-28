@@ -1,16 +1,23 @@
 "use client";
 
-import { BadgeCheck, Check, Laptop, Loader2, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
+import { BadgeCheck, Bell, Check, Laptop, Loader2, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { Email, PhoneNumber } from "@evinvest/types";
 import { usePhoneNumber } from "@evinvest/types/react";
-import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton } from "@evinvest/uikit";
+import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Switch } from "@evinvest/uikit";
 
+import {
+  fetchNotificationSettings,
+  setChannelEnabled,
+  setTopicSubscription,
+} from "@/entities/notification/api/notification-client";
+import { refreshUnreadCount } from "@/entities/notification/model/notification-store";
 import { fetchSessions, revokeSession } from "@/entities/session/api/sessions-client";
 import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
 import { publishProfile } from "@/entities/user/model/profile-store";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
+import type { NotificationSettings } from "@/shared/contracts/notifications";
 import type { Session, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
@@ -32,12 +39,13 @@ function formFrom(p: UserProfile): Form {
   return Object.fromEntries(EDITABLE.map((k) => [k, p[k] ?? ""])) as Form;
 }
 
-type Section = "general" | "security" | "sessions";
+type Section = "general" | "security" | "sessions" | "notifications";
 
 const NAV: { id: Section; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: User },
   { id: "security", label: "Security", icon: Shield },
   { id: "sessions", label: "Sessions & devices", icon: Monitor },
+  { id: "notifications", label: "Notifications", icon: Bell },
 ];
 
 export function SettingsView() {
@@ -226,6 +234,7 @@ export function SettingsView() {
         <div className="min-w-0 flex-1">
           {section === "general" && <GeneralSection loading={loading} form={form} email={email} verified={!!profile?.email_verified} onChange={set} fieldErrors={fieldErrors} />}
           {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => setSection("sessions")} />}
+          {section === "notifications" && <NotificationsSection />}
           {section === "sessions" && (
             <SessionsSection
               sessions={sessions}
@@ -610,5 +619,140 @@ function GoogleMark() {
       <path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.27a12 12 0 0 0 0 10.74l4-3.1Z" />
       <path fill="#EA4335" d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.43-3.43A11.97 11.97 0 0 0 12 0 12 12 0 0 0 1.27 6.63l4 3.1C6.22 6.88 8.87 4.77 12 4.77Z" />
     </svg>
+  );
+}
+
+/**
+ * Delivery preferences. Both master channels are opt-out and may be off at once —
+ * "stop contacting me" is a supported state, so nothing here keeps one of them on.
+ *
+ * Every write returns the full snapshot, so state is replaced from the response
+ * rather than patched locally; that keeps the per-topic email toggles honest when
+ * the master email switch turns them all moot.
+ */
+function NotificationsSection() {
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchNotificationSettings()
+      .then((s) => {
+        if (alive) setSettings(s);
+      })
+      .catch((e: unknown) => {
+        if (alive) setError(e instanceof Error ? e.message : "could not load notification settings");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function run(fn: () => Promise<NotificationSettings>) {
+    setBusy(true);
+    setError(null);
+    try {
+      setSettings(await fn());
+      // Switching the in-app channel changes what the badge should read, and the
+      // sidebar has no other reason to refetch.
+      void refreshUnreadCount();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error && !settings) {
+    return <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <section className={cn(CARD, "px-[22px] pb-1 pt-5")}>
+        <h2 className="text-[15px] font-semibold text-white">Delivery</h2>
+        <p className="mt-1 text-[13px] text-muted-foreground">Choose where notifications reach you. Both can be off.</p>
+        <div className="mt-4">
+          <SettingRow
+            first
+            title="In your cabinet"
+            sub="On by default. Turn this off and notifications stop appearing in your cabinet."
+          >
+            {settings ? (
+              <Switch
+                checked={settings.in_app_enabled}
+                disabled={busy}
+                onCheckedChange={(v) => void run(() => setChannelEnabled("in_app", v))}
+                aria-label="In-app notifications"
+              />
+            ) : (
+              <Skeleton className="h-5 w-9 rounded-full" />
+            )}
+          </SettingRow>
+          <SettingRow
+            title="Email"
+            sub={settings ? (settings.email_verified ? `Sent to ${settings.email} · verified` : `${settings.email} · unverified, so email is not sent`) : undefined}
+          >
+            {settings ? (
+              <Switch
+                checked={settings.email_enabled}
+                disabled={busy || !settings.email_verified}
+                onCheckedChange={(v) => void run(() => setChannelEnabled("email", v))}
+                aria-label="Email notifications"
+              />
+            ) : (
+              <Skeleton className="h-5 w-9 rounded-full" />
+            )}
+          </SettingRow>
+        </div>
+      </section>
+
+      <section className={cn(CARD, "px-[22px] pb-1 pt-5")}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-[15px] font-semibold text-white">What you follow</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">Email a copy for these. Unsubscribing is one click — no confirmation step.</p>
+          </div>
+          <p className="shrink-0 pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Email</p>
+        </div>
+        <div className="mt-4">
+          {settings
+            ? settings.topics.map((t, i) => (
+                <SettingRow key={t.topic} first={i === 0} title={t.label} sub={t.description}>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void run(() => setTopicSubscription(t.topic, !t.subscribed, t.email_enabled))}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors disabled:opacity-40",
+                        t.subscribed ? "border border-border/60 text-main-mist hover:bg-foreground/[0.04]" : "bg-main-accent-t1 text-main-black hover:opacity-90",
+                      )}
+                    >
+                      {t.subscribed ? "Following" : "Follow"}
+                    </button>
+                    <Switch
+                      checked={t.subscribed && t.email_enabled && settings.email_enabled}
+                      disabled={busy || !t.subscribed || !settings.email_enabled}
+                      onCheckedChange={(v) => void run(() => setTopicSubscription(t.topic, true, v))}
+                      aria-label={`Email copy for ${t.label}`}
+                    />
+                  </div>
+                </SettingRow>
+              ))
+            : [0, 1, 2].map((i) => (
+                <SettingRow key={i} first={i === 0} title={<Skeleton className="h-4 w-32" />}>
+                  <Skeleton className="h-5 w-9 rounded-full" />
+                </SettingRow>
+              ))}
+        </div>
+      </section>
+
+      {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      <p className="text-[12px] text-muted-foreground">
+        Turn a channel off and we stop sending on it. Turn both off and we stop notifying you altogether — updates still live on the fund pages whenever you want them.
+      </p>
+    </div>
   );
 }
