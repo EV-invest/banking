@@ -308,23 +308,32 @@
               # eth_getLogs (-32005), so the deposit SCAN needs its own endpoint.
               BSC_RPC_URL = "https://bsc-dataseed.bnbchain.org";
               POLYGON_RPC_URL = "https://polygon-rpc.com";
-              # BSC_LOGS_RPC_URL / POLYGON_LOGS_RPC_URL are deliberately ABSENT here.
+              # Deposit-scan endpoints. Both keyless, so both are committable — the
+              # limits below were MEASURED against the watcher's real query shape (a
+              # `to`-topic filter over the USDT contract), not taken from provider docs,
+              # which are wrong about all of this.
               #
-              # A keyed provider URL carries its API key in the path, so it is a
-              # credential and cannot be committed. They arrive instead through the
-              # pod's `kubernetes-ev-banking-piggybank` secret (sops on the rpi5 host →
-              # k3s-cluster-secrets.service), reaching the container via `envFrom` —
-              # the same path TON_API_KEY already takes.
+              # BSC: moved off bsc.drpc.org, whose rate limit (code 15) throttled the
+              # scan — including eth_blockNumber — into a permanent alert storm.
+              # publicnode served 12/12 back-to-back 500-block chunks at the watcher's
+              # pacing with no throttling. Its ceiling is HISTORY, not rate: depths up to
+              # ~5k blocks (~1h at 0.75s/block) answer, ≥10k returns "Archive requests
+              # require a personal token". Steady state runs 15 blocks back, so this is
+              # only a limit on backfilling an outage longer than ~1h — for that, point
+              # this at bsc.drpc.org temporarily (it serves 500-block ranges 200k+ deep,
+              # just slowly) or use a keyed archive provider.
+              BSC_LOGS_RPC_URL = "https://bsc-rpc.publicnode.com";
+              # Polygon: drpc is kept — depth is not its problem (range-100 queries answer
+              # 200k blocks deep) and the keyless alternatives refuse Polygon getLogs
+              # outright. Its actual cap is a ~100-BLOCK RANGE: 100 answers, 128 fails.
               #
-              # They must not be re-added here: on a duplicate key Kubernetes lets `env`
-              # win over `envFrom`, so a value in this set SILENTLY overrides the secret
-              # and the rail quietly keeps using whatever is written here.
-              #
-              # Why keyed at all: drpc's keyless endpoint rate-limits the scan (code 15)
-              # and refuses getLogs once the query reaches far enough back (code 35), so
-              # a scan that falls behind can never catch up and deposits go uncredited.
-              # Free tiers of Alchemy/QuickNode/Ankr are sufficient. If the secret is
-              # missing the watcher says so loudly at boot and detects no deposits.
+              # It reports that as code 35 "ranges over 10000 blocks are not supported on
+              # free plan", which is simply false — the number in the message is off by
+              # two orders of magnitude. Against the 500-block default EVERY Polygon
+              # getLogs was refused, so this rail credited nothing at all until the range
+              # below was set. Do not raise it without re-measuring.
+              POLYGON_LOGS_RPC_URL = "https://polygon.drpc.org";
+              POLYGON_MAX_BLOCK_RANGE = "100";
               TIGERBEETLE_ADDRESS = pkgs.lib.concatStringsSep "," tbProd.addresses;
               TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
               AUTH_SIGNING_KID = "prod-1";
