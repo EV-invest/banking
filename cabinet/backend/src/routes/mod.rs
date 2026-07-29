@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod identity;
 pub mod money;
+pub mod notifications;
 pub mod platform;
 pub mod system;
 
@@ -38,6 +39,14 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/mfe-registry", get(system::mfe_registry))
 		.route("/api/platform", get(platform::status))
 		.route("/api/users", get(identity::get_me).patch(identity::update_profile))
+		// Notifications — self-service only: concierge resolves the subscriber from the
+		// forwarded user token, so no route here names one.
+		.route("/api/notifications", get(notifications::list))
+		.route("/api/notifications/unread-count", get(notifications::unread_count))
+		.route("/api/notifications/read", post(notifications::mark_read))
+		.route("/api/notifications/settings", get(notifications::settings))
+		.route("/api/notifications/settings/channel", post(notifications::set_channel))
+		.route("/api/notifications/settings/topic", post(notifications::set_topic))
 		.route("/api/wallet", get(money::get_wallet))
 		.route("/api/wallet/deposit-address", get(money::deposit_address))
 		.route("/api/wallet/withdrawals", get(money::list_withdrawals).post(money::request_withdrawal))

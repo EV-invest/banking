@@ -644,3 +644,121 @@ impl From<cc::PlatformConfig> for PlatformConfig {
 		}
 	}
 }
+
+/// One inbox entry. Unix-second timestamps are rendered as strings for the same
+/// reason every other i64 here is: the old proto-loader emitted `longs: String`, and
+/// the frontend's generated types still expect that shape.
+#[derive(serde::Serialize)]
+pub struct Notification {
+	pub id: String,
+	pub topic: String,
+	pub kind: String,
+	pub title: String,
+	pub body: String,
+	pub link: String,
+	pub occurred_at: String,
+	pub created_at: String,
+	/// "0" while unread.
+	pub read_at: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct NotificationList {
+	pub notifications: Vec<Notification>,
+	pub next_cursor: String,
+	pub unread_count: u32,
+}
+
+#[derive(serde::Serialize)]
+pub struct UnreadCount {
+	pub unread_count: u32,
+}
+
+#[derive(serde::Serialize)]
+pub struct MarkReadResult {
+	pub marked: u32,
+	pub unread_count: u32,
+}
+
+#[derive(serde::Serialize)]
+pub struct TopicSubscription {
+	pub topic: String,
+	pub label: String,
+	pub description: String,
+	pub subscribed: bool,
+	pub email_enabled: bool,
+}
+
+/// The whole delivery surface. Both master switches may be false at once — that is a
+/// supported state, so the frontend must not treat it as a broken record.
+#[derive(serde::Serialize)]
+pub struct NotificationSettings {
+	pub in_app_enabled: bool,
+	pub email_enabled: bool,
+	pub email: String,
+	pub email_verified: bool,
+	pub topics: Vec<TopicSubscription>,
+}
+
+impl From<cc::Notification> for Notification {
+	fn from(n: cc::Notification) -> Self {
+		Self {
+			id: n.id,
+			topic: n.topic,
+			kind: n.kind,
+			title: n.title,
+			body: n.body,
+			link: n.link,
+			occurred_at: n.occurred_at.to_string(),
+			created_at: n.created_at.to_string(),
+			read_at: n.read_at.to_string(),
+		}
+	}
+}
+
+impl From<cc::ListNotificationsResponse> for NotificationList {
+	fn from(r: cc::ListNotificationsResponse) -> Self {
+		Self {
+			notifications: r.notifications.into_iter().map(Into::into).collect(),
+			next_cursor: r.next_cursor,
+			unread_count: r.unread_count,
+		}
+	}
+}
+
+impl From<cc::GetUnreadCountResponse> for UnreadCount {
+	fn from(r: cc::GetUnreadCountResponse) -> Self {
+		Self { unread_count: r.unread_count }
+	}
+}
+
+impl From<cc::MarkReadResponse> for MarkReadResult {
+	fn from(r: cc::MarkReadResponse) -> Self {
+		Self {
+			marked: r.marked,
+			unread_count: r.unread_count,
+		}
+	}
+}
+
+impl From<cc::NotificationSettings> for NotificationSettings {
+	fn from(s: cc::NotificationSettings) -> Self {
+		Self {
+			in_app_enabled: s.in_app_enabled,
+			email_enabled: s.email_enabled,
+			email: s.email,
+			email_verified: s.email_verified,
+			topics: s
+				.topics
+				.into_iter()
+				.map(|t| TopicSubscription {
+					topic: t.topic,
+					label: t.label,
+					description: t.description,
+					subscribed: t.subscribed,
+					email_enabled: t.email_enabled,
+				})
+				.collect(),
+		}
+	}
+}
