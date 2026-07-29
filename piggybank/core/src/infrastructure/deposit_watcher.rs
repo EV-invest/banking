@@ -19,7 +19,14 @@
 //! The `eth_getLogs` `to`-topic filter (an OR over the watched addresses) means the endpoint
 //! MUST support `eth_getLogs` — some public nodes don't; point the rail's RPC URL at one that does.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+	collections::HashMap,
+	sync::{
+		Arc,
+		atomic::{AtomicU64, Ordering},
+	},
+	time::Duration,
+};
 
 use domain::{
 	balance::Party,
@@ -48,6 +55,19 @@ const RPC_MAX_BACKOFF_MS: u64 = 30_000;
 /// Max poll interval after repeated cycle failures, in seconds — the adaptive ceiling
 /// so a down endpoint isn't hammered at the normal cadence.
 const CYCLE_MAX_BACKOFF_SECS: u64 = 300;
+/// Floor for the adaptive `eth_getLogs` window. Below this the endpoint is refusing the
+/// query for a reason other than its width (free tiers also cap how deep into history a
+/// getLogs may reach), so narrowing further is pointless and the cycle fails instead.
+const MIN_BLOCK_RANGE: u64 = 16;
+/// Pause between consecutive `eth_getLogs` chunks while catching up. Without it the
+/// catch-up loop fires chunks as fast as the endpoint answers, which is precisely the
+/// burst a free-tier rate limit rejects — pacing trades a slower backfill for one that
+/// actually completes.
+const CHUNK_PACE_MS: u64 = 250;
+/// How far the scan may fall behind the safe head before it is called out on its own.
+/// A lagging scan means deposits are landing on-chain UNCREDITED, which is worth an alert
+/// in a way that an individual throttled RPC call is not.
+const LAG_WARN_BLOCKS: u64 = 5_000;
 
 /// The on-chain deposit watcher task. Holds its own pool clone so its polling reads don't
 /// compete with request traffic, and the relay `Notify` so a credit dispatches promptly.
@@ -57,6 +77,12 @@ pub struct DepositWatcher {
 	relay: Arc<Notify>,
 	http: reqwest::Client,
 	config: EvmConfig,
+	/// The `eth_getLogs` window actually in use, in blocks. Starts at the configured
+	/// `max_block_range` and halves whenever the endpoint rejects the query as too wide, so
+	/// the scan settles on the widest window the endpoint accepts. It never widens again:
+	/// a free tier's cap is static, and re-probing it would reintroduce the failed call
+	/// this narrowing exists to avoid.
+	block_range: AtomicU64,
 }
 
 impl DepositWatcher {
@@ -66,12 +92,14 @@ impl DepositWatcher {
 			.build()
 			.expect("reqwest client builds with default config");
 		let deposits = PgDeposits::new(pool.clone());
+		let block_range = AtomicU64::new(config.max_block_range.max(1));
 		Self {
 			pool,
 			deposits,
 			relay,
 			http,
 			config,
+			block_range,
 		}
 	}
 
@@ -93,12 +121,8 @@ impl DepositWatcher {
 				}
 				Err(err) => {
 					consecutive_failures += 1;
-					let backoff = if consecutive_failures > 1 {
-						(self.config.poll_secs * 2u64.pow(consecutive_failures as u32 - 1)).min(CYCLE_MAX_BACKOFF_SECS)
-					} else {
-						self.config.poll_secs
-					};
-					warn!("deposit watcher: scan cycle failed, retrying in {backoff}s (failure #{consecutive_failures}): {err}");
+					let backoff = cycle_backoff_secs(self.config.poll_secs, consecutive_failures);
+					warn!(network = %self.config.network, "deposit watcher: scan cycle failed, retrying in {backoff}s (failure #{consecutive_failures}): {err}");
 					backoff
 				}
 			};
@@ -130,10 +154,17 @@ impl DepositWatcher {
 		}
 		let topic_addrs: Vec<Value> = watched.keys().map(|a| Value::String(pad_topic(a))).collect();
 
+		// A scan that has fallen behind is the condition worth alerting on: those blocks hold
+		// deposits nobody has been credited for yet. Reported once per cycle, against the
+		// per-cycle backoff, rather than once per throttled RPC call.
+		let lag = safe_head - last_scanned;
+		if lag > LAG_WARN_BLOCKS {
+			warn!(network = %network, lag_blocks = lag, last_scanned, safe_head, "deposit watcher: scan is behind the chain — deposits in the gap are not yet credited");
+		}
+
 		while last_scanned < safe_head {
 			let from = last_scanned + 1;
-			let to = (from + self.config.max_block_range - 1).min(safe_head);
-			let logs = self.get_logs(from, to, &topic_addrs).await?;
+			let (logs, to) = self.get_logs(from, safe_head, &topic_addrs).await?;
 			for log in &logs {
 				let Some(transfer) = decode_transfer(log) else { continue };
 				let Some(&user) = watched.get(&transfer.to) else { continue };
@@ -143,6 +174,9 @@ impl DepositWatcher {
 			// and this update re-scans the chunk; `record_deposit` is idempotent by tx_ref.
 			self.set_cursor(network, to).await?;
 			last_scanned = to;
+			if last_scanned < safe_head {
+				tokio::time::sleep(Duration::from_millis(CHUNK_PACE_MS)).await;
+			}
 		}
 		Ok(())
 	}
@@ -169,31 +203,60 @@ impl DepositWatcher {
 		parse_hex_u64(hex).ok_or_else(|| WatcherError::Rpc(format!("eth_blockNumber: unparseable {hex}")))
 	}
 
-	async fn get_logs(&self, from: u64, to: u64, addresses: &[Value]) -> Result<Vec<Value>, WatcherError> {
-		let params = json!([{
-			"fromBlock": format!("0x{from:x}"),
-			"toBlock": format!("0x{to:x}"),
-			"address": self.config.usdt_contract,
-			"topics": [TRANSFER_TOPIC, Value::Null, addresses],
-		}]);
-		let result = self.rpc("eth_getLogs", params).await?;
-		result.as_array().cloned().ok_or_else(|| WatcherError::Rpc("eth_getLogs: result is not an array".into()))
+	/// One chunk of Transfer logs starting at `from`, plus the last block it covers — the
+	/// caller advances the cursor to that block rather than assuming the window it asked for.
+	///
+	/// A "range too wide" rejection is DETERMINISTIC: the identical request fails every time,
+	/// so retrying it (as a rate limit is retried) only burns attempts and log lines. The one
+	/// response that can succeed is a narrower window, so that is what this does — halving
+	/// until the endpoint accepts it or [`MIN_BLOCK_RANGE`] is reached, at which point the
+	/// refusal is about something other than width and the cycle fails.
+	async fn get_logs(&self, from: u64, safe_head: u64, addresses: &[Value]) -> Result<(Vec<Value>, u64), WatcherError> {
+		loop {
+			let range = self.block_range.load(Ordering::Relaxed);
+			let to = from.saturating_add(range - 1).min(safe_head);
+			let params = json!([{
+				"fromBlock": format!("0x{from:x}"),
+				"toBlock": format!("0x{to:x}"),
+				"address": self.config.usdt_contract,
+				"topics": [TRANSFER_TOPIC, Value::Null, addresses],
+			}]);
+			match self.rpc("eth_getLogs", params).await {
+				Ok(result) => {
+					let logs = result.as_array().cloned().ok_or_else(|| WatcherError::Rpc("eth_getLogs: result is not an array".into()))?;
+					return Ok((logs, to));
+				}
+				Err(err) if matches!(classify(&err.to_string()), RpcAction::Narrow) && range > MIN_BLOCK_RANGE => {
+					let narrowed = (range / 2).max(MIN_BLOCK_RANGE);
+					self.block_range.store(narrowed, Ordering::Relaxed);
+					// Bounded: the window only ever shrinks, so this fires at most
+					// log2(max_block_range / MIN_BLOCK_RANGE) times for the process's life.
+					warn!(network = %self.config.network, "deposit watcher: endpoint refused a {range}-block eth_getLogs window, narrowing to {narrowed}: {err}");
+				}
+				Err(err) => return Err(err),
+			}
+		}
 	}
 
 	/// Issue a single JSON-RPC call — no retry, the raw transport. Used by the retry
 	/// loop in [`rpc`] and kept thin so the retry counter and backoff live above it.
 	async fn rpc_once(&self, method: &str, params: &Value) -> Result<Value, WatcherError> {
 		let body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
-		let response: Value = self
+		let response = self
 			.http
 			.post(self.config.logs_rpc_url.as_deref().unwrap_or(&self.config.rpc_url))
 			.json(&body)
 			.send()
 			.await
-			.map_err(|e| WatcherError::Rpc(format!("{method}: request failed: {e}")))?
-			.json()
-			.await
-			.map_err(|e| WatcherError::Rpc(format!("{method}: bad json: {e}")))?;
+			.map_err(|e| WatcherError::Rpc(format!("{method}: request failed: {e}")))?;
+		// A throttling proxy answers 429 (or a 5xx) with an HTML body, not a JSON-RPC error
+		// object. Classify on the status BEFORE parsing, or the throttle reads as a permanent
+		// "bad json" and the cycle gives up instead of backing off.
+		let status = response.status();
+		if !status.is_success() {
+			return Err(WatcherError::Rpc(format!("{method}: http status {}", status.as_u16())));
+		}
+		let response: Value = response.json().await.map_err(|e| WatcherError::Rpc(format!("{method}: bad json: {e}")))?;
 		if let Some(err) = response.get("error").filter(|e| !e.is_null()) {
 			return Err(WatcherError::Rpc(format!("{method}: rpc error: {err}")));
 		}
@@ -207,6 +270,12 @@ impl DepositWatcher {
 	/// getLogs) go to the logs endpoint when one is configured — free full nodes
 	/// increasingly paywall eth_getLogs specifically, while the money-moving paths
 	/// stay on the (reliable) main rpc_url.
+	///
+	/// Retries log at DEBUG, not WARN. Being throttled by a public endpoint is the expected
+	/// steady state here, and a retry that then succeeds is a non-event; emitting a warning
+	/// per attempt turned one throttled call into five alerts. The cycle-level `warn!` in
+	/// [`run`] is the signal — it fires once per cycle, after the retries are exhausted, and
+	/// rides the cycle backoff instead of the RPC cadence.
 	async fn rpc(&self, method: &str, params: Value) -> Result<Value, WatcherError> {
 		let mut attempt: u32 = 0;
 		loop {
@@ -214,12 +283,12 @@ impl DepositWatcher {
 				Ok(val) => return Ok(val),
 				Err(e) => {
 					let msg = e.to_string();
-					if !is_retryable_rpc_error(&msg) || attempt >= RPC_MAX_RETRIES {
+					if !matches!(classify(&msg), RpcAction::Backoff) || attempt >= RPC_MAX_RETRIES {
 						return Err(e);
 					}
 					attempt += 1;
-					let ms = (RPC_BASE_BACKOFF_MS * 2u64.pow(attempt - 1)).min(RPC_MAX_BACKOFF_MS);
-					tracing::warn!("deposit watcher: {method} retryable error (attempt {attempt}/{RPC_MAX_RETRIES}), backing off {ms}ms: {msg}");
+					let ms = (RPC_BASE_BACKOFF_MS << (attempt - 1)).min(RPC_MAX_BACKOFF_MS);
+					tracing::debug!(network = %self.config.network, "deposit watcher: {method} retryable error (attempt {attempt}/{RPC_MAX_RETRIES}), backing off {ms}ms: {msg}");
 					tokio::time::sleep(Duration::from_millis(ms)).await;
 				}
 			}
@@ -344,13 +413,50 @@ fn rpc_host(url: &str) -> &str {
 	url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or(url)
 }
 
-/// Whether an RPC error is transient and worth retrying with backoff.
-/// dRPC free-tier codes 15 (rate limit), 30 (timeout), and 35 (range) are the
-/// common patterns; transport errors (network hiccup, DNS, TCP reset) are also
-/// transient. Non-retryable errors (invalid params, method-not-found, parse)
-/// fail immediately so the poll cycle logs them and moves on.
-fn is_retryable_rpc_error(msg: &str) -> bool {
-	msg.contains("\"code\":15") || msg.contains("\"code\":30") || msg.contains("\"code\":35") || msg.contains("request failed")
+/// How the caller should react to an RPC error.
+#[derive(Debug, PartialEq, Eq)]
+enum RpcAction {
+	/// Transient (rate limit, timeout, transport, 429/5xx) — the same call may succeed later.
+	Backoff,
+	/// The endpoint refused the query's block window — only a narrower one can succeed.
+	Narrow,
+	/// Repeating changes nothing (invalid params, method-not-found, unparseable) — fail now.
+	Fail,
+}
+
+/// Classify an RPC error message. dRPC's free tier is the endpoint these run against by
+/// default, so its codes lead: 15 (rate limit), 30 (timeout), 35 (block window refused).
+/// The `Narrow` phrasings cover the other providers' wording for the same condition, since
+/// the rail's RPC URL is operator-configured and may point anywhere.
+///
+/// Splitting `Narrow` out of the retryable set is the point: it used to be lumped in with
+/// rate limits and retried five times, and since the identical query is refused every time,
+/// those five attempts could only ever fail — five alerts for one unwinnable call.
+fn classify(msg: &str) -> RpcAction {
+	if msg.contains("\"code\":35")
+		|| msg.contains("blocks are not supported")
+		|| msg.contains("block range")
+		|| msg.contains("query returned more than")
+		|| msg.contains("exceed maximum block range")
+	{
+		return RpcAction::Narrow;
+	}
+	if msg.contains("\"code\":15") || msg.contains("\"code\":30") || msg.contains("request failed") || msg.contains("http status 429") || msg.contains("http status 5") {
+		return RpcAction::Backoff;
+	}
+	RpcAction::Fail
+}
+
+/// Poll interval after `failures` consecutive failed cycles: `poll_secs` doubled per
+/// failure, capped at [`CYCLE_MAX_BACKOFF_SECS`].
+///
+/// Saturating throughout. The naive `poll_secs * 2u64.pow(failures - 1)` overflows `u64`
+/// around the 60th consecutive failure — reachable in well under a day once the cap pins
+/// the cycle at 5 minutes — and an overflow there wraps to a SMALL delay, turning a
+/// backed-off watcher back into a hot loop against the endpoint already refusing it.
+fn cycle_backoff_secs(poll_secs: u64, failures: u64) -> u64 {
+	let shift = u32::try_from(failures.saturating_sub(1)).unwrap_or(u32::MAX).min(63);
+	poll_secs.saturating_mul(1u64 << shift).min(CYCLE_MAX_BACKOFF_SECS)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -407,6 +513,59 @@ mod tests {
 			pad_topic("0x024da544a76714a3812096e9ef84d40b2c8863e8"),
 			"0x000000000000000000000000024da544a76714a3812096e9ef84d40b2c8863e8"
 		);
+	}
+
+	#[test]
+	fn a_rate_limit_backs_off_but_a_refused_range_narrows() {
+		// The two errors seen in production, verbatim from the dRPC free tier.
+		assert_eq!(
+			classify(r#"rpc: eth_blockNumber: rpc error: {"code":15,"message":"You reached Public endpoint rate limit, please upgrade to paid plan"}"#),
+			RpcAction::Backoff
+		);
+		assert_eq!(
+			classify(r#"rpc: eth_getLogs: rpc error: {"code":35,"message":"ranges over 10000 blocks are not supported on free plan"}"#),
+			RpcAction::Narrow
+		);
+		// A throttling proxy's bare 429/5xx is transient; its parse failure is not the signal.
+		assert_eq!(classify("rpc: eth_getLogs: http status 429"), RpcAction::Backoff);
+		assert_eq!(classify("rpc: eth_getLogs: http status 503"), RpcAction::Backoff);
+		assert_eq!(classify("rpc: eth_getLogs: request failed: connection reset"), RpcAction::Backoff);
+		// Other providers' wording for a refused window.
+		assert_eq!(classify("rpc: eth_getLogs: rpc error: exceed maximum block range: 5000"), RpcAction::Narrow);
+		assert_eq!(classify("rpc: eth_getLogs: rpc error: query returned more than 10000 results"), RpcAction::Narrow);
+		// Retrying these changes nothing — fail the cycle instead of burning five attempts.
+		assert_eq!(classify(r#"rpc: eth_getLogs: rpc error: {"code":-32601,"message":"method not found"}"#), RpcAction::Fail);
+		assert_eq!(classify("rpc: eth_getLogs: bad json: expected value"), RpcAction::Fail);
+	}
+
+	#[test]
+	fn narrowing_halves_down_to_the_floor_and_stops() {
+		// What `get_logs` walks when an endpoint keeps refusing the window: 500 → 16, then
+		// the guard (`range > MIN_BLOCK_RANGE`) stops it and the error surfaces.
+		let mut range = 500u64;
+		let mut steps = 0;
+		while range > MIN_BLOCK_RANGE {
+			range = (range / 2).max(MIN_BLOCK_RANGE);
+			steps += 1;
+			assert!(steps < 64, "narrowing must terminate");
+		}
+		assert_eq!(range, MIN_BLOCK_RANGE);
+		assert_eq!(steps, 5);
+	}
+
+	#[test]
+	fn cycle_backoff_ramps_then_saturates() {
+		assert_eq!(cycle_backoff_secs(12, 0), 12); // no failures yet
+		assert_eq!(cycle_backoff_secs(12, 1), 12);
+		assert_eq!(cycle_backoff_secs(12, 2), 24);
+		assert_eq!(cycle_backoff_secs(12, 3), 48);
+		assert_eq!(cycle_backoff_secs(12, 5), 192);
+		assert_eq!(cycle_backoff_secs(12, 6), CYCLE_MAX_BACKOFF_SECS); // 384 → capped
+		// The regression: a long outage must stay pinned at the ceiling, never wrap around
+		// to a short delay that hammers the endpoint that is already refusing us.
+		assert_eq!(cycle_backoff_secs(12, 60), CYCLE_MAX_BACKOFF_SECS);
+		assert_eq!(cycle_backoff_secs(12, 64), CYCLE_MAX_BACKOFF_SECS);
+		assert_eq!(cycle_backoff_secs(12, u64::MAX), CYCLE_MAX_BACKOFF_SECS);
 	}
 
 	#[test]

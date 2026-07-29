@@ -304,9 +304,16 @@
               # k8s Secrets; main.rs refuses a prod boot with every rail empty.
               TON_API_URL = "https://toncenter.com/api/v3";
               # BSC (BEP20 USDT): split-provider — dataseed is a solid free full node
-              # for balances/nonce/broadcast but rejects eth_getLogs (-32005); drpc
-              # allows getLogs in 500-block chunks but throttles — the deposit scan
-              # alone goes to drpc. For anything serious: a keyed provider.
+              # for balances/nonce/broadcast but rejects eth_getLogs (-32005); the
+              # deposit scan alone goes to drpc.
+              #
+              # drpc's KEYLESS endpoint is not sufficient for a live rail. Its free tier
+              # rate-limits the scan (code 15) and refuses getLogs once the query reaches
+              # far enough back (code 35), so a scan that falls behind can no longer catch
+              # up and deposits go uncredited until an operator intervenes. The watcher
+              # now degrades quietly instead of alert-storming, but quiet is not working:
+              # set BSC_LOGS_RPC_URL / POLYGON_LOGS_RPC_URL to a KEYED provider
+              # (Alchemy/QuickNode/Ankr — free tiers suffice) via k8s Secret.
               BSC_RPC_URL = "https://bsc-dataseed.bnbchain.org";
               BSC_LOGS_RPC_URL = "https://bsc.drpc.org";
               # Polygon (PoS USDT, 6-dp): official public RPC; drpc fallback for the
