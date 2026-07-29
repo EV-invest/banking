@@ -15,9 +15,9 @@ interface TabItem {
 
 // The 5-tab mobile navigation bar (Figma cabinet mobile tab bar). These tabs
 // replace the desktop sidebar on narrow viewports (<1024px). "Products" maps
-// to the invest page for now — both sidebar products ("Quy Nhon Fund", "Coastal
-// Yield") resolve there. Active-tint uses the same teal accent as the sidebar's
-// highlighted nav link for visual consistency.
+// to the invest page for now — the sidebar product ("Quy Nhon Fund") resolves
+// there. Active-tint uses the same teal accent as the sidebar's highlighted nav
+// link for visual consistency.
 const TABS: TabItem[] = [
   { href: "/", label: "Home", icon: Home, active: (p) => p === "/" },
   { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p.startsWith("/invest") && !p.startsWith("/invest/products") },

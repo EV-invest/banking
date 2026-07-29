@@ -8,7 +8,6 @@
 
 export type NotificationTopic =
 	| "fund:quy-nhon"
-	| "fund:coastal-yield"
 	| "account:money-movement"
 	| "platform:announcements";
 
