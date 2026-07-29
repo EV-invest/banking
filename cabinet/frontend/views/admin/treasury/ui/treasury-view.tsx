@@ -148,7 +148,7 @@ function FundingRow({ label, value }: { label: string; value: string | undefined
 }
 
 /** Address row with full address in a code block + copy button.
- *  Follows the same pattern as wallet-view's deposit address. */
+ *  Follows the same pattern as deposit-view's deposit address. */
 function CopyableAddress({ address, label }: { address: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 

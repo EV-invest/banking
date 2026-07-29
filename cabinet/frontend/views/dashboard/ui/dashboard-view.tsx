@@ -63,10 +63,10 @@ export function DashboardView() {
           <p className="text-[13px] text-main-mist/55">All-time performance and your participation</p>
         </div>
         <div className="flex shrink-0 gap-[10px]">
-          <Link href="/wallet" className="rounded-lg border border-border px-4 py-[9px] text-[13px] font-semibold text-main-mist/90 transition-colors hover:bg-foreground/[0.04]">
+          <Link href="/wallet/withdraw" className="rounded-lg border border-border px-4 py-[9px] text-[13px] font-semibold text-main-mist/90 transition-colors hover:bg-foreground/[0.04]">
             Withdraw
           </Link>
-          <Link href="/wallet" className="rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90">
+          <Link href="/wallet/deposit" className="rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90">
             Deposit
           </Link>
         </div>
@@ -188,10 +188,10 @@ function MoveMoney() {
     <div className={cn(CARD, "flex flex-col gap-4 px-[22px] py-5")}>
       <p className="text-[15px] font-semibold text-white">Move money</p>
       <div className="flex gap-[10px]">
-        <Link href="/wallet" className="flex flex-1 items-center justify-center rounded-lg bg-main-accent-t1 px-4 py-2.5 text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90">
+        <Link href="/wallet/deposit" className="flex flex-1 items-center justify-center rounded-lg bg-main-accent-t1 px-4 py-2.5 text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90">
           Deposit
         </Link>
-        <Link href="/wallet" className="flex flex-1 items-center justify-center rounded-lg border border-border px-4 py-2.5 text-[13px] font-semibold text-main-mist/90 transition-colors hover:bg-foreground/[0.04]">
+        <Link href="/wallet/withdraw" className="flex flex-1 items-center justify-center rounded-lg border border-border px-4 py-2.5 text-[13px] font-semibold text-main-mist/90 transition-colors hover:bg-foreground/[0.04]">
           Withdraw
         </Link>
       </div>
