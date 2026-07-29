@@ -27,7 +27,6 @@ const FUND: NavItem[] = [
 
 const PRODUCTS = [
   { href: "/invest", label: "Quy Nhon Fund", badge: "Q", tone: "bg-main-accent-t1/15 text-main-accent-t1" },
-  { href: "/invest", label: "Coastal Yield", badge: "C", tone: "bg-main-accent-t2/15 text-main-accent-t2" },
 ];
 
 // ADMINISTER group — the operator console. Rendered only for a non-investor session
