@@ -42,3 +42,12 @@ export function initialsOf(email: string | null | undefined): string {
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/** Initials from a resolved display name ("Fen Astra" → "FA"), falling back to the
+ *  email heuristic while the name is still unknown. */
+export function initialsOfName(name: string, email: string | null | undefined): string {
+  const parts = name.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
+  const a = parts[0]?.[0];
+  if (!a) return initialsOf(email);
+  return (a + (parts[1]?.[0] ?? "")).toUpperCase();
+}
