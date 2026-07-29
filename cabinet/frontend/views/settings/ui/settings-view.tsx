@@ -24,7 +24,7 @@ import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { TipAnchor } from "@/shared/tips";
-import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
+import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue, SWITCH_ON } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
 import { displayName, initialsOfName, truncateName } from "@/views/settings/lib/format";
 
@@ -613,7 +613,7 @@ function SessionsSection({
               {i > 0 && <Hairline />}
               {/* Device and action stack below `sm` — side by side, both the device label and
                   the ip/last-seen meta were being clipped to an ellipsis on a phone. */}
-              <div className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-3.5">
                 <div className="flex min-w-0 items-start gap-3">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-main-surface text-main-mist/90">
                     <Icon className="size-[18px]" />
@@ -867,6 +867,7 @@ function NotificationsSection() {
           <RowLabel title="In your cabinet" sub="On by default. Turn this off and notifications stop appearing in your cabinet." />
           {settings ? (
             <Switch
+              className={SWITCH_ON}
               checked={settings.in_app_enabled}
               disabled={busy}
               onCheckedChange={(v) => void run(() => setChannelEnabled("in_app", v))}
@@ -884,6 +885,7 @@ function NotificationsSection() {
           />
           {settings ? (
             <Switch
+              className={SWITCH_ON}
               checked={settings.email_enabled}
               disabled={busy || !settings.email_verified}
               onCheckedChange={(v) => void run(() => setChannelEnabled("email", v))}
@@ -904,9 +906,11 @@ function NotificationsSection() {
           ? settings.topics.map((t) => (
               <div key={t.topic}>
                 <Hairline />
-                {/* Follow button and email switch drop under the label on a phone —
-                    side by side they squeeze the topic description to a sliver. */}
-                <div className="flex flex-col gap-2.5 py-[13px] sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                {/* Wraps rather than switching at a breakpoint: the controls drop under
+                    the label only when they genuinely do not fit, so the row is correct at
+                    every width instead of at two. The `sm:` variants this replaced were
+                    rendering as a permanent centred column — see the PR for detail. */}
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-[13px]">
                   <RowLabel title={t.label} sub={t.description} />
                   <div className="flex shrink-0 items-center gap-3">
                     <button
@@ -921,6 +925,7 @@ function NotificationsSection() {
                       {t.subscribed ? "Following" : "Follow"}
                     </button>
                     <Switch
+              className={SWITCH_ON}
                       checked={t.subscribed && t.email_enabled && settings.email_enabled}
                       disabled={busy || !t.subscribed || !settings.email_enabled}
                       onCheckedChange={(v) => void run(() => setTopicSubscription(t.topic, true, v))}

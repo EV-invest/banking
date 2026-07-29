@@ -11,6 +11,18 @@ import { cn } from "@/shared/lib/cn";
 
 export const CARD = "rounded-[14px] border border-border bg-main-card";
 
+/**
+ * uikit's `Switch` paints its checked state with `--primary`, which in this theme is
+ * `main-brand` (#001e4e) — a near-black navy that all but vanishes against the
+ * `main-card` (#0c1626) it sits on, leaving "on" harder to read than "off". Every
+ * other active affordance in the cabinet (rail item, Follow button, "This device")
+ * uses the teal accent, so switches follow suit.
+ *
+ * Belongs in uikit proper; kept here until that ships so the cabinet is not left
+ * with an unreadable control in the meantime.
+ */
+export const SWITCH_ON = "data-[state=checked]:bg-main-accent-t1";
+
 export function ListCard({ className, children }: { className?: string; children: ReactNode }) {
   return <section className={cn(CARD, "flex w-full min-w-0 flex-col px-4 pb-1.5 pt-1", className)}>{children}</section>;
 }
