@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownToLine, ArrowUpFromLine, TrendingDown, TrendingUp } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -55,12 +55,12 @@ export function DashboardView() {
   const ops = buildOps(redemptions, withdrawals);
 
   return (
-    <div className="flex flex-col gap-6 px-8 pb-7 pt-6">
+    <div className="flex flex-col gap-6 px-8 pb-7 pt-[26px]">
       {/* topbar */}
       <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="font-sans text-2xl font-semibold text-foreground">Portfolio</h1>
-          <p className="text-[13px] text-muted-foreground">All-time performance and your participation</p>
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 className="font-sans text-2xl font-semibold leading-tight text-foreground">Portfolio</h1>
+          <p className="text-[13px] text-main-mist/55">All-time performance and your participation</p>
         </div>
         <div className="flex shrink-0 gap-[10px]">
           <Link href="/wallet" className="rounded-lg border border-border px-4 py-[9px] text-[13px] font-semibold text-main-mist/90 transition-colors hover:bg-foreground/[0.04]">
@@ -85,11 +85,11 @@ export function DashboardView() {
       <div className={cn(CARD, "flex flex-wrap items-stretch gap-x-7 gap-y-4 px-[26px] py-5")}>
         <Stat label="Unrealized P&L" value={walletLoading || posLoading ? null : formatSignedMoney(pnlSum)} tone={pnlSum < 0 ? "loss" : "gain"} hint="across all positions" tip="dashboard.stats.unrealized-pnl" />
         <Divider />
-        <Stat label="Available" value={walletLoading ? null : formatMoney(balance?.available)} hint="free to deploy" tip="dashboard.stats.available" />
+        <Stat label="Available" value={walletLoading ? null : formatMoney(balance?.available)} hint="auto-deploys at EOD" tip="dashboard.stats.available" />
         <Divider />
         <Stat label="Active strategies" value={posLoading ? null : String(pos.length)} hint="fund positions" />
         <Divider />
-        <Stat label="Net invested" value={posLoading ? null : formatMoney(netContributed)} hint="at cost basis" tip="dashboard.stats.net-invested" />
+        <Stat label="Net contributed" value={posLoading ? null : formatMoney(netContributed)} hint="at cost basis" tip="dashboard.stats.net-invested" />
       </div>
 
       {/* operations */}
@@ -101,14 +101,14 @@ export function DashboardView() {
           </Link>
         </div>
         {ops.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">No operations yet — your subscriptions, redemptions and withdrawals will show up here.</p>
+          <p className="py-10 text-center text-sm text-main-mist/45">No operations yet — your subscriptions, redemptions and withdrawals will show up here.</p>
         ) : (
           ops.map((op, i) => (
             <div key={op.id} className={cn("flex items-center gap-4 py-[15px]", i > 0 && "border-t border-border")}>
               <span className={cn("rounded-md px-[9px] py-1 text-[11px] font-semibold", op.tagClass)}>{op.tag}</span>
-              <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
                 <p className="truncate text-sm font-semibold text-main-mist">{op.title}</p>
-                <p className="truncate text-xs text-muted-foreground">{op.sub}</p>
+                <p className="truncate text-xs text-main-mist/45">{op.sub}</p>
               </div>
               <p className={cn("shrink-0 text-[15px] font-semibold tabular-nums", op.amountClass)}>{op.amount}</p>
             </div>
@@ -133,8 +133,8 @@ function PerfCard({ value, loading, allTimePct }: { value: string | undefined; l
           <div className="flex items-center gap-[14px]">
             {loading ? <Skeleton className="h-12 w-48" /> : <p className="text-[46px] font-semibold leading-none text-white tabular-nums">{formatMoney(value)}</p>}
             {allTimePct !== null && (
-              <span className={cn("flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold", down ? "bg-main-accent-t4/15 text-main-accent-t4" : "bg-main-accent-t3/15 text-main-accent-t3")}>
-                {down ? <TrendingDown className="size-3.5" /> : <TrendingUp className="size-3.5" />}
+              <span className={cn("flex items-center gap-1 rounded-full py-[5px] pl-[9px] pr-[11px] text-xs font-semibold", down ? "bg-destructive/15 text-destructive" : "bg-main-accent-t3/15 text-main-accent-t3")}>
+                {down ? <TrendingDown className="size-[13px]" /> : <TrendingUp className="size-[13px]" />}
                 {formatPct(allTimePct)} all-time
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
               </span>
@@ -148,7 +148,7 @@ function PerfCard({ value, loading, allTimePct }: { value: string | undefined; l
               type="button"
               aria-pressed={r === range}
               onClick={() => setRange(r)}
-              className={cn("rounded-[7px] px-[13px] py-1.5 text-xs font-medium transition-colors", r === range ? "bg-main-accent-t1/18 text-main-accent-t1" : "text-muted-foreground hover:text-foreground")}
+              className={cn("rounded-[7px] px-[13px] py-1.5 text-xs transition-colors", r === range ? "bg-main-accent-t1/18 font-semibold text-main-accent-t1" : "font-medium text-main-mist/60 hover:text-foreground")}
             >
               {r}
             </button>
@@ -162,12 +162,12 @@ function PerfCard({ value, loading, allTimePct }: { value: string | undefined; l
         <div className="absolute inset-x-0 top-3/4 h-px bg-border/60" />
         <div className="absolute inset-0 bg-gradient-to-b from-main-accent-t1/[0.06] to-transparent" />
         <div className="absolute inset-0 flex items-center justify-center">
-          <p className="text-xs text-muted-foreground">Performance history will appear here</p>
+          <p className="text-xs text-main-mist/45">Performance history will appear here</p>
         </div>
       </div>
       <div className="flex gap-[18px]">
         <Legend color="#f2c94c" label="Fund performance" />
-        <Legend color="#2a9d8f" label="Your participation" />
+        <Legend color="#2e9e5b" label="Your participation" />
       </div>
     </div>
   );
@@ -175,7 +175,7 @@ function PerfCard({ value, loading, allTimePct }: { value: string | undefined; l
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (
-    <span className="flex items-center gap-[7px] text-xs text-muted-foreground">
+    <span className="flex items-center gap-[7px] text-xs font-medium text-main-mist/60">
       <span className="size-2 rounded-full" style={{ backgroundColor: color }} />
       {label}
     </span>
@@ -188,20 +188,20 @@ function MoveMoney() {
     <div className={cn(CARD, "flex flex-col gap-4 px-[22px] py-5")}>
       <p className="text-[15px] font-semibold text-white">Move money</p>
       <div className="flex gap-[10px]">
-        <Link href="/wallet" className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-main-accent-t1 px-4 py-2.5 text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90">
-          <ArrowDownToLine className="size-4" /> Deposit
+        <Link href="/wallet" className="flex flex-1 items-center justify-center rounded-lg bg-main-accent-t1 px-4 py-2.5 text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90">
+          Deposit
         </Link>
-        <Link href="/wallet" className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5 text-[13px] font-semibold text-main-mist/90 transition-colors hover:bg-foreground/[0.04]">
-          <ArrowUpFromLine className="size-4" /> Withdraw
+        <Link href="/wallet" className="flex flex-1 items-center justify-center rounded-lg border border-border px-4 py-2.5 text-[13px] font-semibold text-main-mist/90 transition-colors hover:bg-foreground/[0.04]">
+          Withdraw
         </Link>
       </div>
       <div className="flex items-center gap-3 rounded-[10px] border border-border bg-main-surface px-[14px] py-3">
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <p id="auto-deploy-label" className="flex items-center gap-1.5 text-[13px] font-semibold text-main-mist">
             Auto-deploy idle cash
             <TipAnchor anchor="dashboard.move-money.auto-deploy" />
           </p>
-          <p className="text-[11px] text-muted-foreground">Available balance commits at end of day</p>
+          <p className="text-[11px] text-main-mist/50">Available balance commits at end of day</p>
         </div>
         <button
           type="button"
@@ -209,9 +209,9 @@ function MoveMoney() {
           onClick={() => setAuto((v) => !v)}
           aria-checked={auto}
           aria-labelledby="auto-deploy-label"
-          className={cn("relative h-5 w-8 shrink-0 rounded-full transition-colors", auto ? "bg-main-accent-t1" : "bg-border")}
+          className={cn("relative h-5 w-8 shrink-0 rounded-full transition-colors", auto ? "bg-primary" : "bg-input")}
         >
-          <span className={cn("absolute top-0.5 size-4 rounded-full bg-white transition-all", auto ? "left-[14px]" : "left-0.5")} />
+          <span className={cn("absolute top-0.5 size-4 rounded-full bg-primary-foreground transition-all", auto ? "left-[14px]" : "left-0.5")} />
         </button>
       </div>
     </div>
@@ -226,14 +226,14 @@ function WhatIOwn({ allocations, total, loading }: { allocations: { name: string
           Invested · what I own
           <TipAnchor anchor="dashboard.invested.allocation" />
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs font-medium text-main-mist/50">
           {allocations.length} {allocations.length === 1 ? "strategy" : "strategies"}
         </p>
       </div>
       {loading ? (
         <Skeleton className="h-24 w-full" />
       ) : allocations.length === 0 ? (
-        <p className="py-4 text-sm text-muted-foreground">No fund positions yet.</p>
+        <p className="py-4 text-sm text-main-mist/45">No fund positions yet.</p>
       ) : (
         <div className="flex flex-col gap-4">
           {allocations.map((a, i) => {
@@ -260,15 +260,16 @@ function WhatIOwn({ allocations, total, loading }: { allocations: { name: string
 }
 
 function Stat({ label, value, tone, hint, tip }: { label: string; value: string | null; tone?: "gain" | "loss"; hint: string; tip?: TipKey }) {
-  const valueClass = tone === "gain" ? "text-main-accent-t2" : tone === "loss" ? "text-main-accent-t4" : "text-white";
+  const valueClass = tone === "gain" ? "text-main-accent-t2" : tone === "loss" ? "text-destructive" : "text-white";
+  const hintClass = tone === "gain" ? "text-main-accent-t2/80" : tone === "loss" ? "text-destructive/80" : "text-main-mist/50";
   return (
     <div className="flex min-w-[120px] flex-1 flex-col gap-1.5">
       <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="text-xs font-medium text-main-mist/55">{label}</p>
         {tip && <TipAnchor anchor={tip} />}
       </div>
       {value === null ? <Skeleton className="h-6 w-20" /> : <p className={cn("text-[23px] font-semibold tabular-nums", valueClass)}>{value}</p>}
-      <p className="text-[11px] text-muted-foreground">{hint}</p>
+      <p className={cn("text-[11px] font-medium", hintClass)}>{hint}</p>
     </div>
   );
 }
@@ -302,11 +303,11 @@ function buildOps(redemptions: Redemption[], withdrawals: Withdrawal[]): Op[] {
   const fromWithdrawals: Op[] = withdrawals.map((w, i) => ({
     id: w.id ?? `w-${i}`,
     tag: "OUT",
-    tagClass: "bg-main-accent-t4/15 text-main-accent-t4",
+    tagClass: "bg-destructive/15 text-destructive",
     title: `Withdrawal · ${(w.network ?? "").toUpperCase()}`,
     sub: `${shortAddress(w.address)} · ${w.state ?? ""}`,
     amount: `−${formatMoney(w.net_amount ?? w.amount)}`,
-    amountClass: "text-main-mist",
+    amountClass: "text-destructive",
   }));
   return [...fromRedemptions, ...fromWithdrawals].slice(0, 6);
 }

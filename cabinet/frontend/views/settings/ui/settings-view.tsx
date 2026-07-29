@@ -1,19 +1,26 @@
 "use client";
 
-import { BadgeCheck, Check, Laptop, Loader2, LogOut, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
+import { BadgeCheck, Bell, Check, Laptop, Loader2, LogOut, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
-import { PhoneNumber } from "@evinvest/types";
+import { Email, PhoneNumber } from "@evinvest/types";
 import { usePhoneNumber } from "@evinvest/types/react";
-import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Switch } from "@evinvest/uikit";
 
+import {
+  fetchNotificationSettings,
+  setChannelEnabled,
+  setTopicSubscription,
+} from "@/entities/notification/api/notification-client";
+import { refreshUnreadCount } from "@/entities/notification/model/notification-store";
 import { fetchSessions, revokeSession } from "@/entities/session/api/sessions-client";
 import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
 import { publishProfile } from "@/entities/user/model/profile-store";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import { withBasePath } from "@/shared/config/base-path";
 import type { Session, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
+import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { TipAnchor } from "@/shared/tips";
@@ -29,10 +36,10 @@ import { displayName, initialsOfName, truncateName } from "@/views/settings/lib/
 // General edits the same core user record as the Profile page (full-replace, so the form
 // carries every editable field even where a breakpoint only shows some); Security states
 // the real auth model (Google-managed) and surfaces live sessions; Sessions & devices
-// lists and revokes the real refresh-token families at the hub. Auth is Google-OAuth-only
-// and there is no notification or theme store, so the mock's 2FA/biometric/password rows
-// and its Notifications and Preferences cards have no backing here — they are left out
-// rather than faked.
+// lists and revokes the real refresh-token families at the hub; Notifications is the real
+// delivery-preference store. Auth is Google-OAuth-only and there is no theme store, so the
+// mock's 2FA/biometric/password rows and its Preferences card have no backing here — they
+// are left out rather than faked.
 
 const EDITABLE = ["legal_name", "preferred_name", "phone", "date_of_birth", "nationality", "tax_residence", "residential_address", "language", "base_currency", "timezone"] as const;
 type Form = Record<(typeof EDITABLE)[number], string>;
@@ -41,18 +48,19 @@ function formFrom(p: UserProfile): Form {
   return Object.fromEntries(EDITABLE.map((k) => [k, p[k] ?? ""])) as Form;
 }
 
-type Section = "general" | "security" | "sessions";
+type Section = "general" | "security" | "sessions" | "notifications";
 
 const NAV: { id: Section; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: User },
   { id: "security", label: "Security", icon: Shield },
   { id: "sessions", label: "Sessions & devices", icon: Monitor },
+  { id: "notifications", label: "Notifications", icon: Bell },
 ];
 
 export function SettingsView() {
   const [section, setSection] = useState<Section>("general");
-  // The mobile stack: the root screen, or Sessions pushed on top of it.
-  const [pushed, setPushed] = useState<"sessions" | null>(null);
+  // The mobile stack: the root screen, or a section pushed on top of it.
+  const [pushed, setPushed] = useState<"sessions" | "notifications" | null>(null);
 
   const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
   const [form, setForm] = useState<Form | null>(null);
@@ -166,7 +174,7 @@ export function SettingsView() {
   return (
     <>
       <MobileAppBar
-        title={pushed === "sessions" ? "Sessions & devices" : "Settings"}
+        title={pushed === "sessions" ? "Sessions & devices" : pushed === "notifications" ? "Notifications" : "Settings"}
         onBack={pushed ? () => setPushed(null) : undefined}
         right={
           dirty ? (
@@ -221,11 +229,14 @@ export function SettingsView() {
         <div className="flex flex-col gap-4 lg:hidden">
           {pushed === "sessions" ? (
             sessionsPanel(false)
+          ) : pushed === "notifications" ? (
+            <NotificationsSection />
           ) : (
             <>
               <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
               <AccountRowsCard loading={loading} form={form} email={email} fieldErrors={fieldErrors} onChange={set} />
               <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => setPushed("sessions")} />
+              <MobileNotificationsCard onOpen={() => setPushed("notifications")} />
               <SignOutButton />
             </>
           )}
@@ -258,6 +269,7 @@ export function SettingsView() {
           <div className="min-w-0 flex-1">
             {section === "general" && <GeneralSection loading={loading} form={form} email={email} verified={!!profile?.email_verified} onChange={set} fieldErrors={fieldErrors} />}
             {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => setSection("sessions")} />}
+            {section === "notifications" && <NotificationsSection />}
             {section === "sessions" && sessionsPanel(true)}
           </div>
         </div>
@@ -299,7 +311,7 @@ function ProfileSummaryCard({ loading, name, email, verified }: { loading: boole
             {verified && <Pill icon={BadgeCheck}>Verified</Pill>}
           </div>
         )}
-        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-[12px] text-muted-foreground">{email ?? "Not signed in"}</span>}
+        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-[12px] text-muted-foreground">{formatEmail(email) || "Not signed in"}</span>}
       </div>
       <Chevron className="size-5" />
     </Link>
@@ -329,7 +341,7 @@ function AccountRowsCard({
       {/* Email is the IdP's — displayed, never editable here. */}
       <Row>
         <span className="shrink-0 text-[14px] font-medium text-foreground">Email</span>
-        {loading ? <Skeleton className="h-3.5 w-36" /> : <RowValue>{email ?? "—"}</RowValue>}
+        {loading ? <Skeleton className="h-3.5 w-36" /> : <RowValue>{formatEmail(email) || "—"}</RowValue>}
       </Row>
       <Hairline />
       <ExpandableRow label="Phone" value={form ? formatPhone(form.phone) : ""} loading={!ready} open={open === "phone"} onToggle={() => toggle("phone")}>
@@ -397,7 +409,7 @@ function MobileSecurityCard({
       <ListCardTitle>Security</ListCardTitle>
       <Hairline />
       <Row>
-        <RowLabel title="Signed in with Google" sub={loading ? "…" : (email ?? "—")} />
+        <RowLabel title="Signed in with Google" sub={loading ? "…" : formatEmail(email) || "—"} />
         <Pill>Connected</Pill>
       </Row>
       <Hairline />
@@ -412,6 +424,21 @@ function MobileSecurityCard({
       <p className="py-3 text-[11px] leading-relaxed text-muted-foreground">
         Your password, two-factor authentication and recovery are configured in your Google Account.
       </p>
+    </ListCard>
+  );
+}
+
+/** `card-Notifications` — the entry into delivery preferences. The mock's four topic
+ *  switches live on the pushed screen, where the real per-topic state comes from. */
+function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
+  return (
+    <ListCard>
+      <ListCardTitle>Notifications</ListCardTitle>
+      <Hairline />
+      <button type="button" onClick={onOpen} className="flex min-w-0 items-center justify-between gap-3 py-[13px] text-left">
+        <RowLabel title="Delivery &amp; topics" sub="Where we reach you and what you follow" />
+        <Chevron />
+      </button>
     </ListCard>
   );
 }
@@ -476,7 +503,7 @@ function GeneralSection({
           ) : <FieldSkeleton />}
         </Field>
         <Field label="Email address" trailing={verified ? <VerifiedTag /> : undefined}>
-          {loading ? <FieldSkeleton /> : <Input value={email ?? ""} readOnly className="border-border bg-main-surface text-muted-foreground" />}
+          {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-main-surface text-muted-foreground" />}
         </Field>
         <Field label="Phone number">
           {ready ? <PhoneField initial={form.phone} onChange={(v) => onChange("phone", v)} error={fieldErrors.phone} /> : <FieldSkeleton />}
@@ -517,7 +544,7 @@ function SecuritySection({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[14px] text-white">Signed in with Google</p>
-          {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-[13px] text-muted-foreground">{email ?? "—"}</p>}
+          {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-[13px] text-muted-foreground">{formatEmail(email) || "—"}</p>}
         </div>
         <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">Connected</Badge>
       </div>
@@ -737,6 +764,13 @@ function lastSeen(value: number | string | undefined): string {
   return `last active ${Math.floor(hrs / 24)}d ago`;
 }
 
+/** Normalise the stored email for display via the `Email` TypeObject. */
+function formatEmail(raw?: string | null): string {
+  if (!raw) return "";
+  const e = Email.parseInput(raw) ?? Email.fromUnsafe(raw);
+  return Email.raw(e);
+}
+
 function formatPhone(raw: string): string {
   if (!raw) return "";
   const pn = PhoneNumber.parseInput(raw) ?? PhoneNumber.fromUnsafe(raw);
@@ -775,5 +809,142 @@ function GoogleMark() {
       <path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.27a12 12 0 0 0 0 10.74l4-3.1Z" />
       <path fill="#EA4335" d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.43-3.43A11.97 11.97 0 0 0 12 0 12 12 0 0 0 1.27 6.63l4 3.1C6.22 6.88 8.87 4.77 12 4.77Z" />
     </svg>
+  );
+}
+
+/**
+ * Delivery preferences. Both master channels are opt-out and may be off at once —
+ * "stop contacting me" is a supported state, so nothing here keeps one of them on.
+ *
+ * Every write returns the full snapshot, so state is replaced from the response
+ * rather than patched locally; that keeps the per-topic email toggles honest when
+ * the master email switch turns them all moot.
+ */
+function NotificationsSection() {
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchNotificationSettings()
+      .then((s) => {
+        if (alive) setSettings(s);
+      })
+      .catch((e: unknown) => {
+        if (alive) setError(e instanceof Error ? e.message : "could not load notification settings");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function run(fn: () => Promise<NotificationSettings>) {
+    setBusy(true);
+    setError(null);
+    try {
+      setSettings(await fn());
+      // Switching the in-app channel changes what the badge should read, and the
+      // sidebar has no other reason to refetch.
+      void refreshUnreadCount();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error && !settings) {
+    return <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-4 lg:gap-[18px]">
+      <ListCard className="lg:px-[22px]">
+        <ListCardTitle sub="Choose where notifications reach you. Both can be off.">Delivery</ListCardTitle>
+        <Hairline />
+        <Row>
+          <RowLabel title="In your cabinet" sub="On by default. Turn this off and notifications stop appearing in your cabinet." />
+          {settings ? (
+            <Switch
+              checked={settings.in_app_enabled}
+              disabled={busy}
+              onCheckedChange={(v) => void run(() => setChannelEnabled("in_app", v))}
+              aria-label="In-app notifications"
+            />
+          ) : (
+            <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
+          )}
+        </Row>
+        <Hairline />
+        <Row>
+          <RowLabel
+            title="Email"
+            sub={settings ? (settings.email_verified ? `Sent to ${settings.email} · verified` : `${settings.email} · unverified, so email is not sent`) : undefined}
+          />
+          {settings ? (
+            <Switch
+              checked={settings.email_enabled}
+              disabled={busy || !settings.email_verified}
+              onCheckedChange={(v) => void run(() => setChannelEnabled("email", v))}
+              aria-label="Email notifications"
+            />
+          ) : (
+            <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
+          )}
+        </Row>
+      </ListCard>
+
+      <ListCard className="lg:px-[22px]">
+        <div className="flex items-start justify-between gap-4">
+          <ListCardTitle sub="Email a copy for these. Unsubscribing is one click — no confirmation step.">What you follow</ListCardTitle>
+          <p className="shrink-0 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Email</p>
+        </div>
+        {settings
+          ? settings.topics.map((t) => (
+              <div key={t.topic}>
+                <Hairline />
+                {/* Follow button and email switch drop under the label on a phone —
+                    side by side they squeeze the topic description to a sliver. */}
+                <div className="flex flex-col gap-2.5 py-[13px] sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                  <RowLabel title={t.label} sub={t.description} />
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void run(() => setTopicSubscription(t.topic, !t.subscribed, t.email_enabled))}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors disabled:opacity-40",
+                        t.subscribed ? "border border-border/60 text-main-mist hover:bg-foreground/[0.04]" : "bg-main-accent-t1 text-main-black hover:opacity-90",
+                      )}
+                    >
+                      {t.subscribed ? "Following" : "Follow"}
+                    </button>
+                    <Switch
+                      checked={t.subscribed && t.email_enabled && settings.email_enabled}
+                      disabled={busy || !t.subscribed || !settings.email_enabled}
+                      onCheckedChange={(v) => void run(() => setTopicSubscription(t.topic, true, v))}
+                      aria-label={`Email copy for ${t.label}`}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))
+          : [0, 1, 2].map((i) => (
+              <div key={i}>
+                <Hairline />
+                <Row>
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
+                </Row>
+              </div>
+            ))}
+      </ListCard>
+
+      {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      <p className="text-[12px] leading-relaxed text-muted-foreground">
+        Turn a channel off and we stop sending on it. Turn both off and we stop notifying you altogether — updates still live on the fund pages whenever you want them.
+      </p>
+    </div>
   );
 }
