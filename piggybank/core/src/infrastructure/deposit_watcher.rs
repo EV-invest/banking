@@ -111,7 +111,22 @@ impl DepositWatcher {
 	/// [`CYCLE_MAX_BACKOFF_SECS`]) so a down or rate-limited endpoint isn't hammered at the
 	/// normal cadence. A single successful cycle resets the backoff to `poll_secs`.
 	pub async fn run(self, shutdown: CancellationToken) {
-		info!(network = %self.config.network, rpc = %rpc_host(&self.config.rpc_url), contract = %self.config.usdt_contract, confirmations = self.config.confirmations, "deposit watcher: watching EVM USDT deposits");
+		// Report the endpoint the SCAN actually uses, not `rpc_url` — they differ whenever a
+		// dedicated logs endpoint is configured, and logging the wrong one sends whoever is
+		// debugging a silent watcher to the wrong provider's dashboard.
+		info!(network = %self.config.network, rpc = %rpc_host(self.scan_endpoint()), contract = %self.config.usdt_contract, confirmations = self.config.confirmations, "deposit watcher: watching EVM USDT deposits");
+		if self.config.logs_rpc_url.is_none() {
+			// The fallback is `rpc_url`, chosen for the money-moving paths (nonce, balance,
+			// broadcast). The public full nodes that serve those well are exactly the ones that
+			// refuse eth_getLogs (-32005), so this combination detects NO deposits at all — a
+			// silent failure worth naming loudly at boot rather than discovering from a
+			// customer's missing balance.
+			warn!(
+				network = %self.config.network,
+				rpc = %rpc_host(&self.config.rpc_url),
+				"deposit watcher: no dedicated eth_getLogs endpoint set (BSC_LOGS_RPC_URL / POLYGON_LOGS_RPC_URL) — falling back to the main RPC, which on the default public nodes REJECTS eth_getLogs; deposits will go undetected until one is configured"
+			);
+		}
 		let mut consecutive_failures: u64 = 0;
 		loop {
 			let delay = match self.scan_once().await {
@@ -197,6 +212,13 @@ impl DepositWatcher {
 	}
 
 	// ── JSON-RPC ────────────────────────────────────────────────────────────────
+	/// The endpoint the scan's reads go to: the dedicated logs endpoint when configured,
+	/// else the rail's main RPC. Free full nodes increasingly paywall `eth_getLogs`
+	/// specifically, so the scan and the money-moving paths can want different providers.
+	fn scan_endpoint(&self) -> &str {
+		self.config.logs_rpc_url.as_deref().unwrap_or(&self.config.rpc_url)
+	}
+
 	async fn block_number(&self) -> Result<u64, WatcherError> {
 		let result = self.rpc("eth_blockNumber", json!([])).await?;
 		let hex = result.as_str().ok_or_else(|| WatcherError::Rpc("eth_blockNumber: non-string result".into()))?;
@@ -244,7 +266,7 @@ impl DepositWatcher {
 		let body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
 		let response = self
 			.http
-			.post(self.config.logs_rpc_url.as_deref().unwrap_or(&self.config.rpc_url))
+			.post(self.scan_endpoint())
 			.json(&body)
 			.send()
 			.await

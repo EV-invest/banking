@@ -303,23 +303,28 @@
               # On-chain rail gates (Rails::from_env). Per-rail API keys arrive via
               # k8s Secrets; main.rs refuses a prod boot with every rail empty.
               TON_API_URL = "https://toncenter.com/api/v3";
-              # BSC (BEP20 USDT): split-provider — dataseed is a solid free full node
-              # for balances/nonce/broadcast but rejects eth_getLogs (-32005); the
-              # deposit scan alone goes to drpc.
-              #
-              # drpc's KEYLESS endpoint is not sufficient for a live rail. Its free tier
-              # rate-limits the scan (code 15) and refuses getLogs once the query reaches
-              # far enough back (code 35), so a scan that falls behind can no longer catch
-              # up and deposits go uncredited until an operator intervenes. The watcher
-              # now degrades quietly instead of alert-storming, but quiet is not working:
-              # set BSC_LOGS_RPC_URL / POLYGON_LOGS_RPC_URL to a KEYED provider
-              # (Alchemy/QuickNode/Ankr — free tiers suffice) via k8s Secret.
+              # Split-provider, per EVM rail: these public full nodes serve the
+              # money-moving paths (nonce, balance, broadcast) well but reject
+              # eth_getLogs (-32005), so the deposit SCAN needs its own endpoint.
               BSC_RPC_URL = "https://bsc-dataseed.bnbchain.org";
-              BSC_LOGS_RPC_URL = "https://bsc.drpc.org";
-              # Polygon (PoS USDT, 6-dp): official public RPC; drpc fallback for the
-              # deposit scan. Keyed provider (Alchemy/QuickNode) recommended past demo.
               POLYGON_RPC_URL = "https://polygon-rpc.com";
-              POLYGON_LOGS_RPC_URL = "https://polygon.drpc.org";
+              # BSC_LOGS_RPC_URL / POLYGON_LOGS_RPC_URL are deliberately ABSENT here.
+              #
+              # A keyed provider URL carries its API key in the path, so it is a
+              # credential and cannot be committed. They arrive instead through the
+              # pod's `kubernetes-ev-banking-piggybank` secret (sops on the rpi5 host →
+              # k3s-cluster-secrets.service), reaching the container via `envFrom` —
+              # the same path TON_API_KEY already takes.
+              #
+              # They must not be re-added here: on a duplicate key Kubernetes lets `env`
+              # win over `envFrom`, so a value in this set SILENTLY overrides the secret
+              # and the rail quietly keeps using whatever is written here.
+              #
+              # Why keyed at all: drpc's keyless endpoint rate-limits the scan (code 15)
+              # and refuses getLogs once the query reaches far enough back (code 35), so
+              # a scan that falls behind can never catch up and deposits go uncredited.
+              # Free tiers of Alchemy/QuickNode/Ankr are sufficient. If the secret is
+              # missing the watcher says so loudly at boot and detects no deposits.
               TIGERBEETLE_ADDRESS = pkgs.lib.concatStringsSep "," tbProd.addresses;
               TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
               AUTH_SIGNING_KID = "prod-1";
