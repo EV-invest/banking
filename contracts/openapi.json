@@ -2,6 +2,301 @@
   "openapi": "3.1.0",
   "info": {},
   "paths": {
+    "/banking.v1.AllocationsService/GetAllocation": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "GetAllocation",
+        "description": "One allocation by service id. Readable by any authenticated user in any state —\n an investor holding units of a closed product still needs to render it.",
+        "operationId": "banking.v1.AllocationsService.GetAllocation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetAllocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/ListAllocations": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "ListAllocations",
+        "description": "The catalog. Any authenticated user sees the `open` allocations; an\n `AllocationManage` holder may set `include_unlisted` to see drafts and closed\n ones too. Ordered by `service`.",
+        "operationId": "banking.v1.AllocationsService.ListAllocations",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListAllocationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.AllocationList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/RegisterAllocation": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "RegisterAllocation",
+        "description": "Register a new allocation in `draft` (AllocationManage). The service id is a\n 1..64 char `[A-Za-z0-9_-]` slug and is immutable once registered; re-registering\n an existing one is a conflict, never a silent update.",
+        "operationId": "banking.v1.AllocationsService.RegisterAllocation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RegisterAllocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/SetAllocationState": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "SetAllocationState",
+        "description": "Drive the lifecycle (AllocationManage): `open` or `close`. Idempotent — setting\n the state an allocation already holds succeeds and changes nothing.",
+        "operationId": "banking.v1.AllocationsService.SetAllocationState",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetAllocationStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/UpdateAllocation": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "UpdateAllocation",
+        "description": "Update the presentation fields of an existing allocation (AllocationManage).\n Never changes state or identity.",
+        "operationId": "banking.v1.AllocationsService.UpdateAllocation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.UpdateAllocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.AuthService/IssueUserToken": {
       "post": {
         "tags": [
@@ -3074,7 +3369,7 @@
           "concierge.v1.UserDirectory"
         ],
         "summary": "ListUsers",
-        "description": "Admin (UserRead): list/search users for the operator console — paginated, with\n optional role/KYC/status filters. Returns lightweight summaries, not full profiles.",
+        "description": "Admin (UserRead): list/search users for the operator console — paginated, with a\n free-text query and optional role/status filters (see ListUsersRequest). Returns\n lightweight summaries, not full profiles.",
         "operationId": "concierge.v1.UserDirectory.ListUsers",
         "parameters": [
           {
@@ -3437,6 +3732,66 @@
         "title": "AdminBalanceRequest",
         "additionalProperties": false
       },
+      "banking.v1.Allocation": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "the slug — the id used by every FundsService RPC"
+          },
+          "title": {
+            "type": "string",
+            "title": "title",
+            "description": "display name (\"EV Trading\")"
+          },
+          "summary": {
+            "type": "string",
+            "title": "summary",
+            "description": "one-line description for the catalog card"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "draft | open | closed"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64",
+            "description": "unix seconds"
+          },
+          "updated_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "updated_at",
+            "format": "int64",
+            "description": "unix seconds"
+          }
+        },
+        "title": "Allocation",
+        "additionalProperties": false,
+        "description": "One registered investable product. Carries no money: units, NAV and positions are\n read from FundsService against the same `service` id."
+      },
+      "banking.v1.AllocationList": {
+        "type": "object",
+        "properties": {
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Allocation"
+            },
+            "title": "allocations"
+          }
+        },
+        "title": "AllocationList",
+        "additionalProperties": false
+      },
       "banking.v1.Balance": {
         "type": "object",
         "properties": {
@@ -3514,7 +3869,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | polygon | trc20 | ton"
           },
           "amount": {
             "type": "string",
@@ -3698,13 +4053,24 @@
         "additionalProperties": false,
         "description": "The current price of a fund's share, derived (AUM / units_outstanding) and frozen\n between operator marks. `posted_at` is 0 when the fund has never been marked (seed\n NAV 1.0); `stale` is true when the latest mark is older than the dealing window."
       },
+      "banking.v1.GetAllocationRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "GetAllocationRequest",
+        "additionalProperties": false
+      },
       "banking.v1.GetDepositAddressRequest": {
         "type": "object",
         "properties": {
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | polygon | trc20 | ton"
           }
         },
         "title": "GetDepositAddressRequest",
@@ -3829,6 +4195,18 @@
         "title": "JwksResponse",
         "additionalProperties": false
       },
+      "banking.v1.ListAllocationsRequest": {
+        "type": "object",
+        "properties": {
+          "include_unlisted": {
+            "type": "boolean",
+            "title": "include_unlisted",
+            "description": "Include `draft` and `closed` allocations. Requires AllocationManage; a caller\n without it is refused rather than silently downgraded to the open-only list."
+          }
+        },
+        "title": "ListAllocationsRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListDepositsRequest": {
         "type": "object",
         "title": "ListDepositsRequest",
@@ -3917,7 +4295,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | polygon | trc20 | ton"
           },
           "withdrawable": {
             "type": "string",
@@ -4105,7 +4483,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | polygon | trc20 | ton"
           },
           "custody": {
             "type": "string",
@@ -4219,7 +4597,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton — the rail it arrived on"
+            "description": "bep20 | polygon | trc20 | ton — the rail it arrived on"
           },
           "amount": {
             "type": "string",
@@ -4377,13 +4755,32 @@
         "title": "RefreshRequest",
         "additionalProperties": false
       },
+      "banking.v1.RegisterAllocationRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "summary"
+          }
+        },
+        "title": "RegisterAllocationRequest",
+        "additionalProperties": false
+      },
       "banking.v1.RequestWithdrawalRequest": {
         "type": "object",
         "properties": {
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton — the rail to ship on"
+            "description": "bep20 | polygon | trc20 | ton — the rail to ship on"
           },
           "address": {
             "type": "string",
@@ -4458,7 +4855,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | polygon | trc20 | ton"
           }
         },
         "title": "RotateDepositAddressRequest",
@@ -4482,7 +4879,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton — the rail the capital lands on"
+            "description": "bep20 | polygon | trc20 | ton — the rail the capital lands on"
           },
           "amount": {
             "type": "string",
@@ -4538,6 +4935,22 @@
         "title": "Session",
         "additionalProperties": false,
         "description": "One active session = one refresh-token family. Timestamps are unix SECONDS."
+      },
+      "banking.v1.SetAllocationStateRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "open | closed  (draft is entered only by RegisterAllocation)"
+          }
+        },
+        "title": "SetAllocationStateRequest",
+        "additionalProperties": false
       },
       "banking.v1.SetOperationsModeRequest": {
         "type": "object",
@@ -4727,6 +5140,25 @@
       "banking.v1.UnparkEventResponse": {
         "type": "object",
         "title": "UnparkEventResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.UpdateAllocationRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "title": {
+            "type": "string",
+            "title": "title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "summary"
+          }
+        },
+        "title": "UpdateAllocationRequest",
         "additionalProperties": false
       },
       "banking.v1.UpdateProfileRequest": {
@@ -4957,7 +5389,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | polygon | trc20 | ton"
           },
           "address": {
             "type": "string",
@@ -5040,7 +5472,7 @@
           "network": {
             "type": "string",
             "title": "network",
-            "description": "bep20 | trc20 | ton"
+            "description": "bep20 | polygon | trc20 | ton"
           },
           "address": {
             "type": "string",
@@ -5804,6 +6236,10 @@
   "security": [],
   "tags": [
     {
+      "name": "banking.v1.AllocationsService",
+      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation and lifecycle only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Reads are open to any authenticated user; `ListAllocations` returns only `open`\n allocations unless the caller holds `AllocationManage` and asks for all. See\n docs/ARCHITECTURE.md."
+    },
+    {
       "name": "banking.v1.AuthService",
       "description": "AuthService — the money plane's token issuance and authorization surface.\n\n This is the MONEY plane: it does NOT do third-party (Google) OAuth — identity and\n sign-in live wholly in the concierge plane. Users are mirrored here by the one-way\n cross-plane bridge (concierge `CREATED` → a local row keyed by `auth_subject`).\n This service only issues/rotates the hub's OWN first-party asymmetric JWTs\n (EdDSA/Ed25519, `aud=banking-core`) for those already-identified users, and\n publishes verification keys. Services do NOT call this per request to authorize:\n they verify access tokens locally against the cached JWKS via the shared\n `evbanking_auth` flow (no round trip, no per-service token storage). They DO call\n `Jwks` periodically to refresh that cache, since the hub speaks only gRPC (no HTTP\n `.well-known` endpoint).\n\n `IssueUserToken` is the concierge→banking token-exchange seam: after the cabinet\n BFF authenticates a user against concierge, it calls this server-to-server (with the\n shared bridge issuance token, NOT a user token) to mint the money-plane pair for that\n user. Banking trusts its OWN service credential, never concierge's issuer — so a\n leaked concierge token can't move money. See docs/ARCHITECTURE.md."
     },
@@ -5825,7 +6261,7 @@
     },
     {
       "name": "banking.v1.WalletService",
-      "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
+      "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/Polygon/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
     },
     {
       "name": "concierge.v1.UserDirectory",
