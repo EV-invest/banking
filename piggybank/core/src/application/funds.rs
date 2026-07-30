@@ -17,10 +17,14 @@ use domain::{
 };
 use tokio::sync::Notify;
 
-use crate::ports::{
-	FundPositionReader, RedemptionRepository, SubscriptionRepository,
-	ledger::Ledger,
-	nav::{NavMarks, Valuation},
+use crate::{
+	application::allocations as allocations_app,
+	ports::{
+		FundPositionReader, RedemptionRepository, SubscriptionRepository,
+		allocations::AllocationRegistry,
+		ledger::Ledger,
+		nav::{NavMarks, Valuation},
+	},
 };
 
 /// A derived NAV that jumps more than this (percent) from the previous mark is rejected
@@ -75,8 +79,14 @@ pub async fn dealing_nav(nav: &dyn NavMarks, service: &ServiceId, now_unix: i64)
 /// staleness guard refuses to deal on a drifted mark. The relay then posts the cash move
 /// (`Dr UserClaim / Cr ServiceClaim`) and the unit mint (`Dr UserShares / Cr
 /// SharesOutstanding`) — cash-leg first, so an insufficient claim parks before any mint.
+///
+/// The **registry gate runs first**, before any balance read or pricing: `service` must
+/// be a registered, `open` allocation. It is what stops a user from minting a fund out
+/// of an arbitrary slug — previously the only check was the slug's shape, and a service
+/// with no valuation bootstrapped silently at the seed NAV.
 #[allow(clippy::too_many_arguments)]
 pub async fn subscribe(
+	allocations: &dyn AllocationRegistry,
 	subscriptions: &dyn SubscriptionRepository,
 	ledger: &dyn Ledger,
 	nav: &dyn NavMarks,
@@ -86,6 +96,7 @@ pub async fn subscribe(
 	cash: Usdt,
 	now_unix: i64,
 ) -> Result<Subscription, DomainError> {
+	allocations_app::require_subscribable(allocations, &service).await?;
 	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
 	if Usdt::from_base_units(claim.available()) < cash {
 		return Err(DomainError::Validation("insufficient available balance to subscribe".into()));
@@ -104,8 +115,12 @@ pub async fn subscribe(
 /// fund's claim can already cover the payout, this settles immediately via a **separate**
 /// command (never co-emitting `Requested`+`Settled`, which would race the burn reserve);
 /// otherwise it stays `Queued` for an operator `settle_redemption` once the fund tops up.
+///
+/// The registry gate here is the **laxer** one: a `closed` allocation still redeems, so
+/// winding a product down never traps an investor's units inside it.
 #[allow(clippy::too_many_arguments)]
 pub async fn request_redemption(
+	allocations: &dyn AllocationRegistry,
 	redemptions: &dyn RedemptionRepository,
 	ledger: &dyn Ledger,
 	nav: &dyn NavMarks,
@@ -115,6 +130,7 @@ pub async fn request_redemption(
 	units: Shares,
 	now_unix: i64,
 ) -> Result<Redemption, DomainError> {
+	allocations_app::require_redeemable(allocations, &service).await?;
 	let holding = ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?;
 	if Shares::from_base_units(holding.available()) < units {
 		return Err(DomainError::Validation("insufficient units to redeem".into()));
@@ -241,7 +257,22 @@ pub async fn fund_nav_view(nav: &dyn NavMarks, ledger: &dyn Ledger, service: Ser
 /// live from TigerBeetle). Rejects zero units (NAV undefined) and — unless `force` — a
 /// move beyond [`MAX_NAV_MOVE_PCT`] vs the last mark. Records the mark (with `posted_by`)
 /// and returns it.
-pub async fn post_fund_valuation(nav: &dyn NavMarks, ledger: &dyn Ledger, service: ServiceId, aum: Usdt, posted_by: &str, force: bool) -> Result<Valuation, DomainError> {
+///
+/// Gated on the allocation *existing* (any state — a closed product still gets marked so
+/// queued redemptions price correctly). Without this an AUM post would write a valuation
+/// history for a service no registry entry backs — the second way a phantom fund used to
+/// come into being.
+#[allow(clippy::too_many_arguments)]
+pub async fn post_fund_valuation(
+	allocations: &dyn AllocationRegistry,
+	nav: &dyn NavMarks,
+	ledger: &dyn Ledger,
+	service: ServiceId,
+	aum: Usdt,
+	posted_by: &str,
+	force: bool,
+) -> Result<Valuation, DomainError> {
+	allocations_app::get(allocations, &service).await?;
 	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
 	// `from_aum` rejects zero units — NAV is undefined with nothing outstanding.
 	let derived = Nav::from_aum(aum, units)?;

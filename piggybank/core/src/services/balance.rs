@@ -123,9 +123,17 @@ impl BalanceService for BalanceSvc {
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let aum = Usdt::parse_decimal(&req.aum).map_err(map_err)?;
-		let valuation = funds_app::post_fund_valuation(self.state.nav.as_ref(), self.state.ledger.as_ref(), service.clone(), aum, &posted_by, req.r#override)
-			.await
-			.map_err(map_err)?;
+		let valuation = funds_app::post_fund_valuation(
+			self.state.allocations.as_ref(),
+			self.state.nav.as_ref(),
+			self.state.ledger.as_ref(),
+			service.clone(),
+			aum,
+			&posted_by,
+			req.r#override,
+		)
+		.await
+		.map_err(map_err)?;
 		Ok(Response::new(pb::FundNav {
 			service: service.to_string(),
 			nav: valuation.nav.to_decimal_string(),

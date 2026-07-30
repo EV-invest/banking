@@ -20,7 +20,11 @@
 //! [`balance`], [`funds`], and [`withdrawals`] are the money use cases — each notifies
 //! the relay after its commit so the ledger move follows promptly. [`users`] holds the
 //! account commands (profile / revoke / disable) shared by the service and the auth task.
+//! [`allocations`] is the pure control-plane registry of investable products — it moves
+//! no money, and its `require_subscribable` gate is what every subscribe runs before one
+//! does.
 
+pub mod allocations;
 pub mod auth_sync;
 pub mod balance;
 pub mod funds;
