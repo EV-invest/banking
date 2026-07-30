@@ -8,11 +8,12 @@
 //! It carries the cross-cutting [`error::DomainError`], re-exports the `ev`
 //! architecture building blocks, and holds the hub's bounded contexts — `auth` /
 //! `authz` (identity + the RBAC matrix), `balance` / `money` (the chart of accounts
-//! and the 18-dp USDT unit), and the `users` / `subscriptions` / `redemptions` /
-//! `withdrawals` aggregates.
+//! and the 18-dp USDT unit), `allocations` (the registry of investable products), and
+//! the `users` / `subscriptions` / `redemptions` / `withdrawals` aggregates.
 
 pub mod error;
 
+pub mod allocations;
 pub mod auth;
 pub mod authz;
 pub mod balance;

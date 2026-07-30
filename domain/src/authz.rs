@@ -71,6 +71,10 @@ pub enum Permission {
 	UserBalanceRead,
 	/// Post a fund NAV valuation.
 	ValuationPost,
+	/// Register an investable product and drive its lifecycle (open/close). Gates the
+	/// ONLY path by which a fund comes into existence, so it sits with `ValuationPost`
+	/// on the Admin/Owner side of the matrix rather than with the operator reads.
+	AllocationManage,
 	/// Settle a queued redemption.
 	RedemptionSettle,
 	/// Fail (void + refund) a queued redemption.
@@ -147,8 +151,13 @@ mod tests {
 		assert!(!grants(Role::Operator, Permission::ValuationPost));
 		assert!(!grants(Role::Operator, Permission::RedemptionSettle));
 		assert!(!grants(Role::Operator, Permission::OutboxManage));
+		// Creating an investable product is not a read, so an operator may not.
+		assert!(!grants(Role::Operator, Permission::AllocationManage));
+		assert!(!grants(Role::Investor, Permission::AllocationManage));
 		// Admin/Owner move money.
 		assert!(grants(Role::Admin, Permission::ValuationPost));
+		assert!(grants(Role::Admin, Permission::AllocationManage));
+		assert!(grants(Role::Owner, Permission::AllocationManage));
 		assert!(grants(Role::Owner, Permission::WithdrawalSettle));
 		assert!(grants(Role::Admin, Permission::OutboxManage));
 		// Investor holds nothing.
