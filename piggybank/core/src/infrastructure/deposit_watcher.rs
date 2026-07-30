@@ -272,11 +272,23 @@ impl DepositWatcher {
 			.await
 			.map_err(|e| WatcherError::Rpc(format!("{method}: request failed: {e}")))?;
 		// A throttling proxy answers 429 (or a 5xx) with an HTML body, not a JSON-RPC error
-		// object. Classify on the status BEFORE parsing, or the throttle reads as a permanent
-		// "bad json" and the cycle gives up instead of backing off.
+		// object, so the status has to be inspected before the body is parsed as JSON —
+		// otherwise a throttle reads as a permanent "bad json" and the cycle gives up
+		// instead of backing off.
+		//
+		// The body still has to come along. Providers also return a perfectly good JSON-RPC
+		// error object WITH a 4xx status (drpc answers an over-wide `eth_getLogs` that way),
+		// and that body carries the only signal separating "narrow the window and retry"
+		// from "give up". Reporting the bare status discarded it, so every 4xx looked fatal
+		// and the adaptive narrowing below never engaged — the Polygon rail sat refused for
+		// days behind a `http status 400` that was really a range error.
 		let status = response.status();
 		if !status.is_success() {
-			return Err(WatcherError::Rpc(format!("{method}: http status {}", status.as_u16())));
+			let body = response.text().await.unwrap_or_default();
+			// One line, bounded: this lands in a log and the useful part (the JSON-RPC error
+			// object) is at the front. An HTML error page just contributes noise.
+			let detail: String = body.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(400).collect();
+			return Err(WatcherError::Rpc(format!("{method}: http status {} {detail}", status.as_u16())));
 		}
 		let response: Value = response.json().await.map_err(|e| WatcherError::Rpc(format!("{method}: bad json: {e}")))?;
 		if let Some(err) = response.get("error").filter(|e| !e.is_null()) {
@@ -455,7 +467,10 @@ enum RpcAction {
 /// rate limits and retried five times, and since the identical query is refused every time,
 /// those five attempts could only ever fail — five alerts for one unwinnable call.
 fn classify(msg: &str) -> RpcAction {
-	if msg.contains("\"code\":35")
+	// Codes are matched against a whitespace-stripped copy: the JSON-RPC error object is
+	// reproduced verbatim from the wire, and `{"code": 35}` is as valid as `{"code":35}`.
+	let compact: String = msg.chars().filter(|c| !c.is_whitespace()).collect();
+	if compact.contains("\"code\":35")
 		|| msg.contains("blocks are not supported")
 		|| msg.contains("block range")
 		|| msg.contains("query returned more than")
@@ -463,7 +478,7 @@ fn classify(msg: &str) -> RpcAction {
 	{
 		return RpcAction::Narrow;
 	}
-	if msg.contains("\"code\":15") || msg.contains("\"code\":30") || msg.contains("request failed") || msg.contains("http status 429") || msg.contains("http status 5") {
+	if compact.contains("\"code\":15") || compact.contains("\"code\":30") || msg.contains("request failed") || msg.contains("http status 429") || msg.contains("http status 5") {
 		return RpcAction::Backoff;
 	}
 	RpcAction::Fail
@@ -558,6 +573,30 @@ mod tests {
 		// Retrying these changes nothing — fail the cycle instead of burning five attempts.
 		assert_eq!(classify(r#"rpc: eth_getLogs: rpc error: {"code":-32601,"message":"method not found"}"#), RpcAction::Fail);
 		assert_eq!(classify("rpc: eth_getLogs: bad json: expected value"), RpcAction::Fail);
+	}
+
+	#[test]
+	fn a_range_error_delivered_with_a_4xx_status_still_narrows() {
+		// The regression that left Polygon refused for five days: drpc answers an over-wide
+		// eth_getLogs with a JSON-RPC error object AND an HTTP 400. Reporting the bare status
+		// dropped the body, so this read as `Fail` and the narrowing never engaged.
+		assert_eq!(
+			classify(r#"rpc: eth_getLogs: http status 400 {"jsonrpc":"2.0","id":1,"error":{"code":35,"message":"ranges over 10000 blocks are not supported on free plan"}}"#),
+			RpcAction::Narrow
+		);
+		// Same body with the spacing a different serializer produces.
+		assert_eq!(
+			classify(r#"rpc: eth_getLogs: http status 400 {"error": {"code": 35, "message": "ranges over 10000 blocks are not supported on free plan"}}"#),
+			RpcAction::Narrow
+		);
+		// A rate limit delivered the same way is still transient, not a range problem.
+		assert_eq!(
+			classify(r#"rpc: eth_blockNumber: http status 429 {"error": {"code": 15, "message": "You reached Public endpoint rate limit"}}"#),
+			RpcAction::Backoff
+		);
+		// A 4xx with nothing actionable in it stays fatal — repeating it changes nothing.
+		assert_eq!(classify("rpc: eth_getLogs: http status 400 <html>Bad Request</html>"), RpcAction::Fail);
+		assert_eq!(classify("rpc: eth_getLogs: http status 400"), RpcAction::Fail);
 	}
 
 	#[test]
