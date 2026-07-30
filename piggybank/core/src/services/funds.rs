@@ -41,6 +41,7 @@ impl FundsService for FundsSvc {
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
 		let subscription = funds_app::subscribe(
+			self.state.allocations.as_ref(),
 			self.state.subscriptions.as_ref(),
 			self.state.ledger.as_ref(),
 			self.state.nav.as_ref(),
@@ -61,6 +62,7 @@ impl FundsService for FundsSvc {
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;
 		let redemption = funds_app::request_redemption(
+			self.state.allocations.as_ref(),
 			self.state.redemptions.as_ref(),
 			self.state.ledger.as_ref(),
 			self.state.nav.as_ref(),

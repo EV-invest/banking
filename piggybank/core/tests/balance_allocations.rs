@@ -23,6 +23,7 @@ use domain::{
 use piggybank_core::{
 	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
 	infrastructure::{
+		allocations::PgAllocations,
 		custody::StubCustody,
 		db,
 		deposits::PgDeposits,
@@ -37,7 +38,7 @@ use piggybank_core::{
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		FundPositionReader, RedemptionRepository, SubscriptionRepository, UserRepository,
+		AllocationRegistry, FundPositionReader, RedemptionRepository, SubscriptionRepository, UserRepository,
 		ledger::{Ledger, LedgerError, LedgerTransfer},
 		nav::NavMarks,
 	},
@@ -49,6 +50,7 @@ use uuid::Uuid;
 struct Harness {
 	pool: PgPool,
 	deposits: PgDeposits,
+	allocations: PgAllocations,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -72,9 +74,11 @@ async fn harness() -> Option<Harness> {
 	let notify = Arc::new(Notify::new());
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	let deposits = PgDeposits::new(pool.clone());
+	let allocations = PgAllocations::new(pool.clone());
 	Some(Harness {
 		pool,
 		deposits,
+		allocations,
 		ledger,
 		relay,
 		notify,
@@ -87,6 +91,17 @@ fn usdt(decimal: &str) -> Usdt {
 
 fn unique_service() -> ServiceId {
 	ServiceId::parse(&format!("svc-{}", Uuid::new_v4())).unwrap()
+}
+
+/// A unique service that is also REGISTERED AND OPEN in the allocation registry — the
+/// state every money path now requires. Tests that only poke the ledger directly keep
+/// using the bare [`unique_service`].
+async fn registered_service(h: &Harness) -> ServiceId {
+	let service = unique_service();
+	let mut allocation = domain::allocations::Allocation::register(domain::allocations::AllocationId::new(), service.clone(), "itest fund", "").unwrap();
+	h.allocations.register(&mut allocation).await.unwrap();
+	h.allocations.open(&service).await.unwrap();
+	service
 }
 
 fn unique_tx_ref() -> TxRef {
@@ -302,13 +317,13 @@ async fn fund_valuation_derives_nav_and_guards_fat_finger() {
 	let Some(h) = harness().await else { return };
 	let nav_repo = PgNav::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 
 	// No mark yet → the current NAV is the bootstrap seed (1.0).
 	assert_eq!(nav_repo.current(&service).await.unwrap().map(|v| v.nav).unwrap_or(Nav::SEED), Nav::SEED);
 	// Posting AUM with zero units outstanding is rejected — NAV is undefined.
 	assert!(
-		funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("100"), "op", false)
+		funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("100"), "op", false)
 			.await
 			.is_err()
 	);
@@ -325,7 +340,7 @@ async fn fund_valuation_derives_nav_and_guards_fat_finger() {
 	h.ledger.post(&mint).await.unwrap();
 
 	// AUM 150 over 100 units → NAV 1.5, and it becomes the current price.
-	let v = funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("150"), "op", false)
+	let v = funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("150"), "op", false)
 		.await
 		.unwrap();
 	assert_eq!(v.nav, Nav::parse_decimal("1.5").unwrap());
@@ -333,12 +348,12 @@ async fn fund_valuation_derives_nav_and_guards_fat_finger() {
 
 	// A 10x fat-finger (AUM 1500 → NAV 15, +900%) is rejected without override…
 	assert!(
-		funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", false)
+		funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", false)
 			.await
 			.is_err()
 	);
 	// …and accepted with it.
-	let forced = funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", true)
+	let forced = funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", true)
 		.await
 		.unwrap();
 	assert_eq!(forced.nav, Nav::parse_decimal("15").unwrap());
@@ -350,7 +365,7 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	let subs = PgSubscriptions::new(h.pool.clone());
 	let nav_repo = PgNav::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 	let user_claim = LedgerAccountKey::UserClaim(user);
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
@@ -363,7 +378,7 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	h.relay.drain().await;
 
 	// First subscription mints at the seed NAV (1.0): 200 cash → 200 units.
-	funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("200"), now)
+	funds_app::subscribe(&h.allocations, &subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("200"), now)
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -373,12 +388,12 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	assert_eq!(units(&h, &outstanding).await, shares("200"), "supply grew with the mint");
 
 	// Operator marks the fund up to NAV 2.0 (AUM 400 over 200 units).
-	funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", false)
+	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", false)
 		.await
 		.unwrap();
 
 	// A second subscription prices at NAV 2.0: 100 cash → 50 units (fractional pricing).
-	funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
+	funds_app::subscribe(&h.allocations, &subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -389,14 +404,14 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	// the balance, so this isolates the staleness guard.
 	let stale_now = now + funds_app::MAX_NAV_AGE_SECS + 100;
 	assert!(
-		funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("50"), stale_now)
+		funds_app::subscribe(&h.allocations, &subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("50"), stale_now)
 			.await
 			.is_err()
 	);
 
 	// Subscribing beyond the available balance is rejected Read-First.
 	assert!(
-		funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("1000"), now)
+		funds_app::subscribe(&h.allocations, &subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("1000"), now)
 			.await
 			.is_err()
 	);
@@ -409,7 +424,7 @@ async fn redeem_when_fund_is_liquid_auto_completes() {
 	let reds = PgRedemptions::new(h.pool.clone());
 	let nav_repo = PgNav::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 	let user_claim = LedgerAccountKey::UserClaim(user);
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
@@ -420,14 +435,14 @@ async fn redeem_when_fund_is_liquid_auto_completes() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
+	funds_app::subscribe(&h.allocations, &subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
 		.await
 		.unwrap();
 	h.relay.drain().await;
 
 	// Redeem 40 units at the seed NAV (1.0) → 40 cash. The fund claim (100) covers it, so
 	// it auto-settles in one request (a separate settle command, not a co-emitted event).
-	let r = funds_app::request_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("40"), now)
+	let r = funds_app::request_redemption(&h.allocations, &reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("40"), now)
 		.await
 		.unwrap();
 	assert_eq!(r.state(), RedemptionState::Completed, "a liquid redemption settles immediately");
@@ -459,14 +474,16 @@ async fn queued_short_redemption(
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	funds_app::subscribe(subs, h.ledger.as_ref(), nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
+	funds_app::subscribe(&h.allocations, subs, h.ledger.as_ref(), nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
 		.await
 		.unwrap();
 	h.relay.drain().await;
 	// Any AUM over the 100-unit supply moves the NAV ≥ the fat-finger threshold here, so
 	// the operator forces the mark.
-	funds_app::post_fund_valuation(nav_repo, h.ledger.as_ref(), service.clone(), usdt(aum), "op", true).await.unwrap();
-	let r = funds_app::request_redemption(reds, h.ledger.as_ref(), nav_repo, &h.notify, user, service.clone(), shares(units), now)
+	funds_app::post_fund_valuation(&h.allocations, nav_repo, h.ledger.as_ref(), service.clone(), usdt(aum), "op", true)
+		.await
+		.unwrap();
+	let r = funds_app::request_redemption(&h.allocations, reds, h.ledger.as_ref(), nav_repo, &h.notify, user, service.clone(), shares(units), now)
 		.await
 		.unwrap();
 	assert_eq!(r.state(), RedemptionState::Queued, "a short fund queues the redemption");
@@ -481,7 +498,7 @@ async fn redeem_on_a_short_fund_queues_then_settles_with_profit() {
 	let reds = PgRedemptions::new(h.pool.clone());
 	let nav_repo = PgNav::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 	let user_claim = LedgerAccountKey::UserClaim(user);
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
@@ -517,7 +534,7 @@ async fn settling_a_short_fund_parks_without_burning_or_paying() {
 	let reds = PgRedemptions::new(h.pool.clone());
 	let nav_repo = PgNav::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 	let user_claim = LedgerAccountKey::UserClaim(user);
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
@@ -541,7 +558,7 @@ async fn cancelling_a_queued_redemption_returns_the_units() {
 	let reds = PgRedemptions::new(h.pool.clone());
 	let nav_repo = PgNav::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 	let user_shares = LedgerAccountKey::UserShares(service.clone(), user);
 
@@ -608,7 +625,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 	let nav_repo = PgNav::new(h.pool.clone());
 	let positions = PgFundPositions::new(h.pool.clone());
 	let user = active_user(&users).await;
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 	let user_claim = LedgerAccountKey::UserClaim(user);
 	let service_claim = LedgerAccountKey::ServiceClaim(service.clone());
@@ -621,7 +638,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 
 	// Fire both at once; the shared `users` advisory lock inside each `open` serializes the two
 	// commits so they can never interleave a half-applied write.
-	let sub_fut = funds_app::subscribe(subs.as_ref(), h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("80"), now);
+	let sub_fut = funds_app::subscribe(&h.allocations, subs.as_ref(), h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("80"), now);
 	let wd_fut = withdrawal_app::request_withdrawal(
 		withdrawals.as_ref(),
 		h.ledger.as_ref(),
@@ -687,14 +704,14 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	let nav_repo = PgNav::new(h.pool.clone());
 	let positions = PgFundPositions::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 
 	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	funds_app::subscribe(&subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
+	funds_app::subscribe(&h.allocations, &subs, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), usdt("100"), now)
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -703,13 +720,13 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 
 	// Mark NAV to 4 (AUM 400 / 100 units, a forced +300% move) so each 30-unit redemption prices
 	// to 120 cash — above the fund's 100 claim — and stays Queued (no auto-settle).
-	funds_app::post_fund_valuation(&nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", true)
+	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", true)
 		.await
 		.unwrap();
-	let r1 = funds_app::request_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
+	let r1 = funds_app::request_redemption(&h.allocations, &reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
 		.await
 		.unwrap();
-	let r2 = funds_app::request_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
+	let r2 = funds_app::request_redemption(&h.allocations, &reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
 		.await
 		.unwrap();
 	assert_eq!(r1.state(), RedemptionState::Queued, "short fund queues the first redemption");
@@ -760,7 +777,7 @@ async fn a_repeat_settle_reduces_the_cost_basis_exactly_once() {
 	let nav_repo = PgNav::new(h.pool.clone());
 	let positions = PgFundPositions::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 
 	// AUM 400 → NAV 4, so the 30-unit redemption prices to 120 cash > the 100 fund claim
@@ -803,7 +820,7 @@ async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
 	let nav_repo = PgNav::new(h.pool.clone());
 	let positions = PgFundPositions::new(h.pool.clone());
 	let user = UserId::new();
-	let service = unique_service();
+	let service = registered_service(&h).await;
 	let now = now_unix();
 
 	// 100 units in TB with the projection row still absent — the mid-race state. The fund
@@ -823,7 +840,7 @@ async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
 	h.relay.drain().await;
 
 	// The auto-settle loses to the missing projection — the redeem is still accepted, queued.
-	let r = funds_app::request_redemption(&reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
+	let r = funds_app::request_redemption(&h.allocations, &reds, h.ledger.as_ref(), &nav_repo, &h.notify, user, service.clone(), shares("30"), now)
 		.await
 		.unwrap();
 	assert_eq!(r.state(), RedemptionState::Queued, "the raced auto-settle degrades to accepted-and-queued");

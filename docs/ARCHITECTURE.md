@@ -27,7 +27,7 @@ stay documented placeholders until a feature explicitly asks.
    └──────────────────────────────────────────────────────────────────────────────┘
    browser ─HTTP─▶ cabinet/frontend (Next.js) ─/api rewrite─▶ cabinet/backend
      (the BFF) ─gRPC─▶ piggybank core (money) + concierge (identity, separate repo)
-   other service repos (separate): own logic+allocations ─gRPC (evbanking_contracts)─▶ piggybank;
+   other service repos (separate): own logic, registered as allocations ─gRPC (evbanking_contracts)─▶ piggybank;
      verify client tokens locally via evbanking_auth; own microfrontends mount into the cabinet.
 ```
 

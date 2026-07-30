@@ -226,6 +226,69 @@ pub async fn redemption_queue(State(st): State<AppState>, jar: CookieJar) -> Res
 	Ok(Json(queue.into()))
 }
 
+/// `GET /api/admin/allocations` — the full catalog, drafts and closed included.
+pub async fn list_allocations(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AllocationList>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let token = require_money_token(&st, &jar).await?;
+	let list = st.grpc.list_allocations(&token, true).await.map_err(|s| ApiError::read(s, "allocations unavailable"))?;
+	Ok(Json(list.into()))
+}
+
+/// `POST /api/admin/allocations/register` — register a new investable product (`draft`).
+/// This is the only way a fund comes into existence.
+pub async fn register_allocation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let (Some(service), Some(title)) = (required(&v, "service"), required(&v, "title")) else {
+		return Err(ApiError::BadRequest("service and title are required".into()));
+	};
+	let req = bk::RegisterAllocationRequest {
+		service,
+		title,
+		summary: required(&v, "summary").unwrap_or_default(),
+	};
+	Ok(Json(st.grpc.register_allocation(&token, req).await?.into()))
+}
+
+/// `POST /api/admin/allocations/update` — edit an allocation's presentation fields.
+pub async fn update_allocation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let (Some(service), Some(title)) = (required(&v, "service"), required(&v, "title")) else {
+		return Err(ApiError::BadRequest("service and title are required".into()));
+	};
+	let req = bk::UpdateAllocationRequest {
+		service,
+		title,
+		summary: required(&v, "summary").unwrap_or_default(),
+	};
+	Ok(Json(st.grpc.update_allocation(&token, req).await?.into()))
+}
+
+/// `POST /api/admin/allocations/state` — open or close an allocation. Closing stops new
+/// subscriptions only; redemptions keep working so no investor is trapped.
+pub async fn set_allocation_state(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let (Some(service), Some(state)) = (required(&v, "service"), required(&v, "state")) else {
+		return Err(ApiError::BadRequest("service and state are required".into()));
+	};
+	let req = bk::SetAllocationStateRequest { service, state };
+	Ok(Json(st.grpc.set_allocation_state(&token, req).await?.into()))
+}
+
 /// `POST /api/admin/valuation/post` — post a fund NAV (with the fat-finger guard).
 pub async fn post_valuation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FundNav>, ApiError> {
 	require_admin(&st, &jar).await?;

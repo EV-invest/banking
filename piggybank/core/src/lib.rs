@@ -27,7 +27,9 @@ use std::sync::Arc;
 use domain::money::Network;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
-use ports::{Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger};
+use ports::{
+	AllocationRegistry, Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
+};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 
@@ -56,6 +58,9 @@ pub struct AppState {
 	pub users: Arc<dyn UserRepository>,
 	/// The `withdrawals` aggregate's driven port (Postgres control plane).
 	pub withdrawals: Arc<dyn WithdrawalRepository>,
+	/// The registry of investable products — the gate every subscribe resolves its
+	/// service through. Control plane only; moves no money.
+	pub allocations: Arc<dyn AllocationRegistry>,
 	/// The `subscriptions` aggregate's driven port (mint records + position cost basis).
 	pub subscriptions: Arc<dyn SubscriptionRepository>,
 	/// The `redemptions` aggregate's driven port (the accept-and-queue saga).
@@ -96,6 +101,7 @@ impl AppState {
 		analytics: Analytics,
 		users: Arc<dyn UserRepository>,
 		withdrawals: Arc<dyn WithdrawalRepository>,
+		allocations: Arc<dyn AllocationRegistry>,
 		subscriptions: Arc<dyn SubscriptionRepository>,
 		redemptions: Arc<dyn RedemptionRepository>,
 		deposits: Arc<dyn Deposits>,
@@ -115,6 +121,7 @@ impl AppState {
 			analytics,
 			users,
 			withdrawals,
+			allocations,
 			subscriptions,
 			redemptions,
 			deposits,

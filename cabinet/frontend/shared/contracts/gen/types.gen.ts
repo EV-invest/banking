@@ -21,6 +21,61 @@ export type BankingV1AdminBalanceRequest = {
 };
 
 /**
+ * Allocation
+ *
+ * One registered investable product. Carries no money: units, NAV and positions are
+ * read from FundsService against the same `service` id.
+ */
+export type BankingV1Allocation = {
+    /**
+     * service
+     *
+     * the slug — the id used by every FundsService RPC
+     */
+    service?: string;
+    /**
+     * title
+     *
+     * display name ("EV Trading")
+     */
+    title?: string;
+    /**
+     * summary
+     *
+     * one-line description for the catalog card
+     */
+    summary?: string;
+    /**
+     * state
+     *
+     * draft | open | closed
+     */
+    state?: string;
+    /**
+     * created_at
+     *
+     * unix seconds
+     */
+    created_at?: number | string;
+    /**
+     * updated_at
+     *
+     * unix seconds
+     */
+    updated_at?: number | string;
+};
+
+/**
+ * AllocationList
+ */
+export type BankingV1AllocationList = {
+    /**
+     * allocations
+     */
+    allocations?: Array<BankingV1Allocation>;
+};
+
+/**
  * Balance
  *
  * The user's single, network-agnostic balance, segmented by lifecycle. Every figure is
@@ -106,7 +161,7 @@ export type BankingV1Deposit = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | polygon | trc20 | ton
      */
     network?: string;
     /**
@@ -289,13 +344,23 @@ export type BankingV1FundNav = {
 };
 
 /**
+ * GetAllocationRequest
+ */
+export type BankingV1GetAllocationRequest = {
+    /**
+     * service
+     */
+    service?: string;
+};
+
+/**
  * GetDepositAddressRequest
  */
 export type BankingV1GetDepositAddressRequest = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | polygon | trc20 | ton
      */
     network?: string;
 };
@@ -432,6 +497,19 @@ export type BankingV1JwksResponse = {
 };
 
 /**
+ * ListAllocationsRequest
+ */
+export type BankingV1ListAllocationsRequest = {
+    /**
+     * include_unlisted
+     *
+     * Include `draft` and `closed` allocations. Requires AllocationManage; a caller
+     * without it is refused rather than silently downgraded to the open-only list.
+     */
+    include_unlisted?: boolean;
+};
+
+/**
  * ListDepositsRequest
  */
 export type BankingV1ListDepositsRequest = {
@@ -537,7 +615,7 @@ export type BankingV1NetworkWithdrawable = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | polygon | trc20 | ton
      */
     network?: string;
     /**
@@ -723,7 +801,7 @@ export type BankingV1RailLiquidity = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | polygon | trc20 | ton
      */
     network?: string;
     /**
@@ -838,7 +916,7 @@ export type BankingV1RecordDepositRequest = {
     /**
      * network
      *
-     * bep20 | trc20 | ton — the rail it arrived on
+     * bep20 | polygon | trc20 | ton — the rail it arrived on
      */
     network?: string;
     /**
@@ -992,13 +1070,31 @@ export type BankingV1RefreshRequest = {
 };
 
 /**
+ * RegisterAllocationRequest
+ */
+export type BankingV1RegisterAllocationRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * title
+     */
+    title?: string;
+    /**
+     * summary
+     */
+    summary?: string;
+};
+
+/**
  * RequestWithdrawalRequest
  */
 export type BankingV1RequestWithdrawalRequest = {
     /**
      * network
      *
-     * bep20 | trc20 | ton — the rail to ship on
+     * bep20 | polygon | trc20 | ton — the rail to ship on
      */
     network?: string;
     /**
@@ -1073,7 +1169,7 @@ export type BankingV1RotateDepositAddressRequest = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | polygon | trc20 | ton
      */
     network?: string;
 };
@@ -1097,7 +1193,7 @@ export type BankingV1SeedCapitalRequest = {
     /**
      * network
      *
-     * bep20 | trc20 | ton — the rail the capital lands on
+     * bep20 | polygon | trc20 | ton — the rail the capital lands on
      */
     network?: string;
     /**
@@ -1147,6 +1243,22 @@ export type BankingV1Session = {
      * True for the family that owns the refresh token presented on the listing call.
      */
     current?: boolean;
+};
+
+/**
+ * SetAllocationStateRequest
+ */
+export type BankingV1SetAllocationStateRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * state
+     *
+     * open | closed  (draft is entered only by RegisterAllocation)
+     */
+    state?: string;
 };
 
 /**
@@ -1337,6 +1449,24 @@ export type BankingV1UnparkEventRequest = {
  */
 export type BankingV1UnparkEventResponse = {
     [key: string]: never;
+};
+
+/**
+ * UpdateAllocationRequest
+ */
+export type BankingV1UpdateAllocationRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * title
+     */
+    title?: string;
+    /**
+     * summary
+     */
+    summary?: string;
 };
 
 /**
@@ -1574,7 +1704,7 @@ export type BankingV1Withdrawal = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | polygon | trc20 | ton
      */
     network?: string;
     /**
@@ -1657,7 +1787,7 @@ export type BankingV1WithdrawalQueueItem = {
     /**
      * network
      *
-     * bep20 | trc20 | ton
+     * bep20 | polygon | trc20 | ton
      */
     network?: string;
     /**
@@ -2360,6 +2490,151 @@ export type ConnectErrorDetailsAny = {
     };
     [key: string]: unknown;
 };
+
+export type BankingV1AllocationsServiceGetAllocationData = {
+    body: BankingV1GetAllocationRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/GetAllocation';
+};
+
+export type BankingV1AllocationsServiceGetAllocationErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceGetAllocationError = BankingV1AllocationsServiceGetAllocationErrors[keyof BankingV1AllocationsServiceGetAllocationErrors];
+
+export type BankingV1AllocationsServiceGetAllocationResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Allocation;
+};
+
+export type BankingV1AllocationsServiceGetAllocationResponse = BankingV1AllocationsServiceGetAllocationResponses[keyof BankingV1AllocationsServiceGetAllocationResponses];
+
+export type BankingV1AllocationsServiceListAllocationsData = {
+    body: BankingV1ListAllocationsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/ListAllocations';
+};
+
+export type BankingV1AllocationsServiceListAllocationsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceListAllocationsError = BankingV1AllocationsServiceListAllocationsErrors[keyof BankingV1AllocationsServiceListAllocationsErrors];
+
+export type BankingV1AllocationsServiceListAllocationsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1AllocationList;
+};
+
+export type BankingV1AllocationsServiceListAllocationsResponse = BankingV1AllocationsServiceListAllocationsResponses[keyof BankingV1AllocationsServiceListAllocationsResponses];
+
+export type BankingV1AllocationsServiceRegisterAllocationData = {
+    body: BankingV1RegisterAllocationRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/RegisterAllocation';
+};
+
+export type BankingV1AllocationsServiceRegisterAllocationErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceRegisterAllocationError = BankingV1AllocationsServiceRegisterAllocationErrors[keyof BankingV1AllocationsServiceRegisterAllocationErrors];
+
+export type BankingV1AllocationsServiceRegisterAllocationResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Allocation;
+};
+
+export type BankingV1AllocationsServiceRegisterAllocationResponse = BankingV1AllocationsServiceRegisterAllocationResponses[keyof BankingV1AllocationsServiceRegisterAllocationResponses];
+
+export type BankingV1AllocationsServiceSetAllocationStateData = {
+    body: BankingV1SetAllocationStateRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/SetAllocationState';
+};
+
+export type BankingV1AllocationsServiceSetAllocationStateErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceSetAllocationStateError = BankingV1AllocationsServiceSetAllocationStateErrors[keyof BankingV1AllocationsServiceSetAllocationStateErrors];
+
+export type BankingV1AllocationsServiceSetAllocationStateResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Allocation;
+};
+
+export type BankingV1AllocationsServiceSetAllocationStateResponse = BankingV1AllocationsServiceSetAllocationStateResponses[keyof BankingV1AllocationsServiceSetAllocationStateResponses];
+
+export type BankingV1AllocationsServiceUpdateAllocationData = {
+    body: BankingV1UpdateAllocationRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/UpdateAllocation';
+};
+
+export type BankingV1AllocationsServiceUpdateAllocationErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceUpdateAllocationError = BankingV1AllocationsServiceUpdateAllocationErrors[keyof BankingV1AllocationsServiceUpdateAllocationErrors];
+
+export type BankingV1AllocationsServiceUpdateAllocationResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Allocation;
+};
+
+export type BankingV1AllocationsServiceUpdateAllocationResponse = BankingV1AllocationsServiceUpdateAllocationResponses[keyof BankingV1AllocationsServiceUpdateAllocationResponses];
 
 export type BankingV1AuthServiceIssueUserTokenData = {
     body: BankingV1IssueUserTokenRequest;

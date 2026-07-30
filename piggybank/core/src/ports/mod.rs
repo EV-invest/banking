@@ -16,6 +16,7 @@
 //! construction cannot enrol in a Postgres `UnitOfWork` (money is written last, in
 //! the relay).
 
+pub mod allocations;
 pub mod custody;
 pub mod deposit_addresses;
 pub mod deposits;
@@ -26,6 +27,7 @@ pub mod redemptions;
 pub mod subscriptions;
 pub mod withdrawals;
 
+pub use allocations::{AllocationRecord, AllocationRegistry};
 use async_trait::async_trait;
 pub use custody::{BroadcastRequest, Custody, CustodyError};
 pub use deposit_addresses::DepositAddresses;

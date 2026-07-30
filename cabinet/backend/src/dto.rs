@@ -208,6 +208,47 @@ impl From<bk::DepositList> for DepositList {
 	}
 }
 
+// ── piggybank: allocations (the registry of investable products) ─────────────
+
+/// One catalog entry. Carries no money — units/NAV/P&L come from the funds surface
+/// keyed by the same `service`.
+#[derive(Serialize)]
+pub struct Allocation {
+	pub service: String,
+	pub title: String,
+	pub summary: String,
+	/// `draft` | `open` | `closed`.
+	pub state: String,
+	pub created_at: String,
+	pub updated_at: String,
+}
+
+impl From<bk::Allocation> for Allocation {
+	fn from(a: bk::Allocation) -> Self {
+		Self {
+			service: a.service,
+			title: a.title,
+			summary: a.summary,
+			state: a.state,
+			created_at: a.created_at.to_string(),
+			updated_at: a.updated_at.to_string(),
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct AllocationList {
+	pub allocations: Vec<Allocation>,
+}
+
+impl From<bk::AllocationList> for AllocationList {
+	fn from(l: bk::AllocationList) -> Self {
+		Self {
+			allocations: l.allocations.into_iter().map(Allocation::from).collect(),
+		}
+	}
+}
+
 // ── piggybank: funds (the service currency) ──────────────────────────────────
 
 #[derive(Serialize)]

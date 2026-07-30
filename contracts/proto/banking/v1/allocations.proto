@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package banking.v1;
+
+// AllocationsService — the registry of investable products (the Allocation primitive).
+//
+// An allocation is the control-plane record that makes a service id investable. It is
+// the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service
+// with no registered, open allocation, so a user can never mint a fund by typing an
+// unknown slug. Money never flows through this service — amounts, units and NAV stay
+// on FundsService/BalanceService; here live identity, presentation and lifecycle only.
+//
+// Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +
+// redeem) → `closed` (redeem only, so a closed product never traps an investor).
+// `closed` → `open` re-opens. Registration and every transition require
+// `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.
+//
+// Reads are open to any authenticated user; `ListAllocations` returns only `open`
+// allocations unless the caller holds `AllocationManage` and asks for all. See
+// docs/ARCHITECTURE.md.
+service AllocationsService {
+  // The catalog. Any authenticated user sees the `open` allocations; an
+  // `AllocationManage` holder may set `include_unlisted` to see drafts and closed
+  // ones too. Ordered by `service`.
+  rpc ListAllocations(ListAllocationsRequest) returns (AllocationList);
+
+  // One allocation by service id. Readable by any authenticated user in any state —
+  // an investor holding units of a closed product still needs to render it.
+  rpc GetAllocation(GetAllocationRequest) returns (Allocation);
+
+  // Register a new allocation in `draft` (AllocationManage). The service id is a
+  // 1..64 char `[A-Za-z0-9_-]` slug and is immutable once registered; re-registering
+  // an existing one is a conflict, never a silent update.
+  rpc RegisterAllocation(RegisterAllocationRequest) returns (Allocation);
+
+  // Update the presentation fields of an existing allocation (AllocationManage).
+  // Never changes state or identity.
+  rpc UpdateAllocation(UpdateAllocationRequest) returns (Allocation);
+
+  // Drive the lifecycle (AllocationManage): `open` or `close`. Idempotent — setting
+  // the state an allocation already holds succeeds and changes nothing.
+  rpc SetAllocationState(SetAllocationStateRequest) returns (Allocation);
+}
+
+// One registered investable product. Carries no money: units, NAV and positions are
+// read from FundsService against the same `service` id.
+message Allocation {
+  string service = 1;     // the slug — the id used by every FundsService RPC
+  string title = 2;       // display name ("EV Trading")
+  string summary = 3;     // one-line description for the catalog card
+  string state = 4;       // draft | open | closed
+  int64 created_at = 5;   // unix seconds
+  int64 updated_at = 6;   // unix seconds
+}
+
+message AllocationList {
+  repeated Allocation allocations = 1;
+}
+
+message ListAllocationsRequest {
+  // Include `draft` and `closed` allocations. Requires AllocationManage; a caller
+  // without it is refused rather than silently downgraded to the open-only list.
+  bool include_unlisted = 1;
+}
+
+message GetAllocationRequest {
+  string service = 1;
+}
+
+message RegisterAllocationRequest {
+  string service = 1;
+  string title = 2;
+  string summary = 3;
+}
+
+message UpdateAllocationRequest {
+  string service = 1;
+  string title = 2;
+  string summary = 3;
+}
+
+message SetAllocationStateRequest {
+  string service = 1;
+  string state = 2;  // open | closed  (draft is entered only by RegisterAllocation)
+}

@@ -20,6 +20,7 @@ use piggybank_core::{
 	application::auth_sync,
 	config::{self, Rails},
 	infrastructure::{
+		allocations::PgAllocations,
 		bridge::BridgeConsumer,
 		custody::{ChainCustody, MultiChainCustody, StubCustody},
 		db,
@@ -49,7 +50,10 @@ use piggybank_core::{
 		withdrawal_watcher::WithdrawalWatcher,
 		withdrawals::PgWithdrawals,
 	},
-	ports::{Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{
+		AllocationRegistry, Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository,
+		ledger::Ledger,
+	},
 	services,
 };
 use tokio::sync::Notify;
@@ -169,6 +173,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
+	let allocations: Arc<dyn AllocationRegistry> = Arc::new(PgAllocations::new(pool.clone()));
 	let subscriptions: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(pool.clone()));
 	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
 	let deposits: Arc<dyn Deposits> = Arc::new(PgDeposits::new(pool.clone()));
@@ -367,6 +372,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		analytics,
 		users.clone(),
 		withdrawals,
+		allocations,
 		subscriptions,
 		redemptions,
 		deposits,

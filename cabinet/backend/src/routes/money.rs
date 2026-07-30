@@ -85,6 +85,28 @@ pub async fn cancel_withdrawal(State(st): State<AppState>, jar: CookieJar, heade
 	Ok(Json(st.grpc.cancel_withdrawal(&token, &withdrawal_id).await?.into()))
 }
 
+// ── allocations (the catalog of investable products) ─────────────────────────
+
+/// `GET /api/allocations` — the investor-facing catalog: the `open` allocations only.
+/// The unlisted (draft/closed) half is admin-only and lives on the admin surface.
+pub async fn list_allocations(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AllocationList>, ApiError> {
+	let token = require_money_token(&st, &jar).await?;
+	let list = st.grpc.list_allocations(&token, false).await.map_err(|s| ApiError::read(s, "allocations unavailable"))?;
+	Ok(Json(list.into()))
+}
+
+/// `GET /api/allocations/detail?service=` — one allocation, in any state. An investor
+/// holding units of a closed product still has to render it.
+pub async fn get_allocation(State(st): State<AppState>, jar: CookieJar, Query(q): Query<ServiceQuery>) -> Result<Json<dto::Allocation>, ApiError> {
+	let token = require_money_token(&st, &jar).await?;
+	let allocation = st
+		.grpc
+		.get_allocation(&token, &q.service.unwrap_or_default())
+		.await
+		.map_err(|s| ApiError::read(s, "allocation unavailable"))?;
+	Ok(Json(allocation.into()))
+}
+
 // ── funds (the service currency) ─────────────────────────────────────────────
 
 /// `GET /api/funds/nav?service=` — the current NAV (price per share) of a fund.
