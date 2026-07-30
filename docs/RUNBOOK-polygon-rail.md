@@ -35,10 +35,19 @@ Required to turn the rail on:
 - `POLYGON_RPC_URL` — an `eth_getLogs`-capable JSON-RPC endpoint. Free public nodes gate/throttle
   `eth_getLogs`; use a keyed provider (Alchemy/QuickNode/Infura) for anything past a demo.
   `POLYGON_LOGS_RPC_URL` optionally splits the deposit scan onto a second endpoint.
+- **`POLYGON_MAX_BLOCK_RANGE` must match what the logs endpoint accepts.** On
+  `polygon.drpc.org` (the committed default) the cap is a **~100-block range** — 100 answers,
+  128 is refused. Depth is not the constraint: range-100 queries answer 200k blocks deep.
+  drpc reports the refusal as code 35 `"ranges over 10000 blocks are not supported on free
+  plan"`, which is false by two orders of magnitude — believe the measurement, not the message.
+  Against the old 500 default every Polygon `eth_getLogs` was refused and **the rail credited
+  no deposits at all**. Re-measure before raising it, and note the keyless alternatives
+  (publicnode et al.) refuse Polygon `getLogs` outright, so drpc is the only free option.
 
 Sensible defaults (override only to deviate): `POLYGON_USDT_CONTRACT`, `POLYGON_CHAIN_ID` (137),
-`POLYGON_CONFIRMATIONS` (128), `POLYGON_POLL_SECS` (6), `POLYGON_MAX_BLOCK_RANGE` (500),
-`POLYGON_GAS_LIMIT` (100_000), `POLYGON_DEPOSIT_START_BLOCK` (unset ⇒ watch from head).
+`POLYGON_CONFIRMATIONS` (128), `POLYGON_POLL_SECS` (6), `POLYGON_MAX_BLOCK_RANGE` (500 in code,
+**overridden to 100 in the prod env** — see above), `POLYGON_GAS_LIMIT` (100_000),
+`POLYGON_DEPOSIT_START_BLOCK` (unset ⇒ watch from head).
 
 Sweep (opt-in, moves user funds on-chain — leave OFF until funded): `POLYGON_SWEEP_ENABLED`
 (falls back to the global `SWEEP_ENABLED`), `POLYGON_SWEEP_MIN_USDT` (1_000_000 = 1 USDT @ 6-dp),
