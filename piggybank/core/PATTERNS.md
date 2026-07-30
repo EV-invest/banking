@@ -63,12 +63,58 @@ any rail so acceptance never depends on rail liquidity. *(This supersedes the or
 per-network `sum(custody:N)==sum(claims:N)` model: claims were unified once a single
 fungible balance — not three — became the product requirement.)*
 
+## Allocations — the registry of investable products (`domain::allocations`, `AllocationsService`)
+
+An **allocation** is the control-plane record that makes a `ServiceId` investable. It is
+the *only* way a fund comes into existence.
+
+**The hole it closed.** `Subscribe` used to validate only the slug's *shape*
+(1..64 `[A-Za-z0-9_-]`), and `dealing_nav` bootstraps a service with no valuation at the
+**seed NAV 1.0** — so any investor could mint a fund by typing an unregistered id, moving
+real money into a `service:<typo>` claim with no operator behind it. `PostFundValuation`
+was the second such door. Both now resolve the registry first.
+
+**States.** `draft` (registered, accepts no money, hidden from the default catalog) ->
+`open` (subscribe + redeem) -> `closed` (**redeem only**). `closed -> open` re-opens;
+`draft` is entered only by registration, so a product that has taken money can never
+travel back to "never opened". Transitions are idempotent — re-opening an open allocation
+raises no event.
+
+**The asymmetric gate is the point.** `require_subscribable` admits only `open`;
+`require_redeemable` admits `open` *and* `closed`. Winding a product down must never trap
+an investor's units inside it, so only the *new money* direction is ever blocked.
+
+**Authorization.** Registration and every transition need `Permission::AllocationManage`
+— Admin/Owner, alongside `ValuationPost`, never Operator: bringing a fund into existence
+is not a read. Reads are open to any authenticated user; `include_unlisted` (drafts +
+closed) is behind the same permission and **refuses** rather than silently downgrading to
+the open-only list.
+
+**No money, so no relay.** An allocation moves no value: its events are drained with
+`relay = false` — audit facts in `event_log`, never in the `outbox` (the relay has no
+ledger op for the kind and would park the row). Identity is the `ServiceId` slug; the
+table's UUID `id` is a surrogate carried only because `event_log.aggregate_id` is a UUID.
+
+**Wire contract.** `contracts/proto/banking/v1/allocations.proto` plus the hand-written
+`evbanking_contracts::allocation` facade, which gathers the stubs and pins the state
+vocabulary consumer repos match on. `domain::allocations::AllocationState::as_str` must
+stay byte-identical with it (guarded by `allocation_state_strings_are_canonical` and
+`domain_states_match_the_wire_contract`).
+
+**Migration `0021`** drops the dead `allocations` table from `0002` (the write store of
+the abandoned per-service stake aggregate, unread by any code since `0005`) and backfills
+every service already carrying subscriptions/redemptions/positions/valuations as `open` —
+without that backfill the gate would retroactively lock existing investors out of
+`Redeem`.
+
 ## Fund shares — the service currency (`domain::subscriptions`, `domain::redemptions`, `FundsService`)
 
 A client invests by **subscribing** cash into a fund (a `ServiceId`) and receiving
 **units** of the service currency, priced at **NAV per share**. A holding's value is
 `units × NAV`, so profit comes from a rising NAV, **not** from extra units (standard
-NAV/unit accounting). This **replaced** the old flat per-service "allocation" stake.
+NAV/unit accounting). This **replaced** the original flat per-service *stake* aggregate
+(confusingly also called an "allocation" then — the name now belongs to the registry
+above, which is a different thing entirely: a product's listing, not a holding).
 
 **Units ledger (`Ledger::Share`, `= 3`).** `UserShares(service, user)` (60, debit-normal,
 `shares:<svc>:<uuid>`) is a holder's units; `SharesOutstanding(service)` (61, credit-normal,
@@ -212,8 +258,9 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
 
 - The stable **`event_id` UUID** (not the delivery cursor `seq`) is the key. A
   single-transfer event's TB id **is** the event id; a reservation's pending uses an
-  **allocation-derived** id (`uuid_v5(allocation_id, "reserve")`) so its settle/cancel
-  can recompute the same `pending_id`.
+  **aggregate-derived** id (`tid(aggregate_id, <salt>)` — `BURN_RESERVE` for a redemption,
+  `CLEARING_RESERVE` for a withdrawal) so its settle/cancel can recompute the same
+  `pending_id`.
 - The gateway treats `Exists | AlreadyPosted | AlreadyVoided` as success; a post racing
   its pending is `Retryable` (can't happen under strict `seq`, but handled).
   `InsufficientFunds`/`Conflict` are **parked** into a distinct `outbox.parked_at`
@@ -398,8 +445,13 @@ auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
 ## Tests
 
 `domain` unit tests cover the money + NAV math (incl. the `mul_div` overflow bound and the
-share-key ledger sides), the subscription/redemption aggregates, and the withdrawal
-transitions; `piggybank/core/tests/balance_allocations.rs` and
+share-key ledger sides), the subscription/redemption aggregates, the withdrawal
+transitions, and the allocation registry's state machine;
+`piggybank/core/tests/allocation_registry.rs` covers the gate against real Postgres +
+TigerBeetle (an unregistered service refused *before* any money moves, a draft taking
+nothing, a closed allocation still redeeming, double registration as a conflict, the
+catalog's listed/unlisted split, and allocation events staying out of the outbox);
+`piggybank/core/tests/balance_allocations.rs` and
 `piggybank/core/tests/wallet_withdrawals.rs` hit **real** Postgres + TigerBeetle
 (deposit idempotency, the non-negative backstop, transfer-id idempotency; the Share-ledger
 mint/burn + **over-redeem reject by the TB flag**; NAV derivation + the fat-finger guard;
