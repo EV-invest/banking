@@ -22,6 +22,7 @@
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
 pub mod bridge;
+pub mod config_drift;
 pub mod custody;
 pub mod db;
 pub mod deposit_watcher;

@@ -43,7 +43,12 @@ ev::settings! {
 		/// browser. Same-origin (relative) `scriptUrl`s need no entry.
 		mfe_allowed_origins: Vec<String> = "",
 		app_env: String,
+		/// Unset ⇒ error monitoring is a silent no-op. Right locally; in
+		/// production it means the BFF's errors reach nobody, so there the boot
+		/// fails instead.
+		#[required_in("production")]
 		sentry_dsn: Option<String>,
+		#[required_in("production")]
 		posthog_key: Option<String>,
 		posthog_host: Option<String>,
 	}
@@ -126,5 +131,27 @@ mod tests {
 				"POSTHOG_HOST",
 			]
 		);
+	}
+
+	/// What a production deploy must provide. The gitops preflight diffs the
+	/// cluster Secret against this list (`--print-required-vars`), so a change
+	/// here is a change to the deploy contract.
+	#[test]
+	fn production_additionally_requires_the_silent_failure_surface() {
+		let extra: Vec<String> = AppConfig::required_var_names("production")
+			.into_iter()
+			.filter(|var| !AppConfig::required_var_names("development").contains(var))
+			.collect();
+		assert_eq!(extra, vec!["SENTRY_DSN", "POSTHOG_KEY"]);
+	}
+
+	#[test]
+	fn a_production_deploy_without_monitoring_fails_to_boot() {
+		let mut env = minimal_env();
+		env.insert("APP_ENV".to_string(), "production".to_string());
+		let error = AppConfig::from_source(|var| env.get(var).cloned()).expect_err("production without monitoring must not boot");
+
+		let vars: Vec<&str> = error.errors.iter().map(|e| e.var.as_str()).collect();
+		assert_eq!(vars, vec!["SENTRY_DSN", "POSTHOG_KEY"]);
 	}
 }

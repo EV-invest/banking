@@ -21,9 +21,14 @@ ev::settings! {
 		grpc_addr: SocketAddr = "127.0.0.1:50051",
 		/// Auth service gRPC listener address (token issuance routes for clients).
 		auth_grpc_addr: SocketAddr = "127.0.0.1:50052",
+		/// `None` ⇒ error monitoring is a silent no-op. Right for local and CI;
+		/// on the money plane an unreported error is the one thing nobody can
+		/// afford to miss, so in production the boot fails instead.
+		#[required_in("production")]
 		sentry_dsn: Option<String>,
 		/// PostHog project key for native product-analytics capture. `None` disables
 		/// capture (a silent no-op), so the same code runs unconfigured (local, CI).
+		#[required_in("production")]
 		posthog_key: Option<String>,
 		/// PostHog ingestion host; `None` falls back to the library default
 		/// (`https://us.i.posthog.com`).
@@ -585,6 +590,37 @@ mod tests {
 				"BRIDGE_POLL_SECS",
 			]
 		);
+	}
+
+	/// What a production deploy must provide beyond the always-required set.
+	/// The gitops preflight diffs the cluster Secret against this list
+	/// (`--print-required-vars`), so a change here changes the deploy contract.
+	#[test]
+	fn production_additionally_requires_the_silent_failure_surface() {
+		let extra: Vec<String> = AppConfig::required_var_names("production")
+			.into_iter()
+			.filter(|var| !AppConfig::required_var_names("development").contains(var))
+			.collect();
+		assert_eq!(extra, vec!["SENTRY_DSN", "POSTHOG_KEY"]);
+	}
+
+	#[test]
+	fn a_production_deploy_without_monitoring_fails_to_boot() {
+		let minimal: std::collections::HashMap<&str, &str> = [
+			("DATABASE_URL", "postgres://localhost/banking"),
+			("APP_ENV", "production"),
+			("TIGERBEETLE_ADDRESS", "127.0.0.1:3033"),
+			("TIGERBEETLE_CLUSTER_ID", "0"),
+			("SIGNER_GRPC_ADDR", "http://127.0.0.1:50053"),
+			("CONCIERGE_BRIDGE_ADDR", "http://127.0.0.1:55670"),
+			("BRIDGE_SERVICE_TOKEN", "test-bridge"),
+		]
+		.into_iter()
+		.collect();
+		let error = AppConfig::from_source(|var| minimal.get(var).map(|v| v.to_string())).expect_err("the money plane must not run unmonitored");
+
+		let vars: Vec<&str> = error.errors.iter().map(|e| e.var.as_str()).collect();
+		assert_eq!(vars, vec!["SENTRY_DSN", "POSTHOG_KEY"]);
 	}
 
 	/// A minimal rails config with the given chain Options set — only the fields

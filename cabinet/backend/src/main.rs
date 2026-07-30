@@ -34,9 +34,21 @@ fn main() -> color_eyre::Result<()> {
 	color_eyre::install()?;
 	dotenvy::dotenv().ok();
 
+	// The deploy contract, straight out of the image: the gitops preflight runs
+	// this against the built image and diffs it with the cluster Secret's keys,
+	// so a missing variable is caught before the rollout, not as a
+	// CrashLoopBackOff after it.
+	if let Some(profile) = print_required_vars_for() {
+		for var in AppConfig::required_var_names(&profile) {
+			println!("{var}");
+		}
+		return Ok(());
+	}
+
 	// One env read at boot; every missing/invalid variable fails HERE, in one
-	// aggregate error, before anything binds.
-	let config = AppConfig::from_env()?;
+	// aggregate error, before anything binds — exiting 78 (EX_CONFIG), so "the
+	// config is wrong" is distinguishable from a dependency blip.
+	let config = ev::settings::or_exit(AppConfig::from_env());
 
 	// Guard must stay alive for the duration of main — dropping it flushes events. A
 	// `None` DSN makes `init` return `None`, so this binding is simply inert.
@@ -103,6 +115,22 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 
 // Returns the OTel guard (flushes/shuts down on drop); bind it in `main`. `None`
 // when OTEL_EXPORTER_OTLP_ENDPOINT is unset — the layers are then inert.
+/// `--print-required-vars[=PROFILE]` (default `production`). Hand-rolled: this
+/// binary has no other CLI surface, and a whole arg parser for one flag is not
+/// worth the dependency.
+fn print_required_vars_for() -> Option<String> {
+	const FLAG: &str = "--print-required-vars";
+
+	let mut args = std::env::args().skip(1);
+	let arg = args.next()?;
+	match arg.split_once('=') {
+		Some((FLAG, profile)) => Some(profile.to_string()),
+		Some(_) => None,
+		None if arg == FLAG => Some(args.next().unwrap_or_else(|| "production".to_string())),
+		None => None,
+	}
+}
+
 fn init_tracing(environment: &str) -> Option<ev::otel::Telemetry> {
 	use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
