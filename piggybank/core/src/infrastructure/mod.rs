@@ -23,6 +23,7 @@
 
 pub mod allocations;
 pub mod bridge;
+pub mod config_drift;
 pub mod custody;
 pub mod db;
 pub mod deposit_watcher;

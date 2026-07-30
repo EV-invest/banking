@@ -22,6 +22,7 @@ use piggybank_core::{
 	infrastructure::{
 		allocations::PgAllocations,
 		bridge::BridgeConsumer,
+		config_drift,
 		custody::{ChainCustody, MultiChainCustody, StubCustody},
 		db,
 		deposit_watcher::DepositWatcher,
@@ -65,9 +66,21 @@ fn main() -> color_eyre::Result<()> {
 	color_eyre::install()?;
 	dotenvy::dotenv().ok();
 
+	// The deploy contract, straight out of the image: the gitops preflight runs
+	// this against the built image and diffs it with the cluster Secret's keys,
+	// so a missing variable is caught before the rollout, not as a
+	// CrashLoopBackOff after it.
+	if let Some(profile) = print_required_vars_for() {
+		for var in config::AppConfig::required_var_names(&profile) {
+			println!("{var}");
+		}
+		return Ok(());
+	}
+
 	// One env read at boot; every missing/invalid variable fails HERE, in one
-	// aggregate error, before anything binds.
-	let config = config::AppConfig::from_env()?;
+	// aggregate error, before anything binds — exiting 78 (EX_CONFIG), so "the
+	// config is wrong" is distinguishable from a dependency blip.
+	let config = ev::settings::or_exit(config::AppConfig::from_env());
 
 	// Guard must stay alive for the duration of main — dropping it flushes events.
 	// `None` DSN → `init` returns `None`, so this binding is simply inert.
@@ -89,6 +102,10 @@ fn main() -> color_eyre::Result<()> {
 }
 
 async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
+	// Watches the mounted settings Secret and warns when it stops matching what
+	// this process booted with. Detection only — applying means a redeploy.
+	config_drift::spawn(config::AppConfig::var_names());
+
 	// The on-chain rails keep their env-based conditional construction — a rail
 	// runs only when its endpoint var is set. Production asserts the rail set below.
 	let rails = Rails::from_env().context("failed to load the on-chain rail configuration")?;
@@ -553,6 +570,22 @@ async fn infallible(fut: impl Future<Output = ()>) -> Result<(), std::convert::I
 
 /// Run the bridge consumer if configured, else idle until shutdown — so the `join!` branch
 /// exists unconditionally (an unconfigured bridge is a no-op, not a missing branch).
+/// `--print-required-vars[=PROFILE]` (default `production`). Hand-rolled: this
+/// binary has no other CLI surface, and a whole arg parser for one flag is not
+/// worth the dependency.
+fn print_required_vars_for() -> Option<String> {
+	const FLAG: &str = "--print-required-vars";
+
+	let mut args = std::env::args().skip(1);
+	let arg = args.next()?;
+	match arg.split_once('=') {
+		Some((FLAG, profile)) => Some(profile.to_string()),
+		Some(_) => None,
+		None if arg == FLAG => Some(args.next().unwrap_or_else(|| "production".to_string())),
+		None => None,
+	}
+}
+
 async fn run_bridge(bridge: Option<BridgeConsumer>, shutdown: CancellationToken) {
 	match bridge {
 		Some(consumer) => consumer.run(shutdown).await,

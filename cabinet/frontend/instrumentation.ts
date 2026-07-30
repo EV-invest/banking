@@ -13,8 +13,12 @@ export async function register() {
   // inlined) so config.ts — and its process.exit — stays out of the Edge
   // bundle Next also compiles this file into.
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { orExit } = await import("@evinvest/settings");
     const { assertConfig } = await import("@/config");
-    assertConfig();
+    // Exit 78 (EX_CONFIG) instead of letting the throw surface as a generic
+    // crash: "the config is wrong, restarting will not help", as opposed to the
+    // dependency blip a restart does fix.
+    orExit(() => assertConfig());
   }
   return initMonitoring();
 }

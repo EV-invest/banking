@@ -8,7 +8,7 @@
 // accepts traffic. The client/server split is automatic: only NEXT_PUBLIC_*
 // keys reach the browser bundle; accessing a server key there is a no-op.
 
-import { createSettings, bool, optional as opt, str, url } from "@evinvest/settings";
+import { createSettings, bool, optional as opt, requiredIn, str, url } from "@evinvest/settings";
 
 // ── Lazy settings — re-created on every access ─────────────────────────
 // No caching: tests mutate `process.env` between calls, and the overhead of
@@ -33,8 +33,14 @@ function getSettings() {
     client: {
       NEXT_PUBLIC_MFE_ALLOWED_ORIGINS: opt(str()),
       NEXT_PUBLIC_POSTHOG_HOST: opt(str()),
-      NEXT_PUBLIC_SENTRY_DSN: opt(str()),
+      // Unset ⇒ browser error monitoring is a silent no-op: the cabinet's
+      // client-side crashes reach nobody. Acceptable locally, not in a deploy.
+      NEXT_PUBLIC_SENTRY_DSN: requiredIn(opt(str()), "production"),
     },
+    // `requiredIn` matches against this. NODE_ENV is what Next.js already sets
+    // and what every other check here reads, so it stays the single name for
+    // "which environment is this" rather than a second, drifting APP_ENV.
+    profile: process.env.NODE_ENV,
     runtimeEnv: {
       CABINET_BACKEND_URL: process.env.CABINET_BACKEND_URL,
       AUTH_COOKIE_SECURE: process.env.AUTH_COOKIE_SECURE,
