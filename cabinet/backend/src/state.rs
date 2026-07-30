@@ -74,6 +74,10 @@ impl Grpc {
 		bk::funds_service_client::FundsServiceClient::new(self.piggybank.clone())
 	}
 
+	fn allocations(&self) -> bk::allocations_service_client::AllocationsServiceClient<Channel> {
+		bk::allocations_service_client::AllocationsServiceClient::new(self.piggybank.clone())
+	}
+
 	fn health(&self) -> bk::health_service_client::HealthServiceClient<Channel> {
 		bk::health_service_client::HealthServiceClient::new(self.piggybank.clone())
 	}
@@ -188,6 +192,28 @@ impl Grpc {
 
 	pub async fn list_redemptions(&self, token: &str) -> Result<bk::RedemptionList, Status> {
 		Ok(self.funds().list_redemptions(bearer(token, bk::ListRedemptionsRequest {})?).await?.into_inner())
+	}
+
+	pub async fn list_allocations(&self, token: &str, include_unlisted: bool) -> Result<bk::AllocationList, Status> {
+		let req = bk::ListAllocationsRequest { include_unlisted };
+		Ok(self.allocations().list_allocations(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn get_allocation(&self, token: &str, service: &str) -> Result<bk::Allocation, Status> {
+		let req = bk::GetAllocationRequest { service: service.to_string() };
+		Ok(self.allocations().get_allocation(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn register_allocation(&self, token: &str, req: bk::RegisterAllocationRequest) -> Result<bk::Allocation, Status> {
+		Ok(self.allocations().register_allocation(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn update_allocation(&self, token: &str, req: bk::UpdateAllocationRequest) -> Result<bk::Allocation, Status> {
+		Ok(self.allocations().update_allocation(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn set_allocation_state(&self, token: &str, req: bk::SetAllocationStateRequest) -> Result<bk::Allocation, Status> {
+		Ok(self.allocations().set_allocation_state(bearer(token, req)?).await?.into_inner())
 	}
 
 	pub async fn fund_nav(&self, token: &str, service: &str) -> Result<bk::FundNav, Status> {
