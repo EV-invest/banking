@@ -24,6 +24,12 @@
 //! `LOOKBACK_SECS` of effective indexer lag, not infinite. It is set generously for that
 //! reason. Each cycle re-scans that window below the watermark; the overlap is idempotent
 //! (`record_deposit` dedupes by `transaction_hash`).
+//!
+//! Only an observed transfer raises the watermark, so a rail with no traffic would hold its
+//! initial value forever — an unboundedly widening re-scan window, and a `updated_at` that
+//! says nothing about liveness. A cycle that drains every owner therefore floats the
+//! watermark up to `now - LOOKBACK_SECS` (see [`next_watermark`]), which is where a rail
+//! carrying traffic already sits.
 
 use std::{sync::Arc, time::Duration};
 
@@ -123,6 +129,10 @@ impl TonDepositWatcher {
 
 		let from = cursor.saturating_sub(LOOKBACK_SECS);
 		let mut high = cursor;
+		// Whether every owner was drained to the head this cycle. Only then is it safe to float
+		// the watermark up on an idle rail (see `next_watermark`) — a skipped owner may still
+		// have an unseen transfer below `now - LOOKBACK_SECS`.
+		let mut all_owners_drained = true;
 		for (owner, user) in &watched {
 			// Drain this owner to the head, page by page: a single capped page could leave
 			// older transfers unfetched while ANOTHER owner's newer transfer advances the
@@ -139,6 +149,7 @@ impl TonDepositWatcher {
 						// a transiently-failed valid owner is re-scanned within the LOOKBACK_SECS window
 						// next cycle, and a permanently-bad address is never a real deposit target.
 						warn!(owner, "ton deposit watcher: owner scan failed, skipping this owner this cycle: {err}");
+						all_owners_drained = false;
 						break;
 					}
 				};
@@ -158,6 +169,7 @@ impl TonDepositWatcher {
 					// cursor never advances, so each cycle re-hits this same stuck page first). The
 					// `LOOKBACK_SECS` window re-scans this owner next cycle; crediting is idempotent.
 					warn!(owner, "ton deposit watcher: full page without time progress — skipping this owner for the cycle");
+					all_owners_drained = false;
 					break;
 				}
 				// Resume AT the newest raw time (inclusive): boundary entries are refetched
@@ -167,8 +179,9 @@ impl TonDepositWatcher {
 		}
 		// Advance to the newest transaction time seen (never backwards). The next cycle
 		// re-scans `LOOKBACK_SECS` below this; the overlap is deduped by `record_deposit`.
-		if high > cursor {
-			self.set_cursor(network, high).await?;
+		let next = next_watermark(cursor, high, all_owners_drained, now_unix());
+		if next > cursor {
+			self.set_cursor(network, next).await?;
 		}
 		Ok(())
 	}
@@ -240,6 +253,27 @@ impl TonDepositWatcher {
 	}
 }
 
+/// The watermark to store after a cycle: the newest transfer time seen, never below the cursor
+/// it started from.
+///
+/// On an idle rail `high` never rises above `cursor` — nothing is found to raise it — so a rail
+/// with no traffic would hold its initial watermark forever. Two costs, both real: the re-scanned
+/// window (`cursor - LOOKBACK_SECS` .. head) grows without bound, so each cycle asks the indexer
+/// for a longer history than the last; and `updated_at` stops being a liveness signal, leaving
+/// "healthy but idle" indistinguishable from "wedged" — the EVM watcher has no such ambiguity
+/// because it advances to the chain head whether or not any log matched.
+///
+/// So when every owner drained to the head, float the watermark up to `now - LOOKBACK_SECS`.
+/// That preserves the invariant exactly as a busy rail has it: with traffic the cursor sits at
+/// the newest transfer, i.e. ~`now`, and a transaction is only missed if the indexer surfaces it
+/// more than `LOOKBACK_SECS` late. Idling now gets that same margin instead of an ever-widening
+/// one. If any owner was skipped, hold the cursor — that owner may still have an unseen transfer
+/// below the floor, and re-scanning it next cycle is the only thing keeping it.
+fn next_watermark(cursor: u64, high: u64, all_owners_drained: bool, now: u64) -> u64 {
+	let floor = if all_owners_drained { now.saturating_sub(LOOKBACK_SECS) } else { 0 };
+	high.max(floor).max(cursor)
+}
+
 /// Current unix time in seconds.
 fn now_unix() -> u64 {
 	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
@@ -259,4 +293,54 @@ enum WatcherError {
 
 fn repo(err: sqlx::Error) -> WatcherError {
 	WatcherError::Db(err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	const NOW: u64 = 1_800_000_000;
+
+	#[test]
+	fn an_idle_rail_floats_up_instead_of_holding_its_initial_watermark() {
+		// No transfers, so `high` stays at the cursor — the case that pinned the TON cursor at
+		// its creation time for weeks and made the rail look wedged.
+		let cursor = NOW - 3_000_000;
+		assert_eq!(next_watermark(cursor, cursor, true, NOW), NOW - LOOKBACK_SECS);
+	}
+
+	#[test]
+	fn floating_up_keeps_a_full_lookback_window_below_the_cursor() {
+		// The floor must stay a whole LOOKBACK_SECS behind now, never at now itself, or the
+		// next cycle would scan a window that has already passed.
+		let next = next_watermark(NOW - 3_000_000, NOW - 3_000_000, true, NOW);
+		assert_eq!(NOW - next, LOOKBACK_SECS);
+	}
+
+	#[test]
+	fn a_skipped_owner_holds_the_cursor_still() {
+		// Floating up past a skipped owner would drop any transfer of theirs below the floor.
+		let cursor = NOW - 3_000_000;
+		assert_eq!(next_watermark(cursor, cursor, false, NOW), cursor);
+	}
+
+	#[test]
+	fn a_real_transfer_still_wins_over_the_idle_floor() {
+		let cursor = NOW - 3_000_000;
+		let newest = NOW - 10;
+		assert_eq!(next_watermark(cursor, newest, true, NOW), newest);
+	}
+
+	#[test]
+	fn the_watermark_never_moves_backwards() {
+		// A cursor already ahead of the floor (a busy rail, or a configured future start) must
+		// not be dragged back down to `now - LOOKBACK_SECS`.
+		let cursor = NOW - 10;
+		assert_eq!(next_watermark(cursor, cursor, true, NOW), cursor);
+	}
+
+	#[test]
+	fn a_clock_before_the_lookback_window_cannot_underflow() {
+		assert_eq!(next_watermark(0, 0, true, LOOKBACK_SECS / 2), 0);
+	}
 }
