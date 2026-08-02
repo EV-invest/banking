@@ -68,7 +68,6 @@
             AGENTS.md
             CLAUDE.md
             .claude/
-            .pre-commit-config.yaml
           '';
           jobs = {
             warnings.augment = [ "tokei" "code-duplication" ];
@@ -78,7 +77,6 @@
         };
         readme = v_flakes.readme-fw {
           inherit pkgs pname;
-          repo = "EV-invest/banking";
           defaults = true;
           lastSupportedVersion = "nightly-1.92";
           rootDir = ./.;

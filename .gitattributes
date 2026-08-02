@@ -35,4 +35,3 @@
 # Generated/locked files (keep current branch's version on conflict)
 Cargo.lock -filter merge=ours
 flake.lock -filter merge=ours
-.pre-commit-config.yaml -filter merge=ours

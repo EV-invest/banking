@@ -23,6 +23,8 @@ functions.sh
 result
 .direnv/
 .devenv/
+### store symlink written by git-hooks.nix' installationScript; the path is per-rev, so tracking it only ever produces churn
+.pre-commit-config.yaml
 
 ## Vim
 *.sw[po]
@@ -65,6 +67,7 @@ venv/
 **/node_modules/
 **/.next/
 **/.turbo/
+**/dist/
 
 ## LLMs
 AGENTS.md
@@ -100,5 +103,4 @@ node_modules/
 AGENTS.md
 CLAUDE.md
 .claude/
-.pre-commit-config.yaml
 
