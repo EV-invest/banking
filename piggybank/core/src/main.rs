@@ -88,6 +88,10 @@ fn main() -> color_eyre::Result<()> {
 		dsn: config.sentry_dsn.clone(),
 		environment: config.app_env.clone(),
 		release: error_monitoring::release_name!().map(|r| r.into_owned()),
+		// Several services share one Sentry project, so this is what tells them
+		// apart in an issue list. Same name as OTEL_SERVICE_NAME, so a Sentry
+		// issue, a trace and a log line agree.
+		service: Some("piggybank-core".to_string()),
 		traces_sample_rate: SentryConfig::traces_sample_rate_for(&config.app_env),
 	});
 
