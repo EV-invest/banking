@@ -28,7 +28,11 @@ ev::settings! {
 		sentry_dsn: Option<String>,
 		/// PostHog project key for native product-analytics capture. `None` disables
 		/// capture (a silent no-op), so the same code runs unconfigured (local, CI).
-		#[required_in("production")]
+		///
+		/// Deliberately NOT `required_in("production")`, unlike `sentry_dsn`: a
+		/// missing error reporter hides failures, while missing product analytics
+		/// only forgoes a metric — a bad trade anywhere, and worst on the money
+		/// plane. That must never be the reason a service refuses to boot.
 		posthog_key: Option<String>,
 		/// PostHog ingestion host; `None` falls back to the library default
 		/// (`https://us.i.posthog.com`).
@@ -396,7 +400,7 @@ impl EvmConfig {
 /// A configured rail's testnet/mainnet reality for [`Rails::assert_single_realm`]. `Unknown`
 /// (an unrecognized chain id — e.g. a local dev chain) is deliberately neither: it takes no
 /// side, so it can never pair with a real rail to trip the guard.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Realm {
 	Testnet,
 	Mainnet,
@@ -601,7 +605,9 @@ mod tests {
 			.into_iter()
 			.filter(|var| !AppConfig::required_var_names("development").contains(var))
 			.collect();
-		assert_eq!(extra, vec!["SENTRY_DSN", "POSTHOG_KEY"]);
+		// POSTHOG_KEY is read (it is in the env surface above) but never required:
+		// analytics is a metric, not a safety net. See the field's comment.
+		assert_eq!(extra, vec!["SENTRY_DSN"]);
 	}
 
 	#[test]
@@ -620,7 +626,7 @@ mod tests {
 		let error = AppConfig::from_source(|var| minimal.get(var).map(|v| v.to_string())).expect_err("the money plane must not run unmonitored");
 
 		let vars: Vec<&str> = error.errors.iter().map(|e| e.var.as_str()).collect();
-		assert_eq!(vars, vec!["SENTRY_DSN", "POSTHOG_KEY"]);
+		assert_eq!(vars, vec!["SENTRY_DSN"]);
 	}
 
 	/// A minimal rails config with the given chain Options set — only the fields

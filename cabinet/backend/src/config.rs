@@ -48,7 +48,11 @@ ev::settings! {
 		/// fails instead.
 		#[required_in("production")]
 		sentry_dsn: Option<String>,
-		#[required_in("production")]
+		/// Deliberately NOT `required_in("production")`, unlike `sentry_dsn`: a
+		/// missing error reporter hides failures, while missing product analytics
+		/// only forgoes a metric. That must never be the reason a service refuses
+		/// to boot — and the BFF builds an Analytics client it drops on the next
+		/// line, so unset simply means no analytics.
 		posthog_key: Option<String>,
 		posthog_host: Option<String>,
 	}
@@ -142,7 +146,9 @@ mod tests {
 			.into_iter()
 			.filter(|var| !AppConfig::required_var_names("development").contains(var))
 			.collect();
-		assert_eq!(extra, vec!["SENTRY_DSN", "POSTHOG_KEY"]);
+		// POSTHOG_KEY is read (it is in the env surface above) but never required:
+		// analytics is a metric, not a safety net. See the field's comment.
+		assert_eq!(extra, vec!["SENTRY_DSN"]);
 	}
 
 	#[test]
@@ -152,6 +158,6 @@ mod tests {
 		let error = AppConfig::from_source(|var| env.get(var).cloned()).expect_err("production without monitoring must not boot");
 
 		let vars: Vec<&str> = error.errors.iter().map(|e| e.var.as_str()).collect();
-		assert_eq!(vars, vec!["SENTRY_DSN", "POSTHOG_KEY"]);
+		assert_eq!(vars, vec!["SENTRY_DSN"]);
 	}
 }
