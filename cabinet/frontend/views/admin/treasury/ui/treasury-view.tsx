@@ -8,7 +8,7 @@ import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 import { fetchTreasury } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { usd } from "@/views/admin/lib/format";
+import { formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
 const RAIL_LABELS: Record<string, string> = {
@@ -91,7 +91,7 @@ function MoneyCard({ label, value, hint, loading, footer, tip }: { label: string
           <p className="text-xs text-muted-foreground">{label || "…"}</p>
           {tip && <TipAnchor anchor={tip} />}
         </div>
-        {loading ? <Skeleton className="mt-1 h-8 w-28" /> : <p className="text-3xl font-semibold tabular-nums">{usd(value)}</p>}
+        {loading ? <Skeleton className="mt-1 h-8 w-28" /> : <p className="text-3xl font-semibold tabular-nums">{formatUsd(value)}</p>}
         {hint && !loading && <p className="text-xs text-main-accent-t2">{hint}</p>}
         {footer && !loading && footer}
       </CardContent>

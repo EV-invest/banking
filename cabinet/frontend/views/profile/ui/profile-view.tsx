@@ -13,6 +13,7 @@ import { publishProfile } from "@/entities/user/model/profile-store";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { Position, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { formatUsd, num } from "@/shared/lib/money";
 import { CARD, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, type PillTone, Row, RowLabel, RowValue, StackRow } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
 import { TipAnchor, type TipKey } from "@/shared/tips";
@@ -296,7 +297,7 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
       <Hairline />
       <Row>
         <RowLabel title="KYC level" sub="Raised by compliance review" />
-        {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold text-foreground">{profile?.kyc_level ?? "—"}</RowValue>}
+        {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold tabular-nums text-foreground">{profile?.kyc_level ?? "—"}</RowValue>}
       </Row>
       <Hairline />
       <Row>
@@ -314,7 +315,7 @@ function SnapshotCard({ invested, strategies }: { invested: number; strategies: 
       <Hairline />
       <Row>
         <span className="text-[13px] font-medium text-muted-foreground">Total invested</span>
-        <span className="text-[15px] font-semibold tabular-nums text-foreground">{money(invested)}</span>
+        <span className="text-[15px] font-semibold tabular-nums text-foreground">{formatUsd(invested)}</span>
       </Row>
       <Hairline />
       <Row>
@@ -408,13 +409,4 @@ function PhoneField({ initial, onChange, error }: { initial: string; onChange: (
       {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
     </div>
   );
-}
-
-function num(value: string | undefined): number {
-  const n = Number(value ?? "0");
-  return Number.isFinite(n) ? n : 0;
-}
-
-function money(n: number): string {
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }

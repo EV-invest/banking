@@ -10,7 +10,7 @@ import { apiPath } from "@/shared/config/base-path";
 import type { FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
-import { ago, usd } from "@/views/admin/lib/format";
+import { ago, formatNav, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader, Toggle } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
@@ -122,8 +122,8 @@ export function ValuationView() {
                   <TipAnchor anchor="admin.valuation.post.derived-nav" />
                 </span>
                 <div className="flex h-9 items-center rounded-md border border-main-accent-t1/40 bg-main-accent-t1/10 px-3 text-sm">
-                  <span className="font-semibold text-main-accent-t1 tabular-nums">{derivedNav ? `$${derivedNav.toFixed(4)}` : "—"}</span>
-                  {units > 0 && <span className="ml-2 text-xs text-muted-foreground">= AUM / {units.toLocaleString("en-US")} units</span>}
+                  <span className="font-semibold text-main-accent-t1 tabular-nums">{derivedNav ? formatNav(derivedNav) : "—"}</span>
+                  {units > 0 && <span className="ml-2 text-xs tabular-nums text-muted-foreground">= AUM / {units.toLocaleString("en-US")} units</span>}
                 </div>
               </div>
             </div>
@@ -194,7 +194,7 @@ export function ValuationView() {
                           <p className="font-mono-tech text-xs text-muted-foreground">{item.service}</p>
                         </td>
                         <td className="px-5 py-3 tabular-nums">{Number(item.units).toLocaleString("en-US")}</td>
-                        <td className="px-5 py-3 tabular-nums text-muted-foreground">{est ? `≈ ${usd(est.toFixed(2))}` : "—"}</td>
+                        <td className="px-5 py-3 tabular-nums text-muted-foreground">{est ? `≈ ${formatUsd(est)}` : "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at)}</td>
                         <td className="px-5 py-3">
                           <div className="flex justify-end gap-2">

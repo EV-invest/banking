@@ -1,16 +1,10 @@
-// Formatting + small helpers shared by the admin-console views.
+// Formatting + small helpers shared by the admin-console views. Money comes from the
+// cabinet's one money module (`@/shared/lib/money`) — the console reads the same figures
+// an investor does, so it shows them at the same precision.
 
-/** A decimal amount string → grouped display (no currency symbol). */
-export function amount(value: string | undefined): string {
-  const n = Number(value ?? "0");
-  if (!Number.isFinite(n)) return value ?? "0";
-  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-}
-
-/** A decimal amount string → `$1,234.56`. */
-export function usd(value: string | undefined): string {
-  return `$${amount(value)}`;
-}
+/** `formatAmount` is a decimal amount → grouped display with no currency symbol; the
+ *  admin tables spell the unit out in the header instead. */
+export { formatAmount as amount, formatNav, formatUsd } from "@/shared/lib/money";
 
 /** A unix-seconds string → a coarse "3h ago" age (for queue/session rows). */
 export function ago(unixSecs: string | undefined): string {

@@ -8,7 +8,7 @@ import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 import { dispatchWithdrawal, failWithdrawal, fetchWithdrawalQueue, settleWithdrawal } from "@/entities/admin/api/admin-client";
 import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
 import { TipAnchor } from "@/shared/tips";
-import { ago, usd } from "@/views/admin/lib/format";
+import { ago, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
 // Which confirm panel is open under a row: settle asks for the mined tx ref,
@@ -180,8 +180,8 @@ function WithdrawalRow({
           </p>
         </td>
         <td className="px-5 py-3 tabular-nums">
-          <p>{usd(item.amount)}</p>
-          <p className="text-xs text-muted-foreground">{usd(item.net_amount)} net</p>
+          <p>{formatUsd(item.amount)}</p>
+          <p className="text-xs text-muted-foreground">{formatUsd(item.net_amount)} net</p>
         </td>
         <td className="px-5 py-3">
           <span className={queued ? "text-main-accent-t3" : "text-main-accent-t2"}>{item.state}</span>

@@ -11,7 +11,7 @@ import { fetchWallet, fetchWithdrawals } from "@/entities/wallet/api/wallet-clie
 import type { Position, Redemption, Wallet, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { formatMoney, formatPct, formatSignedMoney, num, shortAddress } from "@/views/dashboard/lib/format";
+import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
 
 const RANGES = ["1M", "6M", "1Y", "All"] as const;
 
@@ -105,13 +105,13 @@ export function DashboardView() {
 
       {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
       <Card className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-        <Stat label="Unrealized P&L" value={walletLoading || posLoading ? null : formatSignedMoney(pnlSum)} tone={pnlSum < 0 ? "loss" : "gain"} hint="across all positions" tip="dashboard.stats.unrealized-pnl" />
+        <Stat label="Unrealized P&L" value={walletLoading || posLoading ? null : formatSignedUsd(pnlSum)} tone={pnlSum < 0 ? "loss" : "gain"} hint="across all positions" tip="dashboard.stats.unrealized-pnl" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label="Available" value={walletLoading ? null : formatMoney(balance?.available)} hint="auto-deploys at EOD" tip="dashboard.stats.available" />
+        <Stat label="Available" value={walletLoading ? null : formatUsd(balance?.available)} hint="auto-deploys at EOD" tip="dashboard.stats.available" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
         <Stat label="Active strategies" value={posLoading ? null : String(pos.length)} hint="fund positions" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label="Net contributed" value={posLoading ? null : formatMoney(netContributed)} hint="at cost basis" tip="dashboard.stats.net-invested" />
+        <Stat label="Net contributed" value={posLoading ? null : formatUsd(netContributed)} hint="at cost basis" tip="dashboard.stats.net-invested" />
       </Card>
 
       {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop
@@ -188,7 +188,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </p>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
-            {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl">{formatMoney(value)}</p>}
+            {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl">{formatUsd(value)}</p>}
             {allTimePct !== null && (
               <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-destructive/40 text-destructive" : "border-main-accent-t3/40 text-main-accent-t3")}>
                 {down ? <TrendingDown /> : <TrendingUp />}
@@ -368,7 +368,7 @@ function buildOps(redemptions: Redemption[], withdrawals: Withdrawal[]): Op[] {
     tagClass: "bg-main-accent-t1/15 text-main-accent-t1",
     title: `${r.service ?? "Fund"} — redeemed`,
     sub: r.state ?? "queued",
-    amount: r.cash ? `+${formatMoney(r.cash)}` : `${r.units ?? "0"} units`,
+    amount: r.cash ? `+${formatUsd(r.cash)}` : `${r.units ?? "0"} units`,
     amountClass: r.cash ? "text-main-accent-t2" : "text-main-mist",
   }));
   const fromWithdrawals: Op[] = withdrawals.map((w, i) => ({
@@ -376,8 +376,8 @@ function buildOps(redemptions: Redemption[], withdrawals: Withdrawal[]): Op[] {
     tag: "OUT",
     tagClass: "bg-destructive/15 text-destructive",
     title: `Withdrawal · ${(w.network ?? "").toUpperCase()}`,
-    sub: `${shortAddress(w.address)} · ${w.state ?? ""}`,
-    amount: `−${formatMoney(w.net_amount ?? w.amount)}`,
+    sub: `${shortAddress(w.address, DASH_ADDRESS)} · ${w.state ?? ""}`,
+    amount: `−${formatUsd(w.net_amount ?? w.amount)}`,
     amountClass: "text-destructive",
   }));
   return [...fromRedemptions, ...fromWithdrawals].slice(0, 6);

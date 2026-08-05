@@ -9,7 +9,7 @@ import { fetchUser, fetchUserBalance, fetchUsers, reinstateUser, revokeSessions,
 import type { AdminUserProfile, AdminUserSummary, UserBalance } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { ROLES, ago, statusTone, usd } from "@/views/admin/lib/format";
+import { ROLES, ago, formatUsd, statusTone } from "@/views/admin/lib/format";
 import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
 
 export function UsersView() {
@@ -210,7 +210,7 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
         <Section title="Identity">
           <Row label="Joined" value={ago(summary.created_at)} />
           <Row label="Token version" value={`v${profile?.token_version ?? summary.token_version}`} tip="admin.users.identity.token-version" />
-          <Row label="Balance" value={balance ? `${usd(balance.amount)} USDT` : "—"} />
+          <Row label="Balance" value={balance ? `${formatUsd(balance.amount)} USDT` : "—"} />
         </Section>
 
         <Section title="Access & security">
