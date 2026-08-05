@@ -302,7 +302,14 @@
               # money-moving paths (nonce, balance, broadcast) well but reject
               # eth_getLogs (-32005), so the deposit SCAN needs its own endpoint.
               BSC_RPC_URL = "https://bsc-dataseed.bnbchain.org";
-              POLYGON_RPC_URL = "https://polygon-rpc.com";
+              # Polygon: moved off polygon-rpc.com, which went keyed without notice and
+              # now answers EVERY call 401 "API key disabled, reason: tenant disabled".
+              # The deposit scan has its own endpoint below, so this is invisible from
+              # the deposit side — it surfaced as a blind treasury (`—` on the admin
+              # screen, `treasury_funding` degrading both reads to None) and a rail whose
+              # withdrawals could never dispatch. publicnode is keyless and serves the
+              # money path (chain-id, gas price, nonce, ERC-20 balance).
+              POLYGON_RPC_URL = "https://polygon-bor-rpc.publicnode.com";
               # Deposit-scan endpoints. Both keyless, so both are committable — the
               # limits below were MEASURED against the watcher's real query shape (a
               # `to`-topic filter over the USDT contract), not taken from provider docs,
