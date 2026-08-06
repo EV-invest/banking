@@ -1,27 +1,23 @@
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { Avatar, AvatarFallback, Badge } from "@evinvest/uikit";
+
 import { cn } from "@/shared/lib/cn";
 
 // The card + row vocabulary the Settings and Profile surfaces are built from
 // (Figma `cabinet/mobile/settings` node 498:259 and `cabinet/mobile/profile` node
-// 503:266): a 14px card on `main-card`, a compact section title, and rows split by
+// 503:266): a card on `main-card`, a compact section title, and rows split by
 // hairlines. Section titles carry `font-sans` explicitly — the global `h1,h2,h3`
 // rule swaps in the serif display face, which these headings are not.
+//
+// Rows and hairlines stay local because uikit has no equivalent vocabulary. The
+// card string stays local too: its call sites are a `<Link>` and a `<section>` as
+// often as a `<div>`, which uikit's `Card` — a hard `<div>` carrying its own
+// `gap-6 py-6 shadow-sm` — cannot be without being unset at every one. It is the
+// same string as the wallet screens' `WALLET_CARD`.
 
-export const CARD = "rounded-[14px] border border-border bg-main-card";
-
-/**
- * uikit's `Switch` paints its checked state with `--primary`, which in this theme is
- * `main-brand` (#001e4e) — a near-black navy that all but vanishes against the
- * `main-card` (#0c1626) it sits on, leaving "on" harder to read than "off". Every
- * other active affordance in the cabinet (rail item, Follow button, "This device")
- * uses the teal accent, so switches follow suit.
- *
- * Belongs in uikit proper; kept here until that ships so the cabinet is not left
- * with an unreadable control in the meantime.
- */
-export const SWITCH_ON = "data-[state=checked]:bg-main-accent-t1";
+export const CARD = "rounded-xl border border-border bg-main-card";
 
 export function ListCard({ className, children }: { className?: string; children: ReactNode }) {
   return <section className={cn(CARD, "flex w-full min-w-0 flex-col px-4 pb-1.5 pt-1", className)}>{children}</section>;
@@ -30,8 +26,8 @@ export function ListCard({ className, children }: { className?: string; children
 export function ListCardTitle({ sub, children }: { sub?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-px pb-2 pt-3">
-      <h2 className="font-sans text-[14px] font-semibold tracking-normal text-foreground">{children}</h2>
-      {sub && <p className="text-[11px] font-medium text-muted-foreground">{sub}</p>}
+      <h2 className="font-sans text-sm font-semibold tracking-normal text-foreground">{children}</h2>
+      {sub && <p className="text-xs font-medium text-muted-foreground">{sub}</p>}
     </div>
   );
 }
@@ -41,29 +37,33 @@ export function Hairline() {
 }
 
 export function Row({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("flex min-w-0 items-center justify-between gap-3 py-[13px]", className)}>{children}</div>;
+  return <div className={cn("flex min-w-0 items-center justify-between gap-3 py-3.5", className)}>{children}</div>;
 }
 
-/** Row leading block: a 14px title with an optional 11px caption underneath. */
+/** Row leading block: the title, with an optional caption a step down underneath. */
 export function RowLabel({ title, sub }: { title: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-      <span className="text-[14px] font-medium text-foreground">{title}</span>
-      {sub && <span className="text-[11px] leading-snug text-muted-foreground">{sub}</span>}
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="text-sm font-medium text-foreground">{title}</span>
+      {sub && <span className="text-xs leading-snug text-muted-foreground">{sub}</span>}
     </div>
   );
 }
 
-/** Row trailing value — muted, right-aligned, truncated rather than pushing the row wide. */
+/**
+ * Row trailing value — right-aligned and truncated rather than pushing the row wide.
+ * It shares the row title's step, so the muted tone and the lighter weight are what
+ * keep the label reading ahead of its value.
+ */
 export function RowValue({ className, children }: { className?: string; children: ReactNode }) {
-  return <span className={cn("min-w-0 truncate text-right text-[13px] text-muted-foreground", className)}>{children}</span>;
+  return <span className={cn("min-w-0 truncate text-right text-sm text-muted-foreground", className)}>{children}</span>;
 }
 
 /** A stacked label-over-value row (Figma `card-Personal`). */
 export function StackRow({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 py-3">
-      <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </div>
   );
@@ -76,25 +76,26 @@ export function Chevron({ className }: { className?: string }) {
 const PILL_TONE = {
   positive: "bg-main-accent-t1/15 text-main-accent-t1",
   pending: "bg-main-accent-t3/15 text-main-accent-t3",
-  neutral: "bg-foreground/[0.07] text-muted-foreground",
+  neutral: "bg-foreground/5 text-muted-foreground",
 } as const;
 
 export type PillTone = keyof typeof PILL_TONE;
 
+/** uikit's `Badge` in the pill silhouette these surfaces use — it sizes the icon too. */
 export function Pill({ tone = "positive", icon: Icon, className, children }: { tone?: PillTone; icon?: LucideIcon; className?: string; children: ReactNode }) {
   return (
-    <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-[3px] text-[11px] font-semibold", PILL_TONE[tone], className)}>
-      {Icon && <Icon className="size-[11px]" aria-hidden />}
+    <Badge className={cn("rounded-full font-semibold", PILL_TONE[tone], className)}>
+      {Icon && <Icon aria-hidden />}
       {children}
-    </span>
+    </Badge>
   );
 }
 
 /** The teal initials disc used for the account avatar; the caller sizes it. */
 export function InitialsAvatar({ initials, className }: { initials: string; className?: string }) {
   return (
-    <span className={cn("flex shrink-0 items-center justify-center rounded-full bg-main-accent-t1 font-semibold text-main-black", className)} aria-hidden>
-      {initials}
-    </span>
+    <Avatar className={className} aria-hidden>
+      <AvatarFallback className="bg-main-accent-t1 font-semibold text-main-black">{initials}</AvatarFallback>
+    </Avatar>
   );
 }
