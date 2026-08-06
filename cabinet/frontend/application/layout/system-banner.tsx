@@ -48,7 +48,12 @@ export function SystemBanner() {
             <span className="font-semibold">{platform.announcement_title}</span>
             {platform.announcement_body && <span className="text-muted-foreground"> — {platform.announcement_body}</span>}
           </div>
-          <button type="button" aria-label="Dismiss announcement" onClick={dismiss} className="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
+          <button
+            type="button"
+            aria-label="Dismiss announcement"
+            onClick={dismiss}
+            className="shrink-0 rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <X className="size-4" />
           </button>
         </div>

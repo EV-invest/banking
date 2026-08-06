@@ -86,10 +86,18 @@ export function UsersView() {
                       className={cn("cursor-pointer transition-colors hover:bg-foreground/5", selected?.user_id === u.user_id && "bg-main-accent-t1/10")}
                     >
                       <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
+                        {/* The row is clickable for the mouse, but the identity cell carries the
+                            real control: a bare `tr onClick` gives the keyboard no way in, and
+                            the address is what names the row being opened. */}
+                        <button
+                          type="button"
+                          aria-pressed={selected?.user_id === u.user_id}
+                          onClick={() => setSelected(u)}
+                          className="flex min-w-0 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
                           <Avatar email={u.email} />
                           <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
-                        </div>
+                        </button>
                       </td>
                       <td className="px-5 py-3 capitalize">{u.role}</td>
                       <td className="px-5 py-3 text-muted-foreground">L{u.kyc_level}</td>
