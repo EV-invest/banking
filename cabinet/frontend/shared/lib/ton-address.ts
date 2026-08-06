@@ -6,6 +6,16 @@
 
 const RAW_RE = /^(-?\d+):([0-9a-fA-F]{64})$/;
 
+// What to SHOW for an address the hub stored, whatever the rail. Only TON needs
+// rewriting — its raw `workchain:hex` is valid but wallet-hostile and reads as an opaque
+// hex blob rather than an address; every other rail already stores its user-facing form.
+// Anything unconvertible (an already-friendly TON string, an EVM/TRON address) passes
+// through untouched.
+export function displayAddress(network: string, raw: string, opts?: { testnet?: boolean }): string {
+  if (network !== "ton" || !raw) return raw;
+  return tonFriendlyAddress(raw, { testnet: opts?.testnet }) ?? raw;
+}
+
 export function tonFriendlyAddress(raw: string, opts?: { bounceable?: boolean; testnet?: boolean }): string | null {
   const m = RAW_RE.exec(raw);
   if (!m) return null; // non-TON / already-friendly input — caller falls back to raw

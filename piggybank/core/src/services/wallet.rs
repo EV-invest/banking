@@ -16,7 +16,7 @@ use crate::{
 	AppState,
 	application::{wallet as wallet_app, withdrawals as withdrawal_app},
 	ports::deposits::DepositRecord,
-	services::support::{caller_id, map_err, parse_withdrawal_id, unfrozen_caller},
+	services::support::{caller_id, map_err, parse_withdrawal_id, rail_is_testnet, unfrozen_caller},
 };
 
 #[derive(Clone)]
@@ -27,12 +27,6 @@ pub struct WalletSvc {
 impl WalletSvc {
 	pub fn new(state: AppState) -> Self {
 		Self { state }
-	}
-
-	/// Whether a rail's deposit addresses are testnet-tagged. Only TON has a distinct testnet
-	/// address form; the other rails' addresses are network-agnostic on the wire.
-	fn rail_is_testnet(&self, network: Network) -> bool {
-		matches!(network, Network::Ton) && self.state.ton_is_testnet
 	}
 }
 
@@ -60,7 +54,7 @@ impl WalletService for WalletSvc {
 			deposit_addresses: wallet
 				.deposit_addresses
 				.iter()
-				.map(|rail| deposit_rail_to_proto(rail, self.rail_is_testnet(rail.network)))
+				.map(|rail| deposit_rail_to_proto(rail, rail_is_testnet(&self.state, rail.network)))
 				.collect(),
 			withdrawable: wallet.withdrawable.iter().map(withdrawable_to_proto).collect(),
 		}))
@@ -79,7 +73,7 @@ impl WalletService for WalletSvc {
 			network: network.as_str().to_owned(),
 			address: address.map(|a| a.as_str().to_owned()).unwrap_or_default(),
 			min_confirmations: network.min_confirmations(),
-			is_testnet: self.rail_is_testnet(network),
+			is_testnet: rail_is_testnet(&self.state, network),
 		}))
 	}
 

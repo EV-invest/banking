@@ -103,6 +103,8 @@ export interface RailLiquidity {
   /** The rail's sweep gas-station wallet — fund native coin here (never USDT). Empty when unwired. */
   gas_station_address: string;
   gas_station_gas: string;
+  /** Whether the rail's addresses are testnet-tagged — TON's friendly form differs per realm. */
+  is_testnet: boolean;
 }
 
 export interface Treasury {

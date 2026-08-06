@@ -7,6 +7,7 @@ import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { fetchTreasury } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
+import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
@@ -103,6 +104,9 @@ function MoneyCard({ label, value, hint, loading, footer, tip }: { label: string
  * treasury read was unavailable (the hub degrades to empty, never fails). */
 function RailFunding({ rail }: { rail: RailLiquidity }) {
   const gasSymbol = GAS_SYMBOLS[rail.network] ?? "";
+  // The hub stores TON addresses raw (`workchain:hex`) — an operator can't recognise or
+  // paste that into a wallet, so render the same friendly form the deposit screen shows.
+  const show = (address: string) => displayAddress(rail.network, address, { testnet: rail.is_testnet });
 
   return (
     <div className="space-y-2 border-t border-border pt-2.5">
@@ -112,7 +116,7 @@ function RailFunding({ rail }: { rail: RailLiquidity }) {
             <p className="text-xs text-muted-foreground">Treasury</p>
             <TipAnchor anchor="admin.treasury.rail.address" />
           </div>
-          <CopyableAddress address={rail.treasury_address} />
+          <CopyableAddress address={show(rail.treasury_address)} />
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">— · custody unconfigured</p>
@@ -127,7 +131,7 @@ function RailFunding({ rail }: { rail: RailLiquidity }) {
             </p>
             <TipAnchor anchor="admin.treasury.rail.gas-station" />
           </div>
-          <CopyableAddress address={rail.gas_station_address} />
+          <CopyableAddress address={show(rail.gas_station_address)} />
           <FundingRow
             label="Gas station balance"
             value={rail.gas_station_gas ? `${qty(rail.gas_station_gas)} ${gasSymbol}`.trimEnd() : undefined}

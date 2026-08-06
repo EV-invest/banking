@@ -476,6 +476,9 @@ pub struct RailLiquidity {
 	/// The rail's sweep gas-station wallet — fund native coin here (never USDT).
 	pub gas_station_address: String,
 	pub gas_station_gas: String,
+	/// Whether the addresses above are testnet-tagged (TON renders a different friendly
+	/// address per realm); false on the rails whose address form is network-agnostic.
+	pub is_testnet: bool,
 }
 
 /// The two-layer treasury picture (Treasury screen).
@@ -504,6 +507,7 @@ impl From<bk::Treasury> for Treasury {
 					onchain_gas: r.onchain_gas,
 					gas_station_address: r.gas_station_address,
 					gas_station_gas: r.gas_station_gas,
+					is_testnet: r.is_testnet,
 				})
 				.collect(),
 			bank: t.bank,

@@ -842,6 +842,14 @@ export type BankingV1RailLiquidity = {
      * the gas station's native-coin balance
      */
     gas_station_gas?: string;
+    /**
+     * is_testnet
+     *
+     * Whether the addresses above are testnet-tagged, so a client can render them in the
+     * rail's user-facing form (e.g. TON's testnet-tagged friendly address). Only
+     * meaningful per rail; false where the rail's address form is network-agnostic.
+     */
+    is_testnet?: boolean;
 };
 
 /**

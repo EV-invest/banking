@@ -20,7 +20,7 @@ use crate::{
 	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
 	services::{
 		funds::redemption_to_proto,
-		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, require_permission, unix_now},
+		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
 	},
 };
 
@@ -45,6 +45,7 @@ impl BalanceService for BalanceSvc {
 				.rails
 				.into_iter()
 				.map(|r| pb::RailLiquidity {
+					is_testnet: rail_is_testnet(&self.state, r.network),
 					network: r.network.as_str().to_owned(),
 					custody: r.custody.to_decimal_string(),
 					treasury_address: r.treasury_address.unwrap_or_default(),

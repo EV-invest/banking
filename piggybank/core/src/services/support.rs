@@ -13,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use domain::{
 	authz::{Permission, Role, grants},
 	error::DomainError,
+	money::Network,
 	redemptions::RedemptionId,
 	users::UserId,
 	withdrawals::WithdrawalId,
@@ -122,6 +123,14 @@ pub(super) fn parse_redemption_id(raw: &str) -> Result<RedemptionId, Status> {
 
 pub(super) fn parse_withdrawal_id(raw: &str) -> Result<WithdrawalId, Status> {
 	Uuid::parse_str(raw).map(WithdrawalId::from_raw).map_err(|_| Status::invalid_argument("invalid withdrawal id"))
+}
+
+/// Whether a rail's addresses are testnet-tagged. Only TON has a distinct testnet address
+/// form (the tag is baked into the friendly encoding), so a client can render the raw
+/// `workchain:hex` the hub stores in the right user-facing form; the other rails' addresses
+/// are network-agnostic on the wire.
+pub(super) fn rail_is_testnet(state: &AppState, network: Network) -> bool {
+	matches!(network, Network::Ton) && state.ton_is_testnet
 }
 
 /// Treat an empty proto string field as an absent optional.

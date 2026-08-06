@@ -8,7 +8,7 @@ import { Skeleton } from "@evinvest/uikit";
 import { fetchDepositAddress, fetchWallet } from "@/entities/wallet/api/wallet-client";
 import type { DepositAddress, Wallet } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
-import { tonFriendlyAddress } from "@/shared/lib/ton-address";
+import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor } from "@/shared/tips";
 import { isEvmRail, networkLabel } from "@/views/wallet/lib/format";
 import { DepositQr } from "@/views/wallet/ui/deposit-qr";
@@ -60,12 +60,11 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
 
   // TON's raw `workchain:hex` form is valid but wallet-hostile — show the friendly
   // non-bounceable UQ… form (an uninitialized deposit wallet bounces EQ… sends).
-  const rawAddress = address?.address ?? "";
-  const displayAddress = network === "ton" ? (tonFriendlyAddress(rawAddress, { testnet: address?.is_testnet }) ?? rawAddress) : rawAddress;
+  const shown = displayAddress(network, address?.address ?? "", { testnet: address?.is_testnet });
 
   const copy = () => {
-    if (!displayAddress) return;
-    void navigator.clipboard.writeText(displayAddress);
+    if (!shown) return;
+    void navigator.clipboard.writeText(shown);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -103,18 +102,18 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                 <TipAnchor anchor="wallet.deposit.address" />
               </p>
 
-              {error && !displayAddress && <p className="text-sm text-destructive">{error}</p>}
+              {error && !shown && <p className="text-sm text-destructive">{error}</p>}
 
               {address === null ? (
                 <>
                   <Skeleton className="size-40 rounded-xl lg:size-45 lg:rounded-2xl" />
                   <Skeleton className="h-10 w-full rounded-lg" />
                 </>
-              ) : displayAddress ? (
+              ) : shown ? (
                 <>
-                  <DepositQr value={displayAddress} />
+                  <DepositQr value={shown} />
                   <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-input px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
-                    <code className="min-w-0 flex-1 break-all font-sans text-xs text-foreground lg:text-sm">{displayAddress}</code>
+                    <code className="min-w-0 flex-1 break-all font-sans text-xs text-foreground lg:text-sm">{shown}</code>
                     <button type="button" onClick={copy} className={cn(WALLET_CTA, "hidden shrink-0 gap-1.5 px-3.5 py-2 text-xs lg:flex")}>
                       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                       {copied ? "Copied" : "Copy"}
