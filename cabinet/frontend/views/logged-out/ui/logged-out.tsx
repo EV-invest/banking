@@ -13,7 +13,10 @@ export function LoggedOutView() {
           <p className="text-sm text-muted-foreground">You&apos;ve been signed out of your cabinet.</p>
         </div>
 
-        <Link href="/login" className="flex w-full items-center justify-center rounded-md bg-main-accent-t1 px-4 py-2.5 text-sm font-medium text-main-black transition hover:opacity-90">
+        <Link
+          href="/login"
+          className="flex w-full items-center justify-center rounded-md bg-main-accent-t1 px-4 py-2.5 text-sm font-medium text-main-black outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+        >
           Sign in again
         </Link>
       </div>

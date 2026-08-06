@@ -237,7 +237,7 @@ export function OverviewView() {
                       </p>
                     </td>
                     <td className="py-2.5 text-muted-foreground">
-                      <div className="max-w-[280px] truncate" title={e.reason}>
+                      <div className="max-w-70 truncate" title={e.reason}>
                         {e.reason || "—"}
                       </div>
                     </td>
@@ -245,7 +245,7 @@ export function OverviewView() {
                     <td className="py-2.5 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {e.compensated && (
-                          <span className="flex items-center gap-1.5 rounded-full bg-foreground/[0.06] px-2 py-0.5 text-xs font-medium text-main-mist">
+                          <span className="flex items-center gap-1.5 rounded-full bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground">
                             compensated
                             <TipAnchor anchor="admin.overview.parked.compensated" />
                           </span>
@@ -293,7 +293,7 @@ function Kpi({ label, value, hint, tone, tip }: { label: string; value: string |
 function ObsPanel({ label, hint }: { label: string; hint: string }) {
   return (
     <div className="rounded-lg border border-dashed border-border p-3">
-      <p className="text-xs font-semibold text-main-mist">{label}</p>
+      <p className="text-xs font-semibold text-foreground">{label}</p>
       <p className="text-xs text-muted-foreground">{hint}</p>
     </div>
   );

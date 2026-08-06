@@ -11,6 +11,10 @@ import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
 
 import { clearIdentity, readIdentity, writeIdentity } from "../model/identity-cache";
 
+// The chip's three controls are hand-written so the bundle stays free of the uikit Button,
+// which means the keyboard focus ring has to be written out too.
+const CHIP_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 // The account chip, rendered as a cabinet microfrontend inside the conductor's shared
 // header (registered in site_conductor's mfe-registry as `cabinet.account`). It replaces
 // the header's old Investor Portal button and owns all three states itself:
@@ -103,18 +107,18 @@ function AuthedChip({
     <div className={cn("flex items-center gap-2", className)}>
       <a
         href={withBasePath("/profile")}
-        className="flex min-w-0 items-center gap-[10px] rounded-lg px-1.5 py-1 transition-colors hover:bg-foreground/[0.04]"
+        className={cn("flex min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-foreground/5", CHIP_FOCUS)}
       >
-        <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">
+        <span className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">
           {initialsOf(email)}
         </span>
         <div className="min-w-0">
           {name ? (
-            <p className="truncate text-[13px] font-semibold text-main-mist">{name}</p>
+            <p className="truncate text-sm font-semibold text-foreground">{name}</p>
           ) : (
-            <span className="my-[3px] block h-3 w-24 animate-pulse rounded bg-foreground/10" aria-hidden />
+            <span className="my-1 block h-3 w-24 animate-pulse rounded bg-foreground/10" aria-hidden />
           )}
-          <p className="flex items-center gap-[5px] text-[11px] font-medium text-main-accent-t1">
+          <p className="flex items-center gap-1 text-xs font-medium text-main-accent-t1">
             <BadgeCheck className="size-3" /> Verified
           </p>
         </div>
@@ -123,7 +127,7 @@ function AuthedChip({
         type="button"
         onClick={signOut}
         aria-label="Sign out"
-        className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+        className={cn("shrink-0 rounded-md text-muted-foreground transition-colors hover:text-foreground", CHIP_FOCUS)}
       >
         <LogOut className="size-4" />
       </button>
@@ -140,6 +144,7 @@ function SignInCta({ className }: { className?: string }) {
       href={withBasePath("/login")}
       className={cn(
         "inline-flex h-9 items-center justify-center rounded-md border border-main-accent-t1 bg-transparent px-4 font-mono-tech text-xs tracking-wider text-main-accent-t1 transition-all duration-300 hover:bg-main-accent-t1 hover:text-main-black",
+        CHIP_FOCUS,
         className,
       )}
     >
@@ -150,8 +155,8 @@ function SignInCta({ className }: { className?: string }) {
 
 function ChipSkeleton({ className }: { className?: string }) {
   return (
-    <div className={cn("flex items-center gap-[10px] px-1.5 py-1", className)} aria-hidden>
-      <span className="size-[34px] shrink-0 animate-pulse rounded-full bg-foreground/10" />
+    <div className={cn("flex items-center gap-2.5 px-1.5 py-1", className)} aria-hidden>
+      <span className="size-8.5 shrink-0 animate-pulse rounded-full bg-foreground/10" />
       <span className="h-3 w-20 animate-pulse rounded bg-foreground/10" />
     </div>
   );

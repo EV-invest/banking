@@ -41,6 +41,13 @@ const ADMIN: NavItem[] = [
   { href: "/admin/valuation", label: "Valuation & redemptions", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
 ];
 
+// Every rail row is a hand-written Link, so keyboard focus rides on this string. It runs
+// The ring is the solid token, never a tint: at 50% the teal composites to 1.9–2.3:1 against
+// every surface in this theme, under the 3:1 SC 1.4.11 floor, where solid clears it
+// everywhere. The offset keeps the ring legible around the active row, whose fill is that
+// same teal.
+const NAV_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-main-surface";
+
 // The signed-in app shell's left rail (Figma cabinet sidebar). Persistent across the
 // `(app)` route group; auth is enforced upstream in `proxy.ts`. Positioned by a
 // `lg:fixed` wrapper in the `(app)` layout — below 1024px the sidebar is hidden,
@@ -56,8 +63,8 @@ export function Sidebar() {
   useUnreadCountPolling();
   const unread = useUnreadCount();
   return (
-    <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-[18px] pb-5 pt-6">
-      <nav aria-label="Primary" className="flex flex-col gap-[18px]">
+    <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-4.5 pb-5 pt-6">
+      <nav aria-label="Primary" className="flex flex-col gap-4.5">
         <Group label="Fund">
           {FUND.map((item) => (
             <NavLink key={item.label} item={item} active={item.active(pathname)} />
@@ -68,9 +75,9 @@ export function Sidebar() {
             <Link
               key={p.label}
               href={p.href}
-              className="flex items-center gap-[11px] rounded-lg px-3 py-2 text-[13.5px] font-medium text-main-mist/90 transition-colors hover:bg-foreground/[0.04]"
+              className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5", NAV_FOCUS)}
             >
-              <span className={cn("flex size-5 items-center justify-center rounded-md text-[11px] font-semibold", p.tone)}>{p.badge}</span>
+              <span className={cn("flex size-5 items-center justify-center rounded-md text-xs font-semibold", p.tone)}>{p.badge}</span>
               {p.label}
             </Link>
           ))}
@@ -101,7 +108,7 @@ export function Sidebar() {
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1 pl-1">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-main-mist/40">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
       {children}
     </div>
   );
@@ -114,11 +121,12 @@ function NavLink({ item, active, trailing }: { item: NavItem; active: boolean; t
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-[11px] rounded-lg px-3 py-[9px] text-sm transition-colors",
-        active ? "bg-main-accent-t1 font-semibold text-main-black" : "font-medium text-main-mist/90 hover:bg-foreground/[0.04]",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        NAV_FOCUS,
+        active ? "bg-main-accent-t1 font-semibold text-main-black" : "font-medium text-foreground hover:bg-foreground/5",
       )}
     >
-      <Icon className="size-[18px]" />
+      <Icon className="size-4.5" />
       <span className="flex-1">{item.label}</span>
       {trailing}
     </Link>
@@ -131,8 +139,8 @@ function UnreadPill({ count, active }: { count: number; active: boolean }) {
     <span
       aria-label={`${count} unread`}
       className={cn(
-        "rounded-full px-[7px] py-0.5 text-[11px] font-semibold tabular-nums",
-        active ? "bg-main-black text-main-mist" : "bg-main-accent-t1/15 text-main-accent-t1",
+        "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+        active ? "bg-main-black text-foreground" : "bg-main-accent-t1/15 text-main-accent-t1",
       )}
     >
       {count > 99 ? "99+" : count}

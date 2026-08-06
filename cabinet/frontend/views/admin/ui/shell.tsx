@@ -60,11 +60,11 @@ export function Toggle({ on, onChange, disabled, label }: { on: boolean; onChang
       disabled={disabled}
       onClick={() => onChange(!on)}
       className={cn(
-        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50",
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
         on ? "bg-main-accent-t1" : "bg-muted",
       )}
     >
-      <span className={cn("inline-block size-4 rounded-full bg-main-mist transition-transform", on ? "translate-x-[18px]" : "translate-x-0.5")} />
+      <span className={cn("inline-block size-4 rounded-full bg-main-mist transition-transform", on ? "translate-x-4.5" : "translate-x-0.5")} />
     </button>
   );
 }

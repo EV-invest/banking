@@ -50,7 +50,7 @@ export function TreasuryView() {
       )}
 
       <section className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Layer 1 · Ledger — user claims (USDT)</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Layer 1 · Ledger — user claims (USDT)</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MoneyCard label="Claims · total (USDT)" value={treasury?.total_custody} hint="= on-chain custody · backed" loading={!treasury} tip="admin.treasury.layer1.claims-total" />
           <MoneyCard label="Held for clients" value={treasury?.held_for_clients} hint="user + service balances" loading={!treasury} tip="admin.treasury.layer1.held-for-clients" />
@@ -60,7 +60,7 @@ export function TreasuryView() {
       </section>
 
       <section className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Layer 2 · Treasury — liquidity by rail</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Layer 2 · Treasury — liquidity by rail</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {treasury ? (
             <>
@@ -109,7 +109,7 @@ function RailFunding({ rail }: { rail: RailLiquidity }) {
       {rail.treasury_address ? (
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
-            <p className="text-[11px] text-muted-foreground">Treasury</p>
+            <p className="text-xs text-muted-foreground">Treasury</p>
             <TipAnchor anchor="admin.treasury.rail.address" />
           </div>
           <CopyableAddress address={rail.treasury_address} />
@@ -122,7 +122,7 @@ function RailFunding({ rail }: { rail: RailLiquidity }) {
       {rail.gas_station_address && (
         <div className="space-y-1.5">
           <div className="flex items-center gap-1.5">
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Gas station <span className="text-main-accent-t2">(fund {gasSymbol || "gas"} here — pays sweep gas drops)</span>
             </p>
             <TipAnchor anchor="admin.treasury.rail.gas-station" />
@@ -160,9 +160,9 @@ function CopyableAddress({ address, label }: { address: string; label?: string }
 
   return (
     <div className="space-y-1">
-      {label && <p className="text-[11px] text-muted-foreground">{label}</p>}
+      {label && <p className="text-xs text-muted-foreground">{label}</p>}
       <div className="flex items-center gap-1.5">
-        <code className="flex-1 min-w-0 truncate rounded border border-border bg-main-surface px-2 py-1 font-mono-tech text-[11px] text-muted-foreground" title={address}>
+        <code className="flex-1 min-w-0 truncate rounded border border-border bg-main-surface px-2 py-1 font-mono-tech text-xs text-muted-foreground" title={address}>
           {address}
         </code>
         <Button type="button" variant="outline" size="icon" onClick={copy} aria-label={`Copy ${label ?? "address"}`}>

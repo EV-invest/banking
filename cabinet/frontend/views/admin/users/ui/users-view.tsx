@@ -83,7 +83,7 @@ export function UsersView() {
                     <tr
                       key={u.user_id}
                       onClick={() => setSelected(u)}
-                      className={cn("cursor-pointer transition-colors hover:bg-foreground/[0.03]", selected?.user_id === u.user_id && "bg-main-accent-t1/[0.06]")}
+                      className={cn("cursor-pointer transition-colors hover:bg-foreground/5", selected?.user_id === u.user_id && "bg-main-accent-t1/10")}
                     >
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
@@ -141,7 +141,7 @@ function Avatar({ email }: { email: string }) {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
-  return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-[11px] font-semibold text-main-accent-t1">{initials || "?"}</span>;
+  return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initials || "?"}</span>;
 }
 
 function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary; onClose: () => void; onChanged: () => void }) {
@@ -183,14 +183,19 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
   const role = profile?.role ?? summary.role;
 
   return (
-    <Card className="w-[340px] shrink-0 self-start">
+    <Card className="w-85 shrink-0 self-start">
       <CardContent className="space-y-5 py-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate font-semibold">{summary.email || summary.user_id.slice(0, 12)}</p>
             <p className="truncate text-xs text-muted-foreground">{summary.user_id}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -253,7 +258,7 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
             {busy === "revoke" ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Revoke all sessions
           </Button>
-          <p className="flex items-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
+          <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
             Bumps token_version — invalidates every JWT issued to this user.
             <TipAnchor anchor="admin.users.access.revoke-sessions" />
           </p>
@@ -286,7 +291,7 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-1 border-t border-border pt-4">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{title}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{title}</p>
       {children}
     </div>
   );
@@ -305,5 +310,5 @@ function Row({ label, value, tip }: { label: string; value: string; tip?: TipKey
 }
 
 function Badge({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 font-medium capitalize text-main-mist">{children}</span>;
+  return <span className="rounded-full bg-foreground/5 px-2 py-0.5 font-medium capitalize text-foreground">{children}</span>;
 }
