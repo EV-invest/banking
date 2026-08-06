@@ -246,7 +246,7 @@ export function SettingsView() {
                   aria-current={active ? "page" : undefined}
                   onClick={() => setSection(item.id)}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                     active ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "text-foreground hover:bg-foreground/5",
                   )}
                 >
@@ -293,7 +293,7 @@ function ProfileSummaryCard({ loading, name, email, verified }: { loading: boole
   return (
     <Link
       href="/profile"
-      className={cn(CARD, "flex items-center gap-3.5 py-3.5 pl-3.5 pr-4 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 active:bg-foreground/5")}
+      className={cn(CARD, "flex items-center gap-3.5 py-3.5 pl-3.5 pr-4 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:bg-foreground/5")}
     >
       <InitialsAvatar initials={initialsOfName(name, email)} className="size-11.5 text-base" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -379,7 +379,7 @@ function ExpandableRow({
         onClick={onToggle}
         disabled={loading}
         aria-expanded={open}
-        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="shrink-0 text-sm font-medium text-foreground">{label}</span>
         <span className="flex min-w-0 items-center gap-2">
@@ -416,7 +416,7 @@ function MobileSecurityCard({
       <button
         type="button"
         onClick={onOpenSessions}
-        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <RowLabel title="Trusted sessions" sub="Devices signed in to your account" />
         <span className="flex shrink-0 items-center gap-2">
@@ -442,7 +442,7 @@ function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
       <button
         type="button"
         onClick={onOpen}
-        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <RowLabel title="Delivery &amp; topics" sub="Where we reach you and what you follow" />
         <Chevron />
@@ -467,7 +467,7 @@ function SignOutButton() {
       type="button"
       onClick={signOut}
       disabled={busy}
-      className="flex w-full items-center justify-center gap-2 rounded-lg border border-border py-3.5 text-sm font-semibold text-destructive outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 active:bg-destructive/10 disabled:opacity-60"
+      className="flex w-full items-center justify-center gap-2 rounded-lg border border-border py-3.5 text-sm font-semibold text-destructive outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:bg-destructive/10 disabled:opacity-60"
     >
       {busy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />} Sign out
     </button>
@@ -932,7 +932,7 @@ function NotificationsSection() {
                       disabled={busy}
                       onClick={() => void run(() => setTopicSubscription(t.topic, !t.subscribed, t.email_enabled))}
                       className={cn(
-                        "rounded-lg px-3 py-1.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-40",
+                        "rounded-lg px-3 py-1.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
                         t.subscribed ? "border border-border/60 text-foreground hover:bg-foreground/5" : "bg-main-accent-t1 text-main-black hover:opacity-90",
                       )}
                     >

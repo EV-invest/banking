@@ -130,7 +130,7 @@ function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; b
               disabled={busy}
               onClick={onCancel}
               aria-label="Cancel withdrawal"
-              className="rounded-md border border-border p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+              className="rounded-md border border-border p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
               {busy ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
             </button>

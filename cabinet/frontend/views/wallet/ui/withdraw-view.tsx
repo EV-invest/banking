@@ -14,7 +14,7 @@ import { NetworkSegments } from "@/views/wallet/ui/network-segments";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
 const FIELD =
-  "w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50";
+  "w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
 
 // What the user reviewed, frozen at the "Review" click — Confirm submits exactly this
 // even if a wallet refetch changes the live selection underneath the open confirm.
@@ -160,7 +160,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     setAmount(opts?.withdrawable ?? "0");
                     setConfirming(null);
                   }}
-                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-main-accent-t1 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-main-accent-t1 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Max
                 </button>

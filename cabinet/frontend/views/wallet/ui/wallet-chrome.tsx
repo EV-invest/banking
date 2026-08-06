@@ -18,7 +18,7 @@ export function WalletScreen({ title, subtitle, back, actions, children }: { tit
           <Link
             href={back}
             aria-label="Back"
-            className="-m-1 shrink-0 rounded-md p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="-m-1 shrink-0 rounded-md p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ChevronLeft className="size-6" />
           </Link>
@@ -44,9 +44,9 @@ export const WALLET_CARD = "rounded-xl border border-border bg-main-card";
 // hand-written rather than uikit Buttons, so the keyboard focus ring rides along here — every
 // wallet CTA is a link or a button built from one of these two strings.
 export const WALLET_CTA =
-  "flex items-center justify-center rounded-lg bg-main-accent-t1 font-medium text-main-black outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50";
+  "flex items-center justify-center rounded-lg bg-main-accent-t1 font-medium text-main-black outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
 export const WALLET_CTA_GHOST =
-  "flex items-center justify-center rounded-lg border border-border font-medium text-foreground outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50";
+  "flex items-center justify-center rounded-lg border border-border font-medium text-foreground outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
 
 // The all-caps field/section label used across the wallet cards.
 export function FieldLabel({ children, className }: { children: ReactNode; className?: string }) {

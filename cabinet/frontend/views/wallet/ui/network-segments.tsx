@@ -20,7 +20,7 @@ export function NetworkSegments({ networks, value, onChange, label }: { networks
             aria-checked={selected}
             onClick={() => onChange(network)}
             className={cn(
-              "min-w-0 flex-1 rounded-md py-2 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 lg:py-2.5 lg:text-sm",
+              "min-w-0 flex-1 rounded-md py-2 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:py-2.5 lg:text-sm",
               selected ? "bg-main-accent-t1 text-main-black" : "text-muted-foreground hover:text-foreground",
             )}
           >

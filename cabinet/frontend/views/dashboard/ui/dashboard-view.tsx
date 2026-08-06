@@ -207,7 +207,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
               aria-pressed={r === range}
               onClick={() => setRange(r)}
               className={cn(
-                "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 lg:px-3 lg:py-1.5 lg:text-xs",
+                "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-1.5 lg:text-xs",
                 r === range ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "font-medium text-muted-foreground hover:text-foreground",
               )}
             >

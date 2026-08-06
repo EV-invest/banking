@@ -110,7 +110,7 @@ export function WalletOverviewView() {
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-foreground">Networks</p>
         {/* The Figma frames leave the activity screen with no entry point; this is it. */}
-        <Link href="/wallet/activity" className="rounded-md text-xs text-main-accent-t1 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 lg:hidden">
+        <Link href="/wallet/activity" className="rounded-md text-xs text-main-accent-t1 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
           Activity
         </Link>
         <p className="hidden text-xs text-muted-foreground lg:block">deposit &amp; withdrawal rails</p>
