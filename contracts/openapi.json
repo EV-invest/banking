@@ -4514,6 +4514,11 @@
             "type": "string",
             "title": "gas_station_gas",
             "description": "the gas station's native-coin balance"
+          },
+          "is_testnet": {
+            "type": "boolean",
+            "title": "is_testnet",
+            "description": "Whether the addresses above are testnet-tagged, so a client can render them in the\n rail's user-facing form (e.g. TON's testnet-tagged friendly address). Only\n meaningful per rail; false where the rail's address form is network-agnostic."
           }
         },
         "title": "RailLiquidity",

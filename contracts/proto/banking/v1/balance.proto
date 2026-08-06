@@ -172,6 +172,10 @@ message RailLiquidity {
   // never USDT. Empty when the rail has no gas-station view.
   string gas_station_address = 6;
   string gas_station_gas = 7;   // the gas station's native-coin balance
+  // Whether the addresses above are testnet-tagged, so a client can render them in the
+  // rail's user-facing form (e.g. TON's testnet-tagged friendly address). Only
+  // meaningful per rail; false where the rail's address form is network-agnostic.
+  bool is_testnet = 8;
 }
 
 // The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).

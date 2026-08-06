@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { tonFriendlyAddress } from "./ton-address.ts";
+import { displayAddress, tonFriendlyAddress } from "./ton-address.ts";
 
 // The example address from the TON docs (docs.ton.org, "Smart Contract Addresses").
 // Both forms cross-checked against an independent CRC16/XMODEM implementation
@@ -39,6 +39,21 @@ test("malformed inputs return null", () => {
   assert.equal(tonFriendlyAddress("0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"), null); // EVM address
   assert.equal(tonFriendlyAddress(""), null);
   assert.equal(tonFriendlyAddress(`300:${RAW.slice(2)}`), null); // workchain outside int8
+});
+
+test("displayAddress rewrites only the TON rail", () => {
+  const EVM = "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B";
+  // The raw form the hub stores never reaches an operator/user screen as-is.
+  assert.equal(displayAddress("ton", RAW), "UQDKbjIcfM6ezt8KjKJJLshZJJSqX7XOA4ff-W72r5gqPuwA");
+  assert.equal(displayAddress("ton", RAW, { testnet: true }), "0QDKbjIcfM6ezt8KjKJJLshZJJSqX7XOA4ff-W72r5gqPleK");
+  // Every other rail already stores its user-facing form — pass through untouched, and
+  // an EVM address must never be mistaken for a convertible TON one.
+  assert.equal(displayAddress("bep20", EVM), EVM);
+  assert.equal(displayAddress("ton", EVM), EVM);
+  // An already-friendly TON string (a user-supplied withdrawal destination) survives.
+  assert.equal(displayAddress("ton", "UQDKbjIcfM6ezt8KjKJJLshZJJSqX7XOA4ff-W72r5gqPuwA"), "UQDKbjIcfM6ezt8KjKJJLshZJJSqX7XOA4ff-W72r5gqPuwA");
+  // The empty "rail unavailable" sentinel stays empty, so callers can still test it.
+  assert.equal(displayAddress("ton", ""), "");
 });
 
 test("output is exactly 48 chars of unpadded base64url", () => {
