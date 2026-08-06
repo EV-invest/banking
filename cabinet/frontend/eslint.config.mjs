@@ -27,6 +27,33 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // The cabinet had accumulated 386 arbitrary Tailwind values — 24 distinct font
+    // sizes and 10 radii against the 8 and 5 the design system defines. That happened
+    // because nothing stopped it, not because anyone chose it, so the guard is a lint
+    // rule rather than a convention.
+    //
+    // Only brackets opening on a digit or `#` are caught: those are the hardcoded
+    // sizes and colours. `calc()`, `var()` and `env()` brackets are how the shell
+    // contract and device insets are expressed and stay legal, as does the
+    // `grid-cols-(--name)` form for a fixed track with no step on the scale.
+    // Bare viewport units are exempt for the same reason — `min-h-[60vh]` sizes
+    // against the viewport, which no spacing step can express.
+    files: ["**/*.ts", "**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=/-\\[(?!\\d+(?:\\.\\d+)?(?:d|s|l)?v[hw]\\])(?:#|\\d)/]",
+          message: "Arbitrary Tailwind value — use a scale step, or a CSS custom property for a genuine one-off.",
+        },
+        {
+          selector: "TemplateElement[value.raw=/-\\[(?!\\d+(?:\\.\\d+)?(?:d|s|l)?v[hw]\\])(?:#|\\d)/]",
+          message: "Arbitrary Tailwind value — use a scale step, or a CSS custom property for a genuine one-off.",
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

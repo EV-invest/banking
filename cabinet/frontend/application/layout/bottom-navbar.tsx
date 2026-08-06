@@ -39,10 +39,11 @@ export function BottomNavbar() {
             key={tab.label}
             href={tab.href}
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-[10px] font-medium transition-colors",
-              isActive
-                ? "text-main-accent-t1"
-                : "text-main-mist/60 hover:text-main-mist/90",
+              "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-xs font-medium transition-colors",
+              // The offset is what earns its keep here: the active tab's fill is the same
+              // teal as the ring, so without a gap the ring reads as the pill growing.
+              "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-main-surface",
+              isActive ? "text-main-accent-t1" : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Icon className="size-5" />

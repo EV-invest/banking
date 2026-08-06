@@ -12,6 +12,10 @@ import { cn } from "@/shared/lib/cn";
 // screen centres the title between a back affordance and a matching spacer.
 // Hidden from `lg` up, where the desktop shell renders its own page heading.
 
+// The back affordance is a bare icon with no border of its own, so it needs a rounded box
+// for the focus ring to trace.
+const BACK_FOCUS = "rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 export function MobileAppBar({
   title,
   backHref,
@@ -27,18 +31,20 @@ export function MobileAppBar({
   return (
     <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-main-surface px-5 pb-3.5 pt-4 lg:hidden">
       {backHref ? (
-        <Link href={backHref} aria-label="Back" className="-ml-1 flex size-[22px] shrink-0 items-center justify-center text-foreground">
-          <ChevronLeft className="size-[22px]" />
+        <Link href={backHref} aria-label="Back" className={cn("-ml-1 flex size-6 shrink-0 items-center justify-center text-foreground", BACK_FOCUS)}>
+          <ChevronLeft className="size-6" />
         </Link>
       ) : (
         onBack && (
-          <button type="button" onClick={onBack} aria-label="Back" className="-ml-1 flex size-[22px] shrink-0 items-center justify-center text-foreground">
-            <ChevronLeft className="size-[22px]" />
+          <button type="button" onClick={onBack} aria-label="Back" className={cn("-ml-1 flex size-6 shrink-0 items-center justify-center text-foreground", BACK_FOCUS)}>
+            <ChevronLeft className="size-6" />
           </button>
         )
       )}
-      <h1 className={cn("min-w-0 flex-1 truncate font-sans font-semibold tracking-normal text-foreground", pushed ? "text-center text-[17px]" : "text-[20px]")}>{title}</h1>
-      {pushed && !right ? <span className="size-[22px] shrink-0" aria-hidden /> : right}
+      {/* Both sizes land on the type scale, so the pushed/root distinction is carried by
+          size plus centring rather than the 3px that used to separate them. */}
+      <h1 className={cn("min-w-0 flex-1 truncate font-sans font-semibold tracking-normal text-foreground", pushed ? "text-center text-base" : "text-lg")}>{title}</h1>
+      {pushed && !right ? <span className="size-6 shrink-0" aria-hidden /> : right}
     </header>
   );
 }

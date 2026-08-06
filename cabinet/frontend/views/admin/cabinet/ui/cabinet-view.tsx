@@ -91,7 +91,7 @@ export function CabinetView() {
                     <p className="truncate font-mono-tech text-xs text-muted-foreground">{m.tag}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <span className="rounded-md bg-foreground/[0.06] px-2 py-0.5 text-xs capitalize text-main-mist">{m.kind}</span>
+                    <span className="rounded-md bg-foreground/5 px-2 py-0.5 text-xs capitalize text-muted-foreground">{m.kind}</span>
                     <StatusDot status="healthy" label="Registered" />
                   </div>
                 </div>

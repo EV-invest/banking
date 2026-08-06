@@ -13,6 +13,7 @@ import { publishProfile } from "@/entities/user/model/profile-store";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { Position, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { formatUsd, num } from "@/shared/lib/money";
 import { CARD, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, type PillTone, Row, RowLabel, RowValue, StackRow } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
 import { TipAnchor, type TipKey } from "@/shared/tips";
@@ -119,12 +120,12 @@ export function ProfileView() {
     <>
       <MobileAppBar title="Profile" backHref="/settings" />
 
-      <div className="flex flex-col gap-4 px-5 pb-6 pt-[18px] lg:gap-5 lg:px-8 lg:pb-8 lg:pt-6">
+      <div className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-5 lg:px-8 lg:pb-8 lg:pt-6">
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
         <div className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
             <h1 className="font-sans text-2xl font-semibold text-foreground">Profile</h1>
-            <p className="text-[13px] text-muted-foreground">Your personal details and verification status</p>
+            <p className="text-sm text-muted-foreground">Your personal details and verification status</p>
           </div>
           <div className="flex shrink-0 gap-2">
             {editing ? (
@@ -132,24 +133,14 @@ export function ProfileView() {
                 <Button variant="outline" size="sm" className="border-border" onClick={cancel} disabled={saving}>
                   Cancel
                 </Button>
-                <button
-                  type="button"
-                  onClick={save}
-                  disabled={saving}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90 disabled:opacity-60"
-                >
+                <Button type="button" onClick={save} disabled={saving} className="rounded-lg font-semibold">
                   {saving && <Loader2 className="size-4 animate-spin" />} Save
-                </button>
+                </Button>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                disabled={loading || profile === null}
-                className="rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90 disabled:opacity-60"
-              >
+              <Button type="button" onClick={() => setEditing(true)} disabled={loading || profile === null} className="rounded-lg font-semibold">
                 Edit profile
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -157,12 +148,12 @@ export function ProfileView() {
         {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
 
         {/* card-Hero — centred on mobile (Figma 503:274), a wide chip on desktop (489:258). */}
-        <div className={cn(CARD, "flex flex-col items-center gap-3 px-5 pb-[22px] pt-6 lg:flex-row lg:gap-5 lg:px-6 lg:py-[22px]")}>
-          <InitialsAvatar initials={initialsOfName(name, email)} className="size-16 text-2xl lg:text-[22px]" />
+        <div className={cn(CARD, "flex flex-col items-center gap-3 px-5 pb-5.5 pt-6 lg:flex-row lg:gap-5 lg:px-6 lg:py-5.5")}>
+          <InitialsAvatar initials={initialsOfName(name, email)} className="size-16 text-2xl lg:text-xl" />
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center lg:items-start lg:text-left">
             <div className="flex min-w-0 flex-col items-center gap-1 lg:flex-row lg:items-baseline lg:gap-3">
-              {loading ? <Skeleton className="h-6 w-40" /> : <p className="truncate text-[18px] font-semibold text-white lg:text-[22px]">{name || "Account"}</p>}
-              {loading ? <Skeleton className="h-4 w-48" /> : <p className="truncate text-[13px] text-muted-foreground">{email || "Not signed in"}</p>}
+              {loading ? <Skeleton className="h-6 w-40" /> : <p className="truncate text-lg font-semibold text-foreground lg:text-xl">{name || "Account"}</p>}
+              {loading ? <Skeleton className="h-4 w-48" /> : <p className="truncate text-sm text-muted-foreground">{email || "Not signed in"}</p>}
             </div>
             {!loading && (
               <div className="mt-1 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
@@ -179,17 +170,12 @@ export function ProfileView() {
                 <Button variant="outline" className="h-9 flex-1 border-input" onClick={cancel} disabled={saving}>
                   Cancel
                 </Button>
-                <button
-                  type="button"
-                  onClick={save}
-                  disabled={saving}
-                  className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-main-accent-t1 text-[14px] font-semibold text-main-black disabled:opacity-60"
-                >
+                <Button type="button" onClick={save} disabled={saving} className="h-9 flex-1 gap-1.5 font-semibold">
                   {saving && <Loader2 className="size-4 animate-spin" />} Save
-                </button>
+                </Button>
               </>
             ) : (
-              <Button variant="outline" className="h-9 w-full border-input text-[14px] font-medium" onClick={() => setEditing(true)} disabled={loading || profile === null}>
+              <Button variant="outline" className="h-9 w-full border-input" onClick={() => setEditing(true)} disabled={loading || profile === null}>
                 Edit profile
               </Button>
             )}
@@ -216,11 +202,11 @@ export function ProfileView() {
                           onChange={(e) => set(key, e.target.value)}
                           className={fieldErrors[key] ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
                         />
-                        {fieldErrors[key] && <p className="mt-1 text-[11px] text-destructive">{fieldErrors[key]}</p>}
+                        {fieldErrors[key] && <p className="mt-1 text-xs text-destructive">{fieldErrors[key]}</p>}
                       </div>
                     )
                   ) : (
-                    <span className={cn("break-words text-[14px] font-medium", profile?.[key] ? "text-foreground" : "text-muted-foreground")}>
+                    <span className={cn("break-words text-sm font-medium", profile?.[key] ? "text-foreground" : "text-muted-foreground")}>
                       {(key === "phone" ? formatPhone(profile?.[key]) : profile?.[key]) || "—"}
                     </span>
                   )}
@@ -229,7 +215,7 @@ export function ProfileView() {
             ))}
             <Hairline />
             <StackRow label="Email address">
-              {loading ? <Skeleton className="h-5 w-48" /> : <span className="break-words text-[14px] font-medium text-muted-foreground">{email || "—"}</span>}
+              {loading ? <Skeleton className="h-5 w-48" /> : <span className="break-words text-sm font-medium text-muted-foreground">{email || "—"}</span>}
             </StackRow>
           </ListCard>
 
@@ -239,16 +225,16 @@ export function ProfileView() {
 
         {/* ── Desktop (Figma cabinet/profile) ──────────────────────────────── */}
         <div className="hidden items-start gap-5 lg:flex">
-          <section className={cn(CARD, "w-full flex-1 space-y-[18px] px-6 py-[22px]")}>
+          <section className={cn(CARD, "w-full flex-1 space-y-4.5 px-6 py-5.5")}>
             <header>
-              <h2 className="font-sans text-[15px] font-semibold tracking-normal text-white">Personal information</h2>
+              <h2 className="font-sans text-sm font-semibold tracking-normal text-foreground">Personal information</h2>
               <p className="text-xs text-muted-foreground">Used for compliance and statements</p>
             </header>
-            <div className="flex flex-wrap gap-[16px_18px]">
+            <div className="flex flex-wrap gap-x-4.5 gap-y-4">
               {SHOWN.map(({ key, label, tip }) => (
                 <FieldBox key={key} label={label} tip={tip}>
                   {loading || !form ? (
-                    <Skeleton className="h-[42px] w-full rounded-lg" />
+                    <Skeleton className="h-10.5 w-full rounded-lg" />
                   ) : editing ? (
                     key === "phone" ? (
                       <PhoneField initial={form.phone} onChange={(v) => set("phone", v)} error={fieldErrors.phone} />
@@ -259,7 +245,7 @@ export function ProfileView() {
                           onChange={(e) => set(key, e.target.value)}
                           className={fieldErrors[key] ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"}
                         />
-                        {fieldErrors[key] && <p className="mt-1 text-[11px] text-destructive">{fieldErrors[key]}</p>}
+                        {fieldErrors[key] && <p className="mt-1 text-xs text-destructive">{fieldErrors[key]}</p>}
                       </div>
                     )
                   ) : (
@@ -268,12 +254,12 @@ export function ProfileView() {
                 </FieldBox>
               ))}
               <FieldBox label="Email address" trailing={profile?.email_verified ? <VerifiedTag /> : undefined}>
-                {loading ? <Skeleton className="h-[42px] w-full rounded-lg" /> : <ReadValue value={email} muted />}
+                {loading ? <Skeleton className="h-10.5 w-full rounded-lg" /> : <ReadValue value={email} muted />}
               </FieldBox>
             </div>
           </section>
 
-          <div className="flex w-[388px] shrink-0 flex-col gap-5">
+          <div className="flex w-97 shrink-0 flex-col gap-5">
             {verification}
             {snapshot}
           </div>
@@ -286,7 +272,7 @@ export function ProfileView() {
 /** `card-Verification` — the KYC state the hub actually holds, not a document checklist. */
 function VerificationCard({ loading, profile, email }: { loading: boolean; profile: UserProfile | null; email: string }) {
   return (
-    <ListCard className="lg:px-[22px]">
+    <ListCard className="lg:px-5.5">
       <ListCardTitle sub="Managed by compliance">Identity verification</ListCardTitle>
       <Hairline />
       <Row>
@@ -296,7 +282,7 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
       <Hairline />
       <Row>
         <RowLabel title="KYC level" sub="Raised by compliance review" />
-        {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold text-foreground">{profile?.kyc_level ?? "—"}</RowValue>}
+        {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold tabular-nums text-foreground">{profile?.kyc_level ?? "—"}</RowValue>}
       </Row>
       <Hairline />
       <Row>
@@ -309,17 +295,17 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
 
 function SnapshotCard({ invested, strategies }: { invested: number; strategies: number }) {
   return (
-    <ListCard className="lg:px-[22px]">
+    <ListCard className="lg:px-5.5">
       <ListCardTitle>Account snapshot</ListCardTitle>
       <Hairline />
       <Row>
-        <span className="text-[13px] font-medium text-muted-foreground">Total invested</span>
-        <span className="text-[15px] font-semibold tabular-nums text-foreground">{money(invested)}</span>
+        <span className="text-sm font-medium text-muted-foreground">Total invested</span>
+        <span className="text-sm font-semibold tabular-nums text-foreground">{formatUsd(invested)}</span>
       </Row>
       <Hairline />
       <Row>
-        <span className="text-[13px] font-medium text-muted-foreground">Active strategies</span>
-        <span className="text-[15px] font-semibold tabular-nums text-foreground">{strategies}</span>
+        <span className="text-sm font-medium text-muted-foreground">Active strategies</span>
+        <span className="text-sm font-semibold tabular-nums text-foreground">{strategies}</span>
       </Row>
     </ListCard>
   );
@@ -327,7 +313,7 @@ function SnapshotCard({ invested, strategies }: { invested: number; strategies: 
 
 function FieldBox({ label, trailing, tip, children }: { label: string; trailing?: ReactNode; tip?: TipKey; children: ReactNode }) {
   return (
-    <div className="flex min-w-[260px] flex-1 flex-col">
+    <div className="flex min-w-65 flex-1 flex-col">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           {label}
@@ -348,8 +334,8 @@ function ReadValue({ value, muted }: { value?: string; muted?: boolean }) {
   return (
     <div
       className={cn(
-        "flex min-h-[42px] items-center rounded-lg border border-border bg-main-surface px-[13px] py-[11px] text-[13px]",
-        v && !muted ? "text-white" : "text-muted-foreground",
+        "flex min-h-10.5 items-center rounded-lg border border-border bg-main-surface px-3.5 py-3 text-sm",
+        v && !muted ? "text-foreground" : "text-muted-foreground",
       )}
       title={raw.length > MAX_DISPLAY_VALUE ? raw : undefined}
     >
@@ -360,7 +346,7 @@ function ReadValue({ value, muted }: { value?: string; muted?: boolean }) {
 
 function VerifiedTag() {
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-main-accent-t1">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-main-accent-t1">
       <BadgeCheck className="size-3" /> Verified
       <TipAnchor anchor="profile.email.verified" />
     </span>
@@ -405,16 +391,7 @@ function PhoneField({ initial, onChange, error }: { initial: string; onChange: (
   return (
     <div className="min-w-0 flex-1">
       <Input {...inputProps} className={error ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
-      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
     </div>
   );
-}
-
-function num(value: string | undefined): number {
-  const n = Number(value ?? "0");
-  return Number.isFinite(n) ? n : 0;
-}
-
-function money(n: number): string {
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }

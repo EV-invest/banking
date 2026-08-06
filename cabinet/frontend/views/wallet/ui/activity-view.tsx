@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, Loader2, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";
 
@@ -11,6 +11,11 @@ import type { Deposit, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
 import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
+
+// The desktop table track — network, destination, amount, status. Fixed px columns with no
+// matching step on the spacing scale, so they ride in as a custom property rather than an
+// arbitrary class, and the header row and the body rows stay locked to one definition.
+const COLUMNS = { "--activity-columns": "110px 1fr 150px 130px" } as CSSProperties;
 
 const STATUS_STYLES: Record<string, string> = {
   queued: "bg-main-accent-t3/15 text-main-accent-t3",
@@ -70,15 +75,18 @@ export function ActivityView() {
 
   return (
     <WalletScreen title="Activity" subtitle="Deposits and withdrawals — queued, processing, completed" back="/wallet">
-      {error && <p className="text-[13px] text-destructive">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {loading ? (
-        <Skeleton className="h-64 w-full rounded-[14px] lg:max-w-[760px]" />
+        <Skeleton className="h-64 w-full rounded-xl lg:max-w-190" />
       ) : entries.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className={cn(WALLET_CARD, "overflow-hidden lg:max-w-[760px]")}>
-          <div className="hidden grid-cols-[110px_1fr_150px_130px] items-center gap-3 border-b border-border px-5 py-3.5 text-[11px] font-medium text-muted-foreground lg:grid">
+        <div className={cn(WALLET_CARD, "overflow-hidden lg:max-w-190")}>
+          <div
+            style={COLUMNS}
+            className="hidden grid-cols-(--activity-columns) items-center gap-3 border-b border-border px-5 py-3.5 text-xs font-medium text-muted-foreground lg:grid"
+          >
             <span>NETWORK</span>
             <span>DESTINATION</span>
             <span className="text-right">AMOUNT</span>
@@ -96,15 +104,15 @@ export function ActivityView() {
 function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; busy: boolean; onCancel: () => void }) {
   const rail = railMeta(entry.network);
   return (
-    <div className={cn("flex items-center gap-3 px-[14px] py-3 lg:grid lg:grid-cols-[110px_1fr_150px_130px] lg:px-5 lg:py-3.5", !first && "border-t border-border")}>
+    <div style={COLUMNS} className={cn("flex items-center gap-3 px-3.5 py-3 lg:grid lg:grid-cols-(--activity-columns) lg:px-5 lg:py-3.5", !first && "border-t border-border")}>
       <span className="flex items-center gap-2.5 lg:gap-2">
-        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-[9px] text-xs font-semibold lg:size-6 lg:rounded-md lg:text-[11px]", rail.tone)}>{rail.badge}</span>
-        <span className="hidden text-[13px] text-foreground lg:inline">{rail.label}</span>
+        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold lg:size-6", rail.tone)}>{rail.badge}</span>
+        <span className="hidden text-sm text-foreground lg:inline">{rail.label}</span>
       </span>
 
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-[13px] font-medium text-foreground lg:text-sm">{entry.title}</span>
-        <span className="truncate text-[11px] text-muted-foreground">
+        <span className="truncate text-sm font-medium text-foreground">{entry.title}</span>
+        <span className="truncate text-xs text-muted-foreground">
           <span className="lg:hidden">
             {rail.label} · {entry.sub}
           </span>
@@ -113,16 +121,16 @@ function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; b
       </span>
 
       <span className="flex shrink-0 flex-col items-end gap-1 lg:contents">
-        <span className="text-[13px] font-medium tabular-nums text-foreground lg:text-right lg:text-sm">{entry.amount}</span>
+        <span className="text-sm font-medium tabular-nums text-foreground lg:text-right">{entry.amount}</span>
         <span className="flex items-center justify-end gap-2">
-          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", STATUS_STYLES[entry.state] ?? "bg-muted text-muted-foreground")}>{entry.state}</span>
+          <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium capitalize", STATUS_STYLES[entry.state] ?? "bg-muted text-muted-foreground")}>{entry.state}</span>
           {entry.cancellable && (
             <button
               type="button"
               disabled={busy}
               onClick={onCancel}
               aria-label="Cancel withdrawal"
-              className="rounded-md border border-border p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              className="rounded-md border border-border p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
               {busy ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
             </button>
@@ -135,13 +143,13 @@ function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; b
 
 function EmptyState() {
   return (
-    <div className={cn(WALLET_CARD, "flex flex-col items-center gap-3 px-6 py-12 text-center lg:max-w-[400px]")}>
+    <div className={cn(WALLET_CARD, "flex flex-col items-center gap-3 px-6 py-12 text-center lg:max-w-100")}>
       <span className="flex size-11 items-center justify-center rounded-xl bg-main-accent-t1/15">
         <ArrowUpRight className="size-5 text-main-accent-t1" />
       </span>
-      <p className="text-[15px] font-semibold text-foreground">No activity yet</p>
-      <p className="max-w-[260px] text-xs text-muted-foreground">Your deposits and withdrawals will appear here once you make your first transfer.</p>
-      <Link href="/wallet/deposit" className={cn(WALLET_CTA, "mt-1 px-4 py-2.5 text-[13px]")}>
+      <p className="text-sm font-semibold text-foreground">No activity yet</p>
+      <p className="max-w-65 text-xs text-muted-foreground">Your deposits and withdrawals will appear here once you make your first transfer.</p>
+      <Link href="/wallet/deposit" className={cn(WALLET_CTA, "mt-1 px-4 py-2.5 text-sm")}>
         New deposit
       </Link>
     </div>

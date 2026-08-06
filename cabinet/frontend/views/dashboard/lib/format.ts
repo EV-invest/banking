@@ -1,28 +1,9 @@
-// Display helpers for the portfolio dashboard. Amounts arrive as exact decimal USDT
-// strings (the authoritative value lives server-side); these parse only for on-screen
-// figures and proportions — never feed the parsed number back into a money operation.
+// Display helpers for the portfolio dashboard. Money formatting lives in one module for
+// the whole cabinet (`@/shared/lib/money`) — the dashboard's figures are summaries, so
+// they take the 2-dp summary precision.
 
-export function num(value: string | undefined): number {
-  const n = Number(value ?? "0");
-  return Number.isFinite(n) ? n : 0;
-}
+export { formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/shared/lib/money";
 
-// Headline/stat money: "$48,250" (whole dollars — the figures are summaries, not ledger
-// entries). Uses the Unicode minus elsewhere for sign symmetry.
-export function formatMoney(value: string | number | undefined): string {
-  const n = typeof value === "number" ? value : num(value);
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-}
-
-export function formatSignedMoney(value: number): string {
-  return `${value < 0 ? "−" : "+"}${formatMoney(Math.abs(value))}`;
-}
-
-export function formatPct(value: number): string {
-  return `${value < 0 ? "−" : "+"}${Math.abs(value).toFixed(1)}%`;
-}
-
-export function shortAddress(address: string | undefined): string {
-  if (!address) return "—";
-  return address.length > 16 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
-}
+// The dashboard's activity lines have far less room than the wallet's, so its addresses
+// cut harder than the shared default.
+export const DASH_ADDRESS = { head: 6, tail: 4, min: 16 } as const;

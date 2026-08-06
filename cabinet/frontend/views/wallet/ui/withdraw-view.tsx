@@ -13,7 +13,8 @@ import { formatUsdt, fromBaseUnits, networkLabel, shortAddress, subUsdt, toBaseU
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
-const FIELD = "w-full rounded-lg border border-border bg-input px-3 py-2.5 text-[13px] text-foreground placeholder:text-main-mist/50 focus:outline-none focus:ring-1 focus:ring-ring";
+const FIELD =
+  "w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
 
 // What the user reviewed, frozen at the "Review" click — Confirm submits exactly this
 // even if a wallet refetch changes the live selection underneath the open confirm.
@@ -93,14 +94,14 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   return (
     <WalletScreen title="Withdraw USDT" subtitle="Send funds to an external address — one balance, any rail" back="/wallet">
       {wallet === undefined ? (
-        <Skeleton className="h-[444px] w-full rounded-[14px] lg:max-w-[560px]" />
+        <Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />
       ) : networks.length === 0 ? (
         <p className="text-sm text-muted-foreground">{error ?? "No withdrawal rails are available right now — check back soon."}</p>
       ) : (
         // Form 560 + review 400 side by side is the Figma at 1440; below that the content
         // column can't hold both, so the review wraps under the form rather than overflowing.
-        <div className="flex flex-col gap-[14px] lg:flex-row lg:flex-wrap lg:items-start lg:gap-5">
-          <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-[18px] lg:w-[560px] lg:max-w-full lg:flex-none lg:p-6")}>
+        <div className="flex flex-col gap-3.5 lg:flex-row lg:flex-wrap lg:items-start lg:gap-5">
+          <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:w-140 lg:max-w-full lg:flex-none lg:p-6")}>
             <FieldLabel>
               NETWORK
               <TipAnchor anchor="wallet.withdraw.network" />
@@ -135,12 +136,14 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             <label className="flex flex-col gap-2">
               <span className="flex items-center justify-between gap-2">
                 <FieldLabel>AMOUNT</FieldLabel>
-                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   Avail: {formatUsdt(opts?.withdrawable)}
                   <TipAnchor anchor="wallet.withdraw.available" />
                 </span>
               </span>
-              <span className="flex w-full items-center gap-2 rounded-lg border border-border bg-input py-2 pl-3 pr-2">
+              {/* The bordered box is the field, not the bare input inside it — so the focus ring
+                  belongs on the wrapper, reached from the input via focus-within. */}
+              <span className="flex w-full items-center gap-2 rounded-lg border border-border bg-input py-2 pl-3 pr-2 focus-within:ring-2 focus-within:ring-ring/50">
                 <input
                   value={amount}
                   onChange={(e) => {
@@ -149,7 +152,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   }}
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-main-mist/50 focus:outline-none"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                 />
                 <button
                   type="button"
@@ -157,14 +160,14 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     setAmount(opts?.withdrawable ?? "0");
                     setConfirming(null);
                   }}
-                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-main-accent-t1 transition-colors hover:bg-foreground/[0.04]"
+                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-main-accent-t1 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Max
                 </button>
               </span>
             </label>
 
-            <div className="flex flex-col gap-2.5 rounded-[10px] bg-main-surface px-3.5 py-3">
+            <div className="flex flex-col gap-2.5 rounded-lg bg-main-surface px-3.5 py-3">
               <Row label="Network fee" value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} tip="wallet.withdraw.network-fee" />
               <div className="h-px w-full bg-border" />
               <Row label="You will receive" value={`${formatUsdt(youReceive)} USDT`} tone="text-main-accent-t2" tip="wallet.withdraw.you-receive" />
@@ -173,11 +176,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             {/* `wallet.withdraw.queueing` / `.review` are section-type tips (descriptor blocks,
                 not inline ⓘ), so that copy is stated inline here rather than anchored. */}
             {queuedUnits > 0n && amountUnits > 0n && (
-              <p className="text-[11px] text-main-accent-t3">
+              <p className="text-xs text-main-accent-t3">
                 ~{formatUsdt(fromBaseUnits(queuedUnits))} USDT exceeds instant {label} liquidity and will be queued until the rail is topped up.
               </p>
             )}
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Min {formatUsdt(opts?.min_withdrawal)} USDT · instant {label} {formatUsdt(opts?.instant)} · rest queued
             </p>
 
@@ -191,13 +194,13 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             </button>
           </div>
 
-          <div className="flex flex-col gap-[14px] empty:hidden lg:w-[400px] lg:max-w-full lg:flex-none lg:gap-5">
+          <div className="flex flex-col gap-3.5 empty:hidden lg:w-100 lg:max-w-full lg:flex-none lg:gap-5">
             {done && (
-              <div className={cn(WALLET_CARD, "flex gap-3 p-[18px] lg:p-5")}>
+              <div className={cn(WALLET_CARD, "flex gap-3 p-4.5 lg:p-5")}>
                 <Clock className="mt-0.5 size-4 shrink-0 text-main-accent-t3" />
                 <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-foreground">{done.state === "queued" ? "Withdrawal queued" : "Withdrawal submitted"}</p>
-                  <p className="text-xs text-main-mist">
+                  <p className="text-sm font-semibold text-foreground">{done.state === "queued" ? "Withdrawal queued" : "Withdrawal submitted"}</p>
+                  <p className="text-xs text-muted-foreground">
                     {done.state === "queued"
                       ? `${formatUsdt(done.net_amount)} USDT to ${shortAddress(done.address)} is queued — it ships once the ${networkLabel(done.network)} rail is topped up.`
                       : `${formatUsdt(done.net_amount)} USDT is on its way to ${shortAddress(done.address)} — pending on-chain confirmation.`}
@@ -207,18 +210,18 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             )}
 
             {error && (
-              <div className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-[18px] lg:p-5")}>
+              <div className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-5")}>
                 <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
                 <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-foreground">Withdrawal failed</p>
-                  <p className="text-xs text-main-mist">{error}</p>
+                  <p className="text-sm font-semibold text-foreground">Withdrawal failed</p>
+                  <p className="text-xs text-muted-foreground">{error}</p>
                 </div>
               </div>
             )}
 
             {confirming && (
-              <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-[18px] lg:p-5")}>
-                <p className="text-[15px] font-semibold text-foreground">Review withdrawal</p>
+              <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:p-5")}>
+                <p className="text-sm font-semibold text-foreground">Review withdrawal</p>
                 <div className="flex flex-col gap-2.5">
                   <Row label="Network" value={networkLabel(confirming.network)} />
                   <Row label="Destination" value={shortAddress(confirming.address)} />
@@ -227,9 +230,9 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   <div className="h-px w-full bg-border" />
                   <Row label="You will receive" value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-main-accent-t2" />
                 </div>
-                <p className="break-all font-mono-tech text-[11px] text-muted-foreground">To {confirming.address}</p>
+                <p className="break-all font-mono-tech text-xs text-muted-foreground">To {confirming.address}</p>
                 {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
-                  <p className="text-[11px] text-main-accent-t3">
+                  <p className="text-xs text-main-accent-t3">
                     ~{formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant)))} USDT exceeds instant {networkLabel(confirming.network)}{" "}
                     liquidity and will be queued until the rail is topped up.
                   </p>
@@ -243,7 +246,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     Back
                   </button>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Accepted instantly; if the {networkLabel(confirming.network)}{" "}
                   rail is short it queues until funded — you&apos;ll be notified.
                 </p>
@@ -263,7 +266,7 @@ function Row({ label, value, tone, tip }: { label: string; value: string; tone?:
         {label}
         {tip && <TipAnchor anchor={tip} />}
       </span>
-      <span className={cn("text-[13px] font-medium tabular-nums", tone ?? "text-foreground")}>{value}</span>
+      <span className={cn("text-sm font-medium tabular-nums", tone ?? "text-foreground")}>{value}</span>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { apiPath } from "@/shared/config/base-path";
 import type { FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
-import { ago, usd } from "@/views/admin/lib/format";
+import { ago, formatNav, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader, Toggle } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
@@ -101,7 +101,7 @@ export function ValuationView() {
       )}
 
       <section className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Post valuation</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Post valuation</p>
         <Card>
           <CardContent className="space-y-5 py-6">
             <div className="grid gap-4 md:grid-cols-3">
@@ -122,13 +122,13 @@ export function ValuationView() {
                   <TipAnchor anchor="admin.valuation.post.derived-nav" />
                 </span>
                 <div className="flex h-9 items-center rounded-md border border-main-accent-t1/40 bg-main-accent-t1/10 px-3 text-sm">
-                  <span className="font-semibold text-main-accent-t1 tabular-nums">{derivedNav ? `$${derivedNav.toFixed(4)}` : "—"}</span>
-                  {units > 0 && <span className="ml-2 text-xs text-muted-foreground">= AUM / {units.toLocaleString("en-US")} units</span>}
+                  <span className="font-semibold text-main-accent-t1 tabular-nums">{derivedNav ? formatNav(derivedNav) : "—"}</span>
+                  {units > 0 && <span className="ml-2 text-xs tabular-nums text-muted-foreground">= AUM / {units.toLocaleString("en-US")} units</span>}
                 </div>
               </div>
             </div>
 
-            <div className="rounded-lg border border-main-accent-t3/30 bg-main-accent-t3/[0.06] px-4 py-2.5 text-sm text-main-accent-t3">
+            <div className="rounded-lg border border-main-accent-t3/30 bg-main-accent-t3/5 px-4 py-2.5 text-sm text-main-accent-t3">
               <TriangleAlert className="mr-2 inline size-4" />
               NAV-move guard — a post is rejected if NAV moves more than 50% from the last mark, unless override is on.
             </div>
@@ -154,10 +154,12 @@ export function ValuationView() {
       </section>
 
       <section className="space-y-3">
-        <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Redemption queue
+          {/* The count pill lands on the same step as the label it trails, so its fill and
+              accent colour — not a smaller size — are what set it apart. */}
           {queue && (
-            <span className="rounded-full bg-main-accent-t3/15 px-2 py-0.5 text-[10px] font-semibold text-main-accent-t3">{queue.length} queued</span>
+            <span className="rounded-full bg-main-accent-t3/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t3">{queue.length} queued</span>
           )}
         </p>
         <Card>
@@ -194,7 +196,7 @@ export function ValuationView() {
                           <p className="font-mono-tech text-xs text-muted-foreground">{item.service}</p>
                         </td>
                         <td className="px-5 py-3 tabular-nums">{Number(item.units).toLocaleString("en-US")}</td>
-                        <td className="px-5 py-3 tabular-nums text-muted-foreground">{est ? `≈ ${usd(est.toFixed(2))}` : "—"}</td>
+                        <td className="px-5 py-3 tabular-nums text-muted-foreground">{est ? `≈ ${formatUsd(est)}` : "—"}</td>
                         <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at)}</td>
                         <td className="px-5 py-3">
                           <div className="flex justify-end gap-2">

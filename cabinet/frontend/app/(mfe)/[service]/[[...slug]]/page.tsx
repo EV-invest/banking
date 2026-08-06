@@ -24,6 +24,9 @@ export default async function MfePage({ params }: { params: Promise<{ service: s
   }
 
   return (
+    // The 60vh reserve keeps the page from collapsing while the remote boots. It is
+    // viewport maths, not a spacing step — a fixed height would over-reserve on a short
+    // viewport and under-reserve on a tall one — so it stays expressed in vh.
     <RemoteElement
       tag={entry.tag}
       scriptUrl={entry.scriptUrl}

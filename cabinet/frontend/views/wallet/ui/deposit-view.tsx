@@ -77,11 +77,11 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
 
   return (
     <WalletScreen title="Deposit USDT" subtitle="Receive funds into your wallet" back="/wallet">
-      <div className="flex w-full flex-col gap-[14px] lg:max-w-[640px] lg:gap-5">
+      <div className="flex w-full flex-col gap-3.5 lg:max-w-160 lg:gap-5">
         {wallet === undefined ? (
           <>
-            <Skeleton className="h-[104px] rounded-[14px]" />
-            <Skeleton className="h-[360px] rounded-[14px]" />
+            <Skeleton className="h-26 rounded-xl" />
+            <Skeleton className="h-90 rounded-xl" />
           </>
         ) : networks.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -89,7 +89,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
           </p>
         ) : (
           <>
-            <div className={cn(WALLET_CARD, "flex flex-col gap-[14px] p-[18px] lg:p-6")}>
+            <div className={cn(WALLET_CARD, "flex flex-col gap-3.5 p-4.5 lg:p-6")}>
               <FieldLabel>
                 SELECT NETWORK
                 <TipAnchor anchor="wallet.deposit.network" />
@@ -97,52 +97,52 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
               <NetworkSegments networks={networks} value={network} onChange={selectNetwork} label="Deposit network" />
             </div>
 
-            <div className={cn(WALLET_CARD, "flex flex-col items-center gap-4 p-[18px] lg:gap-[18px] lg:p-6")}>
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground lg:text-[15px]">
+            <div className={cn(WALLET_CARD, "flex flex-col items-center gap-4 p-4.5 lg:gap-4.5 lg:p-6")}>
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                 Your {label} deposit address
                 <TipAnchor anchor="wallet.deposit.address" />
               </p>
 
-              {error && !displayAddress && <p className="text-[13px] text-destructive">{error}</p>}
+              {error && !displayAddress && <p className="text-sm text-destructive">{error}</p>}
 
               {address === null ? (
                 <>
-                  <Skeleton className="size-40 rounded-xl lg:size-[180px] lg:rounded-[18px]" />
+                  <Skeleton className="size-40 rounded-xl lg:size-45 lg:rounded-2xl" />
                   <Skeleton className="h-10 w-full rounded-lg" />
                 </>
               ) : displayAddress ? (
                 <>
                   <DepositQr value={displayAddress} />
                   <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-input px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
-                    <code className="min-w-0 flex-1 break-all font-sans text-xs text-foreground lg:text-[13px]">{displayAddress}</code>
-                    <button type="button" onClick={copy} className={cn(WALLET_CTA, "hidden shrink-0 gap-1.5 px-3.5 py-[7px] text-xs lg:flex")}>
+                    <code className="min-w-0 flex-1 break-all font-sans text-xs text-foreground lg:text-sm">{displayAddress}</code>
+                    <button type="button" onClick={copy} className={cn(WALLET_CTA, "hidden shrink-0 gap-1.5 px-3.5 py-2 text-xs lg:flex")}>
                       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                       {copied ? "Copied" : "Copy"}
                     </button>
                   </div>
-                  <button type="button" onClick={copy} className={cn(WALLET_CTA, "w-full gap-1.5 py-2.5 text-[13px] lg:hidden")}>
+                  <button type="button" onClick={copy} className={cn(WALLET_CTA, "w-full gap-1.5 py-2.5 text-sm lg:hidden")}>
                     {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                     {copied ? "Copied" : "Copy address"}
                   </button>
-                  <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground lg:text-xs">
+                  <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
                     Credited to your one balance after {address.min_confirmations} network confirmations.
                     <TipAnchor anchor="wallet.deposit.min-confirmations" />
                   </p>
                 </>
               ) : (
-                <p className="text-center text-[13px] text-muted-foreground">
+                <p className="text-center text-sm text-muted-foreground">
                   A {label} deposit address isn&apos;t available yet — this rail is still being provisioned. Check back soon.
                 </p>
               )}
             </div>
 
-            <div className="flex gap-2.5 rounded-[14px] border border-main-accent-t3 bg-main-accent-t3/[0.06] px-4 py-3.5 lg:gap-3 lg:px-[18px] lg:py-4">
+            <div className="flex gap-2.5 rounded-xl border border-main-accent-t3 bg-main-accent-t3/5 px-4 py-3.5 lg:gap-3 lg:px-4.5 lg:py-4">
               <TriangleAlert className="mt-px size-4 shrink-0 text-main-accent-t3" />
               <div className="flex min-w-0 flex-col gap-1">
                 {/* `wallet.deposit.rail-hazard` is a section-type tip (a descriptor block, not an
                     inline ⓘ) — this card already carries that copy, so it isn't anchored here. */}
-                <p className="text-[13px] font-semibold text-foreground">Network warning</p>
-                <p className="text-xs text-main-mist">
+                <p className="text-sm font-semibold text-foreground">Network warning</p>
+                <p className="text-xs text-muted-foreground">
                   Only send USDT on the {label} network to this address. Funds sent on any other network will be lost permanently.
                   {evmSiblings.length > 0 && (
                     <>

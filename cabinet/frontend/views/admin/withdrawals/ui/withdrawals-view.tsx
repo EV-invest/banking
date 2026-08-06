@@ -8,7 +8,7 @@ import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 import { dispatchWithdrawal, failWithdrawal, fetchWithdrawalQueue, settleWithdrawal } from "@/entities/admin/api/admin-client";
 import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
 import { TipAnchor } from "@/shared/tips";
-import { ago, usd } from "@/views/admin/lib/format";
+import { ago, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
 // Which confirm panel is open under a row: settle asks for the mined tx ref,
@@ -66,9 +66,11 @@ export function WithdrawalsView() {
       )}
 
       <section className="space-y-3">
-        <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Awaiting action
-          {queue && <span className="rounded-full bg-main-accent-t3/15 px-2 py-0.5 text-[10px] font-semibold text-main-accent-t3">{queue.length} open</span>}
+          {/* The count pill lands on the same step as the label it trails, so its fill and
+              accent colour — not a smaller size — are what set it apart. */}
+          {queue && <span className="rounded-full bg-main-accent-t3/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t3">{queue.length} open</span>}
         </p>
         <Card>
           <CardContent className="p-0">
@@ -180,8 +182,8 @@ function WithdrawalRow({
           </p>
         </td>
         <td className="px-5 py-3 tabular-nums">
-          <p>{usd(item.amount)}</p>
-          <p className="text-xs text-muted-foreground">{usd(item.net_amount)} net</p>
+          <p>{formatUsd(item.amount)}</p>
+          <p className="text-xs text-muted-foreground">{formatUsd(item.net_amount)} net</p>
         </td>
         <td className="px-5 py-3">
           <span className={queued ? "text-main-accent-t3" : "text-main-accent-t2"}>{item.state}</span>
@@ -215,7 +217,7 @@ function WithdrawalRow({
         </td>
       </tr>
       {panel && (
-        <tr className="bg-foreground/[0.02]">
+        <tr className="bg-foreground/5">
           <td colSpan={6} className="px-5 py-3">
             {panel.kind === "settle" ? (
               <div className="flex items-center gap-3">

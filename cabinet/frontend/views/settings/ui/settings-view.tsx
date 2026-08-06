@@ -24,7 +24,7 @@ import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { TipAnchor } from "@/shared/tips";
-import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue, SWITCH_ON } from "@/shared/ui/list-card";
+import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
 import { displayName, initialsOfName, truncateName } from "@/views/settings/lib/format";
 
@@ -178,49 +178,39 @@ export function SettingsView() {
         onBack={pushed ? () => setPushed(null) : undefined}
         right={
           dirty ? (
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-main-accent-t1 px-3.5 py-1.5 text-[13px] font-semibold text-main-black disabled:opacity-50"
-            >
+            <Button type="button" size="sm" onClick={save} disabled={saving} className="rounded-full font-semibold">
               {saving && <Loader2 className="size-3.5 animate-spin" />} Save
-            </button>
+            </Button>
           ) : pushed ? undefined : (
-            <InitialsAvatar initials={initialsOfName(name, email)} className="size-[34px] text-[13px]" />
+            <InitialsAvatar initials={initialsOfName(name, email)} className="size-8.5 text-sm" />
           )
         }
       />
 
-      <div className="flex flex-col gap-4 px-5 pb-6 pt-[18px] lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
+      <div className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
         <div className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
             <h1 className="font-sans text-2xl font-semibold text-foreground">Settings</h1>
-            <p className="text-[13px] text-muted-foreground">Manage your account, security and access</p>
+            <p className="text-sm text-muted-foreground">Manage your account, security and access</p>
           </div>
           {section === "general" && (
             <div className="flex shrink-0 items-center gap-3">
               {saved && (
-                <span className="inline-flex items-center gap-1 text-[13px] font-medium text-main-accent-t2">
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-main-accent-t2">
                   <Check className="size-4" /> Saved
                 </span>
               )}
-              <button
-                type="button"
-                onClick={save}
-                disabled={loading || saving || !dirty}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-main-accent-t1 px-4 py-[9px] text-[13px] font-semibold text-main-black transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
+              <Button type="button" onClick={save} disabled={loading || saving || !dirty} className="rounded-lg font-semibold">
                 {saving && <Loader2 className="size-4 animate-spin" />} Save changes
-              </button>
+              </Button>
             </div>
           )}
         </div>
 
         {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
         {saved && (
-          <p className="inline-flex items-center gap-1 text-[13px] font-medium text-main-accent-t2 lg:hidden">
+          <p className="inline-flex items-center gap-1 text-sm font-medium text-main-accent-t2 lg:hidden">
             <Check className="size-4" /> Saved
           </p>
         )}
@@ -244,7 +234,8 @@ export function SettingsView() {
 
         {/* ── Desktop (Figma cabinet/settings) ─────────────────────────────── */}
         <div className="hidden gap-6 lg:flex">
-          <nav aria-label="Settings sections" className="flex w-[212px] shrink-0 flex-col gap-1">
+          {/* Hand-written rail — uikit has no section-nav component, so the items carry their own focus ring. */}
+          <nav aria-label="Settings sections" className="flex w-53 shrink-0 flex-col gap-1">
             {NAV.map((item) => {
               const Icon = item.icon;
               const active = section === item.id;
@@ -255,11 +246,11 @@ export function SettingsView() {
                   aria-current={active ? "page" : undefined}
                   onClick={() => setSection(item.id)}
                   className={cn(
-                    "flex items-center gap-[11px] rounded-lg px-3 py-[9px] text-sm transition-colors",
-                    active ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "text-main-mist/90 hover:bg-foreground/[0.04]",
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                    active ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "text-foreground hover:bg-foreground/5",
                   )}
                 >
-                  <Icon className="size-[18px]" />
+                  <Icon className="size-4.5" />
                   {item.label}
                 </button>
               );
@@ -300,18 +291,21 @@ function labelOf(options: { value: string; label: string }[], value: string): st
 /** `card-ProfileSummary` — the tap target into the full profile. */
 function ProfileSummaryCard({ loading, name, email, verified }: { loading: boolean; name: string; email: string | null; verified: boolean }) {
   return (
-    <Link href="/profile" className={cn(CARD, "flex items-center gap-[13px] py-3.5 pl-3.5 pr-4 transition-colors active:bg-foreground/[0.04]")}>
-      <InitialsAvatar initials={initialsOfName(name, email)} className="size-[46px] text-[17px]" />
+    <Link
+      href="/profile"
+      className={cn(CARD, "flex items-center gap-3.5 py-3.5 pl-3.5 pr-4 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:bg-foreground/5")}
+    >
+      <InitialsAvatar initials={initialsOfName(name, email)} className="size-11.5 text-base" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {loading ? (
           <Skeleton className="h-4 w-32" />
         ) : (
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[15px] font-semibold text-foreground">{name}</span>
+            <span className="truncate text-sm font-semibold text-foreground">{name}</span>
             {verified && <Pill icon={BadgeCheck}>Verified</Pill>}
           </div>
         )}
-        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-[12px] text-muted-foreground">{formatEmail(email) || "Not signed in"}</span>}
+        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-xs text-muted-foreground">{formatEmail(email) || "Not signed in"}</span>}
       </div>
       <Chevron className="size-5" />
     </Link>
@@ -340,7 +334,7 @@ function AccountRowsCard({
     <ListCard>
       {/* Email is the IdP's — displayed, never editable here. */}
       <Row>
-        <span className="shrink-0 text-[14px] font-medium text-foreground">Email</span>
+        <span className="shrink-0 text-sm font-medium text-foreground">Email</span>
         {loading ? <Skeleton className="h-3.5 w-36" /> : <RowValue>{formatEmail(email) || "—"}</RowValue>}
       </Row>
       <Hairline />
@@ -380,9 +374,15 @@ function ExpandableRow({
 }) {
   return (
     <div className="flex min-w-0 flex-col">
-      <button type="button" onClick={onToggle} disabled={loading} aria-expanded={open} className="flex min-w-0 items-center justify-between gap-3 py-[13px] text-left">
-        <span className="shrink-0 text-[14px] font-medium text-foreground">{label}</span>
-        <span className="flex min-w-0 items-center gap-[7px]">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={loading}
+        aria-expanded={open}
+        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="shrink-0 text-sm font-medium text-foreground">{label}</span>
+        <span className="flex min-w-0 items-center gap-2">
           {loading ? <Skeleton className="h-3.5 w-28" /> : !open && <RowValue>{value || "—"}</RowValue>}
           <Chevron className={cn("transition-transform", open && "rotate-90")} />
         </span>
@@ -413,15 +413,19 @@ function MobileSecurityCard({
         <Pill>Connected</Pill>
       </Row>
       <Hairline />
-      <button type="button" onClick={onOpenSessions} className="flex min-w-0 items-center justify-between gap-3 py-[13px] text-left">
+      <button
+        type="button"
+        onClick={onOpenSessions}
+        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <RowLabel title="Trusted sessions" sub="Devices signed in to your account" />
-        <span className="flex shrink-0 items-center gap-[7px]">
+        <span className="flex shrink-0 items-center gap-2">
           {sessions === undefined ? <Skeleton className="h-3.5 w-4" /> : <RowValue>{sessions.length}</RowValue>}
           <Chevron />
         </span>
       </button>
       <Hairline />
-      <p className="py-3 text-[11px] leading-relaxed text-muted-foreground">
+      <p className="py-3 text-xs leading-relaxed text-muted-foreground">
         Your password, two-factor authentication and recovery are configured in your Google Account.
       </p>
     </ListCard>
@@ -435,7 +439,11 @@ function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
     <ListCard>
       <ListCardTitle>Notifications</ListCardTitle>
       <Hairline />
-      <button type="button" onClick={onOpen} className="flex min-w-0 items-center justify-between gap-3 py-[13px] text-left">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <RowLabel title="Delivery &amp; topics" sub="Where we reach you and what you follow" />
         <Chevron />
       </button>
@@ -452,12 +460,14 @@ function SignOutButton() {
     await fetch("/api/auth/logout", { method: "POST", headers: csrfHeader() });
     window.location.href = withBasePath("/loggedout");
   }
+  // Kept hand-written: at 48px tall it sits between uikit's `sm` (32) and `lg` (40)
+  // Button heights, so it carries its own focus ring rather than being resized.
   return (
     <button
       type="button"
       onClick={signOut}
       disabled={busy}
-      className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-border py-3.5 text-[14px] font-semibold text-destructive transition-colors active:bg-destructive/10 disabled:opacity-60"
+      className="flex w-full items-center justify-center gap-2 rounded-lg border border-border py-3.5 text-sm font-semibold text-destructive outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:bg-destructive/10 disabled:opacity-60"
     >
       {busy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />} Sign out
     </button>
@@ -483,14 +493,14 @@ function GeneralSection({
 }) {
   const ready = !loading && !!form;
   return (
-    <section className={cn(CARD, "px-6 py-[22px]")}>
+    <section className={cn(CARD, "px-6 py-5.5")}>
       <SectionHeader title="Account" sub="Your contact details and preferences" />
-      <div className="flex flex-wrap gap-[16px_18px]">
+      <div className="flex flex-wrap gap-x-4.5 gap-y-4">
         <Field label="Legal name">
           {ready ? (
             <div className="min-w-0 flex-1">
               <Input value={form.legal_name} onChange={(e) => onChange("legal_name", e.target.value)} className={fieldErrors.legal_name ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
-              {fieldErrors.legal_name && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.legal_name}</p>}
+              {fieldErrors.legal_name && <p className="mt-1 text-xs text-destructive">{fieldErrors.legal_name}</p>}
             </div>
           ) : <FieldSkeleton />}
         </Field>
@@ -498,7 +508,7 @@ function GeneralSection({
           {ready ? (
             <div className="min-w-0 flex-1">
               <Input value={form.preferred_name} onChange={(e) => onChange("preferred_name", e.target.value)} className={fieldErrors.preferred_name ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
-              {fieldErrors.preferred_name && <p className="mt-1 text-[11px] text-destructive">{fieldErrors.preferred_name}</p>}
+              {fieldErrors.preferred_name && <p className="mt-1 text-xs text-destructive">{fieldErrors.preferred_name}</p>}
             </div>
           ) : <FieldSkeleton />}
         </Field>
@@ -536,19 +546,20 @@ function SecuritySection({
   const count = sessions?.length;
   const summary = count === undefined ? "Loading active sessions…" : count === 1 ? "1 device currently signed in" : `${count} devices currently signed in`;
   return (
-    <section className={cn(CARD, "px-6 py-[22px]")}>
+    <section className={cn(CARD, "px-6 py-5.5")}>
       <SectionHeader title="Security" sub="How you sign in and where your account is active" />
-      <div className="flex items-center gap-3 rounded-xl border border-border bg-main-surface px-4 py-[14px]">
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-main-surface px-4 py-3.5">
+        {/* Google's mark is only licensed on a white plate, so this one square stays off-theme. */}
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white">
           <GoogleMark />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[14px] text-white">Signed in with Google</p>
-          {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-[13px] text-muted-foreground">{formatEmail(email) || "—"}</p>}
+          <p className="text-sm font-medium text-foreground">Signed in with Google</p>
+          {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-xs text-muted-foreground">{formatEmail(email) || "—"}</p>}
         </div>
         <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">Connected</Badge>
       </div>
-      <p className="mb-1 mt-3 text-[13px] leading-relaxed text-muted-foreground">
+      <p className="mb-1 mt-3 text-sm leading-relaxed text-muted-foreground">
         Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.
       </p>
       <Hairline />
@@ -583,11 +594,11 @@ function SessionsSection({
   const list = sessions ?? [];
   const hasOthers = list.some((s) => !s.current);
   return (
-    <ListCard className="lg:px-6 lg:pb-[22px] lg:pt-2">
+    <ListCard className="lg:px-6 lg:pb-5.5 lg:pt-2">
       {titled ? (
         <ListCardTitle sub="Where you're signed in — revoke anything you don't recognise">Sessions &amp; devices</ListCardTitle>
       ) : (
-        <p className="pb-2 pt-3 text-[11px] font-medium text-muted-foreground">Where you&apos;re signed in — revoke anything you don&apos;t recognise</p>
+        <p className="pb-2 pt-3 text-xs font-medium text-muted-foreground">Where you&apos;re signed in — revoke anything you don&apos;t recognise</p>
       )}
 
       {error && <p className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
@@ -604,7 +615,7 @@ function SessionsSection({
           </div>
         ))
       ) : list.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-muted-foreground">No active sessions.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">No active sessions.</p>
       ) : (
         list.map((s, i) => {
           const { label, icon: Icon } = deviceOf(s.user_agent);
@@ -615,12 +626,12 @@ function SessionsSection({
                   the ip/last-seen meta were being clipped to an ellipsis on a phone. */}
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-3.5">
                 <div className="flex min-w-0 items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-main-surface text-main-mist/90">
-                    <Icon className="size-[18px]" />
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-main-surface text-foreground">
+                    <Icon className="size-4.5" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-medium text-foreground">{label}</p>
-                    <p className="break-words text-[12px] leading-snug text-muted-foreground">{metaOf(s, name)}</p>
+                    <p className="text-sm font-medium text-foreground">{label}</p>
+                    <p className="break-words text-xs leading-snug text-muted-foreground">{metaOf(s, name)}</p>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5 pl-12 sm:pl-0">
@@ -671,7 +682,7 @@ function SessionsSection({
 function SectionHeader({ title, sub }: { title: string; sub: string }) {
   return (
     <header className="mb-4">
-      <h2 className="font-sans text-[15px] font-semibold tracking-normal text-white">{title}</h2>
+      <h2 className="font-sans text-sm font-semibold tracking-normal text-foreground">{title}</h2>
       <p className="text-xs text-muted-foreground">{sub}</p>
     </header>
   );
@@ -679,7 +690,7 @@ function SectionHeader({ title, sub }: { title: string; sub: string }) {
 
 function Field({ label, trailing, children }: { label: string; trailing?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex min-w-[260px] flex-1 flex-col">
+    <div className="flex min-w-65 flex-1 flex-col">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-xs text-muted-foreground">{label}</span>
         {trailing}
@@ -695,7 +706,7 @@ function FieldSkeleton() {
 
 function VerifiedTag() {
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-main-accent-t1">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-main-accent-t1">
       <BadgeCheck className="size-3" /> Verified
     </span>
   );
@@ -730,7 +741,7 @@ function ThemedSelect({
           ))}
         </SelectContent>
       </Select>
-      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
     </div>
   );
 }
@@ -796,14 +807,17 @@ function PhoneField({ initial, onChange, error }: { initial: string; onChange: (
   return (
     <div className="min-w-0 flex-1">
       <Input {...inputProps} className={error ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
-      {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
     </div>
   );
 }
 
+// Google's four brand hexes are fixed by their identity guidelines and are passed to the
+// SVG `fill` attribute, which takes a value rather than a class — so they stay literal and
+// deliberately do not follow the theme.
 function GoogleMark() {
   return (
-    <svg viewBox="0 0 24 24" className="size-[18px]" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="size-4.5" aria-hidden="true">
       <path fill="#4285F4" d="M23.52 12.27c0-.82-.07-1.6-.2-2.36H12v4.47h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.74Z" />
       <path fill="#34A853" d="M12 24c3.24 0 5.96-1.08 7.95-2.91l-3.88-3.01c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.27v3.1A12 12 0 0 0 12 24Z" />
       <path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.27a12 12 0 0 0 0 10.74l4-3.1Z" />
@@ -859,15 +873,14 @@ function NotificationsSection() {
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:gap-[18px]">
-      <ListCard className="lg:px-[22px]">
+    <div className="flex flex-col gap-4 lg:gap-4.5">
+      <ListCard className="lg:px-5.5">
         <ListCardTitle sub="Choose where notifications reach you. Both can be off.">Delivery</ListCardTitle>
         <Hairline />
         <Row>
           <RowLabel title="In your cabinet" sub="On by default. Turn this off and notifications stop appearing in your cabinet." />
           {settings ? (
             <Switch
-              className={SWITCH_ON}
               checked={settings.in_app_enabled}
               disabled={busy}
               onCheckedChange={(v) => void run(() => setChannelEnabled("in_app", v))}
@@ -885,7 +898,6 @@ function NotificationsSection() {
           />
           {settings ? (
             <Switch
-              className={SWITCH_ON}
               checked={settings.email_enabled}
               disabled={busy || !settings.email_verified}
               onCheckedChange={(v) => void run(() => setChannelEnabled("email", v))}
@@ -897,10 +909,10 @@ function NotificationsSection() {
         </Row>
       </ListCard>
 
-      <ListCard className="lg:px-[22px]">
+      <ListCard className="lg:px-5.5">
         <div className="flex items-start justify-between gap-4">
           <ListCardTitle sub="Email a copy for these. Unsubscribing is one click — no confirmation step.">What you follow</ListCardTitle>
-          <p className="shrink-0 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Email</p>
+          <p className="shrink-0 pt-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Email</p>
         </div>
         {settings
           ? settings.topics.map((t) => (
@@ -910,22 +922,23 @@ function NotificationsSection() {
                     the label only when they genuinely do not fit, so the row is correct at
                     every width instead of at two. The `sm:` variants this replaced were
                     rendering as a permanent centred column — see the PR for detail. */}
-                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-[13px]">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-3.5">
                   <RowLabel title={t.label} sub={t.description} />
                   <div className="flex shrink-0 items-center gap-3">
+                    {/* Kept hand-written: at 28px it is shorter than uikit's smallest Button, and
+                        growing it would push the switch beside it out of the row. */}
                     <button
                       type="button"
                       disabled={busy}
                       onClick={() => void run(() => setTopicSubscription(t.topic, !t.subscribed, t.email_enabled))}
                       className={cn(
-                        "rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors disabled:opacity-40",
-                        t.subscribed ? "border border-border/60 text-main-mist hover:bg-foreground/[0.04]" : "bg-main-accent-t1 text-main-black hover:opacity-90",
+                        "rounded-lg px-3 py-1.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
+                        t.subscribed ? "border border-border/60 text-foreground hover:bg-foreground/5" : "bg-main-accent-t1 text-main-black hover:opacity-90",
                       )}
                     >
                       {t.subscribed ? "Following" : "Follow"}
                     </button>
                     <Switch
-              className={SWITCH_ON}
                       checked={t.subscribed && t.email_enabled && settings.email_enabled}
                       disabled={busy || !t.subscribed || !settings.email_enabled}
                       onCheckedChange={(v) => void run(() => setTopicSubscription(t.topic, true, v))}
@@ -947,7 +960,7 @@ function NotificationsSection() {
       </ListCard>
 
       {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-      <p className="text-[12px] leading-relaxed text-muted-foreground">
+      <p className="text-xs leading-relaxed text-muted-foreground">
         Turn a channel off and we stop sending on it. Turn both off and we stop notifying you altogether — updates still live on the fund pages whenever you want them.
       </p>
     </div>

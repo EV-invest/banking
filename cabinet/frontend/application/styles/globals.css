@@ -11,6 +11,60 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── TEMPORARY token override — delete when @evinvest/uikit > 0.8.0 lands ─────
+   Mirrors EV-invest/lib#91 byte-for-byte so the cabinet gets the fixes now
+   instead of waiting on an npm publish + version bump. The moment the uikit
+   dependency is bumped, this whole block must go: two sources of truth for the
+   same tokens is exactly the drift the upstream fix exists to end.
+
+   That removal is enforced, not remembered — `shared/config/token-override.test.ts`
+   fails as soon as the installed uikit ships these values itself, and names the
+   block to delete.
+
+   What it fixes, all measured against the card surface:
+     · every plane sat within 1.07:1 of the page background, so cards were
+       indistinguishable from the ground and the UI read as unfinished
+     · --primary          #001e4e  1.12:1 — filled controls were invisible,
+       which had forced a local Switch patch and hardcoded teal CTAs
+     · --destructive      #da251d  3.18:1 — fails AA, and it is the loss signal
+     · --muted-foreground mist 40% 3.15:1 — fails AA, and it is the most-used
+       secondary text token in the cabinet (140 call sites)
+
+   `bg-main-card` / `bg-main-surface` are generated from @theme at build time,
+   not from :root, so the brand palette has to be re-declared there — a :root
+   override alone would leave every existing card unchanged. */
+@theme inline {
+  --color-main-surface: #0d1526;
+  --color-main-card: #16233c;
+
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-elevated:
+    0 4px 12px -2px rgb(0 0 0 / 0.4),
+    0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.6);
+}
+
+:root {
+  --card: #16233c;
+  --popover: #1d2c49;
+  --secondary: #0d1526;
+  --muted: #26375c;
+  --muted-foreground: color-mix(in srgb, #e6e1d3 65%, transparent);
+  --primary: #2a9d8f;
+  --primary-foreground: #070d18;
+  --destructive: #ef5b52;
+  --destructive-foreground: #070d18;
+  --border: color-mix(in srgb, #e6e1d3 14%, transparent);
+
+  --sidebar: #0d1526;
+  --sidebar-primary: #2a9d8f;
+  --sidebar-primary-foreground: #070d18;
+  --sidebar-border: color-mix(in srgb, #e6e1d3 14%, transparent);
+}
+/* ── end temporary override ─────────────────────────────────────────────── */
+
 :root {
   /* Width of the desktop app-shell rail (application/layout/sidebar.tsx). The
      `(app)` layout reserves the same width as content padding above `lg`;
