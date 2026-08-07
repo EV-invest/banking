@@ -40,7 +40,14 @@ function getSettings() {
     // `requiredIn` matches against this. NODE_ENV is what Next.js already sets
     // and what every other check here reads, so it stays the single name for
     // "which environment is this" rather than a second, drifting APP_ENV.
-    profile: process.env.NODE_ENV,
+    //
+    // `next build` is the exception, and must not resolve to `production`: the build
+    // runs with NODE_ENV=production, but a NEXT_PUBLIC_* value is inlined from the
+    // BUILD environment while the deploy only supplies the DSN to the running pod — so
+    // a production-required client key can never be satisfied here, and instead fails
+    // page-data collection (the whole cabinet image stops building). Same build-phase
+    // carve-out `assertConfig()` already makes; the boot assert is what enforces this.
+    profile: process.env.NEXT_PHASE === "phase-production-build" ? "build" : process.env.NODE_ENV,
     runtimeEnv: {
       CABINET_BACKEND_URL: process.env.CABINET_BACKEND_URL,
       AUTH_COOKIE_SECURE: process.env.AUTH_COOKIE_SECURE,
