@@ -143,7 +143,7 @@ function SignInCta({ className }: { className?: string }) {
     <a
       href={withBasePath("/login")}
       className={cn(
-        "inline-flex h-9 items-center justify-center rounded-md border border-main-accent-t1 bg-transparent px-4 font-mono-tech text-xs tracking-wider text-main-accent-t1 transition-all duration-300 hover:bg-main-accent-t1 hover:text-main-black",
+        "inline-flex h-9 items-center justify-center rounded-md border border-main-accent-t1 bg-transparent px-4 font-mono-tech text-xs tracking-wider text-main-accent-t1 transition-all duration-300 hover:bg-primary hover:text-primary-foreground",
         CHIP_FOCUS,
         className,
       )}

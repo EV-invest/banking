@@ -123,7 +123,7 @@ function NavLink({ item, active, trailing }: { item: NavItem; active: boolean; t
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
         NAV_FOCUS,
-        active ? "bg-main-accent-t1 font-semibold text-main-black" : "font-medium text-foreground hover:bg-foreground/5",
+        active ? "bg-primary font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
       )}
     >
       <Icon className="size-4.5" />

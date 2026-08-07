@@ -15,7 +15,7 @@ export function LoggedOutView() {
 
         <Link
           href="/login"
-          className="flex w-full items-center justify-center rounded-md bg-main-accent-t1 px-4 py-2.5 text-sm font-medium text-main-black outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-full items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
         >
           Sign in again
         </Link>

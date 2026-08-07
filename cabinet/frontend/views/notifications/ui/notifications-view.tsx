@@ -136,7 +136,7 @@ export function NotificationsView() {
             className={cn(
               "rounded-md px-3.5 py-1.5 text-sm transition-colors",
               FOCUS,
-              filter === f ? "bg-main-accent-t1 font-semibold text-main-black" : "font-medium text-foreground hover:bg-foreground/5",
+              filter === f ? "bg-primary font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
             )}
           >
             {f === "all" ? "All" : unread > 0 ? `Unread · ${unread}` : "Unread"}
@@ -229,7 +229,7 @@ function EmptyState({ filter }: { filter: Filter }) {
       </p>
       <Link
         href="/settings"
-        className={cn("mt-5 rounded-lg bg-main-accent-t1 px-5.5 py-2.5 text-sm font-semibold text-main-black transition-opacity hover:opacity-90", FOCUS)}
+        className={cn("mt-5 rounded-lg bg-primary px-5.5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90", FOCUS)}
       >
         Notification settings
       </Link>
