@@ -531,7 +531,7 @@ dependencies = [
  "axum-extra",
  "color-eyre",
  "dotenvy",
- "ev_lib 0.7.0",
+ "ev_lib",
  "evbanking_contracts",
  "evconcierge_auth",
  "evconcierge_contracts",
@@ -1566,7 +1566,7 @@ dependencies = [
 name = "domain"
 version = "0.1.0"
 dependencies = [
- "ev_lib 0.7.0",
+ "ev_lib",
  "getrandom 0.3.4",
  "serde",
  "serde_json",
@@ -1721,25 +1721,6 @@ dependencies = [
 
 [[package]]
 name = "ev_lib"
-version = "0.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19a3a9e8ee94ab64e96b8deda3f58a07be008d08592c33036ad91bc7f862a927"
-dependencies = [
- "async-trait",
- "jiff",
- "js-sys",
- "reqwest 0.13.4",
- "sentry",
- "serde",
- "serde_json",
- "uuid",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
-name = "ev_lib"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "715778aa8403e6b555e7fa4389bcff28252a5c585b4aa085909d02d922e3fd38"
@@ -1772,7 +1753,7 @@ name = "evbanking_auth"
 version = "0.1.0"
 dependencies = [
  "color-eyre",
- "ev_lib 0.7.0",
+ "ev_lib",
  "evbanking_contracts",
  "http 1.4.2",
  "jsonwebtoken",
@@ -1800,10 +1781,10 @@ dependencies = [
 [[package]]
 name = "evconcierge_auth"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=42cbeffdcf7883646bfdec8527420c790fcaec76#42cbeffdcf7883646bfdec8527420c790fcaec76"
+source = "git+https://github.com/EV-invest/concierge.git?rev=34dc166016351917c7db6f6fe7f2da183b8316b8#34dc166016351917c7db6f6fe7f2da183b8316b8"
 dependencies = [
  "color-eyre",
- "ev_lib 0.6.7",
+ "ev_lib",
  "evconcierge_contracts",
  "http 1.4.2",
  "jsonwebtoken",
@@ -1822,7 +1803,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_contracts"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=42cbeffdcf7883646bfdec8527420c790fcaec76#42cbeffdcf7883646bfdec8527420c790fcaec76"
+source = "git+https://github.com/EV-invest/concierge.git?rev=34dc166016351917c7db6f6fe7f2da183b8316b8#34dc166016351917c7db6f6fe7f2da183b8316b8"
 dependencies = [
  "prost",
  "tonic 0.14.6",
@@ -3711,7 +3692,7 @@ dependencies = [
  "color-eyre",
  "domain",
  "dotenvy",
- "ev_lib 0.7.0",
+ "ev_lib",
  "evbanking_auth",
  "evbanking_contracts",
  "evconcierge_contracts",
@@ -3743,7 +3724,7 @@ dependencies = [
  "domain",
  "dotenvy",
  "ed25519-dalek",
- "ev_lib 0.7.0",
+ "ev_lib",
  "evbanking_auth",
  "evbanking_contracts",
  "getrandom 0.3.4",
