@@ -253,6 +253,14 @@
             # next.config rewrites resolve at BUILD time (routes-manifest.json), so the
             # BFF's in-cluster service DNS is baked here; matches the contract below.
             CABINET_BACKEND_URL = "http://ev-banking-cabinet-backend:50062";
+            # Browser error monitoring. A NEXT_PUBLIC_* value is inlined at BUILD time, so
+            # this cannot come from the pod's env the way the server-side secrets do — and
+            # the same inlining is what lets `assertConfig()` see it at boot. A Sentry
+            # PUBLIC dsn is not a secret: it ships to every browser that loads the app, so
+            # it lives here as a literal rather than forcing an impure build for a value
+            # that is public anyway. `shared/config/security.ts` derives the CSP
+            # `connect-src` origin from it, so the browser is allowed to report.
+            NEXT_PUBLIC_SENTRY_DSN = "https://702d594df36cfbd3c5a711613d3981e7@o4511508657012736.ingest.de.sentry.io/4511508677066832";
           };
           buildPhase = ''
             runHook preBuild
