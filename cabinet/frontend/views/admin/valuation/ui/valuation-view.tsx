@@ -5,16 +5,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
-import { failRedemption, fetchRedemptionQueue, postValuation, settleRedemption } from "@/entities/admin/api/admin-client";
+import { failRedemption, fetchAllocations, fetchRedemptionQueue, postValuation, settleRedemption } from "@/entities/admin/api/admin-client";
 import { apiPath } from "@/shared/config/base-path";
-import type { FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
+import type { Allocation, FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
 import { ago, formatNav, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader, Toggle } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
-const DEFAULT_FUND = "quy-nhon-fund";
 
 // Read the current fund NAV (units_outstanding drives the derived-NAV preview and the
 // queue's est-cash), via the existing self-service money route.
@@ -26,7 +25,12 @@ async function fetchFundNav(service: string): Promise<FundNav> {
 }
 
 export function ValuationView() {
-  const [service, setService] = useState(DEFAULT_FUND);
+  // The fund is PICKED from the registry, never typed: the hub refuses a valuation for
+  // an unregistered service, so a free-text field could only ever produce a NOT_FOUND.
+  // Drafts and closed products are listed too — a closed fund still gets marked so its
+  // queued redemptions price correctly.
+  const [allocations, setAllocations] = useState<Allocation[] | null>(null);
+  const [service, setService] = useState("");
   const [aum, setAum] = useState("");
   const [override, setOverride] = useState(false);
   const [nav, setNav] = useState<FundNav | null>(null);
@@ -43,6 +47,10 @@ export function ValuationView() {
   }, []);
 
   const loadNav = useCallback((svc: string) => {
+    if (!svc) {
+      setNav(null);
+      return;
+    }
     fetchFundNav(svc)
       .then(setNav)
       .catch(() => setNav(null));
@@ -50,7 +58,19 @@ export function ValuationView() {
 
   useEffect(() => {
     loadQueue();
-    loadNav(DEFAULT_FUND);
+    fetchAllocations()
+      .then((list) => {
+        const rows = list.allocations ?? [];
+        setAllocations(rows);
+        // Default to the first product that can actually take a mark, so the common case
+        // needs no interaction; fall back to the first row when none is open yet.
+        const initial = rows.find((a) => a.state === "open") ?? rows[0];
+        if (initial) {
+          setService(initial.service);
+          loadNav(initial.service);
+        }
+      })
+      .catch((e: Error) => setError(e.message));
   }, [loadQueue, loadNav]);
 
   // Live derived NAV preview = entered AUM / current units.
@@ -107,7 +127,27 @@ export function ValuationView() {
             <div className="grid gap-4 md:grid-cols-3">
               <label className="block space-y-1.5">
                 <span className="text-sm text-muted-foreground">Fund (service)</span>
-                <Input value={service} onChange={(e) => setService(e.target.value)} onBlur={() => loadNav(service)} spellCheck={false} />
+                <select
+                  value={service}
+                  onChange={(e) => {
+                    setService(e.target.value);
+                    loadNav(e.target.value);
+                  }}
+                  disabled={!allocations || allocations.length === 0}
+                  className="h-9 w-full rounded-md border border-border bg-main-surface px-2 text-sm outline-none focus:border-main-accent-t1 disabled:opacity-60"
+                >
+                  {!allocations ? (
+                    <option value="">Loading…</option>
+                  ) : allocations.length === 0 ? (
+                    <option value="">No allocations registered</option>
+                  ) : (
+                    allocations.map((a) => (
+                      <option key={a.service} value={a.service}>
+                        {a.title} ({a.service}){a.state === "open" ? "" : ` — ${a.state}`}
+                      </option>
+                    ))
+                  )}
+                </select>
               </label>
               <label className="block space-y-1.5">
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -144,7 +184,7 @@ export function ValuationView() {
                   <p className="text-xs text-muted-foreground">Allow a &gt;50% NAV move</p>
                 </div>
               </div>
-              <Button type="button" className={cn("ml-auto", TEAL_CTA)} disabled={posting || !aum} onClick={post}>
+              <Button type="button" className={cn("ml-auto", TEAL_CTA)} disabled={posting || !aum || !service} onClick={post}>
                 {posting ? <Loader2 className="size-4 animate-spin" /> : null}
                 Post valuation
               </Button>
