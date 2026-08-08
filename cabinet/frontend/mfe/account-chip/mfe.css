@@ -1,11 +1,21 @@
 /* Stylesheet for the account-chip element remote. It mounts into the host's LIGHT DOM, so
-   it must NOT ship preflight or fonts (the host already has them) — utilities only. Every
-   rule is pre-assigned to the low-priority `reamfe` cascade layer so the host's own styles
-   always win (the conductor also demotes /mfe/ stylesheets into this layer). Tokens come
-   from the same @evinvest/uikit source the app uses, so classes like `text-main-mist` /
-   `bg-main-accent-t1` / `border-border` resolve identically. */
-@import "tailwindcss/theme.css" layer(reamfe);
+   it must NOT ship preflight or fonts (the host already has them) — utilities only. The
+   utilities are pre-assigned to the low-priority `reamfe` cascade layer so the host's own
+   styles always win (the conductor also demotes /mfe/ stylesheets into this layer).
+
+   The theme import is deliberately NOT layered. Layering it hides the spacing scale from
+   the utility generator, so fractional steps silently compile to nothing — `size-8.5`,
+   `gap-2.5` and `px-1.5` all vanished from this bundle and the chip collapsed: the avatar
+   lost its box and the name overlapped it. Integer steps kept working, which is what made
+   it look like a layout bug rather than a build one. The theme emits variables only, so
+   leaving it unlayered costs nothing.
+
+   Tokens come from the same source the app uses, so `text-main-mist` / `bg-main-accent-t1`
+   / `border-border` resolve identically — including the temporary override, without which
+   the remote renders the old palette against a host that has already moved. */
+@import "tailwindcss/theme.css";
 @import "tailwindcss/utilities.css" layer(reamfe);
 @import "@evinvest/uikit/styles/tokens.css" layer(reamfe);
+@import "../../application/styles/token-override.css" layer(reamfe);
 
 @source "../../features/account-chip/ui/account-chip.tsx";

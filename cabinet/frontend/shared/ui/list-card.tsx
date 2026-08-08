@@ -95,7 +95,7 @@ export function Pill({ tone = "positive", icon: Icon, className, children }: { t
 export function InitialsAvatar({ initials, className }: { initials: string; className?: string }) {
   return (
     <Avatar className={className} aria-hidden>
-      <AvatarFallback className="bg-main-accent-t1 font-semibold text-main-black">{initials}</AvatarFallback>
+      <AvatarFallback className="bg-primary font-semibold text-primary-foreground">{initials}</AvatarFallback>
     </Avatar>
   );
 }

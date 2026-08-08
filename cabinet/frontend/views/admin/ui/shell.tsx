@@ -61,7 +61,7 @@ export function Toggle({ on, onChange, disabled, label }: { on: boolean; onChang
       onClick={() => onChange(!on)}
       className={cn(
         "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-        on ? "bg-main-accent-t1" : "bg-muted",
+        on ? "bg-primary" : "bg-muted",
       )}
     >
       <span className={cn("inline-block size-4 rounded-full bg-main-mist transition-transform", on ? "translate-x-4.5" : "translate-x-0.5")} />
