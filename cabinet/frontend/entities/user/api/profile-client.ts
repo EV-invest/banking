@@ -1,25 +1,14 @@
 // Browser → BFF profile client. Thin typed fetchers over /api/users; the shapes are the
-// proto-derived types. The PATCH carries the CSRF double-submit header. No tokens here —
-// the BFF holds them.
+// proto-derived types. Transport, CSRF and session handling belong to
+// `@/shared/lib/api-client`. No tokens here — the BFF holds them.
 
-import { apiPath } from "@/shared/config/base-path";
-import { csrfHeader } from "@/shared/lib/csrf-client";
+import { getJson, requestJson } from "@/shared/lib/api-client";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 
-export async function fetchProfile(): Promise<UserProfile> {
-  const res = await fetch(apiPath("/api/users"), { headers: { accept: "application/json" } });
-  const data = (await res.json().catch(() => ({}))) as UserProfile & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `request failed (${res.status})`);
-  return data;
+export function fetchProfile(): Promise<UserProfile> {
+  return getJson<UserProfile>("/api/users");
 }
 
-export async function saveProfile(fields: UpdateProfileRequest): Promise<UserProfile> {
-  const res = await fetch(apiPath("/api/users"), {
-    method: "PATCH",
-    headers: { "content-type": "application/json", ...csrfHeader() },
-    body: JSON.stringify(fields),
-  });
-  const data = (await res.json().catch(() => ({}))) as UserProfile & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `save failed (${res.status})`);
-  return data;
+export function saveProfile(fields: UpdateProfileRequest): Promise<UserProfile> {
+  return requestJson<UserProfile>("/api/users", { method: "PATCH", body: fields });
 }

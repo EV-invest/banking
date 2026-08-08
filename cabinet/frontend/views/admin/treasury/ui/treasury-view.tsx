@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, TriangleAlert } from "lucide-react";
+import { Check, Copy, RefreshCw, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
@@ -27,36 +27,64 @@ const GAS_SYMBOLS: Record<string, string> = {
 };
 
 export function TreasuryView() {
-  const [treasury, setTreasury] = useState<Treasury | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // One record so a resolution lands in a single update: a failed read must STOP the
+  // skeletons — pulsing placeholders beside an error read as "still coming", so the retry
+  // never gets clicked — and it must not leave a stale figure on screen either.
+  const [{ treasury, error, loading }, setState] = useState<{ treasury: Treasury | null; error: string | null; loading: boolean }>({
+    treasury: null,
+    error: null,
+    loading: true,
+  });
+  const [attempt, setAttempt] = useState(0);
+
+  // Retry (event handler — the spinner may start synchronously here; the effect below
+  // only ever sets state from its async callbacks).
+  const retry = useCallback(() => {
+    setState((s) => ({ ...s, loading: true }));
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     let active = true;
     fetchTreasury()
-      .then((t) => active && setTreasury(t))
-      .catch((e: Error) => active && setError(e.message));
+      .then((t) => active && setState({ treasury: t, error: null, loading: false }))
+      .catch((e: Error) => active && setState((s) => ({ ...s, error: e.message, loading: false })));
     return () => {
       active = false;
     };
-  }, []);
+  }, [attempt]);
 
   return (
     <div className="space-y-8 px-8 pb-10 pt-6">
-      <AdminHeader eyebrow="Administer" title="Treasury" subtitle="Two layers — user claims (USDT) vs on-chain liquidity by rail" />
+      <AdminHeader
+        eyebrow="Administer"
+        title="Treasury"
+        subtitle="Two layers — user claims (USDT) vs on-chain liquidity by rail"
+        action={
+          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={retry}>
+            <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} /> Refresh
+          </Button>
+        }
+      />
 
       {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
-          <TriangleAlert className="size-4" /> {error}
-        </p>
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5">
+          <p className="flex items-center gap-2 text-sm text-destructive">
+            <TriangleAlert className="size-4 shrink-0" /> {error}
+          </p>
+          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={retry}>
+            <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} /> Try again
+          </Button>
+        </div>
       )}
 
       <section className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Layer 1 · Ledger — user claims (USDT)</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MoneyCard label="Claims · total (USDT)" value={treasury?.total_custody} hint="= on-chain custody · backed" loading={!treasury} tip="admin.treasury.layer1.claims-total" />
-          <MoneyCard label="Held for clients" value={treasury?.held_for_clients} hint="user + service balances" loading={!treasury} tip="admin.treasury.layer1.held-for-clients" />
-          <MoneyCard label="Fund capital" value={treasury?.fund_capital} hint="company's own" loading={!treasury} tip="admin.treasury.layer1.fund-capital" />
-          <MoneyCard label="Reserved · withdrawals" value={treasury?.reserved_for_withdrawals} hint="queued + in-flight (clearing)" loading={!treasury} tip="admin.treasury.layer1.reserved-withdrawals" />
+          <MoneyCard label="Claims · total (USDT)" value={treasury?.total_custody} hint="= on-chain custody · backed" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.claims-total" />
+          <MoneyCard label="Held for clients" value={treasury?.held_for_clients} hint="user + service balances" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.held-for-clients" />
+          <MoneyCard label="Fund capital" value={treasury?.fund_capital} hint="company's own" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.fund-capital" />
+          <MoneyCard label="Reserved · withdrawals" value={treasury?.reserved_for_withdrawals} hint="queued + in-flight (clearing)" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.reserved-withdrawals" />
         </div>
       </section>
 
@@ -71,7 +99,7 @@ export function TreasuryView() {
               <MoneyCard label="Bank · USD" value={treasury.bank} hint="off-ramp · FX" loading={false} tip="admin.treasury.bank" />
             </>
           ) : (
-            Array.from({ length: 4 }).map((_, i) => <MoneyCard key={i} label="" value={undefined} loading />)
+            Array.from({ length: 4 }).map((_, i) => <MoneyCard key={i} label="" value={undefined} loading={loading} unavailable={!loading} />)
           )}
         </div>
       </section>
@@ -84,7 +112,9 @@ export function TreasuryView() {
   );
 }
 
-function MoneyCard({ label, value, hint, loading, footer, tip }: { label: string; value: string | undefined; hint?: string; loading: boolean; footer?: ReactNode; tip?: TipKey }) {
+/** `unavailable` is the read-failed state: a muted dash, never a formatted `$0.00` —
+ *  a zero the treasury never reported would be read as a real balance. */
+function MoneyCard({ label, value, hint, loading, unavailable, footer, tip }: { label: string; value: string | undefined; hint?: string; loading: boolean; unavailable?: boolean; footer?: ReactNode; tip?: TipKey }) {
   return (
     <Card>
       <CardContent className="space-y-1 py-5">
@@ -92,8 +122,14 @@ function MoneyCard({ label, value, hint, loading, footer, tip }: { label: string
           <p className="text-xs text-muted-foreground">{label || "…"}</p>
           {tip && <TipAnchor anchor={tip} />}
         </div>
-        {loading ? <Skeleton className="mt-1 h-8 w-28" /> : <p className="text-3xl font-semibold tabular-nums">{formatUsd(value)}</p>}
-        {hint && !loading && <p className="text-xs text-main-accent-t2">{hint}</p>}
+        {loading ? (
+          <Skeleton className="mt-1 h-8 w-28" />
+        ) : unavailable ? (
+          <p className="text-3xl font-semibold tabular-nums text-muted-foreground">—</p>
+        ) : (
+          <p className="text-3xl font-semibold tabular-nums">{formatUsd(value)}</p>
+        )}
+        {hint && !loading && !unavailable && <p className="text-xs text-main-accent-t2">{hint}</p>}
         {footer && !loading && footer}
       </CardContent>
     </Card>
