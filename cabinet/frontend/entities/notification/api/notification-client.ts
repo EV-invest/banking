@@ -1,29 +1,10 @@
-import { apiPath } from "@/shared/config/base-path";
-import { csrfHeader } from "@/shared/lib/csrf-client";
+import { getJson, postJson } from "@/shared/lib/api-client";
 import type {
 	MarkReadResult,
 	NotificationList,
 	NotificationSettings,
 	UnreadCount,
 } from "@/shared/contracts/notifications";
-
-async function getJson<T>(url: `/${string}`): Promise<T> {
-	const res = await fetch(apiPath(url), { headers: { accept: "application/json" } });
-	const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-	if (!res.ok) throw new Error(data.error ?? `request failed (${res.status})`);
-	return data;
-}
-
-async function postJson<T>(url: `/${string}`, body: unknown): Promise<T> {
-	const res = await fetch(apiPath(url), {
-		method: "POST",
-		headers: { "content-type": "application/json", ...csrfHeader() },
-		body: JSON.stringify(body),
-	});
-	const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-	if (!res.ok) throw new Error(data.error ?? `request failed (${res.status})`);
-	return data;
-}
 
 export interface ListParams {
 	cursor?: string;

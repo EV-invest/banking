@@ -1,52 +1,35 @@
 "use client";
 
-// Browser-side session hook: fetches the SHELL-owned `/api/auth/session` (site-root —
-// auth lives with the shell, not this zone; the response never returns a token, and
-// the call transparently refreshes the shared access-JWT cookie) so client components
-// can read the principal — including the platform `role` and the derived `isAdmin`
-// used to gate the admin console nav. Server-side authorization is still
-// authoritative; this only shapes the UI.
+// Browser-side session hook: reads the SHELL-owned principal (`/api/auth/session` —
+// auth lives with the shell, not this zone; the response never returns a token) so client
+// components can read the platform `role` and the derived `isAdmin` used to gate the
+// admin console nav. Server-side authorization is still authoritative; this only shapes
+// the UI.
 //
-// A module-level cache dedupes the fetch: every consumer on a page (sidebar, account
-// chip, admin gate) shares ONE request. Only resolved responses are cached — a fetch
-// failure yields the SESSION_UNAVAILABLE sentinel and retries on the next mount, so a
-// transient blip never sticks (or bounces anyone to /login).
+// The fetch, its module-level cache and the single-flight live in `shared/lib/session.ts`
+// — shared with the api client and the session keeper, so every consumer on a page
+// (sidebar, account chip, admin gate) and every cookie rotation are ONE request. Only
+// resolved responses are cached; a fetch failure yields the SESSION_UNAVAILABLE sentinel
+// and retries on the next mount, so a transient blip never sticks (or bounces anyone to
+// /login). Consumers also re-render when the keeper's rotation returns a different
+// principal — a sign-out in another tab reaches this one without a reload.
 
 import { useEffect, useState } from "react";
 
 import type { SessionInfo } from "@/shared/contracts/admin";
+import { SESSION_UNAVAILABLE, cachedSession, onSessionChange, readSession } from "@/shared/lib/session";
 
-/// A fetch/parse failure — same shape as a server-resolved "not signed in", but
-/// identity-distinguishable so consumers don't force a re-login on a network blip.
-export const SESSION_UNAVAILABLE: SessionInfo = Object.freeze({ authenticated: false });
-
-let cached: SessionInfo | null = null;
-let inflight: Promise<SessionInfo> | null = null;
-
-function fetchSession(): Promise<SessionInfo> {
-  // Serving the cache here (not in the hook) closes the render→effect race: a consumer
-  // whose effect runs after another consumer's fetch resolved still syncs its state.
-  if (cached) return Promise.resolve(cached);
-  inflight ??= fetch("/api/auth/session")
-    .then((r) => r.json() as Promise<SessionInfo>)
-    .then((s) => {
-      cached = s;
-      return s;
-    })
-    .catch(() => SESSION_UNAVAILABLE)
-    .finally(() => {
-      inflight = null;
-    });
-  return inflight;
-}
+export { SESSION_UNAVAILABLE };
 
 export function useSession(): SessionInfo | null {
-  const [session, setSession] = useState<SessionInfo | null>(cached);
+  const [session, setSession] = useState<SessionInfo | null>(cachedSession);
   useEffect(() => {
     let active = true;
-    void fetchSession().then((s) => active && setSession(s));
+    void readSession().then((s) => active && setSession(s));
+    const stop = onSessionChange((s) => active && setSession(s));
     return () => {
       active = false;
+      stop();
     };
   }, []);
   return session;

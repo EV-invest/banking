@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Sidebar } from "@/application/layout/sidebar";
 import { BottomNavbar } from "@/application/layout/bottom-navbar";
+import { SessionKeeper } from "@/application/layout/session-keeper";
 import { SystemBanner } from "@/application/layout/system-banner";
 
 // The authenticated app shell: a fixed left rail beside a scrollable content
@@ -11,7 +12,10 @@ import { SystemBanner } from "@/application/layout/system-banner";
 // Sidebar), so the content column reserves its width with a matching left
 // padding — both read the shared `--cabinet-rail-w` token. No footer here by
 // design. Auth is enforced upstream in `proxy.ts` — unauthenticated requests
-// are redirected to /login before this layout renders. The system banner
+// are redirected to /login before this layout renders; SessionKeeper mounts
+// once here to keep the short-TTL access cookie alive for as long as this shell
+// is open (that cookie, not the one the proxy gates on, is what the BFF
+// verifies). The system banner
 // (maintenance · read-only · announcement) mounts once here; (auth) pages have
 // no session, so they are intentionally excluded.
 //
@@ -21,6 +25,7 @@ import { SystemBanner } from "@/application/layout/system-banner";
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] bg-background pb-[var(--cabinet-bottom-nav-h,64px)] lg:pl-[var(--cabinet-rail-w)] lg:pb-0">
+      <SessionKeeper />
       <div className="hidden lg:fixed lg:left-0 lg:top-[var(--ev-shell-offset,0px)] lg:flex lg:h-[calc(100dvh-var(--ev-shell-offset,0px))]">
         <Sidebar />
       </div>
