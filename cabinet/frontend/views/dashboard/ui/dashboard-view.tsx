@@ -91,11 +91,15 @@ export function DashboardView() {
           <h1 className="font-sans text-2xl font-semibold leading-tight text-foreground">Portfolio</h1>
           <p className="text-sm text-muted-foreground">All-time performance and your participation</p>
         </div>
+        {/* Shortcuts to the same two actions the Move money card offers, so they stay
+            outline: one solid accent per screen, and that one belongs to the card that
+            explains what it does. Two filled teal CTAs for the same destination read as
+            loud rather than emphatic. */}
         <div className="flex shrink-0 gap-2.5">
           <Button asChild variant="outline">
             <Link href="/wallet/withdraw">Withdraw</Link>
           </Button>
-          <Button asChild>
+          <Button asChild variant="outline">
             <Link href="/wallet/deposit">Deposit</Link>
           </Button>
         </div>
@@ -140,7 +144,9 @@ export function DashboardView() {
                 <EmptyDescription>Subscriptions, redemptions and withdrawals land here as they settle.</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
-                <Button asChild>
+                {/* Same destination as the Move money card's filled Deposit, which is
+                    already on screen — so this one stays outline. */}
+                <Button asChild variant="outline">
                   <Link href="/wallet/deposit">Add funds</Link>
                 </Button>
               </EmptyContent>

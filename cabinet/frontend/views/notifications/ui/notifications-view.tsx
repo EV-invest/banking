@@ -229,7 +229,7 @@ function EmptyState({ filter }: { filter: Filter }) {
       </p>
       <Link
         href="/settings"
-        className={cn("mt-5 rounded-lg bg-primary px-5.5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90", FOCUS)}
+        className={cn("mt-5 rounded-lg border border-border px-5.5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-foreground/5", FOCUS)}
       >
         Notification settings
       </Link>
