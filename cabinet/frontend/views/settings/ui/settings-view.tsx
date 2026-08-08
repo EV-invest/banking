@@ -933,7 +933,7 @@ function NotificationsSection() {
                       onClick={() => void run(() => setTopicSubscription(t.topic, !t.subscribed, t.email_enabled))}
                       className={cn(
                         "rounded-lg px-3 py-1.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-                        t.subscribed ? "border border-border/60 text-foreground hover:bg-foreground/5" : "bg-primary text-primary-foreground hover:opacity-90",
+                        t.subscribed ? "border border-border/60 text-foreground hover:bg-foreground/5" : "border border-main-accent-t1/50 text-main-accent-t1 hover:bg-main-accent-t1/10",
                       )}
                     >
                       {t.subscribed ? "Following" : "Follow"}
