@@ -117,6 +117,26 @@ export interface Treasury {
   reserved_for_withdrawals: string;
 }
 
+// ── allocations (the registry of investable products) ───────────────────────────
+
+/** `draft` — registered, takes no money yet. `open` — subscribe + redeem. `closed` —
+ *  redeem only, so winding a product down never traps an investor. */
+export type AllocationState = "draft" | "open" | "closed";
+
+export interface Allocation {
+  service: string;
+  title: string;
+  summary: string;
+  state: AllocationState;
+  /** Unix seconds; `"0"` on the write responses, which return the clock-free aggregate. */
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AllocationList {
+  allocations: Allocation[];
+}
+
 // ── valuation + redemptions ─────────────────────────────────────────────────────
 export interface FundNav {
   service: string;
