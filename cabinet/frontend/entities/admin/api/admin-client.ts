@@ -7,6 +7,8 @@ import { apiPath } from "@/shared/config/base-path";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import type {
   AdminOverview,
+  Allocation,
+  AllocationList,
   AdminUserList,
   AdminUserProfile,
   CabinetConfig,
@@ -83,6 +85,18 @@ export const setKycLevel = (userId: string, kycLevel: number): Promise<{ kyc_lev
 
 // ── treasury ──────────────────────────────────────────────────────────────────
 export const fetchTreasury = (): Promise<Treasury> => getJson("/api/admin/treasury");
+
+// ── allocations (the registry — the only way a fund comes into existence) ────────
+// The admin listing includes drafts and closed products; the investor-facing
+// `/api/allocations` returns the open set only.
+export const fetchAllocations = (): Promise<AllocationList> => getJson("/api/admin/allocations");
+
+export const registerAllocation = (body: { service: string; title: string; summary: string }): Promise<Allocation> =>
+  postJson("/api/admin/allocations/register", body);
+
+export const updateAllocation = (body: { service: string; title: string; summary: string }): Promise<Allocation> => postJson("/api/admin/allocations/update", body);
+
+export const setAllocationState = (service: string, state: "open" | "closed"): Promise<Allocation> => postJson("/api/admin/allocations/state", { service, state });
 
 // ── valuation + redemptions ─────────────────────────────────────────────────────
 export const fetchRedemptionQueue = (): Promise<RedemptionQueue> => getJson("/api/admin/valuation/queue");
