@@ -3,7 +3,7 @@
 import { Loader2, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { failRedemption, fetchAllocations, fetchRedemptionQueue, postValuation, settleRedemption } from "@/entities/admin/api/admin-client";
 import { apiPath } from "@/shared/config/base-path";
@@ -22,6 +22,11 @@ async function fetchFundNav(service: string): Promise<FundNav> {
   const data = (await res.json().catch(() => ({}))) as FundNav & { error?: string };
   if (!res.ok) throw new Error(data.error ?? `nav unavailable (${res.status})`);
   return data;
+}
+
+// "EV Trading (trading)", with the state trailing when it is not the plain open case.
+function allocationLabel(a: Allocation): string {
+  return `${a.title} (${a.service})${a.state === "open" ? "" : ` — ${a.state}`}`;
 }
 
 export function ValuationView() {
@@ -73,11 +78,17 @@ export function ValuationView() {
       .catch((e: Error) => setError(e.message));
   }, [loadQueue, loadNav]);
 
-  // Live derived NAV preview = entered AUM / current units.
+  // Live derived NAV preview = entered AUM / current units. NAV is *derived*, never
+  // entered — hence the read-only box below.
   const units = Number(nav?.units_outstanding ?? "0");
   const aumNum = Number(aum || "0");
   const derivedNav = units > 0 && aumNum > 0 ? aumNum / units : null;
   const currentNav = derivedNav ?? Number(nav?.nav ?? "0");
+  // A fund nobody has subscribed to has no units, so AUM / units is undefined and the
+  // hub rejects the post outright (`nav undefined: no units outstanding`). Say so here
+  // instead of letting the operator fill the form and meet a raw domain error.
+  const noUnits = nav !== null && units === 0;
+  const selected = allocations?.find((a) => a.service === service) ?? null;
 
   const post = async () => {
     setPosting(true);
@@ -125,53 +136,67 @@ export function ValuationView() {
         <Card>
           <CardContent className="space-y-5 py-6">
             <div className="grid gap-4 md:grid-cols-3">
-              <label className="block space-y-1.5">
+              <div className="flex flex-col gap-1.5">
                 <span className="text-sm text-muted-foreground">Fund (service)</span>
-                <select
-                  value={service}
-                  onChange={(e) => {
-                    setService(e.target.value);
-                    loadNav(e.target.value);
+                <Select
+                  value={service || undefined}
+                  onValueChange={(next) => {
+                    setService(next);
+                    loadNav(next);
                   }}
-                  disabled={!allocations || allocations.length === 0}
-                  className="h-9 w-full rounded-md border border-border bg-main-surface px-2 text-sm outline-none focus:border-main-accent-t1 disabled:opacity-60"
                 >
-                  {!allocations ? (
-                    <option value="">Loading…</option>
-                  ) : allocations.length === 0 ? (
-                    <option value="">No allocations registered</option>
-                  ) : (
-                    allocations.map((a) => (
-                      <option key={a.service} value={a.service}>
-                        {a.title} ({a.service}){a.state === "open" ? "" : ` — ${a.state}`}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-              <label className="block space-y-1.5">
+                  {/* `disabled` lives on the trigger — `Select` itself is a pure state
+                      container and takes no such prop. */}
+                  <SelectTrigger className="w-full border-border bg-main-surface" disabled={!allocations || allocations.length === 0}>
+                    {/* Not `SelectValue`: the uikit's renders the raw stored value, so the
+                        trigger would read the bare slug instead of the product's title. */}
+                    <span className={cn("truncate", !selected && "text-muted-foreground")}>
+                      {selected ? allocationLabel(selected) : !allocations ? "Loading…" : "No allocations registered"}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(allocations ?? []).map((a) => (
+                      <SelectItem key={a.service} value={a.service}>
+                        {allocationLabel(a)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <label className="flex flex-col gap-1.5">
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   AUM (USDT)
                   <TipAnchor anchor="admin.valuation.post.aum" />
                 </span>
-                <Input value={aum} onChange={(e) => setAum(e.target.value)} inputMode="decimal" placeholder="0.00" />
+                <Input value={aum} onChange={(e) => setAum(e.target.value)} inputMode="decimal" placeholder="0.00" disabled={noUnits} className="w-full" />
               </label>
-              <div className="space-y-1.5">
+              <div className="flex flex-col gap-1.5">
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   Derived NAV / share
                   <TipAnchor anchor="admin.valuation.post.derived-nav" />
                 </span>
-                <div className="flex h-9 items-center rounded-md border border-main-accent-t1/40 bg-main-accent-t1/10 px-3 text-sm">
+                {/* Read-only on purpose: NAV is derived (AUM / units read live from the
+                    ledger), never posted directly — an editable field here would imply
+                    an operator can set a price. */}
+                <div className="flex h-9 items-center rounded-md border border-main-accent-t1/40 bg-main-accent-t1/10 px-3 text-sm" aria-readonly="true">
                   <span className="font-semibold text-main-accent-t1 tabular-nums">{derivedNav ? formatNav(derivedNav) : "—"}</span>
                   {units > 0 && <span className="ml-2 text-xs tabular-nums text-muted-foreground">= AUM / {units.toLocaleString("en-US")} units</span>}
                 </div>
               </div>
             </div>
 
-            <div className="rounded-lg border border-main-accent-t3/30 bg-main-accent-t3/5 px-4 py-2.5 text-sm text-main-accent-t3">
-              <TriangleAlert className="mr-2 inline size-4" />
-              NAV-move guard — a post is rejected if NAV moves more than 50% from the last mark, unless override is on.
-            </div>
+            {noUnits ? (
+              <div className="rounded-lg border border-border bg-foreground/5 px-4 py-2.5 text-sm text-muted-foreground">
+                <TriangleAlert className="mr-2 inline size-4" />
+                No units outstanding — NAV is <span className="font-semibold text-foreground">AUM / units</span>, so it is undefined until someone subscribes. The fund prices at the seed
+                NAV 1.0 until the first subscription; there is nothing to mark yet.
+              </div>
+            ) : (
+              <div className="rounded-lg border border-main-accent-t3/30 bg-main-accent-t3/5 px-4 py-2.5 text-sm text-main-accent-t3">
+                <TriangleAlert className="mr-2 inline size-4" />
+                NAV-move guard — a post is rejected if NAV moves more than 50% from the last mark, unless override is on.
+              </div>
+            )}
 
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -184,7 +209,7 @@ export function ValuationView() {
                   <p className="text-xs text-muted-foreground">Allow a &gt;50% NAV move</p>
                 </div>
               </div>
-              <Button type="button" className={cn("ml-auto", TEAL_CTA)} disabled={posting || !aum || !service} onClick={post}>
+              <Button type="button" className={cn("ml-auto", TEAL_CTA)} disabled={posting || !aum || !service || noUnits} onClick={post}>
                 {posting ? <Loader2 className="size-4 animate-spin" /> : null}
                 Post valuation
               </Button>

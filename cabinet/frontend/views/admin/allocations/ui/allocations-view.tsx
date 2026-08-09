@@ -178,13 +178,16 @@ function AllocationRow({
         <tr className="bg-foreground/[0.03]">
           <td colSpan={4} className="px-5 py-4">
             <div className="flex flex-wrap items-end gap-3">
-              <label className="block space-y-1.5">
+              {/* `flex flex-col`, not `block` + `space-y`: the uikit Input is `inline-flex`,
+                  so a narrow one shares the line with its label unless the column is
+                  explicit. */}
+              <label className="flex w-56 flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Title</span>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} className="w-56" />
+                <Input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full" />
               </label>
-              <label className="block flex-1 space-y-1.5">
+              <label className="flex min-w-56 flex-1 flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Summary</span>
-                <Input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="One line for the catalog card" />
+                <Input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="One line for the catalog card" className="w-full" />
               </label>
               <Button type="button" className={cn(TEAL_CTA)} disabled={busy || !title.trim()} onClick={() => onSave({ service: row.service, title, summary })}>
                 Save
@@ -210,20 +213,20 @@ function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: (
     <Card>
       <CardContent className="space-y-4 py-6">
         <div className="grid gap-4 md:grid-cols-3">
-          <label className="block space-y-1.5">
+          <label className="flex flex-col gap-1.5">
             <span className="text-sm text-muted-foreground">Service id</span>
-            <Input value={service} onChange={(e) => setService(e.target.value.trim())} placeholder="quy-nhon-fund" spellCheck={false} className="font-mono-tech" />
+            <Input value={service} onChange={(e) => setService(e.target.value.trim())} placeholder="quy-nhon-fund" spellCheck={false} className="w-full font-mono-tech" />
             <span className={cn("text-xs", service && !slugOk ? "text-destructive" : "text-muted-foreground")}>
               {service && !slugOk ? "Letters, digits, - and _ only (1–64)" : "Permanent — every fund RPC keys on it"}
             </span>
           </label>
-          <label className="block space-y-1.5">
+          <label className="flex flex-col gap-1.5">
             <span className="text-sm text-muted-foreground">Title</span>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quy Nhon Fund" />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quy Nhon Fund" className="w-full" />
           </label>
-          <label className="block space-y-1.5">
+          <label className="flex flex-col gap-1.5">
             <span className="text-sm text-muted-foreground">Summary</span>
-            <Input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="One line for the catalog card" />
+            <Input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="One line for the catalog card" className="w-full" />
           </label>
         </div>
         <div className="flex items-center gap-3">
