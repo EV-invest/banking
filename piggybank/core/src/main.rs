@@ -320,7 +320,13 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// each (idempotent by tx_ref); the relay then credits the user's claim. Runs only when
 	// BSC_RPC_URL is set — unconfigured dev/CI doesn't watch. Its own pool clone keeps the
 	// polling reads off the request path.
-	let deposit_watcher = rails.bsc.clone().map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config));
+	// The custody adapter rides along so the scan also watches the rail's TREASURY: USDT the
+	// operator sends there arrives with no ledger fact behind it, and the sweep's own arrivals
+	// are filtered out by sender so consolidation is never counted as new capital.
+	let deposit_watcher = rails
+		.bsc
+		.clone()
+		.map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config, bsc_custody.clone()));
 
 	// ── on-chain withdrawal confirmation watcher (BEP20 USDT) ──────────────────
 	// Auto-settle a broadcast withdrawal once its transaction confirms — the positive chain
@@ -343,7 +349,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let polygon_deposit_watcher = rails
 		.polygon
 		.clone()
-		.map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config));
+		.map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config, polygon_custody.clone()));
 	let polygon_withdrawal_watcher = rails
 		.polygon
 		.as_ref()

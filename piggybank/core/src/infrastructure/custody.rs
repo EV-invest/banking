@@ -170,7 +170,7 @@ impl ChainCustody {
 
 	/// The sweep gas-station's address, resolved once via `ProvisionAddress` (the
 	/// reserved [`GAS_STATION`] id) and cached — read-only, for the funding view.
-	async fn gas_station_address(&self) -> Result<String, CustodyError> {
+	pub async fn gas_station_address(&self) -> Result<String, CustodyError> {
 		self.gas_station_address
 			.get_or_try_init(|| async {
 				let mut request = Request::new(ProvisionAddressRequest {
