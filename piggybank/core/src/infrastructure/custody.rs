@@ -93,6 +93,13 @@ impl Custody for MultiChainCustody {
 		}
 	}
 
+	async fn deposit_address_liquidity(&self, network: Network) -> Result<Option<Usdt>, CustodyError> {
+		match self.by_network.get(&network) {
+			Some(adapter) => adapter.deposit_address_liquidity(network).await,
+			None => Ok(None),
+		}
+	}
+
 	async fn treasury_funding(&self, network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
 		match self.by_network.get(&network) {
 			Some(adapter) => adapter.treasury_funding(network).await,
@@ -170,7 +177,7 @@ impl ChainCustody {
 
 	/// The sweep gas-station's address, resolved once via `ProvisionAddress` (the
 	/// reserved [`GAS_STATION`] id) and cached — read-only, for the funding view.
-	async fn gas_station_address(&self) -> Result<String, CustodyError> {
+	pub async fn gas_station_address(&self) -> Result<String, CustodyError> {
 		self.gas_station_address
 			.get_or_try_init(|| async {
 				let mut request = Request::new(ProvisionAddressRequest {
@@ -387,6 +394,27 @@ impl Custody for ChainCustody {
 		// (absurd for a real balance) degrades to an Err → the dispatch gate treats it as
 		// "no chain view" and stays conservative (queues), never a wrong dispatch.
 		let usdt = Usdt::from_onchain(self.network, raw).map_err(|e| CustodyError::Unavailable(format!("treasury USDT balance not representable: {e}")))?;
+		Ok(Some(usdt))
+	}
+
+	/// Sums `balanceOf` across every derived deposit address on this rail. Sequential on
+	/// purpose: the free endpoints this runs against rate-limit a burst, and the caller is an
+	/// hourly reconciliation, not a request. A single address failing fails the whole sum —
+	/// a partial total would read as a shortfall and raise a false alarm about missing money.
+	async fn deposit_address_liquidity(&self, _network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let addresses: Vec<String> = sqlx::query_scalar("SELECT address FROM user_deposit_addresses WHERE network = $1 AND address_kind = 'derived'")
+			.bind(self.network.as_str())
+			.fetch_all(&self.pool)
+			.await
+			.map_err(db_unavailable)?;
+		let mut raw_total: u128 = 0;
+		for address in &addresses {
+			let raw = self.rpc.erc20_balance(&self.usdt_contract, address).await.map_err(read_err)?;
+			raw_total = raw_total
+				.checked_add(raw)
+				.ok_or_else(|| CustodyError::Unavailable("deposit-address balance total overflowed".to_owned()))?;
+		}
+		let usdt = Usdt::from_onchain(self.network, raw_total).map_err(|e| CustodyError::Unavailable(format!("deposit-address USDT total not representable: {e}")))?;
 		Ok(Some(usdt))
 	}
 

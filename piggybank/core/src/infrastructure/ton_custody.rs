@@ -120,7 +120,7 @@ impl TonCustody {
 
 	/// The sweep gas-station's TON address, resolved once via `ProvisionAddress` (the reserved
 	/// [`GAS_STATION`] id) and cached — read-only, for the operator funding view.
-	async fn gas_station_address(&self) -> Result<String, CustodyError> {
+	pub async fn gas_station_address(&self) -> Result<String, CustodyError> {
 		self.gas_station
 			.get_or_try_init(|| async {
 				let mut request = Request::new(ProvisionAddressRequest {
@@ -420,6 +420,27 @@ impl Custody for TonCustody {
 		// balance for the dispatch gate, not an error (broadcast-time provisioning parks it).
 		let raw = self.rpc.jetton_wallet(&treasury, &self.usdt_master).await.map_err(read_err)?.map(|w| w.balance).unwrap_or(0);
 		let usdt = Usdt::from_onchain(Network::Ton, raw).map_err(|e| CustodyError::Unavailable(format!("ton treasury balance not representable: {e}")))?;
+		Ok(Some(usdt))
+	}
+
+	/// Sums each derived deposit address's USDT jetton wallet. Sequential for the same reason
+	/// as the EVM rail (toncenter rate-limits a burst), and a single failed read fails the sum
+	/// rather than under-reporting it as missing money.
+	async fn deposit_address_liquidity(&self, _network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let addresses: Vec<String> = sqlx::query_scalar("SELECT address FROM user_deposit_addresses WHERE network = 'ton' AND address_kind = 'derived'")
+			.fetch_all(&self.pool)
+			.await
+			.map_err(db_unavailable)?;
+		let mut raw_total: u128 = 0;
+		for address in &addresses {
+			// No jetton wallet yet is a zero, exactly as for the treasury — an address that
+			// never received USDT is unfunded, not unreadable.
+			let raw = self.rpc.jetton_wallet(address, &self.usdt_master).await.map_err(read_err)?.map(|w| w.balance).unwrap_or(0);
+			raw_total = raw_total
+				.checked_add(raw)
+				.ok_or_else(|| CustodyError::Unavailable("ton deposit-address balance total overflowed".to_owned()))?;
+		}
+		let usdt = Usdt::from_onchain(Network::Ton, raw_total).map_err(|e| CustodyError::Unavailable(format!("ton deposit-address USDT total not representable: {e}")))?;
 		Ok(Some(usdt))
 	}
 

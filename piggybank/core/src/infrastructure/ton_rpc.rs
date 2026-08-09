@@ -173,6 +173,12 @@ pub struct JettonDeposit {
 	pub amount: u128,
 	/// The transaction's unix time — the deposit watcher's globally-comparable cursor.
 	pub now: u64,
+	/// The sender, lowercased raw `0:<hex>` — the same canonical form the hub stores
+	/// addresses in, so it compares to our own wallets without decoding anything. Only
+	/// the treasury path reads it: it is what separates an operator's capital injection
+	/// from the sweep consolidating funds already on the ledger. `None` when the indexer
+	/// omitted it (a mint has no source), which the caller must treat as NOT external.
+	pub source: Option<String>,
 }
 
 /// A user/treasury jetton wallet's address + balance (one `/jetton/wallets` row).
@@ -264,7 +270,10 @@ fn decode_one_transfer(row: &Value) -> Option<JettonDeposit> {
 	}
 	let tx_hash = row.get("transaction_hash")?.as_str()?.to_owned();
 	let now = row.get("transaction_now").and_then(Value::as_u64).unwrap_or(0);
-	Some(JettonDeposit { tx_hash, amount, now })
+	// The indexer returns raw `0:<HEX>` here, uppercase; the hub stores `0:<hex>`. Fold the
+	// case once at the edge so every comparison downstream is a plain string equality.
+	let source = row.get("source").and_then(Value::as_str).map(str::to_lowercase);
+	Some(JettonDeposit { tx_hash, amount, now, source })
 }
 
 /// The account's native balance (nanotons) from an `/accountStates` response.
@@ -324,9 +333,27 @@ mod tests {
 			JettonDeposit {
 				tx_hash: "hash-a".into(),
 				amount: 5_000_000,
-				now: 1_700_000_000
+				now: 1_700_000_000,
+				source: None,
 			}
 		);
+	}
+
+	/// The indexer reports `source` as raw `0:<HEX>` in upper case while the hub stores
+	/// `0:<hex>`; folding it here is what lets the treasury path compare senders by plain
+	/// string equality instead of decoding an address.
+	#[test]
+	fn a_transfer_source_is_folded_to_the_stored_address_case() {
+		let value = json!({
+			"jetton_transfers": [{
+				"amount": "1000000",
+				"transaction_hash": "hash-a",
+				"transaction_now": 1_700_000_000,
+				"source": "0:7D133D4E425C8E00DE015513A44E66E6D163B21E71720AEC7579965E5DE28C55"
+			}]
+		});
+		let out = decode_jetton_transfers(&value);
+		assert_eq!(out[0].source.as_deref(), Some("0:7d133d4e425c8e00de015513a44e66e6d163b21e71720aec7579965e5de28c55"));
 	}
 
 	#[test]

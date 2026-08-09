@@ -43,6 +43,7 @@ use piggybank_core::{
 		ton_deposit_watcher::TonDepositWatcher,
 		ton_sweep::TonSweep,
 		ton_withdrawal_watcher::TonWithdrawalWatcher,
+		treasury_drift::TreasuryDrift,
 		tron_custody::TronCustody,
 		tron_deposit_watcher::TronDepositWatcher,
 		tron_sweep::TronSweep,
@@ -291,6 +292,11 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
 	let reaper = Reaper::new(relay_pool.clone(), withdrawals.clone(), redemptions.clone(), relay_notify.clone());
 	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
+	// The per-rail counterpart to `reconciliation`: that one relates two TigerBeetle accounts,
+	// so it stays green when the LEDGER and the CHAIN disagree. This compares `wallet:<net>`
+	// against the wallets it claims to describe, which is the only thing that notices USDT
+	// arriving out of band. Alert-only, and a no-op on rails with no chain view.
+	let treasury_drift = TreasuryDrift::new(ledger.clone(), custody.clone());
 
 	// ── cross-plane lifecycle bridge consumer (one-way concierge → banking) ─────
 	// Pull concierge `UserLifecycleEvent`s and mirror them onto the `users` control
@@ -320,7 +326,13 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// each (idempotent by tx_ref); the relay then credits the user's claim. Runs only when
 	// BSC_RPC_URL is set — unconfigured dev/CI doesn't watch. Its own pool clone keeps the
 	// polling reads off the request path.
-	let deposit_watcher = rails.bsc.clone().map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config));
+	// The custody adapter rides along so the scan also watches the rail's TREASURY: USDT the
+	// operator sends there arrives with no ledger fact behind it, and the sweep's own arrivals
+	// are filtered out by sender so consolidation is never counted as new capital.
+	let deposit_watcher = rails
+		.bsc
+		.clone()
+		.map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config, bsc_custody.clone()));
 
 	// ── on-chain withdrawal confirmation watcher (BEP20 USDT) ──────────────────
 	// Auto-settle a broadcast withdrawal once its transaction confirms — the positive chain
@@ -343,7 +355,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let polygon_deposit_watcher = rails
 		.polygon
 		.clone()
-		.map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config));
+		.map(|watcher_config| DepositWatcher::new(pool.clone(), relay_notify.clone(), watcher_config, polygon_custody.clone()));
 	let polygon_withdrawal_watcher = rails
 		.polygon
 		.as_ref()
@@ -373,7 +385,10 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// Deposit watcher + withdrawal confirmation watcher run when TON_API_URL is set; the
 	// sweep additionally needs SWEEP_ENABLED. Each holds its own pool clone / signer channel,
 	// mirroring the BEP20 tasks; all are no-ops (idle branch) when unconfigured.
-	let ton_deposit_watcher = rails.ton.clone().map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton));
+	let ton_deposit_watcher = rails
+		.ton
+		.clone()
+		.map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton, ton_custody.clone()));
 	let ton_withdrawal_watcher = match (&rails.ton, &ton_custody) {
 		(Some(ton), Some(ton_custody)) => Some(TonWithdrawalWatcher::new(pool.clone(), ton_custody.clone(), withdrawals.clone(), relay_notify.clone(), ton)),
 		_ => None,
@@ -425,6 +440,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		provisioner,
 		relay_done,
 		reconciliation_done,
+		treasury_drift_done,
 		reaper_done,
 		dispatcher_done,
 		bridge_done,
@@ -448,6 +464,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		branch(&shutdown, "provisioner", infallible(auth_sync::run_provisioner(provision_rx, users))),
 		branch(&shutdown, "relay", infallible(relay.run(shutdown.clone()))),
 		branch(&shutdown, "reconciliation", infallible(reconciliation.run(shutdown.clone()))),
+		branch(&shutdown, "treasury drift watch", infallible(treasury_drift.run(shutdown.clone()))),
 		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
 		branch(&shutdown, "dispatcher", infallible(dispatcher.run(shutdown.clone()))),
 		branch(&shutdown, "bridge", infallible(run_bridge(bridge, shutdown.clone()))),
@@ -487,6 +504,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		.and(provisioner)
 		.and(relay_done)
 		.and(reconciliation_done)
+		.and(treasury_drift_done)
 		.and(reaper_done)
 		.and(dispatcher_done)
 		.and(bridge_done)

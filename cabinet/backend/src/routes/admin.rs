@@ -218,6 +218,49 @@ pub async fn treasury(State(st): State<AppState>, jar: CookieJar) -> Result<Json
 	Ok(Json(treasury.into()))
 }
 
+/// `POST /api/admin/treasury/record-deposit` — write a ledger fact for USDT that arrived
+/// on-chain out of band.
+///
+/// Funding a rail's treasury hot wallet directly moves real USDT while producing no ledger
+/// entry at all: the rail's `custody` figure stays put, `fund_capital` understates what the
+/// company put in, and the withdrawal dispatch gate (`min(TB rail, on-chain treasury)`) keeps
+/// reading zero, so that liquidity cannot be spent. This records the missing fact.
+///
+/// Idempotent by `tx_ref` — deliberately NOT `SeedCapital`, which has no dedup key and
+/// double-credits the fund on a retried click. Pass the real on-chain reference (`txhash:logIndex`
+/// on an EVM rail) so a re-submission, and any watcher that later scans the same transfer,
+/// collapse onto the same key.
+pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let (Some(tx_ref), Some(network), Some(amount)) = (required(&v, "tx_ref"), required(&v, "network"), required(&v, "amount")) else {
+		return Err(ApiError::BadRequest("tx_ref, network and amount are required".into()));
+	};
+	// The fund itself is the default and the reason this route exists; `user`/`service` stay
+	// reachable for the same class of incident (a deposit the watcher missed) without a
+	// second endpoint. The money plane re-checks the pairing and rejects a bad one.
+	let party_kind = required(&v, "party_kind").unwrap_or_else(|| "piggybank".to_string());
+	let party_id = required(&v, "party_id").unwrap_or_default();
+	if party_kind != "piggybank" && party_id.is_empty() {
+		return Err(ApiError::BadRequest("party_id is required unless party_kind is piggybank".into()));
+	}
+	let req = bk::RecordDepositRequest {
+		tx_ref,
+		network,
+		amount,
+		party_kind,
+		party_id,
+	};
+	let res = st.grpc.record_deposit(&token, req).await?;
+	// `false` is a successful no-op, not a failure: the tx_ref was already recorded. The
+	// caller needs the difference to tell "credited" from "already credited".
+	Ok(Json(json!({ "recorded": res.recorded })))
+}
+
 /// `GET /api/admin/valuation/queue` — the cross-user redemption queue awaiting settle.
 pub async fn redemption_queue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::RedemptionQueue>, ApiError> {
 	require_admin(&st, &jar).await?;

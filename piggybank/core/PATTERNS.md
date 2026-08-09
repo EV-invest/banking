@@ -421,9 +421,26 @@ and **alerts** (Sentry-shipped `error!`, no auto-write) on: the **global** poste
 `sum(custody) == sum(claims)` on the USDT ledger (read straight from TB via
 `Ledger::cash_invariant`); `clearing`'s reserved (pending + posted) balance vs the gross of
 every `queued`/`processing` withdrawal in Postgres; and a scan of every `outbox.parked_at`
-row (with its `last_error` and `compensated_at`). Per-rail custody vs the real on-chain
-wallet balance is the treasury's job, surfaced separately. The `last_error` column on a
+row (with its `last_error` and `compensated_at`). The `last_error` column on a
 parked row is the first place to look when money didn't move.
+
+[`treasury_drift`](src/infrastructure/treasury_drift.rs) (`TreasuryDrift::scan_once`) is the
+**per-rail** counterpart, hourly and alert-only. The invariant above relates two TigerBeetle
+accounts, so it stays green when the ledger and the CHAIN disagree; this compares
+`wallet:<net>` against the wallets it claims to describe — `treasury_liquidity` **plus**
+`deposit_address_liquidity`, because the ledger counts un-swept deposit-address funds too. A
+surplus means USDT arrived without a ledger fact (it is also unspendable, since the dispatch
+gate mins the two); a shortfall means claims aren't backed on-chain. A divergence must survive
+two consecutive scans to be reported, so a transfer landing between the two reads is not an
+alert. Rails with no chain view are skipped.
+
+Out-of-band arrivals are **credited automatically**: each deposit watcher also watches its
+rail's treasury and records an arrival as `Party::Piggybank` (`Dr wallet:<net> / Cr fund`),
+idempotent by the same `tx_ref` machinery as a user deposit. The sweep moves USDT from a
+derived address INTO the treasury and that dollar is already in `wallet:<net>`, so a credit
+only fires when the sender is outside every wallet we control — see `is_external_source` in
+both watchers. `RecordDeposit` (admin, `CapitalManage`) is the manual path for anything the
+watchers could not see; prefer it over `SeedCapital`, which has no dedup key.
 
 [`reaper`](src/infrastructure/reaper.rs) (`Reaper::sweep`) owns the timeout for abandoned
 sagas (TB pendings are `timeout = 0`, so nothing auto-voids). Split by safety per the

@@ -39,7 +39,11 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use crate::{application::balance::record_deposit, config::EvmConfig, infrastructure::deposits::PgDeposits};
+use crate::{
+	application::balance::record_deposit,
+	config::EvmConfig,
+	infrastructure::{custody::ChainCustody, deposits::PgDeposits},
+};
 
 /// `keccak256("Transfer(address,address,uint256)")` — the ERC-20 Transfer event topic0.
 const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
@@ -83,10 +87,15 @@ pub struct DepositWatcher {
 	/// a free tier's cap is static, and re-probing it would reintroduce the failed call
 	/// this narrowing exists to avoid.
 	block_range: AtomicU64,
+	/// Resolves the rail's treasury + gas-station addresses so an operator's out-of-band
+	/// top-up of the hot wallet becomes a ledger fact instead of invisible money. `None`
+	/// leaves the watcher user-deposits-only — the pre-existing behaviour, and what an
+	/// unwired rail gets.
+	custody: Option<Arc<ChainCustody>>,
 }
 
 impl DepositWatcher {
-	pub fn new(pool: PgPool, relay: Arc<Notify>, config: EvmConfig) -> Self {
+	pub fn new(pool: PgPool, relay: Arc<Notify>, config: EvmConfig, custody: Option<Arc<ChainCustody>>) -> Self {
 		let http = reqwest::Client::builder()
 			.timeout(Duration::from_secs(20))
 			.build()
@@ -100,6 +109,26 @@ impl DepositWatcher {
 			http,
 			config,
 			block_range,
+			custody,
+		}
+	}
+
+	/// The rail's treasury + gas-station addresses, lowercased, or `None` when the rail has
+	/// no custody adapter or the signer could not be reached this cycle. A failure must NOT
+	/// fail the scan: user deposits are the watcher's primary job and they keep crediting
+	/// with or without the treasury view. `ChainCustody` caches each address in a `OnceCell`,
+	/// so this is one signer round-trip per process, not per cycle.
+	async fn treasury_addresses(&self) -> Option<(String, Option<String>)> {
+		let custody = self.custody.as_ref()?;
+		match custody.treasury_address().await {
+			Ok(treasury) => {
+				let gas_station = custody.gas_station_address().await.ok().map(|a| a.to_lowercase());
+				Some((treasury.to_lowercase(), gas_station))
+			}
+			Err(err) => {
+				tracing::debug!(network = %self.config.network, "deposit watcher: treasury address unavailable this cycle, watching user deposits only: {err}");
+				None
+			}
 		}
 	}
 
@@ -162,12 +191,19 @@ impl DepositWatcher {
 		// Only `derived` (fundable) addresses can receive a real deposit; a placeholder is
 		// never funded. The map is `lower(address) -> owner`, also the `to`-topic filter set.
 		let watched = self.watched_addresses(network).await?;
-		if watched.is_empty() {
+		// The treasury rides along in the SAME filter: USDT arriving there from outside our
+		// own wallets is the fund's own capital, and without this it moves real money while
+		// leaving no ledger trace at all.
+		let (treasury, gas_station) = match self.treasury_addresses().await {
+			Some((treasury, gas_station)) => (Some(treasury), gas_station),
+			None => (None, None),
+		};
+		if watched.is_empty() && treasury.is_none() {
 			// Nothing fundable yet — fast-forward so we don't re-scan an empty window forever.
 			self.set_cursor(network, safe_head).await?;
 			return Ok(());
 		}
-		let topic_addrs: Vec<Value> = watched.keys().map(|a| Value::String(pad_topic(a))).collect();
+		let topic_addrs: Vec<Value> = watched.keys().chain(treasury.iter()).map(|a| Value::String(pad_topic(a))).collect();
 
 		// A scan that has fallen behind is the condition worth alerting on: those blocks hold
 		// deposits nobody has been credited for yet. Reported once per cycle, against the
@@ -182,8 +218,11 @@ impl DepositWatcher {
 			let (logs, to) = self.get_logs(from, safe_head, &topic_addrs).await?;
 			for log in &logs {
 				let Some(transfer) = decode_transfer(log) else { continue };
-				let Some(&user) = watched.get(&transfer.to) else { continue };
-				self.credit(user, network, &transfer).await?;
+				if let Some(&user) = watched.get(&transfer.to) {
+					self.credit(Party::User(user), network, &transfer).await?;
+				} else if treasury.as_deref() == Some(transfer.to.as_str()) && is_external_source(&transfer.from, &watched, gas_station.as_deref(), treasury.as_deref()) {
+					self.credit(Party::Piggybank, network, &transfer).await?;
+				}
 			}
 			// Advance only after the chunk's deposits are recorded. A crash between recording
 			// and this update re-scans the chunk; `record_deposit` is idempotent by tx_ref.
@@ -196,17 +235,22 @@ impl DepositWatcher {
 		Ok(())
 	}
 
-	async fn credit(&self, user: UserId, network: Network, transfer: &Transfer) -> Result<(), WatcherError> {
+	async fn credit(&self, party: Party, network: Network, transfer: &Transfer) -> Result<(), WatcherError> {
 		let amount = Usdt::from_onchain(network, transfer.value).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {
 			return Ok(()); // a legal but meaningless zero-value Transfer — not a deposit.
 		}
 		let tx_ref = TxRef::parse(&transfer.tx_ref()).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
+		let is_capital = matches!(party, Party::Piggybank);
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, party, network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
-		if newly {
-			info!(user = %user, tx = %transfer.tx_hash, "deposit watcher: credited on-chain USDT deposit");
+		if newly && is_capital {
+			// Worth its own line at INFO: this is the fund's own money entering the rail, and
+			// the operator who sent it has no other confirmation that it landed in the ledger.
+			info!(network = %network, tx = %transfer.tx_hash, from = %transfer.from, "deposit watcher: credited an out-of-band treasury top-up as fund capital");
+		} else if newly {
+			info!(tx = %transfer.tx_hash, "deposit watcher: credited on-chain USDT deposit");
 		}
 		Ok(())
 	}
@@ -371,8 +415,27 @@ impl DepositWatcher {
 	}
 }
 
+/// Is USDT arriving at the treasury NEW money, or our own funds being consolidated?
+///
+/// This is the whole safety argument for crediting the treasury at all. The sweep moves USDT
+/// **from a user's derived deposit address to the treasury**, and that dollar is already on the
+/// ledger — `wallet:<net>` counts it from the moment the deposit was credited, whichever of our
+/// addresses it physically sits on. Crediting it again on arrival would post a second
+/// `Dr wallet:<net> / Cr fund` for one dollar and break the global `sum(custody) == sum(claims)`
+/// invariant, in the direction that invents capital out of nothing. Sweeps are not an edge case —
+/// they are the steady state, so this predicate runs before every capital credit.
+///
+/// Only a source outside every wallet we control is genuinely new money: not a derived deposit
+/// address, not the gas station, and not the treasury paying itself.
+fn is_external_source(from: &str, watched: &HashMap<String, UserId>, gas_station: Option<&str>, treasury: Option<&str>) -> bool {
+	!watched.contains_key(from) && gas_station != Some(from) && treasury != Some(from)
+}
+
 /// One decoded ERC-20 `Transfer` to a watched address.
 struct Transfer {
+	/// Lowercase `0x…` 20-byte sender — the only thing separating an operator's capital
+	/// injection from the sweep consolidating funds we already booked.
+	from: String,
 	/// Lowercase `0x…` 20-byte recipient address (the matched deposit address).
 	to: String,
 	/// Transferred value in raw on-chain units, scaled into canonical base units by
@@ -402,11 +465,12 @@ fn decode_transfer(log: &Value) -> Option<Transfer> {
 	if !topics[0].as_str()?.eq_ignore_ascii_case(TRANSFER_TOPIC) {
 		return None;
 	}
+	let from = address_from_topic(topics[1].as_str()?)?;
 	let to = address_from_topic(topics[2].as_str()?)?;
 	let value = u128_from_word(log.get("data")?.as_str()?)?;
 	let tx_hash = log.get("transactionHash")?.as_str()?.to_lowercase();
 	let log_index = parse_hex_u64(log.get("logIndex")?.as_str()?)?;
-	Some(Transfer { to, value, tx_hash, log_index })
+	Some(Transfer { from, to, value, tx_hash, log_index })
 }
 
 /// The last 20 bytes of a 32-byte topic word → a lowercase `0x…` address.
@@ -530,11 +594,43 @@ mod tests {
 			"logIndex": "0x2"
 		});
 		let t = decode_transfer(&log).expect("valid transfer decodes");
+		assert_eq!(t.from, "0x1111111111111111111111111111111111111111");
 		assert_eq!(t.to, "0x024da544a76714a3812096e9ef84d40b2c8863e8");
 		assert_eq!(t.value, 5_000_000_000_000_000_000); // 5 USDT at 18 dp
 		assert_eq!(t.tx_hash, "0xabcdef0000000000000000000000000000000000000000000000000000000001");
 		assert_eq!(t.log_index, 2);
 		assert_eq!(t.tx_ref(), "0xabcdef0000000000000000000000000000000000000000000000000000000001:2");
+	}
+
+	/// The invariant-critical case. A sweep arrives at the treasury exactly like an operator
+	/// top-up does — same recipient, same token, same event — and only the sender tells them
+	/// apart. Credit a sweep and one dollar is booked twice, inventing fund capital and
+	/// breaking `sum(custody) == sum(claims)`.
+	#[test]
+	fn only_a_source_outside_our_own_wallets_is_new_capital() {
+		let deposit_address = "0x024da544a76714a3812096e9ef84d40b2c8863e8";
+		let gas_station = "0x7ec1d5446115c39aab004146255ca62f97ca0514";
+		let treasury = "0x7303d8dcd615548d8f46b059d1bd31a8b6a3389d";
+		let watched: HashMap<String, UserId> = [(deposit_address.to_string(), UserId::from_raw(uuid::Uuid::nil()))].into_iter().collect();
+
+		// The sweep consolidating a user's deposit — already on the ledger, must NOT re-credit.
+		assert!(!is_external_source(deposit_address, &watched, Some(gas_station), Some(treasury)));
+		// The gas station moving native coin never carries USDT, but it is ours either way.
+		assert!(!is_external_source(gas_station, &watched, Some(gas_station), Some(treasury)));
+		// The treasury paying itself is not an injection.
+		assert!(!is_external_source(treasury, &watched, Some(gas_station), Some(treasury)));
+		// An outside wallet — the operator funding the rail. This is the one we credit.
+		assert!(is_external_source("0x1347378b1d0eb69d3462e09b3dfa2fe28ebe74ec", &watched, Some(gas_station), Some(treasury)));
+	}
+
+	/// A rail whose gas station could not be resolved this cycle must still refuse to count a
+	/// sweep as capital — the derived-address set alone carries that guarantee.
+	#[test]
+	fn an_unresolved_gas_station_does_not_open_the_sweep_hole() {
+		let deposit_address = "0x024da544a76714a3812096e9ef84d40b2c8863e8";
+		let watched: HashMap<String, UserId> = [(deposit_address.to_string(), UserId::from_raw(uuid::Uuid::nil()))].into_iter().collect();
+		assert!(!is_external_source(deposit_address, &watched, None, None));
+		assert!(is_external_source("0x1347378b1d0eb69d3462e09b3dfa2fe28ebe74ec", &watched, None, None));
 	}
 
 	#[test]

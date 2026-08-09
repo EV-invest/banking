@@ -45,6 +45,7 @@ pub mod sweep;
 pub mod telemetry;
 pub mod tigerbeetle;
 pub mod ton_custody;
+pub mod treasury_drift;
 pub mod ton_deposit_watcher;
 pub mod ton_rpc;
 pub mod ton_sweep;
