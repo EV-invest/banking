@@ -3,22 +3,40 @@
 import { ArrowDownToLine, Clock, Loader2, Sparkles, TrendingUp, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, Input, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@evinvest/uikit";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  Skeleton,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@evinvest/uikit";
 
-import { cancelRedemption, fetchFundNav, fetchPositions, fetchRedemptions, submitRedeem, submitSubscribe } from "@/entities/fund/api/fund-client";
-import type { FundNav, Position, Redemption } from "@/shared/contracts";
+import { cancelRedemption, fetchAllocations, fetchFundNav, fetchPositions, fetchRedemptions, submitRedeem, submitSubscribe } from "@/entities/fund/api/fund-client";
+import type { Allocation, FundNav, Position, Redemption } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
-// The demo fund — the cabinet ships one service surface; the form lets you point at
-// another fund id if needed, defaulting here.
-const DEFAULT_SERVICE = "fund";
-
+// A fund is whatever the registry says is `open` — there is no default slug to fall back
+// on. The hub refuses a subscription to an unregistered service, so a typed id (what this
+// screen used to take, defaulting to a hardcoded "fund") could only ever 404.
 export function InvestView() {
   const [positions, setPositions] = useState<Position[] | null>(null);
+  const [catalog, setCatalog] = useState<Allocation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -31,6 +49,15 @@ export function InvestView() {
   }, []);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    fetchAllocations()
+      .then((list) => setCatalog(list.allocations ?? []))
+      .catch(() => setCatalog([]));
+  }, []);
+
+  // Slug → display title, so positions and receipts read as the product, not the key.
+  const titleOf = useCallback((service: string) => catalog?.find((a) => a.service === service)?.title ?? service, [catalog]);
 
   return (
     <div className="container max-w-5xl space-y-8 py-12">
@@ -48,7 +75,7 @@ export function InvestView() {
         </Alert>
       )}
 
-      <PositionsList positions={positions} />
+      <PositionsList positions={positions} titleOf={titleOf} />
 
       <Tabs defaultValue="subscribe">
         <TabsList>
@@ -58,10 +85,10 @@ export function InvestView() {
         </TabsList>
 
         <TabsContent value="subscribe" className="pt-6">
-          <SubscribePanel onDone={load} />
+          <SubscribePanel catalog={catalog} onDone={load} />
         </TabsContent>
         <TabsContent value="redeem" className="pt-6">
-          <RedeemPanel positions={positions} onDone={load} />
+          <RedeemPanel positions={positions} titleOf={titleOf} onDone={load} />
         </TabsContent>
         <TabsContent value="activity" className="pt-6">
           <ActivityPanel />
@@ -72,9 +99,9 @@ export function InvestView() {
 }
 
 // One position card: units, current NAV (+ stale badge), value (units × NAV), and P&L.
-function PositionCard({ position }: { position: Position }) {
+function PositionCard({ position, titleOf }: { position: Position; titleOf: (service: string) => string }) {
   const [nav, setNav] = useState<FundNav | null>(null);
-  const service = position.service ?? DEFAULT_SERVICE;
+  const service = position.service ?? "";
 
   useEffect(() => {
     let active = true;
@@ -94,7 +121,10 @@ function PositionCard({ position }: { position: Position }) {
     <Card>
       <CardContent className="space-y-4 pt-6">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-medium">{service}</p>
+          <div className="min-w-0">
+            <p className="truncate font-medium">{titleOf(service)}</p>
+            <p className="font-mono-tech text-xs text-muted-foreground">{service}</p>
+          </div>
           {nav?.stale && (
             <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
               <Clock className="size-3" /> Stale NAV
@@ -122,7 +152,7 @@ function PositionCard({ position }: { position: Position }) {
   );
 }
 
-function PositionsList({ positions }: { positions: Position[] | null }) {
+function PositionsList({ positions, titleOf }: { positions: Position[] | null; titleOf: (service: string) => string }) {
   if (!positions) return <Skeleton className="h-44 w-full" />;
   if (positions.length === 0) {
     return (
@@ -137,7 +167,7 @@ function PositionsList({ positions }: { positions: Position[] | null }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {positions.map((p) => (
-        <PositionCard key={p.service ?? ""} position={p} />
+        <PositionCard key={p.service ?? ""} position={p} titleOf={titleOf} />
       ))}
     </div>
   );
@@ -155,8 +185,8 @@ function Stat({ label, value, emphasis, tip }: { label: string; value: string; e
   );
 }
 
-function SubscribePanel({ onDone }: { onDone: () => void }) {
-  const [service, setService] = useState(DEFAULT_SERVICE);
+function SubscribePanel({ catalog, onDone }: { catalog: Allocation[] | null; onDone: () => void }) {
+  const [service, setService] = useState("");
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -167,7 +197,7 @@ function SubscribePanel({ onDone }: { onDone: () => void }) {
     setError(null);
     setDone(null);
     try {
-      const receipt = await submitSubscribe({ service, amount });
+      const receipt = await submitSubscribe({ service: picked, amount });
       setDone({ units: receipt.units, nav: receipt.nav });
       setAmount("");
       onDone();
@@ -178,7 +208,13 @@ function SubscribePanel({ onDone }: { onDone: () => void }) {
     }
   };
 
-  const valid = service.trim().length > 0 && Number(amount) > 0;
+  // The effective pick: what the user chose, else the first open product once the catalog
+  // lands. Derived rather than seeded into state — an effect that only sets a default is
+  // a render-order trap (and the lint rightly refuses it).
+  const picked = service || catalog?.[0]?.service || "";
+  const selected = catalog?.find((a) => a.service === picked) ?? null;
+  const empty = catalog !== null && catalog.length === 0;
+  const valid = picked.trim().length > 0 && Number(amount) > 0;
 
   return (
     <div className="max-w-xl space-y-5">
@@ -201,20 +237,32 @@ function SubscribePanel({ onDone }: { onDone: () => void }) {
 
       <Card>
         <CardContent className="space-y-4 pt-6">
-          <label className="block space-y-1.5">
+          <div className="flex flex-col gap-1.5">
             <span className="flex items-center gap-1.5 text-sm">
               Fund
               <TipAnchor anchor="invest.subscribe.fund" />
             </span>
-            <Input value={service} onChange={(e) => setService(e.target.value)} placeholder="fund id" spellCheck={false} />
-          </label>
+            <Select value={picked} onValueChange={setService}>
+              <SelectTrigger className="w-full border-border bg-main-surface" disabled={!catalog || empty}>
+                <span className={cn("truncate", !selected && "text-muted-foreground")}>{selected ? selected.title : !catalog ? "Loading…" : "No funds are open right now"}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {(catalog ?? []).map((a) => (
+                  <SelectItem key={a.service} value={a.service}>
+                    {a.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selected?.summary && <span className="text-xs text-muted-foreground">{selected.summary}</span>}
+          </div>
 
-          <label className="block space-y-1.5">
+          <label className="flex flex-col gap-1.5">
             <span className="flex items-center gap-1.5 text-sm">
               Amount
               <TipAnchor anchor="invest.subscribe.amount" />
             </span>
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" />
+            <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
           </label>
 
           <p className="text-xs text-muted-foreground">Units are priced at the current NAV. Profit comes from the NAV rising, not from extra units.</p>
@@ -229,7 +277,7 @@ function SubscribePanel({ onDone }: { onDone: () => void }) {
   );
 }
 
-function RedeemPanel({ positions, onDone }: { positions: Position[] | null; onDone: () => void }) {
+function RedeemPanel({ positions, titleOf, onDone }: { positions: Position[] | null; titleOf: (service: string) => string; onDone: () => void }) {
   if (!positions) return <Skeleton className="h-40 w-full" />;
   if (positions.length === 0) {
     return (
@@ -244,14 +292,14 @@ function RedeemPanel({ positions, onDone }: { positions: Position[] | null; onDo
   return (
     <div className="space-y-4">
       {positions.map((p) => (
-        <RedeemRow key={p.service ?? ""} position={p} onDone={onDone} />
+        <RedeemRow key={p.service ?? ""} position={p} titleOf={titleOf} onDone={onDone} />
       ))}
     </div>
   );
 }
 
-function RedeemRow({ position, onDone }: { position: Position; onDone: () => void }) {
-  const service = position.service ?? DEFAULT_SERVICE;
+function RedeemRow({ position, titleOf, onDone }: { position: Position; titleOf: (service: string) => string; onDone: () => void }) {
+  const service = position.service ?? "";
   const [units, setUnits] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -279,7 +327,7 @@ function RedeemRow({ position, onDone }: { position: Position; onDone: () => voi
     <Card>
       <CardContent className="space-y-4 pt-6">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-medium">{service}</p>
+          <p className="font-medium">{titleOf(service)}</p>
           <span className="text-xs text-muted-foreground">{formatUnits(position.units)} units held</span>
         </div>
 
@@ -385,9 +433,9 @@ function ActivityPanel() {
               <div className="min-w-0 space-y-0.5">
                 <p className="text-sm">
                   <span className="font-medium">{formatUnits(r.units)} units</span>{" "}
-                  <span className="text-muted-foreground">{r.cash ? `→ ${formatUsdt(r.cash)} USDT` : "from " + (r.service ?? "fund")}</span>
+                  <span className="text-muted-foreground">{r.cash ? `→ ${formatUsdt(r.cash)} USDT` : `from ${r.service ?? "—"}`}</span>
                 </p>
-                <p className="font-mono-tech text-xs text-muted-foreground">{r.service ?? "fund"}</p>
+                <p className="font-mono-tech text-xs text-muted-foreground">{r.service ?? "—"}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <StatusPill state={r.state} />

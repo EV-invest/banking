@@ -4,7 +4,13 @@
 // the BFF holds them.
 
 import { getJson, postJson } from "@/shared/lib/api-client";
-import type { FundNav, PositionList, Redemption, RedemptionList, Subscription } from "@/shared/contracts";
+import type { AllocationList, FundNav, PositionList, Redemption, RedemptionList, Subscription } from "@/shared/contracts";
+
+/// The investor-facing catalog: `open` allocations only. Subscribing to anything else is
+/// refused by the hub, so this is the only honest source for the fund picker.
+export function fetchAllocations(): Promise<AllocationList> {
+  return getJson<AllocationList>("/api/allocations");
+}
 
 export function fetchPositions(): Promise<PositionList> {
   return getJson<PositionList>("/api/funds/positions");
