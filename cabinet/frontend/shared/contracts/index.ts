@@ -39,6 +39,11 @@ export type {
   BankingV1CancelRedemptionRequest as CancelRedemptionRequest,
 } from "./gen";
 
+// The allocation catalog is served to BOTH the investor surface (`/api/allocations`,
+// open products only) and the admin one from the same BFF DTO, so the hand-written
+// types live in one place and are re-exported here for the investor imports.
+export type { Allocation, AllocationList, AllocationState } from "./admin";
+
 // Identity surface — owned by the concierge plane.
 export type {
   ConciergeV1UserProfile as UserProfile,

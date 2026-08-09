@@ -86,7 +86,9 @@ export function ValuationView() {
   const currentNav = derivedNav ?? Number(nav?.nav ?? "0");
   // A fund nobody has subscribed to has no units, so AUM / units is undefined and the
   // hub rejects the post outright (`nav undefined: no units outstanding`). Say so here
-  // instead of letting the operator fill the form and meet a raw domain error.
+  // instead of letting the operator fill the form and meet a raw domain error — but gate
+  // only the POST. Writing the figure down is not what is impossible, so the AUM field
+  // stays usable.
   const noUnits = nav !== null && units === 0;
   const selected = allocations?.find((a) => a.service === service) ?? null;
 
@@ -168,7 +170,7 @@ export function ValuationView() {
                   AUM (USDT)
                   <TipAnchor anchor="admin.valuation.post.aum" />
                 </span>
-                <Input value={aum} onChange={(e) => setAum(e.target.value)} inputMode="decimal" placeholder="0.00" disabled={noUnits} className="w-full" />
+                <Input value={aum} onChange={(e) => setAum(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
               </label>
               <div className="flex flex-col gap-1.5">
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
