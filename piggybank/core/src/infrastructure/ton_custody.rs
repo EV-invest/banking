@@ -423,6 +423,24 @@ impl Custody for TonCustody {
 		Ok(Some(usdt))
 	}
 
+	/// Toncoin balance ÷ `msg_value` — the gate `ensure_treasury_funded` applies, so `0` is
+	/// exactly the balance at which the next withdrawal parks. TON's cost is fixed rather
+	/// than priced per block, so unlike the EVM rails nothing has to be read for it.
+	///
+	/// This over-states the runway slightly: most of each `msg_value` comes back (the
+	/// response destination is the treasury itself) and only the forwarded amount plus fees
+	/// is really spent. Erring toward the pessimistic number is deliberate — the alert should
+	/// fire before the cliff, not after it.
+	async fn treasury_gas_runway(&self, _network: Network) -> Result<Option<u64>, CustodyError> {
+		let treasury = self.treasury_address().await?;
+		let balance = self.rpc.balance(&treasury).await.map_err(read_err)?;
+		let per_withdrawal = u128::from(self.msg_value);
+		if per_withdrawal == 0 {
+			return Ok(None);
+		}
+		Ok(Some(u64::try_from(balance / per_withdrawal).unwrap_or(u64::MAX)))
+	}
+
 	/// Sums each derived deposit address's USDT jetton wallet. Sequential for the same reason
 	/// as the EVM rail (toncenter rate-limits a burst), and a single failed read fails the sum
 	/// rather than under-reporting it as missing money.

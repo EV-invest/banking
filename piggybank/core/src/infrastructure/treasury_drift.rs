@@ -32,6 +32,13 @@
 //! landing between them shows up as drift that is gone a moment later. A divergence is only
 //! reported once it has survived two consecutive scans with the same sign, which costs an
 //! interval of latency on a real problem and removes the entire class of false alarm.
+//!
+//! **Gas is watched too**, and is a wholly separate failure: a rail can hold exactly the USDT
+//! it should and still be unable to move any of it. Nothing else looks at the native balance —
+//! `ensure_treasury_funded` parks the withdrawal at broadcast time, and parking is a hard stop
+//! needing an operator, so without this the first symptom of an empty treasury is a user's
+//! withdrawal breaking. Measured in withdrawals rather than coins (see
+//! [`Custody::treasury_gas_runway`]) so one threshold means the same thing on every rail.
 
 use std::{
 	collections::HashMap,
@@ -58,6 +65,14 @@ const DUST_BASE_UNITS: u128 = 10_000_000_000_000_000;
 /// than [`reconciliation`](super::reconciliation)'s minute — the drift it looks for is an
 /// operator action or a bug, neither of which needs sub-hour detection.
 const SCAN_INTERVAL: Duration = Duration::from_secs(3600);
+
+/// Warn once a rail's treasury can pay gas for fewer than this many withdrawals.
+///
+/// Nothing else watches the native balance. An empty treasury does not degrade — the
+/// broadcast gate parks the withdrawal outright, and parking is a hard stop that needs an
+/// operator, so without this the first symptom is a user's withdrawal breaking. At an hourly
+/// cadence the threshold has to leave room to notice and act, not merely to be true.
+const MIN_GAS_RUNWAY: u64 = 5;
 
 /// What the previous scan saw for a rail, so a divergence must persist to be reported.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -104,6 +119,7 @@ impl TreasuryDrift {
 
 	async fn scan_once(&self) {
 		for network in Network::ALL {
+			self.check_gas(network).await;
 			// A rail with no chain view (unwired, or the stub) has nothing to compare against;
 			// it is not a drift and must not be reported as one.
 			let (Ok(Some(treasury)), Ok(Some(deposits))) = (self.custody.treasury_liquidity(network).await, self.custody.deposit_address_liquidity(network).await) else {
@@ -123,6 +139,26 @@ impl TreasuryDrift {
 				}
 			};
 			self.report(network, expected, actual);
+		}
+	}
+
+	/// Native-coin gas, which is a separate failure from the USDT comparison below: a rail can
+	/// hold every dollar it should and still be unable to move any of it.
+	///
+	/// Reported on a single reading, unlike the drift check. That one compares two sides read
+	/// at different instants and so has a race to suppress; this is one balance against one
+	/// price, and a transient RPC failure is already an `Err` that skips the rail. Waiting for
+	/// a second scan would cost an hour of warning and buy nothing.
+	async fn check_gas(&self, network: Network) {
+		let Ok(Some(runway)) = self.custody.treasury_gas_runway(network).await else {
+			return;
+		};
+		match classify_gas(runway) {
+			GasState::Ok => {}
+			// Not a warning: at zero the broadcast gate refuses, so withdrawals on this rail
+			// are already parking and each one needs an operator to unstick.
+			GasState::Exhausted => error!(%network, "treasury gas exhausted: the next withdrawal on this rail will park — fund the treasury with native coin"),
+			GasState::Low => warn!(%network, runway, "treasury gas is low: the treasury can pay for {runway} more withdrawal(s) before they start parking"),
 		}
 	}
 
@@ -160,6 +196,24 @@ impl TreasuryDrift {
 	}
 }
 
+/// How much gas the treasury has left, in the only unit that matters operationally.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum GasState {
+	Ok,
+	/// Still paying, but close enough that the operator has to act now.
+	Low,
+	/// The next withdrawal parks — the broadcast gate already refuses at this balance.
+	Exhausted,
+}
+
+fn classify_gas(runway: u64) -> GasState {
+	match runway {
+		0 => GasState::Exhausted,
+		n if n < MIN_GAS_RUNWAY => GasState::Low,
+		_ => GasState::Ok,
+	}
+}
+
 /// Compare the two sides with a dust tolerance, in whichever direction they differ.
 fn classify(expected: Usdt, actual: Usdt) -> Drift {
 	let (expected, actual) = (expected.base_units(), actual.base_units());
@@ -178,6 +232,18 @@ mod tests {
 
 	fn usdt(whole: u128) -> Usdt {
 		Usdt::from_base_units(whole * 1_000_000_000_000_000_000)
+	}
+
+	/// Zero is its own case, not merely the low end: it is the exact balance at which
+	/// `ensure_treasury_funded` starts parking withdrawals, so it must not be reported as a
+	/// warning the way a thin-but-working treasury is.
+	#[test]
+	fn an_exhausted_treasury_is_not_merely_a_low_one() {
+		assert_eq!(classify_gas(0), GasState::Exhausted);
+		assert_eq!(classify_gas(1), GasState::Low);
+		assert_eq!(classify_gas(MIN_GAS_RUNWAY - 1), GasState::Low);
+		assert_eq!(classify_gas(MIN_GAS_RUNWAY), GasState::Ok);
+		assert_eq!(classify_gas(u64::MAX), GasState::Ok);
 	}
 
 	#[test]

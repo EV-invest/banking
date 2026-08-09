@@ -50,6 +50,20 @@ pub trait Custody: Gateway {
 		Ok(None)
 	}
 
+	/// How many more withdrawals this rail's treasury can pay **gas** for, at the chain's
+	/// current price.
+	///
+	/// Counted in withdrawals rather than coins on purpose: the gas model is the adapter's
+	/// business (an EVM rail multiplies a live `gas_price` by its gas limit, TON attaches a
+	/// fixed `msg_value`), and the caller only wants to know how close the rail is to the
+	/// cliff. `0` is not "nearly empty" but "the next withdrawal parks" — it is the same
+	/// comparison `ensure_treasury_funded` makes at broadcast time, so the two can never
+	/// disagree about when a rail stops paying. `None` means the adapter has no chain view.
+	async fn treasury_gas_runway(&self, network: Network) -> Result<Option<u64>, CustodyError> {
+		let _ = network;
+		Ok(None)
+	}
+
 	/// The rail treasury's operator **funding view** — the hot-wallet address plus its
 	/// real on-chain USDT and native-coin gas balances, for the treasury screen. Same
 	/// read-only rules as [`treasury_liquidity`](Custody::treasury_liquidity); `None`
