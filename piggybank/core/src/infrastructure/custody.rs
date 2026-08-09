@@ -100,6 +100,13 @@ impl Custody for MultiChainCustody {
 		}
 	}
 
+	async fn treasury_gas_runway(&self, network: Network) -> Result<Option<u64>, CustodyError> {
+		match self.by_network.get(&network) {
+			Some(adapter) => adapter.treasury_gas_runway(network).await,
+			None => Ok(None),
+		}
+	}
+
 	async fn treasury_funding(&self, network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
 		match self.by_network.get(&network) {
 			Some(adapter) => adapter.treasury_funding(network).await,
@@ -395,6 +402,23 @@ impl Custody for ChainCustody {
 		// "no chain view" and stays conservative (queues), never a wrong dispatch.
 		let usdt = Usdt::from_onchain(self.network, raw).map_err(|e| CustodyError::Unavailable(format!("treasury USDT balance not representable: {e}")))?;
 		Ok(Some(usdt))
+	}
+
+	/// Native balance ÷ the cost of one withdrawal at the CURRENT gas price — the same
+	/// `gas_limit × gas_price` product `ensure_treasury_funded` compares against, so a
+	/// reported `0` is exactly the balance at which the next broadcast parks. Re-reads the
+	/// price each call rather than caching it: on Polygon it moves by multiples within an
+	/// hour, and a stale price would understate the cliff precisely when gas is spiking.
+	async fn treasury_gas_runway(&self, _network: Network) -> Result<Option<u64>, CustodyError> {
+		let treasury = self.treasury_address().await?;
+		let native = self.rpc.native_balance(&treasury).await.map_err(read_err)?;
+		let per_withdrawal = u128::from(self.gas_limit).saturating_mul(self.rpc.gas_price().await.map_err(read_err)?);
+		// A zero price is not a free chain, it is a node answering nonsense; refuse to divide
+		// by it and report no view rather than an infinite runway.
+		if per_withdrawal == 0 {
+			return Ok(None);
+		}
+		Ok(Some(u64::try_from(native / per_withdrawal).unwrap_or(u64::MAX)))
 	}
 
 	/// Sums `balanceOf` across every derived deposit address on this rail. Sequential on
