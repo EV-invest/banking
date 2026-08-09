@@ -434,6 +434,14 @@ gate mins the two); a shortfall means claims aren't backed on-chain. A divergenc
 two consecutive scans to be reported, so a transfer landing between the two reads is not an
 alert. Rails with no chain view are skipped.
 
+The same job watches **native-coin gas**, a separate failure — a rail can hold exactly the
+USDT it should and still be unable to move any of it. `Custody::treasury_gas_runway` reports
+how many withdrawals the treasury can still pay for (an EVM rail prices `gas_limit × gas_price`
+live; TON divides by its fixed `msg_value`), so one threshold means the same thing on every
+rail and `0` is precisely where `ensure_treasury_funded` starts parking. Exhausted is an
+`error!`, thin-but-working a `warn!`. Nothing else looked at the native balance before this:
+the first symptom of an empty treasury was a user's withdrawal parking.
+
 Out-of-band arrivals are **credited automatically**: each deposit watcher also watches its
 rail's treasury and records an arrival as `Party::Piggybank` (`Dr wallet:<net> / Cr fund`),
 idempotent by the same `tx_ref` machinery as a user deposit. The sweep moves USDT from a
