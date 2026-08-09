@@ -216,8 +216,8 @@
         rustPlatformBuild = pkgs.makeRustPlatform { cargo = rustBuild; rustc = rustBuild; };
         buildSrc = pkgs.lib.cleanSourceWith {
           src = ./.;
-          # .cargo holds dev-only accelerators (sccache/mold) the hermetic sandbox
-          # lacks; .tb-client is recreated in-sandbox below.
+          # .cargo holds dev-only accelerators (mold, nightly -Z flags) the hermetic
+          # sandbox lacks; .tb-client is recreated in-sandbox below.
           filter = path: _type:
             ! builtins.elem (baseNameOf path) [ "target" "node_modules" ".next" ".turbo" ".tb-client" ".tb" ".redis" ".pg" ".direnv" ".git" ".cargo" "tmp" "docs" "result" ];
         };
@@ -1080,7 +1080,9 @@
 
             env.RUST_BACKTRACE = 1;
             env.RUST_LIB_BACKTRACE = 0;
-            # shared compile cache across builds; incremental off (sccache requires it)
+            # shared compile cache across builds; incremental off (sccache requires it).
+            # Stays a devshell env var — in .cargo/config.toml it would break every
+            # cargo invocation outside nix (CI runners have no sccache on PATH).
             env.RUSTC_WRAPPER = "sccache";
             env.CARGO_INCREMENTAL = "0";
           };
