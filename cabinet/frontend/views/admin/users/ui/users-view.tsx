@@ -3,7 +3,7 @@
 import { Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { fetchUser, fetchUserBalance, fetchUsers, reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
 import type { AdminUserProfile, AdminUserSummary, UserBalance } from "@/shared/contracts/admin";
@@ -122,23 +122,27 @@ export function UsersView() {
   );
 }
 
+// A `div`, not a `label`: the uikit Select's trigger is a button, which a label has
+// nothing to bind to. "All" stays a real, selectable item — clearing the filter has to
+// be reachable — and maps back to `undefined`.
 function FilterSelect({ label, value, onChange, options }: { label: string; value?: string; onChange: (v: string | undefined) => void; options: readonly string[] }) {
   return (
-    <label className="inline-flex items-center gap-2 text-sm">
+    <div className="inline-flex items-center gap-2 text-sm">
       <span className="text-muted-foreground">{label}:</span>
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || undefined)}
-        className="rounded-md border border-border bg-main-surface px-2 py-1.5 text-sm capitalize outline-none focus:border-main-accent-t1"
-      >
-        <option value="">All</option>
-        {options.map((o) => (
-          <option key={o} value={o} className="capitalize">
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
+      <Select value={value ?? ""} onValueChange={(v) => onChange(v || undefined)}>
+        <SelectTrigger size="sm" className="border-border bg-main-surface capitalize">
+          <span className="truncate">{value ?? "All"}</span>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="">All</SelectItem>
+          {options.map((o) => (
+            <SelectItem key={o} value={o} className="capitalize">
+              {o}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
@@ -227,24 +231,24 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
         </Section>
 
         <Section title="Access & security">
-          <label className="flex items-center justify-between gap-2 py-1 text-sm">
+          <div className="flex items-center justify-between gap-2 py-1 text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
               Role
               <TipAnchor anchor="admin.users.access.role" />
             </span>
-            <select
-              value={role}
-              disabled={busy === "role"}
-              onChange={(e) => run("role", () => setUserRole(summary.user_id, e.target.value))}
-              className="rounded-md border border-border bg-main-surface px-2 py-1 text-sm capitalize outline-none focus:border-main-accent-t1"
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r} className="capitalize">
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
+            <Select value={role} onValueChange={(next) => run("role", () => setUserRole(summary.user_id, next))}>
+              <SelectTrigger size="sm" className="border-border bg-main-surface capitalize" disabled={busy === "role"}>
+                <span className="capitalize">{role}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {ROLES.map((r) => (
+                  <SelectItem key={r} value={r} className="capitalize">
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <label className="flex items-center justify-between gap-2 py-1 text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
               KYC level
