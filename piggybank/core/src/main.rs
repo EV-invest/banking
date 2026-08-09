@@ -379,7 +379,10 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// Deposit watcher + withdrawal confirmation watcher run when TON_API_URL is set; the
 	// sweep additionally needs SWEEP_ENABLED. Each holds its own pool clone / signer channel,
 	// mirroring the BEP20 tasks; all are no-ops (idle branch) when unconfigured.
-	let ton_deposit_watcher = rails.ton.clone().map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton));
+	let ton_deposit_watcher = rails
+		.ton
+		.clone()
+		.map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton, ton_custody.clone()));
 	let ton_withdrawal_watcher = match (&rails.ton, &ton_custody) {
 		(Some(ton), Some(ton_custody)) => Some(TonWithdrawalWatcher::new(pool.clone(), ton_custody.clone(), withdrawals.clone(), relay_notify.clone(), ton)),
 		_ => None,

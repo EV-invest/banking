@@ -388,6 +388,9 @@ mod tests {
 			tx_hash: hash.to_owned(),
 			amount,
 			now: 0,
+			// The withdrawal watcher matches OUTGOING transfers by amount; the sender is the
+			// treasury by construction, so this field plays no part here.
+			source: None,
 		}
 	}
 

@@ -31,7 +31,7 @@
 //! watermark up to `now - LOOKBACK_SECS` (see [`next_watermark`]), which is where a rail
 //! carrying traffic already sits.
 
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use domain::{
 	balance::Party,
@@ -48,9 +48,28 @@ use crate::{
 	config::TonConfig,
 	infrastructure::{
 		deposits::PgDeposits,
+		ton_custody::TonCustody,
 		ton_rpc::{JettonDeposit, TonRpc},
 	},
 };
+
+/// Is a jetton transfer into the treasury NEW money, or our own funds being consolidated?
+///
+/// The TON sweep sends USDT **from a user's derived deposit address to the treasury**, and
+/// that dollar is already counted in `wallet:ton` from the moment the deposit was credited —
+/// the ledger tracks what we control, not which of our wallets holds it. Crediting the
+/// arrival again would post a second `Dr wallet:ton / Cr fund` for one dollar, inventing
+/// capital and breaking the global `sum(custody) == sum(claims)` invariant.
+///
+/// A missing source is treated as NOT external: the indexer omits it for a mint, and the
+/// safe failure here is to skip a real injection (visible, and recordable by hand) rather
+/// than to double-count one.
+///
+/// `ours` is every wallet we control on this rail, lowercased raw `0:<hex>` — derived
+/// deposit addresses, the gas station, and the treasury itself.
+fn is_external_source(source: Option<&str>, ours: &HashSet<String>) -> bool {
+	source.is_some_and(|source| !ours.contains(source))
+}
 
 /// Per-owner page size for `/jetton/transfers`.
 const PAGE_LIMIT: u32 = 128;
@@ -72,13 +91,40 @@ pub struct TonDepositWatcher {
 	relay: Arc<Notify>,
 	rpc: TonRpc,
 	config: TonConfig,
+	/// Resolves the treasury + gas-station addresses so an operator's out-of-band top-up of
+	/// the hot wallet becomes a ledger fact. `None` leaves the watcher user-deposits-only.
+	custody: Option<Arc<TonCustody>>,
 }
 
 impl TonDepositWatcher {
-	pub fn new(pool: PgPool, relay: Arc<Notify>, config: TonConfig) -> Self {
+	pub fn new(pool: PgPool, relay: Arc<Notify>, config: TonConfig, custody: Option<Arc<TonCustody>>) -> Self {
 		let rpc = TonRpc::new(config.api_url.clone(), config.api_key.clone());
 		let deposits = PgDeposits::new(pool.clone());
-		Self { pool, deposits, relay, rpc, config }
+		Self {
+			pool,
+			deposits,
+			relay,
+			rpc,
+			config,
+			custody,
+		}
+	}
+
+	/// The treasury + gas-station addresses, lowercased raw `0:<hex>`. A resolution failure
+	/// degrades to `None` rather than failing the cycle: user deposits are the primary job
+	/// and must keep crediting regardless. Both are `OnceCell`-cached in the adapter.
+	async fn treasury_addresses(&self) -> Option<(String, Option<String>)> {
+		let custody = self.custody.as_ref()?;
+		match custody.treasury_address().await {
+			Ok(treasury) => {
+				let gas_station = custody.gas_station_address().await.ok().map(|a| a.to_lowercase());
+				Some((treasury.to_lowercase(), gas_station))
+			}
+			Err(err) => {
+				tracing::debug!("ton deposit watcher: treasury address unavailable this cycle, watching user deposits only: {err}");
+				None
+			}
+		}
 	}
 
 	/// Poll until `shutdown` is cancelled. A failed cycle is logged and retried next poll
@@ -121,11 +167,27 @@ impl TonDepositWatcher {
 		let network = Network::Ton;
 		let cursor = self.cursor(network).await?;
 		let watched = self.watched_addresses(network).await?;
-		if watched.is_empty() {
+		// The treasury is drained as one more owner: jettons arriving there from outside our
+		// own wallets are the fund's capital, and nothing else in the system would record them.
+		let (treasury, gas_station) = match self.treasury_addresses().await {
+			Some((treasury, gas_station)) => (Some(treasury), gas_station),
+			None => (None, None),
+		};
+		if watched.is_empty() && treasury.is_none() {
 			// Nothing fundable yet — fast-forward to now so we don't re-scan an empty window.
 			self.set_cursor(network, now_unix()).await?;
 			return Ok(());
 		}
+		// `None` marks the treasury owner — its arrivals credit the fund, not a user.
+		let owners: Vec<(&String, Option<UserId>)> = watched.iter().map(|(a, u)| (a, Some(*u))).chain(treasury.iter().map(|t| (t, None))).collect();
+		// Every wallet we control, folded to the one case the indexer's `source` is folded to.
+		// The treasury credit is gated on a sender outside this set.
+		let ours: HashSet<String> = watched
+			.iter()
+			.map(|(a, _)| a.to_lowercase())
+			.chain(treasury.iter().cloned())
+			.chain(gas_station.iter().cloned())
+			.collect();
 
 		let from = cursor.saturating_sub(LOOKBACK_SECS);
 		let mut high = cursor;
@@ -133,7 +195,7 @@ impl TonDepositWatcher {
 		// the watermark up on an idle rail (see `next_watermark`) — a skipped owner may still
 		// have an unseen transfer below `now - LOOKBACK_SECS`.
 		let mut all_owners_drained = true;
-		for (owner, user) in &watched {
+		for (owner, user) in &owners {
 			// Drain this owner to the head, page by page: a single capped page could leave
 			// older transfers unfetched while ANOTHER owner's newer transfer advances the
 			// global watermark past them — skipped forever. Paging until a short raw page
@@ -154,8 +216,19 @@ impl TonDepositWatcher {
 					}
 				};
 				for transfer in &page.transfers {
-					self.credit(*user, network, transfer).await?;
+					// Seen is seen: the watermark advances for a consolidation we deliberately
+					// ignore exactly as for one we credit, or the cursor would stall on it.
 					high = high.max(transfer.now);
+					match user {
+						Some(user) => self.credit(Party::User(*user), network, transfer).await?,
+						// The sweep also lands here — from OUR derived address — and that dollar is
+						// already `wallet:ton` behind a user's claim. Crediting it would invent
+						// capital and break `sum(custody) == sum(claims)`; only outside money counts.
+						None if is_external_source(transfer.source.as_deref(), &ours) => {
+							self.credit(Party::Piggybank, network, transfer).await?;
+						}
+						None => {}
+					}
 				}
 				if page.raw_len < PAGE_LIMIT as usize {
 					break;
@@ -186,11 +259,21 @@ impl TonDepositWatcher {
 		Ok(())
 	}
 
-	async fn credit(&self, user: UserId, network: Network, transfer: &JettonDeposit) -> Result<(), WatcherError> {
+	async fn credit(&self, party: Party, network: Network, transfer: &JettonDeposit) -> Result<(), WatcherError> {
 		let amount = Usdt::from_onchain(network, transfer.amount).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {
 			return Ok(());
 		}
+		// The recipient discriminator below. `piggybank` is a reserved word here: it is not a
+		// uuid, so it can never collide with a user's key for the same hash. Anything recording
+		// a treasury arrival by hand MUST use this same shape, or the two references describe
+		// one transfer under two keys and the dollar is credited twice.
+		let recipient = match &party {
+			Party::User(user) => user.to_string(),
+			Party::Piggybank => "piggybank".to_string(),
+			Party::Service(service) => service.as_str().to_owned(),
+		};
+		let is_capital = matches!(party, Party::Piggybank);
 		// Disambiguate per recipient like the BEP20/TRC20 watchers: `deposits.tx_ref` is a global
 		// key, so compose the on-chain transaction hash with the credited user. In practice each
 		// incoming jetton transfer is its own transaction on the recipient's jetton wallet (so the
@@ -198,12 +281,14 @@ impl TonDepositWatcher {
 		// quirk — impossible to collapse across users. The user id (a 36-char uuid) keeps the key
 		// well under `TxRef`'s length cap regardless of the indexer's hash encoding, and is stable
 		// across re-scans (the address→user map is fixed), so idempotency holds.
-		let tx_ref = TxRef::parse(&format!("{}:{user}", transfer.tx_hash)).map_err(|e| WatcherError::Decode(e.to_string()))?;
-		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, Party::User(user), network, amount)
+		let tx_ref = TxRef::parse(&format!("{}:{recipient}", transfer.tx_hash)).map_err(|e| WatcherError::Decode(e.to_string()))?;
+		let newly = record_deposit(&self.deposits, &self.relay, tx_ref, party, network, amount)
 			.await
 			.map_err(|e| WatcherError::Credit(e.to_string()))?;
-		if newly {
-			info!(user = %user, tx = %transfer.tx_hash, "ton deposit watcher: credited on-chain jetton USDT deposit");
+		if newly && is_capital {
+			info!(tx = %transfer.tx_hash, source = transfer.source.as_deref().unwrap_or("?"), "ton deposit watcher: credited an out-of-band treasury top-up as fund capital");
+		} else if newly {
+			info!(recipient, tx = %transfer.tx_hash, "ton deposit watcher: credited on-chain jetton USDT deposit");
 		}
 		Ok(())
 	}
@@ -300,6 +385,27 @@ mod tests {
 	use super::*;
 
 	const NOW: u64 = 1_800_000_000;
+
+	/// The invariant-critical case, mirroring the EVM watcher's. The sweep arrives at the
+	/// treasury looking exactly like an operator top-up, and only the sender separates them:
+	/// credit a consolidation and one dollar is booked twice as fund capital.
+	#[test]
+	fn only_a_sender_outside_our_own_wallets_is_new_capital() {
+		let deposit_address = "0:aaaa000000000000000000000000000000000000000000000000000000000001";
+		let gas_station = "0:e13207248f7f8dd9d1d332c3b7d5cc0092c2b01db41b40234614b0c83ac066bb";
+		let treasury = "0:94784e25d2a4b6113576222ca09f782a765f22c895a1a8a512b38382d2ee8ec1";
+		let ours: HashSet<String> = [deposit_address, gas_station, treasury].into_iter().map(str::to_string).collect();
+
+		// The sweep consolidating a user's deposit — already `wallet:ton`, must NOT re-credit.
+		assert!(!is_external_source(Some(deposit_address), &ours));
+		assert!(!is_external_source(Some(gas_station), &ours));
+		assert!(!is_external_source(Some(treasury), &ours));
+		// The operator's own wallet funding the rail — the one arrival that is new capital.
+		assert!(is_external_source(Some("0:7d133d4e425c8e00de015513a44e66e6d163b21e71720aec7579965e5de28c55"), &ours));
+		// A source the indexer omitted is never assumed external: skipping a real injection is
+		// recoverable by hand, double-counting one is not.
+		assert!(!is_external_source(None, &ours));
+	}
 
 	#[test]
 	fn an_idle_rail_floats_up_instead_of_holding_its_initial_watermark() {
