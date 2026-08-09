@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@evinvest/uikit/styles/tokens.css";
-@import "./token-override.css";
 
 /* The shared UI kit ships compiled; point Tailwind at its dist so the classes
    baked into @evinvest/uikit components are generated. Deps hoist to the REPO

@@ -11,11 +11,11 @@
    leaving it unlayered costs nothing.
 
    Tokens come from the same source the app uses, so `text-main-mist` / `bg-main-accent-t1`
-   / `border-border` resolve identically — including the temporary override, without which
-   the remote renders the old palette against a host that has already moved. */
+   / `border-border` resolve identically. Anything the app-only entry point carries is
+   invisible here, so a palette change that lands in globals.css alone leaves the remote
+   painting the old colours against a host that has already moved. */
 @import "tailwindcss/theme.css";
 @import "tailwindcss/utilities.css" layer(reamfe);
 @import "@evinvest/uikit/styles/tokens.css" layer(reamfe);
-@import "../../application/styles/token-override.css" layer(reamfe);
 
 @source "../../features/account-chip/ui/account-chip.tsx";
