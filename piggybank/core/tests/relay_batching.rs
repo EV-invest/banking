@@ -17,19 +17,15 @@ use domain::{
 };
 use piggybank_core::{
 	application::balance as balance_app,
-	infrastructure::{
-		custody::StubCustody,
-		db,
-		deposits::PgDeposits,
-		ledger::{self, TbLedger},
-		relay::Relay,
-		tigerbeetle::TigerBeetle,
-	},
-	ports::ledger::Ledger,
+	infrastructure::{custody::StubCustody, deposits::PgDeposits, relay::Relay},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
 use uuid::Uuid;
+
+mod common;
+
+use crate::common::ledger_for;
 
 struct Harness {
 	pool: PgPool,
@@ -43,14 +39,8 @@ impl Harness {
 }
 
 async fn harness() -> Option<Harness> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-
-	if ledger::seed_singletons(ledger_for(&pool).as_ref()).await.is_err() {
-		eprintln!("TigerBeetle unreachable — skipping relay batching test");
-		return None;
-	}
+	let pool = common::pool().await?;
+	common::seeded_ledger(&pool, "relay batching test").await?;
 	Some(Harness {
 		deposits: PgDeposits::new(pool.clone()),
 		pool,
@@ -78,13 +68,6 @@ async fn drain_exhausts_a_backlog_wider_than_one_batch() {
 
 	assert!(!throttle, "a healthy multi-batch drain must not report a transient failure");
 	assert_eq!(h.balance(&claim).await.saturating_sub(before), usdt("129").base_units(), "every row past the first batch applied");
-}
-
-fn ledger_for(pool: &PgPool) -> Arc<dyn Ledger> {
-	let address = std::env::var("TIGERBEETLE_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3033".to_owned());
-	let cluster = std::env::var("TIGERBEETLE_CLUSTER_ID").ok().and_then(|s| s.parse().ok()).unwrap_or(0u128);
-	let tigerbeetle = Arc::new(TigerBeetle::connect(cluster, &address).expect("connect to TigerBeetle"));
-	Arc::new(TbLedger::new(tigerbeetle, pool.clone()))
 }
 
 fn usdt(decimal: &str) -> Usdt {
