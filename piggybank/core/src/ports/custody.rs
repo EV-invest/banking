@@ -36,6 +36,20 @@ pub trait Custody: Gateway {
 		Ok(None)
 	}
 
+	/// The USDT sitting on this rail's **derived deposit addresses** — credited deposits the
+	/// sweep has not consolidated yet, in 18-dp base units.
+	///
+	/// `treasury_liquidity` plus this is every wallet we control on the rail, which is exactly
+	/// what `wallet:<net>` claims to count. The pair is the only way to check the ledger against
+	/// the chain: the treasury balance alone under-counts by whatever is still sitting on users'
+	/// addresses, which is why no per-rail assertion existed before. Costs one balance read per
+	/// derived address, so it belongs on a slow cadence, never on a request path. `None` means
+	/// the adapter has no chain view.
+	async fn deposit_address_liquidity(&self, network: Network) -> Result<Option<Usdt>, CustodyError> {
+		let _ = network;
+		Ok(None)
+	}
+
 	/// The rail treasury's operator **funding view** — the hot-wallet address plus its
 	/// real on-chain USDT and native-coin gas balances, for the treasury screen. Same
 	/// read-only rules as [`treasury_liquidity`](Custody::treasury_liquidity); `None`

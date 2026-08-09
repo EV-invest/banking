@@ -43,6 +43,7 @@ use piggybank_core::{
 		ton_deposit_watcher::TonDepositWatcher,
 		ton_sweep::TonSweep,
 		ton_withdrawal_watcher::TonWithdrawalWatcher,
+		treasury_drift::TreasuryDrift,
 		tron_custody::TronCustody,
 		tron_deposit_watcher::TronDepositWatcher,
 		tron_sweep::TronSweep,
@@ -291,6 +292,11 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
 	let reaper = Reaper::new(relay_pool.clone(), withdrawals.clone(), redemptions.clone(), relay_notify.clone());
 	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
+	// The per-rail counterpart to `reconciliation`: that one relates two TigerBeetle accounts,
+	// so it stays green when the LEDGER and the CHAIN disagree. This compares `wallet:<net>`
+	// against the wallets it claims to describe, which is the only thing that notices USDT
+	// arriving out of band. Alert-only, and a no-op on rails with no chain view.
+	let treasury_drift = TreasuryDrift::new(ledger.clone(), custody.clone());
 
 	// ── cross-plane lifecycle bridge consumer (one-way concierge → banking) ─────
 	// Pull concierge `UserLifecycleEvent`s and mirror them onto the `users` control
@@ -434,6 +440,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		provisioner,
 		relay_done,
 		reconciliation_done,
+		treasury_drift_done,
 		reaper_done,
 		dispatcher_done,
 		bridge_done,
@@ -457,6 +464,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		branch(&shutdown, "provisioner", infallible(auth_sync::run_provisioner(provision_rx, users))),
 		branch(&shutdown, "relay", infallible(relay.run(shutdown.clone()))),
 		branch(&shutdown, "reconciliation", infallible(reconciliation.run(shutdown.clone()))),
+		branch(&shutdown, "treasury drift watch", infallible(treasury_drift.run(shutdown.clone()))),
 		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
 		branch(&shutdown, "dispatcher", infallible(dispatcher.run(shutdown.clone()))),
 		branch(&shutdown, "bridge", infallible(run_bridge(bridge, shutdown.clone()))),
@@ -496,6 +504,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		.and(provisioner)
 		.and(relay_done)
 		.and(reconciliation_done)
+		.and(treasury_drift_done)
 		.and(reaper_done)
 		.and(dispatcher_done)
 		.and(bridge_done)
