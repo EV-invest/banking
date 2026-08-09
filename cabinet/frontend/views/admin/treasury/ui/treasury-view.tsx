@@ -3,7 +3,7 @@
 import { Check, Copy, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { fetchTreasury, recordTreasuryDeposit } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
@@ -159,29 +159,32 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
             liquidity spendable.
           </p>
           <div className="grid gap-4 md:grid-cols-3">
-            <label className="block space-y-1.5">
+            <div className="flex flex-col gap-1.5">
               <span className="text-sm text-muted-foreground">Rail</span>
-              <select
-                value={network}
-                onChange={(e) => setNetwork(e.target.value)}
-                disabled={options.length === 0}
-                className="h-9 w-full rounded-md border border-border bg-main-surface px-2 text-sm outline-none focus:border-main-accent-t1 disabled:opacity-60"
-              >
-                <option value="">{options.length === 0 ? "No rail with a treasury" : "Select a rail…"}</option>
-                {options.map((r) => (
-                  <option key={r.network} value={r.network}>
-                    {RAIL_LABELS[r.network] ?? r.network}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block space-y-1.5">
+              <Select value={network} onValueChange={setNetwork}>
+                <SelectTrigger className="w-full border-border bg-main-surface" disabled={options.length === 0}>
+                  {/* The placeholder is trigger text, not a selectable item — "Select a
+                      rail…" is not a rail. */}
+                  <span className={cn("truncate", !network && "text-muted-foreground")}>
+                    {network ? (RAIL_LABELS[network] ?? network) : options.length === 0 ? "No rail with a treasury" : "Select a rail…"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((r) => (
+                    <SelectItem key={r.network} value={r.network}>
+                      {RAIL_LABELS[r.network] ?? r.network}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex flex-col gap-1.5">
               <span className="text-sm text-muted-foreground">Amount (USDT)</span>
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" />
+              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
             </label>
-            <label className="block space-y-1.5">
+            <label className="flex flex-col gap-1.5">
               <span className="text-sm text-muted-foreground">On-chain reference</span>
-              <Input value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" />
+              <Input value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" className="w-full" />
             </label>
           </div>
 
