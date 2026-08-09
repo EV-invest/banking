@@ -73,6 +73,7 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/admin/users/kyc", post(admin::set_kyc))
 		.route("/api/admin/users/balance", get(admin::user_balance))
 		.route("/api/admin/treasury", get(admin::treasury))
+		.route("/api/admin/treasury/record-deposit", post(admin::record_treasury_deposit))
 		.route("/api/admin/allocations", get(admin::list_allocations))
 		.route("/api/admin/allocations/register", post(admin::register_allocation))
 		.route("/api/admin/allocations/update", post(admin::update_allocation))

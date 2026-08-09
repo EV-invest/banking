@@ -1,16 +1,19 @@
 "use client";
 
-import { Check, Copy, RefreshCw, TriangleAlert } from "lucide-react";
+import { Check, Copy, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
-import { fetchTreasury } from "@/entities/admin/api/admin-client";
+import { fetchTreasury, recordTreasuryDeposit } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
+import { cn } from "@/shared/lib/cn";
 import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
+
+const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
 const RAIL_LABELS: Record<string, string> = {
   bep20: "BEP20 · BNB Chain",
@@ -104,11 +107,104 @@ export function TreasuryView() {
         </div>
       </section>
 
+      <RecordArrival rails={treasury?.rails} onRecorded={retry} />
+
       <p className="max-w-3xl text-xs text-muted-foreground">
         Per-rail backing is the treasury&apos;s job, not the ledger&apos;s: a shortfall on one rail is accept-and-queue, then rebalanced via CEX / alt-rail / top-up. The global invariant is{" "}
         <span className="font-mono-tech">sum(custody) == sum(claims)</span>.
       </p>
     </div>
+  );
+}
+
+/** Funding a treasury hot wallet directly moves real USDT while writing nothing to the
+ *  ledger: the rail's custody figure doesn't move, fund capital understates what went in,
+ *  and the dispatch gate (`min(TB rail, on-chain treasury)`) keeps reading the old number,
+ *  so that liquidity can't be withdrawn. This is where that arrival gets recorded.
+ *
+ *  Idempotent by `tx_ref`, so the honest outcome is three-way: credited, already credited,
+ *  or failed — collapsing "already credited" into a generic success would invite the
+ *  operator to re-submit under a second reference and double-count the same dollar. */
+function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefined; onRecorded: () => void }) {
+  const [network, setNetwork] = useState("");
+  const [txRef, setTxRef] = useState("");
+  const [amount, setAmount] = useState("");
+  const [state, setState] = useState<{ busy: boolean; error: string | null; result: "recorded" | "duplicate" | null }>({ busy: false, error: null, result: null });
+
+  // Only rails the hub actually reported: an address minted for a rail nothing watches is
+  // exactly the mistake this screen exists to prevent.
+  const options = rails?.filter((r) => r.treasury_address) ?? [];
+
+  const submit = useCallback(() => {
+    setState({ busy: true, error: null, result: null });
+    recordTreasuryDeposit({ tx_ref: txRef.trim(), network, amount: amount.trim(), party_kind: "piggybank" })
+      .then((res) => {
+        setState({ busy: false, error: null, result: res.recorded ? "recorded" : "duplicate" });
+        if (res.recorded) {
+          setTxRef("");
+          setAmount("");
+          onRecorded();
+        }
+      })
+      .catch((e: Error) => setState({ busy: false, error: e.message, result: null }));
+  }, [txRef, network, amount, onRecorded]);
+
+  return (
+    <section className="space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Record an out-of-band arrival</p>
+      <Card>
+        <CardContent className="space-y-5 py-6">
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            USDT sent straight to a treasury hot wallet is real money the ledger never saw. Record it here against its on-chain reference to credit fund capital and make the
+            liquidity spendable.
+          </p>
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="block space-y-1.5">
+              <span className="text-sm text-muted-foreground">Rail</span>
+              <select
+                value={network}
+                onChange={(e) => setNetwork(e.target.value)}
+                disabled={options.length === 0}
+                className="h-9 w-full rounded-md border border-border bg-main-surface px-2 text-sm outline-none focus:border-main-accent-t1 disabled:opacity-60"
+              >
+                <option value="">{options.length === 0 ? "No rail with a treasury" : "Select a rail…"}</option>
+                {options.map((r) => (
+                  <option key={r.network} value={r.network}>
+                    {RAIL_LABELS[r.network] ?? r.network}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-sm text-muted-foreground">Amount (USDT)</span>
+              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-sm text-muted-foreground">On-chain reference</span>
+              <Input value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="0xhash:logIndex" />
+            </label>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            The reference is the idempotency key — use the real one (<span className="font-mono-tech">txhash:logIndex</span> on an EVM rail, the transaction hash on TON). A
+            re-submission under the same reference is a no-op; an invented one credits the same dollar twice.
+          </p>
+
+          {state.error && (
+            <p className="flex items-center gap-2 text-sm text-destructive">
+              <TriangleAlert className="size-4 shrink-0" /> {state.error}
+            </p>
+          )}
+          {state.result === "recorded" && <p className="text-sm text-main-accent-t1">Recorded — fund capital credited.</p>}
+          {state.result === "duplicate" && <p className="text-sm text-main-accent-t3">Already recorded — that reference was credited before, nothing changed.</p>}
+
+          <Button type="button" className={cn("ml-auto flex", TEAL_CTA)} disabled={state.busy || !network || !amount.trim() || !txRef.trim()} onClick={submit}>
+            {state.busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            Record arrival
+          </Button>
+        </CardContent>
+      </Card>
+    </section>
   );
 }
 
