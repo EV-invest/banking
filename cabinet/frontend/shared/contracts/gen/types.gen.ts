@@ -1047,12 +1047,20 @@ export type BankingV1ReadinessResponse = {
 
 /**
  * RecordDepositRequest
+ *
+ * Record an arrival that reached a rail out of band, PROVEN against the chain.
+ *
+ * The caller supplies only a pointer to a fact: the reference is read back from the chain
+ * and the amount and the credited party are taken from what is actually there. An operator
+ * therefore cannot mint a balance by typing one — the worst a wrong reference can do is
+ * name a transfer that does not exist, or one that did not land on an address of ours,
+ * and both are rejected.
  */
 export type BankingV1RecordDepositRequest = {
     /**
      * tx_ref
      *
-     * the on-chain tx reference — the idempotency key
+     * `txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key
      */
     tx_ref?: string;
     /**
@@ -1062,22 +1070,13 @@ export type BankingV1RecordDepositRequest = {
      */
     network?: string;
     /**
-     * amount
+     * expected_amount
      *
-     * decimal USDT (canonical value, network-agnostic)
+     * Optional operator assertion in decimal USDT. When set it must equal what the chain
+     * reports or the call is refused, so a mistyped reference fails loudly instead of
+     * silently crediting some other transfer.
      */
-    amount?: string;
-    /**
-     * party_kind
-     *
-     * The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the
-     * user UUID or service id (empty for piggybank, which credits the fund's capital).
-     */
-    party_kind?: string;
-    /**
-     * party_id
-     */
-    party_id?: string;
+    expected_amount?: string;
 };
 
 /**
@@ -1090,6 +1089,24 @@ export type BankingV1RecordDepositResponse = {
      * false if `tx_ref` was already recorded (idempotent no-op)
      */
     recorded?: boolean;
+    /**
+     * amount
+     *
+     * what the CHAIN reported, decimal USDT — never the caller's number
+     */
+    amount?: string;
+    /**
+     * party_kind
+     *
+     * who the chain says it belongs to: piggybank | user | service
+     */
+    party_kind?: string;
+    /**
+     * party_id
+     *
+     * the user UUID or service id (empty for piggybank)
+     */
+    party_id?: string;
 };
 
 /**

@@ -4764,30 +4764,22 @@
           "tx_ref": {
             "type": "string",
             "title": "tx_ref",
-            "description": "the on-chain tx reference — the idempotency key"
+            "description": "`txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key"
           },
           "network": {
             "type": "string",
             "title": "network",
             "description": "bep20 | polygon | trc20 | ton — the rail it arrived on"
           },
-          "amount": {
+          "expected_amount": {
             "type": "string",
-            "title": "amount",
-            "description": "decimal USDT (canonical value, network-agnostic)"
-          },
-          "party_kind": {
-            "type": "string",
-            "title": "party_kind",
-            "description": "The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the\n user UUID or service id (empty for piggybank, which credits the fund's capital)."
-          },
-          "party_id": {
-            "type": "string",
-            "title": "party_id"
+            "title": "expected_amount",
+            "description": "Optional operator assertion in decimal USDT. When set it must equal what the chain\n reports or the call is refused, so a mistyped reference fails loudly instead of\n silently crediting some other transfer."
           }
         },
         "title": "RecordDepositRequest",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Record an arrival that reached a rail out of band, PROVEN against the chain.\n\n The caller supplies only a pointer to a fact: the reference is read back from the chain\n and the amount and the credited party are taken from what is actually there. An operator\n therefore cannot mint a balance by typing one — the worst a wrong reference can do is\n name a transfer that does not exist, or one that did not land on an address of ours,\n and both are rejected."
       },
       "banking.v1.RecordDepositResponse": {
         "type": "object",
@@ -4796,6 +4788,21 @@
             "type": "boolean",
             "title": "recorded",
             "description": "false if `tx_ref` was already recorded (idempotent no-op)"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "what the CHAIN reported, decimal USDT — never the caller's number"
+          },
+          "party_kind": {
+            "type": "string",
+            "title": "party_kind",
+            "description": "who the chain says it belongs to: piggybank | user | service"
+          },
+          "party_id": {
+            "type": "string",
+            "title": "party_id",
+            "description": "the user UUID or service id (empty for piggybank)"
           }
         },
         "title": "RecordDepositResponse",
