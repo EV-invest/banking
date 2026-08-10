@@ -42,11 +42,12 @@ use tracing::{info, warn};
 use crate::{
 	application::balance::record_deposit,
 	config::EvmConfig,
-	infrastructure::{custody::ChainCustody, deposits::PgDeposits},
+	infrastructure::{
+		custody::ChainCustody,
+		deposits::PgDeposits,
+		evm_rpc::{TRANSFER_TOPIC, address_from_topic, hex_to_u64, word_to_u128},
+	},
 };
-
-/// `keccak256("Transfer(address,address,uint256)")` — the ERC-20 Transfer event topic0.
-const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
 /// Max retries for a single RPC call (`eth_blockNumber` / `eth_getLogs`) when the
 /// error is retryable (rate-limit, timeout). Caps the total backoff within one scan
@@ -266,7 +267,7 @@ impl DepositWatcher {
 	async fn block_number(&self) -> Result<u64, WatcherError> {
 		let result = self.rpc("eth_blockNumber", json!([])).await?;
 		let hex = result.as_str().ok_or_else(|| WatcherError::Rpc("eth_blockNumber: non-string result".into()))?;
-		parse_hex_u64(hex).ok_or_else(|| WatcherError::Rpc(format!("eth_blockNumber: unparseable {hex}")))
+		hex_to_u64(hex).ok_or_else(|| WatcherError::Rpc(format!("eth_blockNumber: unparseable {hex}")))
 	}
 
 	/// One chunk of Transfer logs starting at `from`, plus the last block it covers — the
@@ -467,39 +468,15 @@ fn decode_transfer(log: &Value) -> Option<Transfer> {
 	}
 	let from = address_from_topic(topics[1].as_str()?)?;
 	let to = address_from_topic(topics[2].as_str()?)?;
-	let value = u128_from_word(log.get("data")?.as_str()?)?;
+	let value = word_to_u128(log.get("data")?.as_str()?)?;
 	let tx_hash = log.get("transactionHash")?.as_str()?.to_lowercase();
-	let log_index = parse_hex_u64(log.get("logIndex")?.as_str()?)?;
+	let log_index = hex_to_u64(log.get("logIndex")?.as_str()?)?;
 	Some(Transfer { from, to, value, tx_hash, log_index })
 }
 
-/// The last 20 bytes of a 32-byte topic word → a lowercase `0x…` address.
-fn address_from_topic(topic: &str) -> Option<String> {
-	let hex = topic.strip_prefix("0x")?;
-	if hex.len() != 64 {
-		return None;
-	}
-	Some(format!("0x{}", &hex[24..]).to_lowercase())
-}
 
 /// A 32-byte big-endian uint256 word → `u128`. `None` if it exceeds `u128` (the high 16
 /// bytes are non-zero) — refused rather than silently truncated.
-fn u128_from_word(word: &str) -> Option<u128> {
-	let hex = word.strip_prefix("0x")?;
-	if hex.len() != 64 {
-		return None;
-	}
-	let (high, low) = hex.split_at(32);
-	if high.bytes().any(|b| b != b'0') {
-		return None;
-	}
-	u128::from_str_radix(low, 16).ok()
-}
-
-fn parse_hex_u64(value: &str) -> Option<u64> {
-	u64::from_str_radix(value.strip_prefix("0x")?, 16).ok()
-}
-
 /// Left-pad a 20-byte `0x` address into a 32-byte topic word for the `to` filter.
 fn pad_topic(address_lower: &str) -> String {
 	let hex = address_lower.strip_prefix("0x").unwrap_or(address_lower);
@@ -636,8 +613,8 @@ mod tests {
 	#[test]
 	fn rejects_a_value_exceeding_u128() {
 		// High 16 bytes non-zero ⇒ exceeds u128 ⇒ refused, never truncated.
-		assert!(u128_from_word("0x0000000000000000000000000000000100000000000000000000000000000000").is_none());
-		assert_eq!(u128_from_word("0x0000000000000000000000000000000000000000000000000000000000000001"), Some(1));
+		assert!(word_to_u128("0x0000000000000000000000000000000100000000000000000000000000000000").is_none());
+		assert_eq!(word_to_u128("0x0000000000000000000000000000000000000000000000000000000000000001"), Some(1));
 	}
 
 	#[test]

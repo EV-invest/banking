@@ -115,6 +115,21 @@ impl DepositAddresses for SignerDepositAddresses {
 		Ok(derived.then_some(address))
 	}
 
+	/// Matched case-insensitively: EVM addresses are stored checksummed but arrive from the
+	/// chain lowercased, and a case mismatch here would read as "not our address" and refuse
+	/// a real deposit. Only `derived` rows count — a placeholder is not an on-chain image of
+	/// any key, so nothing can have been sent to it.
+	async fn owner_of(&self, network: Network, address: &str) -> Result<Option<UserId>, DomainError> {
+		let owner: Option<uuid::Uuid> =
+			sqlx::query_scalar("SELECT user_id FROM user_deposit_addresses WHERE network = $1 AND lower(address) = lower($2) AND address_kind = 'derived'")
+				.bind(network.as_str())
+				.bind(address)
+				.fetch_optional(&self.pool)
+				.await
+				.map_err(repo_err)?;
+		Ok(owner.map(UserId::from_raw))
+	}
+
 	async fn rotate(&self, user: UserId, network: Network) -> Result<WalletAddress, DomainError> {
 		let mut request = Request::new(RotateAddressRequest {
 			user_id: user.raw().to_string(),

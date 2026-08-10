@@ -12,7 +12,7 @@ use domain::{
 };
 use tokio::sync::Notify;
 
-use crate::ports::{Custody, Deposits, ledger::Ledger};
+use crate::ports::{Custody, Deposits, custody::InboundTransfer, deposit_addresses::DepositAddresses, ledger::Ledger};
 
 /// Per-rail on-chain liquidity (the treasury / Layer 2). `custody` is
 /// TigerBeetle-authoritative; the funding fields are the operator's chain view,
@@ -79,6 +79,97 @@ pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxR
 	}
 	Ok(recorded)
 }
+/// What a verified arrival turned out to be, once the chain had its say.
+pub struct VerifiedArrival {
+	pub recorded: bool,
+	pub party: Party,
+	pub amount: Usdt,
+}
+
+/// Record an out-of-band arrival, taking every material fact from the CHAIN.
+///
+/// This is the operator's only way to write a deposit by hand, and it is deliberately not a
+/// way to *state* one. The caller supplies a reference; the amount and the credited party are
+/// read back from the transfer that reference names. So the operator surface cannot mint a
+/// balance — the worst a bad reference achieves is a refusal.
+///
+/// Read-First against the chain, then the ordinary idempotent `record_deposit`, so a
+/// hand-verified arrival and a scanned one collapse onto the same `tx_ref` and one transfer
+/// can never be booked twice.
+pub async fn record_verified_arrival(
+	deposits: &dyn Deposits,
+	custody: &dyn Custody,
+	addresses: &dyn DepositAddresses,
+	relay: &Notify,
+	tx_ref: TxRef,
+	network: Network,
+	expected_amount: Option<Usdt>,
+) -> Result<VerifiedArrival, DomainError> {
+	let transfer = custody
+		.inbound_transfer(network, &tx_ref)
+		.await
+		.map_err(|e| DomainError::Repository(format!("chain lookup failed: {e}")))?
+		.ok_or_else(|| {
+			DomainError::Validation(format!(
+				"no confirmed {network} USDT transfer matches {} — check the reference, the rail, and that it has enough confirmations",
+				tx_ref.as_str()
+			))
+		})?;
+	// An assertion, never an input: it can only cause a refusal. Its job is to turn a
+	// reference that points at some OTHER real transfer — a copy-paste from the wrong row —
+	// into a loud error instead of a silent credit of the wrong amount.
+	if let Some(expected) = expected_amount
+		&& expected != transfer.amount
+	{
+		return Err(DomainError::Validation(format!(
+			"the chain reports {} USDT for this reference, not {}",
+			transfer.amount.to_decimal_string(),
+			expected.to_decimal_string()
+		)));
+	}
+	let party = attribute(custody, addresses, network, &transfer).await?;
+	let recorded = record_deposit(deposits, relay, tx_ref, party.clone(), network, transfer.amount).await?;
+	Ok(VerifiedArrival {
+		recorded,
+		party,
+		amount: transfer.amount,
+	})
+}
+
+/// Decide whose money a confirmed transfer is, from its recipient — and refuse anything that
+/// is not ours to credit.
+///
+/// The treasury case carries the one subtlety: the sweep also lands there, moving USDT from a
+/// user's own deposit address, and that dollar is already in `wallet:<net>` behind a claim.
+/// Crediting it again would invent fund capital and break `sum(custody) == sum(claims)`, so a
+/// treasury arrival is only capital when it came from outside every wallet we control.
+async fn attribute(custody: &dyn Custody, addresses: &dyn DepositAddresses, network: Network, transfer: &InboundTransfer) -> Result<Party, DomainError> {
+	if let Some(user) = addresses.owner_of(network, &transfer.to).await? {
+		return Ok(Party::User(user));
+	}
+	let funding = custody
+		.treasury_funding(network)
+		.await
+		.map_err(|e| DomainError::Repository(format!("treasury address unavailable: {e}")))?;
+	let is_treasury = funding.as_ref().is_some_and(|f| f.address.eq_ignore_ascii_case(&transfer.to));
+	if !is_treasury {
+		return Err(DomainError::Validation(format!(
+			"{} received this transfer and it is not one of our {network} addresses",
+			transfer.to
+		)));
+	}
+	let gas_station = funding.as_ref().and_then(|f| f.gas_station_address.clone());
+	let internal = addresses.owner_of(network, &transfer.from).await?.is_some()
+		|| gas_station.is_some_and(|g| g.eq_ignore_ascii_case(&transfer.from))
+		|| funding.as_ref().is_some_and(|f| f.address.eq_ignore_ascii_case(&transfer.from));
+	if internal {
+		return Err(DomainError::Validation(
+			"this transfer is the sweep consolidating funds already on the ledger, not new capital".into(),
+		));
+	}
+	Ok(Party::Piggybank)
+}
+
 /// The treasury, read live from TigerBeetle (Read-First): per-rail liquidity plus the
 /// claims it backs. Each rail is enriched with the custody adapter's funding view
 /// (hot-wallet address + real on-chain USDT/gas) **best-effort** — an unwired rail or

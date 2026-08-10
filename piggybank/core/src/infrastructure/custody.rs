@@ -19,8 +19,9 @@ use std::{collections::HashMap, sync::Arc};
 use async_trait::async_trait;
 use domain::{
 	architecture::Gateway,
-	money::{Network, Usdt},
+	money::{Network, TxRef, Usdt},
 };
+use serde_json::Value;
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignErc20TransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
@@ -35,8 +36,8 @@ const GAS_STATION: Uuid = Uuid::from_u128(1);
 
 use crate::{
 	config::EvmConfig,
-	infrastructure::evm_rpc::{EvmRpc, RpcError},
-	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
+	infrastructure::evm_rpc::{EvmRpc, RpcError, TRANSFER_TOPIC, address_from_topic, hex_to_u64, word_to_u128},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, InboundTransfer, TreasuryFunding, format_native_units},
 };
 
 /// No-op custody: logs and returns success. An operator supplies the real on-chain tx ref
@@ -107,6 +108,14 @@ impl Custody for MultiChainCustody {
 		}
 	}
 
+	async fn inbound_transfer(&self, network: Network, tx_ref: &TxRef) -> Result<Option<InboundTransfer>, CustodyError> {
+		match self.by_network.get(&network) {
+			// A rail with no adapter cannot prove anything, so it credits nothing by hand.
+			Some(adapter) => adapter.inbound_transfer(network, tx_ref).await,
+			None => Ok(None),
+		}
+	}
+
 	async fn treasury_funding(&self, network: Network) -> Result<Option<TreasuryFunding>, CustodyError> {
 		match self.by_network.get(&network) {
 			Some(adapter) => adapter.treasury_funding(network).await,
@@ -127,6 +136,9 @@ pub struct ChainCustody {
 	chain_id: u64,
 	usdt_contract: String,
 	gas_limit: u64,
+	/// Blocks a transfer must be buried under before it counts. Shared with the deposit
+	/// scan so a hand-verified arrival is held to the same reorg safety as a scanned one.
+	confirmations: u64,
 	/// The treasury hot wallet's address (the withdrawal source), resolved once via the
 	/// signer and cached. Funds — USDT to send, and native coin (BNB/POL) for gas — are
 	/// deposited here out-of-band.
@@ -146,6 +158,7 @@ impl ChainCustody {
 			chain_id: evm.chain_id,
 			usdt_contract: evm.usdt_contract.clone(),
 			gas_limit: evm.gas_limit,
+			confirmations: evm.confirmations,
 			treasury_address: OnceCell::new(),
 			gas_station_address: OnceCell::new(),
 		}
@@ -404,6 +417,52 @@ impl Custody for ChainCustody {
 		Ok(Some(usdt))
 	}
 
+	/// Read the transfer a `txhash:logIndex` reference names, and prove it before returning it.
+	///
+	/// Every check here exists because the caller is an operator typing into a form, so each
+	/// one is a way an invented reference could otherwise become money: the transaction must
+	/// be mined and NOT reverted (a reverted transfer moved nothing); the named log must
+	/// belong to **this rail's** USDT contract (or anyone could credit themselves with a token
+	/// they minted); it must actually be a `Transfer` (a token's other events carry different
+	/// operands in the same slots); and it must be buried under the rail's confirmation depth,
+	/// so a reorg cannot un-happen what we just booked.
+	async fn inbound_transfer(&self, _network: Network, tx_ref: &TxRef) -> Result<Option<InboundTransfer>, CustodyError> {
+		let Some((tx_hash, log_index)) = split_evm_tx_ref(tx_ref.as_str()) else {
+			return Ok(None);
+		};
+		let Some((receipt, logs)) = self.rpc.transaction_receipt_logs(&tx_hash).await.map_err(read_err)? else {
+			return Ok(None); // not mined — nothing to credit yet
+		};
+		if !receipt.success {
+			return Ok(None);
+		}
+		let head = self.rpc.block_number().await.map_err(read_err)?;
+		if head.saturating_sub(receipt.block_number) < self.confirmations {
+			return Ok(None);
+		}
+		let Some(log) = logs.iter().find(|log| log.get("logIndex").and_then(Value::as_str).and_then(hex_to_u64) == Some(log_index)) else {
+			return Ok(None);
+		};
+		let is_our_usdt = log
+			.get("address")
+			.and_then(Value::as_str)
+			.is_some_and(|address| address.eq_ignore_ascii_case(&self.usdt_contract));
+		let topics = log.get("topics").and_then(Value::as_array).cloned().unwrap_or_default();
+		let is_transfer = topics.first().and_then(Value::as_str).is_some_and(|t| t.eq_ignore_ascii_case(TRANSFER_TOPIC));
+		if !is_our_usdt || !is_transfer || topics.len() < 3 {
+			return Ok(None);
+		}
+		let (Some(from), Some(to), Some(raw)) = (
+			topics[1].as_str().and_then(address_from_topic),
+			topics[2].as_str().and_then(address_from_topic),
+			log.get("data").and_then(Value::as_str).and_then(word_to_u128),
+		) else {
+			return Ok(None);
+		};
+		let amount = Usdt::from_onchain(self.network, raw).map_err(|e| CustodyError::Unavailable(format!("transfer amount not representable: {e}")))?;
+		Ok(Some(InboundTransfer { from, to, amount }))
+	}
+
 	/// Native balance ÷ the cost of one withdrawal at the CURRENT gas price — the same
 	/// `gas_limit × gas_price` product `ensure_treasury_funded` compares against, so a
 	/// reported `0` is exactly the balance at which the next broadcast parks. Re-reads the
@@ -478,6 +537,18 @@ fn onchain_transfer_amount(network: Network, amount: Usdt) -> Result<u128, Custo
 		.map_err(|e| CustodyError::Rejected(format!("withdrawal amount not representable on {network}: {e}")))
 }
 
+/// Split an EVM arrival reference into `(txhash, logIndex)`. The watcher mints exactly this
+/// shape, so a hand-typed reference and a scanned one collapse onto the same idempotency key
+/// instead of crediting the same transfer twice under two spellings.
+fn split_evm_tx_ref(tx_ref: &str) -> Option<(String, u64)> {
+	let (hash, index) = tx_ref.rsplit_once(':')?;
+	let hash = hash.trim();
+	if !hash.starts_with("0x") || hash.len() != 66 || !hash[2..].bytes().all(|b| b.is_ascii_hexdigit()) {
+		return None;
+	}
+	Some((hash.to_lowercase(), index.trim().parse().ok()?))
+}
+
 /// A read-path RPC failure (nonce/gas) is always retryable — nothing was sent.
 fn read_err(err: RpcError) -> CustodyError {
 	CustodyError::Unavailable(err.to_string())
@@ -497,7 +568,27 @@ fn already_accepted(msg: &str) -> bool {
 mod tests {
 	use domain::money::{Network, Usdt};
 
-	use super::{already_accepted, onchain_transfer_amount};
+	use super::{already_accepted, onchain_transfer_amount, split_evm_tx_ref};
+
+	/// The reference is operator-typed, so this parse is the outer edge of the verification.
+	/// Everything it lets through is looked up on-chain; everything malformed must be refused
+	/// here rather than turning into a lookup for some other transaction.
+	#[test]
+	fn only_a_well_formed_reference_reaches_the_chain() {
+		let hash = "0xfeed5b7c90b4644097c81d79c3bd0abdf2a53fc25c694e3f7316beb43d412bf5";
+		assert_eq!(split_evm_tx_ref(&format!("{hash}:745")), Some((hash.to_owned(), 745)));
+		// Case folds to the form the watcher mints, so both spellings share one idempotency key.
+		assert_eq!(split_evm_tx_ref(&format!("{}:0", hash.to_uppercase().replace("0X", "0x"))), Some((hash.to_owned(), 0)));
+		// A hash of the wrong length, or with non-hex in it, is not a transaction we can look up.
+		assert_eq!(split_evm_tx_ref("0xdeadbeef:1"), None);
+		assert_eq!(split_evm_tx_ref(&format!("{}g:1", &hash[..65])), None);
+		// No log index, a non-numeric one, or a bare hash: nothing to identify the transfer.
+		assert_eq!(split_evm_tx_ref(hash), None);
+		assert_eq!(split_evm_tx_ref(&format!("{hash}:")), None);
+		assert_eq!(split_evm_tx_ref(&format!("{hash}:one")), None);
+		// A negative index would silently parse as an error, not wrap to a real log.
+		assert_eq!(split_evm_tx_ref(&format!("{hash}:-1")), None);
+	}
 
 	#[test]
 	fn recognises_already_submitted_responses() {

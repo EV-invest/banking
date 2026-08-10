@@ -237,28 +237,26 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 	}
 	let token = require_money_token(&st, &jar).await?;
 	let v = parse_body(&body);
-	let (Some(tx_ref), Some(network), Some(amount)) = (required(&v, "tx_ref"), required(&v, "network"), required(&v, "amount")) else {
-		return Err(ApiError::BadRequest("tx_ref, network and amount are required".into()));
+	let (Some(tx_ref), Some(network)) = (required(&v, "tx_ref"), required(&v, "network")) else {
+		return Err(ApiError::BadRequest("tx_ref and network are required".into()));
 	};
-	// The fund itself is the default and the reason this route exists; `user`/`service` stay
-	// reachable for the same class of incident (a deposit the watcher missed) without a
-	// second endpoint. The money plane re-checks the pairing and rejects a bad one.
-	let party_kind = required(&v, "party_kind").unwrap_or_else(|| "piggybank".to_string());
-	let party_id = required(&v, "party_id").unwrap_or_default();
-	if party_kind != "piggybank" && party_id.is_empty() {
-		return Err(ApiError::BadRequest("party_id is required unless party_kind is piggybank".into()));
-	}
+	// Amount is an optional ASSERTION, never an input — the money plane reads the real one off
+	// the chain. Forwarded so a typo fails loudly there instead of crediting another transfer.
 	let req = bk::RecordDepositRequest {
 		tx_ref,
 		network,
-		amount,
-		party_kind,
-		party_id,
+		expected_amount: required(&v, "expected_amount").unwrap_or_default(),
 	};
 	let res = st.grpc.record_deposit(&token, req).await?;
 	// `false` is a successful no-op, not a failure: the tx_ref was already recorded. The
-	// caller needs the difference to tell "credited" from "already credited".
-	Ok(Json(json!({ "recorded": res.recorded })))
+	// caller needs the difference to tell "credited" from "already credited" — and the
+	// amount/party come back from the chain, so the operator sees what was actually booked.
+	Ok(Json(json!({
+		"recorded": res.recorded,
+		"amount": res.amount,
+		"party_kind": res.party_kind,
+		"party_id": res.party_id,
+	})))
 }
 
 /// `GET /api/admin/valuation/queue` — the cross-user redemption queue awaiting settle.

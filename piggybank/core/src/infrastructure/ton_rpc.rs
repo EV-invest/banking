@@ -104,6 +104,26 @@ impl TonRpc {
 		})
 	}
 
+	/// The unix time of the transaction with this hash, if it exists and did not abort.
+	///
+	/// `/transactions` is used rather than the jetton feed because it is the endpoint that
+	/// actually **honours** a `hash` filter. The jetton feed silently ignores unknown
+	/// parameters and answers with an arbitrary page instead, so "filtering" a transfer
+	/// lookup by hash there would validate an arrival against somebody else's transfer.
+	/// The time it returns is only used to seek the recipient's feed to the right page —
+	/// the transfer itself is still matched on the hash.
+	pub async fn transaction_utime(&self, tx_hash: &str) -> Result<Option<u64>, RpcError> {
+		let query = [("hash", tx_hash), ("limit", "1")];
+		let value = self.get("transactions", &query).await?;
+		let Some(tx) = value.get("transactions").and_then(Value::as_array).and_then(|txs| txs.first()) else {
+			return Ok(None);
+		};
+		if tx.get("description").and_then(|d| d.get("aborted")).and_then(Value::as_bool).unwrap_or(false) {
+			return Ok(None);
+		}
+		Ok(tx.get("now").and_then(Value::as_u64))
+	}
+
 	/// The account's native Toncoin balance in nanotons (the gas the sweep checks before a
 	/// jetton move, and the gas station tops up when short).
 	pub async fn balance(&self, address: &str) -> Result<u128, RpcError> {
