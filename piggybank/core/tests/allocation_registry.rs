@@ -267,6 +267,81 @@ async fn registration_is_audited_but_never_reaches_the_relay() {
 }
 
 #[tokio::test]
+async fn a_subscription_past_the_unit_cap_is_refused_before_any_money_moves() {
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let service = unique_service();
+	fund_user(&h, user, "200").await;
+	register(&h, &service).await;
+	h.allocations.open(&service).await.unwrap();
+	// Sized to a hundred units — the whole point of the cap is that "open" and "unbounded"
+	// are different things.
+	h.allocations.set_unit_cap(&service, shares("100")).await.unwrap();
+
+	// At the seed NAV of 1.0 this mints exactly the cap. Landing on it is allowed.
+	subscribe(&h, user, &service, "100").await.unwrap();
+	h.relay.drain().await;
+
+	let err = subscribe(&h, user, &service, "1").await.unwrap_err();
+	assert!(matches!(err, domain::error::DomainError::Validation(ref m) if m.contains("unit cap")), "got {err:?}");
+
+	// Refused before the ledger, like the registry gate above it: the remaining 100 USDT is
+	// still the user's, and the fund did not quietly issue a 101st unit.
+	h.relay.drain().await;
+	let claim = h.ledger.balance(&LedgerAccountKey::UserClaim(user)).await.unwrap();
+	assert_eq!(Usdt::from_base_units(claim.available()), usdt("100"), "the refused subscription spent nothing");
+	let outstanding = h.ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await.unwrap();
+	assert_eq!(Shares::from_base_units(outstanding.posted), shares("100"), "supply stopped at the cap");
+}
+
+#[tokio::test]
+async fn narrowing_the_cap_below_the_issued_supply_stops_issuance_without_trapping_anyone() {
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let service = unique_service();
+	fund_user(&h, user, "100").await;
+	register(&h, &service).await;
+	h.allocations.open(&service).await.unwrap();
+	subscribe(&h, user, &service, "100").await.unwrap();
+	h.relay.drain().await;
+
+	// An operator decides the product has run further than intended and pulls the cap in
+	// under what is already out. Legal, and it means "no more units" — not "some units are
+	// now invalid".
+	h.allocations.set_unit_cap(&service, shares("10")).await.unwrap();
+	assert!(subscribe(&h, user, &service, "1").await.is_err(), "no further issuance");
+
+	// The same asymmetry the lifecycle gate has: the holder still gets out in full.
+	funds_app::request_redemption(&h.allocations, &h.reds, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), shares("100"), now_unix())
+		.await
+		.expect("a narrowed cap must never block a redemption");
+}
+
+#[tokio::test]
+async fn the_cap_defaults_on_registration_persists_and_is_reported_with_the_nav() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+	h.allocations.open(&service).await.unwrap();
+
+	// Registration lands on the default rather than on "unset", so the registry always has
+	// a number to show and to refuse against.
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().unit_cap(), domain::allocations::DEFAULT_UNIT_CAP);
+
+	h.allocations.set_unit_cap(&service, shares("1000")).await.unwrap();
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().unit_cap(), shares("1000"), "the new cap survives a reload");
+	// Zero is refused — it would be indistinguishable from unset while silently closing the
+	// product to new money.
+	assert!(h.allocations.set_unit_cap(&service, Shares::ZERO).await.is_err());
+
+	// And the read side the screens use reports the headroom, so a client never offers
+	// capacity the subscribe gate would then refuse.
+	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), now_unix()).await.unwrap();
+	assert_eq!(view.unit_cap, shares("1000"));
+	assert_eq!(view.remaining_capacity, shares("1000"), "nothing issued yet, so the whole cap is available");
+}
+
+#[tokio::test]
 async fn a_valuation_cannot_be_posted_for_an_unregistered_service() {
 	let Some(h) = harness().await else { return };
 	let service = unique_service();

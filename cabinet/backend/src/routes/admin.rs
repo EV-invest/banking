@@ -330,6 +330,23 @@ pub async fn set_allocation_state(State(st): State<AppState>, jar: CookieJar, he
 	Ok(Json(st.grpc.set_allocation_state(&token, req).await?.into()))
 }
 
+/// `POST /api/admin/allocations/cap` — resize an allocation's authorised unit supply.
+/// Separate from `/update` because this one gates money: the hub refuses a subscription
+/// that would carry the issued supply past it.
+pub async fn set_allocation_unit_cap(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let (Some(service), Some(unit_cap)) = (required(&v, "service"), required(&v, "unit_cap")) else {
+		return Err(ApiError::BadRequest("service and unit_cap are required".into()));
+	};
+	let req = bk::SetAllocationUnitCapRequest { service, unit_cap };
+	Ok(Json(st.grpc.set_allocation_unit_cap(&token, req).await?.into()))
+}
+
 /// `POST /api/admin/valuation/post` — post a fund NAV (with the fat-finger guard).
 pub async fn post_valuation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FundNav>, ApiError> {
 	require_admin(&st, &jar).await?;

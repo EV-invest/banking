@@ -118,6 +118,33 @@ export function subUsdt(a: string | undefined, b: string | undefined): string {
   return fromBaseUnits(r < 0n ? 0n : r);
 }
 
+// Unit counts get large — a hundred-million-unit cap is unreadable written out, and the
+// figure it is compared against has to be readable at the same glance. Compacts to 3
+// significant figures ("21.0M", "940K", "1.5B") and only above a thousand, so a fund
+// sized to 500 units still reads as "500".
+export function compactUnits(value: string | undefined): string {
+  const n = num(value);
+  if (!Number.isFinite(n) || n < 1000) return formatUnits(value);
+  for (const [scale, suffix] of [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]] as const) {
+    if (n >= scale) {
+      const scaled = n / scale;
+      return `${scaled >= 100 ? Math.round(scaled) : Number(scaled.toFixed(scaled >= 10 ? 1 : 2))}${suffix}`;
+    }
+  }
+  return formatUnits(value);
+}
+
+// What fraction of `cap` is taken by `issued`, 0–1, for a progress bar. Exact bigint
+// division scaled to basis points — a 1e26 cap overflows a float's integer precision, so
+// `Number(issued) / Number(cap)` would quietly lie at the sizes this feature is for.
+export function fractionOfCap(issued: string | undefined, cap: string | undefined): number {
+  const a = toBaseUnits(issued);
+  const b = toBaseUnits(cap);
+  if (b <= 0n) return 0;
+  if (a >= b) return 1;
+  return Number((a * 10_000n) / b) / 10_000;
+}
+
 // How much of an address survives truncation. The wallet (the default) keeps enough of a
 // deposit address to check it against a wallet app; the dashboard's activity lines have
 // far less room and cut harder. `min` rides along because each screen also picked its own

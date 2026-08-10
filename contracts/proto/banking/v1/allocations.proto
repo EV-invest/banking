@@ -40,6 +40,14 @@ service AllocationsService {
   // Drive the lifecycle (AllocationManage): `open` or `close`. Idempotent — setting
   // the state an allocation already holds succeeds and changes nothing.
   rpc SetAllocationState(SetAllocationStateRequest) returns (Allocation);
+
+  // Resize the authorised unit supply (AllocationManage). Idempotent. Separate from
+  // UpdateAllocation because this one gates money: `Subscribe` refuses a mint that
+  // would carry the issued supply past the cap. A cap below what is already issued is
+  // legal and means "no more units" — nothing minted is affected and redemptions are
+  // untouched, so this can never strand a holder. Zero is refused: use
+  // SetAllocationState(`closed`) to stop new money, which says so in the state.
+  rpc SetAllocationUnitCap(SetAllocationUnitCapRequest) returns (Allocation);
 }
 
 // One registered investable product. Carries no money: units, NAV and positions are
@@ -51,6 +59,7 @@ message Allocation {
   string state = 4;       // draft | open | closed
   int64 created_at = 5;   // unix seconds
   int64 updated_at = 6;   // unix seconds
+  string unit_cap = 7;    // authorised unit supply, decimal (default 100000000)
 }
 
 message AllocationList {
@@ -82,4 +91,9 @@ message UpdateAllocationRequest {
 message SetAllocationStateRequest {
   string service = 1;
   string state = 2;  // open | closed  (draft is entered only by RegisterAllocation)
+}
+
+message SetAllocationUnitCapRequest {
+  string service = 1;
+  string unit_cap = 2;  // decimal units, > 0 (e.g. "1000" or "100000000")
 }

@@ -20,12 +20,18 @@
 use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
-use crate::{balance::ServiceId, error::DomainError};
+use crate::{balance::ServiceId, error::DomainError, money::Shares};
 
 /// The longest accepted display title.
 const MAX_TITLE_LEN: usize = 120;
 /// The longest accepted catalog one-liner.
 const MAX_SUMMARY_LEN: usize = 280;
+/// The authorised unit supply a product is registered with: 100,000,000 units.
+///
+/// High enough that it never surprises an operator who did not think about it, finite so
+/// that "unlimited" is never the stored answer — the registry always has a number to show
+/// and to refuse against. An operator narrows it (to a thousand, say) before opening.
+pub const DEFAULT_UNIT_CAP: Shares = Shares::from_base_units(100_000_000 * 1_000_000_000_000_000_000);
 
 /// A unique allocation id (UUID). Minted by the application layer.
 ///
@@ -89,13 +95,15 @@ pub struct Allocation {
 	title: String,
 	summary: String,
 	state: AllocationState,
+	unit_cap: Shares,
 	pending: Vec<AllocationEvent>,
 }
 
 impl Allocation {
-	/// Register `service` as an investable product, in [`AllocationState::Draft`] — a
-	/// registration never opens for business in the same step, so listing and funding
-	/// stay separate operator decisions. Raises `Registered`.
+	/// Register `service` as an investable product, in [`AllocationState::Draft`] and at
+	/// [`DEFAULT_UNIT_CAP`] — a registration never opens for business in the same step,
+	/// so listing, sizing and funding stay separate operator decisions. Raises
+	/// `Registered`.
 	pub fn register(id: AllocationId, service: ServiceId, title: &str, summary: &str) -> Result<Self, DomainError> {
 		let title = validate_title(title)?;
 		let summary = validate_summary(summary)?;
@@ -105,6 +113,7 @@ impl Allocation {
 			title: title.clone(),
 			summary: summary.clone(),
 			state: AllocationState::Draft,
+			unit_cap: DEFAULT_UNIT_CAP,
 			pending: Vec::new(),
 		};
 		allocation.pending.push(AllocationEvent::Registered {
@@ -112,18 +121,20 @@ impl Allocation {
 			service,
 			title,
 			summary,
+			unit_cap: DEFAULT_UNIT_CAP,
 		});
 		Ok(allocation)
 	}
 
 	/// Reconstitute from the store. Raises no events.
-	pub fn rehydrate(id: AllocationId, service: ServiceId, title: String, summary: String, state: AllocationState) -> Self {
+	pub fn rehydrate(id: AllocationId, service: ServiceId, title: String, summary: String, state: AllocationState, unit_cap: Shares) -> Self {
 		Self {
 			id,
 			service,
 			title,
 			summary,
 			state,
+			unit_cap,
 			pending: Vec::new(),
 		}
 	}
@@ -170,6 +181,64 @@ impl Allocation {
 		});
 	}
 
+	/// Resize the authorised unit supply. Idempotent: setting the cap it already has
+	/// raises nothing. Raises `CapUpdated`.
+	///
+	/// A cap **below** the units already issued is deliberately legal — it is how an
+	/// operator stops issuance on a product that has run further than intended. It means
+	/// "no more units", not "some units are now invalid": nothing already minted is
+	/// touched, and [`Self::ensure_redeemable`] is not consulted here, so holders still
+	/// get out. Only zero is refused, because a zero cap is indistinguishable from an
+	/// unset one and would silently close a live product to new money without saying so
+	/// in its state.
+	pub fn set_unit_cap(&mut self, unit_cap: Shares) -> Result<(), DomainError> {
+		if unit_cap.is_zero() {
+			return Err(DomainError::Validation(
+				"allocation unit cap must be greater than zero — close the allocation to stop new money".into(),
+			));
+		}
+		if unit_cap == self.unit_cap {
+			return Ok(());
+		}
+		self.unit_cap = unit_cap;
+		self.pending.push(AllocationEvent::CapUpdated {
+			allocation_id: self.id,
+			service: self.service.clone(),
+			unit_cap,
+		});
+		Ok(())
+	}
+
+	/// The supply gate the subscribe path runs once it knows what it would mint:
+	/// `issued + minting` must stay within the cap.
+	///
+	/// `issued` is what the caller reads from the ledger; this aggregate does no I/O, so
+	/// it takes the figure rather than fetching it. Overflow is refused rather than
+	/// wrapped — an addition that cannot be represented cannot be shown to be under a cap.
+	pub fn ensure_capacity(&self, issued: Shares, minting: Shares) -> Result<(), DomainError> {
+		let after = issued
+			.checked_add(minting)
+			.ok_or_else(|| DomainError::Validation(format!("allocation '{}' cannot mint that many units", self.service)))?;
+		if after > self.unit_cap {
+			let remaining = self.unit_cap.checked_sub(issued).unwrap_or(Shares::ZERO);
+			return Err(DomainError::Validation(format!(
+				"allocation '{}' has {} units left of its {} unit cap — this subscription would mint {}",
+				self.service,
+				remaining.to_decimal_string(),
+				self.unit_cap.to_decimal_string(),
+				minting.to_decimal_string(),
+			)));
+		}
+		Ok(())
+	}
+
+	/// Units still issuable against the cap, given what the ledger says is already out.
+	/// Saturating: a cap narrowed below the issued supply reports zero headroom, not a
+	/// negative one.
+	pub fn remaining_capacity(&self, issued: Shares) -> Shares {
+		self.unit_cap.checked_sub(issued).unwrap_or(Shares::ZERO)
+	}
+
 	/// The gate the subscribe path runs: only an `Open` allocation takes new money.
 	pub fn ensure_subscribable(&self) -> Result<(), DomainError> {
 		match self.state {
@@ -213,6 +282,10 @@ impl Allocation {
 	pub fn state(&self) -> AllocationState {
 		self.state
 	}
+
+	pub fn unit_cap(&self) -> Shares {
+		self.unit_cap
+	}
 }
 
 fn validate_title(raw: &str) -> Result<String, DomainError> {
@@ -252,12 +325,13 @@ impl AggregateRoot for Allocation {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AllocationEvent {
-	/// A service id became a registered product (in `Draft`).
+	/// A service id became a registered product (in `Draft`, at the default unit cap).
 	Registered {
 		allocation_id: AllocationId,
 		service: ServiceId,
 		title: String,
 		summary: String,
+		unit_cap: Shares,
 	},
 	/// Presentation fields changed; state and identity did not.
 	DetailsUpdated {
@@ -266,6 +340,10 @@ pub enum AllocationEvent {
 		title: String,
 		summary: String,
 	},
+	/// The authorised unit supply was resized. Its own fact rather than a field on
+	/// `DetailsUpdated`: this one gates money, so "who changed the cap, and when" has to
+	/// be answerable without diffing every title edit.
+	CapUpdated { allocation_id: AllocationId, service: ServiceId, unit_cap: Shares },
 	/// Now accepting subscriptions.
 	Opened { allocation_id: AllocationId, service: ServiceId },
 	/// No longer accepting subscriptions; redemptions continue.
@@ -342,6 +420,58 @@ mod tests {
 	#[test]
 	fn a_draft_is_not_redeemable_because_it_can_hold_no_units() {
 		assert!(registered().ensure_redeemable().is_err());
+	}
+
+	#[test]
+	fn a_registration_starts_at_the_default_cap() {
+		let allocation = registered();
+		assert_eq!(allocation.unit_cap(), DEFAULT_UNIT_CAP);
+		assert_eq!(DEFAULT_UNIT_CAP.to_decimal_string(), "100000000");
+	}
+
+	#[test]
+	fn capacity_admits_up_to_the_cap_and_refuses_the_unit_past_it() {
+		let mut allocation = registered();
+		allocation.set_unit_cap(Shares::parse_decimal("1000").unwrap()).unwrap();
+		let issued = Shares::parse_decimal("999").unwrap();
+		// Landing exactly on the cap is allowed; it is the cap, not a ceiling to stay under.
+		assert!(allocation.ensure_capacity(issued, Shares::parse_decimal("1").unwrap()).is_ok());
+		// One base unit more is not. The message names the headroom the caller has left.
+		let err = allocation.ensure_capacity(issued, Shares::from_base_units(1_000_000_000_000_000_000 + 1)).unwrap_err();
+		assert!(matches!(err, DomainError::Validation(ref m) if m.contains("1 units left")), "{err:?}");
+	}
+
+	#[test]
+	fn a_cap_below_the_issued_supply_stops_issuance_without_trapping_anyone() {
+		let mut allocation = registered();
+		allocation.open();
+		allocation.set_unit_cap(Shares::parse_decimal("100").unwrap()).unwrap();
+		let issued = Shares::parse_decimal("500").unwrap();
+		assert_eq!(allocation.remaining_capacity(issued), Shares::ZERO);
+		assert!(allocation.ensure_capacity(issued, Shares::from_base_units(1)).is_err());
+		// Narrowing the cap is a supply decision, not a lifecycle one — holders still exit.
+		assert!(allocation.ensure_redeemable().is_ok());
+	}
+
+	#[test]
+	fn setting_the_cap_is_idempotent_validated_and_audited() {
+		let mut allocation = registered();
+		allocation.drain_events();
+		// Zero would read as "unset" while silently refusing every subscription.
+		assert!(allocation.set_unit_cap(Shares::ZERO).is_err());
+		allocation.set_unit_cap(Shares::parse_decimal("1000").unwrap()).unwrap();
+		allocation.set_unit_cap(Shares::parse_decimal("1000").unwrap()).unwrap();
+		let events = allocation.drain_events();
+		assert_eq!(events.len(), 1, "re-setting the same cap raises nothing");
+		assert!(matches!(events[0], AllocationEvent::CapUpdated { .. }));
+		assert_eq!(allocation.unit_cap(), Shares::parse_decimal("1000").unwrap());
+	}
+
+	#[test]
+	fn capacity_refuses_a_mint_it_cannot_even_add_up() {
+		let allocation = registered();
+		// `issued + minting` overflowing u128 is refused, never wrapped into "under cap".
+		assert!(allocation.ensure_capacity(Shares::from_base_units(u128::MAX), Shares::from_base_units(1)).is_err());
 	}
 
 	#[test]

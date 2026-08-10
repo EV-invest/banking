@@ -282,6 +282,8 @@ pub struct Allocation {
 	pub state: String,
 	pub created_at: String,
 	pub updated_at: String,
+	/// Authorised unit supply, decimal. Subscribe refuses a mint that would pass it.
+	pub unit_cap: String,
 }
 
 impl From<bk::Allocation> for Allocation {
@@ -291,6 +293,7 @@ impl From<bk::Allocation> for Allocation {
 			title: a.title,
 			summary: a.summary,
 			state: a.state,
+			unit_cap: a.unit_cap,
 			created_at: a.created_at.to_string(),
 			updated_at: a.updated_at.to_string(),
 		}
@@ -415,6 +418,10 @@ pub struct FundNav {
 	pub units_outstanding: String,
 	pub posted_at: String,
 	pub stale: bool,
+	pub unit_cap: String,
+	/// Units still issuable — already nets off in-flight mints, so a screen offering it
+	/// can never offer more than Subscribe accepts.
+	pub remaining_capacity: String,
 }
 
 impl From<bk::FundNav> for FundNav {
@@ -426,6 +433,8 @@ impl From<bk::FundNav> for FundNav {
 			units_outstanding: f.units_outstanding,
 			posted_at: f.posted_at.to_string(),
 			stale: f.stale,
+			unit_cap: f.unit_cap,
+			remaining_capacity: f.remaining_capacity,
 		}
 	}
 }

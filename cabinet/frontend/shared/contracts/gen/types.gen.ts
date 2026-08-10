@@ -63,6 +63,12 @@ export type BankingV1Allocation = {
      * unix seconds
      */
     updated_at?: number | string;
+    /**
+     * unit_cap
+     *
+     * authorised unit supply, decimal (default 100000000)
+     */
+    unit_cap?: string;
 };
 
 /**
@@ -328,7 +334,7 @@ export type BankingV1FundNav = {
     /**
      * units_outstanding
      *
-     * decimal units in circulation
+     * decimal units in circulation (the NAV denominator)
      */
     units_outstanding?: string;
     /**
@@ -341,6 +347,20 @@ export type BankingV1FundNav = {
      * stale
      */
     stale?: boolean;
+    /**
+     * unit_cap
+     *
+     * The allocation's authorised unit supply and what is left of it. `remaining_capacity`
+     * counts in-flight mints as issued, so a client that offers it can never offer more
+     * than Subscribe will accept. decimal units
+     */
+    unit_cap?: string;
+    /**
+     * remaining_capacity
+     *
+     * decimal units still issuable (0 once at the cap)
+     */
+    remaining_capacity?: string;
 };
 
 /**
@@ -1418,6 +1438,22 @@ export type BankingV1SetAllocationStateRequest = {
      * open | closed  (draft is entered only by RegisterAllocation)
      */
     state?: string;
+};
+
+/**
+ * SetAllocationUnitCapRequest
+ */
+export type BankingV1SetAllocationUnitCapRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * unit_cap
+     *
+     * decimal units, > 0 (e.g. "1000" or "100000000")
+     */
+    unit_cap?: string;
 };
 
 /**
@@ -2765,6 +2801,35 @@ export type BankingV1AllocationsServiceSetAllocationStateResponses = {
 };
 
 export type BankingV1AllocationsServiceSetAllocationStateResponse = BankingV1AllocationsServiceSetAllocationStateResponses[keyof BankingV1AllocationsServiceSetAllocationStateResponses];
+
+export type BankingV1AllocationsServiceSetAllocationUnitCapData = {
+    body: BankingV1SetAllocationUnitCapRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/SetAllocationUnitCap';
+};
+
+export type BankingV1AllocationsServiceSetAllocationUnitCapErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceSetAllocationUnitCapError = BankingV1AllocationsServiceSetAllocationUnitCapErrors[keyof BankingV1AllocationsServiceSetAllocationUnitCapErrors];
+
+export type BankingV1AllocationsServiceSetAllocationUnitCapResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Allocation;
+};
+
+export type BankingV1AllocationsServiceSetAllocationUnitCapResponse = BankingV1AllocationsServiceSetAllocationUnitCapResponses[keyof BankingV1AllocationsServiceSetAllocationUnitCapResponses];
 
 export type BankingV1AllocationsServiceUpdateAllocationData = {
     body: BankingV1UpdateAllocationRequest;

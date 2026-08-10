@@ -131,6 +131,8 @@ export interface Allocation {
   /** Unix seconds; `"0"` on the write responses, which return the clock-free aggregate. */
   created_at: string;
   updated_at: string;
+  /** Authorised unit supply, decimal. Subscribe refuses a mint that would pass it. */
+  unit_cap: string;
 }
 
 export interface AllocationList {
@@ -142,9 +144,14 @@ export interface FundNav {
   service: string;
   nav: string;
   aum: string;
+  /** The settled supply — the denominator NAV is derived against. */
   units_outstanding: string;
   posted_at: string;
   stale: boolean;
+  unit_cap: string;
+  /** Units still issuable. Already nets off in-flight mints, so offering this figure can
+   *  never offer more than the hub will accept. */
+  remaining_capacity: string;
 }
 
 export interface RedemptionQueueItem {

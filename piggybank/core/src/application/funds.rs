@@ -52,7 +52,14 @@ pub struct FundNavView {
 	pub nav: Nav,
 	/// The last posted AUM, or `None` when the fund is still on the seed NAV.
 	pub aum: Option<Usdt>,
+	/// The **settled** supply — the denominator NAV is derived against.
 	pub units_outstanding: Shares,
+	/// The allocation's authorised unit supply.
+	pub unit_cap: Shares,
+	/// Units still issuable, measured the way [`subscribe`] measures them (settled plus
+	/// in-flight). Reported rather than left to the caller to subtract, so a screen can
+	/// never offer headroom the subscribe gate would then refuse.
+	pub remaining_capacity: Shares,
 	/// Unix seconds of the latest mark (0 = never marked / seed).
 	pub posted_at: i64,
 	pub stale: bool,
@@ -84,6 +91,23 @@ pub async fn dealing_nav(nav: &dyn NavMarks, service: &ServiceId, now_unix: i64)
 /// be a registered, `open` allocation. It is what stops a user from minting a fund out
 /// of an arbitrary slug — previously the only check was the slug's shape, and a service
 /// with no valuation bootstrapped silently at the seed NAV.
+///
+/// The **supply gate** runs second, once the mint has been priced and is therefore
+/// known: `issued + minting` must fit the allocation's unit cap. Like the cash check
+/// above it is Read-First — and unlike the cash check it has no TigerBeetle backstop
+/// behind it, because a ledger can refuse to go below zero but has no notion of a
+/// ceiling. Two consequences, both deliberate:
+///
+/// * Concurrent subscribes can each read the same `issued` and both pass, so the cap can
+///   be overshot by what is in flight at that instant.
+/// * `issued` is read from the ledger, which the relay writes *after* the control-plane
+///   commit — so a subscription committed moments ago may not be counted yet.
+///
+/// The cap is therefore an **issuance gate, not an invariant**: it reliably stops a fund
+/// from running away, and does not promise the last unit is exact. Making it exact would
+/// mean reconstructing the outstanding supply in Postgres — a second source of truth for
+/// a figure TigerBeetle already owns, which is the trade this architecture refuses
+/// everywhere else.
 #[allow(clippy::too_many_arguments)]
 pub async fn subscribe(
 	allocations: &dyn AllocationRegistry,
@@ -96,16 +120,29 @@ pub async fn subscribe(
 	cash: Usdt,
 	now_unix: i64,
 ) -> Result<Subscription, DomainError> {
-	allocations_app::require_subscribable(allocations, &service).await?;
+	let allocation = allocations_app::require_subscribable(allocations, &service).await?;
 	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
 	if Usdt::from_base_units(claim.available()) < cash {
 		return Err(DomainError::Validation("insufficient available balance to subscribe".into()));
 	}
 	let price = dealing_nav(nav, &service, now_unix).await?;
+	allocation.ensure_capacity(issued_units(ledger, &service).await?, Shares::from_cash(cash, price)?)?;
 	let mut subscription = Subscription::open(SubscriptionId::new(), user, service, cash, price)?;
 	subscriptions.open(&mut subscription).await?;
 	relay.notify_one();
 	Ok(subscription)
+}
+
+/// Units the ledger considers issued for `service` — settled **plus in-flight inflow**.
+///
+/// Counting `pending` is the conservative direction for a ceiling: an unsettled mint is
+/// supply that is on its way out, and treating it as absent would hand the same headroom
+/// to two subscriptions. Pending *burns* (`locked`) are deliberately not subtracted —
+/// those units still exist until the burn settles, and a queued redemption that is later
+/// cancelled would otherwise have briefly re-opened capacity that was never free.
+async fn issued_units(ledger: &dyn Ledger, service: &ServiceId) -> Result<Shares, DomainError> {
+	let balance = ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?;
+	Ok(Shares::from_base_units(balance.posted.saturating_add(balance.pending)))
 }
 
 /// A user redeems `units` of `service` back to cash. Read-First confirms the user holds
@@ -231,15 +268,24 @@ pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Led
 	Ok(out)
 }
 
-/// The current NAV + freshness for a fund (the seed NAV when never marked).
-pub async fn fund_nav_view(nav: &dyn NavMarks, ledger: &dyn Ledger, service: ServiceId, now_unix: i64) -> Result<FundNavView, DomainError> {
-	let units_outstanding = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
-	Ok(match nav.current(&service).await? {
+/// The current NAV + freshness for a fund (the seed NAV when never marked), plus the
+/// supply headroom left against its allocation's cap. Gated on the allocation existing,
+/// for the same reason the valuation post is: a price quoted for a service no registry
+/// entry backs is a price for a fund that does not exist.
+pub async fn fund_nav_view(allocations: &dyn AllocationRegistry, nav: &dyn NavMarks, ledger: &dyn Ledger, service: ServiceId, now_unix: i64) -> Result<FundNavView, DomainError> {
+	let allocation = allocations_app::get(allocations, &service).await?;
+	let balance = ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?;
+	let units_outstanding = Shares::from_base_units(balance.posted);
+	let remaining_capacity = allocation.remaining_capacity(Shares::from_base_units(balance.posted.saturating_add(balance.pending)));
+	let (unit_cap, current) = (allocation.unit_cap(), nav.current(&service).await?);
+	Ok(match current {
 		Some(v) => FundNavView {
 			service,
 			nav: v.nav,
 			aum: Some(v.aum),
 			units_outstanding,
+			unit_cap,
+			remaining_capacity,
 			posted_at: v.posted_at_unix,
 			stale: now_unix.saturating_sub(v.posted_at_unix) > MAX_NAV_AGE_SECS,
 		},
@@ -248,6 +294,8 @@ pub async fn fund_nav_view(nav: &dyn NavMarks, ledger: &dyn Ledger, service: Ser
 			nav: Nav::SEED,
 			aum: None,
 			units_outstanding,
+			unit_cap,
+			remaining_capacity,
 			posted_at: 0,
 			stale: false,
 		},

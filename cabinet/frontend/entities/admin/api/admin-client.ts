@@ -90,6 +90,10 @@ export const updateAllocation = (body: { service: string; title: string; summary
 
 export const setAllocationState = (service: string, state: "open" | "closed"): Promise<Allocation> => postJson("/api/admin/allocations/state", { service, state });
 
+// Its own route rather than a field on `/update`: the cap gates money, so the hub raises
+// its own audit event for it and refuses a subscription that would mint past it.
+export const setAllocationUnitCap = (service: string, unitCap: string): Promise<Allocation> => postJson("/api/admin/allocations/cap", { service, unit_cap: unitCap });
+
 // ── valuation + redemptions ─────────────────────────────────────────────────────
 export const fetchRedemptionQueue = (): Promise<RedemptionQueue> => getJson("/api/admin/valuation/queue");
 
