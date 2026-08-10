@@ -70,6 +70,10 @@ impl Grpc {
 		bk::wallet_service_client::WalletServiceClient::new(self.piggybank.clone())
 	}
 
+	fn operations(&self) -> bk::operations_service_client::OperationsServiceClient<Channel> {
+		bk::operations_service_client::OperationsServiceClient::new(self.piggybank.clone())
+	}
+
 	fn funds(&self) -> bk::funds_service_client::FundsServiceClient<Channel> {
 		bk::funds_service_client::FundsServiceClient::new(self.piggybank.clone())
 	}
@@ -169,6 +173,11 @@ impl Grpc {
 
 	pub async fn list_deposits(&self, token: &str) -> Result<bk::DepositList, Status> {
 		Ok(self.wallet().list_deposits(bearer(token, bk::ListDepositsRequest {})?).await?.into_inner())
+	}
+
+	pub async fn list_operations(&self, token: &str, limit: u32) -> Result<bk::OperationList, Status> {
+		let req = bk::ListOperationsRequest { limit };
+		Ok(self.operations().list_operations(bearer(token, req)?).await?.into_inner())
 	}
 
 	pub async fn subscribe(&self, token: &str, req: bk::SubscribeRequest) -> Result<bk::Subscription, Status> {

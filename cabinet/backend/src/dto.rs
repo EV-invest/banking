@@ -208,6 +208,67 @@ impl From<bk::DepositList> for DepositList {
 	}
 }
 
+// ── piggybank: operations (the unified activity timeline) ────────────────────
+
+/// One row of the caller's activity timeline. `kind` is the discriminator: it decides
+/// which of the remaining fields carry a value, and the rest arrive as empty strings
+/// (proto3 defaults). Passed through verbatim — the BFF adds no interpretation to a
+/// read model that already has exactly one shape.
+#[derive(Serialize)]
+pub struct Operation {
+	pub id: String,
+	pub kind: String,
+	pub state: String,
+	/// Unix seconds, rendered as a string like every other timestamp on this surface —
+	/// an i64 does not survive JSON's 2^53 in every client.
+	pub created_at: String,
+	pub amount: String,
+	pub fee: String,
+	pub net_amount: String,
+	pub units: String,
+	pub nav: String,
+	pub service: String,
+	pub network: String,
+	pub address: String,
+	pub tx_ref: String,
+}
+
+impl From<bk::Operation> for Operation {
+	fn from(o: bk::Operation) -> Self {
+		Self {
+			id: o.id,
+			kind: o.kind,
+			state: o.state,
+			created_at: o.created_at.to_string(),
+			amount: o.amount,
+			fee: o.fee,
+			net_amount: o.net_amount,
+			units: o.units,
+			nav: o.nav,
+			service: o.service,
+			network: o.network,
+			address: o.address,
+			tx_ref: o.tx_ref,
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct OperationList {
+	pub operations: Vec<Operation>,
+	/// True when the history is longer than the page returned.
+	pub truncated: bool,
+}
+
+impl From<bk::OperationList> for OperationList {
+	fn from(l: bk::OperationList) -> Self {
+		Self {
+			operations: l.operations.into_iter().map(Operation::from).collect(),
+			truncated: l.truncated,
+		}
+	}
+}
+
 // ── piggybank: allocations (the registry of investable products) ─────────────
 
 /// One catalog entry. Carries no money — units/NAV/P&L come from the funds surface
