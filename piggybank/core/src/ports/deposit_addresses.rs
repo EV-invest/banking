@@ -25,6 +25,20 @@ pub trait DepositAddresses: Gateway {
 	/// surfacing an address that cannot receive funds.
 	async fn address(&self, user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError>;
 
+	/// The reverse lookup: which user, if any, owns `address` on `network`.
+	///
+	/// Attribution runs this way round whenever the CHAIN is the input rather than the user —
+	/// verifying an arrival starts from a recipient and has to discover whose it is. `None`
+	/// means the address is not one of ours, which is a refusal: crediting a transfer that
+	/// landed somewhere we do not control would book money we cannot spend.
+	///
+	/// `address` is matched in the rail's canonical stored form (lowercase `0x…` on EVM, raw
+	/// `0:<hex>` on TON).
+	async fn owner_of(&self, network: Network, address: &str) -> Result<Option<UserId>, DomainError> {
+		let _ = (network, address);
+		Ok(None)
+	}
+
 	/// Supersede the user's key-backed address on `network` with a freshly minted
 	/// keypair — recovery for a PROVABLY DEAD key (the signer can no longer unseal
 	/// it). Returns the NEW fundable address; the backend refuses to rotate a key

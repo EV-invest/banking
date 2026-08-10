@@ -199,18 +199,30 @@ message SeedCapitalRequest {
 
 message SeedCapitalResponse {}
 
+// Record an arrival that reached a rail out of band, PROVEN against the chain.
+//
+// The caller supplies only a pointer to a fact: the reference is read back from the chain
+// and the amount and the credited party are taken from what is actually there. An operator
+// therefore cannot mint a balance by typing one — the worst a wrong reference can do is
+// name a transfer that does not exist, or one that did not land on an address of ours,
+// and both are rejected.
 message RecordDepositRequest {
-  string tx_ref = 1;      // the on-chain tx reference — the idempotency key
-  string network = 2;     // bep20 | polygon | trc20 | ton — the rail it arrived on
-  string amount = 3;      // decimal USDT (canonical value, network-agnostic)
-  // The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the
-  // user UUID or service id (empty for piggybank, which credits the fund's capital).
-  string party_kind = 4;
-  string party_id = 5;
+  string tx_ref = 1;   // `txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key
+  string network = 2;  // bep20 | polygon | trc20 | ton — the rail it arrived on
+  // Amount and party were once caller-supplied; the chain is the only source for them now.
+  reserved 3, 4, 5;
+  reserved "amount", "party_kind", "party_id";
+  // Optional operator assertion in decimal USDT. When set it must equal what the chain
+  // reports or the call is refused, so a mistyped reference fails loudly instead of
+  // silently crediting some other transfer.
+  string expected_amount = 6;
 }
 
 message RecordDepositResponse {
-  bool recorded = 1;  // false if `tx_ref` was already recorded (idempotent no-op)
+  bool recorded = 1;      // false if `tx_ref` was already recorded (idempotent no-op)
+  string amount = 2;      // what the CHAIN reported, decimal USDT — never the caller's number
+  string party_kind = 3;  // who the chain says it belongs to: piggybank | user | service
+  string party_id = 4;    // the user UUID or service id (empty for piggybank)
 }
 
 message DispatchWithdrawalRequest {

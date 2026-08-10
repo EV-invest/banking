@@ -68,10 +68,15 @@ export const setKycLevel = (userId: string, kycLevel: number): Promise<{ kyc_lev
 export const fetchTreasury = (): Promise<Treasury> => getJson("/api/admin/treasury");
 
 /** Record USDT that reached a rail out of band (an operator top-up of the treasury hot
- *  wallet), which otherwise moves real money without ever touching the ledger. Idempotent
- *  by `tx_ref`: `recorded: false` means that reference was already credited. */
-export const recordTreasuryDeposit = (body: { tx_ref: string; network: string; amount: string; party_kind?: string; party_id?: string }): Promise<{ recorded: boolean }> =>
+ *  wallet), which otherwise moves real money without ever touching the ledger.
+ *
+ *  The amount and the credited party are read off the CHAIN, not sent — this cannot mint a
+ *  balance. `expected_amount` is an optional assertion the chain must match. Idempotent by
+ *  `tx_ref`: `recorded: false` means that reference was already credited. */
+export const recordTreasuryDeposit = (body: { tx_ref: string; network: string; expected_amount?: string }): Promise<RecordedArrival> =>
   postJson("/api/admin/treasury/record-deposit", body);
+
+export type RecordedArrival = { recorded: boolean; amount: string; party_kind: string; party_id: string };
 
 // ── allocations (the registry — the only way a fund comes into existence) ────────
 // The admin listing includes drafts and closed products; the investor-facing

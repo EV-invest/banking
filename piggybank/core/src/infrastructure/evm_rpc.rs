@@ -58,6 +58,19 @@ impl EvmRpc {
 		decode_receipt(&value)
 	}
 
+	/// The receipt again, but with its raw logs — what a hand-recorded arrival is verified
+	/// against. The receipt is the authoritative account of what a transaction did, so a
+	/// reference is checked by reading the log it names rather than by trusting the caller's
+	/// description of it. `None` for a transaction that is not mined.
+	pub async fn transaction_receipt_logs(&self, tx_hash: &str) -> Result<Option<(TxReceipt, Vec<Value>)>, RpcError> {
+		let value = self.call("eth_getTransactionReceipt", json!([tx_hash])).await?;
+		let Some(receipt) = decode_receipt(&value)? else {
+			return Ok(None);
+		};
+		let logs = value.get("logs").and_then(Value::as_array).cloned().unwrap_or_default();
+		Ok(Some((receipt, logs)))
+	}
+
 	/// The account's native-coin balance in wei (BNB on BEP20, POL on Polygon) — the gas the
 	/// sweep checks before moving a deposit address's USDT (and the gas station tops up when short).
 	pub async fn native_balance(&self, address: &str) -> Result<u128, RpcError> {
@@ -144,7 +157,7 @@ fn as_str<'a>(value: &'a Value, method: &str) -> Result<&'a str, RpcError> {
 	value.as_str().ok_or_else(|| RpcError::Rpc(format!("{method}: non-string result")))
 }
 
-fn hex_to_u64(s: &str) -> Option<u64> {
+pub(crate) fn hex_to_u64(s: &str) -> Option<u64> {
 	u64::from_str_radix(s.strip_prefix("0x")?, 16).ok()
 }
 
@@ -162,10 +175,24 @@ fn balance_of_calldata(address: &str) -> Option<String> {
 	Some(format!("0x70a08231{hex:0>64}"))
 }
 
+/// `keccak256("Transfer(address,address,uint256)")` — the ERC-20 Transfer event topic0.
+/// Shared by the deposit scan (which filters on it) and the arrival verifier (which checks
+/// the log it was pointed at really is a Transfer, and not some other event of the token's).
+pub(crate) const TRANSFER_TOPIC: &str = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+/// The last 20 bytes of a 32-byte topic word → a lowercase `0x…` address.
+pub(crate) fn address_from_topic(topic: &str) -> Option<String> {
+	let hex = topic.strip_prefix("0x")?;
+	if hex.len() != 64 {
+		return None;
+	}
+	Some(format!("0x{}", &hex[24..]).to_lowercase())
+}
+
 /// A 32-byte big-endian uint256 `eth_call` result → `u128`. `None` if it is malformed or
 /// exceeds `u128` (the high 16 bytes are non-zero) — refused rather than truncated, like the
 /// deposit watcher's value decode.
-fn word_to_u128(word: &str) -> Option<u128> {
+pub(crate) fn word_to_u128(word: &str) -> Option<u128> {
 	let hex = word.strip_prefix("0x")?;
 	if hex.len() != 64 {
 		return None;

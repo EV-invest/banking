@@ -10,7 +10,7 @@
 use async_trait::async_trait;
 use domain::{
 	architecture::Gateway,
-	money::{Network, Usdt, WalletAddress},
+	money::{Network, TxRef, Usdt, WalletAddress},
 };
 use thiserror::Error;
 use uuid::Uuid;
@@ -50,6 +50,22 @@ pub trait Custody: Gateway {
 		Ok(None)
 	}
 
+	/// Read one **inbound** USDT transfer back off the chain by its reference.
+	///
+	/// This is the seam that makes an operator-recorded arrival a *verification* rather than
+	/// an assertion: the amount and the recipient come from here, never from the caller, so
+	/// the operator surface cannot mint a balance. Implementations MUST prove all of:
+	/// the transfer exists, it moved **this rail's USDT contract** (not some worthless token
+	/// the caller deployed), it was not aborted/reverted, and it is buried under this rail's
+	/// confirmation depth. Anything unproven is `Ok(None)` — a refusal, never a credit.
+	///
+	/// `None` is also what an adapter with no chain view returns, which is the safe default:
+	/// a rail we cannot read is a rail we will not credit by hand.
+	async fn inbound_transfer(&self, network: Network, tx_ref: &TxRef) -> Result<Option<InboundTransfer>, CustodyError> {
+		let (_, _) = (network, tx_ref);
+		Ok(None)
+	}
+
 	/// How many more withdrawals this rail's treasury can pay **gas** for, at the chain's
 	/// current price.
 	///
@@ -73,6 +89,21 @@ pub trait Custody: Gateway {
 		Ok(None)
 	}
 }
+/// One confirmed inbound USDT transfer, as the chain reports it — the evidence behind a
+/// hand-recorded arrival. Addresses are in the rail's own canonical form (lowercase `0x…`
+/// on EVM, raw `0:<hex>` on TON), the same form `user_deposit_addresses` stores, so the
+/// caller compares them without decoding anything.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InboundTransfer {
+	/// Who sent it. The only thing separating the fund's own capital injection from the
+	/// sweep consolidating money already on the ledger.
+	pub from: String,
+	/// Who received it — the address that decides which party gets credited.
+	pub to: String,
+	/// Canonical 18-dp USDT, already scaled from the rail's on-chain precision.
+	pub amount: Usdt,
+}
+
 /// A rail treasury's funding view, read live from the chain: where the operator funds
 /// (`address`) and what is actually there. The balance fields degrade to `None` when
 /// their chain read fails — the address alone is still useful.

@@ -22,7 +22,7 @@
 use async_trait::async_trait;
 use domain::{
 	architecture::Gateway,
-	money::{Network, Usdt},
+	money::{Network, TxRef, Usdt},
 };
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignJettonTransferRequest, signer_service_client::SignerServiceClient};
@@ -35,7 +35,7 @@ use uuid::Uuid;
 use crate::{
 	config::TonConfig,
 	infrastructure::ton_rpc::{RpcError, TonRpc},
-	ports::custody::{BroadcastRequest, Custody, CustodyError, TreasuryFunding, format_native_units},
+	ports::custody::{BroadcastRequest, Custody, CustodyError, InboundTransfer, TreasuryFunding, format_native_units},
 };
 
 /// Seconds a signed external message stays valid (`valid_until = now + this`). Generous so
@@ -46,6 +46,15 @@ const VALID_WINDOW_SECS: u64 = 300;
 /// The reserved sweep gas-station wallet id (shared with the sweep): a TON-only account whose
 /// funding view rides along on the treasury screen so an operator funds the RIGHT wallet.
 const GAS_STATION: Uuid = Uuid::from_u128(1);
+
+/// The reserved recipient word in a TON `tx_ref` for the fund itself. Not a uuid, so it can
+/// never collide with a user's key for the same transaction hash.
+const PIGGYBANK_RECIPIENT: &str = "piggybank";
+
+/// How deep into the recipient's feed a verification looks from the transaction's own time.
+/// The transfer is at that timestamp, so the page only has to absorb others sharing the
+/// second — it is a tie-breaker window, not a search.
+const VERIFY_PAGE_LIMIT: u32 = 64;
 
 pub struct TonCustody {
 	pool: PgPool,
@@ -116,6 +125,22 @@ impl TonCustody {
 			})
 			.await
 			.cloned()
+	}
+
+	/// Resolve a `tx_ref`'s recipient discriminator to the address whose feed proves it —
+	/// the reserved `piggybank` word means the treasury, anything else is a user id.
+	async fn recipient_address(&self, recipient: &str) -> Result<Option<String>, CustodyError> {
+		if recipient == PIGGYBANK_RECIPIENT {
+			return self.treasury_address().await.map(Some);
+		}
+		let Ok(user) = recipient.parse::<Uuid>() else {
+			return Ok(None);
+		};
+		sqlx::query_scalar("SELECT address FROM user_deposit_addresses WHERE user_id = $1 AND network = 'ton' AND address_kind = 'derived'")
+			.bind(user)
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(db_unavailable)
 	}
 
 	/// The sweep gas-station's TON address, resolved once via `ProvisionAddress` (the reserved
@@ -421,6 +446,43 @@ impl Custody for TonCustody {
 		let raw = self.rpc.jetton_wallet(&treasury, &self.usdt_master).await.map_err(read_err)?.map(|w| w.balance).unwrap_or(0);
 		let usdt = Usdt::from_onchain(Network::Ton, raw).map_err(|e| CustodyError::Unavailable(format!("ton treasury balance not representable: {e}")))?;
 		Ok(Some(usdt))
+	}
+
+	/// Read back the jetton transfer a `txhash:recipient` reference names, and prove it.
+	///
+	/// The reference carries its own recipient (the watcher mints `{hash}:{uuid|piggybank}`),
+	/// which is what makes a one-query proof possible: resolve that recipient to an address,
+	/// ask the indexer for **that owner's** incoming USDT feed, and require a transfer with
+	/// this hash in it. Recipient, jetton master and amount are then all server-filtered
+	/// facts rather than anything the caller said.
+	///
+	/// The hash is never used as a filter parameter on the jetton feed: toncenter ignores
+	/// unknown parameters silently, so that "filter" would return an unrelated transfer and
+	/// happily verify against it.
+	async fn inbound_transfer(&self, _network: Network, tx_ref: &TxRef) -> Result<Option<InboundTransfer>, CustodyError> {
+		let Some((tx_hash, recipient)) = tx_ref.as_str().rsplit_once(':') else {
+			return Ok(None);
+		};
+		let Some(owner) = self.recipient_address(recipient).await? else {
+			return Ok(None);
+		};
+		// Existence + not-aborted, from the one endpoint that honours a hash.
+		let Some(utime) = self.rpc.transaction_utime(tx_hash).await.map_err(read_err)? else {
+			return Ok(None);
+		};
+		let page = self
+			.rpc
+			.incoming_jetton_transfers(&owner, &self.usdt_master, utime, VERIFY_PAGE_LIMIT)
+			.await
+			.map_err(read_err)?;
+		let Some(transfer) = page.transfers.iter().find(|t| t.tx_hash == tx_hash) else {
+			return Ok(None);
+		};
+		let Some(from) = transfer.source.clone() else {
+			return Ok(None);
+		};
+		let amount = Usdt::from_onchain(Network::Ton, transfer.amount).map_err(|e| CustodyError::Unavailable(format!("ton transfer amount not representable: {e}")))?;
+		Ok(Some(InboundTransfer { from, to: owner, amount }))
 	}
 
 	/// Toncoin balance ÷ `msg_value` — the gate `ensure_treasury_funded` applies, so `0` is

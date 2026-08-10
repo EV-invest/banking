@@ -5,7 +5,7 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
-import { fetchTreasury, recordTreasuryDeposit } from "@/entities/admin/api/admin-client";
+import { fetchTreasury, recordTreasuryDeposit, type RecordedArrival } from "@/entities/admin/api/admin-client";
 import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { displayAddress } from "@/shared/lib/ton-address";
@@ -129,7 +129,7 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
   const [network, setNetwork] = useState("");
   const [txRef, setTxRef] = useState("");
   const [amount, setAmount] = useState("");
-  const [state, setState] = useState<{ busy: boolean; error: string | null; result: "recorded" | "duplicate" | null }>({ busy: false, error: null, result: null });
+  const [state, setState] = useState<{ busy: boolean; error: string | null; result: RecordedArrival | null }>({ busy: false, error: null, result: null });
 
   // Only rails the hub actually reported: an address minted for a rail nothing watches is
   // exactly the mistake this screen exists to prevent.
@@ -137,9 +137,11 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
 
   const submit = useCallback(() => {
     setState({ busy: true, error: null, result: null });
-    recordTreasuryDeposit({ tx_ref: txRef.trim(), network, amount: amount.trim(), party_kind: "piggybank" })
+    // The amount goes as an ASSERTION, and only when the operator typed one — the hub reads
+    // the real figure off the chain. Sending it as a value is what would let this mint money.
+    recordTreasuryDeposit({ tx_ref: txRef.trim(), network, expected_amount: amount.trim() || undefined })
       .then((res) => {
-        setState({ busy: false, error: null, result: res.recorded ? "recorded" : "duplicate" });
+        setState({ busy: false, error: null, result: res });
         if (res.recorded) {
           setTxRef("");
           setAmount("");
@@ -155,8 +157,8 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
       <Card>
         <CardContent className="space-y-5 py-6">
           <p className="max-w-3xl text-sm text-muted-foreground">
-            USDT sent straight to a treasury hot wallet is real money the ledger never saw. Record it here against its on-chain reference to credit fund capital and make the
-            liquidity spendable.
+            USDT sent straight to a treasury hot wallet is real money the ledger never saw. Give its on-chain reference and the hub reads the transfer back off the chain — the
+            amount and the party credited come from there, so this records an arrival rather than asserting one.
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="flex flex-col gap-1.5">
@@ -179,8 +181,8 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
               </Select>
             </div>
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm text-muted-foreground">Amount (USDT)</span>
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
+              <span className="text-sm text-muted-foreground">Expected amount (USDT) · optional</span>
+              <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="any" className="w-full" />
             </label>
             <label className="flex flex-col gap-1.5">
               <span className="text-sm text-muted-foreground">On-chain reference</span>
@@ -189,8 +191,9 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
           </div>
 
           <p className="text-xs text-muted-foreground">
-            The reference is the idempotency key — use the real one (<span className="font-mono-tech">txhash:logIndex</span> on an EVM rail, the transaction hash on TON). A
-            re-submission under the same reference is a no-op; an invented one credits the same dollar twice.
+            The reference is both what gets verified and the idempotency key — <span className="font-mono-tech">txhash:logIndex</span> on an EVM rail,{" "}
+            <span className="font-mono-tech">txhash:piggybank</span> on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a
+            re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.
           </p>
 
           {state.error && (
@@ -198,10 +201,16 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
               <TriangleAlert className="size-4 shrink-0" /> {state.error}
             </p>
           )}
-          {state.result === "recorded" && <p className="text-sm text-main-accent-t1">Recorded — fund capital credited.</p>}
-          {state.result === "duplicate" && <p className="text-sm text-main-accent-t3">Already recorded — that reference was credited before, nothing changed.</p>}
+          {state.result?.recorded && (
+            <p className="text-sm text-main-accent-t1">
+              Recorded — the chain reported <span className="font-semibold tabular-nums">{formatUsd(state.result.amount)}</span>, credited to {partyLabel(state.result)}.
+            </p>
+          )}
+          {state.result && !state.result.recorded && (
+            <p className="text-sm text-main-accent-t3">Already recorded — that reference was credited before, nothing changed.</p>
+          )}
 
-          <Button type="button" className={cn("ml-auto flex", TEAL_CTA)} disabled={state.busy || !network || !amount.trim() || !txRef.trim()} onClick={submit}>
+          <Button type="button" className={cn("ml-auto flex", TEAL_CTA)} disabled={state.busy || !network || !txRef.trim()} onClick={submit}>
             {state.busy ? <Loader2 className="size-4 animate-spin" /> : null}
             Record arrival
           </Button>
@@ -209,6 +218,14 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
       </Card>
     </section>
   );
+}
+
+/** Who the chain said the money belongs to. Worth showing rather than assuming the fund:
+ *  a reference that turns out to be a user's deposit credits that user, and the operator
+ *  should see that happened instead of reading it as company capital. */
+function partyLabel({ party_kind, party_id }: RecordedArrival): string {
+  if (party_kind === "piggybank") return "fund capital";
+  return party_id ? `${party_kind} ${party_id}` : party_kind;
 }
 
 /** `unavailable` is the read-failed state: a muted dash, never a formatted `$0.00` —

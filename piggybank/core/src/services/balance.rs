@@ -8,7 +8,7 @@
 
 use domain::{
 	authz::Permission,
-	balance::{Party, ServiceId},
+	balance::ServiceId,
 	money::{Network, TxRef, Usdt},
 };
 use evbanking_auth::claims_of;
@@ -80,12 +80,25 @@ impl BalanceService for BalanceSvc {
 		let req = request.into_inner();
 		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;
-		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
-		let party = Party::from_parts(&req.party_kind, optional(&req.party_id)).map_err(map_err)?;
-		let recorded = balance_app::record_deposit(self.state.deposits.as_ref(), &self.state.relay_notify, tx_ref, party, network, amount)
-			.await
-			.map_err(map_err)?;
-		Ok(Response::new(pb::RecordDepositResponse { recorded }))
+		// Empty means "whatever the chain says"; a value is an assertion the chain must match.
+		let expected_amount = optional(&req.expected_amount).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
+		let arrival = balance_app::record_verified_arrival(
+			self.state.deposits.as_ref(),
+			self.state.custody.as_ref(),
+			self.state.deposit_addresses.as_ref(),
+			&self.state.relay_notify,
+			tx_ref,
+			network,
+			expected_amount,
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(pb::RecordDepositResponse {
+			recorded: arrival.recorded,
+			amount: arrival.amount.to_decimal_string(),
+			party_kind: arrival.party.kind_str().to_owned(),
+			party_id: arrival.party.id_str().unwrap_or_default(),
+		}))
 	}
 
 	async fn dispatch_withdrawal(&self, request: Request<pb::DispatchWithdrawalRequest>) -> Result<Response<pb::DispatchWithdrawalResponse>, Status> {
