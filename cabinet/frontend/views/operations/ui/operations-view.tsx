@@ -224,7 +224,9 @@ export function OperationsView() {
             </div>
           )}
 
-          {truncated && <p className="text-xs text-muted-foreground">Showing your most recent operations. Older activity is kept on your statement.</p>}
+          {/* Says only what is true: the page is capped. There is no statements export to
+              point at yet, and promising one here would be inventing a feature. */}
+          {truncated && <p className="text-xs text-muted-foreground">Showing your most recent operations — older activity isn&apos;t listed here yet.</p>}
         </div>
       )}
     </div>
@@ -328,7 +330,9 @@ function rowSub(operation: Operation): string {
     case "deposit":
       return `${networkLabel(operation.network)} · ${operation.tx_ref ? shortAddress(operation.tx_ref) : "USDT"}`;
     case "withdrawal": {
-      const destination = operation.address ? shortAddress(operation.address) : networkLabel(operation.network);
+      // `shortAddress` already renders an absent address as an em dash — falling back to
+      // the network label instead would print the rail twice on the same line.
+      const destination = shortAddress(operation.address);
       // What actually ships is the net; the row's figure is the gross debited, so the
       // fee is stated rather than left as an unexplained gap between the two.
       const net = operation.net_amount ? ` · ${formatUsdt(operation.net_amount)} USDT net` : "";

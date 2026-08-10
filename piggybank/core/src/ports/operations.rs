@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use domain::{
 	balance::ServiceId,
 	error::DomainError,
-	money::{Nav, Network, Shares, TxRef, Usdt, WalletAddress},
+	money::{Nav, Network, Shares, TxRef, Usdt},
 	redemptions::RedemptionState,
 	users::UserId,
 	withdrawals::WithdrawalState,
@@ -58,7 +58,12 @@ pub enum Operation {
 	Withdrawal {
 		id: Uuid,
 		network: Network,
-		address: WalletAddress,
+		/// The destination **as recorded**, not a re-parsed [`WalletAddress`]. This row is
+		/// displayed, never paid to — the address was validated when the withdrawal was
+		/// requested, and re-asserting a chain's address rules at read time only means a
+		/// rule that later tightens takes the caller's whole timeline (deposits included)
+		/// down with the one row it rejects.
+		address: String,
 		amount: Usdt,
 		fee: Usdt,
 		state: WithdrawalState,

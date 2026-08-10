@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use domain::{
 	balance::ServiceId,
 	error::DomainError,
-	money::{Nav, Network, Shares, TxRef, Usdt, WalletAddress},
+	money::{Nav, Network, Shares, TxRef, Usdt},
 	redemptions::RedemptionState,
 	users::UserId,
 	withdrawals::WithdrawalState,
@@ -133,7 +133,8 @@ fn narrow(row: FeedRow) -> Result<Operation, DomainError> {
 			Ok(Operation::Withdrawal {
 				id: id(&row_id)?,
 				network,
-				address: WalletAddress::parse(network, &required(address_raw, "address", &kind)?)?,
+				// Passed through as stored — see the field's note on `Operation::Withdrawal`.
+				address: required(address_raw, "address", &kind)?,
 				amount: amount(&required(amount_raw, "amount", &kind)?, "withdrawal amount")?,
 				fee: amount(&required(fee_raw, "fee", &kind)?, "withdrawal fee")?,
 				state: WithdrawalState::parse(&state)?,

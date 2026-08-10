@@ -163,7 +163,7 @@ async fn merges_all_four_kinds_newest_first_and_only_for_the_caller() {
 		} => {
 			assert_eq!(*id, withdrawal_id.raw());
 			assert_eq!(*network, Network::Bep20);
-			assert_eq!(dest.as_str(), address().as_str());
+			assert_eq!(dest, address().as_str(), "the destination is passed through as stored");
 			assert_eq!(*amount, usdt("50"));
 			assert_eq!(*fee, usdt("1"));
 			assert_eq!(*state, WithdrawalState::Queued);

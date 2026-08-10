@@ -80,7 +80,7 @@ fn operation_to_proto(operation: &Operation) -> pb::Operation {
 			// saturating floor beats an unwrap on a money figure the user reads.
 			net_amount: amount.checked_sub(*fee).unwrap_or(domain::money::Usdt::ZERO).to_decimal_string(),
 			network: network.as_str().to_owned(),
-			address: address.as_str().to_owned(),
+			address: address.clone(),
 			tx_ref: tx_ref.as_ref().map(|tx_ref| tx_ref.as_str().to_owned()).unwrap_or_default(),
 			..base
 		},
