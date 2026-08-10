@@ -6,12 +6,19 @@ import { type CSSProperties, Fragment, useEffect, useState } from "react";
 
 import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Separator, Skeleton, Switch } from "@evinvest/uikit";
 
-import { fetchPositions, fetchRedemptions } from "@/entities/fund/api/fund-client";
-import { fetchWallet, fetchWithdrawals } from "@/entities/wallet/api/wallet-client";
-import type { Position, Redemption, Wallet, Withdrawal } from "@/shared/contracts";
+import { fetchAllocations, fetchPositions } from "@/entities/fund/api/fund-client";
+import { fetchOperations } from "@/entities/operation/api/operation-client";
+import { fetchWallet } from "@/entities/wallet/api/wallet-client";
+import type { Allocation, Operation, Position, Wallet } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
+import { amountTone, kindMeta, networkLabel } from "@/views/operations/lib/format";
+
+// The card is a preview, not the record — `/operations` holds the full timeline. Asked
+// of the hub rather than sliced client-side, so the six shown are the six most recent
+// across all four kinds, not the newest six of whatever happened to be fetched.
+const RECENT_OPS = 6;
 
 const RANGES = ["1M", "6M", "1Y", "All"] as const;
 
@@ -44,8 +51,8 @@ const EMPTY_BOX = "border md:p-6";
 export function DashboardView() {
   const [wallet, setWallet] = useState<Wallet | null | undefined>(undefined);
   const [positions, setPositions] = useState<Position[] | undefined>(undefined);
-  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
-  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
+  const [catalog, setCatalog] = useState<Allocation[]>([]);
 
   useEffect(() => {
     fetchWallet()
@@ -54,11 +61,13 @@ export function DashboardView() {
     fetchPositions()
       .then((l) => setPositions(l.positions ?? []))
       .catch(() => setPositions([]));
-    fetchWithdrawals()
-      .then((l) => setWithdrawals(l.withdrawals ?? []))
+    fetchOperations(RECENT_OPS)
+      .then((l) => setOperations(l.operations ?? []))
       .catch(() => undefined);
-    fetchRedemptions()
-      .then((l) => setRedemptions(l.redemptions ?? []))
+    // The same registry the rail lists products from — a fund row should name the
+    // product, not the slug that keys it.
+    fetchAllocations()
+      .then((l) => setCatalog(l.allocations ?? []))
       .catch(() => undefined);
   }, []);
 
@@ -73,7 +82,9 @@ export function DashboardView() {
   const allocations = pos.map((p, i) => ({ name: p.service ?? "Fund", value: num(p.value), accent: ACCENTS[i % ACCENTS.length]! }));
   const allocTotal = allocations.reduce((s, a) => s + a.value, 0) || 1;
 
-  const ops = buildOps(redemptions, withdrawals);
+  const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : "Fund");
+  // The hub honours `limit`, so the slice is only a shape guarantee for the card.
+  const ops = operations.slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf));
 
   return (
     // One DOM order, two layouts. Mobile stacks in reading order (hero → figures →
@@ -141,7 +152,7 @@ export function DashboardView() {
                   <ArrowLeftRight />
                 </EmptyMedia>
                 <EmptyTitle>No operations yet</EmptyTitle>
-                <EmptyDescription>Subscriptions, redemptions and withdrawals land here as they settle.</EmptyDescription>
+                <EmptyDescription>Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 {/* Same destination as the Move money card's filled Deposit, which is
@@ -365,26 +376,37 @@ interface Op {
   amountClass: string;
 }
 
-// A modest unified feed from what the BFF exposes today (redemptions + withdrawals).
-// Deposits/subscriptions get their own events once the hub surfaces an operations stream.
-function buildOps(redemptions: Redemption[], withdrawals: Withdrawal[]): Op[] {
-  const fromRedemptions: Op[] = redemptions.map((r, i) => ({
-    id: r.id ?? `r-${i}`,
-    tag: "REDEEM",
-    tagClass: "bg-main-accent-t1/15 text-main-accent-t1",
-    title: `${r.service ?? "Fund"} — redeemed`,
-    sub: r.state ?? "queued",
-    amount: r.cash ? `+${formatUsd(r.cash)}` : `${r.units ?? "0"} units`,
-    amountClass: r.cash ? "text-main-accent-t2" : "text-main-mist",
-  }));
-  const fromWithdrawals: Op[] = withdrawals.map((w, i) => ({
-    id: w.id ?? `w-${i}`,
-    tag: "OUT",
-    tagClass: "bg-destructive/15 text-destructive",
-    title: `Withdrawal · ${(w.network ?? "").toUpperCase()}`,
-    sub: `${shortAddress(w.address, DASH_ADDRESS)} · ${w.state ?? ""}`,
-    amount: `−${formatUsd(w.net_amount ?? w.amount)}`,
-    amountClass: "text-destructive",
-  }));
-  return [...fromRedemptions, ...fromWithdrawals].slice(0, 6);
+// One timeline row rendered in the dashboard's summary-money policy (`formatUsd`, to the
+// cent with a currency symbol) rather than the ledger policy the Operations page uses —
+// same data, different unit of measure for the surface it sits on. The badge, tone and
+// sign vocabulary is shared with `/operations` so a row reads identically in both places.
+function toOp(operation: Operation, index: number, titleOf: (service: string | undefined) => string): Op {
+  const meta = kindMeta(operation.kind);
+  const sign = meta.direction === "in" ? "+" : meta.direction === "out" ? "\u2212" : "";
+  return {
+    id: `${operation.kind ?? ""}-${operation.id ?? ""}-${index}`,
+    tag: meta.badge,
+    tagClass: meta.tone,
+    title: opTitle(operation, meta.label, titleOf),
+    sub: opSub(operation),
+    // A queued redemption is not yet priced, so it shows the units it reserved — a
+    // formatted zero would claim the user was paid nothing.
+    amount: operation.amount ? `${sign}${formatUsd(operation.amount)}` : `${operation.units ?? "0"} units`,
+    amountClass: operation.amount ? amountTone(meta.direction) : "text-muted-foreground",
+  };
+}
+
+function opTitle(operation: Operation, fallback: string, titleOf: (service: string | undefined) => string): string {
+  if (operation.kind === "subscription") return `${titleOf(operation.service)} \u2014 subscribed`;
+  if (operation.kind === "redemption") return `${titleOf(operation.service)} \u2014 redeemed`;
+  if (operation.kind === "withdrawal") return `Withdrawal \u00b7 ${networkLabel(operation.network)}`;
+  if (operation.kind === "deposit") return `Deposit \u00b7 ${networkLabel(operation.network)}`;
+  return fallback;
+}
+
+function opSub(operation: Operation): string {
+  const state = operation.state ?? "";
+  if (operation.kind === "withdrawal") return `${shortAddress(operation.address, DASH_ADDRESS)} \u00b7 ${state}`;
+  if (operation.kind === "deposit") return `${shortAddress(operation.tx_ref, DASH_ADDRESS)} \u00b7 ${state}`;
+  return state;
 }
