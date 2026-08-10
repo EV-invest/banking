@@ -178,7 +178,7 @@ the auth refresh Redis), the browser holds only the opaque session id + a readab
 which sign tokens under **separate** issuers and **distinct `aud`** (concierge `aud=concierge`
 vs. banking `aud=banking-core`). So the BFF keeps a token pair **per plane** in its session:
 the concierge pair authorizes identity RPCs (`UserDirectory`), the banking pair authorizes
-money RPCs (`WalletService`/`FundsService`). It forwards each plane its **own** token and never
+money RPCs (`WalletService`/`FundsService`/`OperationsService`). It forwards each plane its **own** token and never
 forwards one plane's token to the other — a leaked identity token therefore cannot move money.
 The trust direction is **exchange-based**: after the concierge sign-in, the BFF calls banking
 `AuthService.IssueUserToken` (authenticated by the shared `BANKING_ISSUANCE_TOKEN`, NOT a user

@@ -22,6 +22,7 @@ pub mod deposit_addresses;
 pub mod deposits;
 pub mod ledger;
 pub mod nav;
+pub mod operations;
 pub mod positions;
 pub mod redemptions;
 pub mod subscriptions;
@@ -40,6 +41,7 @@ use domain::{
 };
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
 pub use nav::{NavMarks, Valuation};
+pub use operations::OperationFeed;
 pub use positions::{FundPosition, FundPositionReader};
 pub use redemptions::{QueuedRedemption, RedemptionRepository};
 pub use subscriptions::SubscriptionRepository;
