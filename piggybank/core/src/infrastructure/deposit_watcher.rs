@@ -74,6 +74,23 @@ const CHUNK_PACE_MS: u64 = 250;
 /// in a way that an individual throttled RPC call is not.
 const LAG_WARN_BLOCKS: u64 = 5_000;
 
+/// Whether a scan owns the persistent cursor. The live cycle does; a backfill must not
+/// touch it, or it would drag the live scan backwards or skip it past unread blocks.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CursorPolicy {
+	Advance,
+	Leave,
+}
+
+/// What a scan did, for the operator who asked for it. `credited` counts only NEW records —
+/// a re-run over the same window reports zero, which is the honest answer to "did anything
+/// come of this", not a failure.
+#[derive(Clone, Copy, Debug)]
+pub struct ScanSummary {
+	pub scanned_to: u64,
+	pub credited: u64,
+}
+
 /// The on-chain deposit watcher task. Holds its own pool clone so its polling reads don't
 /// compete with request traffic, and the relay `Notify` so a credit dispatches promptly.
 pub struct DepositWatcher {
@@ -185,27 +202,10 @@ impl DepositWatcher {
 		let network = self.config.network;
 		let latest = self.block_number().await?;
 		let safe_head = latest.saturating_sub(self.config.confirmations);
-		let mut last_scanned = self.cursor(network, safe_head).await?;
+		let last_scanned = self.cursor(network, safe_head).await?;
 		if safe_head <= last_scanned {
 			return Ok(());
 		}
-		// Only `derived` (fundable) addresses can receive a real deposit; a placeholder is
-		// never funded. The map is `lower(address) -> owner`, also the `to`-topic filter set.
-		let watched = self.watched_addresses(network).await?;
-		// The treasury rides along in the SAME filter: USDT arriving there from outside our
-		// own wallets is the fund's own capital, and without this it moves real money while
-		// leaving no ledger trace at all.
-		let (treasury, gas_station) = match self.treasury_addresses().await {
-			Some((treasury, gas_station)) => (Some(treasury), gas_station),
-			None => (None, None),
-		};
-		if watched.is_empty() && treasury.is_none() {
-			// Nothing fundable yet — fast-forward so we don't re-scan an empty window forever.
-			self.set_cursor(network, safe_head).await?;
-			return Ok(());
-		}
-		let topic_addrs: Vec<Value> = watched.keys().chain(treasury.iter()).map(|a| Value::String(pad_topic(a))).collect();
-
 		// A scan that has fallen behind is the condition worth alerting on: those blocks hold
 		// deposits nobody has been credited for yet. Reported once per cycle, against the
 		// per-cycle backoff, rather than once per throttled RPC call.
@@ -213,33 +213,77 @@ impl DepositWatcher {
 		if lag > LAG_WARN_BLOCKS {
 			warn!(network = %network, lag_blocks = lag, last_scanned, safe_head, "deposit watcher: scan is behind the chain — deposits in the gap are not yet credited");
 		}
+		self.scan_range(last_scanned + 1, safe_head, CursorPolicy::Advance).await?;
+		Ok(())
+	}
 
-		while last_scanned < safe_head {
-			let from = last_scanned + 1;
-			let (logs, to) = self.get_logs(from, safe_head, &topic_addrs).await?;
+	/// Scan `[from, to]` for arrivals at our addresses and credit each one.
+	///
+	/// The live cycle and an operator backfill are the SAME scan over different windows —
+	/// same address set, same attribution, same idempotent credit. Only the cursor differs,
+	/// which is what [`CursorPolicy`] carries: the live scan owns the cursor and advances it
+	/// chunk by chunk, while a backfill must leave it alone. Moving it from a backfill would
+	/// either strand the live scan in the past or, worse, jump it forward over blocks nobody
+	/// has read — the exact way a gap gets created rather than closed.
+	///
+	/// Safe to re-run over any window: crediting is idempotent by `tx_ref`, so an overlapping
+	/// or repeated backfill costs RPC calls and changes nothing else.
+	pub async fn scan_range(&self, from: u64, to: u64, cursor: CursorPolicy) -> Result<ScanSummary, WatcherError> {
+		let network = self.config.network;
+		let mut summary = ScanSummary { scanned_to: from.saturating_sub(1), credited: 0 };
+		if from > to {
+			return Ok(summary);
+		}
+		let watched = self.watched_addresses(network).await?;
+		let (treasury, gas_station) = match self.treasury_addresses().await {
+			Some((treasury, gas_station)) => (Some(treasury), gas_station),
+			None => (None, None),
+		};
+		if watched.is_empty() && treasury.is_none() {
+			// Nothing fundable yet. The live scan still fast-forwards, or it would re-read the
+			// same empty window every cycle forever; a backfill just reports the window done.
+			if matches!(cursor, CursorPolicy::Advance) {
+				self.set_cursor(network, to).await?;
+			}
+			summary.scanned_to = to;
+			return Ok(summary);
+		}
+		let topic_addrs: Vec<Value> = watched.keys().chain(treasury.iter()).map(|a| Value::String(pad_topic(a))).collect();
+
+		let mut next = from;
+		while next <= to {
+			let (logs, chunk_end) = self.get_logs(next, to, &topic_addrs).await?;
 			for log in &logs {
 				let Some(transfer) = decode_transfer(log) else { continue };
-				if let Some(&user) = watched.get(&transfer.to) {
-					self.credit(Party::User(user), network, &transfer).await?;
+				let credited = if let Some(&user) = watched.get(&transfer.to) {
+					self.credit(Party::User(user), network, &transfer).await?
 				} else if treasury.as_deref() == Some(transfer.to.as_str()) && is_external_source(&transfer.from, &watched, gas_station.as_deref(), treasury.as_deref()) {
-					self.credit(Party::Piggybank, network, &transfer).await?;
+					self.credit(Party::Piggybank, network, &transfer).await?
+				} else {
+					false
+				};
+				if credited {
+					summary.credited += 1;
 				}
 			}
 			// Advance only after the chunk's deposits are recorded. A crash between recording
 			// and this update re-scans the chunk; `record_deposit` is idempotent by tx_ref.
-			self.set_cursor(network, to).await?;
-			last_scanned = to;
-			if last_scanned < safe_head {
+			if matches!(cursor, CursorPolicy::Advance) {
+				self.set_cursor(network, chunk_end).await?;
+			}
+			summary.scanned_to = chunk_end;
+			next = chunk_end + 1;
+			if next <= to {
 				tokio::time::sleep(Duration::from_millis(CHUNK_PACE_MS)).await;
 			}
 		}
-		Ok(())
+		Ok(summary)
 	}
 
-	async fn credit(&self, party: Party, network: Network, transfer: &Transfer) -> Result<(), WatcherError> {
+	async fn credit(&self, party: Party, network: Network, transfer: &Transfer) -> Result<bool, WatcherError> {
 		let amount = Usdt::from_onchain(network, transfer.value).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		if amount.is_zero() {
-			return Ok(()); // a legal but meaningless zero-value Transfer — not a deposit.
+			return Ok(false); // a legal but meaningless zero-value Transfer — not a deposit.
 		}
 		let tx_ref = TxRef::parse(&transfer.tx_ref()).map_err(|e| WatcherError::Decode(e.to_string()))?;
 		let is_capital = matches!(party, Party::Piggybank);
@@ -253,7 +297,7 @@ impl DepositWatcher {
 		} else if newly {
 			info!(tx = %transfer.tx_hash, "deposit watcher: credited on-chain USDT deposit");
 		}
-		Ok(())
+		Ok(newly)
 	}
 
 	// ── JSON-RPC ────────────────────────────────────────────────────────────────
@@ -538,7 +582,7 @@ fn cycle_backoff_secs(poll_secs: u64, failures: u64) -> u64 {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum WatcherError {
+pub enum WatcherError {
 	#[error("rpc: {0}")]
 	Rpc(String),
 	#[error("decode: {0}")]
