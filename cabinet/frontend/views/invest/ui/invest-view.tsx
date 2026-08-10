@@ -1,42 +1,52 @@
 "use client";
 
 import { ArrowDownToLine, Clock, Loader2, Sparkles, TrendingUp, TriangleAlert, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  Skeleton,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
 import { cancelRedemption, fetchAllocations, fetchFundNav, fetchPositions, fetchRedemptions, submitRedeem, submitSubscribe } from "@/entities/fund/api/fund-client";
 import type { Allocation, FundNav, Position, Redemption } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
-import { TipAnchor, type TipKey } from "@/shared/tips";
-import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
+import { TipAnchor } from "@/shared/tips";
+import { formatSignedUsdt, formatUnits, formatUsdt, fromBaseUnits, isNegative, isZero, toBaseUnits } from "@/views/invest/lib/format";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const SCALE = 10n ** 18n;
 
-// A fund is whatever the registry says is `open` — there is no default slug to fall back
-// on. The hub refuses a subscription to an unregistered service, so a typed id (what this
-// screen used to take, defaulting to a hardcoded "fund") could only ever 404.
+// One row of the screen: a product, plus whatever the caller holds in it. The two used to
+// be separate sections, so a holder saw their fund twice — once as a position and once as
+// a row in the subscribe form's dropdown.
+interface Product {
+  service: string;
+  title: string;
+  summary: string;
+  /** Absent when the product is no longer in the open catalog but units are still held. */
+  allocation: Allocation | null;
+  position: Position | null;
+}
+
+/** `floor(cash / nav)` in exact base units — mirrors `Shares::from_cash` on the hub, so
+ *  the preview cannot disagree with what the ledger actually mints. */
+function unitsForCash(amount: string, nav: string | undefined): bigint | null {
+  const cash = toBaseUnits(amount);
+  const price = toBaseUnits(nav);
+  if (cash <= 0n || price <= 0n) return null;
+  return (cash * SCALE) / price;
+}
+
+/** `units × nav`, the settle-time estimate shown on redeem. */
+function cashForUnits(units: string, nav: string | undefined): bigint | null {
+  const held = toBaseUnits(units);
+  const price = toBaseUnits(nav);
+  if (held <= 0n || price <= 0n) return null;
+  return (held * price) / SCALE;
+}
+
 export function InvestView() {
   const [positions, setPositions] = useState<Position[] | null>(null);
   const [catalog, setCatalog] = useState<Allocation[] | null>(null);
+  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -46,6 +56,9 @@ export function InvestView() {
         setError(null);
       })
       .catch((e: Error) => setError(e.message));
+    fetchRedemptions()
+      .then((list) => setRedemptions(list.redemptions ?? []))
+      .catch(() => setRedemptions([]));
   }, []);
 
   useEffect(load, [load]);
@@ -56,15 +69,36 @@ export function InvestView() {
       .catch(() => setCatalog([]));
   }, []);
 
-  // Slug → display title, so positions and receipts read as the product, not the key.
-  const titleOf = useCallback((service: string) => catalog?.find((a) => a.service === service)?.title ?? service, [catalog]);
+  // The open catalog UNION the services already held. A closed product is absent from the
+  // catalog but its holders still have units in it — dropping it here would hide real
+  // money, and the hub deliberately keeps redeeming it.
+  const products = useMemo<Product[] | null>(() => {
+    if (!catalog || !positions) return null;
+    const byService = new Map<string, Product>();
+    for (const a of catalog) {
+      byService.set(a.service, { service: a.service, title: a.title, summary: a.summary, allocation: a, position: null });
+    }
+    for (const p of positions) {
+      const service = p.service ?? "";
+      if (!service) continue;
+      const existing = byService.get(service);
+      if (existing) existing.position = p;
+      else byService.set(service, { service, title: service, summary: "", allocation: null, position: p });
+    }
+    return [...byService.values()].sort((a, b) => a.title.localeCompare(b.title));
+  }, [catalog, positions]);
 
   return (
-    <div className="container max-w-5xl space-y-8 py-12">
+    <div className="container max-w-4xl space-y-8 py-12">
       <header className="space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">Invest</p>
-        <h1 className="text-3xl font-semibold">Your fund shares</h1>
-        <p className="text-sm text-muted-foreground">Subscribe USDT for units — your value tracks the fund&apos;s NAV, not the unit count.</p>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold">
+          Your fund shares
+          <TipAnchor anchor="invest.overview" />
+        </h1>
+        {/* The single most misread thing about this product: a holding does not grow in
+            unit count. Say it on the screen, not only in a tooltip. */}
+        <p className="text-sm text-muted-foreground">Your unit count stays put — it is the NAV per unit that moves, and with it what your units are worth.</p>
       </header>
 
       {error && (
@@ -75,129 +109,155 @@ export function InvestView() {
         </Alert>
       )}
 
-      <PositionsList positions={positions} titleOf={titleOf} />
-
-      <Tabs defaultValue="subscribe">
-        <TabsList>
-          <TabsTrigger value="subscribe">Subscribe</TabsTrigger>
-          <TabsTrigger value="redeem">Redeem</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="subscribe" className="pt-6">
-          <SubscribePanel catalog={catalog} onDone={load} />
-        </TabsContent>
-        <TabsContent value="redeem" className="pt-6">
-          <RedeemPanel positions={positions} titleOf={titleOf} onDone={load} />
-        </TabsContent>
-        <TabsContent value="activity" className="pt-6">
-          <ActivityPanel />
-        </TabsContent>
-      </Tabs>
+      {!products ? (
+        <div className="space-y-4">
+          <Skeleton className="h-52 w-full" />
+          <Skeleton className="h-52 w-full" />
+        </div>
+      ) : products.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
+            <Sparkles className="size-6" />
+            <p className="text-sm">No funds are open for subscription right now.</p>
+            <p className="max-w-sm text-xs">A fund appears here once an operator registers and opens it. Nothing you hold is affected.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-5">
+          {products.map((product) => (
+            <ProductCard key={product.service} product={product} redemptions={redemptions.filter((r) => r.service === product.service)} onDone={load} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// One position card: units, current NAV (+ stale badge), value (units × NAV), and P&L.
-function PositionCard({ position, titleOf }: { position: Position; titleOf: (service: string) => string }) {
+type Panel = "subscribe" | "redeem" | null;
+
+function ProductCard({ product, redemptions, onDone }: { product: Product; redemptions: Redemption[]; onDone: () => void }) {
   const [nav, setNav] = useState<FundNav | null>(null);
-  const service = position.service ?? "";
+  const [panel, setPanel] = useState<Panel>(null);
 
   useEffect(() => {
     let active = true;
-    fetchFundNav(service)
+    fetchFundNav(product.service)
       .then((n) => active && setNav(n))
       .catch(() => active && setNav(null));
     return () => {
       active = false;
     };
-  }, [service]);
+  }, [product.service]);
 
-  const loss = isNegative(position.pnl);
-  const flat = isZero(position.pnl);
-  const pnlColor = loss && !flat ? "text-main-accent-t4" : "text-main-accent-t2";
+  const held = product.position;
+  const closed = product.allocation === null;
+  const stale = nav?.stale ?? false;
+  // `posted_at` is 0 until an operator marks the fund, which is exactly when the hub is
+  // still pricing at the bootstrap NAV of 1.0.
+  const unmarked = nav !== null && Number(nav.posted_at ?? 0) === 0;
+  const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
     <Card>
-      <CardContent className="space-y-4 pt-6">
-        <div className="flex items-center justify-between gap-2">
+      <CardContent className="space-y-5 py-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate font-medium">{titleOf(service)}</p>
-            <p className="font-mono-tech text-xs text-muted-foreground">{service}</p>
+            <p className="text-lg font-semibold">{product.title}</p>
+            <p className="font-mono-tech text-xs text-muted-foreground">{product.service}</p>
+            {product.summary && <p className="mt-1 max-w-md text-sm text-muted-foreground">{product.summary}</p>}
           </div>
-          {nav?.stale && (
-            <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
-              <Clock className="size-3" /> Stale NAV
-              <TipAnchor anchor="invest.position.stale-nav" />
-            </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            {closed && (
+              <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
+                Redeem only
+              </Badge>
+            )}
+            {stale && (
+              <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
+                <Clock className="size-3" /> Stale NAV
+                <TipAnchor anchor="invest.position.stale-nav" />
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {held ? <HoldingStats position={held} /> : <PriceOnly nav={nav} unmarked={unmarked} />}
+
+        {/* The gates, stated before the action rather than after a failed submit. */}
+        {closed && <Note tone="amber">This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full.</Note>}
+        {stale && <Note tone="amber">The fund&apos;s valuation is out of date, so dealing is paused until an operator posts a fresh one.</Note>}
+        {unmarked && !closed && <Note tone="muted">No valuation posted yet — units price at the bootstrap NAV of 1.0 until the first mark.</Note>}
+
+        <div className="flex flex-wrap gap-2">
+          {!closed && (
+            <Button type="button" className={cn(TEAL_CTA)} disabled={stale} onClick={() => setPanel((p) => (p === "subscribe" ? null : "subscribe"))}>
+              <Sparkles className="size-4" />
+              {panel === "subscribe" ? "Close" : "Subscribe"}
+            </Button>
+          )}
+          {held && (
+            <Button type="button" variant="outline" disabled={stale} onClick={() => setPanel((p) => (p === "redeem" ? null : "redeem"))}>
+              <ArrowDownToLine className="size-4" />
+              {panel === "redeem" ? "Close" : "Redeem"}
+            </Button>
           )}
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Stat label="Units" value={`${formatUnits(position.units)}`} tip="invest.position.units" />
-          <Stat label="NAV" value={`${formatUsdt(position.nav)} USDT`} tip="invest.position.nav" />
-          <Stat label="Value" value={`${formatUsdt(position.value)} USDT`} emphasis tip="invest.position.value" />
-        </div>
-        <div className="flex items-center justify-between rounded-lg border border-border bg-main-surface p-3 text-sm">
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            Profit &amp; loss
-            <TipAnchor anchor="invest.position.pnl" />
-          </span>
-          <span className={cn("flex items-center gap-1 font-semibold tabular-nums", pnlColor)}>
-            <TrendingUp className={cn("size-4", loss && !flat && "rotate-180")} />
-            {formatSignedUsdt(position.pnl)} USDT
-          </span>
-        </div>
+
+        {panel === "subscribe" && <SubscribePanel service={product.service} nav={nav} onDone={onDone} />}
+        {panel === "redeem" && held && <RedeemPanel service={product.service} position={held} nav={nav} onDone={onDone} />}
+
+        {queued.length > 0 && <QueuedList items={queued} onDone={onDone} />}
       </CardContent>
     </Card>
   );
 }
 
-function PositionsList({ positions, titleOf }: { positions: Position[] | null; titleOf: (service: string) => string }) {
-  if (!positions) return <Skeleton className="h-44 w-full" />;
-  if (positions.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
-          <Sparkles className="size-6" />
-          <p className="text-sm">No fund positions yet — subscribe below to buy your first units.</p>
-        </CardContent>
-      </Card>
-    );
-  }
+function HoldingStats({ position }: { position: Position }) {
+  const loss = isNegative(position.pnl);
+  const flat = isZero(position.pnl);
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {positions.map((p) => (
-        <PositionCard key={p.service ?? ""} position={p} titleOf={titleOf} />
-      ))}
+    <div className="grid gap-3 sm:grid-cols-4">
+      <Stat label="Units" value={formatUnits(position.units)} tip="invest.position.units" />
+      <Stat label="NAV" value={formatUsdt(position.nav)} tip="invest.position.nav" />
+      <Stat label="Value" value={`${formatUsdt(position.value)} USDT`} emphasis tip="invest.position.value" />
+      <Stat
+        label="P&L"
+        value={`${formatSignedUsdt(position.pnl)} USDT`}
+        tip="invest.position.pnl"
+        tone={loss && !flat ? "text-main-accent-t4" : "text-main-accent-t2"}
+        icon={<TrendingUp className={cn("size-3.5", loss && !flat && "rotate-180")} />}
+      />
     </div>
   );
 }
 
-function Stat({ label, value, emphasis, tip }: { label: string; value: string; emphasis?: boolean; tip?: TipKey }) {
+/** A product the caller holds nothing in: the price is all there is to show. */
+function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: boolean }) {
   return (
-    <div className="rounded-lg border border-border bg-main-surface p-4">
-      <div className="flex items-center gap-1.5">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-        {tip && <TipAnchor anchor={tip} />}
-      </div>
-      <p className={cn("tabular-nums", emphasis ? "text-2xl font-semibold" : "text-lg")}>{value}</p>
+    <div className="grid gap-3 sm:grid-cols-4">
+      <Stat label="NAV / unit" value={nav ? formatUsdt(nav.nav) : "—"} tip="invest.position.nav" emphasis />
+      <div className="sm:col-span-3 flex items-center text-sm text-muted-foreground">{unmarked ? "Not yet valued — the first subscription prices at 1.0." : "You hold no units in this fund yet."}</div>
     </div>
   );
 }
 
-function SubscribePanel({ catalog, onDone }: { catalog: Allocation[] | null; onDone: () => void }) {
-  const [service, setService] = useState("");
+function SubscribePanel({ service, nav, onDone }: { service: string; nav: FundNav | null; onDone: () => void }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ units?: string; nav?: string } | null>(null);
+
+  // Exact preview, floored the same way the hub floors it — so "0 units" is visible here
+  // instead of arriving as a rejection.
+  const preview = unitsForCash(amount, nav?.nav);
+  const dust = toBaseUnits(amount) > 0n && preview === 0n;
 
   const submit = async () => {
     setSubmitting(true);
     setError(null);
     setDone(null);
     try {
-      const receipt = await submitSubscribe({ service: picked, amount });
+      const receipt = await submitSubscribe({ service, amount });
       setDone({ units: receipt.units, nav: receipt.nav });
       setAmount("");
       onDone();
@@ -208,16 +268,8 @@ function SubscribePanel({ catalog, onDone }: { catalog: Allocation[] | null; onD
     }
   };
 
-  // The effective pick: what the user chose, else the first open product once the catalog
-  // lands. Derived rather than seeded into state — an effect that only sets a default is
-  // a render-order trap (and the lint rightly refuses it).
-  const picked = service || catalog?.[0]?.service || "";
-  const selected = catalog?.find((a) => a.service === picked) ?? null;
-  const empty = catalog !== null && catalog.length === 0;
-  const valid = picked.trim().length > 0 && Number(amount) > 0;
-
   return (
-    <div className="max-w-xl space-y-5">
+    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-4">
       {done && (
         <Alert>
           <Sparkles className="size-4 text-main-accent-t2" />
@@ -235,75 +287,39 @@ function SubscribePanel({ catalog, onDone }: { catalog: Allocation[] | null; onD
         </Alert>
       )}
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
-          <div className="flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5 text-sm">
-              Fund
-              <TipAnchor anchor="invest.subscribe.fund" />
-            </span>
-            <Select value={picked} onValueChange={setService}>
-              <SelectTrigger className="w-full border-border bg-main-surface" disabled={!catalog || empty}>
-                <span className={cn("truncate", !selected && "text-muted-foreground")}>{selected ? selected.title : !catalog ? "Loading…" : "No funds are open right now"}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {(catalog ?? []).map((a) => (
-                  <SelectItem key={a.service} value={a.service}>
-                    {a.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selected?.summary && <span className="text-xs text-muted-foreground">{selected.summary}</span>}
-          </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex min-w-48 flex-1 flex-col gap-1.5">
+          <span className="flex items-center gap-1.5 text-sm">
+            Amount (USDT)
+            <TipAnchor anchor="invest.subscribe.amount" />
+          </span>
+          <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
+        </label>
+        <Button type="button" className={cn(TEAL_CTA)} disabled={submitting || preview === null || preview === 0n} onClick={submit}>
+          {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          Subscribe
+        </Button>
+      </div>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5 text-sm">
-              Amount
-              <TipAnchor anchor="invest.subscribe.amount" />
-            </span>
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
-          </label>
-
-          <p className="text-xs text-muted-foreground">Units are priced at the current NAV. Profit comes from the NAV rising, not from extra units.</p>
-
-          <Button type="button" className={cn("w-full", TEAL_CTA)} disabled={!valid || submitting} onClick={submit}>
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            Subscribe
-          </Button>
-        </CardContent>
-      </Card>
+      <p className={cn("text-xs", dust ? "text-destructive" : "text-muted-foreground")}>
+        {dust
+          ? `Too small to buy a whole unit at ${formatUsdt(nav?.nav)} — increase the amount.`
+          : preview !== null
+            ? `Buys ${formatUnits(fromBaseUnits(preview))} units at ${formatUsdt(nav?.nav)} USDT per unit.`
+            : "Units are priced at the current NAV; the unit count is fixed at purchase and does not grow."}
+      </p>
     </div>
   );
 }
 
-function RedeemPanel({ positions, titleOf, onDone }: { positions: Position[] | null; titleOf: (service: string) => string; onDone: () => void }) {
-  if (!positions) return <Skeleton className="h-40 w-full" />;
-  if (positions.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
-          <Sparkles className="size-6" />
-          <p className="text-sm">Nothing to redeem — subscribe to a fund first.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-  return (
-    <div className="space-y-4">
-      {positions.map((p) => (
-        <RedeemRow key={p.service ?? ""} position={p} titleOf={titleOf} onDone={onDone} />
-      ))}
-    </div>
-  );
-}
-
-function RedeemRow({ position, titleOf, onDone }: { position: Position; titleOf: (service: string) => string; onDone: () => void }) {
-  const service = position.service ?? "";
+function RedeemPanel({ service, position, nav, onDone }: { service: string; position: Position; nav: FundNav | null; onDone: () => void }) {
   const [units, setUnits] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Redemption | null>(null);
+
+  const estimate = cashForUnits(units, nav?.nav);
+  const overdraw = toBaseUnits(units) > toBaseUnits(position.units);
 
   const submit = async () => {
     setSubmitting(true);
@@ -321,89 +337,78 @@ function RedeemRow({ position, titleOf, onDone }: { position: Position; titleOf:
     }
   };
 
-  const valid = Number(units) > 0;
-
   return (
-    <Card>
-      <CardContent className="space-y-4 pt-6">
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-medium">{titleOf(service)}</p>
-          <span className="text-xs text-muted-foreground">{formatUnits(position.units)} units held</span>
-        </div>
+    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-4">
+      {done && (
+        <Alert>
+          <Clock className="size-4 text-main-accent-t3" />
+          <AlertTitle>{done.state === "completed" ? "Redemption completed" : "Redemption queued"}</AlertTitle>
+          <AlertDescription>
+            {done.state === "completed"
+              ? `${formatUnits(done.units)} units redeemed for ${formatUsdt(done.cash)} USDT at ${formatUsdt(done.nav)} USDT NAV.`
+              : `${formatUnits(done.units)} units reserved — queued until the fund tops up, then priced at the settle NAV.`}
+          </AlertDescription>
+        </Alert>
+      )}
+      {error && (
+        <Alert variant="destructive">
+          <TriangleAlert className="size-4" />
+          <AlertTitle>Redemption failed</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        {done && (
-          <Alert>
-            <Clock className="size-4 text-main-accent-t3" />
-            <AlertTitle>{done.state === "completed" ? "Redemption completed" : "Redemption queued"}</AlertTitle>
-            <AlertDescription>
-              {done.state === "completed"
-                ? `${formatUnits(done.units)} units redeemed for ${formatUsdt(done.cash)} USDT at ${formatUsdt(done.nav)} USDT NAV.`
-                : `${formatUnits(done.units)} units reserved — queued until the fund tops up, then priced at the settle NAV.`}
-            </AlertDescription>
-          </Alert>
-        )}
-        {error && (
-          <Alert variant="destructive">
-            <TriangleAlert className="size-4" />
-            <AlertTitle>Redemption failed</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+      {/* The one genuinely surprising rule of this product, stated on the action itself. */}
+      <p className="flex items-start gap-1.5 text-xs text-main-accent-t3">
+        <Clock className="mt-0.5 size-3.5 shrink-0" />
+        <span>
+          Your units are reserved the moment you submit, but the cash is priced when the redemption settles — not now. A figure shown here is an estimate at today&apos;s NAV.
+          <TipAnchor anchor="invest.redeem.queue" />
+        </span>
+      </p>
 
-        <div className="flex items-end gap-2">
-          <label className="block flex-1 space-y-1.5">
-            <span className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-1.5">
-                Units to redeem
-                <TipAnchor anchor="invest.redeem.units" />
-              </span>
-              <button type="button" className="text-xs text-main-accent-t1 hover:underline" onClick={() => setUnits(position.units ?? "0")}>
-                Max
-              </button>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex min-w-48 flex-1 flex-col gap-1.5">
+          <span className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-1.5">
+              Units to redeem
+              <TipAnchor anchor="invest.redeem.units" />
             </span>
-            <Input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" placeholder="0.00" />
-          </label>
-          <Button type="button" variant="outline" disabled={!valid || submitting} onClick={submit}>
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowDownToLine className="size-4" />}
-            Redeem
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">Redemptions are accept-and-queue — cash is priced at the settle-time NAV.</p>
-      </CardContent>
-    </Card>
+            <button type="button" className="text-xs text-main-accent-t1 hover:underline" onClick={() => setUnits(position.units ?? "0")}>
+              Max
+            </button>
+          </span>
+          <Input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
+        </label>
+        <Button type="button" variant="outline" disabled={submitting || estimate === null || overdraw} onClick={submit}>
+          {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowDownToLine className="size-4" />}
+          Redeem
+        </Button>
+      </div>
+
+      <p className={cn("text-xs", overdraw ? "text-destructive" : "text-muted-foreground")}>
+        {overdraw
+          ? `You hold ${formatUnits(position.units)} units.`
+          : estimate !== null
+            ? `≈ ${formatUsdt(fromBaseUnits(estimate))} USDT at today's NAV — the settle price may differ.`
+            : `${formatUnits(position.units)} units held.`}
+      </p>
+    </div>
   );
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  queued: "bg-main-accent-t3/15 text-main-accent-t3",
-  completed: "bg-main-accent-t2/15 text-main-accent-t2",
-  failed: "bg-main-accent-t4/15 text-main-accent-t4",
-  cancelled: "bg-muted text-muted-foreground",
-};
-
-function StatusPill({ state }: { state: string | undefined }) {
-  const key = state ?? "queued";
-  return <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium capitalize", STATUS_STYLES[key] ?? "bg-muted text-muted-foreground")}>{key}</span>;
-}
-
-function ActivityPanel() {
-  const [items, setItems] = useState<Redemption[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+/** Queued redemptions for this product, inline — they belong to the fund they came from,
+ *  not to a separate activity list the holder has to go and find. */
+function QueuedList({ items, onDone }: { items: Redemption[]; onDone: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    fetchRedemptions()
-      .then((list) => setItems(list.redemptions ?? []))
-      .catch((e: Error) => setError(e.message));
-  }, []);
-
-  useEffect(load, [load]);
+  const [error, setError] = useState<string | null>(null);
 
   const cancel = async (id: string) => {
     setBusy(id);
+    setError(null);
     try {
       await cancelRedemption(id);
-      load();
+      onDone();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -411,49 +416,55 @@ function ActivityPanel() {
     }
   };
 
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (!items) return <Skeleton className="h-40 w-full" />;
-  if (items.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
-          <ArrowDownToLine className="size-6" />
-          <p className="text-sm">No redemptions yet.</p>
-        </CardContent>
-      </Card>
-    );
-  }
   return (
-    <Card>
-      <CardContent className="divide-y divide-border p-0">
-        {items.map((r, i) => {
-          const id = r.id ?? "";
-          return (
-            <div key={id} className="flex items-center justify-between gap-4 px-4 py-3">
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-sm">
-                  <span className="font-medium">{formatUnits(r.units)} units</span>{" "}
-                  <span className="text-muted-foreground">{r.cash ? `→ ${formatUsdt(r.cash)} USDT` : `from ${r.service ?? "—"}`}</span>
-                </p>
-                <p className="font-mono-tech text-xs text-muted-foreground">{r.service ?? "—"}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <StatusPill state={r.state} />
-                {i === 0 && <TipAnchor anchor="invest.activity.status" />}
-                {r.state === "queued" && (
-                  <>
-                    <Button type="button" variant="outline" size="sm" disabled={busy === id} onClick={() => cancel(id)}>
-                      {busy === id ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
-                      Cancel
-                    </Button>
-                    <TipAnchor anchor="invest.activity.cancel" />
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
+    <div className="space-y-2 rounded-lg border border-main-accent-t3/30 bg-main-accent-t3/5 p-3">
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-main-accent-t3">
+        Awaiting settlement
+        <TipAnchor anchor="invest.activity.status" />
+      </p>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      {items.map((r) => (
+        <div key={r.id ?? ""} className="flex items-center justify-between gap-3 text-sm">
+          <span>
+            <span className="font-medium">{formatUnits(r.units)} units</span> <span className="text-muted-foreground">reserved, priced at settle</span>
+          </span>
+          <span className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={busy === (r.id ?? "")} onClick={() => cancel(r.id ?? "")}>
+              {busy === (r.id ?? "") ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+              Cancel
+            </Button>
+            <TipAnchor anchor="invest.activity.cancel" />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Note({ tone, children }: { tone: "amber" | "muted"; children: React.ReactNode }) {
+  return (
+    <p
+      className={cn(
+        "rounded-lg border px-3 py-2 text-xs",
+        tone === "amber" ? "border-main-accent-t3/30 bg-main-accent-t3/5 text-main-accent-t3" : "border-border bg-foreground/5 text-muted-foreground",
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+function Stat({ label, value, emphasis, tip, tone, icon }: { label: string; value: string; emphasis?: boolean; tip?: Parameters<typeof TipAnchor>[0]["anchor"]; tone?: string; icon?: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-main-surface p-3">
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+        {tip && <TipAnchor anchor={tip} />}
+      </div>
+      <p className={cn("flex items-center gap-1 tabular-nums", emphasis ? "text-xl font-semibold" : "text-base", tone)}>
+        {icon}
+        {value}
+      </p>
+    </div>
   );
 }

@@ -143,16 +143,6 @@ export const tips = {
     title: "Profit & loss",
     body: "Your position's current value minus what you paid in — green for a gain, red for a loss, driven by the NAV moving.",
   },
-  "invest.subscribe.pricing": {
-    type: "section",
-    title: "How subscribing works",
-    body: "Units are priced at the current NAV. Profit comes from the NAV rising, not from extra units.",
-  },
-  "invest.subscribe.fund": {
-    type: "input",
-    title: "Fund",
-    body: "The fund your USDT buys units in. It defaults to the demo fund and rarely needs changing.",
-  },
   "invest.subscribe.amount": {
     type: "input",
     title: "Amount",
