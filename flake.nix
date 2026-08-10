@@ -306,44 +306,39 @@
               # On-chain rail gates (Rails::from_env). Per-rail API keys arrive via
               # k8s Secrets; main.rs refuses a prod boot with every rail empty.
               TON_API_URL = "https://toncenter.com/api/v3";
-              # Split-provider, per EVM rail: these public full nodes serve the
-              # money-moving paths (nonce, balance, broadcast) well but reject
-              # eth_getLogs (-32005), so the deposit SCAN needs its own endpoint.
-              BSC_RPC_URL = "https://bsc-dataseed.bnbchain.org";
-              # Polygon: moved off polygon-rpc.com, which went keyed without notice and
-              # now answers EVERY call 401 "API key disabled, reason: tenant disabled".
-              # The deposit scan has its own endpoint below, so this is invisible from
-              # the deposit side — it surfaced as a blind treasury (`—` on the admin
-              # screen, `treasury_funding` degrading both reads to None) and a rail whose
-              # withdrawals could never dispatch. publicnode is keyless and serves the
-              # money path (chain-id, gas price, nonce, ERC-20 balance).
-              POLYGON_RPC_URL = "https://polygon-bor-rpc.publicnode.com";
-              # Deposit-scan endpoints. Both keyless, so both are committable — the
-              # limits below were MEASURED against the watcher's real query shape (a
-              # `to`-topic filter over the USDT contract), not taken from provider docs,
-              # which are wrong about all of this.
               #
-              # BSC: moved off bsc.drpc.org, whose rate limit (code 15) throttled the
-              # scan — including eth_blockNumber — into a permanent alert storm.
-              # publicnode served 12/12 back-to-back 500-block chunks at the watcher's
-              # pacing with no throttling. Its ceiling is HISTORY, not rate: depths up to
-              # ~5k blocks (~1h at 0.75s/block) answer, ≥10k returns "Archive requests
-              # require a personal token". Steady state runs 15 blocks back, so this is
-              # only a limit on backfilling an outage longer than ~1h — for that, point
-              # this at bsc.drpc.org temporarily (it serves 500-block ranges 200k+ deep,
-              # just slowly) or use a keyed archive provider.
-              BSC_LOGS_RPC_URL = "https://bsc-rpc.publicnode.com";
-              # Polygon: drpc is kept — depth is not its problem (range-100 queries answer
-              # 200k blocks deep) and the keyless alternatives refuse Polygon getLogs
-              # outright. Its actual cap is a ~100-BLOCK RANGE: 100 answers, 128 fails.
+              # The four EVM RPC URLs are DELIBERATELY ABSENT from this set. They now carry
+              # an access token in their path, which makes them secrets, and a secret cannot
+              # live in a committable file. They come from the `kubernetes-ev-banking-piggybank`
+              # Secret via `envFrom` instead:
               #
-              # It reports that as code 35 "ranges over 10000 blocks are not supported on
-              # free plan", which is simply false — the number in the message is off by
-              # two orders of magnitude. Against the 500-block default EVERY Polygon
-              # getLogs was refused, so this rail credited nothing at all until the range
-              # below was set. Do not raise it without re-measuring.
-              POLYGON_LOGS_RPC_URL = "https://polygon.drpc.org";
-              POLYGON_MAX_BLOCK_RANGE = "100";
+              #   BSC_RPC_URL · BSC_LOGS_RPC_URL · POLYGON_RPC_URL · POLYGON_LOGS_RPC_URL
+              #
+              # Listing any of them here again would not merely duplicate the value — an
+              # explicit `env` entry **overrides** `envFrom`, so the plain URL would silently
+              # win over the keyed one and the rail would keep running unauthenticated.
+              # That is why they are commented out rather than left with a keyless default:
+              # a default here is indistinguishable, at runtime, from the Secret not working.
+              #
+              # The token buys HISTORY, and only some. Measured against the watcher's real
+              # query shape (a `to`-topic filter over the USDT contract), not provider docs,
+              # which are wrong about all of this:
+              #
+              #   BSC keyless   — 500-block ranges answer to ~5k deep (~1h at 0.75s/block);
+              #                   beyond that, "Archive requests require a personal token".
+              #   BSC keyed     — the same ranges answer to ~50k deep (~10h); at 200k the
+              #                   node says "History has been pruned for this block", so it
+              #                   is a pruned full node, NOT an archive. Backfilling a gap
+              #                   older than ~10h still needs a paid archive plan.
+              #   Polygon keyed — serves getLogs, which the keyless publicnode refused
+              #                   outright, at 500-block ranges to ~50k deep. This retires
+              #                   the drpc split AND the POLYGON_MAX_BLOCK_RANGE=100 override
+              #                   drpc forced (its real cap was a 100-block range, whatever
+              #                   its "10000 blocks" error text claimed), so the rail catches
+              #                   up 5x faster on the code default of 500.
+              #
+              # Re-measure before trusting any of this after a provider change; the probe is
+              # in docs/RUNBOOK-polygon-rail.md.
               TIGERBEETLE_ADDRESS = pkgs.lib.concatStringsSep "," tbProd.addresses;
               TIGERBEETLE_CLUSTER_ID = tbProd.clusterId;
               AUTH_SIGNING_KID = "prod-1";
