@@ -225,6 +225,10 @@ impl Grpc {
 		Ok(self.allocations().set_allocation_state(bearer(token, req)?).await?.into_inner())
 	}
 
+	pub async fn set_allocation_unit_cap(&self, token: &str, req: bk::SetAllocationUnitCapRequest) -> Result<bk::Allocation, Status> {
+		Ok(self.allocations().set_allocation_unit_cap(bearer(token, req)?).await?.into_inner())
+	}
+
 	pub async fn fund_nav(&self, token: &str, service: &str) -> Result<bk::FundNav, Status> {
 		let req = bk::GetFundNavRequest { service: service.to_string() };
 		Ok(self.funds().get_fund_nav(bearer(token, req)?).await?.into_inner())

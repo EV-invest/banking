@@ -13,6 +13,7 @@ use domain::{
 	allocations::{Allocation, AllocationId},
 	balance::ServiceId,
 	error::DomainError,
+	money::Shares,
 };
 
 use crate::ports::allocations::{AllocationRecord, AllocationRegistry};
@@ -29,6 +30,12 @@ pub async fn register(allocations: &dyn AllocationRegistry, service: ServiceId, 
 /// Replace an allocation's presentation fields. State and identity are untouched.
 pub async fn update_details(allocations: &dyn AllocationRegistry, service: &ServiceId, title: &str, summary: &str) -> Result<Allocation, DomainError> {
 	allocations.update_details(service, title, summary).await
+}
+
+/// Resize an allocation's authorised unit supply (idempotent). Lifecycle is untouched:
+/// this bounds how many units may still be minted, not whether the product is open.
+pub async fn set_unit_cap(allocations: &dyn AllocationRegistry, service: &ServiceId, unit_cap: Shares) -> Result<Allocation, DomainError> {
+	allocations.set_unit_cap(service, unit_cap).await
 }
 
 /// Open an allocation for subscriptions (idempotent).
@@ -60,8 +67,15 @@ pub async fn list(allocations: &dyn AllocationRegistry, include_unlisted: bool) 
 /// well-formed slug and a fund existing: an unregistered service is `NotFound`, a
 /// draft/closed one a validation error. Every subscribe runs this **before** reading a
 /// balance or pricing a NAV, so an unregistered slug never reaches the ledger at all.
-pub async fn require_subscribable(allocations: &dyn AllocationRegistry, service: &ServiceId) -> Result<(), DomainError> {
-	get(allocations, service).await?.ensure_subscribable()
+///
+/// Returns the resolved allocation because the caller needs it again: the *second* gate
+/// ([`Allocation::ensure_capacity`]) can only run once the mint has been priced, and
+/// re-reading the row for it would be a second trip to answer a question this one
+/// already answered.
+pub async fn require_subscribable(allocations: &dyn AllocationRegistry, service: &ServiceId) -> Result<Allocation, DomainError> {
+	let allocation = get(allocations, service).await?;
+	allocation.ensure_subscribable()?;
+	Ok(allocation)
 }
 
 /// Resolve `service` and assert investors can still exit it. Deliberately laxer than

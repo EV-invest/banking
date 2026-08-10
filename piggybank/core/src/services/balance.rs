@@ -137,7 +137,7 @@ impl BalanceService for BalanceSvc {
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let aum = Usdt::parse_decimal(&req.aum).map_err(map_err)?;
-		let valuation = funds_app::post_fund_valuation(
+		funds_app::post_fund_valuation(
 			self.state.allocations.as_ref(),
 			self.state.nav.as_ref(),
 			self.state.ledger.as_ref(),
@@ -148,14 +148,13 @@ impl BalanceService for BalanceSvc {
 		)
 		.await
 		.map_err(map_err)?;
-		Ok(Response::new(pb::FundNav {
-			service: service.to_string(),
-			nav: valuation.nav.to_decimal_string(),
-			aum: valuation.aum.to_decimal_string(),
-			units_outstanding: valuation.units_outstanding.to_decimal_string(),
-			posted_at: valuation.posted_at_unix,
-			stale: false,
-		}))
+		// Answer by re-reading the view rather than mapping the mark by hand: the response
+		// carries the allocation's supply headroom too, and one construction path is what
+		// keeps this route and `GetFundNav` from drifting apart field by field.
+		let view = funds_app::fund_nav_view(self.state.allocations.as_ref(), self.state.nav.as_ref(), self.state.ledger.as_ref(), service, unix_now())
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(super::funds::fund_nav_to_proto(&view)))
 	}
 
 	async fn settle_redemption(&self, request: Request<pb::SettleRedemptionRequest>) -> Result<Response<pb::Redemption>, Status> {

@@ -8,6 +8,7 @@ import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 import { fetchAllocations, registerAllocation, setAllocationState, updateAllocation } from "@/entities/admin/api/admin-client";
 import type { Allocation, AllocationState } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { compactUnits } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
@@ -103,6 +104,7 @@ export function AllocationsView() {
                     <th className="px-5 py-3 font-medium">Product</th>
                     <th className="px-5 py-3 font-medium">Service id</th>
                     <th className="px-5 py-3 font-medium">State</th>
+                    <th className="px-5 py-3 font-medium">Unit cap</th>
                     <th className="px-5 py-3 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -125,7 +127,8 @@ export function AllocationsView() {
         </Card>
         <p className="max-w-3xl text-xs text-muted-foreground">
           Registration lands in <span className="font-mono-tech">draft</span>, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can
-          always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered.
+          always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may
+          ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.
         </p>
       </section>
     </div>
@@ -163,6 +166,9 @@ function AllocationRow({
             {row.state}
           </span>
         </td>
+        {/* Read-only here: resizing the supply is a money decision and lives on the
+            Valuation screen, next to the issued figure it has to be judged against. */}
+        <td className="px-5 py-3 tabular-nums text-muted-foreground">{compactUnits(row.unit_cap)}</td>
         <td className="px-5 py-3">
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onEdit}>
@@ -176,7 +182,7 @@ function AllocationRow({
       </tr>
       {editing && (
         <tr className="bg-foreground/[0.03]">
-          <td colSpan={4} className="px-5 py-4">
+          <td colSpan={5} className="px-5 py-4">
             <div className="flex flex-wrap items-end gap-3">
               {/* `flex flex-col`, not `block` + `space-y`: the uikit Input is `inline-flex`,
                   so a narrow one shares the line with its label unless the column is

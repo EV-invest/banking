@@ -110,7 +110,12 @@ message FundNav {
   string service = 1;
   string nav = 2;                // decimal USDT per share
   string aum = 3;                // last posted AUM (decimal USDT; empty if seed)
-  string units_outstanding = 4;  // decimal units in circulation
+  string units_outstanding = 4;  // decimal units in circulation (the NAV denominator)
   int64 posted_at = 5;           // unix seconds of the mark (0 = seed)
   bool stale = 6;
+  // The allocation's authorised unit supply and what is left of it. `remaining_capacity`
+  // counts in-flight mints as issued, so a client that offers it can never offer more
+  // than Subscribe will accept.
+  string unit_cap = 7;           // decimal units
+  string remaining_capacity = 8; // decimal units still issuable (0 once at the cap)
 }

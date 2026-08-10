@@ -4,7 +4,7 @@
 
 /** `formatAmount` is a decimal amount → grouped display with no currency symbol; the
  *  admin tables spell the unit out in the header instead. */
-export { formatAmount as amount, formatNav, formatUsd } from "@/shared/lib/money";
+export { compactUnits, formatAmount as amount, formatNav, formatUnits, formatUsd, fractionOfCap, toBaseUnits } from "@/shared/lib/money";
 
 /** A unix-seconds string → a coarse "3h ago" age (for queue/session rows). */
 export function ago(unixSecs: string | undefined): string {

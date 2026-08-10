@@ -117,7 +117,7 @@ impl FundsService for FundsSvc {
 		// Any authenticated user may read a fund's price.
 		caller_id(&request)?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
-		let view = funds_app::fund_nav_view(self.state.nav.as_ref(), self.state.ledger.as_ref(), service, unix_now())
+		let view = funds_app::fund_nav_view(self.state.allocations.as_ref(), self.state.nav.as_ref(), self.state.ledger.as_ref(), service, unix_now())
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(fund_nav_to_proto(&view)))
@@ -158,7 +158,10 @@ fn position_to_proto(view: &funds_app::PositionView) -> pb::Position {
 	}
 }
 
-fn fund_nav_to_proto(view: &funds_app::FundNavView) -> pb::FundNav {
+/// The single place a `FundNav` is built. Shared with `BalanceService::PostFundValuation`,
+/// which answers with the same shape — two hand-rolled constructions of one message is how
+/// a field ends up populated on one route and empty on the other.
+pub(crate) fn fund_nav_to_proto(view: &funds_app::FundNavView) -> pb::FundNav {
 	pb::FundNav {
 		service: view.service.to_string(),
 		nav: view.nav.to_decimal_string(),
@@ -166,6 +169,8 @@ fn fund_nav_to_proto(view: &funds_app::FundNavView) -> pb::FundNav {
 		units_outstanding: view.units_outstanding.to_decimal_string(),
 		posted_at: view.posted_at,
 		stale: view.stale,
+		unit_cap: view.unit_cap.to_decimal_string(),
+		remaining_capacity: view.remaining_capacity.to_decimal_string(),
 	}
 }
 

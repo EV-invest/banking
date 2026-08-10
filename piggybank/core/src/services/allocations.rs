@@ -12,7 +12,7 @@
 //! type we don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
-use domain::{allocations::Allocation, authz::Permission, balance::ServiceId};
+use domain::{allocations::Allocation, authz::Permission, balance::ServiceId, money::Shares};
 use evbanking_contracts::{
 	allocation::state as wire_state,
 	banking::v1::{self as pb, allocations_service_server::AllocationsService},
@@ -82,6 +82,17 @@ impl AllocationsService for AllocationsSvc {
 		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
 	}
 
+	async fn set_allocation_unit_cap(&self, request: Request<pb::SetAllocationUnitCapRequest>) -> Result<Response<pb::Allocation>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let req = request.into_inner();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		// Parsed at the boundary, so a malformed cap is an `invalid_argument` about the
+		// input rather than a validation error from inside the aggregate.
+		let unit_cap = Shares::parse_decimal(&req.unit_cap).map_err(map_err)?;
+		let allocation = allocations_app::set_unit_cap(self.state.allocations.as_ref(), &service, unit_cap).await.map_err(map_err)?;
+		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
+	}
+
 	async fn set_allocation_state(&self, request: Request<pb::SetAllocationStateRequest>) -> Result<Response<pb::Allocation>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let req = request.into_inner();
@@ -114,6 +125,7 @@ fn allocation_to_proto(allocation: &Allocation, created_at: i64, updated_at: i64
 		state: allocation.state().as_str().to_owned(),
 		created_at,
 		updated_at,
+		unit_cap: allocation.unit_cap().to_decimal_string(),
 	}
 }
 
@@ -126,7 +138,7 @@ fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
 /// between them is a compile-and-test-time failure, not a runtime mystery.
 #[cfg(test)]
 mod tests {
-	use domain::allocations::AllocationState;
+	use domain::allocations::{AllocationState, DEFAULT_UNIT_CAP};
 
 	use super::*;
 
@@ -138,5 +150,12 @@ mod tests {
 		for state in wire_state::ALL {
 			assert_eq!(AllocationState::parse(state).unwrap().as_str(), state);
 		}
+	}
+
+	#[test]
+	fn the_wire_default_cap_matches_the_domain() {
+		// A consumer repo renders `contracts::allocation::DEFAULT_UNIT_CAP` before an
+		// operator has sized a product; it has to be the number the hub actually stored.
+		assert_eq!(DEFAULT_UNIT_CAP.to_decimal_string(), evbanking_contracts::allocation::DEFAULT_UNIT_CAP);
 	}
 }

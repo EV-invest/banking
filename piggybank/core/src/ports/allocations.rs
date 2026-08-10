@@ -17,6 +17,7 @@ use domain::{
 	architecture::{Reader, Repository},
 	balance::ServiceId,
 	error::DomainError,
+	money::Shares,
 };
 
 #[async_trait]
@@ -29,6 +30,13 @@ pub trait AllocationRegistry: Repository<Aggregate = Allocation> + Reader<Aggreg
 	/// Replace the presentation fields under the row lock: load `FOR UPDATE`, apply
 	/// [`Allocation::update_details`], persist + drain. `NotFound` if unregistered.
 	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str) -> Result<Allocation, DomainError>;
+
+	/// Resize the authorised unit supply under the row lock, applying
+	/// [`Allocation::set_unit_cap`]. Its own command rather than a field on
+	/// [`Self::update_details`] because it gates money: it raises its own event, so the
+	/// audit answers "who resized this product" without diffing title edits.
+	/// `NotFound` if unregistered.
+	async fn set_unit_cap(&self, service: &ServiceId, unit_cap: Shares) -> Result<Allocation, DomainError>;
 
 	/// Open the allocation for subscriptions under the row lock (idempotent — an
 	/// already-open one drains no event). `NotFound` if unregistered.

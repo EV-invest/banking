@@ -238,6 +238,65 @@
         }
       }
     },
+    "/banking.v1.AllocationsService/SetAllocationUnitCap": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "SetAllocationUnitCap",
+        "description": "Resize the authorised unit supply (AllocationManage). Idempotent. Separate from\n UpdateAllocation because this one gates money: `Subscribe` refuses a mint that\n would carry the issued supply past the cap. A cap below what is already issued is\n legal and means \"no more units\" — nothing minted is affected and redemptions are\n untouched, so this can never strand a holder. Zero is refused: use\n SetAllocationState(`closed`) to stop new money, which says so in the state.",
+        "operationId": "banking.v1.AllocationsService.SetAllocationUnitCap",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetAllocationUnitCapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.AllocationsService/UpdateAllocation": {
       "post": {
         "tags": [
@@ -3831,6 +3890,11 @@
             "title": "updated_at",
             "format": "int64",
             "description": "unix seconds"
+          },
+          "unit_cap": {
+            "type": "string",
+            "title": "unit_cap",
+            "description": "authorised unit supply, decimal (default 100000000)"
           }
         },
         "title": "Allocation",
@@ -4092,7 +4156,7 @@
           "units_outstanding": {
             "type": "string",
             "title": "units_outstanding",
-            "description": "decimal units in circulation"
+            "description": "decimal units in circulation (the NAV denominator)"
           },
           "posted_at": {
             "type": [
@@ -4106,6 +4170,16 @@
           "stale": {
             "type": "boolean",
             "title": "stale"
+          },
+          "unit_cap": {
+            "type": "string",
+            "title": "unit_cap",
+            "description": "The allocation's authorised unit supply and what is left of it. `remaining_capacity`\n counts in-flight mints as issued, so a client that offers it can never offer more\n than Subscribe will accept. decimal units"
+          },
+          "remaining_capacity": {
+            "type": "string",
+            "title": "remaining_capacity",
+            "description": "decimal units still issuable (0 once at the cap)"
           }
         },
         "title": "FundNav",
@@ -5129,6 +5203,22 @@
           }
         },
         "title": "SetAllocationStateRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SetAllocationUnitCapRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "unit_cap": {
+            "type": "string",
+            "title": "unit_cap",
+            "description": "decimal units, \u003e 0 (e.g. \"1000\" or \"100000000\")"
+          }
+        },
+        "title": "SetAllocationUnitCapRequest",
         "additionalProperties": false
       },
       "banking.v1.SetOperationsModeRequest": {

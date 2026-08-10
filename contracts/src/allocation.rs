@@ -13,22 +13,31 @@
 //! investor ─ ListAllocations ────▶ the catalog (open only, unless AllocationManage)
 //! investor ─ FundsService.Subscribe ────▶ refused unless the allocation is open
 //! investor ─ FundsService.Redeem ───────▶ allowed while open OR closed
+//! operator ─ SetAllocationUnitCap ▶ supply  (how many units may ever be issued)
 //! operator ─ SetAllocationState ─▶ closed   (redeem only — never traps an investor)
 //! ```
 //!
-//! The registry is the **gate**: `Subscribe` resolves its `service` against an
-//! allocation and refuses an unregistered or non-`open` one, so an investable product
-//! exists only because an `AllocationManage` holder said so.
+//! The registry is the **gate**, twice over. `Subscribe` resolves its `service` against
+//! an allocation and refuses an unregistered or non-`open` one, so an investable product
+//! exists only because an `AllocationManage` holder said so — and then refuses a mint
+//! that would carry the issued supply past [`Allocation::unit_cap`], so a product is
+//! also only ever as large as an operator sized it.
 //!
 //! Money is deliberately absent here. Units, NAV, positions and cash all belong to
 //! [`FundsService`](crate::banking::v1::funds_service_client::FundsServiceClient) and
 //! `BalanceService`, keyed by the same `service` slug this registry owns.
 
 pub use crate::banking::v1::{
-	Allocation, AllocationList, GetAllocationRequest, ListAllocationsRequest, RegisterAllocationRequest, SetAllocationStateRequest, UpdateAllocationRequest,
+	Allocation, AllocationList, GetAllocationRequest, ListAllocationsRequest, RegisterAllocationRequest, SetAllocationStateRequest, SetAllocationUnitCapRequest, UpdateAllocationRequest,
 	allocations_service_client::AllocationsServiceClient,
 	allocations_service_server::{AllocationsService, AllocationsServiceServer},
 };
+
+/// The unit cap a `RegisterAllocation` lands on, as its wire decimal — 100,000,000
+/// units. A consumer rendering "of the cap" before the operator has sized the product
+/// is looking at this number; it is finite on purpose, so "unlimited" is never a state
+/// the registry can be in.
+pub const DEFAULT_UNIT_CAP: &str = "100000000";
 
 /// The canonical `Allocation.state` strings.
 ///
@@ -76,6 +85,13 @@ mod tests {
 		// A draft has never taken money, so neither direction applies.
 		assert!(!state::accepts_subscriptions(state::DRAFT));
 		assert!(!state::accepts_redemptions(state::DRAFT));
+	}
+
+	#[test]
+	fn the_default_unit_cap_matches_the_hub() {
+		// Byte-identical with `domain::allocations::DEFAULT_UNIT_CAP` rendered to the wire
+		// (`the_wire_default_cap_matches_the_domain` guards the other side).
+		assert_eq!(super::DEFAULT_UNIT_CAP, "100000000");
 	}
 
 	#[test]

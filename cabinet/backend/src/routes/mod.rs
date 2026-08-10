@@ -79,6 +79,7 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/admin/allocations/register", post(admin::register_allocation))
 		.route("/api/admin/allocations/update", post(admin::update_allocation))
 		.route("/api/admin/allocations/state", post(admin::set_allocation_state))
+		.route("/api/admin/allocations/cap", post(admin::set_allocation_unit_cap))
 		.route("/api/admin/valuation/queue", get(admin::redemption_queue))
 		.route("/api/admin/valuation/post", post(admin::post_valuation))
 		.route("/api/admin/valuation/settle", post(admin::settle_redemption))

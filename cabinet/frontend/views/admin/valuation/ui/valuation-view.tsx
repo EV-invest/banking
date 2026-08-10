@@ -5,12 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
-import { failRedemption, fetchAllocations, fetchRedemptionQueue, postValuation, settleRedemption } from "@/entities/admin/api/admin-client";
+import { failRedemption, fetchAllocations, fetchRedemptionQueue, postValuation, setAllocationUnitCap, settleRedemption } from "@/entities/admin/api/admin-client";
 import { apiPath } from "@/shared/config/base-path";
 import type { Allocation, FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
-import { ago, formatNav, formatUsd } from "@/views/admin/lib/format";
+import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, toBaseUnits } from "@/views/admin/lib/format";
 import { AdminHeader, Toggle } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
@@ -133,7 +133,7 @@ export function ValuationView() {
         </p>
       )}
 
-      <section className="space-y-3">
+      <section className="space-y-3" id="post-valuation">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Post valuation</p>
         <Card>
           <CardContent className="space-y-5 py-6">
@@ -222,6 +222,22 @@ export function ValuationView() {
 
       <section className="space-y-3">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Unit supply
+          <TipAnchor anchor="admin.valuation.post.derived-nav" />
+        </p>
+        <SupplyCapCard
+          allocation={selected}
+          nav={nav}
+          onSaved={(updated) => {
+            setAllocations((rows) => (rows ?? []).map((a) => (a.service === updated.service ? updated : a)));
+            loadNav(updated.service);
+          }}
+          onError={setError}
+        />
+      </section>
+
+      <section className="space-y-3">
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Redemption queue
           {/* The count pill lands on the same step as the label it trails, so its fill and
               accent colour — not a smaller size — are what set it apart. */}
@@ -299,5 +315,106 @@ export function ValuationView() {
         <p className="max-w-3xl text-xs text-muted-foreground">Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.</p>
       </section>
     </div>
+  );
+}
+
+/// How many units this product may ever issue. Lives on the allocation, not on a
+/// valuation mark: a mark is an immutable historical price, while the cap is a policy an
+/// operator revises — storing it on the mark would make "change the cap" mean "post a
+/// price", and tangle the two histories together.
+function SupplyCapCard({
+  allocation,
+  nav,
+  onSaved,
+  onError,
+}: {
+  allocation: Allocation | null;
+  nav: FundNav | null;
+  onSaved: (updated: Allocation) => void;
+  onError: (message: string | null) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const cap = allocation?.unit_cap ?? "";
+  const issued = nav?.units_outstanding ?? "0";
+  // Uncontrolled until the operator types: the field shows the stored cap, and switching
+  // funds re-reads it rather than carrying the previous product's number across.
+  const value = draft ?? cap;
+  const parsed = toBaseUnits(value);
+  const invalid = value.trim() !== "" && parsed <= 0n;
+  const changed = value.trim() !== "" && parsed !== toBaseUnits(cap);
+  const fraction = fractionOfCap(issued, cap);
+  // A cap narrowed below what is already out is legal — it stops issuance without
+  // touching a single minted unit — but it is worth saying out loud before saving.
+  const belowIssued = changed && !invalid && parsed < toBaseUnits(issued);
+  const nearCap = fraction >= 0.9;
+
+  const save = async () => {
+    if (!allocation) return;
+    setSaving(true);
+    onError(null);
+    try {
+      onSaved(await setAllocationUnitCap(allocation.service, value.trim()));
+      setDraft(null);
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!allocation) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-sm text-muted-foreground">Pick a fund above to see and resize its authorised unit supply.</CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-5 py-6">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-sm text-muted-foreground">
+              Units issued in <span className="font-mono-tech text-foreground">{allocation.service}</span>
+            </span>
+            <span className={cn("text-sm font-semibold tabular-nums", nearCap ? "text-main-accent-t3" : "text-foreground")}>
+              {compactUnits(issued)} / {compactUnits(cap)} units
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+            <div className={cn("h-full rounded-full", nearCap ? "bg-main-accent-t3" : "bg-main-accent-t1")} style={{ width: `${Math.max(fraction * 100, fraction > 0 ? 1 : 0)}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {nav ? `${formatUnits(nav.remaining_capacity)} units still issuable` : "Loading supply…"} — a subscription that would mint past the cap is refused.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex w-56 flex-col gap-1.5">
+            <span className="text-sm text-muted-foreground">Cap (units)</span>
+            <Input value={value} onChange={(e) => setDraft(e.target.value)} inputMode="decimal" placeholder="100000000" className="w-full" />
+          </label>
+          <Button type="button" className={cn(TEAL_CTA)} disabled={saving || invalid || !changed} onClick={save}>
+            {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+            Save cap
+          </Button>
+          {draft !== null && (
+            <Button type="button" variant="outline" onClick={() => setDraft(null)}>
+              Reset
+            </Button>
+          )}
+          <p className={cn("min-w-48 flex-1 text-xs", invalid ? "text-destructive" : belowIssued ? "text-main-accent-t3" : "text-muted-foreground")}>
+            {invalid
+              ? "Must be greater than zero — to stop new money entirely, close the allocation instead."
+              : belowIssued
+                ? `Below the ${compactUnits(issued)} units already issued: this stops further issuance. Nothing minted is affected and redemptions keep working.`
+                : "Takes effect on the next subscription. Redemptions are never affected."}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
