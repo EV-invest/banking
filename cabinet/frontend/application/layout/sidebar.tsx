@@ -3,9 +3,11 @@
 import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
+import { fetchAllocations } from "@/entities/fund/api/fund-client";
 import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/model/notification-store";
+import type { Allocation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useSession } from "@/shared/lib/use-session";
 
@@ -25,8 +27,13 @@ const FUND: NavItem[] = [
   { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") || p.startsWith("/wallet") },
 ];
 
-const PRODUCTS = [
-  { href: "/invest", label: "Quy Nhon Fund", badge: "Q", tone: "bg-main-accent-t1/15 text-main-accent-t1" },
+// PRODUCTS is the open allocation registry, not a fixed list: a fund appears in the rail
+// because an operator registered and opened it. It used to name one product literally,
+// which went stale the moment a second one was registered.
+const PRODUCT_TONES = [
+  "bg-main-accent-t1/15 text-main-accent-t1",
+  "bg-main-accent-t2/15 text-main-accent-t2",
+  "bg-main-accent-t3/15 text-main-accent-t3",
 ];
 
 // ADMINISTER group — the operator console. Rendered only for a non-investor session
@@ -63,6 +70,15 @@ export function Sidebar() {
   // count is polled from — every other consumer reads the shared store.
   useUnreadCountPolling();
   const unread = useUnreadCount();
+  const [products, setProducts] = useState<Allocation[]>([]);
+
+  useEffect(() => {
+    // A failed catalog read leaves the group empty rather than blocking the rail — the
+    // nav is not the place to surface an API error.
+    fetchAllocations()
+      .then((list) => setProducts(list.allocations ?? []))
+      .catch(() => setProducts([]));
+  }, []);
   return (
     <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-4.5 pb-5 pt-6">
       <nav aria-label="Primary" className="flex flex-col gap-4.5">
@@ -71,18 +87,22 @@ export function Sidebar() {
             <NavLink key={item.label} item={item} active={item.active(pathname)} />
           ))}
         </Group>
-        <Group label="Products">
-          {PRODUCTS.map((p) => (
-            <Link
-              key={p.label}
-              href={p.href}
-              className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5", NAV_FOCUS)}
-            >
-              <span className={cn("flex size-5 items-center justify-center rounded-md text-xs font-semibold", p.tone)}>{p.badge}</span>
-              {p.label}
-            </Link>
-          ))}
-        </Group>
+        {products.length > 0 && (
+          <Group label="Products">
+            {products.map((p, i) => (
+              <Link
+                key={p.service}
+                href="/invest"
+                className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5", NAV_FOCUS)}
+              >
+                <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md text-xs font-semibold", PRODUCT_TONES[i % PRODUCT_TONES.length])}>
+                  {p.title.charAt(0).toUpperCase()}
+                </span>
+                <span className="truncate">{p.title}</span>
+              </Link>
+            ))}
+          </Group>
+        )}
         {isAdmin && (
           <Group label="Administer">
             {ADMIN.map((item) => (

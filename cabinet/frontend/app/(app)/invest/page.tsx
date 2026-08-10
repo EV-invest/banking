@@ -1,17 +1,8 @@
-import { LineChart } from "lucide-react";
+import { InvestView } from "@/views/invest/ui/invest-view";
 
-import { PagePlaceholder } from "@/application/layout/page-placeholder";
-
-// The fund-shares surface (positions · subscribe · redeem) is parked while the screen is
-// redesigned; the implementation lives in views/invest/ui/invest-view.tsx for later. The
-// placeholder keeps the route an honest nav destination in the meantime.
+// The fund-shares surface: positions · subscribe · redeem. Unparked now that the screen
+// picks its fund from the allocation registry instead of a hardcoded slug — the reason
+// the placeholder went up was that this form could not name a real product.
 export default function InvestPage() {
-  return (
-    <PagePlaceholder
-      eyebrow="Invest"
-      title="Invest"
-      blurb="Fund subscriptions and redemptions are getting their redesigned home — coming soon. Your existing positions stay visible on the dashboard."
-      icon={<LineChart className="size-6" />}
-    />
-  );
+  return <InvestView />;
 }
