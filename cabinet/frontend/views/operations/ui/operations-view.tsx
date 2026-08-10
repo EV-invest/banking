@@ -28,6 +28,13 @@ import {
   ItemMedia,
   ItemSeparator,
   ItemTitle,
+  Drawer,
+  DrawerContent,
+  DrawerTitle,
+  DrawerTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Skeleton,
   ToggleGroup,
   ToggleGroupItem,
@@ -35,6 +42,8 @@ import {
 
 import { fetchAllocations } from "@/entities/fund/api/fund-client";
 import { fetchOperations } from "@/entities/operation/api/operation-client";
+import { useIsCompact } from "@/views/operations/lib/use-is-compact";
+import { OperationDetail } from "@/views/operations/ui/operation-detail";
 import type { Allocation, Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import {
@@ -64,10 +73,10 @@ type Filter = "all" | (typeof KIND_FILTERS)[number];
 // four sources have their own list endpoints, but only the hub can interleave them by
 // time and still apply one page limit across the result.
 //
-// Read-only by design: the cancel affordances for a queued withdrawal and a queued
-// redemption already live on the surfaces that own those aggregates (`/wallet/activity`
-// and `/invest`), and the In progress card links to them rather than growing a third
-// copy of the same mutation.
+// Every row opens a detail panel (a Popover here, a Drawer below `lg`) built from the row
+// the timeline already holds — no second request. The panel still performs no mutation of
+// its own: cancelling a queued withdrawal or redemption belongs to the surfaces that own
+// those aggregates, so the panel links to them rather than growing a third copy.
 export function OperationsView() {
   const [operations, setOperations] = useState<Operation[] | undefined>(undefined);
   const [truncated, setTruncated] = useState(false);
@@ -247,7 +256,7 @@ function InProgress({ operations, titleOf }: { operations: Operation[]; titleOf:
           {operations.map((operation, i) => (
             <Fragment key={rowKey(operation, i)}>
               {i > 0 && <ItemSeparator />}
-              <Row operation={operation} titleOf={titleOf} linkToManage />
+              <Row operation={operation} titleOf={titleOf} />
             </Fragment>
           ))}
         </ItemGroup>
@@ -256,55 +265,74 @@ function InProgress({ operations, titleOf }: { operations: Operation[]; titleOf:
   );
 }
 
-function Row({ operation, titleOf, linkToManage = false }: { operation: Operation; titleOf: (service: string | undefined) => string; linkToManage?: boolean }) {
+function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: string | undefined) => string }) {
+  const [open, setOpen] = useState(false);
+  const compact = useIsCompact();
   const meta = kindMeta(operation.kind);
   const at = seconds(operation.created_at);
-  const manage = linkToManage ? manageHref(operation.kind) : null;
+  const title = rowTitle(operation, titleOf);
 
-  const body = (
-    <>
-      <ItemMedia>
-        <Badge className={cn("font-semibold", meta.tone)}>{meta.badge}</Badge>
-      </ItemMedia>
-      <ItemContent className="min-w-0 gap-0.5">
-        <ItemTitle className="block w-auto truncate font-semibold">{rowTitle(operation, titleOf)}</ItemTitle>
-        <ItemDescription className="line-clamp-1 text-xs">
-          {rowSub(operation)}
-          {at > 0 && ` · ${timeLabel(at)}`}
-        </ItemDescription>
-      </ItemContent>
-      <ItemActions className="shrink-0 flex-col items-end gap-1">
-        <span className={cn("text-sm font-semibold tabular-nums", amountTone(meta.direction))}>{rowAmount(operation)}</span>
-        <Badge className={cn("capitalize", stateTone(operation.state))}>{operation.state}</Badge>
-      </ItemActions>
-      {manage && <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
-    </>
+  const trigger = (
+    <Item asChild size="sm" className="px-0 py-3 lg:py-4">
+      <button
+        type="button"
+        aria-label={`${title} — details`}
+        className="w-full cursor-pointer text-left outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ItemMedia>
+          <Badge className={cn("font-semibold", meta.tone)}>{meta.badge}</Badge>
+        </ItemMedia>
+        <ItemContent className="min-w-0 gap-0.5">
+          <ItemTitle className="block w-auto truncate font-semibold">{title}</ItemTitle>
+          <ItemDescription className="line-clamp-1 text-xs">
+            {rowSub(operation)}
+            {at > 0 && ` · ${timeLabel(at)}`}
+          </ItemDescription>
+        </ItemContent>
+        <ItemActions className="shrink-0 flex-col items-end gap-1">
+          <span className={cn("text-sm font-semibold tabular-nums", amountTone(meta.direction))}>{rowAmount(operation)}</span>
+          <Badge className={cn("capitalize", stateTone(operation.state))}>{operation.state}</Badge>
+        </ItemActions>
+        {/* Every row opens a panel now, so every row carries the same disclosure — not
+            only the in-flight ones that used to link out to their managing surface. */}
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+      </button>
+    </Item>
   );
 
-  // A pending row's whole surface is the affordance rather than a trailing "Manage"
-  // button: at 390px that button cost enough width to truncate "Withdrawal" itself, and
-  // a full-row target is the easier one to hit besides. Item brings its own focus ring
-  // through the anchor.
-  if (manage) {
+  const detail = <OperationDetail operation={operation} title={title} onManage={manageHref(operation.kind, operation.state)} />;
+
+  // A 380px popover on a 390px phone is a modal wearing a popover's clothes; below `lg`
+  // the same panel is presented as a bottom sheet instead.
+  if (compact) {
     return (
-      <Item asChild size="sm" className="px-0 py-3 transition-colors hover:bg-muted/40 lg:py-4">
-        <Link href={manage} aria-label={`${rowTitle(operation, titleOf)} — manage`}>
-          {body}
-        </Link>
-      </Item>
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerTrigger asChild>{trigger}</DrawerTrigger>
+        <DrawerContent className="max-h-[85vh] overflow-y-auto">
+          <DrawerTitle className="sr-only">{title}</DrawerTitle>
+          {detail}
+        </DrawerContent>
+      </Drawer>
     );
   }
 
   return (
-    <Item size="sm" className="px-0 py-3 lg:py-4">
-      {body}
-    </Item>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      {/* `useFloating` flips and clamps the panel's position but never its height, so an
+          in-flight withdrawal (the tall case) has to cap and scroll itself. */}
+      <PopoverContent align="end" side="bottom" className="max-h-[70vh] w-95 overflow-y-auto p-0">
+        {detail}
+      </PopoverContent>
+    </Popover>
   );
 }
 
-// The surface that owns this kind's mutations (cancel a queued withdrawal / redemption).
-// Deposits and subscriptions have nothing to act on once made.
-function manageHref(kind: string | undefined): string | null {
+// The surface that owns this kind's mutations. Only a *queued* operation can still be
+// cancelled — offering "Manage" on a settled one sends the user somewhere with nothing to
+// do. Deposits and subscriptions have nothing to act on once made.
+function manageHref(kind: string | undefined, state: string | undefined): string | null {
+  if (state !== "queued") return null;
   if (kind === "withdrawal") return "/wallet/activity";
   if (kind === "redemption") return "/invest";
   return null;
