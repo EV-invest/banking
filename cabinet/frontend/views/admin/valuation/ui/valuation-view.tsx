@@ -385,7 +385,9 @@ function SupplyCapCard({
             </span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
-            <div className={cn("h-full rounded-full", nearCap ? "bg-main-accent-t3" : "bg-main-accent-t1")} style={{ width: `${Math.max(fraction * 100, fraction > 0 ? 1 : 0)}%` }} />
+            {/* Proportional, no minimum sliver — see `SupplyBar`. The exact issued figure
+                sits directly above it. */}
+            <div className={cn("h-full rounded-full", nearCap ? "bg-main-accent-t3" : "bg-main-accent-t1")} style={{ width: `${fraction * 100}%` }} />
           </div>
           <p className="text-xs text-muted-foreground">
             {nav ? `${formatUnits(nav.remaining_capacity)} units still issuable` : "Loading supply…"} — a subscription that would mint past the cap is refused.

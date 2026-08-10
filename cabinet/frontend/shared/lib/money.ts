@@ -135,14 +135,21 @@ export function compactUnits(value: string | undefined): string {
 }
 
 // What fraction of `cap` is taken by `issued`, 0–1, for a progress bar. Exact bigint
-// division scaled to basis points — a 1e26 cap overflows a float's integer precision, so
+// division — a 1e26 cap overflows a float's integer precision, so
 // `Number(issued) / Number(cap)` would quietly lie at the sizes this feature is for.
+//
+// The scale is 1e12 rather than basis points because these caps are large: one unit of a
+// hundred-million-unit fund is 1e-8, which basis-point division floors to a flat zero.
+// That is fine for a bar (it is invisible either way) and wrong for anything that asks
+// this function a question about a small holding.
+const CAP_FRACTION_SCALE = 1_000_000_000_000n;
+
 export function fractionOfCap(issued: string | undefined, cap: string | undefined): number {
   const a = toBaseUnits(issued);
   const b = toBaseUnits(cap);
   if (b <= 0n) return 0;
   if (a >= b) return 1;
-  return Number((a * 10_000n) / b) / 10_000;
+  return Number((a * CAP_FRACTION_SCALE) / b) / Number(CAP_FRACTION_SCALE);
 }
 
 // How much of an address survives truncation. The wallet (the default) keeps enough of a
