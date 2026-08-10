@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package banking.v1;
+
+// OperationsService — the caller's activity timeline: every money event that touched
+// their account, in one time-ordered stream.
+//
+// A pure CQRS **read model**. The four things a user does — deposit, withdraw,
+// subscribe, redeem — are separate aggregates written through their own services
+// (WalletService, FundsService); each already exposes its own list. What none of them
+// can answer is "what happened, in order", because interleaving four lists client-side
+// needs a timestamp every one of them must agree on. This service is that join, done
+// once in the hub over the Postgres projections.
+//
+// Read-only: it moves no money and owns no state. Every RPC acts on the caller's own
+// access-token `sub`. Amounts are decimal USDT STRINGS (proto3 has no u128; a string is
+// lossless and matches proto-loader's `longs: String`).
+// See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md.
+service OperationsService {
+  // The caller's operations, newest first, across all four kinds.
+  rpc ListOperations(ListOperationsRequest) returns (OperationList);
+}
+
+message ListOperationsRequest {
+  // Rows to return. 0 means the server default (100); the server caps it at 200.
+  uint32 limit = 1;
+}
+
+// One row of the timeline. `kind` is the discriminator — it decides which of the
+// remaining fields carry a value; the rest are empty. Deliberately flat rather than a
+// oneof: the whole surface is projected to TypeScript through OpenAPI, where a flat
+// message with a documented discriminator survives the pipeline unambiguously.
+//
+// | field        | deposit | withdrawal | subscription | redemption |
+// | ------------ | ------- | ---------- | ------------ | ---------- |
+// | amount       | ✓       | ✓ (gross)  | ✓ (cash in)  | ✓ at settle|
+// | fee          |         | ✓          |              |            |
+// | net_amount   |         | ✓          |              |            |
+// | units / nav  |         |            | ✓            | ✓ at settle|
+// | service      |         |            | ✓            | ✓          |
+// | network      | ✓       | ✓          |              |            |
+// | address      |         | ✓          |              |            |
+// | tx_ref       | ✓       | ✓ at settle|              |            |
+message Operation {
+  // Unique within the feed: the aggregate UUID for a withdrawal / subscription /
+  // redemption, the on-chain `tx_ref` for a deposit (which has no surrogate id).
+  string id = 1;
+  string kind = 2;  // deposit | withdrawal | subscription | redemption
+  // Lifecycle, per kind. deposit: always `credited` (the row exists only once the
+  // watcher has confirmed it). subscription: always `completed` (an immutable mint).
+  // withdrawal: queued | processing | completed | failed | cancelled.
+  // redemption: queued | completed | failed | cancelled.
+  string state = 3;
+  int64 created_at = 4;  // unix seconds the hub recorded the operation
+
+  // Cash moved, as a magnitude — the sign is implied by `kind`, never encoded here.
+  // Empty for a redemption that has not settled yet (settle-time pricing).
+  string amount = 5;
+  string fee = 6;         // withdrawal only — network fee retained
+  string net_amount = 7;  // withdrawal only — amount − fee, what ships on-chain
+
+  string units = 8;    // fund kinds — units minted (subscription) or burned (redemption)
+  string nav = 9;      // fund kinds — price dealt at (empty until a redemption settles)
+  string service = 10; // fund kinds — the fund/service id
+
+  string network = 11;  // rail kinds — bep20 | polygon | trc20 | ton
+  string address = 12;  // withdrawal only — the destination address
+  string tx_ref = 13;   // rail kinds — the on-chain reference (empty until settled)
+}
+
+message OperationList {
+  repeated Operation operations = 1;
+  // True when the caller's history is longer than `limit` — the client is looking at
+  // the newest page, not the whole record.
+  bool truncated = 2;
+}
