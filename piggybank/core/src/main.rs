@@ -30,6 +30,7 @@ use piggybank_core::{
 		dispatcher::Dispatcher,
 		ledger::{self, TbLedger},
 		nav::PgNav,
+		operation_feed::PgOperationFeed,
 		positions::PgFundPositions,
 		reaper::Reaper,
 		reconciliation::Reconciliation,
@@ -53,8 +54,8 @@ use piggybank_core::{
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		AllocationRegistry, Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository,
-		ledger::Ledger,
+		AllocationRegistry, Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository, UserRepository,
+		WithdrawalRepository, ledger::Ledger,
 	},
 	services,
 };
@@ -201,6 +202,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let deposits: Arc<dyn Deposits> = Arc::new(PgDeposits::new(pool.clone()));
 	let nav: Arc<dyn NavMarks> = Arc::new(PgNav::new(pool.clone()));
 	let positions: Arc<dyn FundPositionReader> = Arc::new(PgFundPositions::new(pool.clone()));
+	let operations: Arc<dyn OperationFeed> = Arc::new(PgOperationFeed::new(pool.clone()));
 
 	// Deposit addresses are provisioned by the separate-process signer (it mints + seals
 	// the keypair and returns the address; the hub never holds the key). Connect lazily so
@@ -385,10 +387,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// Deposit watcher + withdrawal confirmation watcher run when TON_API_URL is set; the
 	// sweep additionally needs SWEEP_ENABLED. Each holds its own pool clone / signer channel,
 	// mirroring the BEP20 tasks; all are no-ops (idle branch) when unconfigured.
-	let ton_deposit_watcher = rails
-		.ton
-		.clone()
-		.map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton, ton_custody.clone()));
+	let ton_deposit_watcher = rails.ton.clone().map(|ton| TonDepositWatcher::new(pool.clone(), relay_notify.clone(), ton, ton_custody.clone()));
 	let ton_withdrawal_watcher = match (&rails.ton, &ton_custody) {
 		(Some(ton), Some(ton_custody)) => Some(TonWithdrawalWatcher::new(pool.clone(), ton_custody.clone(), withdrawals.clone(), relay_notify.clone(), ton)),
 		_ => None,
@@ -414,6 +413,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		deposits,
 		nav,
 		positions,
+		operations,
 		deposit_addresses,
 		custody,
 		Arc::from(rails.configured_networks()),

@@ -245,6 +245,31 @@ per-transfer USDT cap (`SIGNER_MAX_TRANSFER_USDT`) and an optional destination a
 (`SIGNER_DESTINATION_ALLOWLIST`) on treasury-sourced transfers — both no-ops until configured,
 so set the cap before scaling real liquidity.
 
+## Operations — the activity timeline (`OperationsService`)
+
+The first surface here that is **only** a read model. The four things a user does —
+deposit, withdraw, subscribe, redeem — are separate aggregates, each already listing its
+own history. What none of them can answer is "what happened, in order": interleaving four
+client-side lists needs a timestamp they all agree on, and a per-source `LIMIT` cannot
+produce the newest N *overall* (a long deposit history would push out a recent
+redemption). `ListOperations` is that join, done once in the hub as a single `UNION ALL`
+over the projections the write side already maintains — so it introduces no new table, no
+new event, and no new write path.
+
+It owns nothing, so it gets a **plain driven port** ([`ports::operations`]) rather than a
+`Repository`: there is no aggregate to hang the marker on, the same shape [`Deposits`]
+takes. In Rust the row is a **sum type** (`Operation::{Deposit, Withdrawal, Subscription,
+Redemption}`) so a deposit cannot carry a NAV; on the wire it flattens to one message with
+a `kind` discriminator, because the whole surface is projected to TypeScript through
+OpenAPI and a flat shape survives that pipeline unambiguously. The service layer is where
+that trade is paid, once.
+
+Paging is a `limit` (default 100, capped at 200) with no cursor — the timeline is a
+recent-activity surface, not an export. The adapter over-fetches one row to answer
+`truncated` honestly rather than running a second `COUNT` over the same union. Ordering is
+`created_at DESC, id`: on the `timestamptz`, not on truncated epoch seconds, so a
+subscribe/redeem pair made in the same second keeps the order the user made it in.
+
 ## Write path (Write-Last, Read-First)
 
 A command opens one Postgres tx (the **only** ACID point), mutates the aggregate under

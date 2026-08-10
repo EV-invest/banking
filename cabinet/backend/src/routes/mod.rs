@@ -54,6 +54,7 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/wallet/deposits", get(money::list_deposits))
 		.route("/api/allocations", get(money::list_allocations))
 		.route("/api/allocations/detail", get(money::get_allocation))
+		.route("/api/operations", get(money::list_operations))
 		.route("/api/funds/nav", get(money::fund_nav))
 		.route("/api/funds/positions", get(money::list_positions))
 		.route("/api/funds/redemptions", get(money::list_redemptions))

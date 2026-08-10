@@ -2124,6 +2124,65 @@
         }
       }
     },
+    "/banking.v1.OperationsService/ListOperations": {
+      "post": {
+        "tags": [
+          "banking.v1.OperationsService"
+        ],
+        "summary": "ListOperations",
+        "description": "The caller's operations, newest first, across all four kinds.",
+        "operationId": "banking.v1.OperationsService.ListOperations",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListOperationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.OperationList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.UsersService/DisableUser": {
       "post": {
         "tags": [
@@ -4212,6 +4271,18 @@
         "title": "ListDepositsRequest",
         "additionalProperties": false
       },
+      "banking.v1.ListOperationsRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "Rows to return. 0 means the server default (100); the server caps it at 200."
+          }
+        },
+        "title": "ListOperationsRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListParkedEventsRequest": {
         "type": "object",
         "title": "ListParkedEventsRequest",
@@ -4321,6 +4392,102 @@
         "title": "NetworkWithdrawable",
         "additionalProperties": false,
         "description": "Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole\n available balance (a request beyond `instant` is accepted and queued); `instant` is\n the portion that ships without queueing = min(available, rail liquidity)."
+      },
+      "banking.v1.Operation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Unique within the feed: the aggregate UUID for a withdrawal / subscription /\n redemption, the on-chain `tx_ref` for a deposit (which has no surrogate id)."
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "deposit | withdrawal | subscription | redemption"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "Lifecycle, per kind. deposit: always `credited` (the row exists only once the\n watcher has confirmed it). subscription: always `completed` (an immutable mint).\n withdrawal: queued | processing | completed | failed | cancelled.\n redemption: queued | completed | failed | cancelled."
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64",
+            "description": "unix seconds the hub recorded the operation"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "Cash moved, as a magnitude — the sign is implied by `kind`, never encoded here.\n Empty for a redemption that has not settled yet (settle-time pricing)."
+          },
+          "fee": {
+            "type": "string",
+            "title": "fee",
+            "description": "withdrawal only — network fee retained"
+          },
+          "net_amount": {
+            "type": "string",
+            "title": "net_amount",
+            "description": "withdrawal only — amount − fee, what ships on-chain"
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "fund kinds — units minted (subscription) or burned (redemption)"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav",
+            "description": "fund kinds — price dealt at (empty until a redemption settles)"
+          },
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "fund kinds — the fund/service id"
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "rail kinds — bep20 | polygon | trc20 | ton"
+          },
+          "address": {
+            "type": "string",
+            "title": "address",
+            "description": "withdrawal only — the destination address"
+          },
+          "tx_ref": {
+            "type": "string",
+            "title": "tx_ref",
+            "description": "rail kinds — the on-chain reference (empty until settled)"
+          }
+        },
+        "title": "Operation",
+        "additionalProperties": false,
+        "description": "One row of the timeline. `kind` is the discriminator — it decides which of the\n remaining fields carry a value; the rest are empty. Deliberately flat rather than a\n oneof: the whole surface is projected to TypeScript through OpenAPI, where a flat\n message with a documented discriminator survives the pipeline unambiguously.\n\n | field        | deposit | withdrawal | subscription | redemption |\n | ------------ | ------- | ---------- | ------------ | ---------- |\n | amount       | ✓       | ✓ (gross)  | ✓ (cash in)  | ✓ at settle|\n | fee          |         | ✓          |              |            |\n | net_amount   |         | ✓          |              |            |\n | units / nav  |         |            | ✓            | ✓ at settle|\n | service      |         |            | ✓            | ✓          |\n | network      | ✓       | ✓          |              |            |\n | address      |         | ✓          |              |            |\n | tx_ref       | ✓       | ✓ at settle|              |            |"
+      },
+      "banking.v1.OperationList": {
+        "type": "object",
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Operation"
+            },
+            "title": "operations"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "truncated",
+            "description": "True when the caller's history is longer than `limit` — the client is looking at\n the newest page, not the whole record."
+          }
+        },
+        "title": "OperationList",
+        "additionalProperties": false
       },
       "banking.v1.OperationsMode": {
         "type": "object",
@@ -4597,30 +4764,22 @@
           "tx_ref": {
             "type": "string",
             "title": "tx_ref",
-            "description": "the on-chain tx reference — the idempotency key"
+            "description": "`txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key"
           },
           "network": {
             "type": "string",
             "title": "network",
             "description": "bep20 | polygon | trc20 | ton — the rail it arrived on"
           },
-          "amount": {
+          "expected_amount": {
             "type": "string",
-            "title": "amount",
-            "description": "decimal USDT (canonical value, network-agnostic)"
-          },
-          "party_kind": {
-            "type": "string",
-            "title": "party_kind",
-            "description": "The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the\n user UUID or service id (empty for piggybank, which credits the fund's capital)."
-          },
-          "party_id": {
-            "type": "string",
-            "title": "party_id"
+            "title": "expected_amount",
+            "description": "Optional operator assertion in decimal USDT. When set it must equal what the chain\n reports or the call is refused, so a mistyped reference fails loudly instead of\n silently crediting some other transfer."
           }
         },
         "title": "RecordDepositRequest",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Record an arrival that reached a rail out of band, PROVEN against the chain.\n\n The caller supplies only a pointer to a fact: the reference is read back from the chain\n and the amount and the credited party are taken from what is actually there. An operator\n therefore cannot mint a balance by typing one — the worst a wrong reference can do is\n name a transfer that does not exist, or one that did not land on an address of ours,\n and both are rejected."
       },
       "banking.v1.RecordDepositResponse": {
         "type": "object",
@@ -4629,6 +4788,21 @@
             "type": "boolean",
             "title": "recorded",
             "description": "false if `tx_ref` was already recorded (idempotent no-op)"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "what the CHAIN reported, decimal USDT — never the caller's number"
+          },
+          "party_kind": {
+            "type": "string",
+            "title": "party_kind",
+            "description": "who the chain says it belongs to: piggybank | user | service"
+          },
+          "party_id": {
+            "type": "string",
+            "title": "party_id",
+            "description": "the user UUID or service id (empty for piggybank)"
           }
         },
         "title": "RecordDepositResponse",
@@ -6259,6 +6433,10 @@
     {
       "name": "banking.v1.HealthService",
       "description": "Health surface for the hub's gRPC service plane.\n\n   Check     — liveness: is the process up? Trivial, unauthenticated; backs the\n               `cabinet` BFF smoke path (browser -\u003e BFF -\u003e gRPC) and service checks.\n   Readiness — can this instance actually move money? Pings Postgres + TigerBeetle\n               and inspects the outbox (parked rows / dispatch backlog). An\n               orchestrator/LB drains an instance that is up but not ready instead of\n               routing money-moving traffic to it."
+    },
+    {
+      "name": "banking.v1.OperationsService",
+      "description": "OperationsService — the caller's activity timeline: every money event that touched\n their account, in one time-ordered stream.\n\n A pure CQRS **read model**. The four things a user does — deposit, withdraw,\n subscribe, redeem — are separate aggregates written through their own services\n (WalletService, FundsService); each already exposes its own list. What none of them\n can answer is \"what happened, in order\", because interleaving four lists client-side\n needs a timestamp every one of them must agree on. This service is that join, done\n once in the hub over the Postgres projections.\n\n Read-only: it moves no money and owns no state. Every RPC acts on the caller's own\n access-token `sub`. Amounts are decimal USDT STRINGS (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
     },
     {
       "name": "banking.v1.UsersService",

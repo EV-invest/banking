@@ -37,6 +37,9 @@ export type {
   BankingV1Redemption as Redemption,
   BankingV1RedemptionList as RedemptionList,
   BankingV1CancelRedemptionRequest as CancelRedemptionRequest,
+  // The unified activity timeline — one read model over all four money kinds.
+  BankingV1Operation as Operation,
+  BankingV1OperationList as OperationList,
 } from "./gen";
 
 // The allocation catalog is served to BOTH the investor surface (`/api/allocations`,

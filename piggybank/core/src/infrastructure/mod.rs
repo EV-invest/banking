@@ -18,6 +18,8 @@
 //!   and auto-resolves the safe `queued` redemptions/withdrawals past a max age.
 //! - [`dispatcher`] — the treasury worker: re-checks `queued` withdrawals against both
 //!   liquidity gates (TB rail + on-chain treasury) and dispatches the covered ones.
+//! - [`operation_feed`] — the read-side merge of the four money projections into one
+//!   time-ordered activity timeline (query side only; writes nothing).
 //! - [`telemetry`] — the observability adapter: the one seam that hands errors to
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 
@@ -32,6 +34,7 @@ pub mod dispatcher;
 pub mod evm_rpc;
 pub mod ledger;
 pub mod nav;
+pub mod operation_feed;
 pub mod operations;
 pub mod outbox;
 pub mod positions;
@@ -45,11 +48,11 @@ pub mod sweep;
 pub mod telemetry;
 pub mod tigerbeetle;
 pub mod ton_custody;
-pub mod treasury_drift;
 pub mod ton_deposit_watcher;
 pub mod ton_rpc;
 pub mod ton_sweep;
 pub mod ton_withdrawal_watcher;
+pub mod treasury_drift;
 pub mod tron_custody;
 pub mod tron_deposit_watcher;
 pub mod tron_rpc;

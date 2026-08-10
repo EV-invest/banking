@@ -21,6 +21,11 @@ pub struct NetworkQuery {
 }
 
 #[derive(Deserialize)]
+pub struct LimitQuery {
+	limit: Option<u32>,
+}
+
+#[derive(Deserialize)]
 pub struct ServiceQuery {
 	service: Option<String>,
 }
@@ -56,6 +61,21 @@ pub async fn list_withdrawals(State(st): State<AppState>, jar: CookieJar) -> Res
 pub async fn list_deposits(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::DepositList>, ApiError> {
 	let token = require_money_token(&st, &jar).await?;
 	let list = st.grpc.list_deposits(&token).await.map_err(|s| ApiError::read(s, "deposits unavailable"))?;
+	Ok(Json(list.into()))
+}
+
+// ── operations ───────────────────────────────────────────────────────────────
+
+/// `GET /api/operations?limit=` — the caller's unified activity timeline, newest first.
+/// An absent `limit` falls through to the hub's default page; the hub clamps anything
+/// oversized, so no bound is enforced twice.
+pub async fn list_operations(State(st): State<AppState>, jar: CookieJar, Query(q): Query<LimitQuery>) -> Result<Json<dto::OperationList>, ApiError> {
+	let token = require_money_token(&st, &jar).await?;
+	let list = st
+		.grpc
+		.list_operations(&token, q.limit.unwrap_or(0))
+		.await
+		.map_err(|s| ApiError::read(s, "operations unavailable"))?;
 	Ok(Json(list.into()))
 }
 

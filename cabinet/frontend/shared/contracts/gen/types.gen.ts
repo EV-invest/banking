@@ -517,6 +517,18 @@ export type BankingV1ListDepositsRequest = {
 };
 
 /**
+ * ListOperationsRequest
+ */
+export type BankingV1ListOperationsRequest = {
+    /**
+     * limit
+     *
+     * Rows to return. 0 means the server default (100); the server caps it at 200.
+     */
+    limit?: number;
+};
+
+/**
  * ListParkedEventsRequest
  */
 export type BankingV1ListParkedEventsRequest = {
@@ -642,6 +654,128 @@ export type BankingV1NetworkWithdrawable = {
      * flat network fee retained on a withdrawal
      */
     withdrawal_fee?: string;
+};
+
+/**
+ * Operation
+ *
+ * One row of the timeline. `kind` is the discriminator — it decides which of the
+ * remaining fields carry a value; the rest are empty. Deliberately flat rather than a
+ * oneof: the whole surface is projected to TypeScript through OpenAPI, where a flat
+ * message with a documented discriminator survives the pipeline unambiguously.
+ *
+ * | field        | deposit | withdrawal | subscription | redemption |
+ * | ------------ | ------- | ---------- | ------------ | ---------- |
+ * | amount       | ✓       | ✓ (gross)  | ✓ (cash in)  | ✓ at settle|
+ * | fee          |         | ✓          |              |            |
+ * | net_amount   |         | ✓          |              |            |
+ * | units / nav  |         |            | ✓            | ✓ at settle|
+ * | service      |         |            | ✓            | ✓          |
+ * | network      | ✓       | ✓          |              |            |
+ * | address      |         | ✓          |              |            |
+ * | tx_ref       | ✓       | ✓ at settle|              |            |
+ */
+export type BankingV1Operation = {
+    /**
+     * id
+     *
+     * Unique within the feed: the aggregate UUID for a withdrawal / subscription /
+     * redemption, the on-chain `tx_ref` for a deposit (which has no surrogate id).
+     */
+    id?: string;
+    /**
+     * kind
+     *
+     * deposit | withdrawal | subscription | redemption
+     */
+    kind?: string;
+    /**
+     * state
+     *
+     * Lifecycle, per kind. deposit: always `credited` (the row exists only once the
+     * watcher has confirmed it). subscription: always `completed` (an immutable mint).
+     * withdrawal: queued | processing | completed | failed | cancelled.
+     * redemption: queued | completed | failed | cancelled.
+     */
+    state?: string;
+    /**
+     * created_at
+     *
+     * unix seconds the hub recorded the operation
+     */
+    created_at?: number | string;
+    /**
+     * amount
+     *
+     * Cash moved, as a magnitude — the sign is implied by `kind`, never encoded here.
+     * Empty for a redemption that has not settled yet (settle-time pricing).
+     */
+    amount?: string;
+    /**
+     * fee
+     *
+     * withdrawal only — network fee retained
+     */
+    fee?: string;
+    /**
+     * net_amount
+     *
+     * withdrawal only — amount − fee, what ships on-chain
+     */
+    net_amount?: string;
+    /**
+     * units
+     *
+     * fund kinds — units minted (subscription) or burned (redemption)
+     */
+    units?: string;
+    /**
+     * nav
+     *
+     * fund kinds — price dealt at (empty until a redemption settles)
+     */
+    nav?: string;
+    /**
+     * service
+     *
+     * fund kinds — the fund/service id
+     */
+    service?: string;
+    /**
+     * network
+     *
+     * rail kinds — bep20 | polygon | trc20 | ton
+     */
+    network?: string;
+    /**
+     * address
+     *
+     * withdrawal only — the destination address
+     */
+    address?: string;
+    /**
+     * tx_ref
+     *
+     * rail kinds — the on-chain reference (empty until settled)
+     */
+    tx_ref?: string;
+};
+
+/**
+ * OperationList
+ */
+export type BankingV1OperationList = {
+    /**
+     * operations
+     */
+    operations?: Array<BankingV1Operation>;
+    /**
+     * truncated
+     *
+     * True when the caller's history is longer than `limit` — the client is looking at
+     * the newest page, not the whole record.
+     */
+    truncated?: boolean;
 };
 
 /**
@@ -913,12 +1047,20 @@ export type BankingV1ReadinessResponse = {
 
 /**
  * RecordDepositRequest
+ *
+ * Record an arrival that reached a rail out of band, PROVEN against the chain.
+ *
+ * The caller supplies only a pointer to a fact: the reference is read back from the chain
+ * and the amount and the credited party are taken from what is actually there. An operator
+ * therefore cannot mint a balance by typing one — the worst a wrong reference can do is
+ * name a transfer that does not exist, or one that did not land on an address of ours,
+ * and both are rejected.
  */
 export type BankingV1RecordDepositRequest = {
     /**
      * tx_ref
      *
-     * the on-chain tx reference — the idempotency key
+     * `txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key
      */
     tx_ref?: string;
     /**
@@ -928,22 +1070,13 @@ export type BankingV1RecordDepositRequest = {
      */
     network?: string;
     /**
-     * amount
+     * expected_amount
      *
-     * decimal USDT (canonical value, network-agnostic)
+     * Optional operator assertion in decimal USDT. When set it must equal what the chain
+     * reports or the call is refused, so a mistyped reference fails loudly instead of
+     * silently crediting some other transfer.
      */
-    amount?: string;
-    /**
-     * party_kind
-     *
-     * The party credited. `party_kind` ∈ {piggybank, user, service}; `party_id` is the
-     * user UUID or service id (empty for piggybank, which credits the fund's capital).
-     */
-    party_kind?: string;
-    /**
-     * party_id
-     */
-    party_id?: string;
+    expected_amount?: string;
 };
 
 /**
@@ -956,6 +1089,24 @@ export type BankingV1RecordDepositResponse = {
      * false if `tx_ref` was already recorded (idempotent no-op)
      */
     recorded?: boolean;
+    /**
+     * amount
+     *
+     * what the CHAIN reported, decimal USDT — never the caller's number
+     */
+    amount?: string;
+    /**
+     * party_kind
+     *
+     * who the chain says it belongs to: piggybank | user | service
+     */
+    party_kind?: string;
+    /**
+     * party_id
+     *
+     * the user UUID or service id (empty for piggybank)
+     */
+    party_id?: string;
 };
 
 /**
@@ -3542,6 +3693,35 @@ export type BankingV1HealthServiceReadinessResponses = {
 };
 
 export type BankingV1HealthServiceReadinessResponse = BankingV1HealthServiceReadinessResponses[keyof BankingV1HealthServiceReadinessResponses];
+
+export type BankingV1OperationsServiceListOperationsData = {
+    body: BankingV1ListOperationsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.OperationsService/ListOperations';
+};
+
+export type BankingV1OperationsServiceListOperationsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1OperationsServiceListOperationsError = BankingV1OperationsServiceListOperationsErrors[keyof BankingV1OperationsServiceListOperationsErrors];
+
+export type BankingV1OperationsServiceListOperationsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1OperationList;
+};
+
+export type BankingV1OperationsServiceListOperationsResponse = BankingV1OperationsServiceListOperationsResponses[keyof BankingV1OperationsServiceListOperationsResponses];
 
 export type BankingV1UsersServiceDisableUserData = {
     body: BankingV1DisableUserRequest;
