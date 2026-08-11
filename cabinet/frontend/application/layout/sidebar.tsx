@@ -165,7 +165,10 @@ function NavLink({ item, active, trailing }: { item: NavItem; active: boolean; t
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        // `isolate` is load-bearing: it gives the link its own stacking context so
+        // the pill's negative z-index stays behind the label and not behind the
+        // rail's own background, which is where it would land otherwise.
+        "relative isolate flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
         NAV_FOCUS,
         active ? "font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
       )}
