@@ -8,6 +8,7 @@ import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 import { fetchAllocations, registerAllocation, setAllocationState, updateAllocation } from "@/entities/admin/api/admin-client";
 import type { Allocation, AllocationState } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { Settled } from "@/shared/ui/motion";
 import { compactUnits } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
@@ -89,40 +90,45 @@ export function AllocationsView() {
         </p>
         <Card>
           <CardContent className="p-0">
-            {!rows ? (
-              <div className="p-6">
-                <Skeleton className="h-32 w-full" />
-              </div>
-            ) : rows.length === 0 ? (
-              <p className="p-8 text-center text-sm text-muted-foreground">
-                No allocations registered yet — until one is, every subscription is refused.
-              </p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-5 py-3 font-medium">Product</th>
-                    <th className="px-5 py-3 font-medium">Service id</th>
-                    <th className="px-5 py-3 font-medium">State</th>
-                    <th className="px-5 py-3 font-medium">Unit cap</th>
-                    <th className="px-5 py-3 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {rows.map((row) => (
-                    <AllocationRow
-                      key={row.service}
-                      row={row}
-                      busy={busy === row.service}
-                      editing={editing === row.service}
-                      onEdit={() => setEditing((current) => (current === row.service ? null : row.service))}
-                      onSave={async (body) => (await run(row.service, () => updateAllocation(body))) && setEditing(null)}
-                      onToggle={() => run(row.service, () => setAllocationState(row.service, row.state === "open" ? "closed" : "open"))}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <Settled
+              loading={!rows}
+              skeleton={
+                <div className="p-6">
+                  <Skeleton className="h-32 w-full" />
+                </div>
+              }
+            >
+              {!rows ? null : rows.length === 0 ? (
+                <p className="p-8 text-center text-sm text-muted-foreground">
+                  No allocations registered yet — until one is, every subscription is refused.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-5 py-3 font-medium">Product</th>
+                      <th className="px-5 py-3 font-medium">Service id</th>
+                      <th className="px-5 py-3 font-medium">State</th>
+                      <th className="px-5 py-3 font-medium">Unit cap</th>
+                      <th className="px-5 py-3 text-right font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {rows.map((row) => (
+                      <AllocationRow
+                        key={row.service}
+                        row={row}
+                        busy={busy === row.service}
+                        editing={editing === row.service}
+                        onEdit={() => setEditing((current) => (current === row.service ? null : row.service))}
+                        onSave={async (body) => (await run(row.service, () => updateAllocation(body))) && setEditing(null)}
+                        onToggle={() => run(row.service, () => setAllocationState(row.service, row.state === "open" ? "closed" : "open"))}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </Settled>
           </CardContent>
         </Card>
         <p className="max-w-3xl text-xs text-muted-foreground">

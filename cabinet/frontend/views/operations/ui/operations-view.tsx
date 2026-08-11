@@ -46,6 +46,7 @@ import { useIsCompact } from "@/views/operations/lib/use-is-compact";
 import { OperationDetail } from "@/views/operations/ui/operation-detail";
 import type { Allocation, Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { Settled } from "@/shared/ui/motion";
 import {
   amountTone,
   dayLabel,
@@ -139,107 +140,112 @@ export function OperationsView() {
         </Alert>
       )}
 
-      {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-72 rounded-lg" />
-          <Skeleton className="h-80 w-full rounded-xl" />
-        </div>
-      ) : all.length === 0 ? (
-        <Card>
-          <CardContent>
-            <Empty className={EMPTY_BOX}>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <ListChecks />
-                </EmptyMedia>
-                <EmptyTitle>No operations yet</EmptyTitle>
-                <EmptyDescription>Add funds to your wallet, then subscribe into a fund — every movement appears here from the moment you make it, not once it settles.</EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button asChild>
-                  <Link href="/wallet/deposit">Add funds</Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href="/invest">Browse funds</Link>
-                </Button>
-              </EmptyContent>
-            </Empty>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {/* A filter, not a set of panels: ToggleGroup rather than Tabs, because a
-              TabsList whose triggers control no TabPanel leaves every `aria-controls`
-              pointing at nothing. `type="single"` fires an empty value when the active
-              item is clicked again, which here means "show everything". */}
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            size="sm"
-            value={filter}
-            onValueChange={(value) => setFilter((typeof value === "string" && value ? value : "all") as Filter)}
-            aria-label="Filter operations by kind"
-            // The group is `w-fit`, so past the viewport it must scroll rather than
-            // squeeze — five labels do not fit across 390px at any legible size.
-            className="max-w-full overflow-x-auto"
-          >
-            {/* uikit's items are `flex-1`, which splits the row evenly and lets
-                "Redemptions" overflow its own cell into its neighbour. These size to
-                their own text instead. */}
-            <ToggleGroupItem value="all" className="flex-none px-3">
-              All
-            </ToggleGroupItem>
-            {KIND_FILTERS.map((kind) => (
-              <ToggleGroupItem key={kind} value={kind} className="flex-none px-3">
-                {kindMeta(kind).label}s
+      <Settled
+        loading={loading}
+        skeleton={
+          <div className="space-y-4">
+            <Skeleton className="h-10 w-72 rounded-lg" />
+            <Skeleton className="h-80 w-full rounded-xl" />
+          </div>
+        }
+      >
+        {loading ? null : all.length === 0 ? (
+          <Card>
+            <CardContent>
+              <Empty className={EMPTY_BOX}>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <ListChecks />
+                  </EmptyMedia>
+                  <EmptyTitle>No operations yet</EmptyTitle>
+                  <EmptyDescription>Add funds to your wallet, then subscribe into a fund — every movement appears here from the moment you make it, not once it settles.</EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button asChild>
+                    <Link href="/wallet/deposit">Add funds</Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/invest">Browse funds</Link>
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {/* A filter, not a set of panels: ToggleGroup rather than Tabs, because a
+                TabsList whose triggers control no TabPanel leaves every `aria-controls`
+                pointing at nothing. `type="single"` fires an empty value when the active
+                item is clicked again, which here means "show everything". */}
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={filter}
+              onValueChange={(value) => setFilter((typeof value === "string" && value ? value : "all") as Filter)}
+              aria-label="Filter operations by kind"
+              // The group is `w-fit`, so past the viewport it must scroll rather than
+              // squeeze — five labels do not fit across 390px at any legible size.
+              className="max-w-full overflow-x-auto"
+            >
+              {/* uikit's items are `flex-1`, which splits the row evenly and lets
+                  "Redemptions" overflow its own cell into its neighbour. These size to
+                  their own text instead. */}
+              <ToggleGroupItem value="all" className="flex-none px-3">
+                All
               </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-
-          {visible.length === 0 ? (
-            <Card>
-              <CardContent>
-                <Empty className={EMPTY_BOX}>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <ArrowLeftRight />
-                    </EmptyMedia>
-                    <EmptyTitle>No {kindMeta(filter).label.toLowerCase()}s yet</EmptyTitle>
-                    <EmptyDescription>You have other activity — switch back to All to see it.</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-6">
-              {pending.length > 0 && <InProgress operations={pending} titleOf={titleOf} />}
-              {groups.map((group) => (
-                <section key={group.label} className="space-y-2">
-                  <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.label}</h2>
-                  <Card>
-                    {/* The rows carry the inset instead of the card, so a hover (and the separator
-                        between rows) reaches the card's edges rather than stopping 24px short. */}
-                    <CardContent className="px-0">
-                      <ItemGroup>
-                        {group.operations.map((operation, i) => (
-                          <Fragment key={rowKey(operation, i)}>
-                            {i > 0 && <ItemSeparator />}
-                            <Row operation={operation} titleOf={titleOf} />
-                          </Fragment>
-                        ))}
-                      </ItemGroup>
-                    </CardContent>
-                  </Card>
-                </section>
+              {KIND_FILTERS.map((kind) => (
+                <ToggleGroupItem key={kind} value={kind} className="flex-none px-3">
+                  {kindMeta(kind).label}s
+                </ToggleGroupItem>
               ))}
-            </div>
-          )}
+            </ToggleGroup>
 
-          {/* Says only what is true: the page is capped. There is no statements export to
-              point at yet, and promising one here would be inventing a feature. */}
-          {truncated && <p className="text-xs text-muted-foreground">Showing your most recent operations — older activity isn&apos;t listed here yet.</p>}
-        </div>
-      )}
+            {visible.length === 0 ? (
+              <Card>
+                <CardContent>
+                  <Empty className={EMPTY_BOX}>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <ArrowLeftRight />
+                      </EmptyMedia>
+                      <EmptyTitle>No {kindMeta(filter).label.toLowerCase()}s yet</EmptyTitle>
+                      <EmptyDescription>You have other activity — switch back to All to see it.</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {pending.length > 0 && <InProgress operations={pending} titleOf={titleOf} />}
+                {groups.map((group) => (
+                  <section key={group.label} className="space-y-2">
+                    <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.label}</h2>
+                    <Card>
+                      {/* The rows carry the inset instead of the card, so a hover (and the separator
+                          between rows) reaches the card's edges rather than stopping 24px short. */}
+                      <CardContent className="px-0">
+                        <ItemGroup>
+                          {group.operations.map((operation, i) => (
+                            <Fragment key={rowKey(operation, i)}>
+                              {i > 0 && <ItemSeparator />}
+                              <Row operation={operation} titleOf={titleOf} />
+                            </Fragment>
+                          ))}
+                        </ItemGroup>
+                      </CardContent>
+                    </Card>
+                  </section>
+                ))}
+              </div>
+            )}
+
+            {/* Says only what is true: the page is capped. There is no statements export to
+                point at yet, and promising one here would be inventing a feature. */}
+            {truncated && <p className="text-xs text-muted-foreground">Showing your most recent operations — older activity isn&apos;t listed here yet.</p>}
+          </div>
+        )}
+      </Settled>
     </div>
   );
 }

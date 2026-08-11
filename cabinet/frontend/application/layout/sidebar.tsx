@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
@@ -10,6 +11,7 @@ import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/m
 import type { Allocation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useSession } from "@/shared/lib/use-session";
+import { DUR, EASE } from "@/shared/ui/motion";
 
 interface NavItem {
   href: string;
@@ -148,18 +150,39 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+// The active pill is one shared node, not a background class on each link: with a
+// single `layoutId` across every NavLink in the rail, motion tracks it from the old
+// link to the new one and slides it there, so the rail shows the move instead of
+// blinking the highlight between rows. It spans both navs and the admin group
+// because they share the id.
+const ACTIVE_PILL = "cabinet-rail-active";
+
 function NavLink({ item, active, trailing }: { item: NavItem; active: boolean; trailing?: ReactNode }) {
   const Icon = item.icon;
+  const reduce = useReducedMotion();
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+        // `isolate` is load-bearing: it gives the link its own stacking context so
+        // the pill's negative z-index stays behind the label and not behind the
+        // rail's own background, which is where it would land otherwise.
+        "relative isolate flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
         NAV_FOCUS,
-        active ? "bg-primary font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
+        active ? "font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
       )}
     >
+      {active && (
+        <motion.span
+          // Dropping the id under reduced motion turns the slide into a cut while
+          // leaving the highlight itself in place.
+          layoutId={reduce ? undefined : ACTIVE_PILL}
+          aria-hidden
+          className="absolute inset-0 -z-10 rounded-lg bg-primary"
+          transition={{ duration: DUR.base, ease: EASE.out }}
+        />
+      )}
       <Icon className="size-4.5" />
       <span className="flex-1">{item.label}</span>
       {trailing}

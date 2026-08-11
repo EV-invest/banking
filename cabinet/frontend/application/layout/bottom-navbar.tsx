@@ -1,10 +1,12 @@
 "use client";
 
 import { Home, LayoutGrid, LineChart, ListChecks, Settings, type LucideIcon } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/shared/lib/cn";
+import { DUR, EASE } from "@/shared/ui/motion";
 
 interface TabItem {
   href: string;
@@ -26,12 +28,22 @@ const TABS: TabItem[] = [
   { href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") },
 ];
 
+// A shared `layoutId` marker, so switching tabs slides the rule across the bar
+// rather than blinking it out and in.
+const ACTIVE_MARKER = "cabinet-tab-active";
+
 export function BottomNavbar() {
   const pathname = usePathname();
+  const reduce = useReducedMotion();
+  // Invest and Products both match /invest, so more than one tab can read as
+  // active. Only the first carries the marker: two nodes sharing a layoutId is
+  // an ambiguous origin, and motion resolves it by jumping. The tint still
+  // lands on both, which is the behaviour that was already here.
+  const markerAt = TABS.findIndex((tab) => tab.active(pathname));
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-main-surface px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
-      {TABS.map((tab) => {
+      {TABS.map((tab, i) => {
         const Icon = tab.icon;
         const isActive = tab.active(pathname);
         return (
@@ -39,13 +51,21 @@ export function BottomNavbar() {
             key={tab.label}
             href={tab.href}
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-xs font-medium transition-colors",
+              "relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-xs font-medium transition-colors",
               // The offset is what earns its keep here: the active tab's fill is the same
               // teal as the ring, so without a gap the ring reads as the pill growing.
               "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-main-surface",
               isActive ? "text-main-accent-t1" : "text-muted-foreground hover:text-foreground",
             )}
           >
+            {i === markerAt && (
+              <motion.span
+                layoutId={reduce ? undefined : ACTIVE_MARKER}
+                aria-hidden
+                className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-main-accent-t1"
+                transition={{ duration: DUR.base, ease: EASE.out }}
+              />
+            )}
             <Icon className="size-5" />
             {tab.label}
           </Link>

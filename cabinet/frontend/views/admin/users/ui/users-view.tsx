@@ -8,6 +8,7 @@ import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, Se
 import { fetchUser, fetchUserBalance, fetchUsers, reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
 import type { AdminUserProfile, AdminUserSummary, UserBalance } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { Panel, PanelPresence, PanelSwap, Settled } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ROLES, ago, formatUsd, statusTone } from "@/views/admin/lib/format";
 import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
@@ -62,61 +63,79 @@ export function UsersView() {
       <div className="flex gap-6">
         <Card className="min-w-0 flex-1">
           <CardContent className="p-0">
-            {!users ? (
-              <div className="p-6">
-                <Skeleton className="h-64 w-full" />
-              </div>
-            ) : users.length === 0 ? (
-              <p className="p-8 text-center text-sm text-muted-foreground">No users match these filters.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-5 py-3 font-medium">User</th>
-                    <th className="px-5 py-3 font-medium">Role</th>
-                    <th className="px-5 py-3 font-medium">KYC</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {users.map((u) => (
-                    <tr
-                      key={u.user_id}
-                      onClick={() => setSelected(u)}
-                      className={cn("cursor-pointer transition-colors hover:bg-foreground/5", selected?.user_id === u.user_id && "bg-main-accent-t1/10")}
-                    >
-                      <td className="px-5 py-3">
-                        {/* The row is clickable for the mouse, but the identity cell carries the
-                            real control: a bare `tr onClick` gives the keyboard no way in, and
-                            the address is what names the row being opened. */}
-                        <button
-                          type="button"
-                          aria-pressed={selected?.user_id === u.user_id}
-                          onClick={() => setSelected(u)}
-                          className="flex min-w-0 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <Avatar email={u.email} />
-                          <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
-                        </button>
-                      </td>
-                      <td className="px-5 py-3 capitalize">{u.role}</td>
-                      <td className="px-5 py-3 text-muted-foreground">L{u.kyc_level}</td>
-                      <td className="px-5 py-3">
-                        <StatusDot status={u.status} />
-                      </td>
+            <Settled
+              loading={!users}
+              skeleton={
+                <div className="p-6">
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              }
+            >
+              {!users ? null : users.length === 0 ? (
+                <p className="p-8 text-center text-sm text-muted-foreground">No users match these filters.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-5 py-3 font-medium">User</th>
+                      <th className="px-5 py-3 font-medium">Role</th>
+                      <th className="px-5 py-3 font-medium">KYC</th>
+                      <th className="px-5 py-3 font-medium">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {users.map((u) => (
+                      <tr
+                        key={u.user_id}
+                        onClick={() => setSelected(u)}
+                        className={cn("cursor-pointer transition-colors hover:bg-foreground/5", selected?.user_id === u.user_id && "bg-main-accent-t1/10")}
+                      >
+                        <td className="px-5 py-3">
+                          {/* The row is clickable for the mouse, but the identity cell carries the
+                              real control: a bare `tr onClick` gives the keyboard no way in, and
+                              the address is what names the row being opened. */}
+                          <button
+                            type="button"
+                            aria-pressed={selected?.user_id === u.user_id}
+                            onClick={() => setSelected(u)}
+                            className="flex min-w-0 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <Avatar email={u.email} />
+                            <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
+                          </button>
+                        </td>
+                        <td className="px-5 py-3 capitalize">{u.role}</td>
+                        <td className="px-5 py-3 text-muted-foreground">L{u.kyc_level}</td>
+                        <td className="px-5 py-3">
+                          <StatusDot status={u.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </Settled>
           </CardContent>
         </Card>
 
-        {selected && (
-          // `key` remounts the drawer per user, so its uncontrolled inputs (KYC level)
-          // reset — otherwise a stale value could be committed against the wrong user.
-          <UserDrawer key={selected.user_id} summary={selected} onClose={() => setSelected(null)} onChanged={() => setRefresh((n) => n + 1)} />
-        )}
+        {/* Three distinct motions, and they are not interchangeable: opening slides
+            the panel in from the right, closing plays that in reverse (which needs
+            the node to outlive the state change — hence PanelPresence), and picking
+            a different row while the panel is already open leaves the frame where it
+            is and cross-fades only the body. The panel is keyed on being open, not
+            on which user, or every row click would play a full exit and enter. */}
+        <PanelPresence>
+          {selected && (
+            <Panel key="user-drawer" className="w-85 shrink-0 self-start">
+              <PanelSwap swapKey={selected.user_id}>
+                {/* `key` remounts the drawer per user, so its uncontrolled inputs (KYC
+                    level) reset — otherwise a stale value could be committed against
+                    the wrong user. */}
+                <UserDrawer key={selected.user_id} summary={selected} onClose={() => setSelected(null)} onChanged={() => setRefresh((n) => n + 1)} />
+              </PanelSwap>
+            </Panel>
+          )}
+        </PanelPresence>
       </div>
     </div>
   );
@@ -195,7 +214,9 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
   const role = profile?.role ?? summary.role;
 
   return (
-    <Card className="w-85 shrink-0 self-start">
+    // Width and placement belong to the animated `Panel` wrapper in the parent —
+    // sizing here as well would fight its layout animation on a record swap.
+    <Card className="w-full">
       <CardContent className="space-y-5 py-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">

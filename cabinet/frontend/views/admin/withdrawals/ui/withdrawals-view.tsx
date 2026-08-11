@@ -8,6 +8,7 @@ import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 import { dispatchWithdrawal, failWithdrawal, fetchWithdrawalQueue, settleWithdrawal } from "@/entities/admin/api/admin-client";
 import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
 import { TipAnchor } from "@/shared/tips";
+import { Settled } from "@/shared/ui/motion";
 import { ago, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
@@ -74,63 +75,68 @@ export function WithdrawalsView() {
         </p>
         <Card>
           <CardContent className="p-0">
-            {!queue ? (
-              <div className="p-6">
-                <Skeleton className="h-32 w-full" />
-              </div>
-            ) : queue.length === 0 ? (
-              <p className="p-8 text-center text-sm text-muted-foreground">No withdrawals are awaiting action.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-5 py-3 font-medium">User</th>
-                    <th className="px-5 py-3 font-medium">
-                      <span className="flex items-center gap-1.5">
-                        Destination
-                        <TipAnchor anchor="admin.withdrawals.destination" />
-                      </span>
-                    </th>
-                    <th className="px-5 py-3 font-medium">
-                      <span className="flex items-center gap-1.5">
-                        Gross / net
-                        <TipAnchor anchor="admin.withdrawals.gross-net" />
-                      </span>
-                    </th>
-                    <th className="px-5 py-3 font-medium">
-                      <span className="flex items-center gap-1.5">
-                        State
-                        <TipAnchor anchor="admin.withdrawals.state" />
-                      </span>
-                    </th>
-                    <th className="px-5 py-3 font-medium">Age</th>
-                    <th className="px-5 py-3 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {queue.map((item) => {
-                    const isBusy = busy === item.withdrawal_id;
-                    const open = panel?.id === item.withdrawal_id ? panel : null;
-                    return (
-                      <WithdrawalRow
-                        key={item.withdrawal_id}
-                        item={item}
-                        busy={isBusy}
-                        panel={open}
-                        txRef={txRef}
-                        reason={reason}
-                        onTxRef={setTxRef}
-                        onReason={setReason}
-                        onOpen={openPanel}
-                        onDispatch={() => run(item.withdrawal_id, () => dispatchWithdrawal(item.withdrawal_id))}
-                        onSettle={() => run(item.withdrawal_id, () => settleWithdrawal(item.withdrawal_id, txRef))}
-                        onFail={() => run(item.withdrawal_id, () => failWithdrawal(item.withdrawal_id, reason))}
-                      />
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+            <Settled
+              loading={!queue}
+              skeleton={
+                <div className="p-6">
+                  <Skeleton className="h-32 w-full" />
+                </div>
+              }
+            >
+              {!queue ? null : queue.length === 0 ? (
+                <p className="p-8 text-center text-sm text-muted-foreground">No withdrawals are awaiting action.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-5 py-3 font-medium">User</th>
+                      <th className="px-5 py-3 font-medium">
+                        <span className="flex items-center gap-1.5">
+                          Destination
+                          <TipAnchor anchor="admin.withdrawals.destination" />
+                        </span>
+                      </th>
+                      <th className="px-5 py-3 font-medium">
+                        <span className="flex items-center gap-1.5">
+                          Gross / net
+                          <TipAnchor anchor="admin.withdrawals.gross-net" />
+                        </span>
+                      </th>
+                      <th className="px-5 py-3 font-medium">
+                        <span className="flex items-center gap-1.5">
+                          State
+                          <TipAnchor anchor="admin.withdrawals.state" />
+                        </span>
+                      </th>
+                      <th className="px-5 py-3 font-medium">Age</th>
+                      <th className="px-5 py-3 text-right font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {queue.map((item) => {
+                      const isBusy = busy === item.withdrawal_id;
+                      const open = panel?.id === item.withdrawal_id ? panel : null;
+                      return (
+                        <WithdrawalRow
+                          key={item.withdrawal_id}
+                          item={item}
+                          busy={isBusy}
+                          panel={open}
+                          txRef={txRef}
+                          reason={reason}
+                          onTxRef={setTxRef}
+                          onReason={setReason}
+                          onOpen={openPanel}
+                          onDispatch={() => run(item.withdrawal_id, () => dispatchWithdrawal(item.withdrawal_id))}
+                          onSettle={() => run(item.withdrawal_id, () => settleWithdrawal(item.withdrawal_id, txRef))}
+                          onFail={() => run(item.withdrawal_id, () => failWithdrawal(item.withdrawal_id, reason))}
+                        />
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </Settled>
           </CardContent>
         </Card>
         <p className="max-w-3xl text-xs text-muted-foreground">

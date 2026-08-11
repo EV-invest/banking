@@ -9,6 +9,7 @@ import { failRedemption, fetchAllocations, fetchRedemptionQueue, postValuation, 
 import { apiPath } from "@/shared/config/base-path";
 import type { Allocation, FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { Settled } from "@/shared/ui/motion";
 import { TipAnchor } from "@/shared/tips";
 import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, toBaseUnits } from "@/views/admin/lib/format";
 import { AdminHeader, Toggle } from "@/views/admin/ui/shell";
@@ -247,69 +248,74 @@ export function ValuationView() {
         </p>
         <Card>
           <CardContent className="p-0">
-            {!queue ? (
-              <div className="p-6">
-                <Skeleton className="h-32 w-full" />
-              </div>
-            ) : queue.length === 0 ? (
-              <p className="p-8 text-center text-sm text-muted-foreground">The redemption queue is empty.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-5 py-3 font-medium">User</th>
-                    <th className="px-5 py-3 font-medium">Units</th>
-                    <th className="px-5 py-3 font-medium">
-                      <span className="flex items-center gap-1.5">
-                        Est. cash
-                        <TipAnchor anchor="admin.valuation.queue.est-cash" />
-                      </span>
-                    </th>
-                    <th className="px-5 py-3 font-medium">Age</th>
-                    <th className="px-5 py-3 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {queue.map((item) => {
-                    const est = currentNav > 0 ? Number(item.units) * currentNav : null;
-                    return (
-                      <tr key={item.redemption_id}>
-                        <td className="px-5 py-3">
-                          <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
-                          <p className="font-mono-tech text-xs text-muted-foreground">{item.service}</p>
-                        </td>
-                        <td className="px-5 py-3 tabular-nums">{Number(item.units).toLocaleString("en-US")}</td>
-                        <td className="px-5 py-3 tabular-nums text-muted-foreground">{est ? `≈ ${formatUsd(est)}` : "—"}</td>
-                        <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at)}</td>
-                        <td className="px-5 py-3">
-                          <div className="flex justify-end gap-2">
-                            <span className="inline-flex items-center gap-1">
-                              <Button type="button" variant="outline" size="sm" disabled={busy === item.redemption_id} onClick={() => act(settleRedemption, item.redemption_id)}>
-                                Settle
-                              </Button>
-                              <TipAnchor anchor="admin.valuation.queue.settle" />
-                            </span>
-                            <span className="inline-flex items-center gap-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                                disabled={busy === item.redemption_id}
-                                onClick={() => act(failRedemption, item.redemption_id)}
-                              >
-                                Fail
-                              </Button>
-                              <TipAnchor anchor="admin.valuation.queue.fail" />
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+            <Settled
+              loading={!queue}
+              skeleton={
+                <div className="p-6">
+                  <Skeleton className="h-32 w-full" />
+                </div>
+              }
+            >
+              {!queue ? null : queue.length === 0 ? (
+                <p className="p-8 text-center text-sm text-muted-foreground">The redemption queue is empty.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-5 py-3 font-medium">User</th>
+                      <th className="px-5 py-3 font-medium">Units</th>
+                      <th className="px-5 py-3 font-medium">
+                        <span className="flex items-center gap-1.5">
+                          Est. cash
+                          <TipAnchor anchor="admin.valuation.queue.est-cash" />
+                        </span>
+                      </th>
+                      <th className="px-5 py-3 font-medium">Age</th>
+                      <th className="px-5 py-3 text-right font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {queue.map((item) => {
+                      const est = currentNav > 0 ? Number(item.units) * currentNav : null;
+                      return (
+                        <tr key={item.redemption_id}>
+                          <td className="px-5 py-3">
+                            <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
+                            <p className="font-mono-tech text-xs text-muted-foreground">{item.service}</p>
+                          </td>
+                          <td className="px-5 py-3 tabular-nums">{Number(item.units).toLocaleString("en-US")}</td>
+                          <td className="px-5 py-3 tabular-nums text-muted-foreground">{est ? `≈ ${formatUsd(est)}` : "—"}</td>
+                          <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at)}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex justify-end gap-2">
+                              <span className="inline-flex items-center gap-1">
+                                <Button type="button" variant="outline" size="sm" disabled={busy === item.redemption_id} onClick={() => act(settleRedemption, item.redemption_id)}>
+                                  Settle
+                                </Button>
+                                <TipAnchor anchor="admin.valuation.queue.settle" />
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                  disabled={busy === item.redemption_id}
+                                  onClick={() => act(failRedemption, item.redemption_id)}
+                                >
+                                  Fail
+                                </Button>
+                                <TipAnchor anchor="admin.valuation.queue.fail" />
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </Settled>
           </CardContent>
         </Card>
         <p className="max-w-3xl text-xs text-muted-foreground">Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.</p>
