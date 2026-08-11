@@ -68,16 +68,18 @@ export function InvestView() {
 
   return (
     <div className="container max-w-5xl space-y-6 py-10">
-      <header className="space-y-1">
-        {/* The tip rides after the title text rather than beside the heading block — as a
-            sibling of the block it opened on top of the words it was explaining. */}
-        <h1 className="flex flex-wrap items-center gap-2 text-3xl font-semibold leading-tight">
-          Your fund shares
-          <TipAnchor anchor="invest.overview" />
-        </h1>
-        {/* The single most misread thing about this product: a holding does not grow in
-            unit count. Say it on the screen, not only in a tooltip. */}
-        <p className="text-sm text-muted-foreground">Your unit count stays put — it is the NAV per unit that moves, and with it what your units are worth.</p>
+      <header className="space-y-3">
+        {/* `font-sans` is not decoration: `globals.css` gives every h1/h2/h3 the serif
+            display face, so a page title that wants the sans one has to say so — which is
+            what every other cabinet title does. Without it this heading rendered in
+            Playfair while its Figma frame, and every sibling screen, used Inter. */}
+        <h1 className="font-sans text-3xl font-semibold leading-tight">Your fund shares</h1>
+        {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
+            it cannot live inside the heading row: it laid a full-width bordered box across
+            the title. It belongs under the header, which is also the one place this
+            explanation should live (the hand-written subtitle that used to sit here said
+            the same thing in slightly different words). */}
+        <TipAnchor anchor="invest.overview" />
       </header>
 
       {error && (
@@ -144,7 +146,13 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-6 py-5 md:flex-row md:items-center md:gap-0">
+      {/* The stacking lives on `max-md:`, not on a `md:` override of a base utility.
+          `.flex-col` and `.md\:flex-row` have identical specificity — a media query adds
+          none — so whichever Tailwind emits last wins at every width, and it emits the
+          base utility last. `md:flex-row` therefore silently lost to `flex-col` and this
+          band rendered as a centred column on the desktop it was designed for. Phrased
+          this way the desktop state is the unclassed default and nothing competes. */}
+      <CardContent className="flex py-5 max-md:flex-col max-md:gap-6 md:items-center">
         <div className="space-y-1.5 md:flex-1">
           <p className="text-xs font-semibold uppercase tracking-widest text-main-accent-t1">Invested value</p>
           <div className="flex flex-wrap items-baseline gap-2.5">
