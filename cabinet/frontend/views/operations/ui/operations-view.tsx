@@ -312,7 +312,18 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
     return (
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerTrigger asChild>{trigger}</DrawerTrigger>
-        <DrawerContent className="max-h-[85vh] overflow-y-auto">
+        {/* UIKIT-MIRROR: drawer-animation — TEMPORARY, mirrors EV-invest/lib#96.
+            The published uikit's Drawer ships with no transition at all, so the sheet
+            appears in a single frame. These are the kit's own classes, passed here until
+            the npm bump carries them; `shared/config/uikit-mirror.test.ts` fails the
+            moment the installed uikit animates, which is the signal to delete this. */}
+        <DrawerContent
+          className={cn(
+            "data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom",
+            "transition duration-500 ease-in-out",
+            "max-h-[85vh] overflow-y-auto",
+          )}
+        >
           <DrawerTitle className="sr-only">{title}</DrawerTitle>
           {detail}
         </DrawerContent>

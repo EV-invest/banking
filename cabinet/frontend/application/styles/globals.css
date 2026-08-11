@@ -63,3 +63,30 @@
     }
   }
 }
+
+/* ── UIKIT-MIRROR: drawer-animation ── TEMPORARY, mirrors EV-invest/lib#96 ──────
+   The published uikit renders the Drawer's scrim *inside* DrawerContent with no
+   `data-state`, so neither a call-site className nor a `data-[state=open]:` variant
+   can reach it — the panel slid up while the backdrop snapped to full black in one
+   frame. The element is created fresh on every open, so animating the selector
+   directly is enough. Deleted together with the call-site block in
+   views/operations/ui/operations-view.tsx; shared/config/uikit-mirror.test.ts fails
+   the moment the installed uikit animates its own Drawer. */
+@layer components {
+  [data-slot="drawer-overlay"] {
+    animation: ev-drawer-scrim-in 150ms ease-out;
+  }
+  @keyframes ev-drawer-scrim-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="drawer-overlay"] {
+      animation: none;
+    }
+  }
+}
