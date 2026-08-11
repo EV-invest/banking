@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
@@ -18,13 +18,15 @@ interface NavItem {
   active: (path: string) => boolean;
 }
 
-// FUND group — the primary surfaces. "Home" is the portfolio dashboard; deposit/withdraw
-// live behind the dashboard's money actions (matching the Figma cabinet, which has no
-// standalone Wallet nav item).
+// FUND group — the primary surfaces. "Home" is the portfolio dashboard; "Wallet" is the
+// balance plus deposit/withdraw/activity, which the dashboard's money actions also link
+// into. The mobile tab bar has no room for a sixth tab, so there /wallet still lights up
+// Operations.
 const FUND: NavItem[] = [
   { href: "/", label: "Home", icon: Home, active: (p) => p === "/" },
   { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p.startsWith("/invest") },
-  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") || p.startsWith("/wallet") },
+  { href: "/wallet", label: "Wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
+  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
 ];
 
 // PRODUCTS is the open allocation registry, not a fixed list: a fund appears in the rail
