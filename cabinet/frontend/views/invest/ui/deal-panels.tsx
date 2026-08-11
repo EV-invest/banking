@@ -13,6 +13,7 @@ import { cancelRedemption, submitRedeem, submitSubscribe } from "@/entities/fund
 import type { FundNav, Position, Redemption } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
+import { Panel, PanelPresence } from "@/shared/ui/motion";
 import { formatUnits, formatUsdt, fromBaseUnits, toBaseUnits } from "@/views/invest/lib/format";
 import { cashForUnits, unitsForCash } from "@/views/invest/lib/product";
 import { TEAL_CTA } from "@/views/invest/ui/atoms";
@@ -50,22 +51,31 @@ export function SubscribePanel({ service, nav, onDone }: { service: string; nav:
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-main-surface p-4">
-      {done && (
-        <Alert>
-          <Sparkles className="size-4 text-main-accent-t2" />
-          <AlertTitle>Subscription received</AlertTitle>
-          <AlertDescription>
-            Minted {formatUnits(done.units)} units at {formatUsdt(done.nav)} USDT NAV — your position updates shortly.
-          </AlertDescription>
-        </Alert>
-      )}
-      {error && (
-        <Alert variant="destructive">
-          <TriangleAlert className="size-4" />
-          <AlertTitle>Subscription failed</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      {/* The receipt and the failure occupy the same slot and replace one another, so
+          they share a presence boundary: retrying after an error swaps the panel in
+          place instead of collapsing the form and re-expanding it. */}
+      <PanelPresence>
+        {done && (
+          <Panel key="receipt" from="bottom">
+            <Alert>
+              <Sparkles className="size-4 text-main-accent-t2" />
+              <AlertTitle>Subscription received</AlertTitle>
+              <AlertDescription>
+                Minted {formatUnits(done.units)} units at {formatUsdt(done.nav)} USDT NAV — your position updates shortly.
+              </AlertDescription>
+            </Alert>
+          </Panel>
+        )}
+        {error && (
+          <Panel key="error" from="bottom">
+            <Alert variant="destructive">
+              <TriangleAlert className="size-4" />
+              <AlertTitle>Subscription failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </Panel>
+        )}
+      </PanelPresence>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-48 flex-1 flex-col gap-1.5">
@@ -121,24 +131,30 @@ export function RedeemPanel({ service, position, nav, onDone }: { service: strin
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-main-surface p-4">
-      {done && (
-        <Alert>
-          <Clock className="size-4 text-main-accent-t3" />
-          <AlertTitle>{done.state === "completed" ? "Redemption completed" : "Redemption queued"}</AlertTitle>
-          <AlertDescription>
-            {done.state === "completed"
-              ? `${formatUnits(done.units)} units redeemed for ${formatUsdt(done.cash)} USDT at ${formatUsdt(done.nav)} USDT NAV.`
-              : `${formatUnits(done.units)} units reserved — queued until the fund tops up, then priced at the settle NAV.`}
-          </AlertDescription>
-        </Alert>
-      )}
-      {error && (
-        <Alert variant="destructive">
-          <TriangleAlert className="size-4" />
-          <AlertTitle>Redemption failed</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      <PanelPresence>
+        {done && (
+          <Panel key="receipt" from="bottom">
+            <Alert>
+              <Clock className="size-4 text-main-accent-t3" />
+              <AlertTitle>{done.state === "completed" ? "Redemption completed" : "Redemption queued"}</AlertTitle>
+              <AlertDescription>
+                {done.state === "completed"
+                  ? `${formatUnits(done.units)} units redeemed for ${formatUsdt(done.cash)} USDT at ${formatUsdt(done.nav)} USDT NAV.`
+                  : `${formatUnits(done.units)} units reserved — queued until the fund tops up, then priced at the settle NAV.`}
+              </AlertDescription>
+            </Alert>
+          </Panel>
+        )}
+        {error && (
+          <Panel key="error" from="bottom">
+            <Alert variant="destructive">
+              <TriangleAlert className="size-4" />
+              <AlertTitle>Redemption failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </Panel>
+        )}
+      </PanelPresence>
 
       {/* The one genuinely surprising rule of this product, stated on the action itself. */}
       <p className="flex items-start gap-1.5 text-xs text-main-accent-t3">

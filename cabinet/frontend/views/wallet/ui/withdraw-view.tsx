@@ -9,6 +9,7 @@ import { fetchWallet, submitWithdrawal } from "@/entities/wallet/api/wallet-clie
 import type { NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor, type TipKey } from "@/shared/tips";
+import { Panel, PanelPresence, Settled } from "@/shared/ui/motion";
 import { formatUsdt, fromBaseUnits, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
@@ -93,9 +94,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
 
   return (
     <WalletScreen title="Withdraw USDT" subtitle="Send funds to an external address — one balance, any rail" back="/wallet">
-      {wallet === undefined ? (
-        <Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />
-      ) : networks.length === 0 ? (
+      <Settled
+        loading={wallet === undefined}
+        skeleton={<Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />}
+      >
+        {wallet === undefined ? null : networks.length === 0 ? (
         <p className="text-sm text-muted-foreground">{error ?? "No withdrawal rails are available right now — check back soon."}</p>
       ) : (
         // Form 560 + review 400 side by side is the Figma at 1440; below that the content
@@ -195,66 +198,73 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
           </div>
 
           <div className="flex flex-col gap-3.5 empty:hidden lg:w-100 lg:max-w-full lg:flex-none lg:gap-5">
-            {done && (
-              <div className={cn(WALLET_CARD, "flex gap-3 p-4.5 lg:p-5")}>
-                <Clock className="mt-0.5 size-4 shrink-0 text-main-accent-t3" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">{done.state === "queued" ? "Withdrawal queued" : "Withdrawal submitted"}</p>
+            {/* Receipt, failure and the review step all land in this column and replace
+                one another. One presence boundary over the three means a submit that
+                fails swaps review → error in place, instead of the column emptying and
+                refilling under the reader's eye. */}
+            <PanelPresence>
+              {done && (
+                <Panel key="receipt" from="bottom" className={cn(WALLET_CARD, "flex gap-3 p-4.5 lg:p-5")}>
+                  <Clock className="mt-0.5 size-4 shrink-0 text-main-accent-t3" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{done.state === "queued" ? "Withdrawal queued" : "Withdrawal submitted"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {done.state === "queued"
+                        ? `${formatUsdt(done.net_amount)} USDT to ${shortAddress(done.address)} is queued — it ships once the ${networkLabel(done.network)} rail is topped up.`
+                        : `${formatUsdt(done.net_amount)} USDT is on its way to ${shortAddress(done.address)} — pending on-chain confirmation.`}
+                    </p>
+                  </div>
+                </Panel>
+              )}
+
+              {error && (
+                <Panel key="error" from="bottom" className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-5")}>
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Withdrawal failed</p>
+                    <p className="text-xs text-muted-foreground">{error}</p>
+                  </div>
+                </Panel>
+              )}
+
+              {confirming && (
+                <Panel key="review" from="bottom" className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:p-5")}>
+                  <p className="text-sm font-semibold text-foreground">Review withdrawal</p>
+                  <div className="flex flex-col gap-2.5">
+                    <Row label="Network" value={networkLabel(confirming.network)} />
+                    <Row label="Destination" value={shortAddress(confirming.address)} />
+                    <Row label="Amount" value={`${formatUsdt(confirming.amount)} USDT`} />
+                    <Row label="Network fee" value={`${formatUsdt(confirming.fee)} USDT`} />
+                    <div className="h-px w-full bg-border" />
+                    <Row label="You will receive" value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-main-accent-t2" />
+                  </div>
+                  <p className="break-all font-mono-tech text-xs text-muted-foreground">To {confirming.address}</p>
+                  {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
+                    <p className="text-xs text-main-accent-t3">
+                      ~{formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant)))} USDT exceeds instant {networkLabel(confirming.network)}{" "}
+                      liquidity and will be queued until the rail is topped up.
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <button type="button" disabled={submitting} onClick={submit} className={cn(WALLET_CTA, "flex-1 gap-2 py-3 text-sm font-semibold")}>
+                      {submitting && <Loader2 className="size-4 animate-spin" />}
+                      Confirm withdrawal
+                    </button>
+                    <button type="button" disabled={submitting} onClick={() => setConfirming(null)} className={cn(WALLET_CTA_GHOST, "px-4 py-3 text-sm")}>
+                      Back
+                    </button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    {done.state === "queued"
-                      ? `${formatUsdt(done.net_amount)} USDT to ${shortAddress(done.address)} is queued — it ships once the ${networkLabel(done.network)} rail is topped up.`
-                      : `${formatUsdt(done.net_amount)} USDT is on its way to ${shortAddress(done.address)} — pending on-chain confirmation.`}
+                    Accepted instantly; if the {networkLabel(confirming.network)}{" "}
+                    rail is short it queues until funded — you&apos;ll be notified.
                   </p>
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-5")}>
-                <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">Withdrawal failed</p>
-                  <p className="text-xs text-muted-foreground">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {confirming && (
-              <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:p-5")}>
-                <p className="text-sm font-semibold text-foreground">Review withdrawal</p>
-                <div className="flex flex-col gap-2.5">
-                  <Row label="Network" value={networkLabel(confirming.network)} />
-                  <Row label="Destination" value={shortAddress(confirming.address)} />
-                  <Row label="Amount" value={`${formatUsdt(confirming.amount)} USDT`} />
-                  <Row label="Network fee" value={`${formatUsdt(confirming.fee)} USDT`} />
-                  <div className="h-px w-full bg-border" />
-                  <Row label="You will receive" value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-main-accent-t2" />
-                </div>
-                <p className="break-all font-mono-tech text-xs text-muted-foreground">To {confirming.address}</p>
-                {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
-                  <p className="text-xs text-main-accent-t3">
-                    ~{formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant)))} USDT exceeds instant {networkLabel(confirming.network)}{" "}
-                    liquidity and will be queued until the rail is topped up.
-                  </p>
-                )}
-                <div className="flex gap-2">
-                  <button type="button" disabled={submitting} onClick={submit} className={cn(WALLET_CTA, "flex-1 gap-2 py-3 text-sm font-semibold")}>
-                    {submitting && <Loader2 className="size-4 animate-spin" />}
-                    Confirm withdrawal
-                  </button>
-                  <button type="button" disabled={submitting} onClick={() => setConfirming(null)} className={cn(WALLET_CTA_GHOST, "px-4 py-3 text-sm")}>
-                    Back
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Accepted instantly; if the {networkLabel(confirming.network)}{" "}
-                  rail is short it queues until funded — you&apos;ll be notified.
-                </p>
-              </div>
-            )}
+                </Panel>
+              )}
+            </PanelPresence>
           </div>
         </div>
-      )}
+        )}
+      </Settled>
     </WalletScreen>
   );
 }
