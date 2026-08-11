@@ -74,14 +74,19 @@ export interface PanelSwapProps {
  * cross-fades, so the eye tracks "same panel, new record" instead of re-reading
  * the whole thing.
  *
- * `mode="wait"` rather than an overlap: the two records are different heights,
- * and overlapping them would need one taken out of flow. The exit is deliberately
- * shorter than the enter — leaving should feel like a dismissal, arriving like a
- * placement.
+ * `mode="popLayout"`, not `"wait"`. `wait` holds the incoming record until the
+ * outgoing one has finished leaving, so there is a stretch with no content at
+ * all — and with {@link Panel}'s size animation the frame collapses toward zero
+ * and springs back. `popLayout` takes the leaving record out of flow instead, so
+ * the two overlap, the new height is known immediately, and the panel resizes
+ * once, in one direction.
+ *
+ * The exit is deliberately shorter than the enter: leaving should read as a
+ * dismissal, arriving as a placement.
  */
 export function PanelSwap({ swapKey, children, className }: PanelSwapProps) {
   return (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={swapKey}
         className={className}
