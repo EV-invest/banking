@@ -144,7 +144,13 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-6 py-5 md:flex-row md:items-center md:gap-0">
+      {/* The stacking lives on `max-md:`, not on a `md:` override of a base utility.
+          `.flex-col` and `.md\:flex-row` have identical specificity — a media query adds
+          none — so whichever Tailwind emits last wins at every width, and it emits the
+          base utility last. `md:flex-row` therefore silently lost to `flex-col` and this
+          band rendered as a centred column on the desktop it was designed for. Phrased
+          this way the desktop state is the unclassed default and nothing competes. */}
+      <CardContent className="flex py-5 max-md:flex-col max-md:gap-6 md:items-center">
         <div className="space-y-1.5 md:flex-1">
           <p className="text-xs font-semibold uppercase tracking-widest text-main-accent-t1">Invested value</p>
           <div className="flex flex-wrap items-baseline gap-2.5">
