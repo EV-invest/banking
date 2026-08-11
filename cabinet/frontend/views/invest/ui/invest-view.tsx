@@ -1,15 +1,16 @@
 "use client";
 
 // `/invest` — the portfolio view of the fund surface: what the whole holding is worth,
-// what is free to deploy, and one row per product.
+// what is free to deploy, and one card per product.
 //
-// This screen used to *be* the dealing surface — every fund carried its own subscribe and
-// redeem forms inline, so a holder scrolled past four expandable panels to answer "how am
-// I doing?". Dealing now lives on the product page (`/invest/[service]`); what is left
-// here is a summary and a list, and each row's job is to be readable at a glance and to
-// lead somewhere.
+// Two rounds of layout have been thrown away here. First the dealing forms, which made
+// the list read as a stack of forms. Then the wide table-ish rows that replaced them:
+// they left the left half of every row empty while the figures crowded the right edge,
+// and two summary cards stretched to a shared height they had no content for. The page
+// is now a single dense band plus a grid — nothing is sized by anything other than what
+// is in it.
 
-import { ArrowRight, Clock, Sparkles, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
+import { ArrowRight, Sparkles, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -42,7 +43,7 @@ export function InvestView() {
       .then((list) => setRedemptions(list.redemptions ?? []))
       .catch(() => setRedemptions([]));
     // The free balance is context, not the subject of this screen — a failure to read it
-    // hides the tile rather than failing the page.
+    // hides the figure rather than failing the page.
     fetchWallet()
       .then((w) => setAvailable(w.balance?.available ?? "0"))
       .catch(() => setAvailable(null));
@@ -60,19 +61,17 @@ export function InvestView() {
 
   const held = products?.filter((p) => p.position && !isZero(p.position.units)) ?? [];
   const totals = held.reduce(
-    (acc, p) => ({
-      value: acc.value + toBaseUnits(p.position?.value),
-      cost: acc.cost + toBaseUnits(p.position?.cost_basis),
-    }),
+    (acc, p) => ({ value: acc.value + toBaseUnits(p.position?.value), cost: acc.cost + toBaseUnits(p.position?.cost_basis) }),
     { value: 0n, cost: 0n },
   );
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <div className="container max-w-5xl space-y-8 py-12">
+    <div className="container max-w-5xl space-y-6 py-10">
       <header className="space-y-1">
-        <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">Invest</p>
-        <h1 className="flex items-center gap-2 text-3xl font-semibold">
+        {/* The tip rides after the title text rather than beside the heading block — as a
+            sibling of the block it opened on top of the words it was explaining. */}
+        <h1 className="flex flex-wrap items-center gap-2 text-3xl font-semibold leading-tight">
           Your fund shares
           <TipAnchor anchor="invest.overview" />
         </h1>
@@ -91,13 +90,15 @@ export function InvestView() {
 
       {!products ? (
         <div className="space-y-4">
-          <Skeleton className="h-40 w-full" />
           <Skeleton className="h-28 w-full" />
-          <Skeleton className="h-28 w-full" />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Skeleton className="h-56 w-full" />
+            <Skeleton className="h-56 w-full" />
+          </div>
         </div>
       ) : (
         <>
-          <Summary invested={totals.value} cost={totals.cost} funds={held.length} available={available} queued={queued} />
+          <PortfolioBand invested={totals.value} cost={totals.cost} funds={held.length} available={available} queued={queued.length} />
 
           <section className="space-y-3">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -113,9 +114,9 @@ export function InvestView() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-3">
+              <div className="grid gap-4 lg:grid-cols-2">
                 {products.map((product) => (
-                  <ProductRow key={product.service} product={product} />
+                  <ProductCard key={product.service} product={product} />
                 ))}
               </div>
             )}
@@ -126,8 +127,15 @@ export function InvestView() {
   );
 }
 
-/** The one number this screen exists to answer, with the three that qualify it. */
-function Summary({ invested, cost, funds, available, queued }: { invested: bigint; cost: bigint; funds: number; available: string | null; queued: Redemption[] }) {
+/**
+ * The whole holding in one band.
+ *
+ * Deliberately a single row rather than the two cards it replaced: those were laid out
+ * side by side with `h-full`, so the shorter one stretched to the taller one's height and
+ * spent the difference on nothing. Here each block is only as tall as its content and the
+ * rules between them carry the grouping.
+ */
+function PortfolioBand({ invested, cost, funds, available, queued }: { invested: bigint; cost: bigint; funds: number; available: string | null; queued: number }) {
   const pnl = invested - cost;
   const loss = pnl < 0n;
   const flat = pnl === 0n;
@@ -135,46 +143,44 @@ function Summary({ invested, cost, funds, available, queued }: { invested: bigin
   const pct = cost > 0n ? Number((pnl * 10_000n) / cost) / 100 : null;
 
   return (
-    <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <Card>
-        <CardContent className="space-y-4 py-6">
+    <Card>
+      <CardContent className="flex flex-col gap-6 py-5 md:flex-row md:items-center md:gap-0">
+        <div className="space-y-1.5 md:flex-1">
           <p className="text-xs font-semibold uppercase tracking-widest text-main-accent-t1">Invested value</p>
-          <div className="flex flex-wrap items-baseline gap-3">
-            <p className="text-4xl font-semibold tabular-nums">{formatUsdt(fromBaseUnits(invested))}</p>
+          <div className="flex flex-wrap items-baseline gap-2.5">
+            <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested))}</span>
             <span className="text-sm text-muted-foreground">USDT</span>
             {!flat && (
-              <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums", loss ? "bg-main-accent-t4/15 text-main-accent-t4" : "bg-main-accent-t2/15 text-main-accent-t2")}>
+              <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", loss ? "bg-main-accent-t4/15 text-main-accent-t4" : "bg-main-accent-t2/15 text-main-accent-t2")}>
                 {formatSignedUsdt(fromBaseUnits(pnl))}
                 {pct !== null && ` · ${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`}
               </span>
             )}
           </div>
-          <div className="grid gap-4 border-t border-border pt-4 sm:grid-cols-3">
-            <MiniStat label="Cost basis" value={`${formatUsdt(fromBaseUnits(cost))} USDT`} />
-            <MiniStat label="Funds held" value={String(funds)} />
-            <MiniStat label="Awaiting settlement" value={queued.length === 0 ? "None" : `${queued.length} redemption${queued.length === 1 ? "" : "s"}`} tone={queued.length > 0 ? "text-main-accent-t3" : undefined} />
-          </div>
-        </CardContent>
-      </Card>
+          <p className="text-xs text-muted-foreground">{funds === 0 ? "You hold no fund units yet." : `Across ${funds} fund${funds === 1 ? "" : "s"}`}</p>
+        </div>
 
-      <Card>
-        <CardContent className="flex h-full flex-col justify-between gap-4 py-6">
-          <div className="space-y-1">
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Wallet className="size-3.5" /> Available to invest
-            </p>
-            <p className="text-2xl font-semibold tabular-nums">{available === null ? "—" : `${formatUsdt(available)} USDT`}</p>
-          </div>
-          <Button asChild type="button" variant="outline" className="w-full">
+        <div className="flex flex-wrap gap-8 md:border-l md:border-border md:px-7">
+          <BandStat label="Cost basis" value={`${formatUsdt(fromBaseUnits(cost))} USDT`} />
+          <BandStat label="Funds held" value={String(funds)} />
+          <BandStat label="Awaiting settlement" value={queued === 0 ? "None" : `${queued} queued`} tone={queued > 0 ? "text-main-accent-t3" : undefined} />
+        </div>
+
+        <div className="space-y-2 md:border-l md:border-border md:pl-7">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Wallet className="size-3.5" /> Available to invest
+          </p>
+          <p className="text-xl font-semibold tabular-nums">{available === null ? "—" : `${formatUsdt(available)} USDT`}</p>
+          <Button asChild type="button" variant="outline" size="sm">
             <Link href="/wallet">Top up</Link>
           </Button>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
-function MiniStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function BandStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -184,12 +190,17 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
 }
 
 /**
- * One product, as a link.
+ * One product, as a card that links to its own page.
  *
- * The row carries its own NAV read: the catalog RPC is presentation-only, and a price is
- * the thing a holder is actually scanning this list for.
+ * A card rather than a row because a row at this width left the product's name alone on
+ * the left with the figures pushed against the right edge — a lot of horizontal travel
+ * for the eye and a lot of empty space in between. The card fills the width it is given
+ * and the two columns of figures sit under the name they belong to.
+ *
+ * It carries its own NAV read: the catalog RPC is presentation-only, and a price is the
+ * thing a holder is scanning this list for.
  */
-function ProductRow({ product }: { product: Product }) {
+function ProductCard({ product }: { product: Product }) {
   const [nav, setNav] = useState<FundNav | null>(null);
 
   useEffect(() => {
@@ -209,53 +220,61 @@ function ProductRow({ product }: { product: Product }) {
 
   return (
     <Card className="transition-colors hover:border-main-accent-t1/40">
-      <CardContent className="py-5">
-        <Link href={`/invest/${encodeURIComponent(product.service)}`} className="flex flex-col gap-4 lg:flex-row lg:items-center">
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-base font-semibold">{product.title}</span>
-              {closed && (
-                <Badge variant="outline" className="border-main-accent-t3/40 text-main-accent-t3">
-                  Redeem only
-                </Badge>
-              )}
-              {nav?.stale && (
-                <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
-                  <Clock className="size-3" /> Stale NAV
-                </Badge>
-              )}
-              <span className="font-mono-tech text-xs text-muted-foreground">{product.service}</span>
-            </div>
-            {product.summary && <p className="max-w-lg text-sm text-muted-foreground">{product.summary}</p>}
-            {nav && <SupplyBar issued={nav.units_outstanding} cap={nav.unit_cap} className="max-w-md pt-1" />}
+      <CardContent className="flex h-full flex-col gap-4 py-5">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-main-accent-t1/15 text-sm font-semibold text-main-accent-t1">
+            {product.title.charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-semibold">{product.title}</p>
+            <p className="truncate font-mono-tech text-xs text-muted-foreground">{product.service}</p>
           </div>
+          <Badge variant="outline" className={cn(closed ? "border-main-accent-t3/40 text-main-accent-t3" : "border-main-accent-t2/40 text-main-accent-t2")}>
+            {closed ? "Redeem only" : "Open"}
+          </Badge>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-            <RowStat label="NAV / unit" value={nav ? formatUsdt(nav.nav) : "—"} />
-            <RowStat label="Your units" value={held ? formatUnits(held.units) : "—"} />
-            <RowStat label="Value" value={held ? `${formatUsdt(held.value)}` : "—"} />
-            <RowStat
-              label="P&L"
-              value={held && !flat ? formatSignedUsdt(held.pnl) : held ? "0.00" : "—"}
-              tone={held && !flat ? (loss ? "text-main-accent-t4" : "text-main-accent-t2") : undefined}
-              icon={held && !flat ? <TrendingUp className={cn("size-3.5", loss && "rotate-180")} /> : undefined}
-            />
-            <span className={cn("inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold", held ? "text-main-accent-t1" : TEAL_CTA)}>
-              {held ? "Manage" : "Invest"}
-              <ArrowRight className="size-4" />
-            </span>
-          </div>
-        </Link>
+        <div className="flex flex-wrap gap-x-6 gap-y-3 border-y border-border py-3.5">
+          <CardStat label="NAV / unit" value={nav ? formatUsdt(nav.nav) : "—"} large />
+          {held ? (
+            <>
+              <CardStat label="Your units" value={formatUnits(held.units)} />
+              <CardStat label="Value" value={formatUsdt(held.value)} />
+              <CardStat
+                label="P&L"
+                value={flat ? "0.00" : formatSignedUsdt(held.pnl)}
+                tone={flat ? undefined : loss ? "text-main-accent-t4" : "text-main-accent-t2"}
+                icon={flat ? undefined : <TrendingUp className={cn("size-3.5", loss && "rotate-180")} />}
+              />
+            </>
+          ) : (
+            <div className="ml-auto space-y-1 text-right">
+              <p className="text-xs text-muted-foreground">Your position</p>
+              <p className="text-sm text-muted-foreground">Not invested yet</p>
+            </div>
+          )}
+        </div>
+
+        {nav && <SupplyBar issued={nav.units_outstanding} cap={nav.unit_cap} />}
+
+        {/* One CTA treatment per card, full width. The list used to mix a filled button
+            with a bare text link, which read as two different kinds of thing. */}
+        <Button asChild className={cn("mt-auto w-full", held ? "" : TEAL_CTA)} variant={held ? "outline" : "default"}>
+          <Link href={`/invest/${encodeURIComponent(product.service)}`}>
+            {held ? "Manage" : "Invest"}
+            <ArrowRight className="size-4" />
+          </Link>
+        </Button>
       </CardContent>
     </Card>
   );
 }
 
-function RowStat({ label, value, tone, icon }: { label: string; value: string; tone?: string; icon?: React.ReactNode }) {
+function CardStat({ label, value, large, tone, icon }: { label: string; value: string; large?: boolean; tone?: string; icon?: React.ReactNode }) {
   return (
-    <div className="min-w-20 space-y-1 lg:text-right">
+    <div className="space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn("flex items-center gap-1 text-sm font-semibold tabular-nums lg:justify-end", tone)}>
+      <p className={cn("flex items-center gap-1 font-semibold tabular-nums", large ? "text-xl" : "text-sm", tone)}>
         {icon}
         {value}
       </p>

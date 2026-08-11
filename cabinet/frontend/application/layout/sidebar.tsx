@@ -91,18 +91,29 @@ export function Sidebar() {
         </Group>
         {products.length > 0 && (
           <Group label="Products">
-            {products.map((p, i) => (
-              <Link
-                key={p.service}
-                href="/invest"
-                className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5", NAV_FOCUS)}
-              >
-                <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md text-xs font-semibold", PRODUCT_TONES[i % PRODUCT_TONES.length])}>
-                  {p.title.charAt(0).toUpperCase()}
-                </span>
-                <span className="truncate">{p.title}</span>
-              </Link>
-            ))}
+            {products.map((p, i) => {
+              // Every row pointed at `/invest`, so naming a product in the rail took you to
+              // the list of all of them. The product's own page is keyed by its service id.
+              const href = `/invest/${encodeURIComponent(p.service)}`;
+              const active = pathname === href;
+              return (
+                <Link
+                  key={p.service}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                    NAV_FOCUS,
+                    active ? "bg-primary font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
+                  )}
+                >
+                  <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md text-xs font-semibold", PRODUCT_TONES[i % PRODUCT_TONES.length])}>
+                    {p.title.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="truncate">{p.title}</span>
+                </Link>
+              );
+            })}
           </Group>
         )}
         {isAdmin && (
