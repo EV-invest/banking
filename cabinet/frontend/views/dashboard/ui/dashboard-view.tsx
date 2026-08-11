@@ -99,7 +99,7 @@ export function DashboardView() {
       {/* topbar — desktop only; on mobile the shell app bar plus the hero label carry the page */}
       <div className="hidden items-center justify-between gap-4 lg:flex xl:col-span-2 xl:row-start-1">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="font-sans text-2xl font-semibold leading-tight text-foreground">Portfolio</h1>
+          <h1 className="text-2xl font-semibold leading-tight text-foreground">Portfolio</h1>
           <p className="text-sm text-muted-foreground">All-time performance and your participation</p>
         </div>
         {/* Shortcuts to the same two actions the Move money card offers, so they stay

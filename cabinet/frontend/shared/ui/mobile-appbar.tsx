@@ -43,7 +43,7 @@ export function MobileAppBar({
       )}
       {/* Both sizes land on the type scale, so the pushed/root distinction is carried by
           size plus centring rather than the 3px that used to separate them. */}
-      <h1 className={cn("min-w-0 flex-1 truncate font-sans font-semibold tracking-normal text-foreground", pushed ? "text-center text-base" : "text-lg")}>{title}</h1>
+      <h1 className={cn("min-w-0 flex-1 truncate font-semibold tracking-normal text-foreground", pushed ? "text-center text-base" : "text-lg")}>{title}</h1>
       {pushed && !right ? <span className="size-6 shrink-0" aria-hidden /> : right}
     </header>
   );

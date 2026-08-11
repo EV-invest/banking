@@ -191,7 +191,7 @@ export function SettingsView() {
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
         <div className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
-            <h1 className="font-sans text-2xl font-semibold text-foreground">Settings</h1>
+            <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
             <p className="text-sm text-muted-foreground">Manage your account, security and access</p>
           </div>
           {section === "general" && (
@@ -678,11 +678,11 @@ function SessionsSection({
   );
 }
 
-/** Desktop card header — `font-sans` because the global `h1,h2,h3` rule is the serif face. */
+/** Desktop card header. */
 function SectionHeader({ title, sub }: { title: string; sub: string }) {
   return (
     <header className="mb-4">
-      <h2 className="font-sans text-sm font-semibold tracking-normal text-foreground">{title}</h2>
+      <h2 className="text-sm font-semibold tracking-normal text-foreground">{title}</h2>
       <p className="text-xs text-muted-foreground">{sub}</p>
     </header>
   );

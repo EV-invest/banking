@@ -11,6 +11,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* The cabinet is a single-typeface surface: Inter, everywhere. uikit's
+   tokens.css still ships a display serif, and `@theme inline` INLINES it into
+   the generated `.font-serif` utility — so dropping the Playfair @font-face is
+   not enough on its own, the utility would just fall through to Georgia. Point
+   the token at the sans stack here and every consumer follows: the utility, the
+   `var(--font-serif)` custom property, and the `font-serif` class baked into
+   uikit's own dist (NotFound / Forbidden / ServerError).
+
+   `font-serif-display` is NOT one of those consumers — it has no backing token
+   and never read this variable. It is retired below instead, by taking the
+   font-family off the rule that defined it. So reintroducing a display face by
+   repointing this token would reach `.font-serif` and silently miss it. */
+@theme inline {
+  --font-serif: var(--font-inter, "Inter"), ui-sans-serif, system-ui, sans-serif;
+}
+
 :root {
   /* Width of the desktop app-shell rail (application/layout/sidebar.tsx). The
      `(app)` layout reserves the same width as content padding above `lg`;
@@ -30,11 +46,19 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+  /* Headings inherit Inter from the `*` rule above; they keep only the optical
+     tightening large Inter wants. Small headings opt back out with
+     `tracking-normal`, where -0.02em reads as cramped rather than tight.
+
+     `.font-serif-display` stays in the selector for the tracking alone. It is
+     not a utility and has no backing token — it only ever got its face from
+     this rule — and uikit's error pages hang it on a `<p>`, not a heading, at
+     110/180px. Dropping it from here would leave that numeral untightened while
+     every heading around it stays tight. */
   h1,
   h2,
   h3,
   .font-serif-display {
-    font-family: var(--font-serif);
     letter-spacing: -0.02em;
   }
 

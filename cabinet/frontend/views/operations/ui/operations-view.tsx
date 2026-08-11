@@ -127,7 +127,7 @@ export function OperationsView() {
     <div className="px-4 pb-8 pt-6 lg:px-8">
       <header className="mb-6 space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">Operations</p>
-        <h1 className="font-sans text-2xl font-semibold text-foreground">Operations</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Operations</h1>
         <p className="text-sm text-muted-foreground">Every deposit, withdrawal, subscription and redemption you have made — one timeline.</p>
       </header>
 

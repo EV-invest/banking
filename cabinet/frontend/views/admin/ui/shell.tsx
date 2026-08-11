@@ -25,7 +25,7 @@ export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: str
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">{eyebrow}</p>
-        <h1 className="font-sans text-2xl font-semibold text-foreground">{title}</h1>
+        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
         <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
       <div className="flex items-center gap-3">
