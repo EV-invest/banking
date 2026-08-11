@@ -28,7 +28,7 @@ export function WalletScreen({ title, subtitle, back, actions, children }: { tit
 
       <div className="hidden items-center gap-4 px-8 pb-6 pt-6.5 lg:flex">
         <div className="min-w-0 flex-1">
-          <h1 className="font-sans text-2xl font-semibold text-foreground">{title}</h1>
+          <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
         {actions && <div className="flex shrink-0 gap-2.5">{actions}</div>}

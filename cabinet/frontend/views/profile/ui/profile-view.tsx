@@ -124,7 +124,7 @@ export function ProfileView() {
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
         <div className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
-            <h1 className="font-sans text-2xl font-semibold text-foreground">Profile</h1>
+            <h1 className="text-2xl font-semibold text-foreground">Profile</h1>
             <p className="text-sm text-muted-foreground">Your personal details and verification status</p>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -227,7 +227,7 @@ export function ProfileView() {
         <div className="hidden items-start gap-5 lg:flex">
           <section className={cn(CARD, "w-full flex-1 space-y-4.5 px-6 py-5.5")}>
             <header>
-              <h2 className="font-sans text-sm font-semibold tracking-normal text-foreground">Personal information</h2>
+              <h2 className="text-sm font-semibold tracking-normal text-foreground">Personal information</h2>
               <p className="text-xs text-muted-foreground">Used for compliance and statements</p>
             </header>
             <div className="flex flex-wrap gap-x-4.5 gap-y-4">

@@ -8,8 +8,8 @@ import { cn } from "@/shared/lib/cn";
 // The card + row vocabulary the Settings and Profile surfaces are built from
 // (Figma `cabinet/mobile/settings` node 498:259 and `cabinet/mobile/profile` node
 // 503:266): a card on `main-card`, a compact section title, and rows split by
-// hairlines. Section titles carry `font-sans` explicitly — the global `h1,h2,h3`
-// rule swaps in the serif display face, which these headings are not.
+// hairlines. Section titles take `tracking-normal` — at this size the global
+// `h1,h2,h3` tightening reads as cramped.
 //
 // Rows and hairlines stay local because uikit has no equivalent vocabulary. The
 // card string stays local too: its call sites are a `<Link>` and a `<section>` as
@@ -26,7 +26,7 @@ export function ListCard({ className, children }: { className?: string; children
 export function ListCardTitle({ sub, children }: { sub?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-px pb-2 pt-3">
-      <h2 className="font-sans text-sm font-semibold tracking-normal text-foreground">{children}</h2>
+      <h2 className="text-sm font-semibold tracking-normal text-foreground">{children}</h2>
       {sub && <p className="text-xs font-medium text-muted-foreground">{sub}</p>}
     </div>
   );

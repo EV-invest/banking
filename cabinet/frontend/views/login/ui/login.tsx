@@ -45,7 +45,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
 
         <div className="relative flex max-w-md flex-col gap-5">
           <p className="text-xs font-semibold tracking-widest text-main-accent-t1">EV INVEST</p>
-          <h2 className="font-sans text-5xl font-semibold leading-tight text-white">Private capital for Vietnam&apos;s coastal economy.</h2>
+          <h2 className="text-5xl font-semibold leading-tight text-white">Private capital for Vietnam&apos;s coastal economy.</h2>
           <p className="text-base leading-6 text-muted-foreground">Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.</p>
         </div>
 
@@ -59,7 +59,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
       <div className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="flex w-full max-w-100 flex-col gap-6">
           <div className="flex flex-col gap-2">
-            <h1 className="font-sans text-3xl font-semibold text-foreground">Welcome back</h1>
+            <h1 className="text-3xl font-semibold text-foreground">Welcome back</h1>
             <p className="text-sm text-muted-foreground">Sign in to manage your investments.</p>
           </div>
 

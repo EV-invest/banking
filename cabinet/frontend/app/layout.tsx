@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import "@/application/styles/globals.css";
 import { Providers } from "@/application/providers";
-import { fontInter, fontPlayfair } from "@/application/styles/fonts";
+import { fontInter } from "@/application/styles/fonts";
 import { requestNonce } from "@/shared/config/security";
 
 export const metadata: Metadata = {
@@ -17,11 +17,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const nonce = (await requestNonce()) ?? undefined;
   return (
-    <html
-      lang="en"
-      className={`dark ${fontInter.variable} ${fontPlayfair.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={`dark ${fontInter.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <Providers nonce={nonce}>{children}</Providers>
       </body>

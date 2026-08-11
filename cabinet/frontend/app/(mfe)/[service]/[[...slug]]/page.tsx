@@ -14,7 +14,7 @@ export default async function MfePage({ params }: { params: Promise<{ service: s
   if (!entry || entry.kind !== "page") {
     return (
       <div className="container py-24">
-        <h1 className="font-serif text-3xl">Unknown microfrontend</h1>
+        <h1 className="text-3xl font-semibold">Unknown microfrontend</h1>
         <p className="mt-2 text-muted-foreground">
           No page microfrontend is registered for <code>/{service}</code>. Add it to{" "}
           <code>mfe-registry.json</code>.

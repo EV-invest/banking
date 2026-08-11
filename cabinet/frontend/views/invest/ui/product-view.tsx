@@ -101,9 +101,7 @@ export function ProductView({ service }: { service: string }) {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-3">
-            {/* `font-sans` opts out of the global serif rule on h1/h2/h3 — see the invest
-                list's header for why every cabinet title carries it. */}
-            <h1 className="font-sans text-3xl font-semibold">{product.title}</h1>
+            <h1 className="text-3xl font-semibold">{product.title}</h1>
             <ProductBadges closed={closed} stale={stale} />
           </div>
           <p className="font-mono-tech text-xs text-muted-foreground">{product.service}</p>

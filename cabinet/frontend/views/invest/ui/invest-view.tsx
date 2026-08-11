@@ -69,11 +69,7 @@ export function InvestView() {
   return (
     <div className="container max-w-5xl space-y-6 py-10">
       <header className="space-y-3">
-        {/* `font-sans` is not decoration: `globals.css` gives every h1/h2/h3 the serif
-            display face, so a page title that wants the sans one has to say so — which is
-            what every other cabinet title does. Without it this heading rendered in
-            Playfair while its Figma frame, and every sibling screen, used Inter. */}
-        <h1 className="font-sans text-3xl font-semibold leading-tight">Your fund shares</h1>
+        <h1 className="text-3xl font-semibold leading-tight">Your fund shares</h1>
         {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
             it cannot live inside the heading row: it laid a full-width bordered box across
             the title. It belongs under the header, which is also the one place this
