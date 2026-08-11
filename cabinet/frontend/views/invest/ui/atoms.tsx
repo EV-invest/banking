@@ -72,9 +72,11 @@ export function SupplyBar({ issued, cap, className }: { issued: string | undefin
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
-        {/* A non-zero supply always paints at least a sliver — a bar that reads as empty
-            when units exist is a lie about a figure the holder can check elsewhere. */}
-        <div className={cn("h-full rounded-full", near ? "bg-main-accent-t3" : "bg-main-accent-t1")} style={{ width: `${Math.max(fraction * 100, fraction > 0 ? 1 : 0)}%` }} />
+        {/* Strictly proportional, with no minimum sliver. One unit of a hundred-million
+            cap really is nothing, and floor-to-1% would overstate it a millionfold —
+            "has this fund started issuing?" is a question for the figure above, which is
+            exact, not for a bar whose job is "how full is it?". */}
+        <div className={cn("h-full rounded-full", near ? "bg-main-accent-t3" : "bg-main-accent-t1")} style={{ width: `${fraction * 100}%` }} />
       </div>
       {full && <p className="text-xs text-main-accent-t3">Fully issued — not minting new units.</p>}
     </div>
