@@ -217,7 +217,9 @@ export function OperationsView() {
                 <section key={group.label} className="space-y-2">
                   <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.label}</h2>
                   <Card>
-                    <CardContent>
+                    {/* The rows carry the inset instead of the card, so a hover (and the separator
+                        between rows) reaches the card's edges rather than stopping 24px short. */}
+                    <CardContent className="px-0">
                       <ItemGroup>
                         {group.operations.map((operation, i) => (
                           <Fragment key={rowKey(operation, i)}>
@@ -251,7 +253,9 @@ function InProgress({ operations, titleOf }: { operations: Operation[]; titleOf:
       <CardHeader>
         <CardTitle>In progress</CardTitle>
       </CardHeader>
-      <CardContent>
+      {/* The rows carry the inset instead of the card, so a hover (and the separator
+          between rows) reaches the card's edges rather than stopping 24px short. */}
+      <CardContent className="px-0">
         <ItemGroup>
           {operations.map((operation, i) => (
             <Fragment key={rowKey(operation, i)}>
@@ -273,7 +277,7 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
   const title = rowTitle(operation, titleOf);
 
   const trigger = (
-    <Item asChild size="sm" className="px-0 py-3 lg:py-4">
+    <Item asChild size="sm" className="rounded-none px-6 py-3 lg:py-4">
       <button
         type="button"
         aria-label={`${title} — details`}
