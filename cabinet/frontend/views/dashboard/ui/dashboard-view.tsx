@@ -11,6 +11,7 @@ import { fetchOperations } from "@/entities/operation/api/operation-client";
 import { fetchWallet } from "@/entities/wallet/api/wallet-client";
 import type { Allocation, Operation, Position, Wallet } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { Settled } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
 import { amountTone, kindMeta, networkLabel } from "@/views/operations/lib/format";
@@ -309,42 +310,42 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
         </CardAction>
       </CardHeader>
       <CardContent className={CARD_PAD}>
-        {loading ? (
-          <Skeleton className="h-24 w-full" />
-        ) : allocations.length === 0 ? (
-          <Empty className={EMPTY_BOX}>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <PieChart />
-              </EmptyMedia>
-              <EmptyTitle>Nothing invested yet</EmptyTitle>
-              <EmptyDescription>Subscribe to a strategy and the split of what you own shows up here.</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button asChild variant="outline">
-                <Link href="/invest">Browse strategies</Link>
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {allocations.map((a, i) => {
-              const pct = Math.round((a.value / total) * 100);
-              return (
-                <div key={`${a.name}-${i}`} className="flex flex-col gap-2">
-                  <div className="flex items-center">
-                    <span className="flex flex-1 items-center gap-2">
-                      <span className={cn("size-2.5 rounded-full", a.accent.dot)} />
-                      <span className="truncate text-sm font-medium text-muted-foreground">{a.name}</span>
-                    </span>
-                    <span className="text-sm font-semibold tabular-nums text-foreground">{pct}%</span>
+        <Settled loading={loading} skeleton={<Skeleton className="h-24 w-full" />}>
+          {loading ? null : allocations.length === 0 ? (
+            <Empty className={EMPTY_BOX}>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <PieChart />
+                </EmptyMedia>
+                <EmptyTitle>Nothing invested yet</EmptyTitle>
+                <EmptyDescription>Subscribe to a strategy and the split of what you own shows up here.</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button asChild variant="outline">
+                  <Link href="/invest">Browse strategies</Link>
+                </Button>
+              </EmptyContent>
+            </Empty>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {allocations.map((a, i) => {
+                const pct = Math.round((a.value / total) * 100);
+                return (
+                  <div key={`${a.name}-${i}`} className="flex flex-col gap-2">
+                    <div className="flex items-center">
+                      <span className="flex flex-1 items-center gap-2">
+                        <span className={cn("size-2.5 rounded-full", a.accent.dot)} />
+                        <span className="truncate text-sm font-medium text-muted-foreground">{a.name}</span>
+                      </span>
+                      <span className="text-sm font-semibold tabular-nums text-foreground">{pct}%</span>
+                    </div>
+                    <Progress value={pct} className={cn("h-1.5", a.accent.bar)} />
                   </div>
-                  <Progress value={pct} className={cn("h-1.5", a.accent.bar)} />
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </Settled>
       </CardContent>
     </Card>
   );
