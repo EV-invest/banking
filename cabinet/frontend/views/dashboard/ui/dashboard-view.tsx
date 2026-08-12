@@ -11,7 +11,7 @@ import { fetchOperations } from "@/entities/operation/api/operation-client";
 import { fetchWallet } from "@/entities/wallet/api/wallet-client";
 import type { Allocation, Operation, Position, Wallet } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
-import { Settled } from "@/shared/ui/motion";
+import { AnimatedNumber, Settled } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
 import { amountTone, kindMeta, networkLabel } from "@/views/operations/lib/format";
@@ -37,6 +37,10 @@ type Accent = (typeof ACCENTS)[number];
 
 // Cards inset 16px on mobile (Figma `cabinet/mobile/home`), the uikit 24px from `lg`.
 const CARD_PAD = "px-4 lg:px-6";
+
+// Module scope on purpose: an inline `(n) => String(n)` would be a new function
+// every render, and AnimatedNumber restarts its count when `format` changes.
+const formatCount = (n: number) => String(Math.round(n));
 
 // Mobile reads the hero and the stat strip as page content rather than as cards: those two
 // surfaces sit flat on the background and only take their Card chrome from `lg`.
@@ -121,13 +125,13 @@ export function DashboardView() {
 
       {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
       <Card className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-        <Stat label="Unrealized P&L" value={walletLoading || posLoading ? null : formatSignedUsd(pnlSum)} tone={pnlSum < 0 ? "loss" : "gain"} hint="across all positions" tip="dashboard.stats.unrealized-pnl" />
+        <Stat label="Unrealized P&L" value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint="across all positions" tip="dashboard.stats.unrealized-pnl" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label="Available" value={walletLoading ? null : formatUsd(balance?.available)} hint="auto-deploys at EOD" tip="dashboard.stats.available" />
+        <Stat label="Available" value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint="auto-deploys at EOD" tip="dashboard.stats.available" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label="Active strategies" value={posLoading ? null : String(pos.length)} hint="fund positions" />
+        <Stat label="Active strategies" value={posLoading ? null : pos.length} format={formatCount} hint="fund positions" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label="Net contributed" value={posLoading ? null : formatUsd(netContributed)} hint="at cost basis" tip="dashboard.stats.net-invested" />
+        <Stat label="Net contributed" value={posLoading ? null : netContributed} format={formatUsd} hint="at cost basis" tip="dashboard.stats.net-invested" />
       </Card>
 
       {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop
@@ -206,7 +210,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </p>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
-            {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl">{formatUsd(value)}</p>}
+            {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={formatUsd} /></p>}
             {allTimePct !== null && (
               <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-destructive/40 text-destructive" : "border-main-accent-t3/40 text-main-accent-t3")}>
                 {down ? <TrendingDown /> : <TrendingUp />}
@@ -351,7 +355,11 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
   );
 }
 
-function Stat({ label, value, tone, hint, tip }: { label: string; value: string | null; tone?: "gain" | "loss"; hint: string; tip?: TipKey }) {
+// Takes the figure and its formatter rather than a finished string: a string can
+// only be swapped, and swapping is the thing AnimatedNumber exists to replace.
+// `format` has to be a stable reference (all of these are module functions from
+// shared/lib/money) or the count restarts on every parent render.
+function Stat({ label, value, format, tone, hint, tip }: { label: string; value: number | null; format: (n: number) => string; tone?: "gain" | "loss"; hint: string; tip?: TipKey }) {
   const valueClass = tone === "gain" ? "text-main-accent-t2" : tone === "loss" ? "text-destructive" : "text-foreground";
   const hintClass = tone === "gain" ? "text-main-accent-t2/80" : tone === "loss" ? "text-destructive/80" : "text-muted-foreground";
   return (
@@ -361,7 +369,7 @@ function Stat({ label, value, tone, hint, tip }: { label: string; value: string 
         <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
         {tip && <TipAnchor anchor={tip} />}
       </div>
-      {value === null ? <Skeleton className="h-6 w-20" /> : <p className={cn("truncate text-xl font-semibold tabular-nums lg:text-2xl", valueClass)}>{value}</p>}
+      {value === null ? <Skeleton className="h-6 w-20" /> : <p className={cn("truncate text-xl font-semibold tabular-nums lg:text-2xl", valueClass)}><AnimatedNumber value={value} format={format} /></p>}
       <p className={cn("truncate text-xs font-medium", hintClass)}>{hint}</p>
     </Card>
   );

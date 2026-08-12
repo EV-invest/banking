@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, LayoutGrid, LineChart, ListChecks, Settings, type LucideIcon } from "lucide-react";
+import { Home, LineChart, ListChecks, Settings, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -16,56 +16,76 @@ interface TabItem {
 }
 
 // The 5-tab mobile navigation bar (Figma cabinet mobile tab bar). These tabs
-// replace the desktop sidebar on narrow viewports (<1024px). "Products" maps
-// to the invest page for now — the sidebar product ("Quy Nhon Fund") resolves
-// there. Active-tint uses the same teal accent as the sidebar's highlighted nav
-// link for visual consistency.
+// replace the desktop sidebar on narrow viewports (<1024px).
+//
+// The predicates are pairwise disjoint, and have to stay that way: the active
+// marker below is one element that moves to the matching tab, so two tabs
+// answering true for the same path would make "the matching tab" ambiguous.
+// The pair that used to overlap was Invest and a Products tab that pointed at
+// /invest as well — Products is gone, and Wallet (a real destination with no
+// tab of its own) took the slot. Operations no longer claims /wallet either,
+// which was the other half of that collision.
 const TABS: TabItem[] = [
   { href: "/", label: "Home", icon: Home, active: (p) => p === "/" },
-  { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p.startsWith("/invest") && !p.startsWith("/invest/products") },
-  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") || p.startsWith("/wallet") },
-  { href: "/invest", label: "Products", icon: LayoutGrid, active: (p) => p.startsWith("/invest") },
+  { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p.startsWith("/invest") },
+  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
+  { href: "/wallet", label: "Wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
   { href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") },
 ];
 
-// A shared `layoutId` marker, so switching tabs slides the rule across the bar
-// rather than blinking it out and in.
-const ACTIVE_MARKER = "cabinet-tab-active";
+/** Horizontal padding of the bar, as a length the marker's width math can use. */
+const BAR_PX = "0.5rem";
 
 export function BottomNavbar() {
   const pathname = usePathname();
   const reduce = useReducedMotion();
-  // Invest and Products both match /invest, so more than one tab can read as
-  // active. Only the first carries the marker: two nodes sharing a layoutId is
-  // an ambiguous origin, and motion resolves it by jumping. The tint still
-  // lands on both, which is the behaviour that was already here.
-  const markerAt = TABS.findIndex((tab) => tab.active(pathname));
+  const activeAt = TABS.findIndex((tab) => tab.active(pathname));
+  const onTab = activeAt >= 0;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-[var(--cabinet-bottom-nav-h,64px)] items-center border-t border-border bg-main-surface px-2 pb-[env(safe-area-inset-bottom,0px)] lg:hidden">
-      {TABS.map((tab, i) => {
+      {/* One marker for the whole bar, mounted once and translated — not a node
+          per tab that mounts and unmounts.
+
+          The old version rendered it inside the active <Link>, which had two
+          consequences. It sat at the top of the *link box*, a couple of pixels
+          off the icon rather than on the bar's edge. And on any route no tab
+          claims — /profile, /notifications — the index was -1, so the marker
+          unmounted completely and then reappeared out of nowhere on the way
+          back, with no previous position to travel from. A shared `layoutId`
+          cannot paper over that: an element that does not exist has no origin.
+
+          Mounted permanently, both problems are arithmetic instead. Position is
+          `index × 100%` of its own width, and its own width is exactly one tab,
+          so the two can never drift. An unclaimed route just fades it out where
+          it stands, and returning fades it back in already in the right place. */}
+      <motion.span
+        aria-hidden
+        className="pointer-events-none absolute top-0 flex justify-center"
+        style={{ left: BAR_PX, width: `calc((100% - 2 * ${BAR_PX}) / ${TABS.length})` }}
+        initial={false}
+        animate={{ x: `${Math.max(activeAt, 0) * 100}%`, opacity: onTab ? 1 : 0 }}
+        transition={reduce ? { duration: 0 } : { duration: DUR.base, ease: EASE.out }}
+      >
+        <span className="h-0.5 w-10 rounded-full bg-main-accent-t1" />
+      </motion.span>
+
+      {TABS.map((tab) => {
         const Icon = tab.icon;
         const isActive = tab.active(pathname);
         return (
           <Link
             key={tab.label}
             href={tab.href}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
-              "relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-xs font-medium transition-colors",
+              "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-xs font-medium transition-colors",
               // The offset is what earns its keep here: the active tab's fill is the same
               // teal as the ring, so without a gap the ring reads as the pill growing.
               "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-main-surface",
               isActive ? "text-main-accent-t1" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {i === markerAt && (
-              <motion.span
-                layoutId={reduce ? undefined : ACTIVE_MARKER}
-                aria-hidden
-                className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-main-accent-t1"
-                transition={{ duration: DUR.base, ease: EASE.out }}
-              />
-            )}
             <Icon className="size-5" />
             {tab.label}
           </Link>
