@@ -123,10 +123,21 @@ export function UsersView() {
             the node to outlive the state change — hence PanelPresence), and picking
             a different row while the panel is already open leaves the frame where it
             is and cross-fades only the body. The panel is keyed on being open, not
-            on which user, or every row click would play a full exit and enter. */}
+            on which user, or every row click would play a full exit and enter.
+
+            `collapse` is what makes the table widen rather than snap back: the
+            drawer hands its 340px and the row's gap back over the course of the
+            exit, so the table reflows with it each frame instead of jumping open
+            once the drawer has already gone. `overflow-hidden` keeps the card
+            inside at its own width while the wrapper narrows — without it the
+            drawer's own text reflows on the way out. */}
         <PanelPresence>
           {selected && (
-            <Panel key="user-drawer" className="w-85 shrink-0 self-start">
+            <Panel
+              key="user-drawer"
+              collapse={{ gap: "1.5rem" }}
+              className="w-85 shrink-0 self-start overflow-hidden"
+            >
               <PanelSwap swapKey={selected.user_id}>
                 {/* `key` remounts the drawer per user, so its uncontrolled inputs (KYC
                     level) reset — otherwise a stale value could be committed against

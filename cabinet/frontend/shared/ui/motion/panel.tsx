@@ -26,6 +26,17 @@ export interface PanelProps {
    * switching between two records of different heights otherwise jumps.
    */
   resize?: boolean;
+  /**
+   * For a panel that shares a flex row with content it displaces — the admin
+   * users drawer beside its table. The panel gives its width back over the
+   * course of its exit instead of all at once at the end, so the neighbour
+   * widens *with* it rather than snapping open a frame later.
+   *
+   * Pass the row's `gap` so the negative margin can cancel it: the gap does not
+   * collapse on its own when the panel reaches zero width, and without this the
+   * neighbour would finish one gap short and then jump.
+   */
+  collapse?: { gap: string };
   className?: string;
   children: ReactNode;
 }
@@ -41,11 +52,21 @@ const OFFSET = 12;
 export function Panel({
   from = "right",
   resize = true,
+  collapse,
   className,
   children,
 }: PanelProps) {
   const reduce = useReducedMotion();
   const shift = reduce ? {} : from === "right" ? { x: OFFSET } : { y: OFFSET };
+
+  // Width is a layout property and animating it is not free — which is exactly
+  // why the rest of this slice stays on opacity and transform. It is the right
+  // trade here and only here: a transform-based collapse scales the panel, and
+  // a scaled panel drags its text with it. One element reflowing a two-column
+  // admin screen for 280ms is cheaper than distorted type.
+  const collapsed = collapse
+    ? { width: 0, minWidth: 0, marginLeft: `calc(-1 * ${collapse.gap})` }
+    : {};
 
   return (
     <motion.div
@@ -53,7 +74,7 @@ export function Panel({
       className={className}
       initial={{ opacity: 0, ...shift }}
       animate={{ opacity: 1, x: 0, y: 0 }}
-      exit={{ opacity: 0, ...shift }}
+      exit={{ opacity: 0, ...shift, ...collapsed }}
       transition={{ duration: DUR.base, ease: EASE.out }}
     >
       {children}
