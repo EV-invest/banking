@@ -83,12 +83,24 @@ export function Sidebar() {
       .then((list) => setProducts(list.allocations ?? []))
       .catch(() => setProducts([]));
   }, []);
+  // Which section owns the current route, and whether getting here crossed a
+  // boundary. A product page belongs to no pill-owning section, so it is null and
+  // the next move into one counts as a crossing.
+  const activeSection: Section | null = FUND.some((i) => i.active(pathname))
+    ? "fund"
+    : isAdmin && ADMIN.some((i) => i.active(pathname))
+      ? "administer"
+      : pathname.startsWith("/notifications") || pathname.startsWith("/settings")
+        ? "secondary"
+        : null;
+  const crossed = useCrossedSection(pathname, activeSection);
+
   return (
     <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-4.5 pb-5 pt-6">
       <nav aria-label="Primary" className="flex flex-col gap-4.5">
         <Group label="Fund">
           {FUND.map((item) => (
-            <NavLink key={item.label} item={item} active={item.active(pathname)} />
+            <NavLink key={item.label} item={item} active={item.active(pathname)} section="fund" appear={crossed} />
           ))}
         </Group>
         {products.length > 0 && (
@@ -121,7 +133,7 @@ export function Sidebar() {
         {isAdmin && (
           <Group label="Administer">
             {ADMIN.map((item) => (
-              <NavLink key={item.label} item={item} active={item.active(pathname)} />
+              <NavLink key={item.label} item={item} active={item.active(pathname)} section="administer" appear={crossed} />
             ))}
           </Group>
         )}
@@ -133,9 +145,11 @@ export function Sidebar() {
         <NavLink
           item={{ href: "/notifications", label: "Notifications", icon: Bell, active: (p) => p.startsWith("/notifications") }}
           active={pathname.startsWith("/notifications")}
+          section="secondary"
+          appear={crossed}
           trailing={unread ? <UnreadPill count={unread} active={pathname.startsWith("/notifications")} /> : undefined}
         />
-        <NavLink item={{ href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") }} active={pathname.startsWith("/settings")} />
+        <NavLink item={{ href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") }} active={pathname.startsWith("/settings")} section="secondary" appear={crossed} />
       </nav>
     </aside>
   );
@@ -150,14 +164,50 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-// The active pill is one shared node, not a background class on each link: with a
-// single `layoutId` across every NavLink in the rail, motion tracks it from the old
-// link to the new one and slides it there, so the rail shows the move instead of
-// blinking the highlight between rows. It spans both navs and the admin group
-// because they share the id.
+// The active pill is one shared node per SECTION, not one for the whole rail and
+// not a background class on each link.
+//
+// Sharing a `layoutId` is what makes motion track the pill from the old link to
+// the new one and slide it there, so a move inside a section reads as a move. The
+// id is scoped to the section because that same behaviour is wrong across
+// sections: jumping from Invest to Users sent the pill travelling the length of
+// the rail, straight through two headings that have nothing to do with either
+// row. The distance implied a relationship between them that does not exist.
+//
+// With the id scoped, motion finds no counterpart in the section being entered,
+// so the pill mounts fresh there — and `initial`/`animate` below turn that into a
+// plain fade. Sliding within a section, appearing between them, from one lever.
 const ACTIVE_PILL = "cabinet-rail-active";
 
-function NavLink({ item, active, trailing }: { item: NavItem; active: boolean; trailing?: ReactNode }) {
+/** Rail sections that own a pill. Products styles its rows directly and has none. */
+type Section = "fund" | "administer" | "secondary";
+
+/**
+ * Whether the pill should fade in on mount — true only when the last navigation
+ * crossed a section boundary.
+ *
+ * It has to be derived rather than left to motion: `initial` is honoured whenever
+ * the pill mounts without a layout counterpart, but motion cannot tell us that
+ * happened, and setting `initial` unconditionally makes the pill fade *while it
+ * slides* inside a section too. Measured: with a blanket `initial` a within-
+ * section move ran 13 positions AND 12 opacity steps; the slide alone is what was
+ * asked for.
+ *
+ * Keyed on the path, not the section: a move inside a section leaves the section
+ * unchanged, so comparing sections alone would keep whatever the previous answer
+ * was and fade anyway. Adjusting state during render (rather than in an effect)
+ * is what lets the answer be correct on the very render the pill mounts on.
+ */
+function useCrossedSection(pathname: string, section: Section | null): boolean {
+  const [prev, setPrev] = useState({ path: pathname, section, crossed: false });
+  if (prev.path !== pathname) {
+    setPrev({ path: pathname, section, crossed: prev.section !== section });
+    return prev.section !== section;
+  }
+  return prev.crossed;
+}
+
+function NavLink({ item, active, section, appear, trailing }: { item: NavItem; active: boolean; section: Section; appear: boolean; trailing?: ReactNode }) {
   const Icon = item.icon;
   const reduce = useReducedMotion();
   return (
@@ -177,9 +227,14 @@ function NavLink({ item, active, trailing }: { item: NavItem; active: boolean; t
         <motion.span
           // Dropping the id under reduced motion turns the slide into a cut while
           // leaving the highlight itself in place.
-          layoutId={reduce ? undefined : ACTIVE_PILL}
+          layoutId={reduce ? undefined : `${ACTIVE_PILL}-${section}`}
           aria-hidden
           className="absolute inset-0 -z-10 rounded-lg bg-primary"
+          // `false` disables the mount animation outright, which is what a move
+          // inside a section wants: the pill slides at full opacity and must not
+          // also fade while doing it.
+          initial={appear ? { opacity: 0 } : false}
+          animate={{ opacity: 1 }}
           transition={{ duration: DUR.base, ease: EASE.out }}
         />
       )}
