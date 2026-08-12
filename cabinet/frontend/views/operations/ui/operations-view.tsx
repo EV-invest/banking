@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
+  ButtonGroup,
   Alert,
   AlertDescription,
   AlertTitle,
@@ -36,8 +37,6 @@ import {
   PopoverContent,
   PopoverTrigger,
   Skeleton,
-  ToggleGroup,
-  ToggleGroupItem,
 } from "@evinvest/uikit";
 
 import { fetchAllocations } from "@/entities/fund/api/fund-client";
@@ -67,6 +66,14 @@ import {
 const EMPTY_BOX = "border md:p-6";
 
 type Filter = "all" | (typeof KIND_FILTERS)[number];
+
+// The bar's options, built once rather than in render: `kindMeta` is a lookup and
+// the labels never change, so there is no reason to redo it on every keystroke of
+// the list above.
+const FILTERS: readonly { value: Filter; label: string }[] = [
+  { value: "all", label: "All" },
+  ...KIND_FILTERS.map((kind) => ({ value: kind as Filter, label: `${kindMeta(kind).label}s` })),
+];
 
 // The activity timeline (Figma `ios/operations` · `android/operations`, and the desktop
 // "Recent operations" card's `View all`). Every money movement the user made, in one
@@ -173,33 +180,50 @@ export function OperationsView() {
           </Card>
         ) : (
           <div className="space-y-6">
-            {/* A filter, not a set of panels: ToggleGroup rather than Tabs, because a
-                TabsList whose triggers control no TabPanel leaves every `aria-controls`
-                pointing at nothing. `type="single"` fires an empty value when the active
-                item is clicked again, which here means "show everything". */}
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              size="sm"
-              value={filter}
-              onValueChange={(value) => setFilter((typeof value === "string" && value ? value : "all") as Filter)}
+            {/* The kit's own segmented bar: ButtonGroup collapses the inner radii and
+                the doubled borders between neighbours, so five buttons read as one
+                control rather than five that happen to touch.
+
+                Still a filter, not a set of panels — the group is a `radiogroup` of
+                buttons carrying `aria-pressed`, not Tabs, because a TabsList whose
+                triggers control no TabPanel leaves every `aria-controls` pointing at
+                nothing.
+
+                `w-fit` + `overflow-x-auto`: past the viewport the bar scrolls rather
+                than squeezing, because five labels do not fit across 390px at any
+                legible size. `shrink-0` on each button is what makes that true — the
+                default would compress them to fit and clip the text instead. */}
+            <ButtonGroup
+              role="radiogroup"
               aria-label="Filter operations by kind"
-              // The group is `w-fit`, so past the viewport it must scroll rather than
-              // squeeze — five labels do not fit across 390px at any legible size.
               className="max-w-full overflow-x-auto"
             >
-              {/* uikit's items are `flex-1`, which splits the row evenly and lets
-                  "Redemptions" overflow its own cell into its neighbour. These size to
-                  their own text instead. */}
-              <ToggleGroupItem value="all" className="flex-none px-3">
-                All
-              </ToggleGroupItem>
-              {KIND_FILTERS.map((kind) => (
-                <ToggleGroupItem key={kind} value={kind} className="flex-none px-3">
-                  {kindMeta(kind).label}s
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+              {FILTERS.map(({ value, label }) => {
+                const on = filter === value;
+                return (
+                  <Button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    // Every segment stays `outline`, including the active one: the
+                    // group collapses neighbouring borders, and a variant without a
+                    // border (secondary, ghost) punches a visible gap in the bar
+                    // wherever the selection happens to be. The active state is a
+                    // tint, using the same accent the sidebar and table rows use.
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFilter(value)}
+                    className={cn(
+                      "shrink-0 px-3",
+                      on && "bg-main-accent-t1/10 text-main-accent-t1 hover:bg-main-accent-t1/15 hover:text-main-accent-t1",
+                    )}
+                  >
+                    {label}
+                  </Button>
+                );
+              })}
+            </ButtonGroup>
 
             {visible.length === 0 ? (
               <Card>
