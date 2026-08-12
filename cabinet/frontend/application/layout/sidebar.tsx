@@ -26,7 +26,11 @@ interface NavItem {
 // Operations.
 const FUND: NavItem[] = [
   { href: "/", label: "Home", icon: Home, active: (p) => p === "/" },
-  { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p.startsWith("/invest") },
+  // Exactly `/invest`, not everything beneath it: each product has its own row in
+  // PRODUCTS, and a prefix match here lit both that row and this one on a product
+  // page. Two highlighted rows is not a state the rail should be able to reach —
+  // and with the pill scoped per section it would mean two pills at once.
+  { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p === "/invest" },
   { href: "/wallet", label: "Wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
   { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
 ];
@@ -86,13 +90,17 @@ export function Sidebar() {
   // Which section owns the current route, and whether getting here crossed a
   // boundary. A product page belongs to no pill-owning section, so it is null and
   // the next move into one counts as a crossing.
-  const activeSection: Section | null = FUND.some((i) => i.active(pathname))
-    ? "fund"
-    : isAdmin && ADMIN.some((i) => i.active(pathname))
-      ? "administer"
-      : pathname.startsWith("/notifications") || pathname.startsWith("/settings")
-        ? "secondary"
-        : null;
+  const activeSection: Section | null = products.some(
+    (p) => pathname === `/invest/${encodeURIComponent(p.service)}`,
+  )
+    ? "products"
+    : FUND.some((i) => i.active(pathname))
+      ? "fund"
+      : isAdmin && ADMIN.some((i) => i.active(pathname))
+        ? "administer"
+        : pathname.startsWith("/notifications") || pathname.startsWith("/settings")
+          ? "secondary"
+          : null;
   const crossed = useCrossedSection(pathname, activeSection);
 
   return (
@@ -116,11 +124,15 @@ export function Sidebar() {
                   href={href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                    // `isolate` for the same reason NavLink needs it: the pill sits
+                    // on a negative z-index and would otherwise land behind the
+                    // rail's own background rather than behind the label.
+                    "relative isolate flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                     NAV_FOCUS,
-                    active ? "bg-primary font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
+                    active ? "font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
                   )}
                 >
+                  {active && <ActivePill section="products" appear={crossed} />}
                   <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md text-xs font-semibold", PRODUCT_TONES[i % PRODUCT_TONES.length])}>
                     {p.title.charAt(0).toUpperCase()}
                   </span>
@@ -179,8 +191,8 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 // plain fade. Sliding within a section, appearing between them, from one lever.
 const ACTIVE_PILL = "cabinet-rail-active";
 
-/** Rail sections that own a pill. Products styles its rows directly and has none. */
-type Section = "fund" | "administer" | "secondary";
+/** Rail sections that own a pill. Every group that can hold the active row has one. */
+type Section = "fund" | "products" | "administer" | "secondary";
 
 /**
  * Whether the pill should fade in on mount — true only when the last navigation
@@ -207,9 +219,32 @@ function useCrossedSection(pathname: string, section: Section | null): boolean {
   return prev.crossed;
 }
 
+// The highlight itself, shared by both row shapes in the rail — the icon rows and
+// the lettered product rows. It lives in one place because the two used to style
+// the active state differently: NavLink drew this pill, PRODUCTS set `bg-primary`
+// on the row, and so moving into or out of a product was the one transition in the
+// rail that did not animate at all.
+function ActivePill({ section, appear }: { section: Section; appear: boolean }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.span
+      // Dropping the id under reduced motion turns the slide into a cut while
+      // leaving the highlight itself in place.
+      layoutId={reduce ? undefined : `${ACTIVE_PILL}-${section}`}
+      aria-hidden
+      className="absolute inset-0 -z-10 rounded-lg bg-primary"
+      // `false` disables the mount animation outright, which is what a move inside
+      // a section wants: the pill slides at full opacity and must not also fade
+      // while doing it.
+      initial={appear ? { opacity: 0 } : false}
+      animate={{ opacity: 1 }}
+      transition={{ duration: DUR.base, ease: EASE.out }}
+    />
+  );
+}
+
 function NavLink({ item, active, section, appear, trailing }: { item: NavItem; active: boolean; section: Section; appear: boolean; trailing?: ReactNode }) {
   const Icon = item.icon;
-  const reduce = useReducedMotion();
   return (
     <Link
       href={item.href}
@@ -223,21 +258,7 @@ function NavLink({ item, active, section, appear, trailing }: { item: NavItem; a
         active ? "font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
       )}
     >
-      {active && (
-        <motion.span
-          // Dropping the id under reduced motion turns the slide into a cut while
-          // leaving the highlight itself in place.
-          layoutId={reduce ? undefined : `${ACTIVE_PILL}-${section}`}
-          aria-hidden
-          className="absolute inset-0 -z-10 rounded-lg bg-primary"
-          // `false` disables the mount animation outright, which is what a move
-          // inside a section wants: the pill slides at full opacity and must not
-          // also fade while doing it.
-          initial={appear ? { opacity: 0 } : false}
-          animate={{ opacity: 1 }}
-          transition={{ duration: DUR.base, ease: EASE.out }}
-        />
-      )}
+      {active && <ActivePill section={section} appear={appear} />}
       <Icon className="size-4.5" />
       <span className="flex-1">{item.label}</span>
       {trailing}
