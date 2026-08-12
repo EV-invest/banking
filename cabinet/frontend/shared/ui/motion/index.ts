@@ -5,6 +5,7 @@
 //
 // Four primitives cover this surface:
 //   Settled   — a skeleton hands over to the content it stood in for
+//   AnimatedNumber — a figure travels to its new value instead of being replaced
 //   Panel     — a popup/drawer mounts, unmounts, and swaps what it shows
 //   Reveal    — one block arrives on mount
 //   Stagger   — a short list arrives in sequence (+ StaggerItem per row)
@@ -19,6 +20,7 @@
 // scroll-triggered variants, because a signed-in surface must not make someone
 // scroll to make their balance appear.
 export { Settled, type SettledProps } from "./settled";
+export { AnimatedNumber, type AnimatedNumberProps } from "./number";
 export {
   Panel,
   PanelPresence,
