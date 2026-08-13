@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
@@ -15,7 +17,10 @@ import { DUR, EASE } from "@/shared/ui/motion";
 
 interface NavItem {
   href: string;
+  /** English source, kept as the catalogue key's twin — see messages/en. */
   label: string;
+  /** Catalogue key; `label` is what it resolves to in English. */
+  key: string;
   icon: LucideIcon;
   active: (path: string) => boolean;
 }
@@ -25,14 +30,14 @@ interface NavItem {
 // into. The mobile tab bar has no room for a sixth tab, so there /wallet still lights up
 // Operations.
 const FUND: NavItem[] = [
-  { href: "/", label: "Home", icon: Home, active: (p) => p === "/" },
+  { href: "/", label: "Home", key: "nav.home", icon: Home, active: (p) => p === "/" },
   // Exactly `/invest`, not everything beneath it: each product has its own row in
   // PRODUCTS, and a prefix match here lit both that row and this one on a product
   // page. Two highlighted rows is not a state the rail should be able to reach —
   // and with the pill scoped per section it would mean two pills at once.
-  { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p === "/invest" },
-  { href: "/wallet", label: "Wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
-  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
+  { href: "/invest", label: "Invest", key: "nav.invest", icon: LineChart, active: (p) => p === "/invest" },
+  { href: "/wallet", label: "Wallet", key: "nav.wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
+  { href: "/operations", label: "Operations", key: "nav.operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
 ];
 
 // PRODUCTS is the open allocation registry, not a fixed list: a fund appears in the rail
@@ -48,13 +53,13 @@ const PRODUCT_TONES = [
 // role (the BFF's `/api/auth/session` `isAdmin`); every screen is also authorized
 // server-side, so hiding the nav is cosmetic, not the security boundary.
 const ADMIN: NavItem[] = [
-  { href: "/admin/overview", label: "Overview", icon: LayoutGrid, active: (p) => p.startsWith("/admin/overview") },
-  { href: "/admin/users", label: "Users", icon: UsersRound, active: (p) => p.startsWith("/admin/users") },
-  { href: "/admin/cabinet", label: "Cabinet", icon: PanelsTopLeft, active: (p) => p.startsWith("/admin/cabinet") },
-  { href: "/admin/treasury", label: "Treasury", icon: Landmark, active: (p) => p.startsWith("/admin/treasury") },
-  { href: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpFromLine, active: (p) => p.startsWith("/admin/withdrawals") },
-  { href: "/admin/allocations", label: "Allocations", icon: Boxes, active: (p) => p.startsWith("/admin/allocations") },
-  { href: "/admin/valuation", label: "Valuation & redemptions", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
+  { href: "/admin/overview", label: "Overview", key: "nav.overview", icon: LayoutGrid, active: (p) => p.startsWith("/admin/overview") },
+  { href: "/admin/users", label: "Users", key: "nav.users", icon: UsersRound, active: (p) => p.startsWith("/admin/users") },
+  { href: "/admin/cabinet", label: "Cabinet", key: "nav.cabinet", icon: PanelsTopLeft, active: (p) => p.startsWith("/admin/cabinet") },
+  { href: "/admin/treasury", label: "Treasury", key: "nav.treasury", icon: Landmark, active: (p) => p.startsWith("/admin/treasury") },
+  { href: "/admin/withdrawals", label: "Withdrawals", key: "nav.withdrawals", icon: ArrowUpFromLine, active: (p) => p.startsWith("/admin/withdrawals") },
+  { href: "/admin/allocations", label: "Allocations", key: "nav.allocations", icon: Boxes, active: (p) => p.startsWith("/admin/allocations") },
+  { href: "/admin/valuation", label: "Valuation & redemptions", key: "nav.valuation", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
 ];
 
 // Every rail row is a hand-written Link, so keyboard focus rides on this string. It runs
@@ -155,13 +160,13 @@ export function Sidebar() {
 
       <nav aria-label="Secondary" className="flex flex-col gap-1">
         <NavLink
-          item={{ href: "/notifications", label: "Notifications", icon: Bell, active: (p) => p.startsWith("/notifications") }}
+          item={{ href: "/notifications", label: "Notifications", key: "nav.notifications", icon: Bell, active: (p) => p.startsWith("/notifications") }}
           active={pathname.startsWith("/notifications")}
           section="secondary"
           appear={crossed}
           trailing={unread ? <UnreadPill count={unread} active={pathname.startsWith("/notifications")} /> : undefined}
         />
-        <NavLink item={{ href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") }} active={pathname.startsWith("/settings")} section="secondary" appear={crossed} />
+        <NavLink item={{ href: "/settings", label: "Settings", key: "nav.settings", icon: Settings, active: (p) => p.startsWith("/settings") }} active={pathname.startsWith("/settings")} section="secondary" appear={crossed} />
       </nav>
     </aside>
   );
@@ -244,6 +249,7 @@ function ActivePill({ section, appear }: { section: Section; appear: boolean }) 
 }
 
 function NavLink({ item, active, section, appear, trailing }: { item: NavItem; active: boolean; section: Section; appear: boolean; trailing?: ReactNode }) {
+  const t = useT();
   const Icon = item.icon;
   return (
     <Link
@@ -260,7 +266,7 @@ function NavLink({ item, active, section, appear, trailing }: { item: NavItem; a
     >
       {active && <ActivePill section={section} appear={appear} />}
       <Icon className="size-4.5" />
-      <span className="flex-1">{item.label}</span>
+      <span className="flex-1">{t(item.key)}</span>
       {trailing}
     </Link>
   );

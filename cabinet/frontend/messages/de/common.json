@@ -1,0 +1,58 @@
+{
+  "nav.home": {
+    "en": "Home",
+    "t": "Startseite"
+  },
+  "nav.invest": {
+    "en": "Invest",
+    "t": "Investieren"
+  },
+  "nav.operations": {
+    "en": "Operations",
+    "t": "Transaktionen"
+  },
+  "nav.wallet": {
+    "en": "Wallet",
+    "t": "Wallet"
+  },
+  "nav.settings": {
+    "en": "Settings",
+    "t": "Einstellungen"
+  },
+  "nav.notifications": {
+    "en": "Notifications",
+    "t": "Benachrichtigungen"
+  },
+  "nav.allocations": {
+    "en": "Allocations",
+    "t": "Allokationen"
+  },
+  "nav.cabinet": {
+    "en": "Cabinet",
+    "t": "Kundenbereich"
+  },
+  "nav.overview": {
+    "en": "Overview",
+    "t": "Übersicht"
+  },
+  "nav.treasury": {
+    "en": "Treasury",
+    "t": "Treasury"
+  },
+  "nav.users": {
+    "en": "Users",
+    "t": "Benutzer"
+  },
+  "nav.valuation": {
+    "en": "Valuation & redemptions",
+    "t": "Bewertung & Rücknahmen"
+  },
+  "nav.withdrawals": {
+    "en": "Withdrawals",
+    "t": "Auszahlungen"
+  },
+  "lang.switch": {
+    "en": "Language",
+    "t": "Sprache"
+  }
+}

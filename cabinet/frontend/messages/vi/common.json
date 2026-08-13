@@ -1,0 +1,58 @@
+{
+  "nav.home": {
+    "en": "Home",
+    "t": "Trang chủ"
+  },
+  "nav.invest": {
+    "en": "Invest",
+    "t": "Đầu tư"
+  },
+  "nav.operations": {
+    "en": "Operations",
+    "t": "Giao dịch"
+  },
+  "nav.wallet": {
+    "en": "Wallet",
+    "t": "Ví"
+  },
+  "nav.settings": {
+    "en": "Settings",
+    "t": "Cài đặt"
+  },
+  "nav.notifications": {
+    "en": "Notifications",
+    "t": "Thông báo"
+  },
+  "nav.allocations": {
+    "en": "Allocations",
+    "t": "Phân bổ"
+  },
+  "nav.cabinet": {
+    "en": "Cabinet",
+    "t": "Tài khoản"
+  },
+  "nav.overview": {
+    "en": "Overview",
+    "t": "Tổng quan"
+  },
+  "nav.treasury": {
+    "en": "Treasury",
+    "t": "Ngân quỹ"
+  },
+  "nav.users": {
+    "en": "Users",
+    "t": "Người dùng"
+  },
+  "nav.valuation": {
+    "en": "Valuation & redemptions",
+    "t": "Định giá & hoàn vốn"
+  },
+  "nav.withdrawals": {
+    "en": "Withdrawals",
+    "t": "Rút tiền"
+  },
+  "lang.switch": {
+    "en": "Language",
+    "t": "Ngôn ngữ"
+  }
+}

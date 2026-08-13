@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { createAbMiddleware } from "@evinvest/experiments/next";
+import { negotiate } from "@evinvest/i18n";
 
 import { experiments } from "@/application/experiments";
+import { config as appConfig } from "@/config";
 import { COOKIES } from "@/shared/config/cookies";
 import { contentSecurityPolicy } from "@/shared/config/security";
 
@@ -50,7 +52,32 @@ export function proxy(req: NextRequest) {
     return withCsp(NextResponse.redirect(url), csp);
   }
 
-  return withCsp(ab(req), csp);
+  return withCsp(withLocale(req, ab(req)), csp);
+}
+
+// Assigns a sticky locale on first visit — the same shape as the A/B cookie.
+//
+// `negotiate` reads Accept-Language, which is a *suggestion*. On the public site
+// that distinction matters enormously: a language redirect can bury the other
+// locales for a crawler arriving from a US IP, which is why the conductor never
+// auto-switches. Here there is no crawler and no URL to redirect — the header is
+// simply the best first guess for a signed-in human, and the cookie makes their
+// correction stick.
+//
+// Deliberately never overwritten once set. A reader who chose English on a
+// Russian-configured laptop must not be flipped back on the next navigation.
+function withLocale(req: NextRequest, res: NextResponse): NextResponse {
+  if (req.cookies.get(COOKIES.locale)?.value) return res;
+  res.cookies.set(COOKIES.locale, negotiate(req.headers.get("accept-language")), {
+    path: "/",
+    sameSite: "lax",
+    secure: appConfig.authCookieSecure,
+    // Readable by the client switcher. It carries no authority, so HttpOnly
+    // would buy nothing and cost the switcher a round trip.
+    httpOnly: false,
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  return res;
 }
 
 function withCsp(res: NextResponse, csp: string): NextResponse {

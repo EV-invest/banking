@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { Home, LineChart, ListChecks, Settings, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
@@ -11,6 +13,8 @@ import { DUR, EASE } from "@/shared/ui/motion";
 interface TabItem {
   href: string;
   label: string;
+  /** Catalogue key; `label` is what it resolves to in English. */
+  key: string;
   icon: LucideIcon;
   active: (path: string) => boolean;
 }
@@ -26,17 +30,18 @@ interface TabItem {
 // tab of its own) took the slot. Operations no longer claims /wallet either,
 // which was the other half of that collision.
 const TABS: TabItem[] = [
-  { href: "/", label: "Home", icon: Home, active: (p) => p === "/" },
-  { href: "/invest", label: "Invest", icon: LineChart, active: (p) => p.startsWith("/invest") },
-  { href: "/operations", label: "Operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
-  { href: "/wallet", label: "Wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
-  { href: "/settings", label: "Settings", icon: Settings, active: (p) => p.startsWith("/settings") },
+  { href: "/", label: "Home", key: "nav.home", icon: Home, active: (p) => p === "/" },
+  { href: "/invest", label: "Invest", key: "nav.invest", icon: LineChart, active: (p) => p.startsWith("/invest") },
+  { href: "/operations", label: "Operations", key: "nav.operations", icon: ListChecks, active: (p) => p.startsWith("/operations") },
+  { href: "/wallet", label: "Wallet", key: "nav.wallet", icon: Wallet, active: (p) => p.startsWith("/wallet") },
+  { href: "/settings", label: "Settings", key: "nav.settings", icon: Settings, active: (p) => p.startsWith("/settings") },
 ];
 
 /** Horizontal padding of the bar, as a length the marker's width math can use. */
 const BAR_PX = "0.5rem";
 
 export function BottomNavbar() {
+  const t = useT();
   const pathname = usePathname();
   const reduce = useReducedMotion();
   const activeAt = TABS.findIndex((tab) => tab.active(pathname));
@@ -87,7 +92,7 @@ export function BottomNavbar() {
             )}
           >
             <Icon className="size-5" />
-            {tab.label}
+            {t(tab.key)}
           </Link>
         );
       })}
