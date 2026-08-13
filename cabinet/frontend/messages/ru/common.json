@@ -54,5 +54,73 @@
   "lang.switch": {
     "en": "Language",
     "t": "Язык"
+  },
+  "ui.account": {
+    "en": "Account",
+    "t": "Аккаунт"
+  },
+  "ui.accountStatus": {
+    "en": "Account status",
+    "t": "Статус аккаунта"
+  },
+  "ui.activity": {
+    "en": "Activity",
+    "t": "История"
+  },
+  "ui.deliveryTopics": {
+    "en": "Delivery & topics",
+    "t": "Доставка и темы"
+  },
+  "ui.depositUsdt": {
+    "en": "Deposit USDT",
+    "t": "Пополнить USDT"
+  },
+  "ui.email": {
+    "en": "Email",
+    "t": "Эл. почта"
+  },
+  "ui.emailAddress": {
+    "en": "Email address",
+    "t": "Адрес эл. почты"
+  },
+  "ui.inYourCabinet": {
+    "en": "In your cabinet",
+    "t": "В вашем кабинете"
+  },
+  "ui.kycLevel": {
+    "en": "KYC level",
+    "t": "Уровень KYC"
+  },
+  "ui.profile": {
+    "en": "Profile",
+    "t": "Профиль"
+  },
+  "ui.receiveFunds": {
+    "en": "Receive funds into your wallet",
+    "t": "Получить средства на кошелёк"
+  },
+  "ui.security": {
+    "en": "Security",
+    "t": "Безопасность"
+  },
+  "ui.sessionsDevices": {
+    "en": "Sessions & devices",
+    "t": "Сеансы и устройства"
+  },
+  "ui.signedInGoogle": {
+    "en": "Signed in with Google",
+    "t": "Вход через Google"
+  },
+  "ui.trustedSessions": {
+    "en": "Trusted sessions",
+    "t": "Доверенные сеансы"
+  },
+  "ui.wallet": {
+    "en": "Wallet",
+    "t": "Кошелёк"
+  },
+  "ui.withdrawUsdt": {
+    "en": "Withdraw USDT",
+    "t": "Вывести USDT"
   }
 }

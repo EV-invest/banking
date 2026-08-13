@@ -54,5 +54,73 @@
   "lang.switch": {
     "en": "Language",
     "t": "Ngôn ngữ"
+  },
+  "ui.account": {
+    "en": "Account",
+    "t": "Tài khoản"
+  },
+  "ui.accountStatus": {
+    "en": "Account status",
+    "t": "Trạng thái tài khoản"
+  },
+  "ui.activity": {
+    "en": "Activity",
+    "t": "Hoạt động"
+  },
+  "ui.deliveryTopics": {
+    "en": "Delivery & topics",
+    "t": "Gửi thông báo & chủ đề"
+  },
+  "ui.depositUsdt": {
+    "en": "Deposit USDT",
+    "t": "Nạp USDT"
+  },
+  "ui.email": {
+    "en": "Email",
+    "t": "Email"
+  },
+  "ui.emailAddress": {
+    "en": "Email address",
+    "t": "Địa chỉ email"
+  },
+  "ui.inYourCabinet": {
+    "en": "In your cabinet",
+    "t": "Trong tài khoản của bạn"
+  },
+  "ui.kycLevel": {
+    "en": "KYC level",
+    "t": "Cấp độ KYC"
+  },
+  "ui.profile": {
+    "en": "Profile",
+    "t": "Hồ sơ"
+  },
+  "ui.receiveFunds": {
+    "en": "Receive funds into your wallet",
+    "t": "Nhận tiền vào ví của bạn"
+  },
+  "ui.security": {
+    "en": "Security",
+    "t": "Bảo mật"
+  },
+  "ui.sessionsDevices": {
+    "en": "Sessions & devices",
+    "t": "Phiên & thiết bị"
+  },
+  "ui.signedInGoogle": {
+    "en": "Signed in with Google",
+    "t": "Đăng nhập bằng Google"
+  },
+  "ui.trustedSessions": {
+    "en": "Trusted sessions",
+    "t": "Phiên tin cậy"
+  },
+  "ui.wallet": {
+    "en": "Wallet",
+    "t": "Ví"
+  },
+  "ui.withdrawUsdt": {
+    "en": "Withdraw USDT",
+    "t": "Rút USDT"
   }
 }
