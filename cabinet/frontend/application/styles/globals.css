@@ -36,6 +36,12 @@
      The `(app)` layout reserves matching padding-bottom below `lg` so content is
      never occluded by the fixed bar. */
   --cabinet-bottom-nav-h: 64px;
+  /* Aspect ratio of the brand mark's artwork (application/layout/logo.tsx). uikit's
+     `Logo` is a CSS-masked <span>, which has no intrinsic size the way an inline
+     <svg viewBox> does, so the ratio has to be restated for `w-auto` to resolve. It
+     is the canonical lockup's own 387×335 canvas — changing it distorts nothing
+     (the mask is `contain`) but does letterbox the mark inside its own box. */
+  --ev-logo-aspect: 387 / 335;
 }
 
 @layer base {
