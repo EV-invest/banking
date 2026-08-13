@@ -53,34 +53,19 @@ export function Settled({
     if (wasLoading) setSawSkeleton(true);
   }
 
-  // The skeleton fades in too, rather than being thrown up the instant the
-  // surface mounts. A skeleton that appears in one frame is its own small jolt —
-  // and it is the FIRST thing anyone sees on a cold load, so it sets the tone for
-  // the handover that follows. Deliberately quicker than the content's entrance:
-  // it is scaffolding announcing that work is happening, not the answer.
-  //
-  // `key` is what keeps this honest. Both branches render a motion.div, so
-  // without distinct keys React would reconcile skeleton → content as the same
-  // element, `initial` would never re-run, and the content would inherit the
-  // skeleton's opacity instead of playing its own entrance.
-  if (loading)
-    return (
-      <motion.div
-        key="skeleton"
-        className={className}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: DUR.fast, ease: EASE.out }}
-      >
-        {skeleton}
-      </motion.div>
-    );
-
+  // No entrance on this branch. The skeleton's own fade lives on the primitive
+  // (`[data-slot="skeleton"]` in globals.css) so that it reaches the 40-odd
+  // skeletons in this app written inline, outside any Settled boundary. Fading
+  // the wrapper here as well would compound with it and the scaffolding would
+  // take twice as long to arrive as it was tuned for.
+  if (loading) return <div className={className}>{skeleton}</div>;
   if (!sawSkeleton) return <div className={className}>{children}</div>;
 
+  // Swapping the plain wrapper for a motion one remounts it, which is what
+  // replays `initial` — so a later refetch that shows the skeleton again gets
+  // its own handover rather than appearing instantly.
   return (
     <motion.div
-      key="content"
       className={className}
       initial={{ opacity: 0, y: reduce ? 0 : RISE }}
       animate={{ opacity: 1, y: 0 }}

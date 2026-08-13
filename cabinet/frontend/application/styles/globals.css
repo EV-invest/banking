@@ -120,3 +120,50 @@
     }
   }
 }
+
+/* Every skeleton fades in, wherever it is used.
+   This lives here rather than in `Settled` because most skeletons never pass
+   through it: 40 of the 57 in this app are written inline next to the value they
+   stand in for — a name, a balance, a KYC level — and only 17 sit behind a
+   Settled boundary. Attaching the entrance to the primitive is the only version
+   that cannot be forgotten at a call site, and it covers ones written later.
+
+   The pulse is restated rather than left to `animate-pulse`, because it has to
+   be. Tailwind's pulse animates `opacity`, and a running animation beats a
+   transition on the same property — so a fade-in expressed as a transition, or
+   as a second animation ordered before the pulse, is simply overridden. Running
+   the entrance first and starting the pulse after it is the composition that
+   works, and it needs both keyframes named here to do it.
+
+   Reduced motion keeps the pulse (it is the signal that work is in flight) and
+   drops only the entrance.
+
+   `utilities`, not `components`: the thing being overridden is Tailwind's own
+   `animate-pulse`, which lives in `utilities` and outranks every layer below it.
+   Declared in the same layer and later in the file, this wins on order without
+   needing contrived specificity. */
+@layer utilities {
+  @keyframes ev-skeleton-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes ev-skeleton-pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+  [data-slot="skeleton"] {
+    animation:
+      ev-skeleton-in 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      ev-skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 200ms infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="skeleton"] {
+      animation: ev-skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  }
+}
