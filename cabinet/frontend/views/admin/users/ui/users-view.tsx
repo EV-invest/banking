@@ -74,10 +74,19 @@ export function UsersView() {
               {!users ? null : users.length === 0 ? (
                 <p className="p-8 text-center text-sm text-muted-foreground">No users match these filters.</p>
               ) : (
-                <table className="w-full text-sm">
+                // `table-fixed` is load-bearing, not tidiness. Under the default
+                // auto layout a column is as wide as its content, so `truncate` on
+                // an address never engages: when the drawer opens and takes 340px
+                // the browser compresses the columns instead, the longer addresses
+                // wrap onto a second line, and every row grows taller — the table
+                // stretched vertically for the whole width animation. Fixed layout
+                // sizes the columns from the header row, so narrowing shortens the
+                // addresses and the row heights never move. The other three columns
+                // split what User leaves.
+                <table className="w-full table-fixed text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="px-5 py-3 font-medium">User</th>
+                      <th className="w-1/2 px-5 py-3 font-medium">User</th>
                       <th className="px-5 py-3 font-medium">Role</th>
                       <th className="px-5 py-3 font-medium">KYC</th>
                       <th className="px-5 py-3 font-medium">Status</th>
@@ -135,8 +144,11 @@ export function UsersView() {
           {selected && (
             <Panel
               key="user-drawer"
-              collapse={{ gap: "1.5rem" }}
-              className="w-85 shrink-0 self-start overflow-hidden"
+              // The open width lives here rather than in a class: Panel animates
+              // to it, and an inline width from the animation would beat the
+              // class anyway. 21.25rem is the `w-85` this used to carry.
+              collapse={{ gap: "1.5rem", width: "21.25rem" }}
+              className="shrink-0 self-start overflow-hidden"
             >
               <PanelSwap swapKey={selected.user_id}>
                 {/* `key` remounts the drawer per user, so its uncontrolled inputs (KYC

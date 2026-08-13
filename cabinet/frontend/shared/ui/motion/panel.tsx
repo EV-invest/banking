@@ -28,15 +28,20 @@ export interface PanelProps {
   resize?: boolean;
   /**
    * For a panel that shares a flex row with content it displaces — the admin
-   * users drawer beside its table. The panel gives its width back over the
-   * course of its exit instead of all at once at the end, so the neighbour
-   * widens *with* it rather than snapping open a frame later.
+   * users drawer beside its table. The panel takes its width over the course of
+   * the entrance and gives it back over the exit, so the neighbour narrows and
+   * widens *with* it rather than snapping a frame before or after.
    *
-   * Pass the row's `gap` so the negative margin can cancel it: the gap does not
-   * collapse on its own when the panel reaches zero width, and without this the
-   * neighbour would finish one gap short and then jump.
+   * `gap` is the row's gap, so the negative margin can cancel it: the gap does
+   * not collapse on its own when the panel reaches zero width, and without this
+   * the neighbour would finish one gap short and then jump.
+   *
+   * `width` is the panel's open width, and has to be passed rather than left to
+   * a class. Animating to `auto` would end with `width: auto` inline, which
+   * beats the class that was sizing it and leaves the panel content-sized once
+   * the animation finishes.
    */
-  collapse?: { gap: string };
+  collapse?: { gap: string; width: string };
   className?: string;
   children: ReactNode;
 }
@@ -64,16 +69,24 @@ export function Panel({
   // trade here and only here: a transform-based collapse scales the panel, and
   // a scaled panel drags its text with it. One element reflowing a two-column
   // admin screen for 280ms is cheaper than distorted type.
+  //
+  // Both ends carry it, not just the exit. With it on the exit alone the panel
+  // arrived at full width in a single frame and its neighbour jumped narrower
+  // before the panel had visibly appeared — the two halves of one movement
+  // playing at different times.
   const collapsed = collapse
     ? { width: 0, minWidth: 0, marginLeft: `calc(-1 * ${collapse.gap})` }
+    : {};
+  const opened = collapse
+    ? { width: collapse.width, minWidth: collapse.width, marginLeft: 0 }
     : {};
 
   return (
     <motion.div
       layout={resize ? "size" : false}
       className={className}
-      initial={{ opacity: 0, ...shift }}
-      animate={{ opacity: 1, x: 0, y: 0 }}
+      initial={{ opacity: 0, ...shift, ...collapsed }}
+      animate={{ opacity: 1, x: 0, y: 0, ...opened }}
       exit={{ opacity: 0, ...shift, ...collapsed }}
       transition={{ duration: DUR.base, ease: EASE.out }}
     >
