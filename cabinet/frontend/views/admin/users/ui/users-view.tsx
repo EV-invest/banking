@@ -237,9 +237,15 @@ function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary
   const role = profile?.role ?? summary.role;
 
   return (
-    // Width and placement belong to the animated `Panel` wrapper in the parent —
-    // sizing here as well would fight its layout animation on a record swap.
-    <Card className="w-full">
+    // Fixed width, NOT `w-full`, and this is the whole difference between the
+    // drawer being revealed and being squeezed into place. `w-full` made the card
+    // follow the wrapper's animating width, so its content relaid out on every
+    // frame of the open: the address wrapped, the buttons stacked, and while the
+    // panel was narrow the card stood 538px tall against the table's 220 —
+    // dragging the whole row's height up and back down again over the animation.
+    // Pinned to the panel's open width the layout is computed once and the panel
+    // simply clips it, so the entrance is a wipe and nothing reflows.
+    <Card className="w-85">
       <CardContent className="space-y-5 py-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
