@@ -15,4 +15,10 @@ const PREFIX = SECURE ? "__Host-" : "";
 export const COOKIES = {
   session: `${PREFIX}ev_session`,
   csrf: `${PREFIX}ev_csrf`,
+  // The one cookie this zone MINTS rather than reads, so the header comment
+  // above does not cover it. It carries the reader's locale, because the cabinet
+  // — unlike the public site — has no reason to put the locale in the URL: it is
+  // entirely behind auth, so there is no crawler to serve alternates to and no
+  // indexed URL to keep stable. See the i18n section of README.md.
+  locale: `${PREFIX}ev_locale`,
 } as const;

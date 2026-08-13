@@ -21,6 +21,37 @@ The Next.js host shell for the bank's cabinet. Two jobs:
 See [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) for the full contract and
 the React / Rust-WASM producer recipes.
 
+## i18n
+
+Five locales (`en` `ru` `vi` `fr` `de`) through `@evinvest/i18n`, under the same
+translation policy as the public site: English is canonical, and a translation
+whose English source has since changed is refused and falls back to English. Run
+`npm run i18n:check` — it fails on drift, not on untranslated keys.
+
+**The locale is a cookie here, not a URL segment.** That asymmetry with the
+conductor is deliberate. The public site prefixes every non-default locale
+(`/ru/team`) because it must serve `hreflang` alternates to a crawler and must not
+move already-indexed URLs. The cabinet is entirely behind auth: no crawler, no
+indexed URL, and prefixing would mean restructuring all 19 routes around a
+`[locale]` segment to buy nothing.
+
+So `proxy.ts` negotiates `Accept-Language` once and mints a sticky `ev_locale`
+cookie, and never overwrites it — a reader who picks English on a Russian laptop
+stays in English. `currentLocale()` (`shared/config/locale.ts`) reads it; the root
+layout feeds `I18nProvider` so both the `(app)` and `(auth)` groups are covered.
+
+Catalogues live in `messages/<locale>/common.json`. English is a plain map; every
+other locale records the English each entry was translated from, which is what
+makes drift detectable:
+
+```jsonc
+{ "nav.wallet": { "en": "Wallet", "t": "Кошелёк" } }
+```
+
+Only the navigation is translated so far. The banking vocabulary in it —
+*Treasury*, *Valuation & redemptions* — wants a native review before any locale
+is offered to a real investor.
+
 ## Observability
 
 Wired through the shared `@evinvest/*` libraries; every integration no-ops until

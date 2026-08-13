@@ -1,0 +1,16 @@
+{
+  "nav.home": "Home",
+  "nav.invest": "Invest",
+  "nav.operations": "Operations",
+  "nav.wallet": "Wallet",
+  "nav.settings": "Settings",
+  "nav.notifications": "Notifications",
+  "nav.allocations": "Allocations",
+  "nav.cabinet": "Cabinet",
+  "nav.overview": "Overview",
+  "nav.treasury": "Treasury",
+  "nav.users": "Users",
+  "nav.valuation": "Valuation & redemptions",
+  "nav.withdrawals": "Withdrawals",
+  "lang.switch": "Language"
+}

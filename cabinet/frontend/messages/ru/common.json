@@ -1,0 +1,58 @@
+{
+  "nav.home": {
+    "en": "Home",
+    "t": "Главная"
+  },
+  "nav.invest": {
+    "en": "Invest",
+    "t": "Инвестировать"
+  },
+  "nav.operations": {
+    "en": "Operations",
+    "t": "Операции"
+  },
+  "nav.wallet": {
+    "en": "Wallet",
+    "t": "Кошелёк"
+  },
+  "nav.settings": {
+    "en": "Settings",
+    "t": "Настройки"
+  },
+  "nav.notifications": {
+    "en": "Notifications",
+    "t": "Уведомления"
+  },
+  "nav.allocations": {
+    "en": "Allocations",
+    "t": "Распределения"
+  },
+  "nav.cabinet": {
+    "en": "Cabinet",
+    "t": "Кабинет"
+  },
+  "nav.overview": {
+    "en": "Overview",
+    "t": "Обзор"
+  },
+  "nav.treasury": {
+    "en": "Treasury",
+    "t": "Казначейство"
+  },
+  "nav.users": {
+    "en": "Users",
+    "t": "Пользователи"
+  },
+  "nav.valuation": {
+    "en": "Valuation & redemptions",
+    "t": "Оценка и погашения"
+  },
+  "nav.withdrawals": {
+    "en": "Withdrawals",
+    "t": "Выводы средств"
+  },
+  "lang.switch": {
+    "en": "Language",
+    "t": "Язык"
+  }
+}
