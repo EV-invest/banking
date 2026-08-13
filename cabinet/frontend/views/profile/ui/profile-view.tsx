@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { BadgeCheck, Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
@@ -51,6 +53,7 @@ function formFrom(p: UserProfile): Form {
 }
 
 export function ProfileView() {
+  const t = useT();
   const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
   const [positions, setPositions] = useState<Position[]>([]);
   const [form, setForm] = useState<Form | null>(null);
@@ -118,7 +121,7 @@ export function ProfileView() {
 
   return (
     <>
-      <MobileAppBar title="Profile" backHref="/settings" />
+      <MobileAppBar title={t("ui.profile")} backHref="/settings" />
 
       <div className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-5 lg:px-8 lg:pb-8 lg:pt-6">
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
@@ -271,22 +274,23 @@ export function ProfileView() {
 
 /** `card-Verification` — the KYC state the hub actually holds, not a document checklist. */
 function VerificationCard({ loading, profile, email }: { loading: boolean; profile: UserProfile | null; email: string }) {
+  const t = useT();
   return (
     <ListCard className="lg:px-5.5">
       <ListCardTitle sub="Managed by compliance">Identity verification</ListCardTitle>
       <Hairline />
       <Row>
-        <RowLabel title="Email address" sub={loading ? "…" : email || "—"} />
+        <RowLabel title={t("ui.emailAddress")} sub={loading ? "…" : email || "—"} />
         {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill icon={BadgeCheck}>Verified</Pill> : <Pill tone="pending">Unverified</Pill>}
       </Row>
       <Hairline />
       <Row>
-        <RowLabel title="KYC level" sub="Raised by compliance review" />
+        <RowLabel title={t("ui.kycLevel")} sub="Raised by compliance review" />
         {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold tabular-nums text-foreground">{profile?.kyc_level ?? "—"}</RowValue>}
       </Row>
       <Hairline />
       <Row>
-        <RowLabel title="Account status" sub="Platform access" />
+        <RowLabel title={t("ui.accountStatus")} sub="Platform access" />
         {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.status ? <Pill tone={statusTone(profile.status)}>{titleCase(profile.status)}</Pill> : <RowValue>—</RowValue>}
       </Row>
     </ListCard>

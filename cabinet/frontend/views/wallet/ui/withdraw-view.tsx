@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { Clock, Loader2, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -36,6 +38,7 @@ function withdrawableFor(wallet: Wallet | null | undefined, network: string): Ne
 // `cabinet/mobile/wallet/withdraw`). Review is a distinct step: the reviewed figures are
 // snapshotted so Confirm can never submit something the user didn't see.
 export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
+  const t = useT();
   const [wallet, setWallet] = useState<Wallet | null | undefined>(undefined);
   const [selected, setSelected] = useState<string | null>(initialNetwork ?? null);
   const [address, setAddress] = useState("");
@@ -93,7 +96,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   const label = networkLabel(network);
 
   return (
-    <WalletScreen title="Withdraw USDT" subtitle="Send funds to an external address — one balance, any rail" back="/wallet">
+    <WalletScreen title={t("ui.withdrawUsdt")} subtitle="Send funds to an external address — one balance, any rail" back="/wallet">
       <Settled
         loading={wallet === undefined}
         skeleton={<Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />}
