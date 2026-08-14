@@ -107,7 +107,7 @@ test("a tag nothing carries changes nothing", async () => {
 
 test("invalidateAll reaches every key of one resource, and no others", async () => {
   const { state: navState, fetch: navFetch } = counted(() => "1.00");
-  const nav = defineResource({ name: "t.nav", fetch: (_service: string) => navFetch(), key: (s) => s, revalidate: 600 });
+  const nav = defineResource({ name: "t.nav", fetch: (service: string) => navFetch().then((v) => `${service}:${v}`), key: (s) => s, revalidate: 600 });
   const { state: otherState, fetch: otherFetch } = counted(() => "x");
   const other = defineResource({ name: "t.other", fetch: otherFetch, revalidate: 600 });
 
@@ -150,7 +150,7 @@ test("a disabled read is never issued", async () => {
   const { state, fetch } = counted(() => "nav");
   const nav = defineResource({
     name: "t.nav",
-    fetch: (_service: string) => fetch(),
+    fetch: (service: string) => fetch().then((v) => `${service}:${v}`),
     key: (service) => service,
     enabled: (service) => service.trim().length > 0,
   });

@@ -1,68 +1,55 @@
 "use client";
 
 import { TriangleAlert } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
-import { fetchCabinet, setAnnouncement, setFeatureFlag, setMaintenance, setReadOnly } from "@/entities/admin/api/admin-client";
-import { apiPath } from "@/shared/config/base-path";
+import { setAnnouncement, setFeatureFlag, setMaintenance, setReadOnly } from "@/entities/admin/api/admin-client";
+import { cabinetConfigResource, mfeRegistryResource } from "@/entities/admin/model/admin-resource";
 import type { CabinetConfig, FeatureFlag } from "@/shared/contracts/admin";
+import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { AdminHeader, StatusDot, Toggle } from "@/views/admin/ui/shell";
 
-interface MfeEntry {
-  name: string;
-  tag: string;
-  scriptUrl: string;
-  kind: string;
-}
-
 export function CabinetView() {
-  const [config, setConfig] = useState<CabinetConfig | null>(null);
-  const [mfes, setMfes] = useState<MfeEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [writeError, setWriteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    fetchCabinet()
-      .then((c) => active && setConfig(c))
-      .catch((e: Error) => active && setError(e.message));
-    fetch(apiPath("/api/mfe-registry"), { headers: { accept: "application/json" } })
-      .then((r) => r.json() as Promise<MfeEntry[]>)
-      .then((m) => active && setMfes(Array.isArray(m) ? m : []))
-      .catch(() => active && setMfes([]));
-    return () => {
-      active = false;
-    };
-  }, []);
+  const read = useResource(cabinetConfigResource);
+  const config = read.data ?? null;
+  const mfes = useResource(mfeRegistryResource).data ?? null;
+  const error = writeError ?? (config || !read.error ? null : read.error.message);
 
   const platform = config?.platform;
 
+  // Each write answers with the piece it changed, so the new config is published straight
+  // into the cache — the system banner reading the same platform config follows without a
+  // refetch, and leaving this screen and coming back shows the switch where it was left.
+  const publish = (next: Partial<typeof config> & object) => {
+    if (config) cabinetConfigResource.publish({ ...config, ...next });
+  };
+
   const toggleFlag = async (flag: FeatureFlag) => {
     try {
-      const next = await setFeatureFlag({ key: flag.key, description: flag.description, enabled: !flag.enabled, rollout: flag.rollout });
-      setConfig((c) => (c ? { ...c, platform: next } : c));
+      publish({ platform: await setFeatureFlag({ key: flag.key, description: flag.description, enabled: !flag.enabled, rollout: flag.rollout }) });
     } catch (e) {
-      setError((e as Error).message);
+      setWriteError((e as Error).message);
     }
   };
 
   const toggleMaintenance = async (enabled: boolean) => {
     try {
-      const next = await setMaintenance(enabled);
-      setConfig((c) => (c ? { ...c, platform: next } : c));
+      publish({ platform: await setMaintenance(enabled) });
     } catch (e) {
-      setError((e as Error).message);
+      setWriteError((e as Error).message);
     }
   };
 
   const toggleReadOnly = async (enabled: boolean) => {
     try {
-      const mode = await setReadOnly(enabled);
-      setConfig((c) => (c ? { ...c, read_only: mode.read_only } : c));
+      publish({ read_only: (await setReadOnly(enabled)).read_only });
     } catch (e) {
-      setError((e as Error).message);
+      setWriteError((e as Error).message);
     }
   };
 
@@ -124,7 +111,7 @@ export function CabinetView() {
         </Panel>
 
         <Panel title="Announcement" subtitle="The live banner across the cabinet">
-          {!config ? <Skeleton className="h-28 w-full" /> : <AnnouncementForm config={config} onSaved={(next) => setConfig((c) => (c ? { ...c, platform: next } : c))} onError={setError} />}
+          {!config ? <Skeleton className="h-28 w-full" /> : <AnnouncementForm config={config} onSaved={(next) => publish({ platform: next })} onError={setWriteError} />}
         </Panel>
 
         <Panel title="Maintenance & operations" subtitle="Cabinet holding page + money-plane kill-switch">

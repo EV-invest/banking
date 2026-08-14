@@ -15,6 +15,17 @@
 //   · idle — once the shell is up, warm the handful of reads shared by most screens, at
 //     idle priority so they never race the reads the current screen is making for itself.
 
+import {
+  adminAllocationsResource,
+  cabinetConfigResource,
+  mfeRegistryResource,
+  overviewResource,
+  parkedEventsResource,
+  redemptionQueueResource,
+  treasuryResource,
+  usersResource,
+  withdrawalQueueResource,
+} from "@/entities/admin/model/admin-resource";
 import { allocationsResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import { notificationSettingsResource, notificationsResource } from "@/entities/notification/model/notification-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
@@ -25,6 +36,31 @@ import { depositsResource, walletResource, withdrawalsResource } from "@/entitie
 // Zone-relative paths, exactly as the rail writes them (basePath is not part of these).
 // Ordered longest-prefix-first so `/wallet/activity` isn't answered by `/wallet`.
 const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = [
+  {
+    prefix: "/admin/overview",
+    warm: () => {
+      overviewResource.prefetch();
+      parkedEventsResource.prefetch();
+    },
+  },
+  { prefix: "/admin/users", warm: () => usersResource.prefetch({}) },
+  {
+    prefix: "/admin/cabinet",
+    warm: () => {
+      cabinetConfigResource.prefetch();
+      mfeRegistryResource.prefetch();
+    },
+  },
+  { prefix: "/admin/treasury", warm: () => treasuryResource.prefetch() },
+  { prefix: "/admin/withdrawals", warm: () => withdrawalQueueResource.prefetch() },
+  { prefix: "/admin/allocations", warm: () => adminAllocationsResource.prefetch() },
+  {
+    prefix: "/admin/valuation",
+    warm: () => {
+      adminAllocationsResource.prefetch();
+      redemptionQueueResource.prefetch();
+    },
+  },
   {
     prefix: "/wallet/activity",
     warm: () => {

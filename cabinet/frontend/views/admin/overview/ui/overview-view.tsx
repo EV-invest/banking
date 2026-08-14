@@ -1,81 +1,47 @@
 "use client";
 
 import { Activity, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
-import { fetchOverview, fetchParkedEvents, unparkEvent } from "@/entities/admin/api/admin-client";
-import type { AdminOverview, ParkedEvent } from "@/shared/contracts/admin";
+import { unparkEvent } from "@/entities/admin/api/admin-client";
+import { overviewResource, parkedEventsResource } from "@/entities/admin/model/admin-resource";
+import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ago } from "@/views/admin/lib/format";
 import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
 
 export function OverviewView() {
-  const [overview, setOverview] = useState<AdminOverview | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [parked, setParked] = useState<ParkedEvent[] | null>(null);
-  // Best-effort: a money plane that isn't connected renders as a muted hint, not an
-  // error banner — the fleet grid above must stay useful without it.
-  const [parkedHint, setParkedHint] = useState<string | null>(null);
   const [unparkError, setUnparkError] = useState<string | null>(null);
   const [unparking, setUnparking] = useState<string | null>(null);
-  // Rows whose unpark POST succeeded but whose refetch failed — still listed, but they
-  // must not offer a second unpark. A successful refetch drops them from the list.
+  // Rows whose unpark POST succeeded but whose re-read failed — still listed, but they must
+  // not offer a second unpark. A successful re-read drops them from the list.
   const [unparked, setUnparked] = useState<ReadonlySet<string>>(new Set());
   const [refetchError, setRefetchError] = useState<string | null>(null);
 
-  // Manual "Run health check" (event handler — may set state synchronously). Refetches
-  // BOTH the overview and the parked list so the "Parked rows" KPI and the table agree.
-  const load = useCallback(() => {
-    setRefreshing(true);
-    const overviewDone = fetchOverview()
-      .then((o) => {
-        setOverview(o);
-        setError(null);
-      })
-      .catch((e: Error) => setError(e.message));
-    const parkedDone = fetchParkedEvents()
-      .then((l) => {
-        setParked(l.events ?? []);
-        setParkedHint(null);
-        setUnparked(new Set());
-        setRefetchError(null);
-      })
-      .catch((e: Error) => {
-        setParked([]);
-        setParkedHint(e.message);
-      });
-    void Promise.allSettled([overviewDone, parkedDone]).then(() => setRefreshing(false));
-  }, []);
+  // Both reads are cached, so returning to Overview shows the fleet grid and the backlog it
+  // last held and settles them behind. They carry the same tag and are always refreshed
+  // together — the "Parked rows" KPI and the table below it must never disagree.
+  const overviewRead = useResource(overviewResource);
+  const parkedRead = useResource(parkedEventsResource);
+  const overview = overviewRead.data ?? null;
+  const parked = parkedRead.data ? (parkedRead.data.events ?? []) : null;
+  const error = overview ? null : (overviewRead.error?.message ?? null);
+  // Best-effort: a money plane that isn't connected renders as a muted hint, not an error
+  // banner — the fleet grid above must stay useful without it.
+  const parkedHint = parked ? null : (parkedRead.error?.message ?? null);
 
-  // Mount fetch — state is set only in the async callbacks (no synchronous setState in
-  // the effect body), so it doesn't trigger cascading renders.
-  useEffect(() => {
-    let active = true;
-    fetchOverview()
-      .then((o) => {
-        if (!active) return;
-        setOverview(o);
-        setError(null);
-      })
-      .catch((e: Error) => active && setError(e.message));
-    fetchParkedEvents()
-      .then((l) => {
-        if (!active) return;
-        setParked(l.events ?? []);
-        setParkedHint(null);
-      })
-      .catch((e: Error) => {
-        if (!active) return;
-        setParked([]);
-        setParkedHint(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  // Manual "Run health check". Both, so the KPI and the table agree.
+  const load = () => {
+    setRefreshing(true);
+    setRefetchError(null);
+    void Promise.allSettled([overviewRead.refresh(), parkedRead.refresh()]).then(() => {
+      setUnparked(new Set());
+      setRefreshing(false);
+    });
+  };
 
   const unpark = async (seq: string) => {
     setUnparking(seq);
@@ -89,14 +55,12 @@ export function OverviewView() {
       setUnparking(null);
       return;
     }
-    // The POST succeeded — mark the row unparked before the refetch so a refetch
-    // failure can't leave an enabled Unpark button on an already-unparked event.
+    // The POST succeeded — mark the row unparked before the re-read so a failed re-read
+    // can't leave an enabled Unpark button on an already-unparked event.
     setUnparked((prev) => new Set(prev).add(seq));
     try {
-      // Re-fetch both so the "Parked rows" KPI drops together with the list.
-      const [list, o] = await Promise.all([fetchParkedEvents(), fetchOverview()]);
-      setParked(list.events ?? []);
-      setOverview(o);
+      // Both, so the "Parked rows" KPI drops together with the list.
+      await Promise.all([parkedRead.refresh(), overviewRead.refresh()]);
       setUnparked(new Set());
     } catch (e) {
       setRefetchError((e as Error).message);

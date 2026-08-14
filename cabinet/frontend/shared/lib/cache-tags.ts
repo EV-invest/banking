@@ -33,4 +33,18 @@ export const TAG = {
   notifications: "notifications",
   /** The caller's active device sessions. */
   sessions: "sessions",
+
+  // ── operator console ──────────────────────────────────────────────────────────
+  /** Fleet health and the parked-event backlog — one screen, two reads that move together. */
+  adminFleet: "admin.fleet",
+  /** Custody and claim balances across the rails. */
+  adminTreasury: "admin.treasury",
+  /** Platform config: maintenance, read-only, announcement, flags. */
+  adminCabinet: "admin.cabinet",
+  /** The withdrawal and redemption queues an operator works through. */
+  adminQueue: "admin.queue",
+  /** The operator allocation registry — drafts and closed products included. */
+  adminAllocations: "admin.allocations",
+  /** The user directory and a single user's detail. */
+  adminUsers: "admin.users",
 } as const;
