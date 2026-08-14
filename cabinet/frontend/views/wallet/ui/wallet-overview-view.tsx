@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "@evinvest/uikit";
@@ -16,6 +18,7 @@ import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } f
 // never a balance of its own. Deposit/withdraw are their own routes, so a rail card links
 // straight into the right screen with the rail preselected.
 export function WalletOverviewView() {
+  const t = useT();
   // The same cached balance Home, Deposit, Withdraw and Invest read, so arriving here from
   // any of them shows the figure immediately and refreshes it behind the number. A failed
   // refresh reports itself without blanking what is already on screen.
@@ -32,7 +35,7 @@ export function WalletOverviewView() {
 
   return (
     <WalletScreen
-      title="Wallet"
+      title={t("ui.wallet")}
       subtitle="One USDT balance · networks are deposit / withdrawal rails"
       actions={
         <>

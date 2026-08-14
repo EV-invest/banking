@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { Check, Copy, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
@@ -20,6 +22,7 @@ import { FieldLabel, WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/walle
 // pick a rail, then copy the address it maps to. The address is fetched per rail from the BFF —
 // the rails on offer come from the wallet response, so an unwatched network never appears.
 export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
+  const t = useT();
   const [selected, setSelected] = useState<string | null>(initialNetwork ?? null);
   const [copied, setCopied] = useState(false);
 
@@ -59,7 +62,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
   const label = networkLabel(network);
 
   return (
-    <WalletScreen title="Deposit USDT" subtitle="Receive funds into your wallet" back="/wallet">
+    <WalletScreen title={t("ui.depositUsdt")} subtitle={t("ui.receiveFunds")} back="/wallet">
       <div className="flex w-full flex-col gap-3.5 lg:max-w-160 lg:gap-5">
         {/* The wrapper repeats the column so the two children keep their gap:
             `display: contents` would preserve the parent's layout but makes

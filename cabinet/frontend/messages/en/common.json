@@ -12,5 +12,22 @@
   "nav.users": "Users",
   "nav.valuation": "Valuation & redemptions",
   "nav.withdrawals": "Withdrawals",
-  "lang.switch": "Language"
+  "lang.switch": "Language",
+  "ui.account": "Account",
+  "ui.accountStatus": "Account status",
+  "ui.activity": "Activity",
+  "ui.deliveryTopics": "Delivery & topics",
+  "ui.depositUsdt": "Deposit USDT",
+  "ui.email": "Email",
+  "ui.emailAddress": "Email address",
+  "ui.inYourCabinet": "In your cabinet",
+  "ui.kycLevel": "KYC level",
+  "ui.profile": "Profile",
+  "ui.receiveFunds": "Receive funds into your wallet",
+  "ui.security": "Security",
+  "ui.sessionsDevices": "Sessions & devices",
+  "ui.signedInGoogle": "Signed in with Google",
+  "ui.trustedSessions": "Trusted sessions",
+  "ui.wallet": "Wallet",
+  "ui.withdrawUsdt": "Withdraw USDT"
 }

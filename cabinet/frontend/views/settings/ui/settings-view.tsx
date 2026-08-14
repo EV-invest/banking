@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { BadgeCheck, Bell, Check, Laptop, Loader2, LogOut, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -392,12 +394,13 @@ function MobileSecurityCard({
   sessions: Session[] | undefined;
   onOpenSessions: () => void;
 }) {
+  const t = useT();
   return (
     <ListCard>
       <ListCardTitle>Security</ListCardTitle>
       <Hairline />
       <Row>
-        <RowLabel title="Signed in with Google" sub={loading ? "…" : formatEmail(email) || "—"} />
+        <RowLabel title={t("ui.signedInGoogle")} sub={loading ? "…" : formatEmail(email) || "—"} />
         <Pill>Connected</Pill>
       </Row>
       <Hairline />
@@ -406,7 +409,7 @@ function MobileSecurityCard({
         onClick={onOpenSessions}
         className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <RowLabel title="Trusted sessions" sub="Devices signed in to your account" />
+        <RowLabel title={t("ui.trustedSessions")} sub="Devices signed in to your account" />
         <span className="flex shrink-0 items-center gap-2">
           {sessions === undefined ? <Skeleton className="h-3.5 w-4" /> : <RowValue>{sessions.length}</RowValue>}
           <Chevron />
@@ -423,6 +426,7 @@ function MobileSecurityCard({
 /** `card-Notifications` — the entry into delivery preferences. The mock's four topic
  *  switches live on the pushed screen, where the real per-topic state comes from. */
 function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
+  const t = useT();
   return (
     <ListCard>
       <ListCardTitle>Notifications</ListCardTitle>
@@ -432,7 +436,7 @@ function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
         onClick={onOpen}
         className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <RowLabel title="Delivery &amp; topics" sub="Where we reach you and what you follow" />
+        <RowLabel title={t("ui.deliveryTopics")} sub="Where we reach you and what you follow" />
         <Chevron />
       </button>
     </ListCard>
@@ -479,10 +483,11 @@ function GeneralSection({
   onChange: (key: keyof Form, value: string) => void;
   fieldErrors: Record<string, string>;
 }) {
+  const t = useT();
   const ready = !loading && !!form;
   return (
     <section className={cn(CARD, "px-6 py-5.5")}>
-      <SectionHeader title="Account" sub="Your contact details and preferences" />
+      <SectionHeader title={t("ui.account")} sub="Your contact details and preferences" />
       <div className="flex flex-wrap gap-x-4.5 gap-y-4">
         <Field label="Legal name">
           {ready ? (
@@ -531,11 +536,12 @@ function SecuritySection({
   sessions: Session[] | undefined;
   onManageSessions: () => void;
 }) {
+  const t = useT();
   const count = sessions?.length;
   const summary = count === undefined ? "Loading active sessions…" : count === 1 ? "1 device currently signed in" : `${count} devices currently signed in`;
   return (
     <section className={cn(CARD, "px-6 py-5.5")}>
-      <SectionHeader title="Security" sub="How you sign in and where your account is active" />
+      <SectionHeader title={t("ui.security")} sub="How you sign in and where your account is active" />
       <div className="flex items-center gap-3 rounded-xl border border-border bg-main-surface px-4 py-3.5">
         {/* Google's mark is only licensed on a white plate, so this one square stays off-theme. */}
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white">
@@ -552,7 +558,7 @@ function SecuritySection({
       </p>
       <Hairline />
       <Row>
-        <RowLabel title="Sessions & devices" sub={summary} />
+        <RowLabel title={t("ui.sessionsDevices")} sub={summary} />
         <Button variant="outline" size="sm" className="border-border" onClick={onManageSessions}>
           Manage
         </Button>
@@ -823,6 +829,7 @@ function GoogleMark() {
  * the master email switch turns them all moot.
  */
 function NotificationsSection() {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
 
@@ -859,7 +866,7 @@ function NotificationsSection() {
         <ListCardTitle sub="Choose where notifications reach you. Both can be off.">Delivery</ListCardTitle>
         <Hairline />
         <Row>
-          <RowLabel title="In your cabinet" sub="On by default. Turn this off and notifications stop appearing in your cabinet." />
+          <RowLabel title={t("ui.inYourCabinet")} sub="On by default. Turn this off and notifications stop appearing in your cabinet." />
           {settings ? (
             <Switch
               checked={settings.in_app_enabled}
@@ -874,7 +881,7 @@ function NotificationsSection() {
         <Hairline />
         <Row>
           <RowLabel
-            title="Email"
+            title={t("ui.email")}
             sub={settings ? (settings.email_verified ? `Sent to ${settings.email} · verified` : `${settings.email} · unverified, so email is not sent`) : undefined}
           />
           {settings ? (

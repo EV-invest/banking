@@ -54,5 +54,73 @@
   "lang.switch": {
     "en": "Language",
     "t": "Sprache"
+  },
+  "ui.account": {
+    "en": "Account",
+    "t": "Konto"
+  },
+  "ui.accountStatus": {
+    "en": "Account status",
+    "t": "Kontostatus"
+  },
+  "ui.activity": {
+    "en": "Activity",
+    "t": "Aktivität"
+  },
+  "ui.deliveryTopics": {
+    "en": "Delivery & topics",
+    "t": "Zustellung & Themen"
+  },
+  "ui.depositUsdt": {
+    "en": "Deposit USDT",
+    "t": "USDT einzahlen"
+  },
+  "ui.email": {
+    "en": "Email",
+    "t": "E-Mail"
+  },
+  "ui.emailAddress": {
+    "en": "Email address",
+    "t": "E-Mail-Adresse"
+  },
+  "ui.inYourCabinet": {
+    "en": "In your cabinet",
+    "t": "In Ihrem Bereich"
+  },
+  "ui.kycLevel": {
+    "en": "KYC level",
+    "t": "KYC-Stufe"
+  },
+  "ui.profile": {
+    "en": "Profile",
+    "t": "Profil"
+  },
+  "ui.receiveFunds": {
+    "en": "Receive funds into your wallet",
+    "t": "Geld auf Ihr Wallet empfangen"
+  },
+  "ui.security": {
+    "en": "Security",
+    "t": "Sicherheit"
+  },
+  "ui.sessionsDevices": {
+    "en": "Sessions & devices",
+    "t": "Sitzungen & Geräte"
+  },
+  "ui.signedInGoogle": {
+    "en": "Signed in with Google",
+    "t": "Mit Google angemeldet"
+  },
+  "ui.trustedSessions": {
+    "en": "Trusted sessions",
+    "t": "Vertrauenswürdige Sitzungen"
+  },
+  "ui.wallet": {
+    "en": "Wallet",
+    "t": "Wallet"
+  },
+  "ui.withdrawUsdt": {
+    "en": "Withdraw USDT",
+    "t": "USDT abheben"
   }
 }
