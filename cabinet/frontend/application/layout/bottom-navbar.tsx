@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { prefetchOn } from "@/application/prefetch";
 import { cn } from "@/shared/lib/cn";
 import { DUR, EASE } from "@/shared/ui/motion";
 
@@ -82,6 +83,7 @@ export function BottomNavbar() {
           <Link
             key={tab.label}
             href={tab.href}
+            {...prefetchOn(tab.href)}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-xs font-medium transition-colors",

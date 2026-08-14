@@ -3,13 +3,18 @@
 // The two deal forms and the queue that follows a redemption. Extracted from the invest
 // list when the product page arrived: a subscription has to behave identically wherever
 // it is initiated from, and the surest way to guarantee that is one implementation.
+//
+// None of the three takes an `onDone`. The mutations they call name what they moved (see
+// `entities/fund/model/fund-resource.ts`), so the page around them — and Home, and Wallet,
+// and anything else showing a figure a deal touched — refreshes itself. A callback per
+// panel was the same job done once per call site, which is the version that goes stale.
 
 import { ArrowDownToLine, Clock, Loader2, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Input } from "@evinvest/uikit";
 
-import { cancelRedemption, submitRedeem, submitSubscribe } from "@/entities/fund/api/fund-client";
+import { cancelRedemption, submitRedeem, submitSubscribe } from "@/entities/fund/model/fund-resource";
 import type { FundNav, Position, Redemption } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { TipAnchor } from "@/shared/tips";
@@ -18,7 +23,7 @@ import { formatUnits, formatUsdt, fromBaseUnits, toBaseUnits } from "@/views/inv
 import { cashForUnits, unitsForCash } from "@/views/invest/lib/product";
 import { TEAL_CTA } from "@/views/invest/ui/atoms";
 
-export function SubscribePanel({ service, nav, onDone }: { service: string; nav: FundNav | null; onDone: () => void }) {
+export function SubscribePanel({ service, nav }: { service: string; nav: FundNav | null }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +46,6 @@ export function SubscribePanel({ service, nav, onDone }: { service: string; nav:
       const receipt = await submitSubscribe({ service, amount });
       setDone({ units: receipt.units, nav: receipt.nav });
       setAmount("");
-      onDone();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -104,7 +108,7 @@ export function SubscribePanel({ service, nav, onDone }: { service: string; nav:
   );
 }
 
-export function RedeemPanel({ service, position, nav, onDone }: { service: string; position: Position; nav: FundNav | null; onDone: () => void }) {
+export function RedeemPanel({ service, position, nav }: { service: string; position: Position; nav: FundNav | null }) {
   const [units, setUnits] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +125,6 @@ export function RedeemPanel({ service, position, nav, onDone }: { service: strin
       const redemption = await submitRedeem({ service, units });
       setDone(redemption);
       setUnits("");
-      onDone();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -197,7 +200,7 @@ export function RedeemPanel({ service, position, nav, onDone }: { service: strin
 
 /** Queued redemptions for this product, inline — they belong to the fund they came from,
  *  not to a separate activity list the holder has to go and find. */
-export function QueuedList({ items, onDone }: { items: Redemption[]; onDone: () => void }) {
+export function QueuedList({ items }: { items: Redemption[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -206,7 +209,6 @@ export function QueuedList({ items, onDone }: { items: Redemption[]; onDone: () 
     setError(null);
     try {
       await cancelRedemption(id);
-      onDone();
     } catch (e) {
       setError((e as Error).message);
     } finally {

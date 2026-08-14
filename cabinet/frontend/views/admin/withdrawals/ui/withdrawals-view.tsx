@@ -1,12 +1,14 @@
 "use client";
 
 import { Loader2, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
-import { dispatchWithdrawal, failWithdrawal, fetchWithdrawalQueue, settleWithdrawal } from "@/entities/admin/api/admin-client";
+import { dispatchWithdrawal, failWithdrawal, settleWithdrawal } from "@/entities/admin/api/admin-client";
+import { withdrawalQueueResource } from "@/entities/admin/model/admin-resource";
 import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
+import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { Settled } from "@/shared/ui/motion";
 import { ago, formatUsd } from "@/views/admin/lib/format";
@@ -17,34 +19,30 @@ import { AdminHeader } from "@/views/admin/ui/shell";
 type Panel = { id: string; kind: "settle" | "fail" };
 
 export function WithdrawalsView() {
-  const [queue, setQueue] = useState<WithdrawalQueueItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [txRef, setTxRef] = useState("");
   const [reason, setReason] = useState("");
 
-  const load = useCallback(() => {
-    fetchWithdrawalQueue()
-      .then((q) => setQueue(q.items ?? []))
-      .catch((e: Error) => setError(e.message));
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Cached, so arriving from another console screen shows the queue as it was last read and
+  // refreshes it behind. `refresh()` after an action replaces the manual re-fetch, and keeps
+  // any other surface reading the same queue in step.
+  const read = useResource(withdrawalQueueResource);
+  const queue = read.data ? (read.data.items ?? []) : null;
+  const error = actionError ?? (read.data ? null : (read.error?.message ?? null));
 
   const run = async (id: string, fn: () => Promise<unknown>) => {
     setBusy(id);
-    setError(null);
+    setActionError(null);
     try {
       await fn();
       setPanel(null);
       setTxRef("");
       setReason("");
-      load();
+      await read.refresh();
     } catch (e) {
-      setError((e as Error).message);
+      setActionError((e as Error).message);
     } finally {
       setBusy(null);
     }

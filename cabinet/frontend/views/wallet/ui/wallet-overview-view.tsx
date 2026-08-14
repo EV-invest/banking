@@ -4,13 +4,11 @@ import { useT } from "@evinvest/i18n/react";
 
 import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-
 import { Skeleton } from "@evinvest/uikit";
 
-import { fetchWallet } from "@/entities/wallet/api/wallet-client";
-import type { Wallet } from "@/shared/contracts";
+import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatUsdt, railMeta } from "@/views/wallet/lib/format";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
@@ -21,23 +19,13 @@ import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } f
 // straight into the right screen with the rail preselected.
 export function WalletOverviewView() {
   const t = useT();
-  const [wallet, setWallet] = useState<Wallet | null | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchWallet()
-      .then((w) => {
-        setWallet(w);
-        setError(null);
-      })
-      .catch((e: Error) => {
-        setWallet(null);
-        setError(e.message);
-      });
-  }, []);
+  // The same cached balance Home, Deposit, Withdraw and Invest read, so arriving here from
+  // any of them shows the figure immediately and refreshes it behind the number. A failed
+  // refresh reports itself without blanking what is already on screen.
+  const { data: wallet, error: failure, isLoading: loading } = useResource(walletResource);
+  const error = wallet ? null : (failure?.message ?? null);
 
   const balance = wallet?.balance;
-  const loading = wallet === undefined;
 
   const depositable = new Set((wallet?.deposit_addresses ?? []).map((a) => a.network ?? "").filter(Boolean));
   const withdrawable = new Set((wallet?.withdrawable ?? []).map((w) => w.network ?? "").filter(Boolean));

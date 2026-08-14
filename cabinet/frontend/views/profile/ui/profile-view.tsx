@@ -9,13 +9,13 @@ import { PhoneNumber } from "@evinvest/types";
 import { usePhoneNumber } from "@evinvest/types/react";
 import { Button, Input, Skeleton } from "@evinvest/uikit";
 
-import { fetchPositions } from "@/entities/fund/api/fund-client";
-import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
-import { publishProfile } from "@/entities/user/model/profile-store";
+import { positionsResource } from "@/entities/fund/model/fund-resource";
+import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
-import type { Position, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
+import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { formatUsd, num } from "@/shared/lib/money";
+import { useResource } from "@/shared/lib/resource";
 import { CARD, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, type PillTone, Row, RowLabel, RowValue, StackRow } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
 import { TipAnchor, type TipKey } from "@/shared/tips";
@@ -54,30 +54,27 @@ function formFrom(p: UserProfile): Form {
 
 export function ProfileView() {
   const t = useT();
-  const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
-  const [positions, setPositions] = useState<Position[]>([]);
   const [form, setForm] = useState<Form | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    fetchProfile()
-      .then((p) => {
-        setProfile(p);
-        setForm(formFrom(p));
-      })
-      .catch((e: Error) => {
-        setProfile(null);
-        setError(e.message);
-      });
-    fetchPositions()
-      .then((l) => setPositions(l.positions ?? []))
-      .catch(() => undefined);
-  }, []);
+  // Both reads are cached: the profile with the account chip and Settings, the positions
+  // with Home and Invest. Arriving from any of them fills this page on the first frame.
+  const { data: profile, error: readError, isLoading: loading } = useResource(profileResource);
+  const positions = useResource(positionsResource).data?.positions ?? [];
+  const error = saveError ?? (profile ? null : (readError?.message ?? null));
 
-  const loading = profile === undefined;
+  // Seed the form during render, not in an effect, so a cached profile fills the fields on
+  // the frame it is read rather than one frame later. Never while the user is editing: a
+  // background refresh must not overwrite what they are part-way through typing.
+  const [seeded, setSeeded] = useState<UserProfile | null>(null);
+  if (profile && profile !== seeded && !editing) {
+    setSeeded(profile);
+    setForm(formFrom(profile));
+  }
+
   const email = profile?.email ?? "";
   const legalName = (profile?.legal_name ?? "").trim();
   const name = truncateName(legalName) || (loading ? "…" : displayName(email));
@@ -89,7 +86,7 @@ export function ProfileView() {
   function cancel() {
     if (profile) setForm(formFrom(profile));
     setEditing(false);
-    setError(null);
+    setSaveError(null);
     setFieldErrors({});
   }
   async function save() {
@@ -97,20 +94,20 @@ export function ProfileView() {
     const errors = validateProfileForm(form);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setError("Please fix the highlighted fields");
+      setSaveError("Please fix the highlighted fields");
       return;
     }
     setFieldErrors({});
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     try {
+      // `saveProfile` publishes the PATCH response into the cache, so this page, the
+      // sidebar account chip and Settings all show the new name without a refetch.
       const updated = await saveProfile(form as UpdateProfileRequest);
-      setProfile(updated);
       setForm(formFrom(updated));
-      publishProfile(updated); // the sidebar account chip picks up the new name live
       setEditing(false);
     } catch (e) {
-      setError((e as Error).message);
+      setSaveError((e as Error).message);
     } finally {
       setSaving(false);
     }

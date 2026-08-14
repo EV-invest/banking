@@ -1,13 +1,15 @@
 "use client";
 
 import { Check, Copy, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
-import { fetchTreasury, recordTreasuryDeposit, type RecordedArrival } from "@/entities/admin/api/admin-client";
-import type { RailLiquidity, Treasury } from "@/shared/contracts/admin";
+import { recordTreasuryDeposit, type RecordedArrival } from "@/entities/admin/api/admin-client";
+import { treasuryResource } from "@/entities/admin/model/admin-resource";
+import type { RailLiquidity } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatUsd } from "@/views/admin/lib/format";
@@ -30,32 +32,15 @@ const GAS_SYMBOLS: Record<string, string> = {
 };
 
 export function TreasuryView() {
-  // One record so a resolution lands in a single update: a failed read must STOP the
-  // skeletons — pulsing placeholders beside an error read as "still coming", so the retry
-  // never gets clicked — and it must not leave a stale figure on screen either.
-  const [{ treasury, error, loading }, setState] = useState<{ treasury: Treasury | null; error: string | null; loading: boolean }>({
-    treasury: null,
-    error: null,
-    loading: true,
-  });
-  const [attempt, setAttempt] = useState(0);
-
-  // Retry (event handler — the spinner may start synchronously here; the effect below
-  // only ever sets state from its async callbacks).
-  const retry = useCallback(() => {
-    setState((s) => ({ ...s, loading: true }));
-    setAttempt((n) => n + 1);
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    fetchTreasury()
-      .then((t) => active && setState({ treasury: t, error: null, loading: false }))
-      .catch((e: Error) => active && setState((s) => ({ ...s, error: e.message, loading: false })));
-    return () => {
-      active = false;
-    };
-  }, [attempt]);
+  // Cached, so returning from another console screen paints the figures immediately and
+  // refreshes them behind. A failed read must STOP the skeletons — pulsing placeholders
+  // beside an error read as "still coming", so the retry never gets clicked — which is
+  // exactly what `isLoading` reports: false once an attempt has settled either way.
+  const read = useResource(treasuryResource);
+  const treasury = read.data ?? null;
+  const error = read.error?.message ?? null;
+  const loading = read.isLoading || read.isValidating;
+  const retry = () => void read.refresh();
 
   return (
     <div className="space-y-8 px-8 pb-10 pt-6">

@@ -21,6 +21,7 @@ import type {
   UserBalance,
   WithdrawalQueue,
 } from "@/shared/contracts/admin";
+import type { MfeEntry } from "@/shared/mfe/types";
 
 // ── overview ──────────────────────────────────────────────────────────────────
 export const fetchOverview = (): Promise<AdminOverview> => getJson("/api/admin/overview");
@@ -116,6 +117,14 @@ export const failWithdrawal = (withdrawalId: string, reason: string): Promise<{ 
 
 // ── cabinet (platform config + read-only kill-switch) ───────────────────────────
 export const fetchCabinet = (): Promise<CabinetConfig> => getJson("/api/admin/cabinet");
+
+// Deployment config, not account data: the same list every client resolves its remotes
+// from. A non-array answer is treated as an empty registry rather than a failure — the
+// console's other panels must stay useful when the registry file is missing.
+export const fetchMfeRegistry = async (): Promise<MfeEntry[]> => {
+  const entries = await getJson<MfeEntry[]>("/api/mfe-registry");
+  return Array.isArray(entries) ? entries : [];
+};
 
 export const setMaintenance = (enabled: boolean): Promise<PlatformConfig> => postJson("/api/admin/cabinet/maintenance", { enabled });
 

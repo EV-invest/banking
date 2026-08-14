@@ -81,6 +81,56 @@ nix run .#cabinet-backend   # the BFF (needs piggybank; ports: flake.nix `ports`
 nix run .#dev               # full stack: postgres + tigerbeetle + redis + signer + piggybank + cabinet-backend + cabinet
 ```
 
+## Data
+
+Every browser→BFF read goes through the cache in `shared/lib/resource.ts`. A view
+does **not** call an entity client from a `useEffect`; it declares what it reads
+and the cache decides whether that costs a request.
+
+```ts
+const wallet = useResource(walletResource);          // no argument
+const nav = useResource(fundNavResource, service);   // keyed per fund
+```
+
+Why it exists: every screen used to own its own `useEffect(() => fetchX().then(setX))`,
+so leaving a page threw its answer away. Moving between two screens of the same
+account re-fetched the same balance and preceded each arrival with a skeleton —
+which reads as loading a *different* account. Nothing was wrong with any one of
+those reads; the problem was that none of them was shared.
+
+Why not Next's `fetch` extension: `next: { revalidate, tags }` is a **server**
+extension, applied to fetches Next issues while rendering. This cabinet reads
+nothing on the server — `/api/*` is a rewrite straight to the Rust BFF
+(`next.config.ts`), there are no route handlers, and every read is a browser call
+carrying the user's session cookie. So the cache is client-side, but keeps Next's
+vocabulary — `revalidate` in seconds, `tags`, and a `revalidateTag()` — because
+the semantics are the same.
+
+Rules:
+
+- **Declare each read once**, in `entities/<x>/model/<x>-resource.ts`, with the
+  window it stays fresh for and the tags its mutations move. Views import from
+  `model/`, never from `api/`.
+- **A mutation names what it moved**, it does not refetch. `submitWithdrawal`
+  names `wallet · withdrawals · operations`, so the balance on *every* open
+  surface follows — no call site has to know which screens are mounted. A write
+  whose response IS the new state (`saveProfile`, `postValuation`) publishes it
+  rather than invalidating.
+- **`isLoading` is the only state that earns a skeleton.** It is true only when
+  there is nothing to show and nothing has failed. Cached data renders on the
+  first frame and refreshes behind itself; see the `Settled` rule below, which
+  this pairs with exactly.
+- **A failed refresh never blanks a figure.** The stale value stays and the error
+  is reported beside it. Only a read that has *never* succeeded should surface as
+  an error state.
+- **`persist: true` is for non-personal data only** — the fund catalog and NAVs.
+  A balance, a position, a profile or an operation stays in memory, which dies
+  with the page. Sign-out clears both halves.
+- **Warm ahead of the click.** `application/prefetch.ts` maps each route to the
+  reads it makes; the rail and the tab bar warm the target on pointer or keyboard
+  intent, and the shell warms the shared reads at idle. That is what makes the
+  *first* visit to a screen skeleton-free too.
+
 ## Motion
 
 Everything animated in the cabinet comes from `shared/ui/motion`. Import the

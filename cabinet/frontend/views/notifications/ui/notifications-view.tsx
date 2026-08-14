@@ -4,11 +4,13 @@ import { Bell } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { fetchNotifications, markRead } from "@/entities/notification/api/notification-client";
+import { fetchNotifications } from "@/entities/notification/api/notification-client";
+import { markRead, notificationsResource } from "@/entities/notification/model/notification-resource";
 import { publishUnreadCount } from "@/entities/notification/model/notification-store";
 import type { Notification } from "@/shared/contracts/notifications";
 import { isUnread, toDate } from "@/shared/contracts/notifications";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 
 const CARD = "rounded-xl border border-border bg-main-card";
 // Every control on this screen is hand-written rather than a uikit Button, so the keyboard
@@ -35,49 +37,48 @@ type Filter = "all" | "unread";
  * settings here just to tell them apart.
  */
 export function NotificationsView() {
-  const [items, setItems] = useState<Notification[] | null>(null);
-  const [cursor, setCursor] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [unread, setUnread] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
 
-  // A reload is expressed as a key bump rather than a callable, so every setState
-  // lands in a promise callback. The react-hooks lint rejects an effect that calls a
-  // function which updates state synchronously, and it is right to: that is a
-  // cascading render.
-  const [reloadKey, setReloadKey] = useState(0);
+  // The first page per filter is cached, so returning to the inbox shows the rows it last
+  // showed instead of three skeleton bars. Later cursor pages are appended here and are not
+  // cached: a page is only meaningful after the pages before it.
+  const first = useResource(notificationsResource, filter);
+  const page = first.data;
+  const [older, setOlder] = useState<Notification[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
 
+  // A replaced first page — a filter switch, or a refresh after "mark all read" — voids the
+  // pages appended under it. Reconciled during render so the two halves are never shown
+  // stitched together for a frame.
+  const [shown, setShown] = useState(page);
+  if (shown !== page) {
+    setShown(page);
+    setOlder([]);
+    setCursor(null);
+  }
+
+  const items = page ? [...page.notifications, ...older] : null;
+  const nextCursor = cursor ?? page?.next_cursor ?? "";
+  const unread = page?.unread_count ?? 0;
+  const error = pageError ?? (page || !first.error ? null : (first.error.message || "could not load notifications"));
+
+  // The badge in the rail reads the same count this page just learned, without its own poll.
+  // In an effect, not during render: it writes to a store other components subscribe to.
   useEffect(() => {
-    let alive = true;
-    fetchNotifications({ filter })
-      .then((page) => {
-        if (!alive) return;
-        setError(null);
-        setItems(page.notifications);
-        setCursor(page.next_cursor);
-        setUnread(page.unread_count);
-        publishUnreadCount(page.unread_count);
-      })
-      .catch((e: unknown) => {
-        if (!alive) return;
-        setError(e instanceof Error ? e.message : "could not load notifications");
-        setItems([]);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [filter, reloadKey]);
+    if (page) publishUnreadCount(page.unread_count);
+  }, [page]);
 
   async function loadMore() {
-    if (!cursor || busy) return;
+    if (!nextCursor || busy) return;
     setBusy(true);
     try {
-      const page = await fetchNotifications({ filter, cursor });
-      setItems((prev) => [...(prev ?? []), ...page.notifications]);
-      setCursor(page.next_cursor);
+      const next = await fetchNotifications({ filter, cursor: nextCursor });
+      setOlder((prev) => [...prev, ...next.notifications]);
+      setCursor(next.next_cursor);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not load more");
+      setPageError(e instanceof Error ? e.message : "could not load more");
     } finally {
       setBusy(false);
     }
@@ -87,30 +88,34 @@ export function NotificationsView() {
     if (busy || unread === 0) return;
     setBusy(true);
     try {
-      const res = await markRead();
-      setUnread(res.unread_count);
-      publishUnreadCount(res.unread_count);
-      // Re-read rather than patching locally: under the "unread" filter the rows that
-      // just changed should disappear, which a local patch would not do.
-      setReloadKey((k) => k + 1);
+      // `markRead` invalidates both filters rather than patching: under "unread" the rows
+      // that just changed should leave the list, which no local edit would do.
+      await markRead();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not mark as read");
+      setPageError(e instanceof Error ? e.message : "could not mark as read");
     } finally {
       setBusy(false);
     }
   }
 
   async function open(n: Notification) {
-    if (!isUnread(n)) return;
-    // Optimistic: reading is not a destructive act, and a failed mark simply shows up
-    // again on the next load.
-    setItems((prev) => prev?.map((x) => (x.id === n.id ? { ...x, read_at: String(Math.floor(Date.now() / 1000)) } : x)) ?? prev);
-    setUnread((u) => Math.max(0, u - 1));
+    if (!isUnread(n) || !page) return;
+    // Optimistic, written straight into the cache so the row stays read if the user leaves
+    // and comes back. Reading is not a destructive act, and a failed mark simply shows up
+    // again on the next refresh.
+    notificationsResource.publish(
+      {
+        ...page,
+        notifications: page.notifications.map((x) => (x.id === n.id ? { ...x, read_at: String(Math.floor(Date.now() / 1000)) } : x)),
+        unread_count: Math.max(0, page.unread_count - 1),
+      },
+      filter,
+    );
+    setOlder((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: String(Math.floor(Date.now() / 1000)) } : x)));
     try {
-      const res = await markRead([n.id]);
-      publishUnreadCount(res.unread_count);
+      await markRead([n.id]);
     } catch {
-      /* the next load reconciles */
+      /* the next refresh reconciles */
     }
   }
 
@@ -172,7 +177,7 @@ export function NotificationsView() {
         )}
       </div>
 
-      {cursor && items && items.length > 0 && (
+      {nextCursor && items && items.length > 0 && (
         <div className="mt-4 flex justify-center">
           <button type="button" onClick={loadMore} disabled={busy} className={GHOST_BUTTON}>
             {busy ? "Loading…" : "Load older"}

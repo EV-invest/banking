@@ -13,13 +13,14 @@
 
 import { ArrowDownToLine, ArrowLeft, Loader2, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
-import { fetchAllocations, fetchFundNav, fetchPositions, fetchRedemptions } from "@/entities/fund/api/fund-client";
-import type { FundNav, Position, Redemption } from "@/shared/contracts";
+import { allocationsResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
+import type { FundNav, Position } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { compactUnits, formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
 import { blockedReason, buildProducts, type Product } from "@/views/invest/lib/product";
@@ -29,36 +30,27 @@ import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-
 type Panel = "subscribe" | "redeem" | null;
 
 export function ProductView({ service }: { service: string }) {
-  const [product, setProduct] = useState<Product | null | undefined>(undefined);
-  const [nav, setNav] = useState<FundNav | null>(null);
-  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
 
-  const load = useCallback(() => {
-    // The catalog and the positions are both needed to decide what this product *is* to
-    // this caller: open-and-unheld, open-and-held, or closed-but-still-held. `undefined`
-    // is "still loading" and `null` is "no such product" — collapsing the two would show
-    // a not-found flash on every load.
-    Promise.all([fetchAllocations(), fetchPositions()])
-      .then(([catalog, positions]) => {
-        const match = buildProducts(catalog.allocations ?? [], positions.positions ?? []).find((p) => p.service === service);
-        setProduct(match ?? null);
-        setError(null);
-      })
-      .catch((e: Error) => {
-        setError(e.message);
-        setProduct(null);
-      });
-    fetchFundNav(service)
-      .then(setNav)
-      .catch(() => setNav(null));
-    fetchRedemptions()
-      .then((list) => setRedemptions((list.redemptions ?? []).filter((r) => r.service === service)))
-      .catch(() => setRedemptions([]));
-  }, [service]);
+  // The catalog and the positions are both needed to decide what this product *is* to this
+  // caller: open-and-unheld, open-and-held, or closed-but-still-held. Both are cached and
+  // both were already read by the list this page is usually entered from, so the product
+  // resolves on the first frame. `undefined` is still "loading" and `null` is "no such
+  // product" — collapsing the two would show a not-found flash on every cold load.
+  const catalogList = useResource(allocationsResource);
+  const positionList = useResource(positionsResource);
+  const navRead = useResource(fundNavResource, service);
+  const redemptionList = useResource(redemptionsResource);
 
-  useEffect(load, [load]);
+  const resolving = catalogList.isLoading || positionList.isLoading;
+  const readFailed = (!catalogList.data && catalogList.error) || (!positionList.data && positionList.error);
+  const error = readFailed ? readFailed.message : null;
+  const product: Product | null | undefined = resolving
+    ? undefined
+    : (buildProducts(catalogList.data?.allocations ?? [], positionList.data?.positions ?? []).find((p) => p.service === service) ?? null);
+
+  const nav = navRead.data ?? null;
+  const redemptions = (redemptionList.data?.redemptions ?? []).filter((r) => r.service === service);
 
   if (product === undefined) {
     return (
@@ -139,10 +131,10 @@ export function ProductView({ service }: { service: string }) {
           {blocked && <Note tone="amber">{blocked}</Note>}
           {unmarked && !closed && <Note tone="muted">No valuation posted yet — units price at the bootstrap NAV of 1.0 until the first mark.</Note>}
 
-          {panel === "subscribe" && !blocked && <SubscribePanel service={product.service} nav={nav} onDone={load} />}
-          {panel === "redeem" && held && <RedeemPanel service={product.service} position={held} nav={nav} onDone={load} />}
+          {panel === "subscribe" && !blocked && <SubscribePanel service={product.service} nav={nav} />}
+          {panel === "redeem" && held && <RedeemPanel service={product.service} position={held} nav={nav} />}
 
-          {queued.length > 0 && <QueuedList items={queued} onDone={load} />}
+          {queued.length > 0 && <QueuedList items={queued} />}
         </div>
 
         <SupplyCard nav={nav} />

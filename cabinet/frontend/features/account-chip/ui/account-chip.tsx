@@ -3,10 +3,11 @@
 import { BadgeCheck, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { useProfile, useProfileSettled } from "@/entities/user/model/profile-store";
+import { profileResource } from "@/entities/user/model/profile-resource";
 import { withBasePath } from "@/shared/config/base-path";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
+import { clearResources, useResource } from "@/shared/lib/resource";
 import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
 
 import { clearIdentity, readIdentity, writeIdentity } from "../model/identity-cache";
@@ -79,8 +80,10 @@ function AuthedChip({
 }) {
   // The profile refines the label (preferred/legal name); it only fetches here, in the
   // authenticated branch.
-  const profile = useProfile();
-  const settled = useProfileSettled();
+  // `isLoading` is false once the read has settled either way, so a profile that failed to
+  // load falls through to the heuristic below instead of holding the skeleton forever.
+  const { data: profile, isLoading } = useResource(profileResource);
+  const settled = !isLoading;
   const realName = profile?.preferred_name || profile?.legal_name || null;
   // Resolution order: live profile name → the name seeded from last visit → (only once the
   // fetch has settled without a preferred/legal name) the email heuristic. Showing the
@@ -100,6 +103,9 @@ function AuthedChip({
     // Shell-owned logout (site-root /api/auth): revokes the shared session and clears
     // its cookies for every zone at once.
     await fetch("/api/auth/logout", { method: "POST", headers: csrfHeader() });
+    // The reads cached for this account go with the session. The hard navigation below
+    // clears the in-memory half anyway; this is what clears the sessionStorage half.
+    clearResources();
     window.location.href = withBasePath("/loggedout");
   }
 

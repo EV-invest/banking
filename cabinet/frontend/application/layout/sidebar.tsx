@@ -6,12 +6,13 @@ import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, Li
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 
-import { fetchAllocations } from "@/entities/fund/api/fund-client";
+import { prefetchOn } from "@/application/prefetch";
+import { allocationsResource } from "@/entities/fund/model/fund-resource";
 import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/model/notification-store";
-import type { Allocation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { useSession } from "@/shared/lib/use-session";
 import { DUR, EASE } from "@/shared/ui/motion";
 
@@ -83,15 +84,11 @@ export function Sidebar() {
   // count is polled from — every other consumer reads the shared store.
   useUnreadCountPolling();
   const unread = useUnreadCount();
-  const [products, setProducts] = useState<Allocation[]>([]);
-
-  useEffect(() => {
-    // A failed catalog read leaves the group empty rather than blocking the rail — the
-    // nav is not the place to surface an API error.
-    fetchAllocations()
-      .then((list) => setProducts(list.allocations ?? []))
-      .catch(() => setProducts([]));
-  }, []);
+  // The catalog is cached and mirrored to sessionStorage, so the rail lists its products on
+  // the first frame of a return visit rather than growing a Products group a beat later. A
+  // failed read leaves the group empty rather than blocking the rail — the nav is not the
+  // place to surface an API error.
+  const products = useResource(allocationsResource).data?.allocations ?? [];
   // Which section owns the current route, and whether getting here crossed a
   // boundary. A product page belongs to no pill-owning section, so it is null and
   // the next move into one counts as a crossing.
@@ -127,6 +124,7 @@ export function Sidebar() {
                 <Link
                   key={p.service}
                   href={href}
+                  {...prefetchOn(href)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     // `isolate` for the same reason NavLink needs it: the pill sits
@@ -254,6 +252,7 @@ function NavLink({ item, active, section, appear, trailing }: { item: NavItem; a
   return (
     <Link
       href={item.href}
+      {...prefetchOn(item.href)}
       aria-current={active ? "page" : undefined}
       className={cn(
         // `isolate` is load-bearing: it gives the link its own stacking context so

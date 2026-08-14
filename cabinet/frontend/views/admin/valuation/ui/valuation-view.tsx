@@ -1,29 +1,23 @@
 "use client";
 
 import { Loader2, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
-import { failRedemption, fetchAllocations, fetchRedemptionQueue, postValuation, setAllocationUnitCap, settleRedemption } from "@/entities/admin/api/admin-client";
-import { apiPath } from "@/shared/config/base-path";
-import type { Allocation, FundNav, RedemptionQueueItem } from "@/shared/contracts/admin";
+import { failRedemption, postValuation, setAllocationUnitCap, settleRedemption } from "@/entities/admin/api/admin-client";
+import { adminAllocationsResource, redemptionQueueResource } from "@/entities/admin/model/admin-resource";
+import { fundNavResource } from "@/entities/fund/model/fund-resource";
+import type { Allocation } from "@/shared/contracts/admin";
+import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
+import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { TipAnchor } from "@/shared/tips";
 import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, toBaseUnits } from "@/views/admin/lib/format";
 import { AdminHeader, Toggle } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
-
-// Read the current fund NAV (units_outstanding drives the derived-NAV preview and the
-// queue's est-cash), via the existing self-service money route.
-async function fetchFundNav(service: string): Promise<FundNav> {
-  const res = await fetch(apiPath(`/api/funds/nav?service=${encodeURIComponent(service)}`), { headers: { accept: "application/json" } });
-  const data = (await res.json().catch(() => ({}))) as FundNav & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `nav unavailable (${res.status})`);
-  return data;
-}
 
 // "EV Trading (trading)", with the state trailing when it is not the plain open case.
 function allocationLabel(a: Allocation): string {
@@ -35,49 +29,33 @@ export function ValuationView() {
   // an unregistered service, so a free-text field could only ever produce a NOT_FOUND.
   // Drafts and closed products are listed too — a closed fund still gets marked so its
   // queued redemptions price correctly.
-  const [allocations, setAllocations] = useState<Allocation[] | null>(null);
   const [service, setService] = useState("");
   const [aum, setAum] = useState("");
   const [override, setOverride] = useState(false);
-  const [nav, setNav] = useState<FundNav | null>(null);
   const [posting, setPosting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [queue, setQueue] = useState<RedemptionQueueItem[] | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const loadQueue = useCallback(() => {
-    fetchRedemptionQueue()
-      .then((q) => setQueue(q.items ?? []))
-      .catch((e: Error) => setError(e.message));
-  }, []);
+  const registry = useResource(adminAllocationsResource);
+  const queueRead = useResource(redemptionQueueResource);
+  // The same per-fund NAV entry the investor screens read, so a mark posted here lands on
+  // the product page and the fund cards without either of them re-fetching.
+  const navRead = useResource(fundNavResource, service);
 
-  const loadNav = useCallback((svc: string) => {
-    if (!svc) {
-      setNav(null);
-      return;
-    }
-    fetchFundNav(svc)
-      .then(setNav)
-      .catch(() => setNav(null));
-  }, []);
+  const allocations = registry.data ? (registry.data.allocations ?? []) : null;
+  const queue = queueRead.data ? (queueRead.data.items ?? []) : null;
+  const nav = navRead.data ?? null;
+  const error = actionError ?? (allocations ? null : (registry.error?.message ?? null)) ?? (queue ? null : (queueRead.error?.message ?? null));
 
-  useEffect(() => {
-    loadQueue();
-    fetchAllocations()
-      .then((list) => {
-        const rows = list.allocations ?? [];
-        setAllocations(rows);
-        // Default to the first product that can actually take a mark, so the common case
-        // needs no interaction; fall back to the first row when none is open yet.
-        const initial = rows.find((a) => a.state === "open") ?? rows[0];
-        if (initial) {
-          setService(initial.service);
-          loadNav(initial.service);
-        }
-      })
-      .catch((e: Error) => setError(e.message));
-  }, [loadQueue, loadNav]);
+  // Default to the first product that can actually take a mark, so the common case needs no
+  // interaction; fall back to the first row when none is open yet. Chosen during render, so
+  // a cached registry means the form arrives already pointed at a fund.
+  const [picked, setPicked] = useState(false);
+  if (!picked && allocations) {
+    setPicked(true);
+    const initial = allocations.find((a) => a.state === "open") ?? allocations[0];
+    if (initial) setService(initial.service);
+  }
 
   // Live derived NAV preview = entered AUM / current units. NAV is *derived*, never
   // entered — hence the read-only box below.
@@ -95,14 +73,15 @@ export function ValuationView() {
 
   const post = async () => {
     setPosting(true);
-    setError(null);
+    setActionError(null);
     try {
-      const posted = await postValuation({ service, aum, override });
-      setNav(posted);
+      // The POST answers with the new mark, so it is published straight in rather than
+      // re-read — and every investor surface showing this fund's price follows.
+      fundNavResource.publish(await postValuation({ service, aum, override }), service);
       setAum("");
-      loadQueue();
+      await queueRead.refresh();
     } catch (e) {
-      setError((e as Error).message);
+      setActionError((e as Error).message);
     } finally {
       setPosting(false);
     }
@@ -110,15 +89,16 @@ export function ValuationView() {
 
   const act = async (fn: (id: string) => Promise<unknown>, id: string) => {
     setBusy(id);
-    setError(null);
+    setActionError(null);
     try {
       await fn(id);
-      loadQueue();
-      // Settle burns units, so the derived-NAV preview and the queue's est-cash go
-      // stale on the load-time units_outstanding — refresh the mark alongside the queue.
-      loadNav(service);
+      // Settling burns units, so the derived-NAV preview and the queue's est-cash go stale
+      // on the units_outstanding this screen loaded with — and so do the investor's own
+      // position and redemption lists. One tag sweep covers all of them.
+      revalidateTag(TAG.nav, TAG.positions, TAG.redemptions, TAG.operations);
+      await Promise.all([queueRead.refresh(), navRead.refresh()]);
     } catch (e) {
-      setError((e as Error).message);
+      setActionError((e as Error).message);
     } finally {
       setBusy(null);
     }
@@ -143,10 +123,7 @@ export function ValuationView() {
                 <span className="text-sm text-muted-foreground">Fund (service)</span>
                 <Select
                   value={service || undefined}
-                  onValueChange={(next) => {
-                    setService(next);
-                    loadNav(next);
-                  }}
+                  onValueChange={setService}
                 >
                   {/* `disabled` lives on the trigger — `Select` itself is a pure state
                       container and takes no such prop. */}
@@ -230,10 +207,15 @@ export function ValuationView() {
           allocation={selected}
           nav={nav}
           onSaved={(updated) => {
-            setAllocations((rows) => (rows ?? []).map((a) => (a.service === updated.service ? updated : a)));
-            loadNav(updated.service);
+            // The cap answer carries the whole allocation, so it is written straight into
+            // the registry entry — and the cap gates money, so the investor-facing catalog
+            // and this fund's mark are told too.
+            const rows = registry.data?.allocations ?? [];
+            adminAllocationsResource.publish({ ...registry.data, allocations: rows.map((a) => (a.service === updated.service ? updated : a)) });
+            revalidateTag(TAG.catalog);
+            void navRead.refresh();
           }}
-          onError={setError}
+          onError={setActionError}
         />
       </section>
 
@@ -335,7 +317,7 @@ function SupplyCapCard({
   onError,
 }: {
   allocation: Allocation | null;
-  nav: FundNav | null;
+  nav: { units_outstanding?: string; remaining_capacity?: string } | null;
   onSaved: (updated: Allocation) => void;
   onError: (message: string | null) => void;
 }) {

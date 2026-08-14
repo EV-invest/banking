@@ -1,13 +1,16 @@
 "use client";
 
 import { Loader2, Plus, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
-import { fetchAllocations, registerAllocation, setAllocationState, updateAllocation } from "@/entities/admin/api/admin-client";
+import { registerAllocation, setAllocationState, updateAllocation } from "@/entities/admin/api/admin-client";
+import { adminAllocationsResource } from "@/entities/admin/model/admin-resource";
 import type { Allocation, AllocationState } from "@/shared/contracts/admin";
+import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
+import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { compactUnits } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
@@ -30,31 +33,29 @@ const STATE_HINT: Record<AllocationState, string> = {
 };
 
 export function AllocationsView() {
-  const [rows, setRows] = useState<Allocation[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    fetchAllocations()
-      .then((list) => setRows(list.allocations ?? []))
-      .catch((e: Error) => setError(e.message));
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const read = useResource(adminAllocationsResource);
+  const rows = read.data ? (read.data.allocations ?? []) : null;
+  const error = actionError ?? (read.data ? null : (read.error?.message ?? null));
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
-    setError(null);
+    setActionError(null);
     try {
       await fn();
-      load();
+      // Registering, renaming or opening a fund also changes what investors see: the rail's
+      // Products group, the fund picker, and the names on the activity rows all read the
+      // investor-facing catalog. Naming that tag is what keeps an operator change from
+      // sitting invisible behind a five-minute window on every open investor tab.
+      revalidateTag(TAG.catalog);
+      await read.refresh();
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      setActionError((e as Error).message);
       return false;
     } finally {
       setBusy(null);

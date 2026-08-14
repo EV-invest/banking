@@ -1,13 +1,16 @@
 "use client";
 
 import { Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
-import { fetchUser, fetchUserBalance, fetchUsers, reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
-import type { AdminUserProfile, AdminUserSummary, UserBalance } from "@/shared/contracts/admin";
+import { reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
+import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
+import type { AdminUserSummary } from "@/shared/contracts/admin";
+import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
+import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Panel, PanelPresence, PanelSwap, Settled } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ROLES, ago, formatUsd, statusTone } from "@/views/admin/lib/format";
@@ -15,28 +18,16 @@ import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
 
 export function UsersView() {
   const [filters, setFilters] = useState<UserFilters>({});
-  const [users, setUsers] = useState<AdminUserSummary[] | null>(null);
-  const [total, setTotal] = useState("0");
   const [selected, setSelected] = useState<AdminUserSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // Bumped after a drawer mutation to re-run the list fetch below.
-  const [refresh, setRefresh] = useState(0);
 
-  // Filter/refresh-driven fetch with an ordering guard: a slower earlier response
-  // must not clobber a newer one (search fires per keystroke).
-  useEffect(() => {
-    let active = true;
-    fetchUsers(filters)
-      .then((list) => {
-        if (!active) return;
-        setUsers(list.users ?? []);
-        setTotal(list.total ?? "0");
-      })
-      .catch((e: Error) => active && setError(e.message));
-    return () => {
-      active = false;
-    };
-  }, [filters, refresh]);
+  // One cache entry per filter set, which also settles the ordering hazard the manual
+  // fetch guarded by hand: a search fires per keystroke, and a slower earlier response now
+  // lands on its own key instead of clobbering a newer one. Retyping a search already made
+  // answers from cache.
+  const list = useResource(usersResource, filters);
+  const users = list.data ? (list.data.users ?? []) : null;
+  const total = list.data?.total ?? "0";
+  const error = users ? null : (list.error?.message ?? null);
 
   return (
     <div className="space-y-6 px-8 pb-10 pt-6">
@@ -154,7 +145,7 @@ export function UsersView() {
                 {/* `key` remounts the drawer per user, so its uncontrolled inputs (KYC
                     level) reset — otherwise a stale value could be committed against
                     the wrong user. */}
-                <UserDrawer key={selected.user_id} summary={selected} onClose={() => setSelected(null)} onChanged={() => setRefresh((n) => n + 1)} />
+                <UserDrawer key={selected.user_id} summary={selected} onClose={() => setSelected(null)} />
               </PanelSwap>
             </Panel>
           )}
@@ -198,36 +189,28 @@ function Avatar({ email }: { email: string }) {
   return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initials || "?"}</span>;
 }
 
-function UserDrawer({ summary, onClose, onChanged }: { summary: AdminUserSummary; onClose: () => void; onChanged: () => void }) {
-  const [profile, setProfile] = useState<AdminUserProfile | null>(null);
-  const [balance, setBalance] = useState<UserBalance | null>(null);
+function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const reload = useCallback(() => {
-    fetchUser(summary.user_id)
-      .then(setProfile)
-      .catch((e: Error) => setError(e.message));
-    fetchUserBalance(summary.user_id)
-      .then(setBalance)
-      .catch(() => setBalance(null));
-  }, [summary.user_id]);
-
-  // The parent gives this drawer a `key` per user, so it remounts (state starts null) —
-  // no synchronous reset needed here; `reload` only sets state in its async callbacks.
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  // Keyed per user, so reopening a row already looked at shows its detail immediately.
+  const detail = useResource(adminUserResource, summary.user_id);
+  const balanceRead = useResource(adminUserBalanceResource, summary.user_id);
+  const profile = detail.data ?? null;
+  const balance = balanceRead.data ?? null;
+  const error = actionError ?? (profile ? null : (detail.error?.message ?? null));
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
-    setError(null);
+    setActionError(null);
     try {
       await fn();
-      reload();
-      onChanged();
+      // A role change, a suspension or a KYC bump moves this user's detail AND the row for
+      // them in whatever filtered list is behind this drawer. The tag covers both, so the
+      // parent no longer needs a refresh counter threaded down here.
+      revalidateTag(TAG.adminUsers);
     } catch (e) {
-      setError((e as Error).message);
+      setActionError((e as Error).message);
     } finally {
       setBusy(null);
     }

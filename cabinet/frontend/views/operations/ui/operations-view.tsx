@@ -2,7 +2,7 @@
 
 import { ArrowLeftRight, ChevronRight, ListChecks, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 import {
   ButtonGroup,
@@ -39,12 +39,13 @@ import {
   Skeleton,
 } from "@evinvest/uikit";
 
-import { fetchAllocations } from "@/entities/fund/api/fund-client";
-import { fetchOperations } from "@/entities/operation/api/operation-client";
+import { allocationsResource } from "@/entities/fund/model/fund-resource";
+import { operationsResource } from "@/entities/operation/model/operation-resource";
 import { useIsCompact } from "@/views/operations/lib/use-is-compact";
 import { OperationDetail } from "@/views/operations/ui/operation-detail";
-import type { Allocation, Operation } from "@/shared/contracts";
+import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import {
   amountTone,
@@ -86,40 +87,24 @@ const FILTERS: readonly { value: Filter; label: string }[] = [
 // its own: cancelling a queued withdrawal or redemption belongs to the surfaces that own
 // those aggregates, so the panel links to them rather than growing a third copy.
 export function OperationsView() {
-  const [operations, setOperations] = useState<Operation[] | undefined>(undefined);
-  const [truncated, setTruncated] = useState(false);
-  const [catalog, setCatalog] = useState<Allocation[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
 
-  useEffect(() => {
-    fetchOperations()
-      .then((list) => {
-        setOperations(list.operations ?? []);
-        setTruncated(list.truncated ?? false);
-        setError(null);
-      })
-      .catch((e: Error) => {
-        setOperations([]);
-        setError(e.message);
-      });
-  }, []);
-
+  // Both reads are cached and both are shared with Home's activity card, so arriving from
+  // "View all" shows the timeline already merged rather than re-fetching it.
+  const timeline = useResource(operationsResource, undefined);
   // Fund slugs are keys, not names. The catalog turns them into the product the investor
   // actually bought; a failed lookup degrades to the slug rather than blanking the row.
-  useEffect(() => {
-    fetchAllocations()
-      .then((list) => setCatalog(list.allocations ?? []))
-      .catch(() => setCatalog([]));
-  }, []);
+  const catalog = useResource(allocationsResource).data?.allocations;
 
   const titleOf = useMemo(() => {
-    const byService = new Map(catalog.map((a) => [a.service, a.title]));
+    const byService = new Map((catalog ?? []).map((a) => [a.service, a.title]));
     return (service: string | undefined) => (service ? (byService.get(service) ?? service) : "Fund");
   }, [catalog]);
 
-  const loading = operations === undefined;
-  const all = operations ?? [];
+  const loading = timeline.isLoading;
+  const truncated = timeline.data?.truncated ?? false;
+  const error = timeline.data ? null : (timeline.error?.message ?? null);
+  const all = timeline.data?.operations ?? [];
   // The filter applies to both bands. Lifting a pending row into "In progress" while the
   // filter still let it through below would leave a "Deposits" view showing a withdrawal.
   const visible = filter === "all" ? all : all.filter((o) => o.kind === filter);
