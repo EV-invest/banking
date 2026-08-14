@@ -2,27 +2,27 @@
 
 import { BadgeCheck, Bell, Check, Laptop, Loader2, LogOut, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
 import Link from "next/link";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Email, PhoneNumber } from "@evinvest/types";
 import { usePhoneNumber } from "@evinvest/types/react";
 import { Badge, Button, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton, Switch } from "@evinvest/uikit";
 
 import {
-  fetchNotificationSettings,
+  notificationSettingsResource,
   setChannelEnabled,
   setTopicSubscription,
-} from "@/entities/notification/api/notification-client";
+} from "@/entities/notification/model/notification-resource";
 import { refreshUnreadCount } from "@/entities/notification/model/notification-store";
-import { fetchSessions, revokeSession } from "@/entities/session/api/sessions-client";
-import { fetchProfile, saveProfile } from "@/entities/user/api/profile-client";
-import { publishProfile } from "@/entities/user/model/profile-store";
+import { revokeSession, sessionsResource } from "@/entities/session/model/session-resource";
+import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import { withBasePath } from "@/shared/config/base-path";
 import type { Session, UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 import type { NotificationSettings } from "@/shared/contracts/notifications";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
+import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
@@ -62,47 +62,36 @@ export function SettingsView() {
   // The mobile stack: the root screen, or a section pushed on top of it.
   const [pushed, setPushed] = useState<"sessions" | "notifications" | null>(null);
 
-  const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
   const [form, setForm] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  const [sessions, setSessions] = useState<Session[] | undefined>(undefined);
-  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const loadSessions = useCallback(() => {
-    fetchSessions()
-      .then((s) => {
-        setSessions(s);
-        setSessionsError(null);
-      })
-      .catch((e: Error) => {
-        setSessions([]);
-        setSessionsError(e.message);
-      });
-  }, []);
+  // The profile is the same cached read the account chip and the Profile page use; the
+  // session list is its own, refreshed by the revoke below rather than by a manual reload.
+  const { data: profile, error: profileError, isLoading: loading } = useResource(profileResource);
+  const sessionList = useResource(sessionsResource);
+  const sessions = sessionList.data;
+  const error = saveError ?? (profile ? null : (profileError?.message ?? null));
+  const sessionsError = revokeError ?? (sessions ? null : (sessionList.error?.message ?? null));
 
-  useEffect(() => {
-    fetchProfile()
-      .then((p) => {
-        setProfile(p);
-        setForm(formFrom(p));
-      })
-      .catch((e: Error) => {
-        setProfile(null);
-        setError(e.message);
-      });
-    loadSessions();
-  }, [loadSessions]);
+  // Seeded during render, not in an effect, so a cached profile fills the form on the frame
+  // it is read. Held back while the form is dirty: a background refresh must not overwrite
+  // edits in progress.
+  const [seeded, setSeeded] = useState<UserProfile | null>(null);
+  const pristine = !form || !seeded || EDITABLE.every((k) => form[k] === (seeded[k] ?? ""));
+  if (profile && profile !== seeded && pristine) {
+    setSeeded(profile);
+    setForm(formFrom(profile));
+  }
 
-  const loading = profile === undefined;
   const email = profile?.email ?? null;
   const name = truncateName((profile?.legal_name ?? "").trim()) || displayName(email);
-  const dirty = !!form && !!profile && EDITABLE.some((k) => form[k] !== (profile[k] ?? ""));
+  const dirty = !pristine;
 
   function set(key: keyof Form, value: string) {
     setSaved(false);
@@ -113,22 +102,22 @@ export function SettingsView() {
     const errors = validateProfileForm(form);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setError("Please fix the highlighted fields");
+      setSaveError("Please fix the highlighted fields");
       return;
     }
     setFieldErrors({});
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     try {
+      // Published into the cache by `saveProfile`, so the sidebar account chip and the
+      // Profile page pick up the new name without a refetch.
       const updated = await saveProfile(form as UpdateProfileRequest);
-      setProfile(updated);
       setForm(formFrom(updated));
-      publishProfile(updated); // the sidebar account chip picks up the new name live
       setSaved(true);
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaved(false), 2500);
     } catch (e) {
-      setError((e as Error).message);
+      setSaveError((e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -142,12 +131,12 @@ export function SettingsView() {
 
   async function revoke(id: string) {
     setBusy(true);
-    setSessionsError(null);
+    setRevokeError(null);
     try {
+      // The revoke invalidates the session list, so it refreshes itself.
       await revokeSession(id);
-      loadSessions();
     } catch (e) {
-      setSessionsError((e as Error).message);
+      setRevokeError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -156,12 +145,11 @@ export function SettingsView() {
     const others = (sessions ?? []).filter((s) => !s.current && s.id);
     if (!others.length) return;
     setBusy(true);
-    setSessionsError(null);
+    setRevokeError(null);
     try {
       for (const s of others) await revokeSession(s.id!);
-      loadSessions();
     } catch (e) {
-      setSessionsError((e as Error).message);
+      setRevokeError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -835,34 +823,27 @@ function GoogleMark() {
  * the master email switch turns them all moot.
  */
 function NotificationsSection() {
-  const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [writeError, setWriteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    fetchNotificationSettings()
-      .then((s) => {
-        if (alive) setSettings(s);
-      })
-      .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : "could not load notification settings");
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // Every write answers with the whole new matrix and publishes it into the cache, so the
+  // toggles below stay in step without this section holding a second copy of the state.
+  const read = useResource(notificationSettingsResource);
+  const settings = read.data ?? null;
+  // Only a read that has actually failed reports — while it is still in flight there is
+  // nothing wrong, and the skeleton switches below are the right thing to show.
+  const error = writeError ?? (settings || !read.error ? null : (read.error.message || "could not load notification settings"));
 
   async function run(fn: () => Promise<NotificationSettings>) {
     setBusy(true);
-    setError(null);
+    setWriteError(null);
     try {
-      setSettings(await fn());
+      await fn();
       // Switching the in-app channel changes what the badge should read, and the
       // sidebar has no other reason to refetch.
       void refreshUnreadCount();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "could not save");
+      setWriteError(e instanceof Error ? e.message : "could not save");
     } finally {
       setBusy(false);
     }

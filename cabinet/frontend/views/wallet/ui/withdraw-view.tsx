@@ -1,13 +1,14 @@
 "use client";
 
 import { Clock, Loader2, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";
 
-import { fetchWallet, submitWithdrawal } from "@/entities/wallet/api/wallet-client";
+import { submitWithdrawal, walletResource } from "@/entities/wallet/model/wallet-resource";
 import type { NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { Panel, PanelPresence, Settled } from "@/shared/ui/motion";
 import { formatUsdt, fromBaseUnits, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
@@ -36,25 +37,18 @@ function withdrawableFor(wallet: Wallet | null | undefined, network: string): Ne
 // `cabinet/mobile/wallet/withdraw`). Review is a distinct step: the reviewed figures are
 // snapshotted so Confirm can never submit something the user didn't see.
 export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
-  const [wallet, setWallet] = useState<Wallet | null | undefined>(undefined);
   const [selected, setSelected] = useState<string | null>(initialNetwork ?? null);
   const [address, setAddress] = useState("");
   const [amount, setAmount] = useState("");
   const [confirming, setConfirming] = useState<ReviewedWithdrawal | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState<Withdrawal | null>(null);
 
-  const load = useCallback(() => {
-    fetchWallet()
-      .then((w) => setWallet(w))
-      .catch((e: Error) => {
-        setWallet(null);
-        setError(e.message);
-      });
-  }, []);
-
-  useEffect(load, [load]);
+  const { data: wallet, error: walletError, isLoading: walletLoading } = useResource(walletResource);
+  // A failed submit is the interesting error here; a failed wallet read only matters while
+  // there is no wallet to show, since a stale balance still beats a blank screen.
+  const error = submitError ?? (wallet ? null : (walletError?.message ?? null));
 
   const networks = (wallet?.withdrawable ?? []).map((w) => w.network ?? "").filter(Boolean);
   const network = (selected && networks.includes(selected) ? selected : null) ?? networks[0] ?? "";
@@ -73,16 +67,18 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   const submit = async () => {
     if (submitting || !confirming) return;
     setSubmitting(true);
-    setError(null);
+    setSubmitError(null);
     setDone(null);
     try {
+      // The balance, the withdrawal queue and the timeline all move — `submitWithdrawal`
+      // names those tags, so this screen's wallet and every other open surface refresh
+      // themselves. No explicit reload here any more.
       const withdrawal = await submitWithdrawal({ network: confirming.network, address: confirming.address, amount: confirming.amount });
       setDone(withdrawal);
       setAddress("");
       setAmount("");
-      load();
     } catch (e) {
-      setError((e as Error).message);
+      setSubmitError((e as Error).message);
     } finally {
       setSubmitting(false);
       setConfirming(null);
@@ -95,10 +91,10 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   return (
     <WalletScreen title="Withdraw USDT" subtitle="Send funds to an external address — one balance, any rail" back="/wallet">
       <Settled
-        loading={wallet === undefined}
+        loading={walletLoading}
         skeleton={<Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />}
       >
-        {wallet === undefined ? null : networks.length === 0 ? (
+        {walletLoading ? null : networks.length === 0 ? (
         <p className="text-sm text-muted-foreground">{error ?? "No withdrawal rails are available right now — check back soon."}</p>
       ) : (
         // Form 560 + review 400 side by side is the Figma at 1440; below that the content

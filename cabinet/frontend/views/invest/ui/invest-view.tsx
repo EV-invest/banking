@@ -12,50 +12,34 @@
 
 import { ArrowRight, Sparkles, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
-import { fetchAllocations, fetchFundNav, fetchPositions, fetchRedemptions } from "@/entities/fund/api/fund-client";
-import { fetchWallet } from "@/entities/wallet/api/wallet-client";
-import type { Allocation, FundNav, Position, Redemption } from "@/shared/contracts";
+import { allocationsResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
+import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { formatSignedUsdt, formatUnits, formatUsdt, fromBaseUnits, isNegative, isZero, toBaseUnits } from "@/views/invest/lib/format";
 import { buildProducts, type Product } from "@/views/invest/lib/product";
 import { SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
 
 export function InvestView() {
-  const [positions, setPositions] = useState<Position[] | null>(null);
-  const [catalog, setCatalog] = useState<Allocation[] | null>(null);
-  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
-  const [available, setAvailable] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const positionList = useResource(positionsResource);
+  const catalogList = useResource(allocationsResource);
+  const redemptionList = useResource(redemptionsResource);
+  const wallet = useResource(walletResource);
 
-  const load = useCallback(() => {
-    fetchPositions()
-      .then((list) => {
-        setPositions(list.positions ?? []);
-        setError(null);
-      })
-      .catch((e: Error) => setError(e.message));
-    fetchRedemptions()
-      .then((list) => setRedemptions(list.redemptions ?? []))
-      .catch(() => setRedemptions([]));
-    // The free balance is context, not the subject of this screen — a failure to read it
-    // hides the figure rather than failing the page.
-    fetchWallet()
-      .then((w) => setAvailable(w.balance?.available ?? "0"))
-      .catch(() => setAvailable(null));
-  }, []);
-
-  useEffect(load, [load]);
-
-  useEffect(() => {
-    fetchAllocations()
-      .then((list) => setCatalog(list.allocations ?? []))
-      .catch(() => setCatalog([]));
-  }, []);
+  const positions = positionList.data?.positions ?? null;
+  const catalog = catalogList.data?.allocations ?? null;
+  const redemptions = redemptionList.data?.redemptions ?? [];
+  // The free balance is context, not the subject of this screen — a failure to read it
+  // hides the figure rather than failing the page.
+  const available = wallet.data?.balance?.available ?? null;
+  // Only a positions read that has never succeeded is worth an alert; a failed refresh over
+  // holdings already on screen is not something to interrupt the page for.
+  const error = positionList.data ? null : (positionList.error?.message ?? null);
 
   const products = useMemo<Product[] | null>(() => (catalog && positions ? buildProducts(catalog, positions) : null), [catalog, positions]);
 
@@ -202,20 +186,11 @@ function BandStat({ label, value, tone }: { label: string; value: string; tone?:
  * and the two columns of figures sit under the name they belong to.
  *
  * It carries its own NAV read: the catalog RPC is presentation-only, and a price is the
- * thing a holder is scanning this list for.
+ * thing a holder is scanning this list for. Cached per fund and shared with that fund's own
+ * page, so opening a product from this list opens on the price the card was already showing.
  */
 function ProductCard({ product }: { product: Product }) {
-  const [nav, setNav] = useState<FundNav | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    fetchFundNav(product.service)
-      .then((n) => active && setNav(n))
-      .catch(() => active && setNav(null));
-    return () => {
-      active = false;
-    };
-  }, [product.service]);
+  const nav = useResource(fundNavResource, product.service).data ?? null;
 
   const held = product.position && !isZero(product.position.units) ? product.position : null;
   const closed = product.allocation === null;

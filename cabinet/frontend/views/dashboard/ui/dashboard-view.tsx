@@ -2,15 +2,16 @@
 
 import { ArrowLeftRight, LineChart, PieChart, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
-import { type CSSProperties, Fragment, useEffect, useState } from "react";
+import { type CSSProperties, Fragment, useState } from "react";
 
 import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Separator, Skeleton, Switch } from "@evinvest/uikit";
 
-import { fetchAllocations, fetchPositions } from "@/entities/fund/api/fund-client";
-import { fetchOperations } from "@/entities/operation/api/operation-client";
-import { fetchWallet } from "@/entities/wallet/api/wallet-client";
-import type { Allocation, Operation, Position, Wallet } from "@/shared/contracts";
+import { allocationsResource, positionsResource } from "@/entities/fund/model/fund-resource";
+import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
+import { walletResource } from "@/entities/wallet/model/wallet-resource";
+import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { AnimatedNumber, Settled } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
@@ -18,8 +19,8 @@ import { amountTone, kindMeta, networkLabel } from "@/views/operations/lib/forma
 
 // The card is a preview, not the record — `/operations` holds the full timeline. Asked
 // of the hub rather than sliced client-side, so the six shown are the six most recent
-// across all four kinds, not the newest six of whatever happened to be fetched.
-const RECENT_OPS = 6;
+// across all four kinds, not the newest six of whatever happened to be fetched. The count
+// lives with the resource because the shell's warm-up has to ask for the same one.
 
 const RANGES = ["1M", "6M", "1Y", "All"] as const;
 
@@ -54,42 +55,29 @@ const EMPTY_BOX = "border md:p-6";
 // data; figures with no backing series yet (the performance chart) are honest empty states
 // rather than fabricated numbers.
 export function DashboardView() {
-  const [wallet, setWallet] = useState<Wallet | null | undefined>(undefined);
-  const [positions, setPositions] = useState<Position[] | undefined>(undefined);
-  const [operations, setOperations] = useState<Operation[]>([]);
-  const [catalog, setCatalog] = useState<Allocation[]>([]);
+  // All four reads are shared with other screens and cached, so a return to Home paints the
+  // balance, the holdings and the timeline on the first frame — the skeletons below are for
+  // the cold first load only. The catalog is the same registry the rail lists products from:
+  // a fund row should name the product, not the slug that keys it.
+  const wallet = useResource(walletResource);
+  const positions = useResource(positionsResource);
+  const operations = useResource(operationsResource, RECENT_OPS);
+  const catalog = useResource(allocationsResource).data?.allocations ?? [];
 
-  useEffect(() => {
-    fetchWallet()
-      .then(setWallet)
-      .catch(() => setWallet(null));
-    fetchPositions()
-      .then((l) => setPositions(l.positions ?? []))
-      .catch(() => setPositions([]));
-    fetchOperations(RECENT_OPS)
-      .then((l) => setOperations(l.operations ?? []))
-      .catch(() => undefined);
-    // The same registry the rail lists products from — a fund row should name the
-    // product, not the slug that keys it.
-    fetchAllocations()
-      .then((l) => setCatalog(l.allocations ?? []))
-      .catch(() => undefined);
-  }, []);
-
-  const balance = wallet?.balance;
-  const pos = positions ?? [];
+  const balance = wallet.data?.balance;
+  const pos = positions.data?.positions ?? [];
   const pnlSum = pos.reduce((s, p) => s + num(p.pnl), 0);
   const netContributed = pos.reduce((s, p) => s + num(p.cost_basis), 0);
   const allTimePct = netContributed > 0 ? (pnlSum / netContributed) * 100 : null;
-  const walletLoading = wallet === undefined;
-  const posLoading = positions === undefined;
+  const walletLoading = wallet.isLoading;
+  const posLoading = positions.isLoading;
 
   const allocations = pos.map((p, i) => ({ name: p.service ?? "Fund", value: num(p.value), accent: ACCENTS[i % ACCENTS.length]! }));
   const allocTotal = allocations.reduce((s, a) => s + a.value, 0) || 1;
 
   const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : "Fund");
   // The hub honours `limit`, so the slice is only a shape guarantee for the card.
-  const ops = operations.slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf));
+  const ops = (operations.data?.operations ?? []).slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf));
 
   return (
     // One DOM order, two layouts. Mobile stacks in reading order (hero → figures →

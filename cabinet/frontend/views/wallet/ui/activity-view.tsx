@@ -2,13 +2,14 @@
 
 import { ArrowUpRight, Loader2, X } from "lucide-react";
 import Link from "next/link";
-import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import { type CSSProperties, useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";
 
-import { cancelWithdrawal, fetchDeposits, fetchWithdrawals } from "@/entities/wallet/api/wallet-client";
+import { cancelWithdrawal, depositsResource, withdrawalsResource } from "@/entities/wallet/model/wallet-resource";
 import type { Deposit, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
 import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
@@ -41,37 +42,32 @@ interface Entry {
 }
 
 export function ActivityView() {
-  const [withdrawals, setWithdrawals] = useState<Withdrawal[] | null>(null);
-  const [deposits, setDeposits] = useState<Deposit[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    Promise.all([fetchWithdrawals(), fetchDeposits()])
-      .then(([w, d]) => {
-        setWithdrawals(w.withdrawals ?? []);
-        setDeposits(d.deposits ?? []);
-        setError(null);
-      })
-      .catch((e: Error) => setError(e.message));
-  }, []);
-
-  useEffect(load, [load]);
+  const withdrawals = useResource(withdrawalsResource);
+  const deposits = useResource(depositsResource);
 
   const cancel = async (id: string) => {
     setBusy(id);
     try {
+      // Cancelling names the wallet, withdrawals and operations tags, so this list
+      // refreshes itself — and so does the balance on any other open surface.
       await cancelWithdrawal(id);
-      load();
     } catch (e) {
-      setError((e as Error).message);
+      setCancelError((e as Error).message);
     } finally {
       setBusy(null);
     }
   };
 
-  const loading = !withdrawals || !deposits;
-  const entries: Entry[] = loading ? [] : buildEntries(withdrawals, deposits);
+  const loading = withdrawals.isLoading || deposits.isLoading;
+  const rows = withdrawals.data?.withdrawals ?? [];
+  const credits = deposits.data?.deposits ?? [];
+  // A failed refresh keeps the list it last showed; only a read that never succeeded is
+  // worth reporting in its place.
+  const error = cancelError ?? (withdrawals.data ? null : (withdrawals.error?.message ?? null)) ?? (deposits.data ? null : (deposits.error?.message ?? null));
+  const entries: Entry[] = loading ? [] : buildEntries(rows, credits);
 
   return (
     <WalletScreen title="Activity" subtitle="Deposits and withdrawals — queued, processing, completed" back="/wallet">

@@ -1,13 +1,13 @@
 "use client";
 
 import { Check, Copy, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";
 
-import { fetchDepositAddress, fetchWallet } from "@/entities/wallet/api/wallet-client";
-import type { DepositAddress, Wallet } from "@/shared/contracts";
+import { depositAddressResource, walletResource } from "@/entities/wallet/model/wallet-resource";
 import { cn } from "@/shared/lib/cn";
+import { useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor } from "@/shared/tips";
@@ -20,42 +20,25 @@ import { FieldLabel, WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/walle
 // pick a rail, then copy the address it maps to. The address is fetched per rail from the BFF —
 // the rails on offer come from the wallet response, so an unwatched network never appears.
 export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
-  const [wallet, setWallet] = useState<Wallet | null | undefined>(undefined);
   const [selected, setSelected] = useState<string | null>(initialNetwork ?? null);
-  const [address, setAddress] = useState<DepositAddress | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    fetchWallet()
-      .then((w) => setWallet(w))
-      .catch((e: Error) => {
-        setWallet(null);
-        setError(e.message);
-      });
-  }, []);
+  const { data: wallet, error: walletError, isLoading: walletLoading } = useResource(walletResource);
 
   const networks = (wallet?.deposit_addresses ?? []).map((a) => a.network ?? "").filter(Boolean);
   // A `?network=` that no longer maps to a live rail falls back to the first one on offer.
   const network = (selected && networks.includes(selected) ? selected : null) ?? networks[0] ?? "";
 
-  useEffect(() => {
-    if (!network) return;
-    let active = true;
-    fetchDepositAddress(network)
-      .then((a) => active && setAddress(a))
-      .catch((e: Error) => active && setError(e.message));
-    return () => {
-      active = false;
-    };
-  }, [network]);
+  // Keyed on the rail, so switching back to a network already looked at re-shows its
+  // address and QR immediately instead of re-fetching an address that cannot have changed.
+  const { data: address, error: addressError, isLoading: addressLoading } = useResource(depositAddressResource, network);
 
-  // Reset the displayed address/error in the (event-handler) network switch, not the
-  // effect, so the effect performs no synchronous state update.
+  const error = (wallet ? null : walletError?.message) ?? (address ? null : addressError?.message) ?? null;
+
+  // The address swap is now a consequence of the key changing; only the copy affordance
+  // carries state that has to be reset by hand.
   const selectNetwork = (next: string) => {
     setSelected(next);
-    setAddress(null);
-    setError(null);
     setCopied(false);
   };
 
@@ -83,7 +66,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
             opacity and transform no-ops, which is the whole point here. */}
         <Settled
           className="flex flex-col gap-3.5 lg:gap-5"
-          loading={wallet === undefined}
+          loading={walletLoading}
           skeleton={
             <>
               <Skeleton className="h-26 rounded-xl" />
@@ -91,7 +74,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
             </>
           }
         >
-          {wallet === undefined ? null : networks.length === 0 ? (
+          {walletLoading ? null : networks.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {error ?? "No deposit rails are available right now — check back soon."}
             </p>
@@ -113,12 +96,12 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
 
                 {error && !shown && <p className="text-sm text-destructive">{error}</p>}
 
-                {address === null ? (
+                {addressLoading ? (
                   <>
                     <Skeleton className="size-40 rounded-xl lg:size-45 lg:rounded-2xl" />
                     <Skeleton className="h-10 w-full rounded-lg" />
                   </>
-                ) : shown ? (
+                ) : address && shown ? (
                   <>
                     <DepositQr value={shown} />
                     <div className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-input px-3 py-2.5 lg:py-2.5 lg:pl-3.5 lg:pr-2">
