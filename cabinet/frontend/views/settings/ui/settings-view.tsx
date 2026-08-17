@@ -657,14 +657,20 @@ function SessionsSection({
 
       {!loading && hasOthers && (
         <div className="mb-2 mt-3 flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={onRevokeOthers}
-            className="w-full border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
-          >
-            {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />} Sign out all other devices
-          </Button>
+          {/* The uikit Button carries `shrink-0`, so a `w-full` button sharing the row with the
+              tip glyph refuses to give the glyph room and pushes it past the card edge. The
+              button gets its own shrinkable track, which also lines the glyph up with the
+              per-session ones above. */}
+          <div className="min-w-0 flex-1">
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={onRevokeOthers}
+              className="w-full border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
+            >
+              {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />} Sign out all other devices
+            </Button>
+          </div>
           <TipAnchor anchor="settings.sessions.revoke-others" />
         </div>
       )}
