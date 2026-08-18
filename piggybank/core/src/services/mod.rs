@@ -16,8 +16,8 @@ use std::{future::Future, net::SocketAddr};
 
 use evbanking_auth::{TokenClass, grpc_auth_layer};
 use evbanking_contracts::banking::v1::{
-	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, funds_service_server::FundsServiceServer, health_service_server::HealthServiceServer,
-	operations_service_server::OperationsServiceServer, users_service_server::UsersServiceServer, wallet_service_server::WalletServiceServer,
+	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, fees_service_server::FeesServiceServer, funds_service_server::FundsServiceServer,
+	health_service_server::HealthServiceServer, operations_service_server::OperationsServiceServer, users_service_server::UsersServiceServer, wallet_service_server::WalletServiceServer,
 };
 use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
@@ -26,11 +26,12 @@ use tower_http::trace::TraceLayer;
 
 use crate::{
 	AppState,
-	services::{allocations::AllocationsSvc, balance::BalanceSvc, funds::FundsSvc, health::Health, operations::OperationsSvc, users::UsersSvc, wallet::WalletSvc},
+	services::{allocations::AllocationsSvc, balance::BalanceSvc, fees::FeesSvc, funds::FundsSvc, health::Health, operations::OperationsSvc, users::UsersSvc, wallet::WalletSvc},
 };
 
 pub mod allocations;
 pub mod balance;
+pub mod fees;
 pub mod funds;
 pub mod health;
 pub mod operations;
@@ -70,6 +71,7 @@ pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Outp
 		.add_service(auth.layer(BalanceServiceServer::new(BalanceSvc::new(state.clone()))))
 		.add_service(auth.layer(FundsServiceServer::new(FundsSvc::new(state.clone()))))
 		.add_service(auth.layer(AllocationsServiceServer::new(AllocationsSvc::new(state.clone()))))
+		.add_service(auth.layer(FeesServiceServer::new(FeesSvc::new(state.clone()))))
 		.add_service(auth.layer(OperationsServiceServer::new(OperationsSvc::new(state.clone()))))
 		.add_service(auth.layer(WalletServiceServer::new(WalletSvc::new(state))))
 		.serve_with_shutdown(addr, shutdown)
