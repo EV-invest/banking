@@ -179,8 +179,132 @@ is admitted off the TB balance, which the projection lags) **rolls back** with `
 redemption still `Queued`, settleable by the operator once the projection lands — rather
 than silently skip a reduction the projection would then overwrite into a permanently
 overstated basis. The auto-settle inside `Redeem` degrades that `Conflict` to re-reading and
-returning the redemption's actual state (queued, or a raced terminal) instead of an error. A
-per-investor `high_water_mark` column is reserved (no fee is charged in v1).
+returning the redemption's actual state (queued, or a raced terminal) instead of an error. The
+per-investor `high_water_mark` column reserved here is now live — see [Fees](#fees--2-and-20-domainfees-feesservice-feesweeper).
+
+## Fees — "2 and 20" (`domain::fees`, `FeesService`, `FeeSweeper`)
+
+A fund charges two things, and they answer different questions. **Management** (2% p.a.)
+is rent on parked capital: it accrues continuously with elapsed time and is charged
+whether the fund made money or not. **Performance** (20%) is a share of profit above a
+**high-water mark**, crystallized at the end of a period. A `ServiceId` with no
+`fee_policies` row charges **nothing** — the fee is opt-in per product, so it can never
+appear on a fund whose prospectus did not promise it. `FeePolicy::HOUSE` is the default
+shape (200 bps / 2000 bps / no hurdle / invested capital / annual).
+
+**The management base is the investor's *invested capital*, not the market value** —
+`ManagementBasis::InvestedCapital`, the position's `cost_basis`. Market value is
+available (`MarketValue`, the hedge-fund convention) but is not the default, and the
+reason is a trust seam: the AUM the operator posts is what sets NAV, so a
+market-value base would let an operator raise their own fee with the same input the
+NAV-move guard already treats as "the most dangerous seam in the system". Invested
+capital is the number the investor agreed to, and no operator input moves it.
+
+**The mark is per investor, on `fund_positions.high_water_mark`** — reserved by `0005`
+"so adding a performance fee later isn't a painful backfill", and this is that
+follow-up. A *fund-level* mark (what a tokenized vault is forced into, because a share
+token cannot remember who bought when) mutualizes the fee: someone who subscribes after
+a drawdown rides the recovery fee-free while someone who subscribed at the top pays on
+gains that only restored their own loss. The industry's fixes are *series accounting* (a
+share class per dealing day) and *equalization* (per-investor credits against one
+class); the position projection already exists per `(user, service)`, so the third road
+is simply to put the mark on it. The mark is maintained by the subscribe projection as
+`GREATEST(existing, subscription NAV)` — deliberately the **investor-favourable** blend
+on both sides (a top-up above the mark raises it for the whole position; one below
+leaves it), where exact per-lot fairness would need series accounting. `0023` backfills
+pre-existing positions to `cost_basis / units`, their own average entry price: a mark
+left at the reserved `'0'` would treat an investor's whole NAV as profit and charge 20%
+of their **capital** on the first crystallization.
+
+### The charge moves units, never cash — and that is the whole design
+
+A charge is one posted transfer on the **Share** ledger: `Dr FeeShares(svc) / Cr
+UserShares(svc, user)` (`TransferCode::FeeClawback`). `FeeShares` (code 62,
+debit-normal, `shares_fee:<svc>`) is a holder of units exactly like a user. Three
+properties follow, and each is pinned by a test in
+[`tests/fee_policy.rs`](tests/fee_policy.rs):
+
+- **No chain fee, ever.** Nothing leaves custody when a fee is charged, so the fund pays
+  no gas per investor per period. The manager converts an accumulated unit balance to
+  cash *once*, in bulk (below), instead of N times.
+- **An investor cannot be pushed negative.** The cash claim is not touched *at all*, and
+  the clawback is capped by the units actually held — with TigerBeetle's
+  `credits_must_not_exceed_debits` flag on `UserShares` as the ledger backstop under the
+  application's own cap.
+- **Nobody else pays.** `SharesOutstanding` does not move (a transfer *between holders*,
+  not a mint), so NAV per unit is unchanged. This is what makes the per-investor mark
+  honest rather than a dilution everyone shares. The Share-ledger invariant becomes
+  `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)`.
+
+What cannot be collected — the holder's units are locked by a queued redemption, or the
+charge floors below one base unit of share — is carried as `fund_positions.fee_debt` and
+taken on the next assessment. It is never written off and never becomes a negative
+balance. When **nothing** is collectable the assessment persists nothing at all and
+leaves both clocks where they are, so the accrual simply continues into the next sweep
+(`FeeCharge::is_empty`).
+
+### Ordering, clocks, and the atomic write
+
+`assess` charges **management first, performance on what is left**: charging both
+against the same pre-fee unit count would take a performance cut of capital the
+management fee has already claimed. Two clocks are tracked separately because they mean
+different things — `fees_accrued_at` moves on **every** charge (management is
+continuous), `crystallized_at` only when the performance fee actually crystallized, so a
+mid-period charge cannot silently restart the period.
+
+`PgFeeAssessments::charge` commits four things in one transaction under the
+`fund_positions` row lock: the `fee_assessments` audit row, the new debt/mark/clocks,
+the projection's `units` **decremented by the clawback**, and the `Charged` event into
+`event_log` + `outbox`. The `units` decrement is load-bearing and easy to miss: the
+redemption settle reduces cost basis by `(units − redeemed) / units` against the
+*projection's* count (`0010`), so a clawback that took units without telling the
+projection would leave that denominator permanently too large and every later settle
+would under-reduce the basis. The row lock is the same target the settle takes, which is
+what keeps the two from interleaving.
+
+**A fee is priced at the dealing NAV, staleness guard included.** That is a safety
+property: if an operator stops posting marks, fees stop accruing rather than accruing
+against a price nobody has confirmed. The fee is the one charge the operator sets,
+prices and collects, so it gets the same guard as an investor's own dealing.
+
+### Settlement — the one moment a fee becomes cash
+
+`SettleFeeShares` (operator, `AllocationManage`) converts a fund's accumulated fee units
+in one bulk operation. Two posted legs, **burn-first** like a redemption settle: post
+`Dr SharesOutstanding / Cr FeeShares` (`ShareBurn`), then `Dr ServiceClaim / Cr
+FeeRevenue` (`FeeSettle`). The payout leg joins `redeem_payout` in the relay's
+settle-time liquidity pre-check, so a fund short of cash parks the whole event with
+nothing applied rather than burning units it cannot pay for. The application layer
+**refuses** rather than queueing when the claim is short: unlike an investor's
+redemption nobody is waiting on this, and unconverted fee units keep accumulating at no
+cost.
+
+### The sweeper
+
+[`fee_sweeper`](src/infrastructure/fee_sweeper.rs) is a `join!` branch beside the
+recovery jobs — the only one that *charges* rather than repairs. Hourly, it takes up to
+500 unit-holding positions whose last accrual is over 24h old, oldest first, and
+assesses each. The cadence is an efficiency knob only: the fee owed is a function of
+elapsed seconds, so missing a week bills that week on the next pass with no drift and no
+double-charge. Per-position failures warn and continue — one investor's stale NAV must
+not stop everyone else's fee from being collected.
+
+**Crystallization frequency is a price, not a detail.** Moving from annual to quarterly
+measurably raises what an investor pays over a fund's life, because each reset locks in
+gains a later loss can no longer claw back. Annual is the default for exactly that
+reason.
+
+### Known gap — exit crystallization
+
+`Trigger::Redemption` (crystallize only the units leaving, at the redemption-day NAV,
+leaving the mark for the units that stay) is modelled and unit-tested but **not wired**
+in v1: only `Trigger::Period` runs. Wiring it at *request* time would double-charge the
+same gain if the redemption were cancelled and re-requested, and over-charging an
+investor is the worst failure this feature has. The correct hook is the redemption
+**settle**, netting the fee from the payout (`Dr service / Cr fee` beside the existing
+`Dr service / Cr user`, mirroring the withdrawal settle's fee leg) — where it is
+terminal, idempotent, and cannot be replayed. Until then an investor who redeems shortly
+before a period end escapes the performance fee on that period's gain.
 
 ## User wallet — deposit & withdraw (`domain::withdrawals`, `WalletService`)
 
@@ -496,7 +620,10 @@ auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
 
 `domain` unit tests cover the money + NAV math (incl. the `mul_div` overflow bound and the
 share-key ledger sides), the subscription/redemption aggregates, the withdrawal
-transitions, and the allocation registry's state machine;
+transitions, the allocation registry's state machine, and the fee arithmetic (the flat-year
+2%, the 20% taken net of management, the mark refusing to charge a mere recovery, the
+hurdle, the deferral of an uncollectable charge into debt, and a backwards clock charging
+nothing);
 `piggybank/core/tests/allocation_registry.rs` covers the gate against real Postgres +
 TigerBeetle (an unregistered service refused *before* any money moves, a draft taking
 nothing, a closed allocation still redeeming, double registration as a conflict, the
@@ -512,7 +639,15 @@ withdrawal reserve→settle with fee, fail→refund, short-rail queue→dispatch
 cancel→refund; the on-chain dispatch gate's three arms — short treasury queues despite a
 liquid TB rail, liquid treasury dispatches, read failure degrades to queued — plus the
 refused admin dispatch and the `Dispatcher::sweep` both-gates flow, driven by a test
-`Custody` adapter with a configurable treasury view). `piggybank/core/tests/relay_recovery.rs`
+`Custody` adapter with a configurable treasury view). `piggybank/core/tests/fee_policy.rs` hits real Postgres + TigerBeetle for the fee plane's
+three load-bearing properties — a charge moves **units** and leaves every cash account
+untouched, `SharesOutstanding` is unchanged so no other holder pays, and two investors at
+the same NAV owe different fees when they entered at different prices — plus the bulk
+settlement (the only moment a fee becomes cash), its refusal when the fund's claim is
+short, the sweeper end to end, and a fund with no policy never being charged. Note that
+the accrual clocks are DB-stamped while `now` is caller-supplied, so those tests overshoot
+a period boundary by an hour and compare amounts with a tolerance rather than for equality;
+the sub-second jitter is 3e-8 of a year's fee and never accumulates. `piggybank/core/tests/relay_recovery.rs`
 proves a parked event lands in the distinct `parked_at` state (never marked dispatched),
 stays queryable, and is surfaced by `Reconciliation::scan`; that `Reaper::sweep` alerts on
 a stuck `processing` withdrawal (never auto-voids it) while auto-cancelling an abandoned
