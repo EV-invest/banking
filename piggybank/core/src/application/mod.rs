@@ -25,10 +25,15 @@
 //! [`allocations`] is the pure control-plane registry of investable products — it moves
 //! no money, and its `require_subscribable` gate is what every subscribe runs before one
 //! does.
+//! [`fees`] assesses a fund's management + performance terms against a holding. It is the
+//! one money use case that never moves cash while charging: a fee is collected by moving
+//! *units* between holders, so it costs no chain fee and cannot touch an investor's cash
+//! claim. Only the periodic bulk settlement of accumulated fee units crosses into cash.
 
 pub mod allocations;
 pub mod auth_sync;
 pub mod balance;
+pub mod fees;
 pub mod funds;
 pub mod operations;
 pub mod users;

@@ -18,6 +18,10 @@
 //!   and auto-resolves the safe `queued` redemptions/withdrawals past a max age.
 //! - [`dispatcher`] — the treasury worker: re-checks `queued` withdrawals against both
 //!   liquidity gates (TB rail + on-chain treasury) and dispatches the covered ones.
+//! - [`fees`] — Postgres adapters for the fee plane (policy, accrual clocks, the
+//!   charge, the bulk settlement of accumulated fee units).
+//! - [`fee_sweeper`] — the periodic worker that assesses management + performance fees
+//!   against every unit-holding position that is due.
 //! - [`operation_feed`] — the read-side merge of the four money projections into one
 //!   time-ordered activity timeline (query side only; writes nothing).
 //! - [`telemetry`] — the observability adapter: the one seam that hands errors to
@@ -32,6 +36,8 @@ pub mod deposit_watcher;
 pub mod deposits;
 pub mod dispatcher;
 pub mod evm_rpc;
+pub mod fee_sweeper;
+pub mod fees;
 pub mod ledger;
 pub mod nav;
 pub mod operation_feed;

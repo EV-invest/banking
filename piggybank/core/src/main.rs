@@ -28,6 +28,8 @@ use piggybank_core::{
 		deposit_watcher::DepositWatcher,
 		deposits::PgDeposits,
 		dispatcher::Dispatcher,
+		fee_sweeper::FeeSweeper,
+		fees::{PgFeeAssessments, PgFeePolicies, PgFeeSettlements, PgPositionAccruals},
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		operation_feed::PgOperationFeed,
@@ -54,7 +56,7 @@ use piggybank_core::{
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		AllocationRegistry, Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository, UserRepository,
+		AllocationRegistry, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository, UserRepository,
 		WithdrawalRepository, ledger::Ledger,
 	},
 	services,
@@ -202,6 +204,14 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let deposits: Arc<dyn Deposits> = Arc::new(PgDeposits::new(pool.clone()));
 	let nav: Arc<dyn NavMarks> = Arc::new(PgNav::new(pool.clone()));
 	let positions: Arc<dyn FundPositionReader> = Arc::new(PgFundPositions::new(pool.clone()));
+	// The fee plane. Charging moves units between holders on the Share ledger, so none of
+	// these touch cash; only `settlements` ever crosses into it, once per period per fund.
+	let fees = FeePorts {
+		policies: Arc::new(PgFeePolicies::new(pool.clone())),
+		accruals: Arc::new(PgPositionAccruals::new(pool.clone())),
+		assessments: Arc::new(PgFeeAssessments::new(pool.clone())),
+		settlements: Arc::new(PgFeeSettlements::new(pool.clone())),
+	};
 	let operations: Arc<dyn OperationFeed> = Arc::new(PgOperationFeed::new(pool.clone()));
 
 	// Deposit addresses are provisioned by the separate-process signer (it mints + seals
@@ -294,6 +304,17 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
 	let reaper = Reaper::new(relay_pool.clone(), withdrawals.clone(), redemptions.clone(), relay_notify.clone());
 	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
+	// The fee sweeper is the only job that *charges* rather than repairs: management fees
+	// accrue with the clock, so something has to wake up and collect them. It shares the
+	// recovery jobs' cadence and their per-item warn-and-continue discipline.
+	let fee_sweeper = FeeSweeper::new(
+		fees.policies.clone(),
+		fees.accruals.clone(),
+		fees.assessments.clone(),
+		ledger.clone(),
+		nav.clone(),
+		relay_notify.clone(),
+	);
 	// The per-rail counterpart to `reconciliation`: that one relates two TigerBeetle accounts,
 	// so it stays green when the LEDGER and the CHAIN disagree. This compares `wallet:<net>`
 	// against the wallets it claims to describe, which is the only thing that notices USDT
@@ -413,6 +434,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		deposits,
 		nav,
 		positions,
+		fees,
 		operations,
 		deposit_addresses,
 		custody,
@@ -443,6 +465,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		treasury_drift_done,
 		reaper_done,
 		dispatcher_done,
+		fee_sweeper_done,
 		bridge_done,
 		watcher_done,
 		withdrawal_watcher_done,
@@ -467,6 +490,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		branch(&shutdown, "treasury drift watch", infallible(treasury_drift.run(shutdown.clone()))),
 		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
 		branch(&shutdown, "dispatcher", infallible(dispatcher.run(shutdown.clone()))),
+		branch(&shutdown, "fee sweeper", infallible(fee_sweeper.run(shutdown.clone()))),
 		branch(&shutdown, "bridge", infallible(run_bridge(bridge, shutdown.clone()))),
 		branch(&shutdown, "deposit watcher", infallible(run_watcher(deposit_watcher, shutdown.clone()))),
 		branch(&shutdown, "withdrawal watcher", infallible(run_withdrawal_watcher(withdrawal_watcher, shutdown.clone()))),
@@ -507,6 +531,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		.and(treasury_drift_done)
 		.and(reaper_done)
 		.and(dispatcher_done)
+		.and(fee_sweeper_done)
 		.and(bridge_done)
 		.and(watcher_done)
 		.and(withdrawal_watcher_done)
