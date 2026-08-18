@@ -28,8 +28,8 @@ use domain::money::Network;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use ports::{
-	AllocationRegistry, Custody, DepositAddresses, Deposits, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository,
-	ledger::Ledger,
+	AllocationRegistry, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository, UserRepository,
+	WithdrawalRepository, ledger::Ledger,
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -72,6 +72,10 @@ pub struct AppState {
 	pub nav: Arc<dyn NavMarks>,
 	/// The per-investor fund-position projection (cost basis, high-water mark).
 	pub positions: Arc<dyn FundPositionReader>,
+	/// The fee plane — a fund's "2 and 20" terms, the per-investor accrual clocks, the
+	/// charge, and the bulk settlement of accumulated fee units. A product with no policy
+	/// row charges nothing, so the fee is opt-in per product.
+	pub fees: FeePorts,
 	/// The read-side merge of the four money projections into one activity timeline.
 	/// Query only — it writes nothing and owns no aggregate.
 	pub operations: Arc<dyn OperationFeed>,
@@ -111,6 +115,7 @@ impl AppState {
 		deposits: Arc<dyn Deposits>,
 		nav: Arc<dyn NavMarks>,
 		positions: Arc<dyn FundPositionReader>,
+		fees: FeePorts,
 		operations: Arc<dyn OperationFeed>,
 		deposit_addresses: Arc<dyn DepositAddresses>,
 		custody: Arc<dyn Custody>,
@@ -132,6 +137,7 @@ impl AppState {
 			deposits,
 			nav,
 			positions,
+			fees,
 			operations,
 			deposit_addresses,
 			custody,

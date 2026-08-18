@@ -15,11 +15,16 @@
 //! [`Custody`] (the signing service), and [`DepositAddresses`] — which by
 //! construction cannot enrol in a Postgres `UnitOfWork` (money is written last, in
 //! the relay).
+//!
+//! The fee plane adds [`FeePolicies`] (a fund's terms), [`PositionAccruals`] (the
+//! per-investor accrual clocks), [`FeeAssessments`] (the charge), and
+//! [`FeeSettlements`] (converting accumulated fee units to cash).
 
 pub mod allocations;
 pub mod custody;
 pub mod deposit_addresses;
 pub mod deposits;
+pub mod fees;
 pub mod ledger;
 pub mod nav;
 pub mod operations;
@@ -39,6 +44,7 @@ use domain::{
 	error::DomainError,
 	users::{ConciergeUserId, Email, ProfileFields, User, UserId},
 };
+pub use fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeePorts, FeeSettlements, PositionAccrual, PositionAccruals, SettlementRecord};
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
 pub use nav::{NavMarks, Valuation};
 pub use operations::OperationFeed;

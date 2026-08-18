@@ -36,6 +36,7 @@ use std::{sync::Arc, time::Duration};
 
 use domain::{
 	balance::{LedgerAccountKey, LedgerEvent, TransferCode},
+	fees::FeeEvent,
 	money::Usdt,
 	redemptions::RedemptionEvent,
 	subscriptions::SubscriptionEvent,
@@ -83,6 +84,12 @@ const BURN_SETTLE: &[u8] = b"redeem:burn:settle";
 const REDEEM_PAYOUT: &[u8] = b"redeem:payout";
 const BURN_VOID_FAIL: &[u8] = b"redeem:burn:void:fail";
 const BURN_VOID_CANCEL: &[u8] = b"redeem:burn:void:cancel";
+
+/// Salts for a fee settlement's two posted legs — burning the accumulated fee units and
+/// paying their value out of the fund's claim into fee revenue. The *charge* itself needs
+/// no salt: it is a single leg, so it uses the event id directly, like a deposit.
+const FEE_SETTLE_BURN: &[u8] = b"fee:settle:burn";
+const FEE_SETTLE_PAYOUT: &[u8] = b"fee:settle:payout";
 
 /// Bound on consecutive `RetryBounded` attempts before a never-resolving retryable (a
 /// completion whose pending was itself parked, so it can never be found) is parked
@@ -351,7 +358,10 @@ impl Relay {
 			let LedgerAction::Post(transfer) = &op.action else { continue };
 			let (guarded, liquidity) = match op.role {
 				"withdraw_disburse" => (&transfer.credit, None),
-				"redeem_payout" => (&transfer.debit, Some(())),
+				//   - `fee_payout` — the same shape as a redemption payout: cash leaves the
+				//     fund's claim (`Dr service`), so a fund short of it must park the whole
+				//     settlement before any fee units are burned, never after.
+				"redeem_payout" | "fee_payout" => (&transfer.debit, Some(())),
 				_ => continue,
 			};
 			// Delivery is at-least-once, and legs apply as separate TB calls — a redelivery
@@ -610,6 +620,10 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 			let event: RedemptionEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
 			Ok(plan_redemption(event, row.aggregate_id, reference))
 		}
+		"fees" => {
+			let event: FeeEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
+			Ok(plan_fee(event, row.aggregate_id, event_tid, reference))
+		}
 		// A non-money event reached the outbox (shouldn't happen) — a benign no-op.
 		_ => Ok(Vec::new()),
 	}
@@ -750,6 +764,64 @@ fn void_burn(aggregate_id: Uuid, user: UserId, service: domain::balance::Service
 			code: TransferCode::ShareBurn,
 			reference,
 		}),
+	}
+}
+
+/// The fee plane in the ledger.
+///
+/// - **Charged** → one posted leg, `Dr FeeShares / Cr UserShares`, entirely on the Share
+///   ledger. No cash account is touched, so no chain fee is ever paid to collect a fee
+///   and an investor's cash claim cannot be moved by one. Because it is a transfer
+///   *between two holders*, `SharesOutstanding` does not change and NAV per unit is
+///   unaffected — nobody else pays for this investor's charge. TigerBeetle's
+///   `credits_must_not_exceed_debits` flag on the holder's account is the backstop
+///   under the application's own cap: a clawback larger than the holding is refused by
+///   the ledger rather than driving a balance negative.
+/// - **SharesSettled** → **burn first, pay second**: post `Dr SharesOutstanding /
+///   Cr FeeShares` to destroy the units, then `Dr ServiceClaim / Cr FeeRevenue` for
+///   their value. Same ordering rule as a redemption settle, for the same reason — the
+///   payout leg is liquidity-gated in the pre-check above, so a short fund parks the
+///   whole event with nothing applied instead of burning units it cannot pay for.
+fn plan_fee(event: FeeEvent, aggregate_id: Uuid, event_tid: u128, reference: u128) -> Vec<PlannedOp> {
+	match event {
+		FeeEvent::Charged { user, service, units, .. } => vec![PlannedOp {
+			role: "fee_clawback",
+			transfer_id: event_tid,
+			action: LedgerAction::Post(LedgerTransfer {
+				id: event_tid,
+				debit: LedgerAccountKey::FeeShares(service.clone()),
+				credit: LedgerAccountKey::UserShares(service, user),
+				amount: units.base_units(),
+				code: TransferCode::FeeClawback,
+				reference,
+			}),
+		}],
+		FeeEvent::SharesSettled { service, units, cash, .. } => vec![
+			PlannedOp {
+				role: "fee_burn",
+				transfer_id: tid(aggregate_id, FEE_SETTLE_BURN),
+				action: LedgerAction::Post(LedgerTransfer {
+					id: tid(aggregate_id, FEE_SETTLE_BURN),
+					debit: LedgerAccountKey::SharesOutstanding(service.clone()),
+					credit: LedgerAccountKey::FeeShares(service.clone()),
+					amount: units.base_units(),
+					code: TransferCode::ShareBurn,
+					reference,
+				}),
+			},
+			PlannedOp {
+				role: "fee_payout",
+				transfer_id: tid(aggregate_id, FEE_SETTLE_PAYOUT),
+				action: LedgerAction::Post(LedgerTransfer {
+					id: tid(aggregate_id, FEE_SETTLE_PAYOUT),
+					debit: LedgerAccountKey::ServiceClaim(service),
+					credit: LedgerAccountKey::FeeRevenue,
+					amount: cash.base_units(),
+					code: TransferCode::FeeSettle,
+					reference,
+				}),
+			},
+		],
 	}
 }
 
