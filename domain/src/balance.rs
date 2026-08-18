@@ -13,6 +13,11 @@
 //!   (`WithdrawalClearing`). USDT is one fungible pool, so a user has ONE claim, not
 //!   one per chain.
 //!
+//! A management/performance fee never touches either layer while it is being charged:
+//! it moves *units* on the Share ledger, from the holder's `UserShares` to the
+//! manager's `FeeShares`. Only the periodic bulk settlement of accumulated fee units
+//! crosses into cash (`Dr ServiceClaim / Cr FeeRevenue`).
+//!
 //! Two layers, one invariant: **`sum(custody) == sum(claims)`** globally on the USDT
 //! ledger. Per-rail backing is a *treasury* concern (a withdrawal on a short rail is
 //! queued, not refused), not a ledger one — which is why the invariant is global, not
@@ -179,6 +184,7 @@ pub enum AccountCode {
 	WithdrawalClearing,
 	UserShares,
 	SharesOutstanding,
+	FeeShares,
 }
 
 impl AccountCode {
@@ -193,6 +199,7 @@ impl AccountCode {
 			Self::WithdrawalClearing => 50,
 			Self::UserShares => 60,
 			Self::SharesOutstanding => 61,
+			Self::FeeShares => 62,
 		}
 	}
 }
@@ -228,6 +235,8 @@ pub enum TransferCode {
 	Redeem,
 	ShareMint,
 	ShareBurn,
+	FeeClawback,
+	FeeSettle,
 }
 
 impl TransferCode {
@@ -248,6 +257,8 @@ impl TransferCode {
 			Self::Redeem => 41,
 			Self::ShareMint => 42,
 			Self::ShareBurn => 43,
+			Self::FeeClawback => 44,
+			Self::FeeSettle => 45,
 		}
 	}
 }
@@ -281,8 +292,18 @@ pub enum LedgerAccountKey {
 	/// units (its debits) rejected atomically by TigerBeetle — the over-redeem backstop.
 	UserShares(ServiceId, UserId),
 	/// A fund's total units in circulation (credit-normal, Share ledger). One per
-	/// service. `SharesOutstanding(svc) == Σ_user UserShares(svc, user)` by construction.
+	/// service. `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)`
+	/// by construction.
 	SharesOutstanding(ServiceId),
+	/// The manager's accumulated fee units in a fund (debit-normal, Share ledger). One per
+	/// service — a holder of units exactly like a user, which is the point: a management or
+	/// performance fee is charged by moving units *between holders*
+	/// (`Dr FeeShares / Cr UserShares`), never by moving cash and never by minting. Supply
+	/// is untouched, so NAV per unit does not move and no other investor pays for the
+	/// charge; and because no value leaves custody, charging a fee costs no chain fee at
+	/// all. The balance is converted to cash in one bulk settlement per period
+	/// ([`crate::fees::FeeSettlement`]).
+	FeeShares(ServiceId),
 }
 
 impl LedgerAccountKey {
@@ -298,13 +319,14 @@ impl LedgerAccountKey {
 			Self::BankCustody => "bank".to_owned(),
 			Self::UserShares(service, user) => format!("shares:{service}:{user}"),
 			Self::SharesOutstanding(service) => format!("shares_outstanding:{service}"),
+			Self::FeeShares(service) => format!("shares_fee:{service}"),
 		}
 	}
 
 	pub fn ledger(&self) -> Ledger {
 		match self {
 			Self::BankCustody => Ledger::UsdMock,
-			Self::UserShares(..) | Self::SharesOutstanding(_) => Ledger::Share,
+			Self::UserShares(..) | Self::SharesOutstanding(_) | Self::FeeShares(_) => Ledger::Share,
 			_ => Ledger::Usdt,
 		}
 	}
@@ -320,6 +342,7 @@ impl LedgerAccountKey {
 			Self::WithdrawalClearing => AccountCode::WithdrawalClearing,
 			Self::UserShares(..) => AccountCode::UserShares,
 			Self::SharesOutstanding(_) => AccountCode::SharesOutstanding,
+			Self::FeeShares(_) => AccountCode::FeeShares,
 		}
 	}
 
@@ -327,7 +350,7 @@ impl LedgerAccountKey {
 	/// and the units-outstanding contra are credit-normal.
 	pub fn normal(&self) -> Normal {
 		match self {
-			Self::CryptoWallet(_) | Self::BankCustody | Self::UserShares(..) => Normal::Debit,
+			Self::CryptoWallet(_) | Self::BankCustody | Self::UserShares(..) | Self::FeeShares(_) => Normal::Debit,
 			Self::Fund | Self::UserClaim(_) | Self::ServiceClaim(_) | Self::FeeRevenue | Self::WithdrawalClearing | Self::SharesOutstanding(_) => Normal::Credit,
 		}
 	}
@@ -400,5 +423,67 @@ mod tests {
 		assert_eq!(user_shares.logical_key(), "shares:trading:00000000-0000-0000-0000-000000000000");
 		assert_eq!(outstanding.logical_key(), "shares_outstanding:trading");
 		assert_eq!(user_shares.network(), None);
+	}
+
+	#[test]
+	fn the_fee_holder_is_a_unit_holder_like_any_other() {
+		let fee = LedgerAccountKey::FeeShares(ServiceId::parse("trading").unwrap());
+		// Same ledger and same side as a user's holding — a clawback is a plain
+		// holder-to-holder unit transfer, so supply (and therefore NAV) never moves.
+		assert_eq!(fee.ledger(), Ledger::Share);
+		assert_eq!(fee.normal(), Normal::Debit);
+		assert_eq!(fee.account_code(), AccountCode::FeeShares);
+		assert_eq!(fee.logical_key(), "shares_fee:trading");
+		assert_eq!(fee.network(), None);
+		// Distinct from the cash-side fee revenue it is eventually settled into.
+		assert_ne!(fee.ledger(), LedgerAccountKey::FeeRevenue.ledger());
+	}
+
+	#[test]
+	fn every_account_and_transfer_code_is_unique() {
+		let account_codes = [
+			AccountCode::Fund,
+			AccountCode::CryptoWallet,
+			AccountCode::BankCustody,
+			AccountCode::UserClaim,
+			AccountCode::ServiceClaim,
+			AccountCode::FeeRevenue,
+			AccountCode::WithdrawalClearing,
+			AccountCode::UserShares,
+			AccountCode::SharesOutstanding,
+			AccountCode::FeeShares,
+		]
+		.map(AccountCode::code);
+		let mut sorted = account_codes;
+		sorted.sort_unstable();
+		let mut deduped = sorted.to_vec();
+		deduped.dedup();
+		assert_eq!(deduped.len(), account_codes.len(), "an account code is reused");
+
+		let transfer_codes = [
+			TransferCode::SeedCapital,
+			TransferCode::Deposit,
+			TransferCode::Withdraw,
+			TransferCode::WithdrawFee,
+			TransferCode::UserAllocate,
+			TransferCode::UserRevoke,
+			TransferCode::ServiceReserve,
+			TransferCode::ServiceSettle,
+			TransferCode::ServiceCancel,
+			TransferCode::ServiceTransfer,
+			TransferCode::Bridge,
+			TransferCode::Subscribe,
+			TransferCode::Redeem,
+			TransferCode::ShareMint,
+			TransferCode::ShareBurn,
+			TransferCode::FeeClawback,
+			TransferCode::FeeSettle,
+		]
+		.map(TransferCode::code);
+		let mut sorted = transfer_codes;
+		sorted.sort_unstable();
+		let mut deduped = sorted.to_vec();
+		deduped.dedup();
+		assert_eq!(deduped.len(), transfer_codes.len(), "a transfer code is reused");
 	}
 }

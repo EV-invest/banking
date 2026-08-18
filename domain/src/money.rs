@@ -163,6 +163,18 @@ impl Usdt {
 		self.0.checked_sub(other.0).map(Usdt)
 	}
 
+	/// `floor(self · numer / denom)` — the pro-rata helper a *rate* needs: a fee in
+	/// basis points over a fraction of a year is one `scale` call, with no intermediate
+	/// rounding to lose. The product is 256-bit (see [`mul_div_floor`]), so a whole
+	/// fund's AUM times a multi-year second count never overflows on the way through.
+	/// Flooring is deliberate and always in the investor's favour: the residual sub-unit
+	/// stays with the holder, never with the fee.
+	pub fn scale(self, numer: u128, denom: u128) -> Result<Usdt, DomainError> {
+		mul_div_floor(self.0, numer, denom)
+			.map(Usdt)
+			.ok_or_else(|| DomainError::Validation("amount scaling overflows or divides by zero".into()))
+	}
+
 	/// Lift an on-chain raw amount (in `network`'s native decimals) into canonical
 	/// base units. Scaling **up** is always exact; overflow is the only failure.
 	pub fn from_onchain(network: Network, raw: u128) -> Result<Usdt, DomainError> {
@@ -339,6 +351,26 @@ impl Nav {
 		mul_div_floor(units.base_units(), self.0, SCALE)
 			.map(Usdt::from_base_units)
 			.ok_or_else(|| DomainError::Validation("share value overflows".into()))
+	}
+
+	/// Checked sub — `None` below zero. Prices subtract when measuring a *gain per
+	/// unit* against a high-water mark, which is where the `None` (a fund under its
+	/// mark) is the whole point: no gain, so no performance fee.
+	pub fn checked_sub(self, other: Nav) -> Option<Nav> {
+		self.0.checked_sub(other.0).map(Nav)
+	}
+
+	/// `floor(self · numer / denom)` — the price-side twin of [`Usdt::scale`], used to
+	/// grow a high-water mark by a hurdle rate over an elapsed fraction of a year.
+	pub fn scale(self, numer: u128, denom: u128) -> Result<Nav, DomainError> {
+		mul_div_floor(self.0, numer, denom)
+			.map(Nav)
+			.ok_or_else(|| DomainError::Validation("nav scaling overflows or divides by zero".into()))
+	}
+
+	/// Checked add — `None` on overflow.
+	pub fn checked_add(self, other: Nav) -> Option<Nav> {
+		self.0.checked_add(other.0).map(Nav)
 	}
 
 	pub fn parse_decimal(raw: &str) -> Result<Nav, DomainError> {
@@ -650,6 +682,32 @@ mod tests {
 		let nav = Nav::parse_decimal("3").unwrap();
 		assert!(Shares::from_cash(Usdt::from_base_units(2), nav).unwrap().is_zero());
 		assert_eq!(Shares::from_cash(Usdt::from_base_units(3), nav).unwrap(), Shares::from_base_units(1));
+	}
+
+	#[test]
+	fn scale_pro_rates_without_overflowing_the_intermediate() {
+		// 2% of a year on 1000 USDT: 1000 · 200 · 31_536_000 / (10_000 · 31_536_000) = 20.
+		let year: u128 = 365 * 24 * 60 * 60;
+		let principal = Usdt::parse_decimal("1000").unwrap();
+		assert_eq!(principal.scale(200 * year, 10_000 * year).unwrap(), Usdt::parse_decimal("20").unwrap());
+		// Half a year is half the fee — the numerator alone (1000e18 · 200 · 15768000)
+		// overflows u128, so this only holds on the 256-bit path.
+		assert_eq!(principal.scale(200 * (year / 2), 10_000 * year).unwrap(), Usdt::parse_decimal("10").unwrap());
+		// Flooring keeps the residual with the holder, never with the fee.
+		assert_eq!(Usdt::from_base_units(3).scale(1, 2).unwrap(), Usdt::from_base_units(1));
+		assert!(principal.scale(1, 0).is_err());
+	}
+
+	#[test]
+	fn nav_arithmetic_reports_no_gain_below_the_mark() {
+		let mark = Nav::parse_decimal("1.5").unwrap();
+		assert_eq!(Nav::parse_decimal("1.8").unwrap().checked_sub(mark), Some(Nav::parse_decimal("0.3").unwrap()));
+		// Under the mark there is no gain at all — the performance fee's whole premise.
+		assert_eq!(Nav::parse_decimal("1.2").unwrap().checked_sub(mark), None);
+		// A 5% hurdle over a full year lifts the mark to 1.575.
+		let year: u128 = 365 * 24 * 60 * 60;
+		let hurdle = mark.scale(500 * year, 10_000 * year).unwrap();
+		assert_eq!(mark.checked_add(hurdle).unwrap(), Nav::parse_decimal("1.575").unwrap());
 	}
 
 	#[test]
