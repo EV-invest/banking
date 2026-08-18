@@ -1654,6 +1654,478 @@
         }
       }
     },
+    "/banking.v1.FeesService/GetAccruedFees": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "GetAccruedFees",
+        "description": "What the caller's holding owes right now WITHOUT charging it: the management fee\n accrued since the last charge, the performance fee that would crystallize at\n today's NAV, and any carried debt. This is what a position's \"value net of fees\"\n must subtract, and it carries the investor's own mark so the figure is explicable.",
+        "operationId": "banking.v1.FeesService.GetAccruedFees",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetAccruedFeesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.AccruedFees"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FeesService/GetFeePolicy": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "GetFeePolicy",
+        "description": "One fund's terms, or an empty policy when the product charges nothing. Readable\n by any authenticated user — an investor is entitled to know what they are paying.",
+        "operationId": "banking.v1.FeesService.GetFeePolicy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetFeePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeePolicy"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FeesService/GetFeeShares": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "GetFeeShares",
+        "description": "The fund's accumulated, unconverted fee units and what they are worth\n (AllocationManage).",
+        "operationId": "banking.v1.FeesService.GetFeeShares",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetFeeSharesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeeShares"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FeesService/ListFeeAssessments": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "ListFeeAssessments",
+        "description": "The caller's own fee statement, newest first — every charge, what it was for, and\n anything that deferred.",
+        "operationId": "banking.v1.FeesService.ListFeeAssessments",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListFeeAssessmentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeeAssessmentList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FeesService/ListFeePolicies": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "ListFeePolicies",
+        "description": "Every configured policy, ordered by service. Readable by any authenticated user.",
+        "operationId": "banking.v1.FeesService.ListFeePolicies",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListFeePoliciesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeePolicyList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FeesService/ListFundFeeAssessments": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "ListFundFeeAssessments",
+        "description": "Every charge against one fund (AllocationManage).",
+        "operationId": "banking.v1.FeesService.ListFundFeeAssessments",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListFundFeeAssessmentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeeAssessmentList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FeesService/SetFeePolicy": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "SetFeePolicy",
+        "description": "Install or replace a fund's terms (AllocationManage — the same trust seam as\n bringing the product into existence or posting its valuation). The service must\n already be a registered allocation. Rates are basis points and each is capped at\n 10000; a rate above 100% of the thing it is charged on is always a fat finger.",
+        "operationId": "banking.v1.FeesService.SetFeePolicy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetFeePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeePolicy"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.FeesService/SettleFeeShares": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "SettleFeeShares",
+        "description": "Convert accumulated fee units into fee revenue (AllocationManage). Omit `units`\n to settle the whole balance. Refused — never queued — when the fund's claim\n cannot cover the payout: nobody is waiting on this, and unconverted fee units\n keep accumulating at no cost.",
+        "operationId": "banking.v1.FeesService.SettleFeeShares",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SettleFeeSharesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeeSettlement"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.FundsService/CancelRedemption": {
       "post": {
         "tags": [
@@ -3838,6 +4310,47 @@
   },
   "components": {
     "schemas": {
+      "banking.v1.AccruedFees": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "configured"
+          },
+          "management": {
+            "type": "string",
+            "title": "management",
+            "description": "accrued since the last charge"
+          },
+          "performance": {
+            "type": "string",
+            "title": "performance",
+            "description": "what would crystallize at today's NAV"
+          },
+          "debt": {
+            "type": "string",
+            "title": "debt",
+            "description": "carried from earlier charges"
+          },
+          "total": {
+            "type": "string",
+            "title": "total",
+            "description": "management + performance + debt"
+          },
+          "high_water_mark": {
+            "type": "string",
+            "title": "high_water_mark",
+            "description": "the investor's own mark — why their fee differs"
+          }
+        },
+        "title": "AccruedFees",
+        "additionalProperties": false,
+        "description": "What a holding owes right now. `configured` is false when the fund charges no fee."
+      },
       "banking.v1.AdminBalanceRequest": {
         "type": "object",
         "properties": {
@@ -4136,6 +4649,192 @@
         "title": "FailWithdrawalResponse",
         "additionalProperties": false
       },
+      "banking.v1.FeeAssessment": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "trigger": {
+            "type": "string",
+            "title": "trigger",
+            "description": "period | redemption"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav",
+            "description": "the price the charge was measured and taken at"
+          },
+          "management": {
+            "type": "string",
+            "title": "management"
+          },
+          "performance": {
+            "type": "string",
+            "title": "performance"
+          },
+          "debt_opening": {
+            "type": "string",
+            "title": "debt_opening",
+            "description": "uncollected fee carried INTO this charge"
+          },
+          "charged_units": {
+            "type": "string",
+            "title": "charged_units",
+            "description": "units clawed back"
+          },
+          "charged_cash": {
+            "type": "string",
+            "title": "charged_cash",
+            "description": "their value at `nav`"
+          },
+          "debt_carried": {
+            "type": "string",
+            "title": "debt_carried",
+            "description": "what deferred to the next charge"
+          },
+          "high_water_mark": {
+            "type": "string",
+            "title": "high_water_mark",
+            "description": "the investor's mark AFTER this charge"
+          },
+          "assessed_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "assessed_at",
+            "format": "int64",
+            "description": "unix seconds"
+          }
+        },
+        "title": "FeeAssessment",
+        "additionalProperties": false,
+        "description": "One charge against one holding. `due` and `charged_cash` differ exactly when the\n holding could not cover the charge and the rest deferred into `debt_carried`."
+      },
+      "banking.v1.FeeAssessmentList": {
+        "type": "object",
+        "properties": {
+          "assessments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.FeeAssessment"
+            },
+            "title": "assessments"
+          }
+        },
+        "title": "FeeAssessmentList",
+        "additionalProperties": false
+      },
+      "banking.v1.FeePolicy": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "configured"
+          },
+          "management_bps": {
+            "type": "integer",
+            "title": "management_bps",
+            "description": "200 = 2% p.a."
+          },
+          "performance_bps": {
+            "type": "integer",
+            "title": "performance_bps",
+            "description": "2000 = 20% of the gain above the mark"
+          },
+          "hurdle_bps": {
+            "type": "integer",
+            "title": "hurdle_bps",
+            "description": "0 = no hurdle; else the p.a. rate the gain must clear first"
+          },
+          "basis": {
+            "type": "string",
+            "title": "basis",
+            "description": "invested_capital | market_value — what the management fee is charged on.\n `invested_capital` (the default) is the cash the investor actually put in: it does\n not swell with a mark the operator posted, which keeps the fee the operator earns\n independent of the input the operator supplies."
+          },
+          "crystallization": {
+            "type": "string",
+            "title": "crystallization",
+            "description": "monthly | quarterly | semi_annual | annual — how often the performance fee\n crystallizes and the mark ratchets. This is a price, not a detail: crystallizing\n more often measurably raises what an investor pays over a fund's life, because\n each reset locks in gains a later loss can no longer claw back."
+          },
+          "updated_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "updated_at",
+            "format": "int64",
+            "description": "unix seconds; 0 when unconfigured"
+          }
+        },
+        "title": "FeePolicy",
+        "additionalProperties": false,
+        "description": "One fund's fee terms. `configured` is false when the product has no policy at all,\n which is different from a policy whose rates happen to be zero."
+      },
+      "banking.v1.FeePolicyList": {
+        "type": "object",
+        "properties": {
+          "policies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.FeePolicy"
+            },
+            "title": "policies"
+          }
+        },
+        "title": "FeePolicyList",
+        "additionalProperties": false
+      },
+      "banking.v1.FeeSettlement": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "units": {
+            "type": "string",
+            "title": "units"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav"
+          },
+          "cash": {
+            "type": "string",
+            "title": "cash"
+          }
+        },
+        "title": "FeeSettlement",
+        "additionalProperties": false
+      },
+      "banking.v1.FeeShares": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "units": {
+            "type": "string",
+            "title": "units"
+          },
+          "value": {
+            "type": "string",
+            "title": "value",
+            "description": "units × current NAV"
+          }
+        },
+        "title": "FeeShares",
+        "additionalProperties": false,
+        "description": "The manager's uncollected fee units in one fund."
+      },
       "banking.v1.FundNav": {
         "type": "object",
         "properties": {
@@ -4186,6 +4885,17 @@
         "additionalProperties": false,
         "description": "The current price of a fund's share, derived (AUM / units_outstanding) and frozen\n between operator marks. `posted_at` is 0 when the fund has never been marked (seed\n NAV 1.0); `stale` is true when the latest mark is older than the dealing window."
       },
+      "banking.v1.GetAccruedFeesRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "GetAccruedFeesRequest",
+        "additionalProperties": false
+      },
       "banking.v1.GetAllocationRequest": {
         "type": "object",
         "properties": {
@@ -4207,6 +4917,28 @@
           }
         },
         "title": "GetDepositAddressRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetFeePolicyRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "GetFeePolicyRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetFeeSharesRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "GetFeeSharesRequest",
         "additionalProperties": false
       },
       "banking.v1.GetFundNavRequest": {
@@ -4343,6 +5075,27 @@
       "banking.v1.ListDepositsRequest": {
         "type": "object",
         "title": "ListDepositsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListFeeAssessmentsRequest": {
+        "type": "object",
+        "title": "ListFeeAssessmentsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListFeePoliciesRequest": {
+        "type": "object",
+        "title": "ListFeePoliciesRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListFundFeeAssessmentsRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "ListFundFeeAssessmentsRequest",
         "additionalProperties": false
       },
       "banking.v1.ListOperationsRequest": {
@@ -5221,6 +5974,37 @@
         "title": "SetAllocationUnitCapRequest",
         "additionalProperties": false
       },
+      "banking.v1.SetFeePolicyRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "management_bps": {
+            "type": "integer",
+            "title": "management_bps"
+          },
+          "performance_bps": {
+            "type": "integer",
+            "title": "performance_bps"
+          },
+          "hurdle_bps": {
+            "type": "integer",
+            "title": "hurdle_bps"
+          },
+          "basis": {
+            "type": "string",
+            "title": "basis"
+          },
+          "crystallization": {
+            "type": "string",
+            "title": "crystallization"
+          }
+        },
+        "title": "SetFeePolicyRequest",
+        "additionalProperties": false
+      },
       "banking.v1.SetOperationsModeRequest": {
         "type": "object",
         "properties": {
@@ -5230,6 +6014,22 @@
           }
         },
         "title": "SetOperationsModeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SettleFeeSharesRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "decimal units; empty settles the whole accumulated balance"
+          }
+        },
+        "title": "SettleFeeSharesRequest",
         "additionalProperties": false
       },
       "banking.v1.SettleRedemptionRequest": {
@@ -6519,6 +7319,10 @@
     {
       "name": "banking.v1.BalanceService",
       "description": "BalanceService — the bank's treasury and company capital (operator surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md."
+    },
+    {
+      "name": "banking.v1.FeesService",
+      "description": "FeesService — a fund's management and performance fee (\"2 and 20\").\n\n Two charges, answering different questions. **Management** (2% p.a. by default) is\n rent on parked capital: it accrues continuously with elapsed time and is charged\n whether the fund made money or not. **Performance** (20% by default) is a share of\n profit above the investor's OWN high-water mark, crystallized at the end of a\n period. A product with no policy charges nothing — the fee is opt-in per product.\n\n The mark is PER INVESTOR, not per fund. That is what stops one investor from paying\n for another's timing: somebody who subscribed at the top pays only on gains above\n the price they actually paid, and somebody who subscribed after a drawdown does not\n ride the recovery fee-free. (A fund-level mark, which a tokenized vault is forced\n into, mutualizes both.)\n\n A fee is collected by clawing back UNITS — the holder's fund units move to the\n manager's fee-unit account on the share ledger — never by moving cash. So: no chain\n fee is ever paid to collect a fee, an investor's cash balance is untouched and\n cannot be driven negative, and because total units outstanding do not change, NAV\n per unit does not move and no other investor pays for the charge. What cannot be\n collected (units locked by a queued redemption, or a residue below one base unit)\n is carried as debt and taken next time; it is never written off.\n\n SettleFeeShares is the one operation that crosses into cash, converting a whole\n fund's accumulated fee units in one go rather than once per investor. Amounts and\n prices are exact decimal strings. See piggybank/core/PATTERNS.md and docs/FEES.md."
     },
     {
       "name": "banking.v1.HealthService",

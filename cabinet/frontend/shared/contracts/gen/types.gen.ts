@@ -5,6 +5,52 @@ export type ClientOptions = {
 };
 
 /**
+ * AccruedFees
+ *
+ * What a holding owes right now. `configured` is false when the fund charges no fee.
+ */
+export type BankingV1AccruedFees = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * configured
+     */
+    configured?: boolean;
+    /**
+     * management
+     *
+     * accrued since the last charge
+     */
+    management?: string;
+    /**
+     * performance
+     *
+     * what would crystallize at today's NAV
+     */
+    performance?: string;
+    /**
+     * debt
+     *
+     * carried from earlier charges
+     */
+    debt?: string;
+    /**
+     * total
+     *
+     * management + performance + debt
+     */
+    total?: string;
+    /**
+     * high_water_mark
+     *
+     * the investor's own mark — why their fee differs
+     */
+    high_water_mark?: string;
+};
+
+/**
  * AdminBalanceRequest
  */
 export type BankingV1AdminBalanceRequest = {
@@ -308,6 +354,198 @@ export type BankingV1FailWithdrawalResponse = {
 };
 
 /**
+ * FeeAssessment
+ *
+ * One charge against one holding. `due` and `charged_cash` differ exactly when the
+ * holding could not cover the charge and the rest deferred into `debt_carried`.
+ */
+export type BankingV1FeeAssessment = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * trigger
+     *
+     * period | redemption
+     */
+    trigger?: string;
+    /**
+     * nav
+     *
+     * the price the charge was measured and taken at
+     */
+    nav?: string;
+    /**
+     * management
+     */
+    management?: string;
+    /**
+     * performance
+     */
+    performance?: string;
+    /**
+     * debt_opening
+     *
+     * uncollected fee carried INTO this charge
+     */
+    debt_opening?: string;
+    /**
+     * charged_units
+     *
+     * units clawed back
+     */
+    charged_units?: string;
+    /**
+     * charged_cash
+     *
+     * their value at `nav`
+     */
+    charged_cash?: string;
+    /**
+     * debt_carried
+     *
+     * what deferred to the next charge
+     */
+    debt_carried?: string;
+    /**
+     * high_water_mark
+     *
+     * the investor's mark AFTER this charge
+     */
+    high_water_mark?: string;
+    /**
+     * assessed_at
+     *
+     * unix seconds
+     */
+    assessed_at?: number | string;
+};
+
+/**
+ * FeeAssessmentList
+ */
+export type BankingV1FeeAssessmentList = {
+    /**
+     * assessments
+     */
+    assessments?: Array<BankingV1FeeAssessment>;
+};
+
+/**
+ * FeePolicy
+ *
+ * One fund's fee terms. `configured` is false when the product has no policy at all,
+ * which is different from a policy whose rates happen to be zero.
+ */
+export type BankingV1FeePolicy = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * configured
+     */
+    configured?: boolean;
+    /**
+     * management_bps
+     *
+     * 200 = 2% p.a.
+     */
+    management_bps?: number;
+    /**
+     * performance_bps
+     *
+     * 2000 = 20% of the gain above the mark
+     */
+    performance_bps?: number;
+    /**
+     * hurdle_bps
+     *
+     * 0 = no hurdle; else the p.a. rate the gain must clear first
+     */
+    hurdle_bps?: number;
+    /**
+     * basis
+     *
+     * invested_capital | market_value — what the management fee is charged on.
+     * `invested_capital` (the default) is the cash the investor actually put in: it does
+     * not swell with a mark the operator posted, which keeps the fee the operator earns
+     * independent of the input the operator supplies.
+     */
+    basis?: string;
+    /**
+     * crystallization
+     *
+     * monthly | quarterly | semi_annual | annual — how often the performance fee
+     * crystallizes and the mark ratchets. This is a price, not a detail: crystallizing
+     * more often measurably raises what an investor pays over a fund's life, because
+     * each reset locks in gains a later loss can no longer claw back.
+     */
+    crystallization?: string;
+    /**
+     * updated_at
+     *
+     * unix seconds; 0 when unconfigured
+     */
+    updated_at?: number | string;
+};
+
+/**
+ * FeePolicyList
+ */
+export type BankingV1FeePolicyList = {
+    /**
+     * policies
+     */
+    policies?: Array<BankingV1FeePolicy>;
+};
+
+/**
+ * FeeSettlement
+ */
+export type BankingV1FeeSettlement = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * units
+     */
+    units?: string;
+    /**
+     * nav
+     */
+    nav?: string;
+    /**
+     * cash
+     */
+    cash?: string;
+};
+
+/**
+ * FeeShares
+ *
+ * The manager's uncollected fee units in one fund.
+ */
+export type BankingV1FeeShares = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * units
+     */
+    units?: string;
+    /**
+     * value
+     *
+     * units × current NAV
+     */
+    value?: string;
+};
+
+/**
  * FundNav
  *
  * The current price of a fund's share, derived (AUM / units_outstanding) and frozen
@@ -364,6 +602,16 @@ export type BankingV1FundNav = {
 };
 
 /**
+ * GetAccruedFeesRequest
+ */
+export type BankingV1GetAccruedFeesRequest = {
+    /**
+     * service
+     */
+    service?: string;
+};
+
+/**
  * GetAllocationRequest
  */
 export type BankingV1GetAllocationRequest = {
@@ -383,6 +631,26 @@ export type BankingV1GetDepositAddressRequest = {
      * bep20 | polygon | trc20 | ton
      */
     network?: string;
+};
+
+/**
+ * GetFeePolicyRequest
+ */
+export type BankingV1GetFeePolicyRequest = {
+    /**
+     * service
+     */
+    service?: string;
+};
+
+/**
+ * GetFeeSharesRequest
+ */
+export type BankingV1GetFeeSharesRequest = {
+    /**
+     * service
+     */
+    service?: string;
 };
 
 /**
@@ -534,6 +802,30 @@ export type BankingV1ListAllocationsRequest = {
  */
 export type BankingV1ListDepositsRequest = {
     [key: string]: never;
+};
+
+/**
+ * ListFeeAssessmentsRequest
+ */
+export type BankingV1ListFeeAssessmentsRequest = {
+    [key: string]: never;
+};
+
+/**
+ * ListFeePoliciesRequest
+ */
+export type BankingV1ListFeePoliciesRequest = {
+    [key: string]: never;
+};
+
+/**
+ * ListFundFeeAssessmentsRequest
+ */
+export type BankingV1ListFundFeeAssessmentsRequest = {
+    /**
+     * service
+     */
+    service?: string;
 };
 
 /**
@@ -1457,6 +1749,36 @@ export type BankingV1SetAllocationUnitCapRequest = {
 };
 
 /**
+ * SetFeePolicyRequest
+ */
+export type BankingV1SetFeePolicyRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * management_bps
+     */
+    management_bps?: number;
+    /**
+     * performance_bps
+     */
+    performance_bps?: number;
+    /**
+     * hurdle_bps
+     */
+    hurdle_bps?: number;
+    /**
+     * basis
+     */
+    basis?: string;
+    /**
+     * crystallization
+     */
+    crystallization?: string;
+};
+
+/**
  * SetOperationsModeRequest
  */
 export type BankingV1SetOperationsModeRequest = {
@@ -1464,6 +1786,22 @@ export type BankingV1SetOperationsModeRequest = {
      * read_only
      */
     read_only?: boolean;
+};
+
+/**
+ * SettleFeeSharesRequest
+ */
+export type BankingV1SettleFeeSharesRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * units
+     *
+     * decimal units; empty settles the whole accumulated balance
+     */
+    units?: string;
 };
 
 /**
@@ -3497,6 +3835,238 @@ export type BankingV1BalanceServiceUnparkEventResponses = {
 };
 
 export type BankingV1BalanceServiceUnparkEventResponse = BankingV1BalanceServiceUnparkEventResponses[keyof BankingV1BalanceServiceUnparkEventResponses];
+
+export type BankingV1FeesServiceGetAccruedFeesData = {
+    body: BankingV1GetAccruedFeesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/GetAccruedFees';
+};
+
+export type BankingV1FeesServiceGetAccruedFeesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceGetAccruedFeesError = BankingV1FeesServiceGetAccruedFeesErrors[keyof BankingV1FeesServiceGetAccruedFeesErrors];
+
+export type BankingV1FeesServiceGetAccruedFeesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1AccruedFees;
+};
+
+export type BankingV1FeesServiceGetAccruedFeesResponse = BankingV1FeesServiceGetAccruedFeesResponses[keyof BankingV1FeesServiceGetAccruedFeesResponses];
+
+export type BankingV1FeesServiceGetFeePolicyData = {
+    body: BankingV1GetFeePolicyRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/GetFeePolicy';
+};
+
+export type BankingV1FeesServiceGetFeePolicyErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceGetFeePolicyError = BankingV1FeesServiceGetFeePolicyErrors[keyof BankingV1FeesServiceGetFeePolicyErrors];
+
+export type BankingV1FeesServiceGetFeePolicyResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeePolicy;
+};
+
+export type BankingV1FeesServiceGetFeePolicyResponse = BankingV1FeesServiceGetFeePolicyResponses[keyof BankingV1FeesServiceGetFeePolicyResponses];
+
+export type BankingV1FeesServiceGetFeeSharesData = {
+    body: BankingV1GetFeeSharesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/GetFeeShares';
+};
+
+export type BankingV1FeesServiceGetFeeSharesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceGetFeeSharesError = BankingV1FeesServiceGetFeeSharesErrors[keyof BankingV1FeesServiceGetFeeSharesErrors];
+
+export type BankingV1FeesServiceGetFeeSharesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeeShares;
+};
+
+export type BankingV1FeesServiceGetFeeSharesResponse = BankingV1FeesServiceGetFeeSharesResponses[keyof BankingV1FeesServiceGetFeeSharesResponses];
+
+export type BankingV1FeesServiceListFeeAssessmentsData = {
+    body: BankingV1ListFeeAssessmentsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/ListFeeAssessments';
+};
+
+export type BankingV1FeesServiceListFeeAssessmentsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceListFeeAssessmentsError = BankingV1FeesServiceListFeeAssessmentsErrors[keyof BankingV1FeesServiceListFeeAssessmentsErrors];
+
+export type BankingV1FeesServiceListFeeAssessmentsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeeAssessmentList;
+};
+
+export type BankingV1FeesServiceListFeeAssessmentsResponse = BankingV1FeesServiceListFeeAssessmentsResponses[keyof BankingV1FeesServiceListFeeAssessmentsResponses];
+
+export type BankingV1FeesServiceListFeePoliciesData = {
+    body: BankingV1ListFeePoliciesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/ListFeePolicies';
+};
+
+export type BankingV1FeesServiceListFeePoliciesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceListFeePoliciesError = BankingV1FeesServiceListFeePoliciesErrors[keyof BankingV1FeesServiceListFeePoliciesErrors];
+
+export type BankingV1FeesServiceListFeePoliciesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeePolicyList;
+};
+
+export type BankingV1FeesServiceListFeePoliciesResponse = BankingV1FeesServiceListFeePoliciesResponses[keyof BankingV1FeesServiceListFeePoliciesResponses];
+
+export type BankingV1FeesServiceListFundFeeAssessmentsData = {
+    body: BankingV1ListFundFeeAssessmentsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/ListFundFeeAssessments';
+};
+
+export type BankingV1FeesServiceListFundFeeAssessmentsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceListFundFeeAssessmentsError = BankingV1FeesServiceListFundFeeAssessmentsErrors[keyof BankingV1FeesServiceListFundFeeAssessmentsErrors];
+
+export type BankingV1FeesServiceListFundFeeAssessmentsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeeAssessmentList;
+};
+
+export type BankingV1FeesServiceListFundFeeAssessmentsResponse = BankingV1FeesServiceListFundFeeAssessmentsResponses[keyof BankingV1FeesServiceListFundFeeAssessmentsResponses];
+
+export type BankingV1FeesServiceSetFeePolicyData = {
+    body: BankingV1SetFeePolicyRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/SetFeePolicy';
+};
+
+export type BankingV1FeesServiceSetFeePolicyErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceSetFeePolicyError = BankingV1FeesServiceSetFeePolicyErrors[keyof BankingV1FeesServiceSetFeePolicyErrors];
+
+export type BankingV1FeesServiceSetFeePolicyResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeePolicy;
+};
+
+export type BankingV1FeesServiceSetFeePolicyResponse = BankingV1FeesServiceSetFeePolicyResponses[keyof BankingV1FeesServiceSetFeePolicyResponses];
+
+export type BankingV1FeesServiceSettleFeeSharesData = {
+    body: BankingV1SettleFeeSharesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/SettleFeeShares';
+};
+
+export type BankingV1FeesServiceSettleFeeSharesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceSettleFeeSharesError = BankingV1FeesServiceSettleFeeSharesErrors[keyof BankingV1FeesServiceSettleFeeSharesErrors];
+
+export type BankingV1FeesServiceSettleFeeSharesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeeSettlement;
+};
+
+export type BankingV1FeesServiceSettleFeeSharesResponse = BankingV1FeesServiceSettleFeeSharesResponses[keyof BankingV1FeesServiceSettleFeeSharesResponses];
 
 export type BankingV1FundsServiceCancelRedemptionData = {
     body: BankingV1CancelRedemptionRequest;
