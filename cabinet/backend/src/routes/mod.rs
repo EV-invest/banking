@@ -57,6 +57,8 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/operations", get(money::list_operations))
 		.route("/api/funds/nav", get(money::fund_nav))
 		.route("/api/funds/positions", get(money::list_positions))
+		.route("/api/funds/fee-policy", get(money::fee_policy))
+		.route("/api/funds/accrued-fees", get(money::accrued_fees))
 		.route("/api/funds/redemptions", get(money::list_redemptions))
 		.route("/api/funds/redemptions/cancel", post(money::cancel_redemption))
 		.route("/api/funds/subscribe", post(money::subscribe))

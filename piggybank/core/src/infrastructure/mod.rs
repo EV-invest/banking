@@ -20,6 +20,8 @@
 //!   liquidity gates (TB rail + on-chain treasury) and dispatches the covered ones.
 //! - [`fees`] — Postgres adapters for the fee plane (policy, accrual clocks, the
 //!   charge, the bulk settlement of accumulated fee units).
+//! - [`fee_accrual`] — the obligation the fee plane places on everyone who moves a cost
+//!   basis: settle what the old basis accrued before writing the new one.
 //! - [`fee_sweeper`] — the periodic worker that assesses management + performance fees
 //!   against every unit-holding position that is due.
 //! - [`operation_feed`] — the read-side merge of the four money projections into one
@@ -36,6 +38,7 @@ pub mod deposit_watcher;
 pub mod deposits;
 pub mod dispatcher;
 pub mod evm_rpc;
+pub mod fee_accrual;
 pub mod fee_sweeper;
 pub mod fees;
 pub mod ledger;

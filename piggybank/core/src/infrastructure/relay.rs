@@ -50,7 +50,10 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
-	infrastructure::outbox::{self, OutboxRow},
+	infrastructure::{
+		fee_accrual,
+		outbox::{self, OutboxRow},
+	},
 	ports::{
 		custody::{BroadcastRequest, Custody, CustodyError},
 		ledger::{CompletionKind, Ledger, LedgerError, LedgerTransfer, PendingCompletion},
@@ -515,6 +518,13 @@ async fn project_subscription(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx
 		.await?
 		.rows_affected();
 	if marked == 1 {
+		// The basis is about to move, so whatever the OLD basis accrued has to be settled
+		// first — otherwise the next assessment charges this whole elapsed window on money
+		// that arrives on the next line. See [`super::fee_accrual`] for why resetting the
+		// clock without settling would be the worse bug of the two.
+		fee_accrual::carry_accrual(&mut tx, user.raw(), service.as_str(), now_unix())
+			.await
+			.map_err(|err| sqlx::Error::Protocol(format!("carry fee accrual before subscribe basis change: {err}")))?;
 		sqlx::query(
 			"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
 			 ON CONFLICT (user_id, service) DO UPDATE SET \
@@ -533,6 +543,13 @@ async fn project_subscription(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx
 	}
 	tx.commit().await?;
 	Ok(())
+}
+
+/// Wall clock in unix seconds, for the accrual settled when a projection moves a basis.
+/// The relay has no injected clock — it is an infrastructure worker, not a use case —
+/// and the figure only ever bounds an elapsed window that Postgres then stores.
+fn now_unix() -> i64 {
+	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
 /// Custody failures fold into the existing ledger outcomes: an outage is transient

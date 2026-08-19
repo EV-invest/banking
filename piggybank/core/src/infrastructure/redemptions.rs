@@ -24,9 +24,14 @@ use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::{
-	infrastructure::outbox,
+	infrastructure::{fee_accrual, outbox},
 	ports::{QueuedRedemption, RedemptionRepository},
 };
+
+/// Wall clock in unix seconds, for the accrual settled when the basis shrinks.
+fn now_unix() -> i64 {
+	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
 
 const SELECT_BY_ID: &str = "SELECT id, user_id, service, units, nav, cash, state FROM redemptions WHERE id = $1";
 const SELECT_BY_ID_FOR_UPDATE: &str = "SELECT id, user_id, service, units, nav, cash, state FROM redemptions WHERE id = $1 FOR UPDATE";
@@ -142,6 +147,11 @@ async fn load_for_update(conn: &mut PgConnection, id: RedemptionId) -> Result<Re
 /// already burned, a permanent overstate. The `Conflict` rolls the settle back; the
 /// redemption stays queued and is settleable (operator retry) once the projection lands.
 async fn reduce_cost_basis(conn: &mut PgConnection, redemption: &Redemption) -> Result<(), DomainError> {
+	// Settle what the pre-redemption basis accrued before shrinking it. The direction is
+	// the investor's favour here rather than the manager's — a smaller basis under-bills
+	// the elapsed window — but the asymmetry is the bug either way, and the same call
+	// keeps both sides of a basis move honest. See [`super::fee_accrual`].
+	fee_accrual::carry_accrual(&mut *conn, redemption.user().raw(), redemption.service().as_str(), now_unix()).await?;
 	let reduced = sqlx::query(
 		"UPDATE fund_positions SET \
 		 cost_basis = trunc(cost_basis::numeric * (units::numeric - $3::numeric) / units::numeric)::text, \

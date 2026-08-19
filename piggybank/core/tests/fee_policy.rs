@@ -22,7 +22,7 @@ use std::sync::Arc;
 use domain::{
 	allocations::{Allocation, AllocationId},
 	balance::{LedgerAccountKey, Party, ServiceId},
-	fees::{CrystallizationPeriod, FeePolicy, ManagementBasis, Trigger},
+	fees::{self, CrystallizationPeriod, FeeAssessment, FeeAssessmentId, FeePolicy, ManagementBasis, Trigger},
 	money::{Nav, Network, Shares, TxRef, Usdt},
 	users::UserId,
 };
@@ -44,7 +44,7 @@ use piggybank_core::{
 	},
 	ports::{
 		AllocationRegistry,
-		fees::{FeeAssessments, FeePolicies},
+		fees::{FeeAssessments, FeePolicies, PositionAccruals},
 		ledger::Ledger,
 	},
 };
@@ -113,6 +113,28 @@ async fn harness() -> Option<Harness> {
 	})
 }
 
+/// Serializes the one test that sweeps against every test that does not.
+///
+/// `FeeSweeper::sweep` is global by design — it charges every position in the database
+/// whose accrual is due, which is exactly what a sweeper should do. These tests share one
+/// database and backdate their own positions to make them due, so a sweep running in
+/// parallel will happily charge a sibling test's investor: that test then finds its
+/// position already assessed, its clock already advanced, and its units already reduced.
+///
+/// So the sweeping test takes this lock exclusively and everybody else takes it shared.
+/// Everything stays parallel except the one operation that cannot be.
+static SWEEP: std::sync::LazyLock<tokio::sync::RwLock<()>> = std::sync::LazyLock::new(|| tokio::sync::RwLock::new(()));
+
+/// Hold for the duration of a test that backdates a position it wants to assess itself.
+async fn no_sweeping() -> tokio::sync::RwLockReadGuard<'static, ()> {
+	SWEEP.read().await
+}
+
+/// Hold for the duration of the test that runs the sweeper.
+async fn sweeping() -> tokio::sync::RwLockWriteGuard<'static, ()> {
+	SWEEP.write().await
+}
+
 fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()
 }
@@ -146,11 +168,38 @@ async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 }
 
 /// Subscribe and let the relay post both legs plus the position projection.
+///
+/// The wait at the end is load-bearing, not defensive. These tests share one database and
+/// each `drain()` walks the *global* outbox, so a sibling test's drain can be the one that
+/// projects this subscription. The projection stamps the accrual clocks (it has to — the
+/// basis is moving), so a test that backdated before the projection landed would have its
+/// backdating silently overwritten and see a position that has been held for no time at
+/// all. Returning only once the basis has actually moved makes the helper mean what its
+/// name says.
 async fn subscribe(h: &Harness, user: UserId, service: &ServiceId, amount: &str) {
+	let before = cost_basis_of(h, user, service).await;
 	funds_app::subscribe(&h.allocations, &h.subs, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), usdt(amount), now_unix())
 		.await
 		.unwrap();
 	h.relay.drain().await;
+	for _ in 0..100 {
+		if cost_basis_of(h, user, service).await > before {
+			return;
+		}
+		tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+	}
+	panic!("the subscription's position projection never landed");
+}
+
+/// The position's projected cost basis, or zero before the projection exists.
+async fn cost_basis_of(h: &Harness, user: UserId, service: &ServiceId) -> Usdt {
+	let raw: Option<String> = sqlx::query_scalar("SELECT cost_basis FROM fund_positions WHERE user_id = $1 AND service = $2")
+		.bind(user.raw())
+		.bind(service.as_str())
+		.fetch_optional(&h.pool)
+		.await
+		.unwrap();
+	raw.map(|raw| Usdt::from_base_units(raw.parse().unwrap())).unwrap_or(Usdt::ZERO)
 }
 
 /// Move a position's accrual clocks back by `secs` — "hold this for a year" without
@@ -209,6 +258,7 @@ async fn cash_of(h: &Harness, key: LedgerAccountKey) -> Usdt {
 
 #[tokio::test]
 async fn a_year_of_holding_costs_two_percent_of_units_and_moves_no_cash_at_all() {
+	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -258,6 +308,7 @@ async fn a_year_of_holding_costs_two_percent_of_units_and_moves_no_cash_at_all()
 
 #[tokio::test]
 async fn a_gain_above_the_mark_adds_the_twenty_percent_and_ratchets_it() {
+	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -285,13 +336,25 @@ async fn a_gain_above_the_mark_adds_the_twenty_percent_and_ratchets_it() {
 	assert_eq!(charge.charged_units, Shares::from_cash(charge.due, Nav::parse_decimal("1.5").unwrap()).unwrap());
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("1000"));
 
-	// A second assessment immediately after charges nothing: no time has passed and the
-	// mark now equals the NAV, so there is neither management nor gain to charge.
-	assert!(assess(&h, user, &service).await.is_none(), "the same gain must never be charged twice");
+	// A second assessment immediately after takes no share of the gain: the mark now
+	// equals the NAV, so there is nothing above it to charge. It may still collect a
+	// sliver of management fee, because the clock is stamped from the assessing process's
+	// whole second and one real second can have elapsed since — a millionth of a cent, and
+	// owed, which is the point of accruing pro rata temporis rather than per visit.
+	let again = assess(&h, user, &service).await;
+	if let Some(again) = again {
+		assert_eq!(again.performance, Usdt::ZERO, "the same gain must never be charged twice");
+		// 0.01 USDT is about four hours of management fee on this position, so anything
+		// under it is scheduler jitter between the two assessments. A genuine re-charge
+		// would be another ~118, four orders of magnitude away — the gap is what makes
+		// this a real assertion rather than a tolerance.
+		assert!(again.due < usdt("0.01"), "only a sliver of elapsed management, not a second charge: {}", again.due);
+	}
 }
 
 #[tokio::test]
 async fn the_mark_is_per_investor_so_a_late_entrant_pays_less() {
+	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let early = UserId::new();
 	let late = UserId::new();
@@ -326,6 +389,7 @@ async fn the_mark_is_per_investor_so_a_late_entrant_pays_less() {
 
 #[tokio::test]
 async fn a_recovery_below_the_mark_is_never_charged() {
+	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -376,6 +440,7 @@ async fn a_recovery_below_the_mark_is_never_charged() {
 
 #[tokio::test]
 async fn a_fund_with_no_policy_is_never_charged() {
+	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -395,6 +460,7 @@ async fn a_fund_with_no_policy_is_never_charged() {
 
 #[tokio::test]
 async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
+	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -433,6 +499,7 @@ async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 
 #[tokio::test]
 async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
+	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -481,6 +548,7 @@ async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
 
 #[tokio::test]
 async fn the_sweeper_charges_every_due_position_and_records_a_statement() {
+	let _sweeping = sweeping().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -511,12 +579,18 @@ async fn the_sweeper_charges_every_due_position_and_records_a_statement() {
 		"the statement's figure is the one the ledger actually moved"
 	);
 
-	// A second sweep in the same second charges nothing — the clocks moved with the charge.
-	assert_eq!(sweeper.sweep(now_unix()).await.unwrap(), 0, "a swept position is not due again");
+	// A second sweep does not charge THIS position again — the clocks moved with the
+	// charge. The sweep's own return value counts every due position in the database,
+	// which a sibling test's fixture can add to, so the assertion is on this investor's
+	// statement rather than on that global count.
+	sweeper.sweep(now_unix()).await.unwrap();
+	h.relay.drain().await;
+	assert_eq!(h.assessments.list_by_user(user).await.unwrap().len(), 1, "a swept position is not charged again");
 }
 
 #[tokio::test]
 async fn a_zero_rate_policy_is_distinct_from_no_policy_and_also_charges_nothing() {
+	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -533,4 +607,120 @@ async fn a_zero_rate_policy_is_distinct_from_no_policy_and_also_charges_nothing(
 	// configured answer, not a missing one.
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(free));
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service, user)).await, shares("1000"));
+}
+
+#[tokio::test]
+async fn a_top_up_is_never_billed_for_the_window_before_it_arrived() {
+	let _no_sweeping = no_sweeping().await;
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let service = unique_service();
+	open_fund(&h, &service).await;
+
+	// A small position held for a year, then a hundredfold top-up.
+	fund_user(&h, user, "100000").await;
+	subscribe(&h, user, &service, "1000").await;
+	backdate(&h, user, &service, YEAR + PERIOD_MARGIN).await;
+	subscribe(&h, user, &service, "99000").await;
+
+	// The management leg is `basis × rate × elapsed`, and the top-up moved the basis
+	// without moving the clock. Charging now must bill 2% of the 1000 that was actually
+	// held for the year — NOT 2% of the 100000 that exists at this instant.
+	let charge = assess(&h, user, &service).await.expect("the carried year is collectable");
+	assert_close(charge.due, usdt("20"), "a year on the original 1000, not on the topped-up 100000");
+	// It arrives as carried debt: the accrual was settled the moment the basis moved,
+	// which is the whole mechanism.
+	assert_close(charge.debt_opening, usdt("20"), "settled at the top-up, collected here");
+	assert_close(charge.management, usdt("0"), "no elapsed window remains after the top-up");
+}
+
+#[tokio::test]
+async fn a_position_that_left_and_came_back_is_not_billed_for_its_dormancy() {
+	let _no_sweeping = no_sweeping().await;
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let service = unique_service();
+	open_fund(&h, &service).await;
+
+	fund_user(&h, user, "20000").await;
+	subscribe(&h, user, &service, "10000").await;
+	// Exactly what a full redemption leaves behind: `reduce_cost_basis` computes
+	// `cost_basis × (units − redeemed) / units`, which is zero when everything goes.
+	// Doing it in SQL keeps the test on the branch under examination rather than on the
+	// redemption saga, which has its own tests.
+	sqlx::query("UPDATE fund_positions SET units = '0', cost_basis = '0' WHERE user_id = $1 AND service = $2")
+		.bind(user.raw())
+		.bind(service.as_str())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	// A year of dormancy. The sweeper's queue skips unit-less rows, so nothing would have
+	// advanced this clock on its own.
+	backdate(&h, user, &service, YEAR + PERIOD_MARGIN).await;
+
+	subscribe(&h, user, &service, "10000").await;
+	// Before the fix this billed a full year of management fee on the returning capital —
+	// 2% of 10000, or 200 USDT. What is owed now is the handful of seconds the returned
+	// position has actually been held.
+	let charge = assess(&h, user, &service).await;
+	let due = charge.map(|charge| charge.due).unwrap_or(Usdt::ZERO);
+	assert!(due < usdt("0.01"), "a dormant year must not be billed on the returning capital, got {due}");
+}
+
+#[tokio::test]
+async fn a_second_assessor_for_the_same_window_charges_nothing() {
+	let _no_sweeping = no_sweeping().await;
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let service = unique_service();
+	open_fund(&h, &service).await;
+
+	fund_user(&h, user, "10000").await;
+	subscribe(&h, user, &service, "10000").await;
+	backdate(&h, user, &service, YEAR + PERIOD_MARGIN).await;
+
+	// Capture the clock both assessors would read, then let the first one charge.
+	let stale = h.accruals.find(user, &service).await.unwrap().unwrap().accrued_at_unix;
+	let first = assess(&h, user, &service).await.expect("the year is collectable");
+	let units_after_first = units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await;
+
+	// The second assessor read the same snapshot before the first committed — the shape
+	// of two replicas sweeping the same position, which is a supported deployment (the
+	// relay is a lock-enforced singleton precisely because a second core instance runs).
+	// Its write must be refused, not merely serialized after the first.
+	let charge = fees::assess(
+		&FeePolicy::HOUSE,
+		&snapshot_at(&h, user, &service, stale).await,
+		first.high_water_mark,
+		Trigger::Period,
+		now_unix(),
+	)
+	.unwrap();
+	let mut duplicate = FeeAssessment::record(FeeAssessmentId::new(), user, service.clone(), first.high_water_mark, Trigger::Period, charge).unwrap();
+	let landed = h.assessments.charge(&mut duplicate, stale, now_unix()).await.unwrap();
+	assert!(!landed, "a stale snapshot must not produce a second charge for the same window");
+
+	h.relay.drain().await;
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await,
+		units_after_first,
+		"the investor was charged once, not twice"
+	);
+	// And the refused charge left no audit row behind — the whole transaction rolled back.
+	assert_eq!(h.assessments.list_by_user(user).await.unwrap().len(), 1);
+}
+
+/// Rebuild the snapshot a losing assessor would have held: today's position, but the
+/// accrual clock it read before the winner moved it.
+async fn snapshot_at(h: &Harness, user: UserId, service: &ServiceId, accrued_at_unix: i64) -> domain::fees::PositionSnapshot {
+	let accrual = h.accruals.find(user, service).await.unwrap().unwrap();
+	let units = units_of(h, LedgerAccountKey::UserShares(service.clone(), user)).await;
+	domain::fees::PositionSnapshot {
+		units,
+		cost_basis: accrual.cost_basis,
+		high_water_mark: accrual.high_water_mark,
+		debt: accrual.debt,
+		accrued_at_unix,
+		crystallized_at_unix: accrual.crystallized_at_unix,
+	}
 }

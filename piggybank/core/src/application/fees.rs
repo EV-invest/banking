@@ -72,7 +72,12 @@ pub async fn assess_position(
 		return Ok(None);
 	}
 	let mut assessment = FeeAssessment::record(FeeAssessmentId::new(), user, service, price, trigger, charge)?;
-	assessments.charge(&mut assessment).await?;
+	// Conditional on the accrual clock still being the one we assessed against. Losing
+	// that race is a non-event like every other "nothing to do" here: the winner charged
+	// this window, and re-charging it would bill the investor twice for the same days.
+	if !assessments.charge(&mut assessment, snapshot.accrued_at_unix, now_unix).await? {
+		return Ok(None);
+	}
 	relay.notify_one();
 	Ok(Some(assessment))
 }

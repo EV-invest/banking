@@ -363,7 +363,14 @@ pub fn assess(policy: &FeePolicy, snapshot: &PositionSnapshot, nav: Nav, trigger
 /// time is clamped at zero: a clock that ran backwards (a re-assessment inside the same
 /// second, a corrected timestamp) must never produce a negative — or, on unsigned
 /// arithmetic, an enormous — fee.
-fn management_due(policy: &FeePolicy, snapshot: &PositionSnapshot, nav: Nav, now_unix: i64) -> Result<Usdt, DomainError> {
+///
+/// Public because the management leg has to be settled at one more moment than an
+/// assessment: the instant the *basis itself* changes. A top-up raises `cost_basis`
+/// without the elapsed clock moving, so an assessment that ran afterwards would charge
+/// the whole elapsed window on money that arrived at the end of it. The projection
+/// writers call this first, carry the result into `fee_debt`, and reset the clock — see
+/// `piggybank_core::infrastructure::fees::carry_accrual`.
+pub fn management_due(policy: &FeePolicy, snapshot: &PositionSnapshot, nav: Nav, now_unix: i64) -> Result<Usdt, DomainError> {
 	if policy.management_bps == 0 {
 		return Ok(Usdt::ZERO);
 	}

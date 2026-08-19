@@ -111,5 +111,27 @@ fn operation_to_proto(operation: &Operation) -> pb::Operation {
 			service: service.as_str().to_owned(),
 			..base
 		},
+		Operation::FeeCharge {
+			id,
+			service,
+			units,
+			nav,
+			cash,
+			management,
+			performance,
+			deferred,
+			..
+		} => pb::Operation {
+			id: id.to_string(),
+			state: if *deferred { "partly_deferred" } else { "charged" }.to_owned(),
+			// What the clawed-back units were worth, not a cash transfer — no cash moved.
+			amount: cash.to_decimal_string(),
+			units: units.to_decimal_string(),
+			nav: nav.to_decimal_string(),
+			service: service.as_str().to_owned(),
+			management: management.to_decimal_string(),
+			performance: performance.to_decimal_string(),
+			..base
+		},
 	}
 }

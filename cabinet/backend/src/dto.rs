@@ -439,6 +439,66 @@ impl From<bk::FundNav> for FundNav {
 	}
 }
 
+// ── fees ──────────────────────────────────────────────────────────────────────
+
+/// A fund's fee terms as the investor should read them. `configured` distinguishes "this
+/// product charges nothing" from "we could not tell you" — the client renders no fee
+/// section at all in the first case rather than a row of zeros that looks like a policy.
+#[derive(Serialize)]
+pub struct FeePolicy {
+	pub service: String,
+	pub configured: bool,
+	pub management_bps: u32,
+	pub performance_bps: u32,
+	pub hurdle_bps: u32,
+	pub basis: String,
+	pub crystallization: String,
+	pub updated_at: String,
+}
+
+impl From<bk::FeePolicy> for FeePolicy {
+	fn from(p: bk::FeePolicy) -> Self {
+		Self {
+			service: p.service,
+			configured: p.configured,
+			management_bps: p.management_bps,
+			performance_bps: p.performance_bps,
+			hurdle_bps: p.hurdle_bps,
+			basis: p.basis,
+			crystallization: p.crystallization,
+			updated_at: p.updated_at.to_string(),
+		}
+	}
+}
+
+/// What a holding owes right now without being charged. `high_water_mark` travels with it
+/// because it is the single number that explains why two investors in the same fund at the
+/// same price owe different performance fees.
+#[derive(Serialize)]
+pub struct AccruedFees {
+	pub service: String,
+	pub configured: bool,
+	pub management: String,
+	pub performance: String,
+	pub debt: String,
+	pub total: String,
+	pub high_water_mark: String,
+}
+
+impl From<bk::AccruedFees> for AccruedFees {
+	fn from(a: bk::AccruedFees) -> Self {
+		Self {
+			service: a.service,
+			configured: a.configured,
+			management: a.management,
+			performance: a.performance,
+			debt: a.debt,
+			total: a.total,
+			high_water_mark: a.high_water_mark,
+		}
+	}
+}
+
 // ── admin console ─────────────────────────────────────────────────────────────
 
 /// One fleet-health row (Overview). Backend-sourced where a plane serves it; the
