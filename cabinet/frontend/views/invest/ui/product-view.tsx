@@ -17,8 +17,8 @@ import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
-import { allocationsResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
-import type { FundNav, Position } from "@/shared/contracts";
+import { accruedFeesResource, allocationsResource, feePolicyResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
+import type { AccruedFees, FeePolicy, FundNav, Position } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
@@ -41,6 +41,10 @@ export function ProductView({ service }: { service: string }) {
   const positionList = useResource(positionsResource);
   const navRead = useResource(fundNavResource, service);
   const redemptionList = useResource(redemptionsResource);
+  // Two separate reads on purpose: the terms are the fund's and cache for minutes, while
+  // the accrued figure is the caller's own and moves every second the clock runs.
+  const feeRead = useResource(feePolicyResource, service);
+  const accruedRead = useResource(accruedFeesResource, service);
 
   const resolving = catalogList.isLoading || positionList.isLoading;
   const readFailed = (!catalogList.data && catalogList.error) || (!positionList.data && positionList.error);
@@ -50,6 +54,8 @@ export function ProductView({ service }: { service: string }) {
     : (buildProducts(catalogList.data?.allocations ?? [], positionList.data?.positions ?? []).find((p) => p.service === service) ?? null);
 
   const nav = navRead.data ?? null;
+  const feePolicy = feeRead.data ?? null;
+  const accruedFees = accruedRead.data ?? null;
   const redemptions = (redemptionList.data?.redemptions ?? []).filter((r) => r.service === service);
 
   if (product === undefined) {
@@ -137,7 +143,10 @@ export function ProductView({ service }: { service: string }) {
           {queued.length > 0 && <QueuedList items={queued} />}
         </div>
 
-        <SupplyCard nav={nav} />
+        <div className="space-y-5">
+          <SupplyCard nav={nav} />
+          <FeeCard policy={feePolicy} accrued={held ? accruedFees : null} />
+        </div>
       </div>
     </div>
   );
@@ -184,6 +193,81 @@ function SupplyCard({ nav }: { nav: FundNav | null }) {
     </Card>
   );
 }
+
+/**
+ * What this fund charges, and what the caller's own holding has run up against it.
+ *
+ * It sits beside the supply card rather than inside the holding block because the terms
+ * apply to a product whether or not the caller is in it — somebody deciding whether to
+ * subscribe needs to read the fee before they act, not discover it on the first charge.
+ *
+ * A product with no policy renders nothing at all. That is deliberate: an absent policy
+ * and a policy of zeros are different facts, and a card of zeros reads like a fee that was
+ * generously waived rather than a fund that never had one.
+ *
+ * The accrued figures are shown only to a holder, because they are a statement about a
+ * position. `total` is what would be taken if the fee were charged this instant — the
+ * number the `Value` stat opposite has NOT been reduced by — so the card says so plainly
+ * instead of leaving the two to be reconciled by the reader.
+ */
+function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: AccruedFees | null }) {
+  if (!policy?.configured) return null;
+  const owed = accrued?.configured ? accrued : null;
+  return (
+    <Card className="h-fit">
+      <CardContent className="space-y-4 py-6">
+        <p className="text-sm font-semibold">Fees</p>
+        <dl className="space-y-2.5 text-sm">
+          <Row label="Management" value={`${percent(policy.management_bps)} p.a.`} />
+          <Row label="Performance" value={`${percent(policy.performance_bps)} of the gain`} />
+          {policy.hurdle_bps ? <Row label="Hurdle" value={`${percent(policy.hurdle_bps)} p.a. first`} /> : null}
+          <Row label="Charged on" value={BASIS_LABEL[policy.basis ?? ""] ?? policy.basis ?? "—"} />
+          <Row label="Locked in" value={PERIOD_LABEL[policy.crystallization ?? ""] ?? policy.crystallization ?? "—"} />
+        </dl>
+
+        {owed && (
+          <div className="space-y-2.5 border-t border-border pt-4">
+            {/* Its own heading, so the rows can be labelled `Management` and `Performance`
+                without colliding with the identically-named terms above. Long enough labels
+                to disambiguate inline would wrap onto two lines in this column. */}
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Accrued on your holding</p>
+            <dl className="space-y-2.5 text-sm">
+              <Row label="Management" value={`${formatUsdt(owed.management)} USDT`} />
+              <Row label="Performance" value={`${formatUsdt(owed.performance)} USDT`} />
+              {isZero(owed.debt) ? null : <Row label="Carried over" value={`${formatUsdt(owed.debt)} USDT`} />}
+              <Row label="Total" value={`${formatUsdt(owed.total)} USDT`} />
+              <Row label="Your mark" value={`${formatUsdt(owed.high_water_mark)} USDT`} />
+            </dl>
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          {owed
+            ? "Fees are taken in units, never in cash — your wallet balance is untouched, and the value shown opposite is before them. The performance fee applies only to gains above your own high-water mark, so a recovery back to it costs nothing."
+            : "Fees are taken in units, never in cash. The performance fee applies only to gains above the price you enter at, measured per investor rather than per fund."}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Basis points as an investor reads them: 200 → "2%", 250 → "2.5%". */
+function percent(bps: number | undefined): string {
+  const value = (bps ?? 0) / 100;
+  return `${Number.isInteger(value) ? value : Number(value.toFixed(2))}%`;
+}
+
+const BASIS_LABEL: Record<string, string> = {
+  invested_capital: "Invested capital",
+  market_value: "Market value",
+};
+
+const PERIOD_LABEL: Record<string, string> = {
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  semi_annual: "Every 6 months",
+  annual: "Annually",
+};
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

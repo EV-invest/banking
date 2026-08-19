@@ -231,6 +231,10 @@ pub struct Operation {
 	pub network: String,
 	pub address: String,
 	pub tx_ref: String,
+	/// fee only — the two legs of a charge, so a timeline row can say whether it was rent
+	/// on the capital or a share of the gain rather than only how much was taken.
+	pub management: String,
+	pub performance: String,
 }
 
 impl From<bk::Operation> for Operation {
@@ -249,6 +253,8 @@ impl From<bk::Operation> for Operation {
 			network: o.network,
 			address: o.address,
 			tx_ref: o.tx_ref,
+			management: o.management,
+			performance: o.performance,
 		}
 	}
 }

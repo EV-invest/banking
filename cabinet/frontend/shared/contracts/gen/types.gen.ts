@@ -976,16 +976,24 @@ export type BankingV1NetworkWithdrawable = {
  * oneof: the whole surface is projected to TypeScript through OpenAPI, where a flat
  * message with a documented discriminator survives the pipeline unambiguously.
  *
- * | field        | deposit | withdrawal | subscription | redemption |
- * | ------------ | ------- | ---------- | ------------ | ---------- |
- * | amount       | ✓       | ✓ (gross)  | ✓ (cash in)  | ✓ at settle|
- * | fee          |         | ✓          |              |            |
- * | net_amount   |         | ✓          |              |            |
- * | units / nav  |         |            | ✓            | ✓ at settle|
- * | service      |         |            | ✓            | ✓          |
- * | network      | ✓       | ✓          |              |            |
- * | address      |         | ✓          |              |            |
- * | tx_ref       | ✓       | ✓ at settle|              |            |
+ * | field        | deposit | withdrawal | subscription | redemption | fee        |
+ * | ------------ | ------- | ---------- | ------------ | ---------- | ---------- |
+ * | amount       | ✓       | ✓ (gross)  | ✓ (cash in)  | ✓ at settle| ✓ (taken)  |
+ * | fee          |         | ✓          |              |            |            |
+ * | net_amount   |         | ✓          |              |            |            |
+ * | units / nav  |         |            | ✓            | ✓ at settle| ✓          |
+ * | service      |         |            | ✓            | ✓          | ✓          |
+ * | network      | ✓       | ✓          |              |            |            |
+ * | address      |         | ✓          |              |            |            |
+ * | tx_ref       | ✓       | ✓ at settle|              |            |            |
+ * | management   |         |            |              |            | ✓          |
+ * | performance  |         |            |              |            | ✓          |
+ *
+ * The `fee` row is the one the investor did not initiate: the fund charging its own
+ * management and performance fee against the holding. It moves no cash and touches no
+ * chain — units are clawed back to the manager on the share ledger — so `amount` is what
+ * those units were WORTH at `nav`, not a transfer. Without this row an investor's units
+ * would simply shrink with nothing on the timeline to explain it.
  */
 export type BankingV1Operation = {
     /**
@@ -998,7 +1006,7 @@ export type BankingV1Operation = {
     /**
      * kind
      *
-     * deposit | withdrawal | subscription | redemption
+     * deposit | withdrawal | subscription | redemption | fee
      */
     kind?: string;
     /**
@@ -1008,6 +1016,8 @@ export type BankingV1Operation = {
      * watcher has confirmed it). subscription: always `completed` (an immutable mint).
      * withdrawal: queued | processing | completed | failed | cancelled.
      * redemption: queued | completed | failed | cancelled.
+     * fee: `charged` when the whole charge was collected, `partly_deferred` when the
+     * holding could not cover it and the rest was carried as debt to the next charge.
      */
     state?: string;
     /**
@@ -1071,6 +1081,19 @@ export type BankingV1Operation = {
      * rail kinds — the on-chain reference (empty until settled)
      */
     tx_ref?: string;
+    /**
+     * management
+     *
+     * fee only — the two legs of the charge, so the row can say WHY it was taken rather
+     * than only how much. `management` is rent on parked capital and is charged whether
+     * the fund gained or not; `performance` is the share of the gain above this
+     * investor's own high-water mark, and is zero except at a crystallization.
+     */
+    management?: string;
+    /**
+     * performance
+     */
+    performance?: string;
 };
 
 /**

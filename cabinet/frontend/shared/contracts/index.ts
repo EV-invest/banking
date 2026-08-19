@@ -40,6 +40,9 @@ export type {
   // The unified activity timeline — one read model over all four money kinds.
   BankingV1Operation as Operation,
   BankingV1OperationList as OperationList,
+  // What a fund charges, and what the caller's holding owes for it right now.
+  BankingV1FeePolicy as FeePolicy,
+  BankingV1AccruedFees as AccruedFees,
 } from "./gen";
 
 // The allocation catalog is served to BOTH the investor surface (`/api/allocations`,
