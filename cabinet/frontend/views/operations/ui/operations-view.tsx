@@ -58,6 +58,7 @@ import {
   networkLabel,
   seconds,
   shortAddress,
+  stateLabel,
   stateTone,
   timeLabel,
 } from "@/views/operations/lib/format";
@@ -121,7 +122,7 @@ export function OperationsView() {
       <header className="mb-6 space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">Operations</p>
         <h1 className="text-2xl font-semibold text-foreground">Operations</h1>
-        <p className="text-sm text-muted-foreground">Every deposit, withdrawal, subscription and redemption you have made — one timeline.</p>
+        <p className="text-sm text-muted-foreground">Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.</p>
       </header>
 
       {error && (
@@ -310,7 +311,7 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
         </ItemContent>
         <ItemActions className="shrink-0 flex-col items-end gap-1">
           <span className={cn("text-sm font-semibold tabular-nums", amountTone(meta.direction))}>{rowAmount(operation)}</span>
-          <Badge className={cn("capitalize", stateTone(operation.state))}>{operation.state}</Badge>
+          <Badge className={cn("capitalize", stateTone(operation.state))}>{stateLabel(operation.state)}</Badge>
         </ItemActions>
         {/* Every row opens a panel now, so every row carries the same disclosure — not
             only the in-flight ones that used to link out to their managing surface. */}
@@ -378,9 +379,17 @@ function rowTitle(operation: Operation, titleOf: (service: string | undefined) =
       return `${titleOf(operation.service)} — subscribed`;
     case "redemption":
       return `${titleOf(operation.service)} — redeemed`;
+    case "fee":
+      return `${titleOf(operation.service)} — fee charged`;
     default:
       return kindMeta(operation.kind).label;
   }
+}
+
+/// A decimal-string amount that is present and not zero. The wire sends every money field
+/// as a string, and proto3 omits an empty one entirely, so both "" and "0" mean "no leg".
+function nonZero(amount: string | undefined): boolean {
+  return !!amount && Number(amount) > 0;
 }
 
 function rowSub(operation: Operation): string {
@@ -399,6 +408,17 @@ function rowSub(operation: Operation): string {
     case "subscription":
     case "redemption":
       return `${formatUnits(operation.units)} units`;
+    case "fee": {
+      // The two legs answer the question the amount alone cannot: whether this was rent
+      // on the capital or a share of the gain. A zero leg is omitted rather than printed,
+      // because "0 performance" reads as a fee that was somehow waived.
+      const legs = [
+        nonZero(operation.management) ? `${formatUsdt(operation.management)} management` : null,
+        nonZero(operation.performance) ? `${formatUsdt(operation.performance)} performance` : null,
+      ].filter(Boolean);
+      const taken = `${formatUnits(operation.units)} units`;
+      return legs.length ? `${taken} · ${legs.join(" + ")}` : taken;
+    }
     default:
       return "";
   }

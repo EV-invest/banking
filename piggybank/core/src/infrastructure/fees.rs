@@ -37,11 +37,16 @@ use crate::{
 	ports::fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeeSettlements, PositionAccrual, PositionAccruals, SettlementRecord},
 };
 
-fn repo_err(err: sqlx::Error) -> DomainError {
+/// Cap on a returned history page. The fee statement grows by one row per position per
+/// sweep, so an uncapped `SELECT` is unbounded in the length of the fund's life; nothing
+/// downstream pages yet, and handing back a year of daily charges is already generous.
+const HISTORY_LIMIT: i64 = 500;
+
+pub(crate) fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())
 }
 
-fn parse_units(raw: &str, what: &str) -> Result<u128, DomainError> {
+pub(crate) fn parse_units(raw: &str, what: &str) -> Result<u128, DomainError> {
 	raw.parse::<u128>().map_err(|_| DomainError::Repository(format!("malformed {what}")))
 }
 
@@ -59,7 +64,7 @@ impl PgFeePolicies {
 	}
 }
 
-fn policy_from_row(row: &sqlx::postgres::PgRow) -> Result<(ServiceId, FeePolicy), DomainError> {
+pub(crate) fn policy_from_row(row: &sqlx::postgres::PgRow) -> Result<(ServiceId, FeePolicy), DomainError> {
 	let service = ServiceId::parse(row.try_get::<String, _>("service").map_err(repo_err)?.as_str())?;
 	let policy = FeePolicy::new(
 		u32::try_from(row.try_get::<i32, _>("management_bps").map_err(repo_err)?).map_err(|_| DomainError::Repository("negative management rate".into()))?,
@@ -242,7 +247,23 @@ async fn insert_assessment(conn: &mut PgConnection, assessment: &FeeAssessment) 
 
 /// Advance the position: new debt, new mark, decremented units, and the clocks.
 /// `crystallized_at` moves only when the performance fee actually crystallized.
-async fn advance_position(conn: &mut PgConnection, assessment: &FeeAssessment, units_before: Shares) -> Result<(), DomainError> {
+///
+/// Returns `false` when the position's accrual clock is no longer the one the caller
+/// assessed against — someone else charged this holding between the snapshot read and
+/// this write, and applying a second charge for the same elapsed window would bill the
+/// investor twice. The row lock alone cannot see that: it serializes the two writes but
+/// says nothing about the staleness of the second one's inputs. The clock *is* the
+/// version, so comparing it is the whole check.
+///
+/// The comparison uses the same `EXTRACT(EPOCH …)::bigint` expression the snapshot was
+/// read through, because rows predating this guard carry sub-second precision (the
+/// migration backfilled them from `created_at`) and would never match a bare
+/// `to_timestamp`.
+///
+/// The clocks are stamped from the caller's `now_unix` rather than Postgres's `now()`:
+/// the charge was computed for the window ending at that instant, and stamping a later
+/// one would silently drop the interval between the assessment and the commit.
+async fn advance_position(conn: &mut PgConnection, assessment: &FeeAssessment, units_before: Shares, expected_accrued_at_unix: i64, now_unix: i64) -> Result<bool, DomainError> {
 	let charge = assessment.charge();
 	// Saturating: the projection is the authority for this subtraction, and a charge
 	// capped by a *ledger* read could in principle exceed a lagging projection. Going
@@ -250,9 +271,9 @@ async fn advance_position(conn: &mut PgConnection, assessment: &FeeAssessment, u
 	// the projection monotone and the next sweep re-reads the truth from TigerBeetle.
 	let units_after = units_before.checked_sub(charge.charged_units).unwrap_or(Shares::ZERO);
 	let result = sqlx::query(
-		"UPDATE fund_positions SET units = $3, fee_debt = $4, high_water_mark = $5, fees_accrued_at = now(), \
-		   crystallized_at = CASE WHEN $6 THEN now() ELSE crystallized_at END, updated_at = now() \
-		 WHERE user_id = $1 AND service = $2",
+		"UPDATE fund_positions SET units = $3, fee_debt = $4, high_water_mark = $5, fees_accrued_at = to_timestamp($7), \
+		   crystallized_at = CASE WHEN $6 THEN to_timestamp($7) ELSE crystallized_at END, updated_at = now() \
+		 WHERE user_id = $1 AND service = $2 AND EXTRACT(EPOCH FROM fees_accrued_at)::bigint = $8",
 	)
 	.bind(assessment.user().raw())
 	.bind(assessment.service().as_str())
@@ -260,13 +281,12 @@ async fn advance_position(conn: &mut PgConnection, assessment: &FeeAssessment, u
 	.bind(charge.debt_carried.base_units().to_string())
 	.bind(charge.high_water_mark.base_units().to_string())
 	.bind(charge.crystallized)
+	.bind(now_unix)
+	.bind(expected_accrued_at_unix)
 	.execute(&mut *conn)
 	.await
 	.map_err(repo_err)?;
-	if result.rows_affected() != 1 {
-		return Err(DomainError::Repository("fund position vanished under lock".into()));
-	}
-	Ok(())
+	Ok(result.rows_affected() == 1)
 }
 
 fn assessment_from_row(row: &sqlx::postgres::PgRow) -> Result<AssessmentRecord, DomainError> {
@@ -297,23 +317,30 @@ fn assessment_from_row(row: &sqlx::postgres::PgRow) -> Result<AssessmentRecord, 
 
 #[async_trait]
 impl FeeAssessments for PgFeeAssessments {
-	async fn charge(&self, assessment: &mut FeeAssessment) -> Result<(), DomainError> {
+	async fn charge(&self, assessment: &mut FeeAssessment, expected_accrued_at_unix: i64, now_unix: i64) -> Result<bool, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let units_before = lock_position(&mut tx, assessment.user(), assessment.service()).await?;
 		insert_assessment(&mut tx, assessment).await?;
-		advance_position(&mut tx, assessment, units_before).await?;
+		if !advance_position(&mut tx, assessment, units_before, expected_accrued_at_unix, now_unix).await? {
+			// Someone charged this holding for the same window first. Roll the audit row
+			// back with everything else and report the no-op — the events are still
+			// undrained, so the aggregate leaves no trace either.
+			tx.rollback().await.map_err(repo_err)?;
+			return Ok(false);
+		}
 		outbox::drain_to_outbox(&mut tx, assessment, true).await?;
 		tx.commit().await.map_err(repo_err)?;
-		Ok(())
+		Ok(true)
 	}
 
 	async fn list_by_user(&self, user: UserId) -> Result<Vec<AssessmentRecord>, DomainError> {
 		let rows = sqlx::query(
 			"SELECT user_id, service, trigger_kind, nav, management, performance, debt_opening, \
 			 charged_units, charged_cash, debt_carried, high_water_mark, EXTRACT(EPOCH FROM assessed_at)::bigint AS assessed_at_unix \
-			 FROM fee_assessments WHERE user_id = $1 ORDER BY assessed_at DESC",
+			 FROM fee_assessments WHERE user_id = $1 ORDER BY assessed_at DESC LIMIT $2",
 		)
 		.bind(user.raw())
+		.bind(HISTORY_LIMIT)
 		.fetch_all(&self.pool)
 		.await
 		.map_err(repo_err)?;
@@ -324,9 +351,10 @@ impl FeeAssessments for PgFeeAssessments {
 		let rows = sqlx::query(
 			"SELECT user_id, service, trigger_kind, nav, management, performance, debt_opening, \
 			 charged_units, charged_cash, debt_carried, high_water_mark, EXTRACT(EPOCH FROM assessed_at)::bigint AS assessed_at_unix \
-			 FROM fee_assessments WHERE service = $1 ORDER BY assessed_at DESC",
+			 FROM fee_assessments WHERE service = $1 ORDER BY assessed_at DESC LIMIT $2",
 		)
 		.bind(service.as_str())
+		.bind(HISTORY_LIMIT)
 		.fetch_all(&self.pool)
 		.await
 		.map_err(repo_err)?;
@@ -374,9 +402,10 @@ impl FeeSettlements for PgFeeSettlements {
 	async fn list_by_service(&self, service: &ServiceId) -> Result<Vec<SettlementRecord>, DomainError> {
 		let rows = sqlx::query(
 			"SELECT service, units, nav, cash, settled_by, EXTRACT(EPOCH FROM settled_at)::bigint AS settled_at_unix \
-			 FROM fee_settlements WHERE service = $1 ORDER BY settled_at DESC",
+			 FROM fee_settlements WHERE service = $1 ORDER BY settled_at DESC LIMIT $2",
 		)
 		.bind(service.as_str())
+		.bind(HISTORY_LIMIT)
 		.fetch_all(&self.pool)
 		.await
 		.map_err(repo_err)?;

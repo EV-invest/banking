@@ -81,7 +81,17 @@ pub trait FeeAssessments: Repository<Aggregate = FeeAssessment> {
 	/// It takes the position row lock, which is the same target a redemption settle
 	/// takes — so a fee assessment and a settle can never interleave and each divide a
 	/// cost basis by a figure the other is about to change.
-	async fn charge(&self, assessment: &mut FeeAssessment) -> Result<(), DomainError>;
+	///
+	/// `expected_accrued_at_unix` is the accrual clock the caller assessed against, and
+	/// the write is conditional on it still being there. `Ok(false)` means it was not:
+	/// another assessor charged this holding for the same elapsed window first, so this
+	/// charge is abandoned whole rather than billing the investor twice. The lock cannot
+	/// substitute for this — it orders the two writes but cannot tell that the second
+	/// one's inputs went stale while it waited.
+	///
+	/// `now_unix` is stamped onto the clocks, so the window the charge was computed for
+	/// and the window recorded as charged are the same one.
+	async fn charge(&self, assessment: &mut FeeAssessment, expected_accrued_at_unix: i64, now_unix: i64) -> Result<bool, DomainError>;
 
 	/// One investor's charges, newest first — the fee statement.
 	async fn list_by_user(&self, user: UserId) -> Result<Vec<AssessmentRecord>, DomainError>;

@@ -78,6 +78,10 @@ impl Grpc {
 		bk::funds_service_client::FundsServiceClient::new(self.piggybank.clone())
 	}
 
+	fn fees(&self) -> bk::fees_service_client::FeesServiceClient<Channel> {
+		bk::fees_service_client::FeesServiceClient::new(self.piggybank.clone())
+	}
+
 	fn allocations(&self) -> bk::allocations_service_client::AllocationsServiceClient<Channel> {
 		bk::allocations_service_client::AllocationsServiceClient::new(self.piggybank.clone())
 	}
@@ -232,6 +236,20 @@ impl Grpc {
 	pub async fn fund_nav(&self, token: &str, service: &str) -> Result<bk::FundNav, Status> {
 		let req = bk::GetFundNavRequest { service: service.to_string() };
 		Ok(self.funds().get_fund_nav(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// A fund's fee terms. Readable by any authenticated caller — an investor is entitled
+	/// to know what they are paying before they subscribe, not only after.
+	pub async fn fee_policy(&self, token: &str, service: &str) -> Result<bk::FeePolicy, Status> {
+		let req = bk::GetFeePolicyRequest { service: service.to_string() };
+		Ok(self.fees().get_fee_policy(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// What the caller's holding owes right now, without charging it — the figure a
+	/// position's value has to be shown net of.
+	pub async fn accrued_fees(&self, token: &str, service: &str) -> Result<bk::AccruedFees, Status> {
+		let req = bk::GetAccruedFeesRequest { service: service.to_string() };
+		Ok(self.fees().get_accrued_fees(bearer(token, req)?).await?.into_inner())
 	}
 
 	pub async fn readiness(&self) -> Result<bk::ReadinessResponse, Status> {

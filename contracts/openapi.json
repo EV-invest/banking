@@ -5231,12 +5231,12 @@
           "kind": {
             "type": "string",
             "title": "kind",
-            "description": "deposit | withdrawal | subscription | redemption"
+            "description": "deposit | withdrawal | subscription | redemption | fee"
           },
           "state": {
             "type": "string",
             "title": "state",
-            "description": "Lifecycle, per kind. deposit: always `credited` (the row exists only once the\n watcher has confirmed it). subscription: always `completed` (an immutable mint).\n withdrawal: queued | processing | completed | failed | cancelled.\n redemption: queued | completed | failed | cancelled."
+            "description": "Lifecycle, per kind. deposit: always `credited` (the row exists only once the\n watcher has confirmed it). subscription: always `completed` (an immutable mint).\n withdrawal: queued | processing | completed | failed | cancelled.\n redemption: queued | completed | failed | cancelled.\n fee: `charged` when the whole charge was collected, `partly_deferred` when the\n holding could not cover it and the rest was carried as debt to the next charge."
           },
           "created_at": {
             "type": [
@@ -5291,11 +5291,20 @@
             "type": "string",
             "title": "tx_ref",
             "description": "rail kinds — the on-chain reference (empty until settled)"
+          },
+          "management": {
+            "type": "string",
+            "title": "management",
+            "description": "fee only — the two legs of the charge, so the row can say WHY it was taken rather\n than only how much. `management` is rent on parked capital and is charged whether\n the fund gained or not; `performance` is the share of the gain above this\n investor's own high-water mark, and is zero except at a crystallization."
+          },
+          "performance": {
+            "type": "string",
+            "title": "performance"
           }
         },
         "title": "Operation",
         "additionalProperties": false,
-        "description": "One row of the timeline. `kind` is the discriminator — it decides which of the\n remaining fields carry a value; the rest are empty. Deliberately flat rather than a\n oneof: the whole surface is projected to TypeScript through OpenAPI, where a flat\n message with a documented discriminator survives the pipeline unambiguously.\n\n | field        | deposit | withdrawal | subscription | redemption |\n | ------------ | ------- | ---------- | ------------ | ---------- |\n | amount       | ✓       | ✓ (gross)  | ✓ (cash in)  | ✓ at settle|\n | fee          |         | ✓          |              |            |\n | net_amount   |         | ✓          |              |            |\n | units / nav  |         |            | ✓            | ✓ at settle|\n | service      |         |            | ✓            | ✓          |\n | network      | ✓       | ✓          |              |            |\n | address      |         | ✓          |              |            |\n | tx_ref       | ✓       | ✓ at settle|              |            |"
+        "description": "One row of the timeline. `kind` is the discriminator — it decides which of the\n remaining fields carry a value; the rest are empty. Deliberately flat rather than a\n oneof: the whole surface is projected to TypeScript through OpenAPI, where a flat\n message with a documented discriminator survives the pipeline unambiguously.\n\n | field        | deposit | withdrawal | subscription | redemption | fee        |\n | ------------ | ------- | ---------- | ------------ | ---------- | ---------- |\n | amount       | ✓       | ✓ (gross)  | ✓ (cash in)  | ✓ at settle| ✓ (taken)  |\n | fee          |         | ✓          |              |            |            |\n | net_amount   |         | ✓          |              |            |            |\n | units / nav  |         |            | ✓            | ✓ at settle| ✓          |\n | service      |         |            | ✓            | ✓          | ✓          |\n | network      | ✓       | ✓          |              |            |            |\n | address      |         | ✓          |              |            |            |\n | tx_ref       | ✓       | ✓ at settle|              |            |            |\n | management   |         |            |              |            | ✓          |\n | performance  |         |            |              |            | ✓          |\n\n The `fee` row is the one the investor did not initiate: the fund charging its own\n management and performance fee against the holding. It moves no cash and touches no\n chain — units are clawed back to the manager on the share ledger — so `amount` is what\n those units were WORTH at `nav`, not a transfer. Without this row an investor's units\n would simply shrink with nothing on the timeline to explain it."
       },
       "banking.v1.OperationList": {
         "type": "object",

@@ -25,6 +25,9 @@ export const TAG = {
   catalog: "catalog",
   /** Per-fund NAV. Moves only when an operator posts a valuation. */
   nav: "nav",
+  /** A fund's fee terms and what the caller's holding has accrued against them. Moves
+   *  when the sweeper charges, so it travels with `positions`. */
+  fees: "fees",
   /** The merged activity timeline. Every money movement lands here. */
   operations: "operations",
   /** The caller's own profile. */

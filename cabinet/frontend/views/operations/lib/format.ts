@@ -12,13 +12,15 @@ export { networkLabel } from "@/views/wallet/lib/format";
 export type OperationKind = "deposit" | "withdrawal" | "subscription" | "redemption";
 
 /** The tab set, in the order the filter row presents them. */
-export const KIND_FILTERS = ["deposit", "withdrawal", "subscription", "redemption"] as const;
+export const KIND_FILTERS = ["deposit", "withdrawal", "subscription", "redemption", "fee"] as const;
 
-// Sign policy. Only the two movements that actually change what the user holds carry a
-// sign: money arriving (deposit) and money leaving (withdrawal). Subscribing and
-// redeeming move value *between* the wallet and a fund without either entering or
-// leaving the account, so they render unsigned in the neutral tone — the Figma's `MOVE`
-// row. Signing them would tell an investor that subscribing lost them money.
+// Sign policy. Only the movements that actually change what the user holds carry a
+// sign: money arriving (deposit), money leaving (withdrawal), and the fund's fee, which
+// takes units from the holder and does not give them back. Subscribing and redeeming move
+// value *between* the wallet and a fund without either entering or leaving the account, so
+// they render unsigned in the neutral tone — the Figma's `MOVE` row. Signing them would
+// tell an investor that subscribing lost them money; NOT signing a fee would tell them a
+// charge was free.
 export type Direction = "in" | "out" | "move";
 
 export interface KindMeta {
@@ -35,6 +37,7 @@ const KINDS: Record<string, KindMeta> = {
   withdrawal: { badge: "OUT", label: "Withdrawal", direction: "out", tone: "bg-destructive/15 text-destructive" },
   subscription: { badge: "BUY", label: "Subscription", direction: "move", tone: "bg-main-accent-t1/15 text-main-accent-t1" },
   redemption: { badge: "SELL", label: "Redemption", direction: "move", tone: "bg-main-accent-t3/15 text-main-accent-t3" },
+  fee: { badge: "FEE", label: "Fee", direction: "out", tone: "bg-destructive/15 text-destructive" },
 };
 
 /** An unrecognised kind renders neutrally rather than disappearing — a new hub kind is
@@ -51,13 +54,22 @@ export function amountTone(direction: Direction): string {
   return "text-foreground";
 }
 
-const SETTLED = new Set(["credited", "completed"]);
+// `partly_deferred` is settled too: the charge itself completed, and what it could not
+// collect became debt on the position rather than an operation still in flight.
+const SETTLED = new Set(["credited", "completed", "charged", "partly_deferred"]);
 const FAILED = new Set(["failed", "cancelled"]);
 
 /** Still moving — the rows the "In progress" section lifts to the top. */
 export function isPending(operation: Operation): boolean {
   const state = operation.state ?? "";
   return !SETTLED.has(state) && !FAILED.has(state);
+}
+
+/** A lifecycle state as a human reads it. Every state the hub sends is a lowercase
+ *  identifier that `capitalize` alone renders correctly — except the compound ones, where
+ *  it would leave the underscore in ("Partly_deferred"). */
+export function stateLabel(state: string | undefined): string {
+  return (state ?? "").replace(/_/g, " ");
 }
 
 /** Badge tint for a lifecycle state, matching the wallet activity screen's vocabulary. */
@@ -69,7 +81,13 @@ export function stateTone(state: string | undefined): string {
       return "bg-main-accent-t1/15 text-main-accent-t1";
     case "completed":
     case "credited":
+    case "charged":
       return "bg-main-accent-t2/15 text-main-accent-t2";
+    // Part of the charge could not be collected and is carried to the next one — worth
+    // the attention tint, since it is the only state where the row's figure is less than
+    // what was actually assessed.
+    case "partly_deferred":
+      return "bg-main-accent-t3/15 text-main-accent-t3";
     case "failed":
       return "bg-destructive/15 text-destructive";
     default:

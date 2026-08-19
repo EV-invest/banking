@@ -140,6 +140,30 @@ pub async fn fund_nav(State(st): State<AppState>, jar: CookieJar, Query(q): Quer
 	Ok(Json(nav.into()))
 }
 
+/// `GET /api/funds/fee-policy?service=` — what this fund charges. Not gated on holding a
+/// position: the terms are part of deciding whether to buy in at all.
+pub async fn fee_policy(State(st): State<AppState>, jar: CookieJar, Query(q): Query<ServiceQuery>) -> Result<Json<dto::FeePolicy>, ApiError> {
+	let token = require_money_token(&st, &jar).await?;
+	let policy = st
+		.grpc
+		.fee_policy(&token, &q.service.unwrap_or_default())
+		.await
+		.map_err(|s| ApiError::read(s, "fee policy unavailable"))?;
+	Ok(Json(policy.into()))
+}
+
+/// `GET /api/funds/accrued-fees?service=` — what the caller's holding owes right now,
+/// uncharged. The disclosure behind showing a position's value net of fees.
+pub async fn accrued_fees(State(st): State<AppState>, jar: CookieJar, Query(q): Query<ServiceQuery>) -> Result<Json<dto::AccruedFees>, ApiError> {
+	let token = require_money_token(&st, &jar).await?;
+	let accrued = st
+		.grpc
+		.accrued_fees(&token, &q.service.unwrap_or_default())
+		.await
+		.map_err(|s| ApiError::read(s, "accrued fees unavailable"))?;
+	Ok(Json(accrued.into()))
+}
+
 /// `GET /api/funds/positions` — the caller's fund positions.
 pub async fn list_positions(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::PositionList>, ApiError> {
 	let token = require_money_token(&st, &jar).await?;

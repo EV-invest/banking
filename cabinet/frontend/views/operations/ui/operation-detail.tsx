@@ -6,7 +6,7 @@ import { Badge, Button, Separator } from "@evinvest/uikit";
 
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
-import { amountTone, dayLabel, formatUnits, formatUsdt, kindMeta, networkLabel, seconds, stateTone, timeLabel } from "@/views/operations/lib/format";
+import { amountTone, dayLabel, formatUnits, formatUsdt, kindMeta, networkLabel, seconds, stateLabel, stateTone, timeLabel } from "@/views/operations/lib/format";
 
 // The body of the operation detail panel (Figma `Cabinet · Operations` →
 // `popover-operation-detail`). Rendered inside a Popover on the desktop timeline and a
@@ -29,7 +29,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
         <div className="flex items-center gap-2">
           <Badge className={cn("font-semibold", meta.tone)}>{meta.badge}</Badge>
           <p className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{title}</p>
-          <Badge className={cn("capitalize", stateTone(operation.state))}>{operation.state}</Badge>
+          <Badge className={cn("capitalize", stateTone(operation.state))}>{stateLabel(operation.state)}</Badge>
         </div>
         <p className="text-xs text-muted-foreground">{context(operation, at)}</p>
         <p className={cn("pt-1 text-2xl font-semibold tabular-nums", amountTone(meta.direction))}>{headline(operation)}</p>
@@ -148,6 +148,13 @@ function headline(operation: Operation): string {
 function subheadline(operation: Operation): string | null {
   if (operation.kind === "withdrawal" && operation.net_amount) return `${formatUsdt(operation.net_amount)} USDT arrives after the network fee`;
   if (operation.kind === "redemption" && !operation.amount) return "Priced when the fund settles it";
+  // A fee moves units between holders on the share ledger — no cash leaves the account and
+  // NAV per unit does not move, so nobody else in the fund pays for it either.
+  if (operation.kind === "fee") {
+    return operation.state === "partly_deferred"
+      ? "Taken in units — the rest is carried to the next charge"
+      : "Taken in units, not from your wallet";
+  }
   return null;
 }
 
@@ -176,6 +183,17 @@ function detailsFor(operation: Operation): [string, string][] {
       rows.push(["Units redeemed", formatUnits(operation.units)]);
       rows.push(["Price per unit", operation.nav ? `${formatUsdt(operation.nav)} USDT` : "set at settle"]);
       rows.push(["Cash out", operation.amount ? `${formatUsdt(operation.amount)} USDT` : "set at settle"]);
+      break;
+    case "fee":
+      // The legs first, because they are what the charge WAS; the units are how it was
+      // taken. Both legs are listed even at zero here (unlike the timeline row, where
+      // space is short) — on a detail panel an explicit "0.00 performance" is the answer
+      // to "was I charged for the gain?", not noise.
+      rows.push(["Management fee", `${formatUsdt(operation.management)} USDT`]);
+      rows.push(["Performance fee", `${formatUsdt(operation.performance)} USDT`]);
+      rows.push(["Units taken", formatUnits(operation.units)]);
+      if (operation.nav) rows.push(["Price per unit", `${formatUsdt(operation.nav)} USDT`]);
+      rows.push(["Value taken", `${formatUsdt(operation.amount)} USDT`]);
       break;
     default:
       break;
