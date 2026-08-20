@@ -14,7 +14,7 @@ use domain::{
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::UserId,
-	withdrawals::{Withdrawal, WithdrawalId, WithdrawalState},
+	withdrawals::{Withdrawal, WithdrawalId, WithdrawalSource, WithdrawalState},
 };
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
@@ -24,9 +24,12 @@ use crate::{
 	ports::{WithdrawalRepository, withdrawals::QueuedWithdrawal},
 };
 
-const SELECT_BY_ID: &str = "SELECT id, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE id = $1";
-const SELECT_BY_ID_FOR_UPDATE: &str = "SELECT id, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE id = $1 FOR UPDATE";
-const SELECT_BY_USER: &str = "SELECT id, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC";
+const SELECT_BY_ID: &str = "SELECT id, source, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE id = $1";
+const SELECT_BY_ID_FOR_UPDATE: &str = "SELECT id, source, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE id = $1 FOR UPDATE";
+/// `source = 'user'` is redundant with `user_id = $1` (the schema's CHECK ties the two),
+/// but stated anyway: a user's own list must never widen to the fund's payouts.
+const SELECT_BY_USER: &str = "SELECT id, source, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE user_id = $1 AND source = 'user' ORDER BY created_at DESC";
+const SELECT_REVENUE: &str = "SELECT id, source, user_id, network, address, amount, fee, state, tx_ref FROM withdrawals WHERE source = 'revenue' ORDER BY created_at DESC";
 
 pub struct PgWithdrawals {
 	pool: PgPool,
@@ -49,7 +52,10 @@ impl Reader for PgWithdrawals {
 #[derive(sqlx::FromRow)]
 struct WithdrawalRow {
 	id: Uuid,
-	user_id: Uuid,
+	/// `user` | `revenue`. Paired with `user_id` by a schema CHECK, so exactly one of
+	/// the two shapes below can be stored.
+	source: String,
+	user_id: Option<Uuid>,
 	network: String,
 	address: String,
 	amount: String,
@@ -59,7 +65,16 @@ struct WithdrawalRow {
 }
 
 impl WithdrawalRow {
+	fn source(&self) -> Result<WithdrawalSource, DomainError> {
+		match (self.source.as_str(), self.user_id) {
+			("user", Some(user)) => Ok(WithdrawalSource::User(UserId::from_raw(user))),
+			(WithdrawalSource::REVENUE, None) => Ok(WithdrawalSource::Revenue),
+			_ => Err(DomainError::Repository(format!("withdrawal {} has an inconsistent source", self.id))),
+		}
+	}
+
 	fn into_domain(self) -> Result<Withdrawal, DomainError> {
+		let source = self.source()?;
 		let network = Network::parse(&self.network)?;
 		let amount = Usdt::from_base_units(self.amount.parse::<u128>().map_err(|_| DomainError::Repository("malformed withdrawal amount".into()))?);
 		let fee = Usdt::from_base_units(self.fee.parse::<u128>().map_err(|_| DomainError::Repository("malformed withdrawal fee".into()))?);
@@ -67,7 +82,7 @@ impl WithdrawalRow {
 		let tx_ref = self.tx_ref.as_deref().map(TxRef::parse).transpose()?;
 		Ok(Withdrawal::rehydrate(
 			WithdrawalId::from_raw(self.id),
-			UserId::from_raw(self.user_id),
+			source,
 			network,
 			address,
 			amount,
@@ -83,9 +98,10 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 }
 
 async fn insert_row(conn: &mut PgConnection, withdrawal: &Withdrawal) -> Result<(), DomainError> {
-	sqlx::query("INSERT INTO withdrawals (id, user_id, network, address, amount, fee, state, tx_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)")
+	sqlx::query("INSERT INTO withdrawals (id, source, user_id, network, address, amount, fee, state, tx_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")
 		.bind(withdrawal.id().raw())
-		.bind(withdrawal.user().raw())
+		.bind(if withdrawal.source().is_revenue() { "revenue" } else { "user" })
+		.bind(withdrawal.user().map(|u| u.raw()))
 		.bind(withdrawal.network().as_str())
 		.bind(withdrawal.address().as_str())
 		.bind(withdrawal.amount().base_units().to_string())
@@ -118,11 +134,16 @@ async fn update_row(conn: &mut PgConnection, withdrawal: &Withdrawal) -> Result<
 impl WithdrawalRepository for PgWithdrawals {
 	async fn open(&self, withdrawal: &mut Withdrawal) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		// Serialize every flow that spends this user's unified claim (withdraw + subscribe)
-		// on one shared lock target (see [`outbox::lock_user`]) so a concurrent withdraw +
-		// subscribe can't both pass the optimistic Read-First and both park a reserve (TB's
-		// flag is the money backstop; this lock keeps the PG projection from diverging).
-		outbox::lock_user(&mut tx, withdrawal.user().raw()).await?;
+		// Serialize every flow that spends this claim on one shared lock target (see
+		// [`outbox::lock_user`]) so two of them can't both pass the optimistic Read-First
+		// and both park a reserve (TB's flag is the money backstop; this lock keeps the PG
+		// projection from diverging). For a user that's withdraw + subscribe on their
+		// unified claim; for the fund it's concurrent payouts out of the single `fee`
+		// claim, which contend exactly the same way.
+		match withdrawal.user() {
+			Some(user) => outbox::lock_user(&mut tx, user.raw()).await?,
+			None => outbox::lock_revenue_claim(&mut tx).await?,
+		}
 		insert_row(&mut tx, withdrawal).await?;
 		outbox::drain_to_outbox(&mut tx, withdrawal, true).await?;
 		tx.commit().await.map_err(repo_err)?;
@@ -227,9 +248,17 @@ impl WithdrawalRepository for PgWithdrawals {
 		rows.into_iter().map(WithdrawalRow::into_domain).collect()
 	}
 
+	async fn list_revenue_payouts(&self) -> Result<Vec<Withdrawal>, DomainError> {
+		let rows = sqlx::query_as::<_, WithdrawalRow>(SELECT_REVENUE).fetch_all(&self.pool).await.map_err(repo_err)?;
+		rows.into_iter().map(WithdrawalRow::into_domain).collect()
+	}
+
 	async fn list_actionable(&self) -> Result<Vec<QueuedWithdrawal>, DomainError> {
-		let rows = sqlx::query_as::<_, (Uuid, Uuid, Option<String>, String, String, String, String, String, i64)>(
-			"SELECT w.id, w.user_id, u.email, w.network, w.address, w.amount, w.fee, w.state, EXTRACT(EPOCH FROM w.created_at)::BIGINT \
+		// Revenue payouts share this queue deliberately: they need the same operator
+		// dispatch/settle/fail actions, and an operator clearing the queue must see the
+		// whole of what is in flight against the rails, not the user half of it.
+		let rows = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, Option<String>, String, String, String, String, String, i64)>(
+			"SELECT w.id, w.source, w.user_id, u.email, w.network, w.address, w.amount, w.fee, w.state, EXTRACT(EPOCH FROM w.created_at)::BIGINT \
 			 FROM withdrawals w LEFT JOIN users u ON u.id = w.user_id \
 			 WHERE w.state IN ('queued', 'processing') ORDER BY w.created_at ASC",
 		)
@@ -237,12 +266,17 @@ impl WithdrawalRepository for PgWithdrawals {
 		.await
 		.map_err(repo_err)?;
 		rows.into_iter()
-			.map(|(id, user_id, email, network, address, amount, fee, state, created_at)| {
+			.map(|(id, source, user_id, email, network, address, amount, fee, state, created_at)| {
 				let amount = Usdt::from_base_units(amount.parse::<u128>().map_err(|_| DomainError::Repository("malformed withdrawal amount".into()))?);
 				let fee = Usdt::from_base_units(fee.parse::<u128>().map_err(|_| DomainError::Repository("malformed withdrawal fee".into()))?);
+				let source = match (source.as_str(), user_id) {
+					("user", Some(user)) => WithdrawalSource::User(UserId::from_raw(user)),
+					(WithdrawalSource::REVENUE, None) => WithdrawalSource::Revenue,
+					_ => return Err(DomainError::Repository(format!("withdrawal {id} has an inconsistent source"))),
+				};
 				Ok(QueuedWithdrawal {
 					id: WithdrawalId::from_raw(id),
-					user_id: UserId::from_raw(user_id),
+					source,
 					email: email.unwrap_or_default(),
 					network: Network::parse(&network)?,
 					address,

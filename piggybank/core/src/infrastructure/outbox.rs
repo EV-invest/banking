@@ -34,6 +34,15 @@ pub async fn lock_user(conn: &mut PgConnection, user_id: Uuid) -> Result<(), Dom
 	Ok(())
 }
 
+/// Take the write lock for the fund's **revenue claim** (`fee`) — the account a revenue
+/// payout spends. Concurrent payouts contend for it exactly as concurrent spends contend
+/// for one user's claim in [`lock_user`], and would diverge PG from TB the same way, so
+/// they serialize on one target too. The claim is a singleton with no row of its own,
+/// hence a fixed v5 UUID standing in as the lock's name rather than a real id.
+pub async fn lock_revenue_claim(conn: &mut PgConnection) -> Result<(), DomainError> {
+	lock_user(conn, Uuid::new_v5(&Uuid::NAMESPACE_OID, b"withdrawal:revenue-claim")).await
+}
+
 /// Insert one event into the `event_log` (always) and the `outbox` (when `relay`),
 /// under a caller-supplied `event_id` so the two rows share the idempotency key.
 /// Used directly for standalone ledger facts (deposits/seeding) that have no
@@ -67,7 +76,8 @@ pub async fn insert_event(conn: &mut PgConnection, event_id: Uuid, aggregate: &s
 pub async fn drain_to_outbox<A>(conn: &mut PgConnection, aggregate: &mut A, relay: bool) -> Result<(), DomainError>
 where
 	A: EmitsEvents,
-	<A as Entity>::Id: Identifier<Underlying = Uuid>, {
+	<A as Entity>::Id: Identifier<Underlying = Uuid>,
+{
 	let aggregate_id = Entity::id(aggregate).underlying();
 	for event in aggregate.drain_events() {
 		let payload = serde_json::to_string(&event).map_err(|e| DomainError::Repository(e.to_string()))?;

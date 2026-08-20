@@ -154,7 +154,7 @@ fn deposit_to_proto(deposit: &DepositRecord) -> pb::Deposit {
 	}
 }
 
-fn withdrawal_to_proto(withdrawal: &Withdrawal) -> pb::Withdrawal {
+pub(crate) fn withdrawal_to_proto(withdrawal: &Withdrawal) -> pb::Withdrawal {
 	pb::Withdrawal {
 		id: withdrawal.id().to_string(),
 		network: withdrawal.network().as_str().to_owned(),

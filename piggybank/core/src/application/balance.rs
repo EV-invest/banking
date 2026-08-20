@@ -217,3 +217,71 @@ pub async fn treasury(ledger: &dyn Ledger, custody: &dyn Custody) -> Result<Trea
 		reserved_for_withdrawals,
 	})
 }
+
+/// What the fund has earned and may pay itself — the read behind the admin payout
+/// screen. The mirror of a user's wallet, for the one claim that is the company's own
+/// money rather than money it custodies.
+pub struct FundRevenue {
+	/// Everything the fund has earned and still holds: the `fee` claim's settled
+	/// balance. Grows by every retained withdrawal fee and by every settled 2-and-20
+	/// management/performance fee; falls only when a payout settles.
+	pub earned: Usdt,
+	/// Free to pay out right now — `earned − pending_payout`. Read off the same claim
+	/// balance as the other two, so the three can never disagree.
+	pub available: Usdt,
+	/// Locked by payouts already queued or in flight (the clearing reservation).
+	pub pending_payout: Usdt,
+	/// Where a payout can ship, and how much of it ships without waiting.
+	pub rails: Vec<RevenueRail>,
+}
+
+/// Per-rail payout options, mirroring a user's `NetworkWithdrawable`. `payable` is the
+/// whole available revenue (a request beyond `instant` is accepted and queued until the
+/// treasury is topped up); `instant` is what ships without queueing.
+pub struct RevenueRail {
+	pub network: Network,
+	pub payable: Usdt,
+	pub instant: Usdt,
+	pub minimum: Usdt,
+}
+
+/// The fund's earned revenue and the rails it can be paid out on (Read-First).
+///
+/// `instant` uses the **same** effective liquidity as the dispatch gate —
+/// `min(TB rail, on-chain treasury)` — rather than the TB balance alone, because the
+/// operator reading this screen is deciding whether money will actually move. The TB
+/// `wallet:<net>` balance over-counts: it includes confirmed deposits still sitting on
+/// users' derived addresses, which the hot wallet cannot spend. A treasury read failure
+/// degrades to the TB view (best-effort, like the treasury screen) — a flaky node
+/// must not blank the page.
+pub async fn fund_revenue(ledger: &dyn Ledger, custody: &dyn Custody, configured: &[Network]) -> Result<FundRevenue, DomainError> {
+	let claim = ledger.balance(&LedgerAccountKey::FeeRevenue).await?;
+	let earned = Usdt::from_base_units(claim.posted);
+	let available = Usdt::from_base_units(claim.available());
+	let pending_payout = Usdt::from_base_units(claim.locked);
+
+	let mut rails = Vec::with_capacity(configured.len());
+	for &network in configured {
+		let rail = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
+		let effective = match custody.treasury_liquidity(network).await {
+			Ok(Some(onchain)) => rail.min(onchain),
+			Ok(None) => rail,
+			Err(err) => {
+				tracing::debug!(%network, "treasury liquidity unavailable for the payout view: {err}");
+				rail
+			}
+		};
+		rails.push(RevenueRail {
+			network,
+			payable: available,
+			instant: available.min(effective),
+			minimum: domain::withdrawals::WithdrawalPolicy::minimum(network),
+		});
+	}
+	Ok(FundRevenue {
+		earned,
+		available,
+		pending_payout,
+		rails,
+	})
+}

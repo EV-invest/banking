@@ -13,7 +13,7 @@ use domain::{
 	error::DomainError,
 	money::{Network, TxRef, Usdt},
 	users::UserId,
-	withdrawals::{Withdrawal, WithdrawalId},
+	withdrawals::{Withdrawal, WithdrawalId, WithdrawalSource},
 };
 
 #[async_trait]
@@ -47,8 +47,13 @@ pub trait WithdrawalRepository: Repository<Aggregate = Withdrawal> + Reader<Aggr
 	/// Load a withdrawal by id (no lock; for queries).
 	async fn find_by_id(&self, id: WithdrawalId) -> Result<Option<Withdrawal>, DomainError>;
 
-	/// A user's withdrawals (projection), newest first.
+	/// A user's withdrawals (projection), newest first. Revenue payouts belong to the
+	/// fund, not to any user, so they are never in this list.
 	async fn list_by_user(&self, user: UserId) -> Result<Vec<Withdrawal>, DomainError>;
+
+	/// The fund's own revenue payouts (projection), newest first — the admin payout
+	/// history. The mirror of [`list_by_user`](Self::list_by_user) for the other source.
+	async fn list_revenue_payouts(&self) -> Result<Vec<Withdrawal>, DomainError>;
 
 	/// The cross-user queue of withdrawals awaiting operator action, oldest first —
 	/// the admin Withdrawals screen's clear-the-queue surface.
@@ -59,8 +64,11 @@ pub trait WithdrawalRepository: Repository<Aggregate = Withdrawal> + Reader<Aggr
 /// (broadcast in flight: settle with the mined tx, fail only if nothing landed).
 pub struct QueuedWithdrawal {
 	pub id: WithdrawalId,
-	pub user_id: UserId,
-	/// Mirrored identity email (may be empty if the bridge hasn't populated it).
+	/// Which claim funds it — an investor's, or the fund's own revenue. Payouts share
+	/// this queue because they need the same operator dispatch/settle/fail actions.
+	pub source: WithdrawalSource,
+	/// Mirrored identity email; empty for a revenue payout (it has no user) and for a
+	/// user the bridge hasn't populated yet.
 	pub email: String,
 	pub network: Network,
 	/// Destination on-chain address, as stored.

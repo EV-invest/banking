@@ -20,7 +20,7 @@ use domain::{
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::UserId,
-	withdrawals::{Withdrawal, WithdrawalId, WithdrawalPolicy},
+	withdrawals::{Withdrawal, WithdrawalId, WithdrawalPolicy, WithdrawalSource},
 };
 use tokio::sync::Notify;
 use tracing::warn;
@@ -57,15 +57,68 @@ pub async fn request_withdrawal(
 	if !account.is_active() {
 		return Err(DomainError::Forbidden("account is not permitted to withdraw".into()));
 	}
-	let fee = WithdrawalPolicy::fee(network);
+	let source = WithdrawalSource::User(user);
+	open_withdrawal(withdrawals, ledger, custody, relay, source, network, address, amount).await
+}
+
+/// The fund pays **its own earned revenue** out to `address` — the admin/owner payout.
+///
+/// Identical to a user withdrawal but for the claim it debits: `fee`, which holds what
+/// the fund earned (retained withdrawal fees, plus any fee accrual crediting the same
+/// account). Client money (`user:*`/`service:*`) and the fund's seed capital (`fund`)
+/// are different accounts and are unreachable from here — not by a filter that could be
+/// forgotten, but because [`WithdrawalSource::Revenue`] names exactly one account and
+/// TigerBeetle's non-negative flag on it is the backstop.
+///
+/// Deliberately NOT gated on `configured` rails alone doing the work: like a user
+/// withdrawal, an underfunded rail queues rather than refusing (the dispatcher ships it
+/// on the next top-up), so a payout is never lost to a transient treasury dip.
+#[allow(clippy::too_many_arguments)]
+pub async fn request_revenue_payout(
+	withdrawals: &dyn WithdrawalRepository,
+	ledger: &dyn Ledger,
+	custody: &dyn Custody,
+	relay: &Notify,
+	configured: &[Network],
+	network: Network,
+	address: WalletAddress,
+	amount: Usdt,
+) -> Result<Withdrawal, DomainError> {
+	if !configured.contains(&network) {
+		return Err(DomainError::Validation(format!("{network} withdrawals are not available")));
+	}
+	open_withdrawal(withdrawals, ledger, custody, relay, WithdrawalSource::Revenue, network, address, amount).await
+}
+
+/// The shared body of both request paths: validate the shape, Read-First the **source's**
+/// solvency and the rail's liquidity, then record (dispatching straight away when the
+/// rail can already cover it).
+#[allow(clippy::too_many_arguments)]
+async fn open_withdrawal(
+	withdrawals: &dyn WithdrawalRepository,
+	ledger: &dyn Ledger,
+	custody: &dyn Custody,
+	relay: &Notify,
+	source: WithdrawalSource,
+	network: Network,
+	address: WalletAddress,
+	amount: Usdt,
+) -> Result<Withdrawal, DomainError> {
+	let fee = WithdrawalPolicy::fee_for(source, network);
 	// Validate the request shape (minimum, fee coverage, no on-chain dust, address net).
-	let mut withdrawal = Withdrawal::request(WithdrawalId::new(), user, network, address, amount, fee)?;
-	// Read-First #1 — user solvency: the spendable unified claim (posted minus what's
-	// already reserved by other in-flight withdrawals) must cover the gross. TB's flag
-	// is the hard backstop.
-	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
+	let mut withdrawal = Withdrawal::request(WithdrawalId::new(), source, network, address, amount, fee)?;
+	// Read-First #1 — source solvency: the spendable claim (posted minus what's already
+	// reserved by other in-flight withdrawals) must cover the gross. For a user that is
+	// their unified claim; for a payout it is the fund's earned revenue, so this is the
+	// check that makes "only what the fund earned" true rather than aspirational. TB's
+	// flag is the hard backstop either way.
+	let claim = ledger.balance(&source.claim_key()).await?;
 	if Usdt::from_base_units(claim.available()) < amount {
-		return Err(DomainError::Validation("insufficient available balance to withdraw".into()));
+		return Err(DomainError::Validation(if source.is_revenue() {
+			"payout exceeds the fund's available revenue".into()
+		} else {
+			"insufficient available balance to withdraw".to_owned()
+		}));
 	}
 	// Read-First #2 — rail liquidity: dispatchable liquidity is `min(TB rail, on-chain
 	// treasury)`. The TB `wallet:<net>` balance alone over-counts — it includes confirmed
@@ -122,12 +175,35 @@ pub async fn cancel_withdrawal(withdrawals: &dyn WithdrawalRepository, relay: &N
 		entity: "withdrawal",
 		id: id.to_string(),
 	})?;
-	if existing.user() != user {
+	if existing.user() != Some(user) {
 		return Err(DomainError::Forbidden("not your withdrawal".into()));
 	}
 	let withdrawal = withdrawals.cancel(id).await?;
 	relay.notify_one();
 	Ok(withdrawal)
+}
+
+/// Cancel a still-queued **revenue payout** (admin): voids the reservation, returning
+/// the gross to the fund's revenue claim. The mirror of [`cancel_withdrawal`] for the
+/// source that has no user to own it — and it checks the source for the same reason
+/// that one checks ownership: this entry point must not become a way for an admin to
+/// cancel an investor's withdrawal out from under them.
+pub async fn cancel_revenue_payout(withdrawals: &dyn WithdrawalRepository, relay: &Notify, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+	let existing = withdrawals.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
+		entity: "withdrawal",
+		id: id.to_string(),
+	})?;
+	if !existing.source().is_revenue() {
+		return Err(DomainError::Forbidden("not a revenue payout".into()));
+	}
+	let withdrawal = withdrawals.cancel(id).await?;
+	relay.notify_one();
+	Ok(withdrawal)
+}
+
+/// The fund's own revenue payouts, newest first — the admin payout history.
+pub async fn list_revenue_payouts(withdrawals: &dyn WithdrawalRepository) -> Result<Vec<Withdrawal>, DomainError> {
+	withdrawals.list_revenue_payouts().await
 }
 
 /// Settle a confirmed withdrawal (operator/watcher): records the chain `tx_ref` and

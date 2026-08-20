@@ -116,13 +116,17 @@ impl Dispatcher {
 			// Cross-plane freeze / disable: a queued withdrawal whose owner was SUSPENDED (or
 			// disabled) must not be dispatched, even though it slipped past the sync gate at
 			// request time. Mirror `unfrozen_caller` — skip a frozen owner, and fail closed
-			// (skip this cycle) when the control-plane flag can't be read.
-			match bridge::is_frozen(&self.pool, withdrawal.user()).await {
-				Ok(false) => {}
-				Ok(true) => continue,
-				Err(err) => {
-					warn!(withdrawal_id = %id, "dispatcher: freeze check failed — skipping this cycle (fail-closed): {err}");
-					continue;
+			// (skip this cycle) when the control-plane flag can't be read. A revenue payout
+			// has no owner in the identity plane (the fund is not a user), so there is no
+			// flag to read and nothing to fail closed on — the gate simply doesn't apply.
+			if let Some(owner) = withdrawal.user() {
+				match bridge::is_frozen(&self.pool, owner).await {
+					Ok(false) => {}
+					Ok(true) => continue,
+					Err(err) => {
+						warn!(withdrawal_id = %id, "dispatcher: freeze check failed — skipping this cycle (fail-closed): {err}");
+						continue;
+					}
 				}
 			}
 			let net = withdrawal.net_amount();
