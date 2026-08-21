@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 
 import { Badge, Button, Separator } from "@evinvest/uikit";
 
@@ -18,7 +18,7 @@ import { amountTone, dayLabel, formatUnits, formatUsdt, kindMeta, networkLabel, 
 // prove. A per-step timestamp, a "signed by vault" leg, or a confirmation count would all
 // have to be invented, and an invented number on a money surface is worse than an absent
 // one.
-export function OperationDetail({ operation, title, onManage }: { operation: Operation; title: string; onManage?: string | null }) {
+export function OperationDetail({ operation, title, onManage }: { operation: Operation; title: string; onManage?: `/${string}` | null }) {
   const meta = kindMeta(operation.kind);
   const at = seconds(operation.created_at);
   const steps = progressFor(operation);

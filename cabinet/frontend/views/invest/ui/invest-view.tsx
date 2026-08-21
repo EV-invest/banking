@@ -11,7 +11,7 @@
 // is in it.
 
 import { ArrowRight, Sparkles, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { useMemo } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";

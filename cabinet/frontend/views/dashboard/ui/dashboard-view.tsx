@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeftRight, LineChart, PieChart, TrendingDown, TrendingUp } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { type CSSProperties, Fragment, useState } from "react";
 
 import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Separator, Skeleton, Switch } from "@evinvest/uikit";

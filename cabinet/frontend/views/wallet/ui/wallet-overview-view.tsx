@@ -3,7 +3,7 @@
 import { useT } from "@evinvest/i18n/react";
 
 import { TriangleAlert } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { Skeleton } from "@evinvest/uikit";
 
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
@@ -169,7 +169,7 @@ function RailCard({ network, canDeposit, canWithdraw }: { network: string; canDe
 
 // An unavailable direction stays visible but inert, so the card reads the same on every rail
 // and the missing capability is legible rather than silently absent.
-function RailAction({ href, enabled, className, children }: { href: string; enabled: boolean; className: string; children: string }) {
+function RailAction({ href, enabled, className, children }: { href: `/${string}`; enabled: boolean; className: string; children: string }) {
   if (!enabled) {
     return (
       <span aria-disabled className={cn(className, "flex-1 cursor-not-allowed py-2 text-xs opacity-40")} title={`${children} is not available on this rail yet`}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
@@ -10,7 +10,7 @@ import { cn } from "@/shared/lib/cn";
 // `cabinet/mobile/wallet/*`). The two viewports differ in kind, not degree: desktop gets a
 // topbar with a title/subtitle column and trailing actions, mobile gets an iOS-style appbar
 // with a back affordance — so both are authored explicitly rather than reflowed from one.
-export function WalletScreen({ title, subtitle, back, actions, children }: { title: string; subtitle?: string; back?: string; actions?: ReactNode; children: ReactNode }) {
+export function WalletScreen({ title, subtitle, back, actions, children }: { title: string; subtitle?: string; back?: `/${string}`; actions?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-3 border-b border-border bg-main-surface px-5 pb-3.5 pt-4 lg:hidden">

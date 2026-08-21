@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, Loader2, X } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { type CSSProperties, useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";

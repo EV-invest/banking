@@ -1,25 +1,28 @@
-import { cookies } from "next/headers";
+import { locale as rootLocale } from "next/root-params";
 import { isLocale, type Locale } from "@evinvest/i18n";
 
-import { COOKIES } from "./cookies";
-
 /**
- * The reader's locale, from the cookie the proxy minted.
+ * The reader's locale, from the URL.
  *
- * No URL segment, unlike the public site. The cabinet sits entirely behind auth:
- * there is no crawler to serve `hreflang` alternates to, and no indexed URL whose
- * shape has to stay stable — so a locale prefix would buy nothing and would cost
- * a restructuring of all 19 routes around a `[locale]` segment.
+ * It used to come from a cookie the proxy minted, on the reasoning that the
+ * cabinet sits behind auth and a prefix would buy nothing. That is true of SEO
+ * and false of the reader: the cabinet is mounted inside the conductor's shell at
+ * `/{locale}/cabinet/…`, and someone reading evinvest.ltd in Russian who clicks
+ * through to their cabinet should not have the language silently decided by a
+ * cookie that may say something else. One URL shape across both, one answer to
+ * "what language is this page".
  *
- * Falls back to English rather than throwing. The cookie is absent on the very
- * first request (the proxy sets it on the way out), and a missing cookie has to
- * render a page, not a 500.
+ * `next/root-params` rather than `params`: this is called from server components
+ * that are handed no props (the status pages, and anything deep in a view), and
+ * threading `params` through nineteen routes to reach them is exactly the cost
+ * the old cookie was avoiding. Root params give the same value without it —
+ * `[locale]` is the root layout's own segment, which is why that layout has to
+ * stay the root (see `app/[locale]/layout.tsx`).
  *
- * Kept apart from ./i18n.ts on purpose: this needs the app config, via the
- * Secure-dependent cookie names, and importing it there made the catalogue audit
- * boot the whole env-validated config just to diff some JSON.
+ * Falls back to English rather than throwing: this renders pages, and a bad
+ * segment is a 404 the layout raises, not a 500 from here.
  */
 export async function currentLocale(): Promise<Locale> {
-  const value = (await cookies()).get(COOKIES.locale)?.value;
+  const value = await rootLocale();
   return isLocale(value) ? value : "en";
 }

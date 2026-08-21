@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeftRight, ChevronRight, ListChecks, TriangleAlert } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { Fragment, useMemo, useState } from "react";
 
 import {
@@ -362,7 +362,7 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
 // The surface that owns this kind's mutations. Only a *queued* operation can still be
 // cancelled — offering "Manage" on a settled one sends the user somewhere with nothing to
 // do. Deposits and subscriptions have nothing to act on once made.
-function manageHref(kind: string | undefined, state: string | undefined): string | null {
+function manageHref(kind: string | undefined, state: string | undefined): `/${string}` | null {
   if (state !== "queued") return null;
   if (kind === "withdrawal") return "/wallet/activity";
   if (kind === "redemption") return "/invest";

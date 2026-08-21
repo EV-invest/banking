@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { createAbMiddleware } from "@evinvest/experiments/next";
-import { negotiate } from "@evinvest/i18n";
+import { isLocale, negotiate, type Locale } from "@evinvest/i18n";
 
 import { experiments } from "@/application/experiments";
 import { config as appConfig } from "@/config";
+import { BASE_PATH } from "@/shared/config/base-path";
 import { COOKIES } from "@/shared/config/cookies";
 import { contentSecurityPolicy } from "@/shared/config/security";
 
@@ -21,13 +22,30 @@ const ab = createAbMiddleware(experiments);
 // the BFF still verifies the session server-side on every API call and page data fetch.
 const PUBLIC = ["/login", "/loggedout"];
 
+// Every page path is now `/{locale}/cabinet/…`, so the gate has to compare against
+// what is left after that prefix. Getting this wrong fails open in the worse
+// direction: an unrecognised path is treated as private, which bounces a signed-out
+// reader to /login — annoying — rather than exposing a private page.
+function withoutPrefix(pathname: string): string {
+  const rest = pathname.replace(/^\/[a-z]{2}\/cabinet/, "");
+  return rest === "" ? "/" : rest;
+}
+
 function isPublic(pathname: string): boolean {
-  return PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const path = withoutPrefix(pathname);
+  return PUBLIC.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
+/** The locale segment of `/{locale}/cabinet/…`, or null when there is none. */
+function localeOf(pathname: string): Locale | null {
+  const first = pathname.split("/")[1];
+  return isLocale(first) ? first : null;
 }
 
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const signedIn = Boolean(req.cookies.get(COOKIES.session)?.value);
+  const locale = localeOf(pathname);
 
   // Per-request nonce: written onto the forwarded request headers so Next applies
   // it to its own inline bootstrap scripts (keeping script-src free of
@@ -36,18 +54,31 @@ export function proxy(req: NextRequest) {
   const csp = contentSecurityPolicy(nonce);
   req.headers.set(CSP_HEADER, csp);
 
+  // No locale in the path: an old link, a bookmark, or the conductor's unprefixed
+  // /cabinet mount. Send them to a real URL rather than 404ing — the cookie is the
+  // reader's last choice, Accept-Language the first guess, English the floor.
+  if (!locale && pathname.startsWith(BASE_PATH)) {
+    const chosen =
+      (isLocale(req.cookies.get(COOKIES.locale)?.value)
+        ? (req.cookies.get(COOKIES.locale)!.value as Locale)
+        : null) ?? negotiate(req.headers.get("accept-language"));
+    const url = req.nextUrl.clone();
+    url.pathname = `/${chosen}${pathname}`;
+    return withCsp(NextResponse.redirect(url), csp);
+  }
+
   if (!isPublic(pathname) && !signedIn) {
     const url = req.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = `/${locale ?? "en"}${BASE_PATH}/login`;
     url.search = "";
     const returnTo = `${pathname}${search}`;
     if (returnTo !== "/") url.searchParams.set("returnTo", returnTo);
     return withCsp(NextResponse.redirect(url), csp);
   }
 
-  if (signedIn && pathname === "/login") {
+  if (signedIn && withoutPrefix(pathname) === "/login") {
     const url = req.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = `/${locale ?? "en"}${BASE_PATH}`;
     url.search = "";
     return withCsp(NextResponse.redirect(url), csp);
   }
@@ -67,8 +98,12 @@ export function proxy(req: NextRequest) {
 // Deliberately never overwritten once set. A reader who chose English on a
 // Russian-configured laptop must not be flipped back on the next navigation.
 function withLocale(req: NextRequest, res: NextResponse): NextResponse {
-  if (req.cookies.get(COOKIES.locale)?.value) return res;
-  res.cookies.set(COOKIES.locale, negotiate(req.headers.get("accept-language")), {
+  // The URL is authoritative now; this only remembers it, so an unprefixed
+  // /cabinet entry later resolves to the language the reader was last reading
+  // rather than re-guessing from a header they never set.
+  const fromUrl = localeOf(req.nextUrl.pathname);
+  if (!fromUrl && req.cookies.get(COOKIES.locale)?.value) return res;
+  res.cookies.set(COOKIES.locale, fromUrl ?? negotiate(req.headers.get("accept-language")), {
     path: "/",
     sameSite: "lax",
     secure: appConfig.authCookieSecure,

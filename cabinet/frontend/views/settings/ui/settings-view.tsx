@@ -3,7 +3,7 @@
 import { useT } from "@evinvest/i18n/react";
 
 import { BadgeCheck, Bell, Check, Laptop, Loader2, LogOut, type LucideIcon, Monitor, Shield, Smartphone, User } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Email, PhoneNumber } from "@evinvest/types";
