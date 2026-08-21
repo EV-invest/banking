@@ -16,7 +16,7 @@ use domain::{
 	redemptions::{Redemption, RedemptionId, RedemptionState},
 	subscriptions::{Subscription, SubscriptionId},
 	users::UserId,
-	withdrawals::{Withdrawal, WithdrawalId, WithdrawalState},
+	withdrawals::{Withdrawal, WithdrawalId, WithdrawalSource, WithdrawalState},
 };
 use piggybank_core::{
 	infrastructure::{deposits::PgDeposits, operation_feed::PgOperationFeed, redemptions::PgRedemptions, subscriptions::PgSubscriptions, withdrawals::PgWithdrawals},
@@ -101,7 +101,7 @@ async fn seed_one_of_each(pool: &PgPool, user: UserId) -> (TxRef, WithdrawalId, 
 	assert!(deposits.record(tx_ref.clone(), Party::User(user), Network::Ton, usdt("125.5")).await.expect("record deposit"));
 	age_deposit(pool, &tx_ref, 4).await;
 
-	let mut withdrawal = Withdrawal::request(WithdrawalId::new(), user, Network::Bep20, address(), usdt("50"), usdt("1")).expect("build withdrawal");
+	let mut withdrawal = Withdrawal::request(WithdrawalId::new(), WithdrawalSource::User(user), Network::Bep20, address(), usdt("50"), usdt("1")).expect("build withdrawal");
 	withdrawals.open(&mut withdrawal).await.expect("open withdrawal");
 	age_withdrawal(pool, withdrawal.id(), 1).await;
 

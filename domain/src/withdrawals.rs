@@ -1,6 +1,16 @@
-//! `withdrawals` bounded context — user-initiated on-chain withdrawals.
+//! `withdrawals` bounded context — on-chain withdrawals out of the fund.
 //!
-//! A withdrawal moves a user's free claim out of the fund and onto an external
+//! Two flows share this saga, differing only in **which claim is debited**
+//! ([`WithdrawalSource`]): an investor moving their own free balance out
+//! ([`WithdrawalSource::User`]), and the fund paying its OWN earnings out to an
+//! operator-controlled wallet ([`WithdrawalSource::Revenue`] — the admin/owner revenue
+//! payout). The revenue source is the `fee` claim, and only two things ever credit it:
+//! the withdrawal fee retained on a user withdrawal, and the settled management +
+//! performance fee ([`crate::fees`], the "2 and 20"). That is the whole of what the fund
+//! has earned — never client money, and never the fund's seed capital (`fund`) — so a
+//! payout cannot reach into what the fund merely custodies.
+//!
+//! A withdrawal moves that claim out of the fund and onto an external
 //! address. It is the **dangerous direction** (value leaves the system), so it is a
 //! saga with an explicit queue. The gross amount is *reserved* against the user's
 //! claim the instant the request is recorded — into the network-agnostic
@@ -22,6 +32,7 @@ use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+	balance::LedgerAccountKey,
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::UserId,
@@ -31,6 +42,88 @@ use crate::{
 pub type WithdrawalId = Id<WithdrawalTag>;
 /// Phantom tag making [`WithdrawalId`] a distinct, incompatible identity type.
 pub struct WithdrawalTag;
+
+/// **Whose money leaves** — the claim a withdrawal debits.
+///
+/// The saga (reserve → dispatch → settle/void), the operator queue, the chain watchers
+/// and every recovery job are identical for both variants; only this account differs.
+/// That is why one aggregate serves both, rather than a parallel payout saga that would
+/// have to re-earn the same guarantees.
+///
+/// The wire form is a single string — a user's UUID, or the literal `revenue` — so an
+/// `event_log`/`outbox` payload written before revenue payouts existed (whose field held
+/// a bare UUID) still reads back as [`WithdrawalSource::User`]. Together with the
+/// `alias` on [`WithdrawalEvent`]'s `source` field there is nothing to backfill and no
+/// undrained row that stops deserializing.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(into = "String", try_from = "String")]
+pub enum WithdrawalSource {
+	/// An investor's own unified claim (`user:<uuid>`).
+	User(UserId),
+	/// The fund's earned revenue (`fee`) — retained withdrawal fees plus the settled
+	/// 2-and-20 ([`crate::fees::FeeEvent::SharesSettled`]). NOT `fund` (seed capital),
+	/// NOT a client claim.
+	Revenue,
+}
+
+impl WithdrawalSource {
+	/// The literal marking a revenue payout. Deliberately not UUID-shaped, so the two
+	/// forms can never be confused when parsing a stored value.
+	pub const REVENUE: &'static str = "revenue";
+
+	/// The stored/wire discriminant.
+	pub fn as_wire(&self) -> String {
+		match self {
+			Self::User(user) => user.to_string(),
+			Self::Revenue => Self::REVENUE.to_owned(),
+		}
+	}
+
+	pub fn parse(raw: &str) -> Result<Self, DomainError> {
+		if raw == Self::REVENUE {
+			return Ok(Self::Revenue);
+		}
+		uuid::Uuid::parse_str(raw)
+			.map(|id| Self::User(Id::from_raw(id)))
+			.map_err(|_| DomainError::Validation(format!("unknown withdrawal source: {raw}")))
+	}
+
+	/// The claim account debited — the one line that makes a payout a payout.
+	pub fn claim_key(&self) -> LedgerAccountKey {
+		match self {
+			Self::User(user) => LedgerAccountKey::UserClaim(*user),
+			Self::Revenue => LedgerAccountKey::FeeRevenue,
+		}
+	}
+
+	/// The user this withdrawal belongs to, or `None` for a revenue payout — which
+	/// belongs to the fund itself and must therefore never surface in a user's wallet,
+	/// withdrawal list, or `pending_withdrawal` segment.
+	pub fn user(&self) -> Option<UserId> {
+		match self {
+			Self::User(user) => Some(*user),
+			Self::Revenue => None,
+		}
+	}
+
+	pub fn is_revenue(&self) -> bool {
+		matches!(self, Self::Revenue)
+	}
+}
+
+impl From<WithdrawalSource> for String {
+	fn from(source: WithdrawalSource) -> Self {
+		source.as_wire()
+	}
+}
+
+impl TryFrom<String> for WithdrawalSource {
+	type Error = DomainError;
+
+	fn try_from(raw: String) -> Result<Self, DomainError> {
+		Self::parse(&raw)
+	}
+}
 
 /// Per-network withdrawal policy — the flat network fee the fund retains and the
 /// minimum gross a user may withdraw. **Placeholder constants** standing in for a
@@ -49,6 +142,20 @@ impl WithdrawalPolicy {
 	/// so the on-chain net is always positive.
 	pub const fn minimum(_network: Network) -> Usdt {
 		Usdt::from_base_units(2_000_000_000_000_000_000)
+	}
+
+	/// The fee retained for a withdrawal out of `source`.
+	///
+	/// A **revenue payout charges none**: the `fee` claim is where fees are retained,
+	/// so charging one would debit the gross and credit the fee straight back to the
+	/// same account — money in a circle, and an operator told they'd receive 100 when
+	/// the chain sees 99. Gross therefore equals net for a payout. On-chain gas is
+	/// unaffected either way: the rail's treasury pays it, exactly as for a user.
+	pub fn fee_for(source: WithdrawalSource, network: Network) -> Usdt {
+		match source {
+			WithdrawalSource::User(_) => Self::fee(network),
+			WithdrawalSource::Revenue => Usdt::ZERO,
+		}
 	}
 }
 
@@ -106,7 +213,7 @@ impl WithdrawalState {
 #[derive(Clone, Debug)]
 pub struct Withdrawal {
 	id: WithdrawalId,
-	user: UserId,
+	source: WithdrawalSource,
 	network: Network,
 	address: WalletAddress,
 	amount: Usdt,
@@ -117,13 +224,13 @@ pub struct Withdrawal {
 }
 
 impl Withdrawal {
-	/// Open a withdrawal of `amount` (gross) to `address`. `amount` must clear the
-	/// per-network minimum and exceed `fee` (so the net is positive), and the net
-	/// must be representable at the chain's precision (no dust leak). Raises
-	/// `Requested`; the relay reserves the gross against the user's claim into
+	/// Open a withdrawal of `amount` (gross) to `address`, debiting `source`. `amount`
+	/// must clear the per-network minimum and exceed `fee` (so the net is positive),
+	/// and the net must be representable at the chain's precision (no dust leak).
+	/// Raises `Requested`; the relay reserves the gross against the source's claim into
 	/// `WithdrawalClearing`. Starts `Queued` — the application dispatches it to custody
 	/// once the chosen rail is liquid.
-	pub fn request(id: WithdrawalId, user: UserId, network: Network, address: WalletAddress, amount: Usdt, fee: Usdt) -> Result<Self, DomainError> {
+	pub fn request(id: WithdrawalId, source: WithdrawalSource, network: Network, address: WalletAddress, amount: Usdt, fee: Usdt) -> Result<Self, DomainError> {
 		if address.network() != network {
 			return Err(DomainError::Validation("withdrawal address is for a different network".into()));
 		}
@@ -139,7 +246,7 @@ impl Withdrawal {
 		net.to_onchain(network)?;
 		let mut withdrawal = Self {
 			id,
-			user,
+			source,
 			network,
 			address: address.clone(),
 			amount,
@@ -150,7 +257,7 @@ impl Withdrawal {
 		};
 		withdrawal.pending.push(WithdrawalEvent::Requested {
 			withdrawal_id: id,
-			user,
+			source,
 			network,
 			address,
 			amount,
@@ -161,10 +268,10 @@ impl Withdrawal {
 
 	/// Reconstitute from the store. Raises no events.
 	#[allow(clippy::too_many_arguments)]
-	pub fn rehydrate(id: WithdrawalId, user: UserId, network: Network, address: WalletAddress, amount: Usdt, fee: Usdt, state: WithdrawalState, tx_ref: Option<TxRef>) -> Self {
+	pub fn rehydrate(id: WithdrawalId, source: WithdrawalSource, network: Network, address: WalletAddress, amount: Usdt, fee: Usdt, state: WithdrawalState, tx_ref: Option<TxRef>) -> Self {
 		Self {
 			id,
-			user,
+			source,
 			network,
 			address,
 			amount,
@@ -188,7 +295,7 @@ impl Withdrawal {
 		self.state = WithdrawalState::Processing;
 		self.pending.push(WithdrawalEvent::Dispatched {
 			withdrawal_id: self.id,
-			user: self.user,
+			source: self.source,
 			network: self.network,
 			address: self.address.clone(),
 			amount: self.amount,
@@ -212,7 +319,7 @@ impl Withdrawal {
 		self.tx_ref = Some(tx_ref.clone());
 		self.pending.push(WithdrawalEvent::Settled {
 			withdrawal_id: self.id,
-			user: self.user,
+			source: self.source,
 			network: self.network,
 			amount: self.amount,
 			fee: self.fee,
@@ -235,7 +342,7 @@ impl Withdrawal {
 		self.state = WithdrawalState::Failed;
 		self.pending.push(WithdrawalEvent::Failed {
 			withdrawal_id: self.id,
-			user: self.user,
+			source: self.source,
 			network: self.network,
 			amount: self.amount,
 			fee: self.fee,
@@ -257,7 +364,7 @@ impl Withdrawal {
 		self.state = WithdrawalState::Cancelled;
 		self.pending.push(WithdrawalEvent::Cancelled {
 			withdrawal_id: self.id,
-			user: self.user,
+			source: self.source,
 			network: self.network,
 			amount: self.amount,
 			fee: self.fee,
@@ -269,8 +376,14 @@ impl Withdrawal {
 		self.id
 	}
 
-	pub fn user(&self) -> UserId {
-		self.user
+	/// The claim this withdrawal debits.
+	pub fn source(&self) -> WithdrawalSource {
+		self.source
+	}
+
+	/// The owning investor, or `None` when the fund is paying out its own revenue.
+	pub fn user(&self) -> Option<UserId> {
+		self.source.user()
 	}
 
 	pub fn network(&self) -> Network {
@@ -316,17 +429,23 @@ impl AggregateRoot for Withdrawal {
 }
 
 /// Facts raised by the [`Withdrawal`] aggregate. Each carries the saga-relevant data
-/// (user, network, amount, fee, address) so the relay maps an event to its ledger
+/// (source, network, amount, fee, address) so the relay maps an event to its ledger
 /// ops and the custody broadcast with no extra read. Internally tagged so the stored
 /// JSON is self-describing.
+///
+/// `source` is read from either key: events written before revenue payouts existed
+/// spell it `user` and hold a bare UUID, which [`WithdrawalSource`]'s string form
+/// parses unchanged. An outbox row parked before the upgrade therefore still drains
+/// after it — no backfill, no wedged queue.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WithdrawalEvent {
-	/// Accepted + reserved against the user's claim into clearing (relay: pending
-	/// `Dr user / Cr clearing` for the gross). No rail touched yet.
+	/// Accepted + reserved against the source's claim into clearing (relay: pending
+	/// `Dr <source> / Cr clearing` for the gross). No rail touched yet.
 	Requested {
 		withdrawal_id: WithdrawalId,
-		user: UserId,
+		#[serde(alias = "user")]
+		source: WithdrawalSource,
 		network: Network,
 		address: WalletAddress,
 		amount: Usdt,
@@ -335,7 +454,8 @@ pub enum WithdrawalEvent {
 	/// The rail is liquid — broadcast the net to custody (relay: custody broadcast).
 	Dispatched {
 		withdrawal_id: WithdrawalId,
-		user: UserId,
+		#[serde(alias = "user")]
+		source: WithdrawalSource,
 		network: Network,
 		address: WalletAddress,
 		amount: Usdt,
@@ -345,7 +465,8 @@ pub enum WithdrawalEvent {
 	/// and fee→`fee`).
 	Settled {
 		withdrawal_id: WithdrawalId,
-		user: UserId,
+		#[serde(alias = "user")]
+		source: WithdrawalSource,
 		network: Network,
 		amount: Usdt,
 		fee: Usdt,
@@ -354,7 +475,8 @@ pub enum WithdrawalEvent {
 	/// Broadcast confirmed not to have landed — void the clearing reservation (refund).
 	Failed {
 		withdrawal_id: WithdrawalId,
-		user: UserId,
+		#[serde(alias = "user")]
+		source: WithdrawalSource,
 		network: Network,
 		amount: Usdt,
 		fee: Usdt,
@@ -362,7 +484,8 @@ pub enum WithdrawalEvent {
 	/// Cancelled while queued — void the clearing reservation (refund).
 	Cancelled {
 		withdrawal_id: WithdrawalId,
-		user: UserId,
+		#[serde(alias = "user")]
+		source: WithdrawalSource,
 		network: Network,
 		amount: Usdt,
 		fee: Usdt,
@@ -385,8 +508,8 @@ impl EmitsEvents for Withdrawal {
 mod tests {
 	use super::*;
 
-	fn user() -> UserId {
-		UserId::new()
+	fn user() -> WithdrawalSource {
+		WithdrawalSource::User(UserId::new())
 	}
 
 	fn addr(network: Network) -> WalletAddress {
@@ -510,5 +633,67 @@ mod tests {
 		let json = serde_json::to_string(&event).unwrap();
 		let back: WithdrawalEvent = serde_json::from_str(&json).unwrap();
 		assert!(matches!(back, WithdrawalEvent::Requested { network: Network::Trc20, .. }));
+	}
+
+	#[test]
+	fn a_revenue_payout_debits_the_fee_claim_and_pays_no_fee() {
+		// The whole point of the source: a payout takes the fund's EARNED money (`fee`),
+		// never a client claim and never the fund's seed capital (`fund`).
+		assert_eq!(WithdrawalSource::Revenue.claim_key(), LedgerAccountKey::FeeRevenue);
+		assert_eq!(WithdrawalPolicy::fee_for(WithdrawalSource::Revenue, Network::Bep20), Usdt::ZERO);
+		let uid = UserId::new();
+		assert_eq!(WithdrawalSource::User(uid).claim_key(), LedgerAccountKey::UserClaim(uid));
+		assert_eq!(WithdrawalPolicy::fee_for(WithdrawalSource::User(uid), Network::Bep20), WithdrawalPolicy::fee(Network::Bep20));
+
+		// Gross == net for a payout, and it runs the identical saga.
+		let mut w = Withdrawal::request(WithdrawalId::new(), WithdrawalSource::Revenue, Network::Bep20, addr(Network::Bep20), gross("500"), Usdt::ZERO).unwrap();
+		assert_eq!(w.net_amount(), gross("500"));
+		assert!(w.user().is_none(), "a payout belongs to the fund, so no user's wallet may show it");
+		assert!(w.source().is_revenue());
+		w.dispatch().unwrap();
+		w.settle(TxRef::parse("0xhash").unwrap()).unwrap();
+		assert_eq!(w.state(), WithdrawalState::Completed);
+	}
+
+	#[test]
+	fn the_payout_minimum_still_applies() {
+		// fee_for() is zero for a payout, so the minimum is the only dust guard left.
+		let err = Withdrawal::request(WithdrawalId::new(), WithdrawalSource::Revenue, Network::Ton, addr(Network::Ton), gross("1"), Usdt::ZERO).unwrap_err();
+		assert!(matches!(err, DomainError::Validation(_)));
+	}
+
+	#[test]
+	fn source_round_trips_and_rejects_junk() {
+		let uid = UserId::new();
+		for source in [WithdrawalSource::User(uid), WithdrawalSource::Revenue] {
+			assert_eq!(WithdrawalSource::parse(&source.as_wire()).unwrap(), source);
+		}
+		assert_eq!(WithdrawalSource::Revenue.as_wire(), "revenue");
+		// Not UUID-shaped and not the literal ⇒ refused, never a silent default.
+		assert!(WithdrawalSource::parse("fund").is_err());
+		assert!(WithdrawalSource::parse("").is_err());
+	}
+
+	#[test]
+	fn a_pre_payout_event_payload_still_deserializes() {
+		// An outbox/event_log row written before revenue payouts existed spells the field
+		// `user` and holds a bare UUID. If this regressed, a parked row from before the
+		// upgrade could never be unparked — it would fail to deserialize forever.
+		let uid = UserId::new();
+		let mut w = Withdrawal::request(
+			WithdrawalId::new(),
+			WithdrawalSource::User(uid),
+			Network::Trc20,
+			addr(Network::Trc20),
+			gross("100"),
+			fee(Network::Trc20),
+		)
+		.unwrap();
+		// The only difference from a current payload is the key: `"source"` → `"user"`.
+		let legacy = serde_json::to_string(&w.drain_events().pop().unwrap()).unwrap().replace(r#""source""#, r#""user""#);
+		assert!(legacy.contains(r#""user""#), "the legacy key must actually be present");
+		let back: WithdrawalEvent = serde_json::from_str(&legacy).unwrap();
+		let WithdrawalEvent::Requested { source, .. } = back else { panic!("expected Requested") };
+		assert_eq!(source, WithdrawalSource::User(uid));
 	}
 }

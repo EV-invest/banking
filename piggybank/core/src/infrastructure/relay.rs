@@ -41,7 +41,7 @@ use domain::{
 	redemptions::RedemptionEvent,
 	subscriptions::SubscriptionEvent,
 	users::UserId,
-	withdrawals::WithdrawalEvent,
+	withdrawals::{WithdrawalEvent, WithdrawalSource},
 };
 use sqlx::{PgPool, pool::PoolConnection, postgres::Postgres};
 use tokio::sync::Notify;
@@ -187,11 +187,12 @@ impl Relay {
 							let _ = lock.close().await;
 							continue 'acquire;
 						}
-						DrainStep::More =>
+						DrainStep::More => {
 							if shutdown.is_cancelled() {
 								info!("relay: shutdown requested — batch complete, stopping");
 								return;
-							},
+							}
+						}
 					}
 				};
 				if shutdown.is_cancelled() {
@@ -470,16 +471,18 @@ impl Relay {
 				}
 				Err(LedgerError::Unavailable(err)) => return Outcome::Retry(err),
 				Err(LedgerError::Retryable(err)) => return Outcome::RetryBounded(err),
-				Err(LedgerError::InsufficientFunds) =>
+				Err(LedgerError::InsufficientFunds) => {
 					return Outcome::Park {
 						reason: "insufficient funds".into(),
 						applied_legs: applied,
-					},
-				Err(LedgerError::Conflict(err)) =>
+					};
+				}
+				Err(LedgerError::Conflict(err)) => {
 					return Outcome::Park {
 						reason: format!("ledger conflict: {err}"),
 						applied_legs: applied,
-					},
+					};
+				}
 			}
 		}
 		// A subscription's cost-basis projection is written **here**, after both ledger legs
@@ -843,21 +846,27 @@ fn plan_fee(event: FeeEvent, aggregate_id: Uuid, event_tid: u128, reference: u12
 }
 
 /// A withdrawal's saga in the ledger:
-/// - **Requested** → reserve the gross as a pending `Dr user / Cr clearing` (no rail
+/// - **Requested** → reserve the gross as a pending `Dr <source> / Cr clearing` (no rail
 ///   touched, so acceptance never depends on rail liquidity).
 /// - **Dispatched** → broadcast the net to custody (idempotent by withdrawal id).
 /// - **Settled** → post the clearing pending, then move net→`wallet:<net>` and (when
 ///   non-zero) fee→`fee`. The `Cr wallet:<net>` is where rail liquidity is finally
 ///   checked by the non-negative flag.
-/// - **Failed/Cancelled** → void the clearing pending, refunding the user in full.
+/// - **Failed/Cancelled** → void the clearing pending, refunding the source in full.
+///
+/// The **source's claim** (`user:<uuid>`, or `fee` for a revenue payout) is the only
+/// thing a payout changes here — every other leg, id and guard is shared, which is the
+/// point of one saga rather than two. TigerBeetle's non-negative flag on `fee` is
+/// therefore the same last-line backstop against paying out more than the fund earned
+/// that it is against over-spending a user's claim.
 fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) -> Result<Vec<PlannedOp>, String> {
 	Ok(match event {
-		WithdrawalEvent::Requested { user, amount, .. } => vec![PlannedOp {
+		WithdrawalEvent::Requested { source, amount, .. } => vec![PlannedOp {
 			role: "withdraw_reserve",
 			transfer_id: tid(aggregate_id, CLEARING_RESERVE),
 			action: LedgerAction::Reserve(LedgerTransfer {
 				id: tid(aggregate_id, CLEARING_RESERVE),
-				debit: LedgerAccountKey::UserClaim(user),
+				debit: source.claim_key(),
 				credit: LedgerAccountKey::WithdrawalClearing,
 				amount: amount.base_units(),
 				code: TransferCode::Withdraw,
@@ -877,7 +886,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 				}),
 			}]
 		}
-		WithdrawalEvent::Settled { user, network, amount, fee, .. } => {
+		WithdrawalEvent::Settled { source, network, amount, fee, .. } => {
 			let net = amount.checked_sub(fee).ok_or("withdrawal fee exceeds amount")?;
 			// Post the clearing reservation, then disburse: net leaves the rail's custody,
 			// the fee is retained. The Vec order matters — the post must land before the
@@ -890,7 +899,7 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 						id: tid(aggregate_id, CLEARING_SETTLE),
 						pending_id: tid(aggregate_id, CLEARING_RESERVE),
 						kind: CompletionKind::Post,
-						debit: LedgerAccountKey::UserClaim(user),
+						debit: source.claim_key(),
 						credit: LedgerAccountKey::WithdrawalClearing,
 						amount: amount.base_units(),
 						code: TransferCode::Withdraw,
@@ -926,14 +935,15 @@ fn plan_withdrawal(event: WithdrawalEvent, aggregate_id: Uuid, reference: u128) 
 			}
 			ops
 		}
-		WithdrawalEvent::Failed { user, amount, .. } => vec![void_clearing(aggregate_id, user, amount, reference, CLEARING_VOID_FAIL)],
-		WithdrawalEvent::Cancelled { user, amount, .. } => vec![void_clearing(aggregate_id, user, amount, reference, CLEARING_VOID_CANCEL)],
+		WithdrawalEvent::Failed { source, amount, .. } => vec![void_clearing(aggregate_id, source, amount, reference, CLEARING_VOID_FAIL)],
+		WithdrawalEvent::Cancelled { source, amount, .. } => vec![void_clearing(aggregate_id, source, amount, reference, CLEARING_VOID_CANCEL)],
 	})
 }
 
-/// Void the clearing reservation (full refund) — shared by fail and cancel, which only
-/// differ by the completion's deterministic id salt (a withdrawal reaches at most one).
-fn void_clearing(aggregate_id: Uuid, user: UserId, amount: Usdt, reference: u128, salt: &[u8]) -> PlannedOp {
+/// Void the clearing reservation (full refund to the source) — shared by fail and cancel,
+/// which only differ by the completion's deterministic id salt (a withdrawal reaches at
+/// most one).
+fn void_clearing(aggregate_id: Uuid, source: WithdrawalSource, amount: Usdt, reference: u128, salt: &[u8]) -> PlannedOp {
 	PlannedOp {
 		role: "withdraw_void",
 		transfer_id: tid(aggregate_id, salt),
@@ -941,7 +951,7 @@ fn void_clearing(aggregate_id: Uuid, user: UserId, amount: Usdt, reference: u128
 			id: tid(aggregate_id, salt),
 			pending_id: tid(aggregate_id, CLEARING_RESERVE),
 			kind: CompletionKind::Void,
-			debit: LedgerAccountKey::UserClaim(user),
+			debit: source.claim_key(),
 			credit: LedgerAccountKey::WithdrawalClearing,
 			amount: amount.base_units(),
 			code: TransferCode::Withdraw,

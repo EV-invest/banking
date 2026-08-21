@@ -18,10 +18,12 @@
 import {
   adminAllocationsResource,
   cabinetConfigResource,
+  fundRevenueResource,
   mfeRegistryResource,
   overviewResource,
   parkedEventsResource,
   redemptionQueueResource,
+  revenuePayoutsResource,
   treasuryResource,
   usersResource,
   withdrawalQueueResource,
@@ -53,6 +55,13 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
   },
   { prefix: "/admin/treasury", warm: () => treasuryResource.prefetch() },
   { prefix: "/admin/withdrawals", warm: () => withdrawalQueueResource.prefetch() },
+  {
+    prefix: "/admin/revenue",
+    warm: () => {
+      fundRevenueResource.prefetch();
+      revenuePayoutsResource.prefetch();
+    },
+  },
   { prefix: "/admin/allocations", warm: () => adminAllocationsResource.prefetch() },
   {
     prefix: "/admin/valuation",

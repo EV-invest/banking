@@ -9,7 +9,7 @@
 use domain::{
 	authz::Permission,
 	balance::ServiceId,
-	money::{Network, TxRef, Usdt},
+	money::{Network, TxRef, Usdt, WalletAddress},
 };
 use evbanking_auth::claims_of;
 use evbanking_contracts::banking::v1::{self as pb, balance_service_server::BalanceService};
@@ -21,6 +21,7 @@ use crate::{
 	services::{
 		funds::redemption_to_proto,
 		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
+		wallet::withdrawal_to_proto,
 	},
 };
 
@@ -261,7 +262,9 @@ impl BalanceService for BalanceSvc {
 				.into_iter()
 				.map(|w| pb::WithdrawalQueueItem {
 					withdrawal_id: w.id.to_string(),
-					user_id: w.user_id.to_string(),
+					source: if w.source.is_revenue() { "revenue".to_owned() } else { "user".to_owned() },
+					// Empty for a revenue payout — the fund owns it, no user does.
+					user_id: w.source.user().map(|u| u.to_string()).unwrap_or_default(),
 					email: w.email,
 					network: w.network.as_str().to_owned(),
 					address: w.address,
@@ -271,6 +274,69 @@ impl BalanceService for BalanceSvc {
 					created_at: w.created_at,
 				})
 				.collect(),
+		}))
+	}
+
+	async fn get_fund_revenue(&self, request: Request<pb::GetFundRevenueRequest>) -> Result<Response<pb::FundRevenue>, Status> {
+		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		let revenue = balance_app::fund_revenue(self.state.ledger.as_ref(), self.state.custody.as_ref(), &self.state.configured_networks)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(pb::FundRevenue {
+			earned: revenue.earned.to_decimal_string(),
+			available: revenue.available.to_decimal_string(),
+			pending_payout: revenue.pending_payout.to_decimal_string(),
+			rails: revenue
+				.rails
+				.into_iter()
+				.map(|rail| pb::RevenueRail {
+					network: rail.network.as_str().to_owned(),
+					payable: rail.payable.to_decimal_string(),
+					instant: rail.instant.to_decimal_string(),
+					minimum: rail.minimum.to_decimal_string(),
+				})
+				.collect(),
+		}))
+	}
+
+	async fn request_revenue_payout(&self, request: Request<pb::RequestRevenuePayoutRequest>) -> Result<Response<pb::Withdrawal>, Status> {
+		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		let req = request.into_inner();
+		let network = Network::parse(&req.network).map_err(map_err)?;
+		let address = WalletAddress::parse(network, &req.address).map_err(map_err)?;
+		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
+		let payout = withdrawal_app::request_revenue_payout(
+			self.state.withdrawals.as_ref(),
+			self.state.ledger.as_ref(),
+			self.state.custody.as_ref(),
+			&self.state.relay_notify,
+			&self.state.configured_networks,
+			network,
+			address,
+			amount,
+		)
+		.await
+		.map_err(map_err)?;
+		// WARN on success on purpose: company money leaving the fund is worth an audit
+		// line that stands out, the same way a deposit-address rotation is.
+		tracing::warn!(payout_id = %payout.id(), network = %req.network, address = %req.address, amount = %req.amount, "requested a fund revenue payout");
+		Ok(Response::new(withdrawal_to_proto(&payout)))
+	}
+
+	async fn cancel_revenue_payout(&self, request: Request<pb::CancelRevenuePayoutRequest>) -> Result<Response<pb::Withdrawal>, Status> {
+		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
+		let payout = withdrawal_app::cancel_revenue_payout(self.state.withdrawals.as_ref(), &self.state.relay_notify, id)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(withdrawal_to_proto(&payout)))
+	}
+
+	async fn list_revenue_payouts(&self, request: Request<pb::ListRevenuePayoutsRequest>) -> Result<Response<pb::WithdrawalList>, Status> {
+		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
+		let payouts = withdrawal_app::list_revenue_payouts(self.state.withdrawals.as_ref()).await.map_err(map_err)?;
+		Ok(Response::new(pb::WithdrawalList {
+			withdrawals: payouts.iter().map(withdrawal_to_proto).collect(),
 		}))
 	}
 

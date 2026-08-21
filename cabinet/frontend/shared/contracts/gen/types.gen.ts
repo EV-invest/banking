@@ -172,6 +172,16 @@ export type BankingV1CancelRedemptionRequest = {
 };
 
 /**
+ * CancelRevenuePayoutRequest
+ */
+export type BankingV1CancelRevenuePayoutRequest = {
+    /**
+     * withdrawal_id
+     */
+    withdrawal_id?: string;
+};
+
+/**
  * CancelWithdrawalRequest
  */
 export type BankingV1CancelWithdrawalRequest = {
@@ -602,6 +612,40 @@ export type BankingV1FundNav = {
 };
 
 /**
+ * FundRevenue
+ *
+ * The fund's OWN money — what it earned, not what it custodies. `earned` is the `fee`
+ * claim, credited by exactly two things: the fee retained on a user withdrawal, and the
+ * settled management + performance fee (the "2 and 20").
+ * `earned = available + pending_payout` by construction (all three are read off one
+ * ledger balance), so the figures can never disagree about a payout in flight.
+ */
+export type BankingV1FundRevenue = {
+    /**
+     * earned
+     *
+     * everything earned and still held
+     */
+    earned?: string;
+    /**
+     * available
+     *
+     * free to pay out now
+     */
+    available?: string;
+    /**
+     * pending_payout
+     *
+     * locked by queued / in-flight payouts
+     */
+    pending_payout?: string;
+    /**
+     * rails
+     */
+    rails?: Array<BankingV1RevenueRail>;
+};
+
+/**
  * GetAccruedFeesRequest
  */
 export type BankingV1GetAccruedFeesRequest = {
@@ -661,6 +705,13 @@ export type BankingV1GetFundNavRequest = {
      * service
      */
     service?: string;
+};
+
+/**
+ * GetFundRevenueRequest
+ */
+export type BankingV1GetFundRevenueRequest = {
+    [key: string]: never;
 };
 
 /**
@@ -865,6 +916,13 @@ export type BankingV1ListRedemptionQueueRequest = {
  * ListRedemptionsRequest
  */
 export type BankingV1ListRedemptionsRequest = {
+    [key: string]: never;
+};
+
+/**
+ * ListRevenuePayoutsRequest
+ */
+export type BankingV1ListRevenuePayoutsRequest = {
     [key: string]: never;
 };
 
@@ -1582,6 +1640,30 @@ export type BankingV1RegisterAllocationRequest = {
 };
 
 /**
+ * RequestRevenuePayoutRequest
+ */
+export type BankingV1RequestRevenuePayoutRequest = {
+    /**
+     * network
+     *
+     * bep20 | polygon | trc20 | ton — the rail to ship on
+     */
+    network?: string;
+    /**
+     * address
+     *
+     * destination on-chain address (validated per network)
+     */
+    address?: string;
+    /**
+     * amount
+     *
+     * decimal USDT to pay out; no fee is charged, so this is the net
+     */
+    amount?: string;
+};
+
+/**
  * RequestWithdrawalRequest
  */
 export type BankingV1RequestWithdrawalRequest = {
@@ -1603,6 +1685,40 @@ export type BankingV1RequestWithdrawalRequest = {
      * gross decimal USDT to debit (the fee is taken from this)
      */
     amount?: string;
+};
+
+/**
+ * RevenueRail
+ *
+ * Per-rail payout options, the mirror of WalletService's `NetworkWithdrawable`.
+ * `payable` is the whole available revenue (a request beyond `instant` is accepted and
+ * queued until the treasury is topped up); `instant` ships without queueing.
+ */
+export type BankingV1RevenueRail = {
+    /**
+     * network
+     *
+     * bep20 | polygon | trc20 | ton
+     */
+    network?: string;
+    /**
+     * payable
+     *
+     * max requestable on this rail (= FundRevenue.available)
+     */
+    payable?: string;
+    /**
+     * instant
+     *
+     * ships now = min(available, min(TB rail, on-chain treasury))
+     */
+    instant?: string;
+    /**
+     * minimum
+     *
+     * smallest payout accepted
+     */
+    minimum?: string;
 };
 
 /**
@@ -2326,6 +2442,10 @@ export type BankingV1WithdrawalQueue = {
  *
  * One withdrawal awaiting operator action. `email` is the mirrored identity email
  * (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.
+ *
+ * Revenue payouts share this queue: they need the same dispatch/settle/fail actions,
+ * and an operator clearing the queue must see everything in flight against the rails.
+ * They carry `source = "revenue"` with `user_id`/`email` empty — the fund owns them.
  */
 export type BankingV1WithdrawalQueueItem = {
     /**
@@ -2355,7 +2475,7 @@ export type BankingV1WithdrawalQueueItem = {
     /**
      * amount
      *
-     * gross decimal USDT debited from the user
+     * gross decimal USDT debited from the source
      */
     amount?: string;
     /**
@@ -2374,6 +2494,12 @@ export type BankingV1WithdrawalQueueItem = {
      * created_at
      */
     created_at?: number | string;
+    /**
+     * source
+     *
+     * user | revenue — which claim funds it
+     */
+    source?: string;
 };
 
 /**
@@ -3395,6 +3521,35 @@ export type BankingV1AuthServiceRevokeSessionResponses = {
 
 export type BankingV1AuthServiceRevokeSessionResponse = BankingV1AuthServiceRevokeSessionResponses[keyof BankingV1AuthServiceRevokeSessionResponses];
 
+export type BankingV1BalanceServiceCancelRevenuePayoutData = {
+    body: BankingV1CancelRevenuePayoutRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/CancelRevenuePayout';
+};
+
+export type BankingV1BalanceServiceCancelRevenuePayoutErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceCancelRevenuePayoutError = BankingV1BalanceServiceCancelRevenuePayoutErrors[keyof BankingV1BalanceServiceCancelRevenuePayoutErrors];
+
+export type BankingV1BalanceServiceCancelRevenuePayoutResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Withdrawal;
+};
+
+export type BankingV1BalanceServiceCancelRevenuePayoutResponse = BankingV1BalanceServiceCancelRevenuePayoutResponses[keyof BankingV1BalanceServiceCancelRevenuePayoutResponses];
+
 export type BankingV1BalanceServiceDispatchWithdrawalData = {
     body: BankingV1DispatchWithdrawalRequest;
     headers: {
@@ -3481,6 +3636,35 @@ export type BankingV1BalanceServiceFailWithdrawalResponses = {
 };
 
 export type BankingV1BalanceServiceFailWithdrawalResponse = BankingV1BalanceServiceFailWithdrawalResponses[keyof BankingV1BalanceServiceFailWithdrawalResponses];
+
+export type BankingV1BalanceServiceGetFundRevenueData = {
+    body: BankingV1GetFundRevenueRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/GetFundRevenue';
+};
+
+export type BankingV1BalanceServiceGetFundRevenueErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceGetFundRevenueError = BankingV1BalanceServiceGetFundRevenueErrors[keyof BankingV1BalanceServiceGetFundRevenueErrors];
+
+export type BankingV1BalanceServiceGetFundRevenueResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FundRevenue;
+};
+
+export type BankingV1BalanceServiceGetFundRevenueResponse = BankingV1BalanceServiceGetFundRevenueResponses[keyof BankingV1BalanceServiceGetFundRevenueResponses];
 
 export type BankingV1BalanceServiceGetOperationsModeData = {
     body: BankingV1GetOperationsModeRequest;
@@ -3598,6 +3782,35 @@ export type BankingV1BalanceServiceListRedemptionQueueResponses = {
 
 export type BankingV1BalanceServiceListRedemptionQueueResponse = BankingV1BalanceServiceListRedemptionQueueResponses[keyof BankingV1BalanceServiceListRedemptionQueueResponses];
 
+export type BankingV1BalanceServiceListRevenuePayoutsData = {
+    body: BankingV1ListRevenuePayoutsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/ListRevenuePayouts';
+};
+
+export type BankingV1BalanceServiceListRevenuePayoutsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceListRevenuePayoutsError = BankingV1BalanceServiceListRevenuePayoutsErrors[keyof BankingV1BalanceServiceListRevenuePayoutsErrors];
+
+export type BankingV1BalanceServiceListRevenuePayoutsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1WithdrawalList;
+};
+
+export type BankingV1BalanceServiceListRevenuePayoutsResponse = BankingV1BalanceServiceListRevenuePayoutsResponses[keyof BankingV1BalanceServiceListRevenuePayoutsResponses];
+
 export type BankingV1BalanceServiceListWithdrawalQueueData = {
     body: BankingV1ListWithdrawalQueueRequest;
     headers: {
@@ -3684,6 +3897,35 @@ export type BankingV1BalanceServiceRecordDepositResponses = {
 };
 
 export type BankingV1BalanceServiceRecordDepositResponse = BankingV1BalanceServiceRecordDepositResponses[keyof BankingV1BalanceServiceRecordDepositResponses];
+
+export type BankingV1BalanceServiceRequestRevenuePayoutData = {
+    body: BankingV1RequestRevenuePayoutRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/RequestRevenuePayout';
+};
+
+export type BankingV1BalanceServiceRequestRevenuePayoutErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceRequestRevenuePayoutError = BankingV1BalanceServiceRequestRevenuePayoutErrors[keyof BankingV1BalanceServiceRequestRevenuePayoutErrors];
+
+export type BankingV1BalanceServiceRequestRevenuePayoutResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Withdrawal;
+};
+
+export type BankingV1BalanceServiceRequestRevenuePayoutResponse = BankingV1BalanceServiceRequestRevenuePayoutResponses[keyof BankingV1BalanceServiceRequestRevenuePayoutResponses];
 
 export type BankingV1BalanceServiceRotateDepositAddressData = {
     body: BankingV1RotateDepositAddressRequest;

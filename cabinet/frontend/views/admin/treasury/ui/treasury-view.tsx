@@ -72,6 +72,10 @@ export function TreasuryView() {
           <MoneyCard label="Claims · total (USDT)" value={treasury?.total_custody} hint="= on-chain custody · backed" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.claims-total" />
           <MoneyCard label="Held for clients" value={treasury?.held_for_clients} hint="user + service balances" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.held-for-clients" />
           <MoneyCard label="Fund capital" value={treasury?.fund_capital} hint="company's own" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.fund-capital" />
+          {/* The fee claim was load-bearing but invisible here: `held_for_clients` is
+              derived as total − fund capital − THIS, so without it the figures above
+              don't add up. It is also exactly what the Fund revenue screen pays out. */}
+          <MoneyCard label="Fund revenue" value={treasury?.fee_revenue} hint="earned — fees + settled 2-and-20" loading={loading && !treasury} unavailable={!loading && !treasury} />
           <MoneyCard label="Reserved · withdrawals" value={treasury?.reserved_for_withdrawals} hint="queued + in-flight (clearing)" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.reserved-withdrawals" />
         </div>
       </section>

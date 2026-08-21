@@ -35,6 +35,10 @@
     "en": "Overview",
     "t": "Обзор"
   },
+  "nav.revenue": {
+    "en": "Fund revenue",
+    "t": "Доход фонда"
+  },
   "nav.treasury": {
     "en": "Treasury",
     "t": "Казначейство"

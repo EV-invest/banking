@@ -87,6 +87,11 @@ pub enum Permission {
 	WithdrawalFail,
 	/// Seed fund capital / record an off-rail deposit.
 	CapitalManage,
+	/// Pay the fund's OWN earned revenue (the `fee` claim) out to an external wallet,
+	/// and read what is payable. The only RPC pair that moves company money outward, so
+	/// it sits with the Admin/Owner capabilities — an Operator may see the treasury but
+	/// never send from it.
+	RevenuePayout,
 	/// Toggle the money-plane operations mode (read-only kill-switch).
 	OperationsManage,
 	/// Unpark a parked outbox event so the relay re-drives it.
@@ -160,7 +165,13 @@ mod tests {
 		assert!(grants(Role::Owner, Permission::AllocationManage));
 		assert!(grants(Role::Owner, Permission::WithdrawalSettle));
 		assert!(grants(Role::Admin, Permission::OutboxManage));
+		// Paying the fund's revenue out is the sharpest "move", so the read/move split
+		// must hold hardest here: an Operator sees the treasury but cannot send from it.
+		assert!(!grants(Role::Operator, Permission::RevenuePayout));
+		assert!(grants(Role::Admin, Permission::RevenuePayout));
+		assert!(grants(Role::Owner, Permission::RevenuePayout));
 		// Investor holds nothing.
 		assert!(!grants(Role::Investor, Permission::TreasuryRead));
+		assert!(!grants(Role::Investor, Permission::RevenuePayout));
 	}
 }

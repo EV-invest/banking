@@ -369,6 +369,35 @@ per-transfer USDT cap (`SIGNER_MAX_TRANSFER_USDT`) and an optional destination a
 (`SIGNER_DESTINATION_ALLOWLIST`) on treasury-sourced transfers — both no-ops until configured,
 so set the cap before scaling real liquidity.
 
+### Revenue payout — the same saga, sourced from the fund
+
+The fund earns money in two places: the **retained fee** on every user withdrawal, and the
+settled 2-and-20 (§Fees → *Settlement*). Both land in one claim, `fee`. Paying that money
+out is the same claim → chain direction a user withdrawal is, so it is the **same saga**,
+not a parallel one: `Withdrawal` names its origin with [`WithdrawalSource`] instead of
+assuming a user, and the queue, the chain watchers, the dispatcher, the reaper and
+reconciliation cover payouts with no new machinery.
+
+`RequestRevenuePayout` (Admin/Owner, `authz::RevenuePayout`) Read-First checks the **`fee`
+claim's** available balance and reserves the gross as `Dr fee / Cr clearing`. Two
+consequences worth stating plainly, because both are load-bearing:
+
+* **Client money and seed capital are unreachable from here.** They are different ledger
+  accounts (`user:<uuid>`, `fund:<net>`), so the cap is not a filter someone could forget
+  to apply — it is the `fee` claim's own balance, with TigerBeetle's non-negative flag as
+  the backstop underneath.
+* **A payout charges no fee.** The fee claim is *where* fees are retained; charging one
+  would credit the money straight back to the account it was just debited from.
+
+A payout has no owner in the identity plane — the fund is not a user — so the gates that
+read a user's control-plane flags simply do not apply (the dispatcher's freeze check is
+`if let Some(owner)`, not a fail-closed read against a missing row). Everything else is
+identical, **including the cardinal rule**: once a payout's broadcast may have reached the
+chain, failing it double-pays.
+
+Old outbox payloads spell the field `user` and hold a bare UUID. `WithdrawalSource`'s
+string form reads those unchanged, so a row parked before this landed still drains after it.
+
 ## Operations — the activity timeline (`OperationsService`)
 
 The first surface here that is **only** a read model. The four things a user does —

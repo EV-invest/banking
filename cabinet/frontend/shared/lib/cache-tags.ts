@@ -50,4 +50,8 @@ export const TAG = {
   adminAllocations: "admin.allocations",
   /** The user directory and a single user's detail. */
   adminUsers: "admin.users",
+  /** The fund's earned revenue and its payouts. A payout also moves `adminQueue` (it
+   *  joins the operator withdrawal queue) and `adminTreasury` (it debits a claim), so
+   *  the mutation names all three rather than this one alone. */
+  adminRevenue: "admin.revenue",
 } as const;

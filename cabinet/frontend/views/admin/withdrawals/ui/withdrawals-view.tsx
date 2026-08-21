@@ -56,7 +56,7 @@ export function WithdrawalsView() {
 
   return (
     <div className="space-y-8 px-8 pb-10 pt-6">
-      <AdminHeader eyebrow="Administer" title="Withdrawals" subtitle="Dispatch, settle, or fail user withdrawals" />
+      <AdminHeader eyebrow="Administer" title="Withdrawals" subtitle="Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts" />
 
       {error && (
         <p className="flex items-center gap-2 text-sm text-destructive">
@@ -176,7 +176,14 @@ function WithdrawalRow({
     <>
       <tr>
         <td className="px-5 py-3">
-          <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
+          {/* A revenue payout has no investor behind it — the fund is paying its own
+              earnings out. Naming that beats rendering a blank User cell, and it tells
+              the operator whose money the dispatch/settle below is about to move. */}
+          {item.source === "revenue" ? (
+            <p className="font-medium text-main-accent-t2">Fund revenue</p>
+          ) : (
+            <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
+          )}
           <p className="font-mono-tech text-xs text-muted-foreground">{item.withdrawal_id.slice(0, 8)}</p>
         </td>
         <td className="px-5 py-3">

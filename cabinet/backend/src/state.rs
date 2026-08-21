@@ -422,6 +422,28 @@ impl Grpc {
 		Ok(())
 	}
 
+	/// What the fund has earned (the `fee` claim) and the rails a payout can ship on.
+	pub async fn fund_revenue(&self, token: &str) -> Result<bk::FundRevenue, Status> {
+		Ok(self.balance().get_fund_revenue(bearer(token, bk::GetFundRevenueRequest {})?).await?.into_inner())
+	}
+
+	/// Pay the fund's own earned revenue out to an external wallet. The hub caps it at
+	/// the revenue claim's available balance — client money is a different account.
+	pub async fn request_revenue_payout(&self, token: &str, req: bk::RequestRevenuePayoutRequest) -> Result<bk::Withdrawal, Status> {
+		Ok(self.balance().request_revenue_payout(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_revenue_payout(&self, token: &str, withdrawal_id: &str) -> Result<bk::Withdrawal, Status> {
+		let req = bk::CancelRevenuePayoutRequest {
+			withdrawal_id: withdrawal_id.to_string(),
+		};
+		Ok(self.balance().cancel_revenue_payout(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn revenue_payouts(&self, token: &str) -> Result<bk::WithdrawalList, Status> {
+		Ok(self.balance().list_revenue_payouts(bearer(token, bk::ListRevenuePayoutsRequest {})?).await?.into_inner())
+	}
+
 	pub async fn parked_events(&self, token: &str) -> Result<bk::ParkedEventList, Status> {
 		Ok(self.balance().list_parked_events(bearer(token, bk::ListParkedEventsRequest {})?).await?.into_inner())
 	}

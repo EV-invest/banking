@@ -3,6 +3,7 @@ syntax = "proto3";
 package banking.v1;
 
 import "banking/v1/funds.proto";
+import "banking/v1/wallet.proto";
 
 // BalanceService — the bank's treasury and company capital (operator surface).
 //
@@ -81,6 +82,24 @@ service BalanceService {
   // to rotate a key that still unseals. Funds already on the old address remain
   // unrecoverable; this restores the user's ability to receive FUTURE deposits.
   rpc RotateDepositAddress(RotateDepositAddressRequest) returns (RotateDepositAddressResponse);
+
+  // What the fund has EARNED and may pay itself — the `fee` claim, segmented into
+  // earned / available / pending, plus the rails a payout can ship on. Admin/Owner.
+  rpc GetFundRevenue(GetFundRevenueRequest) returns (FundRevenue);
+
+  // Pay the fund's own earned revenue out to an external wallet (Admin/Owner). Capped
+  // by `FundRevenue.available`: client claims and the fund's seed capital are different
+  // ledger accounts and are unreachable from here. Runs the same saga as a user
+  // withdrawal — accepted and queued when the rail is short, then dispatched/settled
+  // through the usual operator RPCs — so it shares the withdrawal queue and history.
+  rpc RequestRevenuePayout(RequestRevenuePayoutRequest) returns (Withdrawal);
+
+  // Cancel a still-QUEUED revenue payout (refund to the revenue claim). Refuses a
+  // user's withdrawal, and refuses once processing — a broadcast may have landed.
+  rpc CancelRevenuePayout(CancelRevenuePayoutRequest) returns (Withdrawal);
+
+  // The fund's own payouts, newest first — the payout history. Admin/Owner.
+  rpc ListRevenuePayouts(ListRevenuePayoutsRequest) returns (WithdrawalList);
 }
 
 message ListParkedEventsRequest {}
@@ -130,16 +149,21 @@ message ListWithdrawalQueueRequest {}
 
 // One withdrawal awaiting operator action. `email` is the mirrored identity email
 // (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.
+//
+// Revenue payouts share this queue: they need the same dispatch/settle/fail actions,
+// and an operator clearing the queue must see everything in flight against the rails.
+// They carry `source = "revenue"` with `user_id`/`email` empty — the fund owns them.
 message WithdrawalQueueItem {
   string withdrawal_id = 1;
   string user_id = 2;
   string email = 3;
   string network = 4;     // bep20 | polygon | trc20 | ton
   string address = 5;     // destination on-chain address
-  string amount = 6;      // gross decimal USDT debited from the user
+  string amount = 6;      // gross decimal USDT debited from the source
   string net_amount = 7;  // amount − fee — what ships on-chain
   string state = 8;       // queued | processing
   int64 created_at = 9;
+  string source = 10;     // user | revenue — which claim funds it
 }
 
 message WithdrawalQueue {
@@ -259,6 +283,42 @@ message RotateDepositAddressRequest {
 message RotateDepositAddressResponse {
   string address = 1;  // the NEW fundable deposit address
 }
+
+message GetFundRevenueRequest {}
+
+// Per-rail payout options, the mirror of WalletService's `NetworkWithdrawable`.
+// `payable` is the whole available revenue (a request beyond `instant` is accepted and
+// queued until the treasury is topped up); `instant` ships without queueing.
+message RevenueRail {
+  string network = 1;   // bep20 | polygon | trc20 | ton
+  string payable = 2;   // max requestable on this rail (= FundRevenue.available)
+  string instant = 3;   // ships now = min(available, min(TB rail, on-chain treasury))
+  string minimum = 4;   // smallest payout accepted
+}
+
+// The fund's OWN money — what it earned, not what it custodies. `earned` is the `fee`
+// claim, credited by exactly two things: the fee retained on a user withdrawal, and the
+// settled management + performance fee (the "2 and 20").
+// `earned = available + pending_payout` by construction (all three are read off one
+// ledger balance), so the figures can never disagree about a payout in flight.
+message FundRevenue {
+  string earned = 1;           // everything earned and still held
+  string available = 2;        // free to pay out now
+  string pending_payout = 3;   // locked by queued / in-flight payouts
+  repeated RevenueRail rails = 4;
+}
+
+message RequestRevenuePayoutRequest {
+  string network = 1;  // bep20 | polygon | trc20 | ton — the rail to ship on
+  string address = 2;  // destination on-chain address (validated per network)
+  string amount = 3;   // decimal USDT to pay out; no fee is charged, so this is the net
+}
+
+message CancelRevenuePayoutRequest {
+  string withdrawal_id = 1;
+}
+
+message ListRevenuePayoutsRequest {}
 
 message SettleRedemptionRequest {
   string redemption_id = 1;

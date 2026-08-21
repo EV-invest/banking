@@ -12,11 +12,14 @@ import type {
   AdminUserProfile,
   CabinetConfig,
   FundNav,
+  FundRevenue,
   OperationsMode,
   ParkedEventList,
   PlatformConfig,
   Redemption,
   RedemptionQueue,
+  RevenuePayout,
+  RevenuePayoutList,
   Treasury,
   UserBalance,
   WithdrawalQueue,
@@ -114,6 +117,18 @@ export const settleWithdrawal = (withdrawalId: string, txRef: string): Promise<{
 
 export const failWithdrawal = (withdrawalId: string, reason: string): Promise<{ ok: boolean }> =>
   postJson("/api/admin/withdrawals/fail", { withdrawal_id: withdrawalId, reason });
+
+// ── revenue (the fund's own earned money) ────────────────────────────────────────
+// The payout is capped at the money plane by the revenue claim's available balance —
+// client balances and the fund's seed capital are separate ledger accounts. Nothing
+// here can widen that; the form's own cap is a courtesy, not the control.
+export const fetchFundRevenue = (): Promise<FundRevenue> => getJson("/api/admin/revenue");
+
+export const fetchRevenuePayouts = (): Promise<RevenuePayoutList> => getJson("/api/admin/revenue/payouts");
+
+export const requestRevenuePayout = (body: { network: string; address: string; amount: string }): Promise<RevenuePayout> => postJson("/api/admin/revenue/payout", body);
+
+export const cancelRevenuePayout = (withdrawalId: string): Promise<RevenuePayout> => postJson("/api/admin/revenue/cancel", { withdrawal_id: withdrawalId });
 
 // ── cabinet (platform config + read-only kill-switch) ───────────────────────────
 export const fetchCabinet = (): Promise<CabinetConfig> => getJson("/api/admin/cabinet");

@@ -35,6 +35,10 @@
     "en": "Overview",
     "t": "Vue d'ensemble"
   },
+  "nav.revenue": {
+    "en": "Fund revenue",
+    "t": "Revenus du fonds"
+  },
   "nav.treasury": {
     "en": "Treasury",
     "t": "Trésorerie"

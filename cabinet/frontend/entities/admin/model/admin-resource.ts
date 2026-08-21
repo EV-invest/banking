@@ -16,10 +16,12 @@
 import {
   fetchAllocations as fetchAdminAllocations,
   fetchCabinet,
+  fetchFundRevenue,
   fetchMfeRegistry,
   fetchOverview,
   fetchParkedEvents,
   fetchRedemptionQueue,
+  fetchRevenuePayouts,
   fetchTreasury,
   fetchUser,
   fetchUserBalance,
@@ -75,6 +77,22 @@ export const withdrawalQueueResource = defineResource({
   fetch: fetchWithdrawalQueue,
   revalidate: OPERATIONAL,
   tags: [TAG.adminQueue],
+});
+
+// The fund's own money. Operational cadence like the queues — an owner looking at what
+// is payable is looking at it now, and a settling payout moves the figure.
+export const fundRevenueResource = defineResource({
+  name: "admin.fundRevenue",
+  fetch: fetchFundRevenue,
+  revalidate: OPERATIONAL,
+  tags: [TAG.adminRevenue],
+});
+
+export const revenuePayoutsResource = defineResource({
+  name: "admin.revenuePayouts",
+  fetch: fetchRevenuePayouts,
+  revalidate: OPERATIONAL,
+  tags: [TAG.adminRevenue],
 });
 
 export const redemptionQueueResource = defineResource({

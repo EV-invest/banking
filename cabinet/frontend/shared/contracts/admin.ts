@@ -179,6 +179,9 @@ export interface Redemption {
 // ── withdrawals (operator queue) ─────────────────────────────────────────────────
 export interface WithdrawalQueueItem {
   withdrawal_id: string;
+  /** Which claim funds it. A `revenue` row is the fund paying its own earnings out, so
+   *  it carries no `user_id`/`email` — label it rather than rendering a blank investor. */
+  source: "user" | "revenue";
   user_id: string;
   email: string;
   network: string;
@@ -191,6 +194,45 @@ export interface WithdrawalQueueItem {
 
 export interface WithdrawalQueue {
   items: WithdrawalQueueItem[];
+}
+
+// ── revenue (the fund's own earned money) ──────────────────────────────────────
+
+/** Per-rail payout options. `payable` is the whole available revenue (a request beyond
+ *  `instant` is accepted and queued until the treasury is topped up); `instant` ships now. */
+export interface RevenueRail {
+  network: string;
+  payable: string;
+  instant: string;
+  minimum: string;
+}
+
+/** What the fund EARNED and may pay itself — the `fee` claim, credited by the fee
+ *  retained on a user withdrawal and by the settled 2-and-20. Client balances and the
+ *  fund's seed capital are separate claims and are not in this figure.
+ *  `earned = available + pending_payout`, all three off one ledger balance. */
+export interface FundRevenue {
+  earned: string;
+  available: string;
+  pending_payout: string;
+  rails: RevenueRail[];
+}
+
+/** A payout, shaped exactly like a user withdrawal — same saga, same states. `fee` is
+ *  always `"0"`: the fee claim is where fees are retained, so a payout charges none. */
+export interface RevenuePayout {
+  id: string;
+  network: string;
+  address: string;
+  amount: string;
+  fee: string;
+  net_amount: string;
+  state: string;
+  tx_ref: string;
+}
+
+export interface RevenuePayoutList {
+  withdrawals: RevenuePayout[];
 }
 
 // ── cabinet (platform config + money-plane read-only) ───────────────────────────
