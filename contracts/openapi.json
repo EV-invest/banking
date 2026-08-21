@@ -710,6 +710,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/CancelRevenuePayout": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "CancelRevenuePayout",
+        "description": "Cancel a still-QUEUED revenue payout (refund to the revenue claim). Refuses a\n user's withdrawal, and refuses once processing — a broadcast may have landed.",
+        "operationId": "banking.v1.BalanceService.CancelRevenuePayout",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CancelRevenuePayoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Withdrawal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/DispatchWithdrawal": {
       "post": {
         "tags": [
@@ -880,6 +939,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.FailWithdrawalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/GetFundRevenue": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "GetFundRevenue",
+        "description": "What the fund has EARNED and may pay itself — the `fee` claim, segmented into\n earned / available / pending, plus the rails a payout can ship on. Admin/Owner.",
+        "operationId": "banking.v1.BalanceService.GetFundRevenue",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetFundRevenueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FundRevenue"
                 }
               }
             }
@@ -1123,6 +1241,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/ListRevenuePayouts": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "ListRevenuePayouts",
+        "description": "The fund's own payouts, newest first — the payout history. Admin/Owner.",
+        "operationId": "banking.v1.BalanceService.ListRevenuePayouts",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListRevenuePayoutsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.WithdrawalList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/ListWithdrawalQueue": {
       "post": {
         "tags": [
@@ -1293,6 +1470,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.RecordDepositResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BalanceService/RequestRevenuePayout": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "RequestRevenuePayout",
+        "description": "Pay the fund's own earned revenue out to an external wallet (Admin/Owner). Capped\n by `FundRevenue.available`: client claims and the fund's seed capital are different\n ledger accounts and are unreachable from here. Runs the same saga as a user\n withdrawal — accepted and queued when the rail is short, then dispatched/settled\n through the usual operator RPCs — so it shares the withdrawal queue and history.",
+        "operationId": "banking.v1.BalanceService.RequestRevenuePayout",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RequestRevenuePayoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Withdrawal"
                 }
               }
             }
@@ -4467,6 +4703,17 @@
         "title": "CancelRedemptionRequest",
         "additionalProperties": false
       },
+      "banking.v1.CancelRevenuePayoutRequest": {
+        "type": "object",
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "title": "withdrawal_id"
+          }
+        },
+        "title": "CancelRevenuePayoutRequest",
+        "additionalProperties": false
+      },
       "banking.v1.CancelWithdrawalRequest": {
         "type": "object",
         "properties": {
@@ -4885,6 +5132,36 @@
         "additionalProperties": false,
         "description": "The current price of a fund's share, derived (AUM / units_outstanding) and frozen\n between operator marks. `posted_at` is 0 when the fund has never been marked (seed\n NAV 1.0); `stale` is true when the latest mark is older than the dealing window."
       },
+      "banking.v1.FundRevenue": {
+        "type": "object",
+        "properties": {
+          "earned": {
+            "type": "string",
+            "title": "earned",
+            "description": "everything earned and still held"
+          },
+          "available": {
+            "type": "string",
+            "title": "available",
+            "description": "free to pay out now"
+          },
+          "pending_payout": {
+            "type": "string",
+            "title": "pending_payout",
+            "description": "locked by queued / in-flight payouts"
+          },
+          "rails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.RevenueRail"
+            },
+            "title": "rails"
+          }
+        },
+        "title": "FundRevenue",
+        "additionalProperties": false,
+        "description": "The fund's OWN money — what it earned, not what it custodies. `earned` is the `fee`\n claim, credited by exactly two things: the fee retained on a user withdrawal, and the\n settled management + performance fee (the \"2 and 20\").\n `earned = available + pending_payout` by construction (all three are read off one\n ledger balance), so the figures can never disagree about a payout in flight."
+      },
       "banking.v1.GetAccruedFeesRequest": {
         "type": "object",
         "properties": {
@@ -4950,6 +5227,11 @@
           }
         },
         "title": "GetFundNavRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetFundRevenueRequest": {
+        "type": "object",
+        "title": "GetFundRevenueRequest",
         "additionalProperties": false
       },
       "banking.v1.GetMeRequest": {
@@ -5128,6 +5410,11 @@
       "banking.v1.ListRedemptionsRequest": {
         "type": "object",
         "title": "ListRedemptionsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListRevenuePayoutsRequest": {
+        "type": "object",
+        "title": "ListRevenuePayoutsRequest",
         "additionalProperties": false
       },
       "banking.v1.ListSessionsRequest": {
@@ -5789,6 +6076,28 @@
         "title": "RegisterAllocationRequest",
         "additionalProperties": false
       },
+      "banking.v1.RequestRevenuePayoutRequest": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | polygon | trc20 | ton — the rail to ship on"
+          },
+          "address": {
+            "type": "string",
+            "title": "address",
+            "description": "destination on-chain address (validated per network)"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "decimal USDT to pay out; no fee is charged, so this is the net"
+          }
+        },
+        "title": "RequestRevenuePayoutRequest",
+        "additionalProperties": false
+      },
       "banking.v1.RequestWithdrawalRequest": {
         "type": "object",
         "properties": {
@@ -5810,6 +6119,34 @@
         },
         "title": "RequestWithdrawalRequest",
         "additionalProperties": false
+      },
+      "banking.v1.RevenueRail": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | polygon | trc20 | ton"
+          },
+          "payable": {
+            "type": "string",
+            "title": "payable",
+            "description": "max requestable on this rail (= FundRevenue.available)"
+          },
+          "instant": {
+            "type": "string",
+            "title": "instant",
+            "description": "ships now = min(available, min(TB rail, on-chain treasury))"
+          },
+          "minimum": {
+            "type": "string",
+            "title": "minimum",
+            "description": "smallest payout accepted"
+          }
+        },
+        "title": "RevenueRail",
+        "additionalProperties": false,
+        "description": "Per-rail payout options, the mirror of WalletService's `NetworkWithdrawable`.\n `payable` is the whole available revenue (a request beyond `instant` is accepted and\n queued until the treasury is topped up); `instant` ships without queueing."
       },
       "banking.v1.RevokeSessionRequest": {
         "type": "object",
@@ -6560,7 +6897,7 @@
           "amount": {
             "type": "string",
             "title": "amount",
-            "description": "gross decimal USDT debited from the user"
+            "description": "gross decimal USDT debited from the source"
           },
           "net_amount": {
             "type": "string",
@@ -6579,11 +6916,16 @@
             ],
             "title": "created_at",
             "format": "int64"
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "user | revenue — which claim funds it"
           }
         },
         "title": "WithdrawalQueueItem",
         "additionalProperties": false,
-        "description": "One withdrawal awaiting operator action. `email` is the mirrored identity email\n (may be empty if the bridge hasn't populated it); `created_at` is unix seconds."
+        "description": "One withdrawal awaiting operator action. `email` is the mirrored identity email\n (may be empty if the bridge hasn't populated it); `created_at` is unix seconds.\n\n Revenue payouts share this queue: they need the same dispatch/settle/fail actions,\n and an operator clearing the queue must see everything in flight against the rails.\n They carry `source = \"revenue\"` with `user_id`/`email` empty — the fund owns them."
       },
       "concierge.v1.AdminUserSummary": {
         "type": "object",
@@ -7326,6 +7668,10 @@
       "description": "FundsService — a user's investment in funds via the service currency (units/shares).\n\n Subscribing buys units at the current NAV; a holding's value is units × NAV, so\n profit comes from NAV rising, not from extra units. Redeeming is accept-and-queue:\n units are reserved immediately and the cash is priced + paid at settle (settle-time\n NAV). Every amount/unit/price is a decimal STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). Self-service RPCs act on the\n caller's own access-token `sub`. See docs/ARCHITECTURE.md."
     },
     {
+      "name": "banking.v1.WalletService",
+      "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/Polygon/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
+    },
+    {
       "name": "banking.v1.BalanceService",
       "description": "BalanceService — the bank's treasury and company capital (operator surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md."
     },
@@ -7344,10 +7690,6 @@
     {
       "name": "banking.v1.UsersService",
       "description": "UsersService — investor accounts and their investments.\n\n Identity metadata is the Postgres control plane; money is read live from the\n authoritative TigerBeetle ledger and is NEVER re-bookkept in Postgres. Every\n RPC is authorized from the verified access-token Claims injected by core's\n inbound auth layer; self-service RPCs act on the caller's own `sub`, admin RPCs\n are gated by the hub's admin allowlist (config). See docs/ARCHITECTURE.md."
-    },
-    {
-      "name": "banking.v1.WalletService",
-      "description": "WalletService — a user's own crypto wallet: one unified USDT balance, deposit\n addresses, and withdrawals. Networks (BEP20/Polygon/TRC20/TON) are a transaction attribute\n (where you deposit / where a withdrawal ships), never a balance dimension — the user\n holds a single fungible USDT balance, segmented by lifecycle.\n\n Every RPC acts on the caller's own access-token `sub`. Balances are read live from the\n authoritative TigerBeetle ledger (Read-First); amounts are decimal USDT STRINGS\n (proto3 has no u128; a string is lossless and matches proto-loader's `longs: String`).\n A withdrawal is a queued saga (reserve → dispatch → settle/void): it is accepted even\n when the chosen rail is short on liquidity and queued until the treasury tops it up.\n The operator-driven dispatch/settle/fail RPCs live on BalanceService; the custody\n broadcast and deposit-address derivation sit behind ports (a stub in this scaffold).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
     },
     {
       "name": "concierge.v1.UserDirectory",

@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -59,6 +59,9 @@ const ADMIN: NavItem[] = [
   { href: "/admin/cabinet", label: "Cabinet", key: "nav.cabinet", icon: PanelsTopLeft, active: (p) => p.startsWith("/admin/cabinet") },
   { href: "/admin/treasury", label: "Treasury", key: "nav.treasury", icon: Landmark, active: (p) => p.startsWith("/admin/treasury") },
   { href: "/admin/withdrawals", label: "Withdrawals", key: "nav.withdrawals", icon: ArrowUpFromLine, active: (p) => p.startsWith("/admin/withdrawals") },
+  // Sits next to Treasury, not to Withdrawals: the question it answers is "what did the
+  // fund earn", which belongs with the chart of accounts rather than with the user queue.
+  { href: "/admin/revenue", label: "Fund revenue", key: "nav.revenue", icon: PiggyBank, active: (p) => p.startsWith("/admin/revenue") },
   { href: "/admin/allocations", label: "Allocations", key: "nav.allocations", icon: Boxes, active: (p) => p.startsWith("/admin/allocations") },
   { href: "/admin/valuation", label: "Valuation & redemptions", key: "nav.valuation", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
 ];

@@ -455,6 +455,60 @@ pub async fn fail_withdrawal(State(st): State<AppState>, jar: CookieJar, headers
 	Ok(Json(json!({ "ok": true })))
 }
 
+// ── revenue payouts (banking money plane, the fund's own money) ────────────────
+
+/// `GET /api/admin/revenue` — what the fund has earned and may pay itself, plus the
+/// rails a payout can ship on. Admin/Owner at the plane (`RevenuePayout`); an Operator
+/// who may read the treasury is refused here, since this is the payout surface.
+pub async fn fund_revenue(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FundRevenue>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let token = require_money_token(&st, &jar).await?;
+	let revenue = st.grpc.fund_revenue(&token).await.map_err(|s| ApiError::read(s, "fund revenue unavailable"))?;
+	Ok(Json(revenue.into()))
+}
+
+/// `POST /api/admin/revenue/payout` — send earned revenue to an external wallet.
+///
+/// The cap is enforced at the money plane against the revenue claim's available
+/// balance, not here: this handler must never be the thing standing between company
+/// money and client money. Accepted-and-queued like any withdrawal when the rail is
+/// short, then dispatched/settled through the usual withdrawal queue.
+pub async fn request_revenue_payout(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Withdrawal>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let (Some(network), Some(address), Some(amount)) = (required(&v, "network"), required(&v, "address"), required(&v, "amount")) else {
+		return Err(ApiError::BadRequest("network, address and amount are required".into()));
+	};
+	let req = bk::RequestRevenuePayoutRequest { network, address, amount };
+	Ok(Json(st.grpc.request_revenue_payout(&token, req).await?.into()))
+}
+
+/// `POST /api/admin/revenue/cancel` — cancel a still-queued payout (refund to the
+/// revenue claim). The hub refuses a user's withdrawal and refuses once processing.
+pub async fn cancel_revenue_payout(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Withdrawal>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let Some(id) = required(&parse_body(&body), "withdrawal_id") else {
+		return Err(ApiError::BadRequest("withdrawal_id is required".into()));
+	};
+	Ok(Json(st.grpc.cancel_revenue_payout(&token, &id).await?.into()))
+}
+
+/// `GET /api/admin/revenue/payouts` — the fund's payout history, newest first.
+pub async fn revenue_payouts(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::WithdrawalList>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let token = require_money_token(&st, &jar).await?;
+	let list = st.grpc.revenue_payouts(&token).await.map_err(|s| ApiError::read(s, "payout history unavailable"))?;
+	Ok(Json(list.into()))
+}
+
 // ── outbox (banking money plane) ────────────────────────────────────────────────
 
 /// `GET /api/admin/outbox/parked` — outbox rows the relay parked (needs-intervention).

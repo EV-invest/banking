@@ -734,10 +734,13 @@ impl From<bk::RedemptionQueue> for RedemptionQueue {
 	}
 }
 
-/// One withdrawal awaiting operator action (admin Withdrawals screen).
+/// One withdrawal awaiting operator action (admin Withdrawals screen). `source` is
+/// `user` or `revenue`; a revenue payout is the fund's own money leaving, so it carries
+/// no `user_id`/`email` and the screen labels it rather than showing a blank investor.
 #[derive(Serialize)]
 pub struct WithdrawalQueueItem {
 	pub withdrawal_id: String,
+	pub source: String,
 	pub user_id: String,
 	pub email: String,
 	pub network: String,
@@ -761,6 +764,7 @@ impl From<bk::WithdrawalQueue> for WithdrawalQueue {
 				.into_iter()
 				.map(|i| WithdrawalQueueItem {
 					withdrawal_id: i.withdrawal_id,
+					source: i.source,
 					user_id: i.user_id,
 					email: i.email,
 					network: i.network,
@@ -769,6 +773,47 @@ impl From<bk::WithdrawalQueue> for WithdrawalQueue {
 					net_amount: i.net_amount,
 					state: i.state,
 					created_at: i.created_at.to_string(),
+				})
+				.collect(),
+		}
+	}
+}
+
+/// Per-rail payout options (admin Revenue screen) — the mirror of a user's
+/// `NetworkWithdrawable`.
+#[derive(Serialize)]
+pub struct RevenueRail {
+	pub network: String,
+	pub payable: String,
+	pub instant: String,
+	pub minimum: String,
+}
+
+/// What the fund has EARNED and may pay itself: the `fee` claim, credited by the fee
+/// retained on a user withdrawal and by the settled 2-and-20. Client money and the
+/// fund's seed capital are separate claims and are not part of this figure.
+#[derive(Serialize)]
+pub struct FundRevenue {
+	pub earned: String,
+	pub available: String,
+	pub pending_payout: String,
+	pub rails: Vec<RevenueRail>,
+}
+
+impl From<bk::FundRevenue> for FundRevenue {
+	fn from(r: bk::FundRevenue) -> Self {
+		Self {
+			earned: r.earned,
+			available: r.available,
+			pending_payout: r.pending_payout,
+			rails: r
+				.rails
+				.into_iter()
+				.map(|rail| RevenueRail {
+					network: rail.network,
+					payable: rail.payable,
+					instant: rail.instant,
+					minimum: rail.minimum,
 				})
 				.collect(),
 		}
