@@ -166,6 +166,7 @@ impl FeesService for FeesSvc {
 			self.state.fees.settlements.as_ref(),
 			self.state.ledger.as_ref(),
 			self.state.nav.as_ref(),
+			self.state.redemptions.as_ref(),
 			&self.state.relay_notify,
 			service,
 			units,
