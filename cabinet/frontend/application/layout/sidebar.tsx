@@ -4,7 +4,7 @@ import { useT } from "@evinvest/i18n/react";
 
 import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 
@@ -17,7 +17,7 @@ import { useSession } from "@/shared/lib/use-session";
 import { DUR, EASE } from "@/shared/ui/motion";
 
 interface NavItem {
-  href: string;
+  href: `/${string}`;
   /** English source, kept as the catalogue key's twin — see messages/en. */
   label: string;
   /** Catalogue key; `label` is what it resolves to in English. */
@@ -121,7 +121,7 @@ export function Sidebar() {
             {products.map((p, i) => {
               // Every row pointed at `/invest`, so naming a product in the rail took you to
               // the list of all of them. The product's own page is keyed by its service id.
-              const href = `/invest/${encodeURIComponent(p.service)}`;
+              const href: `/${string}` = `/invest/${encodeURIComponent(p.service)}`;
               const active = pathname === href;
               return (
                 <Link

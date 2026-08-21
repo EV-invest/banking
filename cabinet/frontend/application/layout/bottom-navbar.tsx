@@ -4,7 +4,7 @@ import { useT } from "@evinvest/i18n/react";
 
 import { Home, LineChart, ListChecks, Settings, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { usePathname } from "next/navigation";
 
 import { prefetchOn } from "@/application/prefetch";
@@ -12,7 +12,7 @@ import { cn } from "@/shared/lib/cn";
 import { DUR, EASE } from "@/shared/ui/motion";
 
 interface TabItem {
-  href: string;
+  href: `/${string}`;
   label: string;
   /** Catalogue key; `label` is what it resolves to in English. */
   key: string;

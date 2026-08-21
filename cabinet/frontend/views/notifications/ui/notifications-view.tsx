@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import { useEffect, useState } from "react";
 
 import { fetchNotifications } from "@/entities/notification/api/notification-client";
@@ -208,7 +208,7 @@ function Row({ n, first, onOpen }: { n: Notification; first: boolean; onOpen: ()
   return (
     <li className={cn(!first && "border-t border-border/10")}>
       {n.link ? (
-        <Link href={n.link} onClick={onOpen} className={ROW}>
+        <Link href={n.link as `/${string}`} onClick={onOpen} className={ROW}>
           {body}
         </Link>
       ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
@@ -23,7 +23,7 @@ export function MobileAppBar({
   right,
 }: {
   title: string;
-  backHref?: string;
+  backHref?: `/${string}`;
   onBack?: () => void;
   right?: ReactNode;
 }) {

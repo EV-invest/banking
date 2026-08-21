@@ -35,9 +35,23 @@ const nextConfig: NextConfig = {
   // /cabinet/* to this deployment. The rewrite source below is basePath-aware
   // (externally it matches /cabinet/api/*); hand-built browser URLs go through
   // shared/config/base-path.ts.
-  basePath: BASE_PATH,
+  // Pages carry the locale, assets do not. `basePath` cannot express that: it is
+  // static, and Next prepends it to every `<Link>` href — so a locale-prefixed
+  // `/ru/cabinet/wallet` would come out as `/cabinet/ru/cabinet/wallet`. Trading
+  // it for `assetPrefix` keeps `/_next/*` isolated under /cabinet (so the
+  // conductor's beforeFiles rewrite is untouched) while letting the route tree
+  // own the whole public path. Measured both ways in docs/i18n-cabinet-routing-spike.md.
+  // Lets a Server Component read the root layout's `[locale]` segment. Load-bearing:
+  // `currentLocale()` is called from components Next hands no props, and threading
+  // `params` through nineteen routes to reach them is the cost the old locale cookie
+  // existed to avoid.
+  experimental: { rootParams: true },
+  assetPrefix: BASE_PATH,
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${BACKEND}/api/:path*` }];
+    // Explicit /cabinet now that basePath no longer prefixes this for us. Getting
+    // this wrong does not 404 — a bare `/api/*` collides with the conductor's own
+    // shell-owned auth routes on the same origin.
+    return [{ source: "/cabinet/api/:path*", destination: `${BACKEND}/api/:path*` }];
   },
   // Request-invariant hardening on every response, mirroring
   // shared/config/security.ts's staticSecurityHeaders() (kept in sync by

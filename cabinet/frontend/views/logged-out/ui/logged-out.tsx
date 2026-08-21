@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/shared/ui/cabinet-link";
 
 import { Logo } from "@/application/layout/logo";
 
