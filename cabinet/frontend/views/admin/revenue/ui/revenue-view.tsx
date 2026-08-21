@@ -22,7 +22,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag } from "@/shared/lib/resource";
 import { useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
-import { formatUsd } from "@/views/admin/lib/format";
+import { amount as formatAmount, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
 const RAIL_LABELS: Record<string, string> = {
@@ -134,8 +134,11 @@ export function RevenueView() {
       <section className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pay out</p>
         <Card>
-          <CardContent className="space-y-4 py-5">
-            <Settled loading={!data} skeleton={<Skeleton className="h-40 w-full" />}>
+          <CardContent className="py-5">
+            {/* The spacing lives on `Settled`, not on CardContent: Settled wraps its children in a
+                div of its own, so a `space-y` above it has exactly one child to act on and never
+                reaches the rows inside. */}
+            <Settled className="space-y-4" loading={!data} skeleton={<Skeleton className="h-40 w-full" />}>
               {!data ? null : rails.length === 0 ? (
                 <Empty>
                   <EmptyTitle>No rail is configured</EmptyTitle>
@@ -153,8 +156,8 @@ export function RevenueView() {
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="space-y-1.5">
-                      <span className="text-xs text-muted-foreground">Destination address</span>
+                    <label className="block space-y-1.5">
+                      <span className="block text-xs text-muted-foreground">Destination address</span>
                       <Input
                         value={address}
                         onChange={(e) => {
@@ -166,8 +169,8 @@ export function RevenueView() {
                         className="font-mono-tech text-xs"
                       />
                     </label>
-                    <label className="space-y-1.5">
-                      <span className="text-xs text-muted-foreground">Amount (USDT)</span>
+                    <label className="block space-y-1.5">
+                      <span className="block text-xs text-muted-foreground">Amount (USDT)</span>
                       <Input
                         value={amount}
                         onChange={(e) => {
@@ -175,7 +178,7 @@ export function RevenueView() {
                           setConfirming(false);
                         }}
                         inputMode="decimal"
-                        placeholder={rail ? `min ${rail.minimum}` : "0.00"}
+                        placeholder={rail ? `min ${formatAmount(rail.minimum)}` : "0.00"}
                         className="tabular-nums"
                       />
                     </label>
@@ -193,9 +196,11 @@ export function RevenueView() {
                       ruins and the chain will not give back. */}
                   {confirming ? (
                     <div className="space-y-2 rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/5 p-3">
+                      {/* An address is 40-plus unbroken characters — without `break-all` it widens
+                          the panel past the phone. */}
                       <p className="text-sm">
                         Send <span className="font-semibold tabular-nums">{formatUsd(amount)}</span> on{" "}
-                        <span className="uppercase">{rail?.network}</span> to <span className="font-mono-tech text-xs">{address.trim()}</span>?
+                        <span className="uppercase">{rail?.network}</span> to <span className="font-mono-tech break-all text-xs">{address.trim()}</span>?
                       </p>
                       <p className="text-xs text-muted-foreground">No fee is charged on a payout, so the full amount ships. This cannot be reversed once broadcast.</p>
                       <div className="flex gap-2">
@@ -240,22 +245,26 @@ export function RevenueView() {
                   </Empty>
                 </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="px-5 py-3 font-medium">Destination</th>
-                      <th className="px-5 py-3 font-medium">Amount</th>
-                      <th className="px-5 py-3 font-medium">State</th>
-                      <th className="px-5 py-3 font-medium">Transaction</th>
-                      <th className="px-5 py-3 text-right font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {history.map((payout) => (
-                      <PayoutRow key={payout.id} payout={payout} busy={busy === payout.id} onCancel={() => cancel(payout.id)} />
-                    ))}
-                  </tbody>
-                </table>
+                // Five columns do not fit a phone. The table scrolls inside its own box rather
+                // than making the whole page scroll sideways.
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-140 text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="px-5 py-3 font-medium">Destination</th>
+                        <th className="px-5 py-3 font-medium">Amount</th>
+                        <th className="px-5 py-3 font-medium">State</th>
+                        <th className="px-5 py-3 font-medium">Transaction</th>
+                        <th className="px-5 py-3 text-right font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {history.map((payout) => (
+                        <PayoutRow key={payout.id} payout={payout} busy={busy === payout.id} onCancel={() => cancel(payout.id)} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Settled>
           </CardContent>
