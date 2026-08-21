@@ -29,7 +29,7 @@ use domain::{
 	balance::{LedgerAccountKey, LedgerEvent, Party, TransferCode},
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
-	withdrawals::{WithdrawalEvent, WithdrawalState},
+	withdrawals::{WithdrawalEvent, WithdrawalSource, WithdrawalState},
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
@@ -273,7 +273,7 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 	// composes with the broadcast-state guard rather than bypassing it.
 	let event = WithdrawalEvent::Dispatched {
 		withdrawal_id: withdrawal.id(),
-		user,
+		source: WithdrawalSource::User(user),
 		network,
 		address: destination(network),
 		amount: withdrawal.amount(),
