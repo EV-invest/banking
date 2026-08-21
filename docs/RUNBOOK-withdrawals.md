@@ -31,6 +31,14 @@ landed, this park is a rare check-then-act residue (the on-chain balance dropped
 the dispatch-time read and the broadcast), not the norm — but the recovery below stays
 the same.
 
+A queued or processing row is **not always a user's** withdrawal. A **revenue payout** —
+the fund moving its own earned money (retained fees + settled 2-and-20) to an external
+wallet — rides this same saga and appears in this same queue; the console labels it *Fund
+revenue* in place of an email, and `ListWithdrawalQueue` reports `source: revenue`. The
+recovery steps below are identical, with one wording change: **Fail** refunds the `fee`
+claim rather than a user, so nobody is waiting on support — but the cardinal rule is
+unchanged, because the chain does not care whose money it was.
+
 ## Step 1 — prove the broadcast never happened
 
 ```sql
