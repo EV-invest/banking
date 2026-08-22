@@ -15,14 +15,16 @@
 // on a shell whose every panel reads "sign in again". An unknown answer (offline, 5xx, no
 // shell mounted in dev) is never treated as a sign-out.
 
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { useCabinetHref, useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { STALE_MS, onSessionChange, refreshIfStale } from "@/shared/lib/session";
 
 export function SessionKeeper() {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useCabinetPathname();
+  const href = useCabinetHref();
 
   useEffect(() => {
     const rotate = () => {
@@ -45,12 +47,13 @@ export function SessionKeeper() {
     () =>
       onSessionChange((session) => {
         if (session.authenticated) return;
-        // `pathname` is basePath-stripped, and the login view re-adds the zone prefix
-        // when it hands returnTo to the shell — so pass the zone-relative path.
+        // The login view re-adds the zone prefix when it hands returnTo to the shell, so
+        // this stays zone-relative — `useCabinetPathname` is what makes that true now that
+        // `usePathname` reports the whole `/{locale}/cabinet/...` path.
         const returnTo = `${pathname}${window.location.search}`;
-        router.replace(returnTo === "/" ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`);
+        router.replace(href(returnTo === "/" ? "/login" : `/login?returnTo=${encodeURIComponent(returnTo)}`));
       }),
-    [pathname, router],
+    [href, pathname, router],
   );
 
   return null;

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 
+import { useCabinetHref } from "@/shared/lib/cabinet-route";
 import { useSession } from "@/shared/lib/use-session";
 
 // Client-side guard for the admin console: bounce a non-operator session back to the
@@ -12,11 +13,12 @@ import { useSession } from "@/shared/lib/use-session";
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const session = useSession();
   const router = useRouter();
+  const href = useCabinetHref();
   const denied = session !== null && !session.user?.isAdmin;
 
   useEffect(() => {
-    if (denied) router.replace("/");
-  }, [denied, router]);
+    if (denied) router.replace(href("/"));
+  }, [denied, href, router]);
 
   if (denied) return null;
   return <>{children}</>;

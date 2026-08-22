@@ -1,12 +1,9 @@
 "use client";
 
 import NextLink from "next/link";
-import { useParams } from "next/navigation";
 import type { ComponentProps } from "react";
 
-import { isLocale } from "@evinvest/i18n";
-
-import { cabinetPath } from "@/shared/config/base-path";
+import { useCabinetHref } from "@/shared/lib/cabinet-route";
 
 /**
  * `next/link` for in-cabinet navigation, with the zone prefix applied.
@@ -22,17 +19,15 @@ import { cabinetPath } from "@/shared/config/base-path";
  * failure no tool in this repo catches, which is the argument for routing every
  * link through one component rather than 23 call sites remembering a rule.
  *
- * The locale comes from `useParams()` rather than a prop so a link does not have
- * to be handed something every caller would forward identically. English is the
- * floor: a link that renders in the wrong language is recoverable, a link that
- * throws while rendering a page is not.
+ * The locale comes from the route rather than a prop so a link does not have to be
+ * handed something every caller would forward identically. That resolution now lives in
+ * `shared/lib/cabinet-route.ts` next to its reading counterpart, so the writing and
+ * reading halves of one rule cannot drift apart.
  */
 export function Link({
   href,
   ...props
 }: Omit<ComponentProps<typeof NextLink>, "href"> & { href: `/${string}` }) {
-  const params = useParams();
-  const raw = params?.locale;
-  const locale = isLocale(raw) ? raw : "en";
-  return <NextLink href={cabinetPath(locale, href)} {...props} />;
+  const toHref = useCabinetHref();
+  return <NextLink href={toHref(href)} {...props} />;
 }
