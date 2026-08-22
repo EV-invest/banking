@@ -87,7 +87,6 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/admin/fees/shares", get(admin::fee_shares))
 		.route("/api/admin/fees/settle", post(admin::settle_fee_shares))
 		.route("/api/admin/fees/assessments", get(admin::fund_fee_assessments))
-		.route("/api/admin/fees/payout", post(admin::pay_fee_revenue))
 		.route("/api/admin/valuation/queue", get(admin::redemption_queue))
 		.route("/api/admin/valuation/post", post(admin::post_valuation))
 		.route("/api/admin/valuation/settle", post(admin::settle_redemption))

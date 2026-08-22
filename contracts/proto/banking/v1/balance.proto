@@ -23,19 +23,6 @@ service BalanceService {
   // `tx_ref` — recording the same chain tx twice credits once.
   rpc RecordDeposit(RecordDepositRequest) returns (RecordDepositResponse);
 
-  // Pay retained fee revenue out to an account that can withdraw it
-  // (Dr FEE / Cr <user claim>).
-  //
-  // The fee plane's last step, and the only one that hands the company its own money.
-  // It stops short of the chain deliberately: FEE is a retained-earnings account with no
-  // rail and no address, so paying it out directly would mean a second withdrawal
-  // pipeline beside the audited one. The revenue becomes an ordinary claim instead and is
-  // withdrawn through the same machinery every account holder uses.
-  //
-  // NOT idempotent — there is no external fact to key on, so a second call is a second
-  // genuine payout. The gate is the balance: refused, never queued, when revenue is short.
-  rpc PayFeeRevenue(PayFeeRevenueRequest) returns (PayFeeRevenueResponse);
-
   // Dispatch a queued withdrawal to custody once its rail has liquidity (the treasury
   // worker). Stands in for an automated rebalance/top-up trigger. Idempotent.
   rpc DispatchWithdrawal(DispatchWithdrawalRequest) returns (DispatchWithdrawalResponse);
@@ -253,15 +240,6 @@ message RecordDepositRequest {
   // reports or the call is refused, so a mistyped reference fails loudly instead of
   // silently crediting some other transfer.
   string expected_amount = 6;
-}
-
-message PayFeeRevenueRequest {
-  string user_id = 1;  // the account the revenue is assigned to; it withdraws normally afterwards
-  string amount = 2;   // decimal USDT
-}
-
-message PayFeeRevenueResponse {
-  string remaining = 1;  // retained fee revenue left after this payout, decimal USDT
 }
 
 message RecordDepositResponse {

@@ -1234,36 +1234,6 @@ export type BankingV1ParkedEventList = {
 };
 
 /**
- * PayFeeRevenueRequest
- */
-export type BankingV1PayFeeRevenueRequest = {
-    /**
-     * user_id
-     *
-     * the account the revenue is assigned to; it withdraws normally afterwards
-     */
-    user_id?: string;
-    /**
-     * amount
-     *
-     * decimal USDT
-     */
-    amount?: string;
-};
-
-/**
- * PayFeeRevenueResponse
- */
-export type BankingV1PayFeeRevenueResponse = {
-    /**
-     * remaining
-     *
-     * retained fee revenue left after this payout, decimal USDT
-     */
-    remaining?: string;
-};
-
-/**
  * Position
  *
  * A user's holding in one fund. `value = units × nav`; `pnl = value − cost_basis`
@@ -3869,35 +3839,6 @@ export type BankingV1BalanceServiceListWithdrawalQueueResponses = {
 };
 
 export type BankingV1BalanceServiceListWithdrawalQueueResponse = BankingV1BalanceServiceListWithdrawalQueueResponses[keyof BankingV1BalanceServiceListWithdrawalQueueResponses];
-
-export type BankingV1BalanceServicePayFeeRevenueData = {
-    body: BankingV1PayFeeRevenueRequest;
-    headers: {
-        'Connect-Protocol-Version': ConnectProtocolVersion;
-        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
-    };
-    path?: never;
-    query?: never;
-    url: '/banking.v1.BalanceService/PayFeeRevenue';
-};
-
-export type BankingV1BalanceServicePayFeeRevenueErrors = {
-    /**
-     * Error
-     */
-    default: ConnectError;
-};
-
-export type BankingV1BalanceServicePayFeeRevenueError = BankingV1BalanceServicePayFeeRevenueErrors[keyof BankingV1BalanceServicePayFeeRevenueErrors];
-
-export type BankingV1BalanceServicePayFeeRevenueResponses = {
-    /**
-     * Success
-     */
-    200: BankingV1PayFeeRevenueResponse;
-};
-
-export type BankingV1BalanceServicePayFeeRevenueResponse = BankingV1BalanceServicePayFeeRevenueResponses[keyof BankingV1BalanceServicePayFeeRevenueResponses];
 
 export type BankingV1BalanceServicePostFundValuationData = {
     body: BankingV1PostFundValuationRequest;

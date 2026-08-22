@@ -290,16 +290,6 @@ impl Grpc {
 		Ok(self.fees().list_fund_fee_assessments(bearer(token, req)?).await?.into_inner())
 	}
 
-	/// Pay retained fee revenue out to an account that can withdraw it. Lives on the
-	/// balance service, not the fee service: it moves company cash, not fund units.
-	pub async fn pay_fee_revenue(&self, token: &str, user_id: &str, amount: &str) -> Result<bk::PayFeeRevenueResponse, Status> {
-		let req = bk::PayFeeRevenueRequest {
-			user_id: user_id.to_string(),
-			amount: amount.to_string(),
-		};
-		Ok(self.balance().pay_fee_revenue(bearer(token, req)?).await?.into_inner())
-	}
-
 	pub async fn readiness(&self) -> Result<bk::ReadinessResponse, Status> {
 		Ok(self.health().readiness(bk::ReadinessRequest {}).await?.into_inner())
 	}

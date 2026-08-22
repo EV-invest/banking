@@ -9,7 +9,6 @@ use domain::{
 	balance::{LedgerAccountKey, Party},
 	error::DomainError,
 	money::{Network, TxRef, Usdt},
-	users::UserId,
 };
 use tokio::sync::Notify;
 
@@ -94,39 +93,6 @@ pub struct VerifiedArrival {
 /// read back from the transfer that reference names. So the operator surface cannot mint a
 /// balance — the worst a bad reference achieves is a refusal.
 ///
-/// Pay retained fee revenue out to an account that can withdraw it
-/// (`Dr FEE / Cr <user claim>`).
-///
-/// This is the last step of the fee plane and the only one that hands the company its own
-/// money. It stops one step short of the chain on purpose. `FeeRevenue` is a
-/// retained-earnings account: it has no rail, no address, and no confirmation depth, so
-/// paying it out directly would mean standing up a second withdrawal pipeline — address
-/// validation, rail liquidity, gas runway, broadcast, confirmations, settle — alongside the
-/// audited one. Instead the revenue becomes an ordinary claim, and the company withdraws it
-/// through exactly the machinery every account holder uses, inheriting every one of those
-/// gates for free.
-///
-/// Read-First on the revenue balance, and it **refuses** rather than parking when short:
-/// unlike an investor's withdrawal nobody is waiting on this, and unpaid revenue simply
-/// stays retained at no cost. The relay would refuse it anyway — `FeeRevenue` cannot go
-/// negative — but failing here means the operator gets a sentence instead of a parked event.
-pub async fn pay_fee_revenue(deposits: &dyn Deposits, ledger: &dyn Ledger, relay: &Notify, user: UserId, amount: Usdt) -> Result<Usdt, DomainError> {
-	if amount.is_zero() {
-		return Err(DomainError::Validation("a fee payout must be positive".into()));
-	}
-	let available = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::FeeRevenue).await?.available());
-	if amount > available {
-		return Err(DomainError::Validation(format!(
-			"retained fee revenue is {} USDT — settle more fee units before paying out {}",
-			available.to_decimal_string(),
-			amount.to_decimal_string()
-		)));
-	}
-	deposits.pay_fee_revenue(user, amount).await?;
-	relay.notify_one();
-	available.checked_sub(amount).ok_or_else(|| DomainError::Repository("fee revenue underflows".into()))
-}
-
 /// Read-First against the chain, then the ordinary idempotent `record_deposit`, so a
 /// hand-verified arrival and a scanned one collapse onto the same `tx_ref` and one transfer
 /// can never be booked twice.

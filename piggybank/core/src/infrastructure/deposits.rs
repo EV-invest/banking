@@ -45,18 +45,6 @@ impl Deposits for PgDeposits {
 		tx.commit().await.map_err(repo_err)
 	}
 
-	async fn pay_fee_revenue(&self, user: UserId, amount: Usdt) -> Result<(), DomainError> {
-		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		// A fresh aggregate id per payout, not a derived one: each payout is its own fact,
-		// and a v5 id over the payee would collapse the second payout onto the first's
-		// transfer id — which TigerBeetle would reject as a duplicate, turning a legitimate
-		// second payout into a silent no-op.
-		let payout_id = Uuid::new_v4();
-		let payload = serde_json::to_string(&LedgerEvent::FeeRevenuePaid { user, amount }).map_err(|e| DomainError::Repository(e.to_string()))?;
-		outbox::insert_event(&mut tx, Uuid::new_v4(), "fee_payout", payout_id, LedgerEvent::KIND, &payload, true).await?;
-		tx.commit().await.map_err(repo_err)
-	}
-
 	async fn record(&self, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let event_id = Uuid::new_v4();

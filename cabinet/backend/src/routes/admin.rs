@@ -268,7 +268,9 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 //
 // The fee plane shipped with no operator surface at all: the sweeper ran hourly and
 // nothing could give a fund a policy for it to act on, so no fund ever charged anything.
-// These are the six calls that make it operable — configure, watch, collect, pay out.
+// These are the five calls that make it operable. Paying the collected revenue OUT is
+// not among them: `/api/admin/revenue/payout` already does that, debiting the same `fee`
+// claim through the ordinary withdrawal pipeline.
 
 /// `GET /api/admin/fees/policies` — every fund's fee terms, for the fees table.
 pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FeePolicyList>, ApiError> {
@@ -349,24 +351,6 @@ pub async fn fund_fee_assessments(State(st): State<AppState>, jar: CookieJar, Qu
 		.await
 		.map_err(|s| ApiError::read(s, "fee assessments unavailable"))?;
 	Ok(Json(list.into()))
-}
-
-/// `POST /api/admin/fees/payout` — pay retained fee revenue to an account that can withdraw it.
-///
-/// Not idempotent, and the UI must not retry it blindly: there is no external fact to key
-/// on, so a second call is a second payout. The gate is the retained balance itself.
-pub async fn pay_fee_revenue(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
-	require_admin(&st, &jar).await?;
-	if !verify_csrf(&st, &jar, &headers) {
-		return Err(ApiError::Csrf);
-	}
-	let token = require_money_token(&st, &jar).await?;
-	let v = parse_body(&body);
-	let (Some(user_id), Some(amount)) = (required(&v, "user_id"), required(&v, "amount")) else {
-		return Err(ApiError::BadRequest("user_id and amount are required".into()));
-	};
-	let res = st.grpc.pay_fee_revenue(&token, &user_id, &amount).await?;
-	Ok(Json(json!({ "remaining": res.remaining })))
 }
 
 /// `GET /api/admin/valuation/queue` — the cross-user redemption queue awaiting settle.

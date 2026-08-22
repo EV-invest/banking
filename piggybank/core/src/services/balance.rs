@@ -10,12 +10,10 @@ use domain::{
 	authz::Permission,
 	balance::ServiceId,
 	money::{Network, TxRef, Usdt, WalletAddress},
-	users::UserId,
 };
 use evbanking_auth::claims_of;
 use evbanking_contracts::banking::v1::{self as pb, balance_service_server::BalanceService};
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 use crate::{
 	AppState,
@@ -76,21 +74,6 @@ impl BalanceService for BalanceSvc {
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(pb::SeedCapitalResponse {}))
-	}
-
-	async fn pay_fee_revenue(&self, request: Request<pb::PayFeeRevenueRequest>) -> Result<Response<pb::PayFeeRevenueResponse>, Status> {
-		// The same permission that seeds capital and records deposits: this moves the
-		// company's own money, not a fund's or a user's.
-		require_permission(&self.state, &request, Permission::CapitalManage).await?;
-		let req = request.into_inner();
-		let user = UserId::from_raw(Uuid::parse_str(req.user_id.trim()).map_err(|_| Status::invalid_argument("user_id must be a UUID"))?);
-		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
-		let remaining = balance_app::pay_fee_revenue(self.state.deposits.as_ref(), self.state.ledger.as_ref(), &self.state.relay_notify, user, amount)
-			.await
-			.map_err(map_err)?;
-		Ok(Response::new(pb::PayFeeRevenueResponse {
-			remaining: remaining.to_decimal_string(),
-		}))
 	}
 
 	async fn record_deposit(&self, request: Request<pb::RecordDepositRequest>) -> Result<Response<pb::RecordDepositResponse>, Status> {
