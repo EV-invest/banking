@@ -123,6 +123,60 @@ export interface Treasury {
  *  redeem only, so winding a product down never traps an investor. */
 export type AllocationState = "draft" | "open" | "closed";
 
+// ── fees ─────────────────────────────────────────────────────────────────────
+
+/** A fund's terms. `configured` false means no policy row exists, which is a different
+ *  fact from a policy whose rates are zero — the first can never charge. */
+export interface FeePolicy {
+  service: string;
+  configured: boolean;
+  management_bps: number;
+  performance_bps: number;
+  hurdle_bps: number;
+  basis: string;
+  crystallization: string;
+  updated_at: string;
+}
+
+export interface FeePolicyList {
+  policies: FeePolicy[];
+}
+
+/** Uncollected fee units in one fund. `value` is what a settlement would convert them to
+ *  at the current NAV. */
+export interface FeeShares {
+  service: string;
+  units: string;
+  value: string;
+}
+
+export interface FeeSettlement {
+  service: string;
+  units: string;
+  nav: string;
+  cash: string;
+}
+
+/** One charge against one holding. `charged_cash` falls short of
+ *  `management + performance` exactly when the rest went to `debt_carried`. */
+export interface FeeAssessment {
+  service: string;
+  trigger: string;
+  nav: string;
+  management: string;
+  performance: string;
+  debt_opening: string;
+  charged_units: string;
+  charged_cash: string;
+  debt_carried: string;
+  high_water_mark: string;
+  assessed_at: string;
+}
+
+export interface FeeAssessmentList {
+  assessments: FeeAssessment[];
+}
+
 export interface Allocation {
   service: string;
   title: string;

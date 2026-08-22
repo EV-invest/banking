@@ -31,6 +31,11 @@ pub struct UserIdQuery {
 }
 
 #[derive(Deserialize)]
+pub struct FeeServiceQuery {
+	service: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub struct ListUsersQuery {
 	query: Option<String>,
 	role: Option<String>,
@@ -257,6 +262,95 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 		"party_kind": res.party_kind,
 		"party_id": res.party_id,
 	})))
+}
+
+// ── fees ─────────────────────────────────────────────────────────────────────
+//
+// The fee plane shipped with no operator surface at all: the sweeper ran hourly and
+// nothing could give a fund a policy for it to act on, so no fund ever charged anything.
+// These are the five calls that make it operable. Paying the collected revenue OUT is
+// not among them: `/api/admin/revenue/payout` already does that, debiting the same `fee`
+// claim through the ordinary withdrawal pipeline.
+
+/// `GET /api/admin/fees/policies` — every fund's fee terms, for the fees table.
+pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FeePolicyList>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let token = require_money_token(&st, &jar).await?;
+	let list = st.grpc.fee_policies(&token).await.map_err(|s| ApiError::read(s, "fee policies unavailable"))?;
+	Ok(Json(list.into()))
+}
+
+/// `POST /api/admin/fees/policy` — write a fund's terms.
+///
+/// Every rate is required rather than patch-style optional. A fee schedule is read as a
+/// whole — "2 and 20 over a 5% hurdle, annual" is one statement — and letting an operator
+/// change the management rate while leaving an unseen crystallization period in place is
+/// how a fund ends up charging terms nobody chose.
+pub async fn set_fee_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicy>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let (Some(service), Some(basis), Some(crystallization)) = (required(&v, "service"), required(&v, "basis"), required(&v, "crystallization")) else {
+		return Err(ApiError::BadRequest("service, basis and crystallization are required".into()));
+	};
+	let req = bk::SetFeePolicyRequest {
+		service,
+		management_bps: u32_field(&v, "management_bps"),
+		performance_bps: u32_field(&v, "performance_bps"),
+		hurdle_bps: u32_field(&v, "hurdle_bps"),
+		basis,
+		crystallization,
+	};
+	let policy = st.grpc.set_fee_policy(&token, req).await?;
+	Ok(Json(policy.into()))
+}
+
+/// `GET /api/admin/fees/shares?service=` — uncollected fee units in one fund, and their value.
+pub async fn fee_shares(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeeShares>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let shares = st.grpc.fee_shares(&token, &service).await.map_err(|s| ApiError::read(s, "fee shares unavailable"))?;
+	Ok(Json(shares.into()))
+}
+
+/// `POST /api/admin/fees/settle` — convert a fund's accumulated fee units into cash.
+///
+/// Omitting `units` settles the whole balance, which is the ordinary end-of-period call.
+/// Refused rather than queued when the fund's claim cannot cover it on top of its queued
+/// redemptions — the manager is paid last.
+pub async fn settle_fee_shares(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeeSettlement>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_money_token(&st, &jar).await?;
+	let v = parse_body(&body);
+	let Some(service) = required(&v, "service") else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let settlement = st.grpc.settle_fee_shares(&token, &service, &required(&v, "units").unwrap_or_default()).await?;
+	Ok(Json(settlement.into()))
+}
+
+/// `GET /api/admin/fees/assessments?service=` — every charge this fund has made.
+pub async fn fund_fee_assessments(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeeAssessmentList>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let list = st
+		.grpc
+		.fund_fee_assessments(&token, &service)
+		.await
+		.map_err(|s| ApiError::read(s, "fee assessments unavailable"))?;
+	Ok(Json(list.into()))
 }
 
 /// `GET /api/admin/valuation/queue` — the cross-user redemption queue awaiting settle.

@@ -10,6 +10,11 @@ import type {
   AllocationList,
   AdminUserList,
   AdminUserProfile,
+  FeeAssessmentList,
+  FeePolicy,
+  FeePolicyList,
+  FeeSettlement,
+  FeeShares,
   CabinetConfig,
   FundNav,
   FundRevenue,
@@ -129,6 +134,25 @@ export const fetchRevenuePayouts = (): Promise<RevenuePayoutList> => getJson("/a
 export const requestRevenuePayout = (body: { network: string; address: string; amount: string }): Promise<RevenuePayout> => postJson("/api/admin/revenue/payout", body);
 
 export const cancelRevenuePayout = (withdrawalId: string): Promise<RevenuePayout> => postJson("/api/admin/revenue/cancel", { withdrawal_id: withdrawalId });
+
+// ── fees ────────────────────────────────────────────────────────────────────────
+export const fetchFeePolicies = (): Promise<FeePolicyList> => getJson("/api/admin/fees/policies");
+
+export const fetchFeeShares = (service: string): Promise<FeeShares> => getJson(`/api/admin/fees/shares?service=${encodeURIComponent(service)}`);
+
+export const fetchFeeAssessments = (service: string): Promise<FeeAssessmentList> => getJson(`/api/admin/fees/assessments?service=${encodeURIComponent(service)}`);
+
+export const setFeePolicy = (body: {
+  service: string;
+  management_bps: number;
+  performance_bps: number;
+  hurdle_bps: number;
+  basis: string;
+  crystallization: string;
+}): Promise<FeePolicy> => postJson("/api/admin/fees/policy", body);
+
+// Empty `units` settles the whole accumulated balance — the ordinary end-of-period call.
+export const settleFeeShares = (body: { service: string; units: string }): Promise<FeeSettlement> => postJson("/api/admin/fees/settle", body);
 
 // ── cabinet (platform config + read-only kill-switch) ───────────────────────────
 export const fetchCabinet = (): Promise<CabinetConfig> => getJson("/api/admin/cabinet");

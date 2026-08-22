@@ -54,4 +54,7 @@ export const TAG = {
    *  joins the operator withdrawal queue) and `adminTreasury` (it debits a claim), so
    *  the mutation names all three rather than this one alone. */
   adminRevenue: "admin.revenue",
+  /** Fee terms, accumulated units and the charge history. Settling moves the fee units
+   *  AND the revenue figure, so a settle names this and `adminRevenue` together. */
+  adminFees: "admin.fees",
 } as const;

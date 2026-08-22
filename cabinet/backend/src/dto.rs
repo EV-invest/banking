@@ -275,6 +275,111 @@ impl From<bk::OperationList> for OperationList {
 	}
 }
 
+// ── piggybank: fees (operator) ───────────────────────────────────────────────
+
+/// Every configured policy, for the operator's fees table. The element type is the same
+/// `FeePolicy` the investor read returns — the operator sees no more of a fund's terms
+/// than the people paying them do.
+#[derive(Serialize)]
+pub struct FeePolicyList {
+	pub policies: Vec<FeePolicy>,
+}
+
+impl From<bk::FeePolicyList> for FeePolicyList {
+	fn from(l: bk::FeePolicyList) -> Self {
+		Self {
+			policies: l.policies.into_iter().map(FeePolicy::from).collect(),
+		}
+	}
+}
+
+/// The manager's uncollected fee units in one fund. `value` is `units × current NAV` —
+/// what a settlement would convert them to if it ran now.
+#[derive(Serialize)]
+pub struct FeeShares {
+	pub service: String,
+	pub units: String,
+	pub value: String,
+}
+
+impl From<bk::FeeShares> for FeeShares {
+	fn from(f: bk::FeeShares) -> Self {
+		Self {
+			service: f.service,
+			units: f.units,
+			value: f.value,
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct FeeSettlement {
+	pub service: String,
+	pub units: String,
+	pub nav: String,
+	pub cash: String,
+}
+
+impl From<bk::FeeSettlement> for FeeSettlement {
+	fn from(s: bk::FeeSettlement) -> Self {
+		Self {
+			service: s.service,
+			units: s.units,
+			nav: s.nav,
+			cash: s.cash,
+		}
+	}
+}
+
+/// One charge against one holding. `charged_cash` is below `management + performance`
+/// exactly when the holding could not cover the whole charge and the rest went to
+/// `debt_carried`.
+#[derive(Serialize)]
+pub struct FeeAssessment {
+	pub service: String,
+	pub trigger: String,
+	pub nav: String,
+	pub management: String,
+	pub performance: String,
+	pub debt_opening: String,
+	pub charged_units: String,
+	pub charged_cash: String,
+	pub debt_carried: String,
+	pub high_water_mark: String,
+	pub assessed_at: String,
+}
+
+impl From<bk::FeeAssessment> for FeeAssessment {
+	fn from(a: bk::FeeAssessment) -> Self {
+		Self {
+			service: a.service,
+			trigger: a.trigger,
+			nav: a.nav,
+			management: a.management,
+			performance: a.performance,
+			debt_opening: a.debt_opening,
+			charged_units: a.charged_units,
+			charged_cash: a.charged_cash,
+			debt_carried: a.debt_carried,
+			high_water_mark: a.high_water_mark,
+			assessed_at: a.assessed_at.to_string(),
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct FeeAssessmentList {
+	pub assessments: Vec<FeeAssessment>,
+}
+
+impl From<bk::FeeAssessmentList> for FeeAssessmentList {
+	fn from(l: bk::FeeAssessmentList) -> Self {
+		Self {
+			assessments: l.assessments.into_iter().map(FeeAssessment::from).collect(),
+		}
+	}
+}
+
 // ── piggybank: allocations (the registry of investable products) ─────────────
 
 /// One catalog entry. Carries no money — units/NAV/P&L come from the funds surface

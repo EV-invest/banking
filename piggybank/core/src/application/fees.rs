@@ -30,6 +30,7 @@ use crate::{
 		fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeeSettlements, PositionAccruals, SettlementRecord},
 		ledger::Ledger,
 		nav::NavMarks,
+		redemptions::RedemptionRepository,
 	},
 };
 
@@ -201,11 +202,27 @@ pub async fn fee_shares(ledger: &dyn Ledger, nav: &dyn NavMarks, service: &Servi
 /// and **refuses** when short rather than queueing: unlike an investor's redemption,
 /// nobody is waiting on this, and a fee that cannot be paid today is simply left
 /// accumulating as units at no cost.
+///
+/// # The queue is reserved before the manager is paid
+///
+/// Queuing a redemption reserves the investor's *units* (a pending burn) but **no cash** —
+/// there is none to reserve, because the redemption is priced at settle. So the fund's
+/// claim carries no trace of what the queue will shortly cost, and a settlement gated only
+/// on `available` would happily hand the manager money the queue is about to need, leaving
+/// investors unpayable while the fee revenue sits collected.
+///
+/// This is the ordinary fund-accounting holdback: accrued-but-unpaid fees are a liability
+/// of the fund, and the manager draws only what is left once the fund's obligations are
+/// covered. So the queue is priced at the same dealing NAV and reserved first. It is an
+/// estimate — the queue settles at whatever mark is posted then, not this one — but it is
+/// the only honest estimate available, and erring toward the investor is the direction
+/// every rounding decision in this plane already leans.
 #[allow(clippy::too_many_arguments)]
 pub async fn settle_fee_shares(
 	settlements: &dyn FeeSettlements,
 	ledger: &dyn Ledger,
 	nav: &dyn NavMarks,
+	redemptions: &dyn RedemptionRepository,
 	relay: &Notify,
 	service: ServiceId,
 	units: Option<Shares>,
@@ -222,15 +239,41 @@ pub async fn settle_fee_shares(
 	}
 	let price = dealing_nav(nav, &service, now_unix).await?;
 	let mut settlement = FeeSettlement::record(FeeSettlementId::new(), service.clone(), units, price)?;
-	let fund = ledger.balance(&LedgerAccountKey::ServiceClaim(service)).await?;
-	if Usdt::from_base_units(fund.available()) < settlement.cash() {
-		return Err(DomainError::Validation(
-			"the fund's claim cannot cover this fee settlement — top it up or settle fewer units".into(),
-		));
+	let fund = ledger.balance(&LedgerAccountKey::ServiceClaim(service.clone())).await?;
+	let reserved = queued_redemption_cash(redemptions, &service, price).await?;
+	let required = settlement
+		.cash()
+		.checked_add(reserved)
+		.ok_or_else(|| DomainError::Repository("fee settlement plus the queue overflows".into()))?;
+	if Usdt::from_base_units(fund.available()) < required {
+		return Err(DomainError::Validation(if reserved.is_zero() {
+			"the fund's claim cannot cover this fee settlement — top it up or settle fewer units".into()
+		} else {
+			format!(
+				"the fund's claim cannot cover this fee settlement on top of {reserved} USDT of queued redemptions — \
+				 settle the queue first, top the fund up, or settle fewer units"
+			)
+		}));
 	}
 	settlements.settle(&mut settlement, settled_by).await?;
 	relay.notify_one();
 	Ok(settlement)
+}
+
+/// What the queued redemptions for one fund would cost at `price`.
+///
+/// The queue read is cross-fund (it backs the operator's single "clear the queue" screen),
+/// so it is filtered here rather than growing a second query for one caller.
+async fn queued_redemption_cash(redemptions: &dyn RedemptionRepository, service: &ServiceId, price: Nav) -> Result<Usdt, DomainError> {
+	let mut total = Usdt::ZERO;
+	for queued in redemptions.list_queued().await? {
+		if &queued.service != service {
+			continue;
+		}
+		let cash = price.value(queued.units)?;
+		total = total.checked_add(cash).ok_or_else(|| DomainError::Repository("queued redemption cash overflows".into()))?;
+	}
+	Ok(total)
 }
 
 /// Settlement history for one fund.

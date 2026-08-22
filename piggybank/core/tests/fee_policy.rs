@@ -130,6 +130,22 @@ async fn no_sweeping() -> tokio::sync::RwLockReadGuard<'static, ()> {
 	SWEEP.read().await
 }
 
+/// `FeeRevenue` is a single platform-wide account, not one per fund — retained fees are
+/// the company's, and the company is one. So a test cannot scope an assertion about it to
+/// its own `unique_service()` the way it can for a claim or a share balance: it can only
+/// bracket its own call and compare. That comparison is wrong the moment another test
+/// settles in between, and "a charge never credits fee revenue" then fails against a
+/// credit some sibling made.
+///
+/// Every test that brackets the global figure takes this exclusively. There are four, they
+/// are short, and serialising them costs less than a suite that fails once a run.
+static REVENUE: std::sync::LazyLock<tokio::sync::Mutex<()>> = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
+
+/// Hold for the duration of a test that reads `FeeRevenue` before and after its own work.
+async fn exclusive_revenue() -> tokio::sync::MutexGuard<'static, ()> {
+	REVENUE.lock().await
+}
+
 /// Hold for the duration of the test that runs the sweeper.
 async fn sweeping() -> tokio::sync::RwLockWriteGuard<'static, ()> {
 	SWEEP.write().await
@@ -259,6 +275,7 @@ async fn cash_of(h: &Harness, key: LedgerAccountKey) -> Usdt {
 #[tokio::test]
 async fn a_year_of_holding_costs_two_percent_of_units_and_moves_no_cash_at_all() {
 	let _no_sweeping = no_sweeping().await;
+	let _revenue = exclusive_revenue().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -461,6 +478,7 @@ async fn a_fund_with_no_policy_is_never_charged() {
 #[tokio::test]
 async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 	let _no_sweeping = no_sweeping().await;
+	let _revenue = exclusive_revenue().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -479,7 +497,7 @@ async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 
 	// One bulk conversion for the whole fund — not one per investor. This is what the
 	// unit-denominated charge buys: a single ledger operation per period.
-	let settlement = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.notify, service.clone(), None, "itest", now_unix())
+	let settlement = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
 		.await
 		.unwrap();
 	h.relay.drain().await;
@@ -493,6 +511,9 @@ async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 		units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await,
 		outstanding_before.checked_sub(fee_units).unwrap()
 	);
+	// `fee` is where the money now sits, and that is the whole handoff between the two
+	// planes: `WithdrawalSource::Revenue` debits this exact account, so a settled fee is
+	// withdrawable on-chain through the ordinary payout pipeline with no further step.
 	assert_eq!(cash_of(&h, LedgerAccountKey::FeeRevenue).await, revenue_before.checked_add(settlement.cash()).unwrap());
 	assert_eq!(cash_of(&h, LedgerAccountKey::ServiceClaim(service)).await, fund_before.checked_sub(settlement.cash()).unwrap());
 }
@@ -500,6 +521,7 @@ async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 #[tokio::test]
 async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
 	let _no_sweeping = no_sweeping().await;
+	let _revenue = exclusive_revenue().await;
 	let Some(h) = harness().await else { return };
 	let user = UserId::new();
 	let service = unique_service();
@@ -537,13 +559,72 @@ async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
 	// Refused, not queued: nobody is waiting on this, and the fee units keep accumulating
 	// at no cost until the fund is liquid again.
 	let revenue_before = cash_of(&h, LedgerAccountKey::FeeRevenue).await;
-	let err = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.notify, service.clone(), None, "itest", now_unix())
+	let err = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, domain::error::DomainError::Validation(_)), "got {err:?}");
 	// And nothing was destroyed on the way to that refusal.
 	assert_eq!(units_of(&h, LedgerAccountKey::FeeShares(service)).await, fee_units);
 	assert_eq!(cash_of(&h, LedgerAccountKey::FeeRevenue).await, revenue_before);
+}
+
+#[tokio::test]
+async fn a_queued_redemption_is_reserved_before_the_manager_is_paid() {
+	let _no_sweeping = no_sweeping().await;
+	let _revenue = exclusive_revenue().await;
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	fund_user(&h, user, "1000").await;
+	subscribe(&h, user, &service, "1000").await;
+	backdate(&h, user, &service, YEAR).await;
+	assess(&h, user, &service).await.expect("a year owes a fee");
+
+	let fee_units = units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await;
+	let held = units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await;
+
+	// Mark the fund up first. The units are now worth more than the cash standing behind
+	// them, which is the ordinary state of a fund holding anything other than cash.
+	let claim = cash_of(&h, LedgerAccountKey::ServiceClaim(service.clone())).await;
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), claim.checked_add(claim).unwrap(), "itest", true)
+		.await
+		.unwrap();
+
+	// Now the investor asks to exit. `request_redemption` settles immediately only when
+	// the claim covers the payout; here it does not, so the redemption genuinely QUEUES —
+	// and note what that means: a queue exists precisely because the fund is already short
+	// of what it owes this investor. The queue reserves units, never cash.
+	funds_app::request_redemption(&h.allocations, &h.reds, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), held, now_unix())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	// The claim still covers the fee many times over, so a gate reading only `available`
+	// would pay the manager out of money already owed to a waiting investor — making a
+	// shortfall the fund had already failed to cover worse. The holdback refuses it.
+	let revenue_before = cash_of(&h, LedgerAccountKey::FeeRevenue).await;
+	let err = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
+		.await
+		.unwrap_err();
+	let domain::error::DomainError::Validation(message) = &err else {
+		panic!("expected a validation refusal, got {err:?}");
+	};
+	assert!(message.contains("queued redemptions"), "the refusal names the queue it is protecting: {message}");
+
+	// Nothing moved on the way to the refusal — the units keep accumulating at no cost.
+	assert_eq!(units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await, fee_units);
+	assert_eq!(cash_of(&h, LedgerAccountKey::FeeRevenue).await, revenue_before);
+
+	// And once the queue is gone the same settlement goes through: the reserve is a
+	// holdback against a real obligation, not a permanent freeze on the manager's fee.
+	let queued = piggybank_core::ports::redemptions::RedemptionRepository::list_queued(&h.reds).await.unwrap();
+	let mine = queued.iter().find(|q| q.service == service).expect("the redemption is queued");
+	funds_app::cancel_redemption(&h.reds, &h.notify, mine.id, user).await.unwrap();
+	h.relay.drain().await;
+	fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
+		.await
+		.expect("with the queue cleared the manager is paid");
 }
 
 #[tokio::test]
