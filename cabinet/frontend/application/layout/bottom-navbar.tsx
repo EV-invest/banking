@@ -5,9 +5,9 @@ import { useT } from "@evinvest/i18n/react";
 import { Home, LineChart, ListChecks, Settings, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
-import { usePathname } from "next/navigation";
 
 import { prefetchOn } from "@/application/prefetch";
+import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
 import { DUR, EASE } from "@/shared/ui/motion";
 
@@ -43,7 +43,7 @@ const BAR_PX = "0.5rem";
 
 export function BottomNavbar() {
   const t = useT();
-  const pathname = usePathname();
+  const pathname = useCabinetPathname();
   const reduce = useReducedMotion();
   const activeAt = TABS.findIndex((tab) => tab.active(pathname));
   const onTab = activeAt >= 0;

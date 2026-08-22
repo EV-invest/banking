@@ -5,12 +5,12 @@ import { useT } from "@evinvest/i18n/react";
 import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
-import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 
 import { prefetchOn } from "@/application/prefetch";
 import { allocationsResource } from "@/entities/fund/model/fund-resource";
 import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/model/notification-store";
+import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { useSession } from "@/shared/lib/use-session";
@@ -80,7 +80,9 @@ const NAV_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring foc
 // rail scrolls internally solely when it can't fit (e.g. the admin nav on a short
 // viewport), so nothing gets clipped.
 export function Sidebar() {
-  const pathname = usePathname();
+  // Zone-relative, so the `active` predicates below can stay written in the paths
+  // the app reasons in rather than the ones the browser shows.
+  const pathname = useCabinetPathname();
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
   // The rail is mounted on every signed-in screen, so it is the one place the unread
