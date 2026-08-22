@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeftRight, LineChart, PieChart, TrendingDown, TrendingUp } from "lucide-react";
+import { useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type CSSProperties, Fragment, useState } from "react";
 
@@ -55,6 +56,7 @@ const EMPTY_BOX = "border md:p-6";
 // data; figures with no backing series yet (the performance chart) are honest empty states
 // rather than fabricated numbers.
 export function DashboardView() {
+  const t = useT();
   // All four reads are shared with other screens and cached, so a return to Home paints the
   // balance, the holdings and the timeline on the first frame — the skeletons below are for
   // the cold first load only. The catalog is the same registry the rail lists products from:
@@ -92,8 +94,8 @@ export function DashboardView() {
       {/* topbar — desktop only; on mobile the shell app bar plus the hero label carry the page */}
       <div className="hidden items-center justify-between gap-4 lg:flex xl:col-span-2 xl:row-start-1">
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-2xl font-semibold leading-tight text-foreground">Portfolio</h1>
-          <p className="text-sm text-muted-foreground">All-time performance and your participation</p>
+          <h1 className="text-2xl font-semibold leading-tight text-foreground">{t("dash.portfolio")}</h1>
+          <p className="text-sm text-muted-foreground">{t("dash.portfolioSub")}</p>
         </div>
         {/* Shortcuts to the same two actions the Move money card offers, so they stay
             outline: one solid accent per screen, and that one belongs to the card that
@@ -101,10 +103,10 @@ export function DashboardView() {
             loud rather than emphatic. */}
         <div className="flex shrink-0 gap-2.5">
           <Button asChild variant="outline">
-            <Link href="/wallet/withdraw">Withdraw</Link>
+            <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/wallet/deposit">Deposit</Link>
+            <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
           </Button>
         </div>
       </div>
@@ -113,13 +115,13 @@ export function DashboardView() {
 
       {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
       <Card className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-        <Stat label="Unrealized P&L" value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint="across all positions" tip="dashboard.stats.unrealized-pnl" />
+        <Stat label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label="Available" value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint="auto-deploys at EOD" tip="dashboard.stats.available" />
+        <Stat label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label="Active strategies" value={posLoading ? null : pos.length} format={formatCount} hint="fund positions" />
+        <Stat label={t("dash.activeStrategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label="Net contributed" value={posLoading ? null : netContributed} format={formatUsd} hint="at cost basis" tip="dashboard.stats.net-invested" />
+        <Stat label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={formatUsd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
       </Card>
 
       {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop
@@ -130,10 +132,10 @@ export function DashboardView() {
       {/* operations */}
       <Card className="gap-3 py-4 lg:order-5 lg:gap-4 lg:py-5 xl:col-span-2 xl:col-start-1 xl:row-start-5">
         <CardHeader className={CARD_PAD}>
-          <CardTitle>Recent operations</CardTitle>
+          <CardTitle>{t("dash.recentOperations")}</CardTitle>
           <CardAction>
             <Button asChild variant="link" size="sm" className="px-0">
-              <Link href="/operations">View all</Link>
+              <Link href="/operations">{t("ui.viewAll")}</Link>
             </Button>
           </CardAction>
         </CardHeader>
@@ -144,14 +146,14 @@ export function DashboardView() {
                 <EmptyMedia variant="icon">
                   <ArrowLeftRight />
                 </EmptyMedia>
-                <EmptyTitle>No operations yet</EmptyTitle>
-                <EmptyDescription>Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.</EmptyDescription>
+                <EmptyTitle>{t("dash.noOperations")}</EmptyTitle>
+                <EmptyDescription>{t("dash.noOperationsHint")}</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 {/* Same destination as the Move money card's filled Deposit, which is
                     already on screen — so this one stays outline. */}
                 <Button asChild variant="outline">
-                  <Link href="/wallet/deposit">Add funds</Link>
+                  <Link href="/wallet/deposit">{t("ui.addFunds")}</Link>
                 </Button>
               </EmptyContent>
             </Empty>
@@ -184,6 +186,7 @@ export function DashboardView() {
 // value sits flat on the background, the range switch spans the width below it, and only the
 // plot is boxed — with its legend above. From `lg` the whole block is the desktop card again.
 function PerfCard({ value, loading, allTimePct, className }: { value: string | undefined; loading: boolean; allTimePct: number | null; className?: string }) {
+  const t = useT();
   const [range, setRange] = useState<(typeof RANGES)[number]>("All");
   const down = (allTimePct ?? 0) < 0;
   return (
@@ -194,7 +197,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-main-accent-t1">
-            Portfolio value
+            {t("dash.portfolioValue")}
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </p>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
@@ -228,8 +231,8 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
       </div>
       <CardContent className="flex flex-col gap-3 px-0 lg:gap-5 lg:px-6 xl:flex-1">
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
-          <Legend dot="bg-main-accent-t3" label="Fund performance" />
-          <Legend dot="bg-main-accent-t2" label="Your participation" />
+          <Legend dot="bg-main-accent-t3" label={t("dash.fundPerformance")} />
+          <Legend dot="bg-main-accent-t2" label={t("dash.yourParticipation")} />
         </div>
         {/* No performance series exists in `shared/contracts` yet, so the plot area says so
             rather than drawing a line that traces back to nothing. */}
@@ -238,8 +241,8 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
             <EmptyMedia variant="icon">
               <LineChart />
             </EmptyMedia>
-            <EmptyTitle>No performance history yet</EmptyTitle>
-            <EmptyDescription>The fund curve and your participation appear here once there is activity to plot.</EmptyDescription>
+            <EmptyTitle>{t("dash.noHistory")}</EmptyTitle>
+            <EmptyDescription>{t("dash.noHistoryHint")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       </CardContent>
@@ -257,28 +260,29 @@ function Legend({ dot, label }: { dot: string; label: string }) {
 }
 
 function MoveMoney({ className }: { className?: string }) {
+  const t = useT();
   const [auto, setAuto] = useState(true);
   return (
     <Card className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
-        <CardTitle>Move money</CardTitle>
+        <CardTitle>{t("dash.moveMoney")}</CardTitle>
       </CardHeader>
       <CardContent className={cn("flex flex-col gap-3.5 lg:gap-4", CARD_PAD)}>
         <div className="flex gap-2.5">
           <Button asChild className="flex-1">
-            <Link href="/wallet/deposit">Deposit</Link>
+            <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
           </Button>
           <Button asChild variant="outline" className="flex-1">
-            <Link href="/wallet/withdraw">Withdraw</Link>
+            <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
           </Button>
         </div>
         <Item variant="outline" size="sm" className="rounded-lg bg-main-surface">
           <ItemContent className="gap-0.5">
             <ItemTitle id="auto-deploy-label" className="gap-1.5">
-              Auto-deploy idle cash
+              {t("dash.autoDeploy")}
               <TipAnchor anchor="dashboard.move-money.auto-deploy" />
             </ItemTitle>
-            <ItemDescription className="text-xs">Available balance commits at end of day</ItemDescription>
+            <ItemDescription className="text-xs">{t("dash.autoDeployHint")}</ItemDescription>
           </ItemContent>
           <ItemActions>
             <Switch checked={auto} onCheckedChange={setAuto} aria-labelledby="auto-deploy-label" />
@@ -290,6 +294,7 @@ function MoveMoney({ className }: { className?: string }) {
 }
 
 function WhatIOwn({ allocations, total, loading, className }: { allocations: { name: string; value: number; accent: Accent }[]; total: number; loading: boolean; className?: string }) {
+  const t = useT();
   return (
     <Card className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
@@ -309,12 +314,12 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
                 <EmptyMedia variant="icon">
                   <PieChart />
                 </EmptyMedia>
-                <EmptyTitle>Nothing invested yet</EmptyTitle>
-                <EmptyDescription>Subscribe to a strategy and the split of what you own shows up here.</EmptyDescription>
+                <EmptyTitle>{t("dash.nothingInvested")}</EmptyTitle>
+                <EmptyDescription>{t("dash.nothingInvestedHint")}</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 <Button asChild variant="outline">
-                  <Link href="/invest">Browse strategies</Link>
+                  <Link href="/invest">{t("dash.browseStrategies")}</Link>
                 </Button>
               </EmptyContent>
             </Empty>

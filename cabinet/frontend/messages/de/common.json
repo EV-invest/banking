@@ -1,27 +1,103 @@
 {
-  "nav.home": {
-    "en": "Home",
-    "t": "Startseite"
+  "dash.activeStrategies": {
+    "en": "Active strategies",
+    "t": "Aktive Strategien"
   },
-  "nav.invest": {
-    "en": "Invest",
-    "t": "Investieren"
+  "dash.autoDeploy": {
+    "en": "Auto-deploy idle cash",
+    "t": "Freie Mittel automatisch anlegen"
   },
-  "nav.operations": {
-    "en": "Operations",
-    "t": "Transaktionen"
+  "dash.autoDeployHint": {
+    "en": "Available balance commits at end of day",
+    "t": "Das verfügbare Guthaben wird zum Tagesende angelegt"
   },
-  "nav.wallet": {
-    "en": "Wallet",
-    "t": "Wallet"
+  "dash.available": {
+    "en": "Available",
+    "t": "Verfügbar"
   },
-  "nav.settings": {
-    "en": "Settings",
-    "t": "Einstellungen"
+  "dash.browseStrategies": {
+    "en": "Browse strategies",
+    "t": "Strategien ansehen"
   },
-  "nav.notifications": {
-    "en": "Notifications",
-    "t": "Benachrichtigungen"
+  "dash.fundPerformance": {
+    "en": "Fund performance",
+    "t": "Wertentwicklung des Fonds"
+  },
+  "dash.hintAcrossPositions": {
+    "en": "across all positions",
+    "t": "über alle Positionen"
+  },
+  "dash.hintAtCostBasis": {
+    "en": "at cost basis",
+    "t": "zu Anschaffungskosten"
+  },
+  "dash.hintAutoDeploysEod": {
+    "en": "auto-deploys at EOD",
+    "t": "wird zum Tagesende angelegt"
+  },
+  "dash.hintFundPositions": {
+    "en": "fund positions",
+    "t": "Fondspositionen"
+  },
+  "dash.moveMoney": {
+    "en": "Move money",
+    "t": "Geld bewegen"
+  },
+  "dash.netContributed": {
+    "en": "Net contributed",
+    "t": "Nettoeinlagen"
+  },
+  "dash.noHistory": {
+    "en": "No performance history yet",
+    "t": "Noch keine Wertentwicklung"
+  },
+  "dash.noHistoryHint": {
+    "en": "The fund curve and your participation appear here once there is activity to plot.",
+    "t": "Fondskurve und Ihr Anteil erscheinen hier, sobald es etwas darzustellen gibt."
+  },
+  "dash.noOperations": {
+    "en": "No operations yet",
+    "t": "Noch keine Vorgänge"
+  },
+  "dash.noOperationsHint": {
+    "en": "Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.",
+    "t": "Einzahlungen, Zeichnungen, Rücknahmen und Auszahlungen erscheinen hier, sobald Sie sie ausführen."
+  },
+  "dash.nothingInvested": {
+    "en": "Nothing invested yet",
+    "t": "Noch nichts investiert"
+  },
+  "dash.nothingInvestedHint": {
+    "en": "Subscribe to a strategy and the split of what you own shows up here.",
+    "t": "Zeichnen Sie eine Strategie, und die Aufteilung Ihrer Anlagen erscheint hier."
+  },
+  "dash.portfolio": {
+    "en": "Portfolio",
+    "t": "Portfolio"
+  },
+  "dash.portfolioSub": {
+    "en": "All-time performance and your participation",
+    "t": "Wertentwicklung seit Auflage und Ihr Anteil"
+  },
+  "dash.portfolioValue": {
+    "en": "Portfolio value",
+    "t": "Portfoliowert"
+  },
+  "dash.recentOperations": {
+    "en": "Recent operations",
+    "t": "Letzte Vorgänge"
+  },
+  "dash.unrealizedPnl": {
+    "en": "Unrealized P&L",
+    "t": "Nicht realisiertes Ergebnis"
+  },
+  "dash.yourParticipation": {
+    "en": "Your participation",
+    "t": "Ihr Anteil"
+  },
+  "lang.switch": {
+    "en": "Language",
+    "t": "Sprache"
   },
   "nav.allocations": {
     "en": "Allocations",
@@ -31,6 +107,22 @@
     "en": "Cabinet",
     "t": "Kundenbereich"
   },
+  "nav.home": {
+    "en": "Home",
+    "t": "Startseite"
+  },
+  "nav.invest": {
+    "en": "Invest",
+    "t": "Investieren"
+  },
+  "nav.notifications": {
+    "en": "Notifications",
+    "t": "Benachrichtigungen"
+  },
+  "nav.operations": {
+    "en": "Operations",
+    "t": "Transaktionen"
+  },
   "nav.overview": {
     "en": "Overview",
     "t": "Übersicht"
@@ -38,6 +130,10 @@
   "nav.revenue": {
     "en": "Fund revenue",
     "t": "Fondserträge"
+  },
+  "nav.settings": {
+    "en": "Settings",
+    "t": "Einstellungen"
   },
   "nav.treasury": {
     "en": "Treasury",
@@ -51,13 +147,13 @@
     "en": "Valuation & redemptions",
     "t": "Bewertung & Rücknahmen"
   },
+  "nav.wallet": {
+    "en": "Wallet",
+    "t": "Wallet"
+  },
   "nav.withdrawals": {
     "en": "Withdrawals",
     "t": "Auszahlungen"
-  },
-  "lang.switch": {
-    "en": "Language",
-    "t": "Sprache"
   },
   "ui.account": {
     "en": "Account",
@@ -71,9 +167,17 @@
     "en": "Activity",
     "t": "Aktivität"
   },
+  "ui.addFunds": {
+    "en": "Add funds",
+    "t": "Geld einzahlen"
+  },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
     "t": "Zustellung & Themen"
+  },
+  "ui.deposit": {
+    "en": "Deposit",
+    "t": "Einzahlen"
   },
   "ui.depositUsdt": {
     "en": "Deposit USDT",
@@ -119,9 +223,17 @@
     "en": "Trusted sessions",
     "t": "Vertrauenswürdige Sitzungen"
   },
+  "ui.viewAll": {
+    "en": "View all",
+    "t": "Alle anzeigen"
+  },
   "ui.wallet": {
     "en": "Wallet",
     "t": "Wallet"
+  },
+  "ui.withdraw": {
+    "en": "Withdraw",
+    "t": "Auszahlen"
   },
   "ui.withdrawUsdt": {
     "en": "Withdraw USDT",

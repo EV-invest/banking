@@ -1,27 +1,103 @@
 {
-  "nav.home": {
-    "en": "Home",
-    "t": "Главная"
+  "dash.activeStrategies": {
+    "en": "Active strategies",
+    "t": "Активные стратегии"
   },
-  "nav.invest": {
-    "en": "Invest",
-    "t": "Инвестировать"
+  "dash.autoDeploy": {
+    "en": "Auto-deploy idle cash",
+    "t": "Автоматически размещать свободные средства"
   },
-  "nav.operations": {
-    "en": "Operations",
-    "t": "Операции"
+  "dash.autoDeployHint": {
+    "en": "Available balance commits at end of day",
+    "t": "Доступный остаток размещается в конце дня"
   },
-  "nav.wallet": {
-    "en": "Wallet",
-    "t": "Кошелёк"
+  "dash.available": {
+    "en": "Available",
+    "t": "Доступно"
   },
-  "nav.settings": {
-    "en": "Settings",
-    "t": "Настройки"
+  "dash.browseStrategies": {
+    "en": "Browse strategies",
+    "t": "Смотреть стратегии"
   },
-  "nav.notifications": {
-    "en": "Notifications",
-    "t": "Уведомления"
+  "dash.fundPerformance": {
+    "en": "Fund performance",
+    "t": "Доходность фонда"
+  },
+  "dash.hintAcrossPositions": {
+    "en": "across all positions",
+    "t": "по всем позициям"
+  },
+  "dash.hintAtCostBasis": {
+    "en": "at cost basis",
+    "t": "по цене приобретения"
+  },
+  "dash.hintAutoDeploysEod": {
+    "en": "auto-deploys at EOD",
+    "t": "размещается в конце дня"
+  },
+  "dash.hintFundPositions": {
+    "en": "fund positions",
+    "t": "позиций в фондах"
+  },
+  "dash.moveMoney": {
+    "en": "Move money",
+    "t": "Движение средств"
+  },
+  "dash.netContributed": {
+    "en": "Net contributed",
+    "t": "Чистые взносы"
+  },
+  "dash.noHistory": {
+    "en": "No performance history yet",
+    "t": "Истории доходности пока нет"
+  },
+  "dash.noHistoryHint": {
+    "en": "The fund curve and your participation appear here once there is activity to plot.",
+    "t": "Кривая фонда и ваша доля появятся здесь, как только будет что отобразить."
+  },
+  "dash.noOperations": {
+    "en": "No operations yet",
+    "t": "Операций пока нет"
+  },
+  "dash.noOperationsHint": {
+    "en": "Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.",
+    "t": "Пополнения, подписки, погашения и выводы появятся здесь сразу после того, как вы их совершите."
+  },
+  "dash.nothingInvested": {
+    "en": "Nothing invested yet",
+    "t": "Пока ничего не инвестировано"
+  },
+  "dash.nothingInvestedHint": {
+    "en": "Subscribe to a strategy and the split of what you own shows up here.",
+    "t": "Подпишитесь на стратегию — и структура ваших вложений появится здесь."
+  },
+  "dash.portfolio": {
+    "en": "Portfolio",
+    "t": "Портфель"
+  },
+  "dash.portfolioSub": {
+    "en": "All-time performance and your participation",
+    "t": "Доходность за всё время и ваша доля"
+  },
+  "dash.portfolioValue": {
+    "en": "Portfolio value",
+    "t": "Стоимость портфеля"
+  },
+  "dash.recentOperations": {
+    "en": "Recent operations",
+    "t": "Последние операции"
+  },
+  "dash.unrealizedPnl": {
+    "en": "Unrealized P&L",
+    "t": "Нереализованный P&L"
+  },
+  "dash.yourParticipation": {
+    "en": "Your participation",
+    "t": "Ваша доля"
+  },
+  "lang.switch": {
+    "en": "Language",
+    "t": "Язык"
   },
   "nav.allocations": {
     "en": "Allocations",
@@ -31,6 +107,22 @@
     "en": "Cabinet",
     "t": "Кабинет"
   },
+  "nav.home": {
+    "en": "Home",
+    "t": "Главная"
+  },
+  "nav.invest": {
+    "en": "Invest",
+    "t": "Инвестировать"
+  },
+  "nav.notifications": {
+    "en": "Notifications",
+    "t": "Уведомления"
+  },
+  "nav.operations": {
+    "en": "Operations",
+    "t": "Операции"
+  },
   "nav.overview": {
     "en": "Overview",
     "t": "Обзор"
@@ -38,6 +130,10 @@
   "nav.revenue": {
     "en": "Fund revenue",
     "t": "Доход фонда"
+  },
+  "nav.settings": {
+    "en": "Settings",
+    "t": "Настройки"
   },
   "nav.treasury": {
     "en": "Treasury",
@@ -51,13 +147,13 @@
     "en": "Valuation & redemptions",
     "t": "Оценка и погашения"
   },
+  "nav.wallet": {
+    "en": "Wallet",
+    "t": "Кошелёк"
+  },
   "nav.withdrawals": {
     "en": "Withdrawals",
     "t": "Выводы средств"
-  },
-  "lang.switch": {
-    "en": "Language",
-    "t": "Язык"
   },
   "ui.account": {
     "en": "Account",
@@ -71,9 +167,17 @@
     "en": "Activity",
     "t": "История"
   },
+  "ui.addFunds": {
+    "en": "Add funds",
+    "t": "Пополнить счёт"
+  },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
     "t": "Доставка и темы"
+  },
+  "ui.deposit": {
+    "en": "Deposit",
+    "t": "Пополнить"
   },
   "ui.depositUsdt": {
     "en": "Deposit USDT",
@@ -119,9 +223,17 @@
     "en": "Trusted sessions",
     "t": "Доверенные сеансы"
   },
+  "ui.viewAll": {
+    "en": "View all",
+    "t": "Все операции"
+  },
   "ui.wallet": {
     "en": "Wallet",
     "t": "Кошелёк"
+  },
+  "ui.withdraw": {
+    "en": "Withdraw",
+    "t": "Вывести"
   },
   "ui.withdrawUsdt": {
     "en": "Withdraw USDT",
