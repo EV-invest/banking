@@ -187,12 +187,11 @@ impl Relay {
 							let _ = lock.close().await;
 							continue 'acquire;
 						}
-						DrainStep::More => {
+						DrainStep::More =>
 							if shutdown.is_cancelled() {
 								info!("relay: shutdown requested — batch complete, stopping");
 								return;
-							}
-						}
+							},
 					}
 				};
 				if shutdown.is_cancelled() {
@@ -672,6 +671,21 @@ fn plan_balance(event: LedgerEvent, event_tid: u128, reference: u128) -> Planned
 				credit: LedgerAccountKey::Fund,
 				amount: amount.base_units(),
 				code: TransferCode::SeedCapital,
+				reference,
+			}),
+		},
+		// No custody leg: the cash never moves rails here, it only stops being retained
+		// earnings and starts being a claim. The rail is touched later, by the ordinary
+		// withdrawal this payout makes possible.
+		LedgerEvent::FeeRevenuePaid { user, amount } => PlannedOp {
+			role: "fee_payout",
+			transfer_id: event_tid,
+			action: LedgerAction::Post(LedgerTransfer {
+				id: event_tid,
+				debit: LedgerAccountKey::FeeRevenue,
+				credit: LedgerAccountKey::UserClaim(user),
+				amount: amount.base_units(),
+				code: TransferCode::FeePayout,
 				reference,
 			}),
 		},

@@ -625,6 +625,52 @@ async fn a_queued_redemption_is_reserved_before_the_manager_is_paid() {
 }
 
 #[tokio::test]
+async fn settled_fee_revenue_becomes_an_ordinary_claim_the_company_can_withdraw() {
+	let _no_sweeping = no_sweeping().await;
+	let _revenue = exclusive_revenue().await;
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let payee = UserId::new();
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	fund_user(&h, user, "1000").await;
+	subscribe(&h, user, &service, "1000").await;
+	backdate(&h, user, &service, YEAR).await;
+	assess(&h, user, &service).await.expect("a year owes a fee");
+
+	let revenue_before = cash_of(&h, LedgerAccountKey::FeeRevenue).await;
+	let settlement = fee_app::settle_fee_shares(&h.settlements, h.ledger.as_ref(), &h.nav, &h.reds, &h.notify, service.clone(), None, "itest", now_unix())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	let revenue = cash_of(&h, LedgerAccountKey::FeeRevenue).await;
+	assert_eq!(revenue, revenue_before.checked_add(settlement.cash()).unwrap(), "the settlement retained the fee");
+
+	// More than has been retained is refused rather than parked. Nobody is waiting on the
+	// company's own money, and unpaid revenue costs nothing to leave retained.
+	let err = balance_app::pay_fee_revenue(&h.deposits, h.ledger.as_ref(), &h.notify, payee, revenue.checked_add(usdt("1")).unwrap())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, domain::error::DomainError::Validation(_)), "got {err:?}");
+	assert_eq!(cash_of(&h, LedgerAccountKey::FeeRevenue).await, revenue, "the refusal moved nothing");
+
+	// The payout stops one step short of the chain on purpose: the fee becomes an ordinary
+	// claim, and the company withdraws it through the same pipeline every account holder
+	// uses rather than a second one built beside it.
+	let payee_before = cash_of(&h, LedgerAccountKey::UserClaim(payee)).await;
+	let remaining = balance_app::pay_fee_revenue(&h.deposits, h.ledger.as_ref(), &h.notify, payee, settlement.cash()).await.unwrap();
+	h.relay.drain().await;
+
+	assert_eq!(remaining, revenue.checked_sub(settlement.cash()).unwrap(), "the caller is told what is left");
+	assert_eq!(cash_of(&h, LedgerAccountKey::FeeRevenue).await, remaining, "and the ledger agrees");
+	assert_eq!(
+		cash_of(&h, LedgerAccountKey::UserClaim(payee)).await,
+		payee_before.checked_add(settlement.cash()).unwrap(),
+		"the fee is now a claim its holder can withdraw normally"
+	);
+}
+
+#[tokio::test]
 async fn the_sweeper_charges_every_due_position_and_records_a_statement() {
 	let _sweeping = sweeping().await;
 	let Some(h) = harness().await else { return };

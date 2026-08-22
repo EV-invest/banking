@@ -142,6 +142,17 @@ pub enum LedgerEvent {
 	Deposited { party: Party, network: Network, amount: Usdt },
 	/// The company injected its own capital. Ledger: `Dr WALLET:<net> / Cr FUND`.
 	CapitalSeeded { network: Network, amount: Usdt },
+	/// Retained fee revenue was assigned to an account that can withdraw it.
+	/// Ledger: `Dr FEE / Cr <user claim>`.
+	///
+	/// This is how fee revenue leaves the platform, and it deliberately stops one step
+	/// short of the chain. `FeeRevenue` is a retained-earnings account with no rail and no
+	/// address; giving it its own payout path would mean a second withdrawal pipeline —
+	/// address handling, rail liquidity, gas runway, confirmations, dispatch, settle — beside
+	/// the audited one. So the fee is turned into an ordinary claim instead, and the company
+	/// withdraws it exactly as any account holder does, through machinery that already has
+	/// every one of those gates.
+	FeeRevenuePaid { user: UserId, amount: Usdt },
 }
 
 impl DomainEvent for LedgerEvent {
@@ -237,6 +248,7 @@ pub enum TransferCode {
 	ShareBurn,
 	FeeClawback,
 	FeeSettle,
+	FeePayout,
 }
 
 impl TransferCode {
@@ -259,6 +271,7 @@ impl TransferCode {
 			Self::ShareBurn => 43,
 			Self::FeeClawback => 44,
 			Self::FeeSettle => 45,
+			Self::FeePayout => 46,
 		}
 	}
 }

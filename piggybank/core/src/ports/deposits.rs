@@ -22,6 +22,16 @@ pub trait Deposits: Send + Sync {
 	/// as an outbox event.
 	async fn seed_capital(&self, network: Network, amount: Usdt) -> Result<(), DomainError>;
 
+	/// Assign retained fee revenue to an account that can withdraw it
+	/// (`Dr FEE / Cr <user claim>`) as an outbox event.
+	///
+	/// Not idempotent, and deliberately not: unlike a deposit there is no external fact to
+	/// key on — no chain reference, nothing the operator is merely *recording*. A second
+	/// call is a second, genuinely different payout, and inventing a key here would make a
+	/// retried click silently do nothing while looking like it worked. The caller's gate is
+	/// the balance itself: two payouts only both succeed if the revenue covers both.
+	async fn pay_fee_revenue(&self, user: UserId, amount: Usdt) -> Result<(), DomainError>;
+
 	/// Record an on-chain deposit, **idempotent by `tx_ref`**: the unique gate makes
 	/// a second record of the same chain tx impossible, so the credit happens at most
 	/// once even under concurrent recorders. Returns `true` if newly recorded,
