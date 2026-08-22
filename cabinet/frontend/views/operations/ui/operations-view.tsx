@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
 import { ArrowLeftRight, ChevronRight, ListChecks, TriangleAlert } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Fragment, useMemo, useState } from "react";
@@ -88,6 +89,7 @@ const FILTERS: readonly { value: Filter; label: string }[] = [
 // its own: cancelling a queued withdrawal or redemption belongs to the surfaces that own
 // those aggregates, so the panel links to them rather than growing a third copy.
 export function OperationsView() {
+  const t = useT();
   const [filter, setFilter] = useState<Filter>("all");
 
   // Both reads are cached and both are shared with Home's activity card, so arriving from
@@ -120,8 +122,8 @@ export function OperationsView() {
   return (
     <div className="px-4 pb-8 pt-6 lg:px-8">
       <header className="mb-6 space-y-1">
-        <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">Operations</p>
-        <h1 className="text-2xl font-semibold text-foreground">Operations</h1>
+        <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">{t("ui.operations")}</p>
+        <h1 className="text-2xl font-semibold text-foreground">{t("ui.operations")}</h1>
         <p className="text-sm text-muted-foreground">Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.</p>
       </header>
 
@@ -150,15 +152,15 @@ export function OperationsView() {
                   <EmptyMedia variant="icon">
                     <ListChecks />
                   </EmptyMedia>
-                  <EmptyTitle>No operations yet</EmptyTitle>
+                  <EmptyTitle>{t("ui.noOperations")}</EmptyTitle>
                   <EmptyDescription>Add funds to your wallet, then subscribe into a fund — every movement appears here from the moment you make it, not once it settles.</EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
                   <Button asChild>
-                    <Link href="/wallet/deposit">Add funds</Link>
+                    <Link href="/wallet/deposit">{t("ui.addFunds")}</Link>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link href="/invest">Browse funds</Link>
+                    <Link href="/invest">{t("ui.browseFunds")}</Link>
                   </Button>
                 </EmptyContent>
               </Empty>
@@ -181,7 +183,7 @@ export function OperationsView() {
                 default would compress them to fit and clip the text instead. */}
             <ButtonGroup
               role="radiogroup"
-              aria-label="Filter operations by kind"
+              aria-label={t("ops.filterByKind")}
               className="max-w-full overflow-x-auto"
             >
               {FILTERS.map(({ value, label }) => {
@@ -264,10 +266,11 @@ export function OperationsView() {
 // top so a queued withdrawal is not buried under a day of settled rows. These rows do not
 // repeat in the timeline below — see the split in `OperationsView`.
 function InProgress({ operations, titleOf }: { operations: Operation[]; titleOf: (service: string | undefined) => string }) {
+  const t = useT();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>In progress</CardTitle>
+        <CardTitle>{t("ui.inProgress")}</CardTitle>
       </CardHeader>
       {/* The rows carry the inset instead of the card, so a hover (and the separator
           between rows) reaches the card's edges rather than stopping 24px short. */}

@@ -55,10 +55,6 @@
     "en": "The fund curve and your participation appear here once there is activity to plot.",
     "t": "Fondskurve und Ihr Anteil erscheinen hier, sobald es etwas darzustellen gibt."
   },
-  "dash.noOperations": {
-    "en": "No operations yet",
-    "t": "Noch keine Vorgänge"
-  },
   "dash.noOperationsHint": {
     "en": "Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.",
     "t": "Einzahlungen, Zeichnungen, Rücknahmen und Auszahlungen erscheinen hier, sobald Sie sie ausführen."
@@ -155,6 +151,10 @@
     "en": "Withdrawals",
     "t": "Auszahlungen"
   },
+  "ops.filterByKind": {
+    "en": "Filter operations by kind",
+    "t": "Vorgänge nach Art filtern"
+  },
   "ui.account": {
     "en": "Account",
     "t": "Konto"
@@ -171,6 +171,14 @@
     "en": "Add funds",
     "t": "Geld einzahlen"
   },
+  "ui.allocate": {
+    "en": "Allocate",
+    "t": "Anlegen"
+  },
+  "ui.browseFunds": {
+    "en": "Browse funds",
+    "t": "Fonds ansehen"
+  },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
     "t": "Zustellung & Themen"
@@ -183,6 +191,14 @@
     "en": "Deposit USDT",
     "t": "USDT einzahlen"
   },
+  "ui.destination": {
+    "en": "Destination",
+    "t": "Empfänger"
+  },
+  "ui.details": {
+    "en": "Details",
+    "t": "Details"
+  },
   "ui.email": {
     "en": "Email",
     "t": "E-Mail"
@@ -190,6 +206,10 @@
   "ui.emailAddress": {
     "en": "Email address",
     "t": "E-Mail-Adresse"
+  },
+  "ui.inProgress": {
+    "en": "In progress",
+    "t": "In Bearbeitung"
   },
   "ui.inYourCabinet": {
     "en": "In your cabinet",
@@ -199,9 +219,29 @@
     "en": "KYC level",
     "t": "KYC-Stufe"
   },
+  "ui.network": {
+    "en": "Network",
+    "t": "Netzwerk"
+  },
+  "ui.networks": {
+    "en": "Networks",
+    "t": "Netzwerke"
+  },
+  "ui.noOperations": {
+    "en": "No operations yet",
+    "t": "Noch keine Vorgänge"
+  },
+  "ui.operations": {
+    "en": "Operations",
+    "t": "Vorgänge"
+  },
   "ui.profile": {
     "en": "Profile",
     "t": "Profil"
+  },
+  "ui.progress": {
+    "en": "Progress",
+    "t": "Fortschritt"
   },
   "ui.receiveFunds": {
     "en": "Receive funds into your wallet",
@@ -238,5 +278,73 @@
   "ui.withdrawUsdt": {
     "en": "Withdraw USDT",
     "t": "USDT abheben"
+  },
+  "wallet.cancelWithdrawal": {
+    "en": "Cancel withdrawal",
+    "t": "Auszahlung stornieren"
+  },
+  "wallet.depositNetwork": {
+    "en": "Deposit network",
+    "t": "Einzahlungsnetzwerk"
+  },
+  "wallet.destinationAddressCaps": {
+    "en": "DESTINATION ADDRESS",
+    "t": "EMPFÄNGERADRESSE"
+  },
+  "wallet.destinationCaps": {
+    "en": "DESTINATION",
+    "t": "EMPFÄNGER"
+  },
+  "wallet.networkCaps": {
+    "en": "NETWORK",
+    "t": "NETZWERK"
+  },
+  "wallet.networkFee": {
+    "en": "Network fee",
+    "t": "Netzwerkgebühr"
+  },
+  "wallet.networkWarning": {
+    "en": "Network warning",
+    "t": "Netzwerkhinweis"
+  },
+  "wallet.newDeposit": {
+    "en": "New deposit",
+    "t": "Neue Einzahlung"
+  },
+  "wallet.noActivity": {
+    "en": "No activity yet",
+    "t": "Noch keine Aktivität"
+  },
+  "wallet.noActivityHint": {
+    "en": "Your deposits and withdrawals will appear here once you make your first transfer.",
+    "t": "Ihre Ein- und Auszahlungen erscheinen hier nach Ihrer ersten Überweisung."
+  },
+  "wallet.pendWd": {
+    "en": "PEND WD",
+    "t": "AUSZAHLUNG OFFEN"
+  },
+  "wallet.reviewWithdrawal": {
+    "en": "Review withdrawal",
+    "t": "Auszahlung prüfen"
+  },
+  "wallet.selectNetwork": {
+    "en": "SELECT NETWORK",
+    "t": "NETZWERK WÄHLEN"
+  },
+  "wallet.totalBalance": {
+    "en": "TOTAL BALANCE",
+    "t": "GESAMTGUTHABEN"
+  },
+  "wallet.withdrawalFailed": {
+    "en": "Withdrawal failed",
+    "t": "Auszahlung fehlgeschlagen"
+  },
+  "wallet.withdrawalNetwork": {
+    "en": "Withdrawal network",
+    "t": "Auszahlungsnetzwerk"
+  },
+  "wallet.youWillReceive": {
+    "en": "You will receive",
+    "t": "Sie erhalten"
   }
 }

@@ -40,16 +40,16 @@ export function WalletOverviewView() {
       actions={
         <>
           <Link href="/wallet/deposit" className={cn(WALLET_CTA, "px-4 py-2.5 text-sm")}>
-            Deposit
+            {t("ui.deposit")}
           </Link>
           <Link href="/wallet/withdraw" className={cn(WALLET_CTA_GHOST, "px-4 py-2.5 text-sm")}>
-            Withdraw
+            {t("ui.withdraw")}
           </Link>
           <Link href="/invest" className={cn(WALLET_CTA_GHOST, "px-4 py-2.5 text-sm")}>
-            Allocate
+            {t("ui.allocate")}
           </Link>
           <Link href="/wallet/activity" className={cn(WALLET_CTA_GHOST, "px-4 py-2.5 text-sm")}>
-            Activity
+            {t("ui.activity")}
           </Link>
         </>
       }
@@ -66,7 +66,7 @@ export function WalletOverviewView() {
 
       <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-7 lg:py-6")}>
         <div className="flex flex-col gap-2">
-          <FieldLabel className="tracking-wider">TOTAL BALANCE</FieldLabel>
+          <FieldLabel className="tracking-wider">{t("wallet.totalBalance")}</FieldLabel>
           <div className="flex items-baseline gap-2">
             {loading ? (
               <Skeleton className="h-9 w-44 lg:h-12 lg:w-64" />
@@ -82,27 +82,27 @@ export function WalletOverviewView() {
         <div className="grid grid-cols-3 gap-2.5 lg:flex lg:shrink-0">
           <Chip label="AVAIL" wideLabel="AVAILABLE" dot="bg-main-accent-t2" value={balance?.available} loading={loading} tip="wallet.balance.available" />
           <Chip label="INVEST" wideLabel="INVESTED" dot="bg-main-accent-t3" value={balance?.invested} loading={loading} tip="wallet.balance.invested" />
-          <Chip label="PEND WD" wideLabel="PENDING WD" dot="bg-main-accent-t1" value={balance?.pending_withdrawal} loading={loading} tip="wallet.balance.pending-withdrawal" />
+          <Chip label={t("wallet.pendWd")} wideLabel="PENDING WD" dot="bg-main-accent-t1" value={balance?.pending_withdrawal} loading={loading} tip="wallet.balance.pending-withdrawal" />
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2 lg:hidden">
         <Link href="/wallet/deposit" className={cn(WALLET_CTA, "py-2.5 text-sm")}>
-          Deposit
+          {t("ui.deposit")}
         </Link>
         <Link href="/wallet/withdraw" className={cn(WALLET_CTA_GHOST, "py-2.5 text-sm")}>
-          Withdraw
+          {t("ui.withdraw")}
         </Link>
         <Link href="/invest" className={cn(WALLET_CTA_GHOST, "py-2.5 text-sm")}>
-          Allocate
+          {t("ui.allocate")}
         </Link>
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">Networks</p>
+        <p className="text-sm font-semibold text-foreground">{t("ui.networks")}</p>
         {/* The Figma frames leave the activity screen with no entry point; this is it. */}
         <Link href="/wallet/activity" className="rounded-md text-xs text-main-accent-t1 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
-          Activity
+          {t("ui.activity")}
         </Link>
         <p className="hidden text-xs text-muted-foreground lg:block">deposit &amp; withdrawal rails</p>
       </div>
@@ -145,6 +145,7 @@ function Chip({ label, wideLabel, dot, value, loading, tip }: { label: string; w
 }
 
 function RailCard({ network, canDeposit, canWithdraw }: { network: string; canDeposit: boolean; canWithdraw: boolean }) {
+  const t = useT();
   const rail = railMeta(network);
   return (
     <div className={cn(WALLET_CARD, "flex flex-col gap-3.5 p-4.5 lg:gap-4 lg:p-5")}>
@@ -157,10 +158,10 @@ function RailCard({ network, canDeposit, canWithdraw }: { network: string; canDe
       </div>
       <div className="flex gap-2">
         <RailAction href={`/wallet/deposit?network=${network}`} enabled={canDeposit} className={WALLET_CTA}>
-          Deposit
+          {t("ui.deposit")}
         </RailAction>
         <RailAction href={`/wallet/withdraw?network=${network}`} enabled={canWithdraw} className={WALLET_CTA_GHOST}>
-          Withdraw
+          {t("ui.withdraw")}
         </RailAction>
       </div>
     </div>

@@ -105,7 +105,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
         <div className="flex flex-col gap-3.5 lg:flex-row lg:flex-wrap lg:items-start lg:gap-5">
           <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:w-140 lg:max-w-full lg:flex-none lg:p-6")}>
             <FieldLabel>
-              NETWORK
+              {t("wallet.networkCaps")}
               <TipAnchor anchor="wallet.withdraw.network" />
             </FieldLabel>
             <NetworkSegments
@@ -115,12 +115,12 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 setSelected(n);
                 setConfirming(null);
               }}
-              label="Withdrawal network"
+              label={t("wallet.withdrawalNetwork")}
             />
 
             <label className="flex flex-col gap-2">
               <FieldLabel>
-                DESTINATION ADDRESS
+                {t("wallet.destinationAddressCaps")}
                 <TipAnchor anchor="wallet.withdraw.destination" />
               </FieldLabel>
               <input
@@ -170,9 +170,9 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             </label>
 
             <div className="flex flex-col gap-2.5 rounded-lg bg-main-surface px-3.5 py-3">
-              <Row label="Network fee" value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} tip="wallet.withdraw.network-fee" />
+              <Row label={t("wallet.networkFee")} value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} tip="wallet.withdraw.network-fee" />
               <div className="h-px w-full bg-border" />
-              <Row label="You will receive" value={`${formatUsdt(youReceive)} USDT`} tone="text-main-accent-t2" tip="wallet.withdraw.you-receive" />
+              <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(youReceive)} USDT`} tone="text-main-accent-t2" tip="wallet.withdraw.you-receive" />
             </div>
 
             {/* `wallet.withdraw.queueing` / `.review` are section-type tips (descriptor blocks,
@@ -192,7 +192,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
               onClick={() => setConfirming({ network, address, amount, fee: opts?.withdrawal_fee, instant: opts?.instant, rails })}
               className={cn(WALLET_CTA, "w-full py-3 text-sm font-semibold")}
             >
-              Review withdrawal
+              {t("wallet.reviewWithdrawal")}
             </button>
           </div>
 
@@ -220,7 +220,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 <Panel key="error" from="bottom" className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-5")}>
                   <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Withdrawal failed</p>
+                    <p className="text-sm font-semibold text-foreground">{t("wallet.withdrawalFailed")}</p>
                     <p className="text-xs text-muted-foreground">{error}</p>
                   </div>
                 </Panel>
@@ -228,14 +228,14 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
 
               {confirming && (
                 <Panel key="review" from="bottom" className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:p-5")}>
-                  <p className="text-sm font-semibold text-foreground">Review withdrawal</p>
+                  <p className="text-sm font-semibold text-foreground">{t("wallet.reviewWithdrawal")}</p>
                   <div className="flex flex-col gap-2.5">
-                    <Row label="Network" value={networkLabel(confirming.network)} />
-                    <Row label="Destination" value={shortAddress(confirming.address)} />
+                    <Row label={t("ui.network")} value={networkLabel(confirming.network)} />
+                    <Row label={t("ui.destination")} value={shortAddress(confirming.address)} />
                     <Row label="Amount" value={`${formatUsdt(confirming.amount)} USDT`} />
-                    <Row label="Network fee" value={`${formatUsdt(confirming.fee)} USDT`} />
+                    <Row label={t("wallet.networkFee")} value={`${formatUsdt(confirming.fee)} USDT`} />
                     <div className="h-px w-full bg-border" />
-                    <Row label="You will receive" value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-main-accent-t2" />
+                    <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-main-accent-t2" />
                   </div>
                   <p className="break-all font-mono-tech text-xs text-muted-foreground">To {confirming.address}</p>
                   {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
