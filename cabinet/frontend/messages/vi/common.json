@@ -1,27 +1,103 @@
 {
-  "nav.home": {
-    "en": "Home",
-    "t": "Trang chủ"
+  "dash.activeStrategies": {
+    "en": "Active strategies",
+    "t": "Chiến lược đang hoạt động"
   },
-  "nav.invest": {
-    "en": "Invest",
-    "t": "Đầu tư"
+  "dash.autoDeploy": {
+    "en": "Auto-deploy idle cash",
+    "t": "Tự động phân bổ tiền nhàn rỗi"
   },
-  "nav.operations": {
-    "en": "Operations",
-    "t": "Giao dịch"
+  "dash.autoDeployHint": {
+    "en": "Available balance commits at end of day",
+    "t": "Số dư khả dụng được phân bổ vào cuối ngày"
   },
-  "nav.wallet": {
-    "en": "Wallet",
-    "t": "Ví"
+  "dash.available": {
+    "en": "Available",
+    "t": "Khả dụng"
   },
-  "nav.settings": {
-    "en": "Settings",
-    "t": "Cài đặt"
+  "dash.browseStrategies": {
+    "en": "Browse strategies",
+    "t": "Xem các chiến lược"
   },
-  "nav.notifications": {
-    "en": "Notifications",
-    "t": "Thông báo"
+  "dash.fundPerformance": {
+    "en": "Fund performance",
+    "t": "Hiệu suất quỹ"
+  },
+  "dash.hintAcrossPositions": {
+    "en": "across all positions",
+    "t": "trên tất cả vị thế"
+  },
+  "dash.hintAtCostBasis": {
+    "en": "at cost basis",
+    "t": "theo giá gốc"
+  },
+  "dash.hintAutoDeploysEod": {
+    "en": "auto-deploys at EOD",
+    "t": "tự động phân bổ cuối ngày"
+  },
+  "dash.hintFundPositions": {
+    "en": "fund positions",
+    "t": "vị thế trong quỹ"
+  },
+  "dash.moveMoney": {
+    "en": "Move money",
+    "t": "Chuyển tiền"
+  },
+  "dash.netContributed": {
+    "en": "Net contributed",
+    "t": "Đóng góp ròng"
+  },
+  "dash.noHistory": {
+    "en": "No performance history yet",
+    "t": "Chưa có lịch sử hiệu suất"
+  },
+  "dash.noHistoryHint": {
+    "en": "The fund curve and your participation appear here once there is activity to plot.",
+    "t": "Đường cong của quỹ và phần tham gia của bạn sẽ hiện ở đây khi có dữ liệu để vẽ."
+  },
+  "dash.noOperations": {
+    "en": "No operations yet",
+    "t": "Chưa có giao dịch nào"
+  },
+  "dash.noOperationsHint": {
+    "en": "Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.",
+    "t": "Các khoản nạp, đăng ký, hoàn vốn và rút tiền sẽ xuất hiện ở đây ngay khi bạn thực hiện."
+  },
+  "dash.nothingInvested": {
+    "en": "Nothing invested yet",
+    "t": "Chưa đầu tư khoản nào"
+  },
+  "dash.nothingInvestedHint": {
+    "en": "Subscribe to a strategy and the split of what you own shows up here.",
+    "t": "Đăng ký một chiến lược và cơ cấu khoản đầu tư của bạn sẽ hiện ở đây."
+  },
+  "dash.portfolio": {
+    "en": "Portfolio",
+    "t": "Danh mục"
+  },
+  "dash.portfolioSub": {
+    "en": "All-time performance and your participation",
+    "t": "Hiệu suất từ trước đến nay và phần tham gia của bạn"
+  },
+  "dash.portfolioValue": {
+    "en": "Portfolio value",
+    "t": "Giá trị danh mục"
+  },
+  "dash.recentOperations": {
+    "en": "Recent operations",
+    "t": "Giao dịch gần đây"
+  },
+  "dash.unrealizedPnl": {
+    "en": "Unrealized P&L",
+    "t": "Lãi/lỗ chưa thực hiện"
+  },
+  "dash.yourParticipation": {
+    "en": "Your participation",
+    "t": "Phần tham gia của bạn"
+  },
+  "lang.switch": {
+    "en": "Language",
+    "t": "Ngôn ngữ"
   },
   "nav.allocations": {
     "en": "Allocations",
@@ -31,6 +107,22 @@
     "en": "Cabinet",
     "t": "Tài khoản"
   },
+  "nav.home": {
+    "en": "Home",
+    "t": "Trang chủ"
+  },
+  "nav.invest": {
+    "en": "Invest",
+    "t": "Đầu tư"
+  },
+  "nav.notifications": {
+    "en": "Notifications",
+    "t": "Thông báo"
+  },
+  "nav.operations": {
+    "en": "Operations",
+    "t": "Giao dịch"
+  },
   "nav.overview": {
     "en": "Overview",
     "t": "Tổng quan"
@@ -38,6 +130,10 @@
   "nav.revenue": {
     "en": "Fund revenue",
     "t": "Doanh thu quỹ"
+  },
+  "nav.settings": {
+    "en": "Settings",
+    "t": "Cài đặt"
   },
   "nav.treasury": {
     "en": "Treasury",
@@ -51,13 +147,13 @@
     "en": "Valuation & redemptions",
     "t": "Định giá & hoàn vốn"
   },
+  "nav.wallet": {
+    "en": "Wallet",
+    "t": "Ví"
+  },
   "nav.withdrawals": {
     "en": "Withdrawals",
     "t": "Rút tiền"
-  },
-  "lang.switch": {
-    "en": "Language",
-    "t": "Ngôn ngữ"
   },
   "ui.account": {
     "en": "Account",
@@ -71,9 +167,17 @@
     "en": "Activity",
     "t": "Hoạt động"
   },
+  "ui.addFunds": {
+    "en": "Add funds",
+    "t": "Nạp thêm tiền"
+  },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
     "t": "Gửi thông báo & chủ đề"
+  },
+  "ui.deposit": {
+    "en": "Deposit",
+    "t": "Nạp tiền"
   },
   "ui.depositUsdt": {
     "en": "Deposit USDT",
@@ -119,9 +223,17 @@
     "en": "Trusted sessions",
     "t": "Phiên tin cậy"
   },
+  "ui.viewAll": {
+    "en": "View all",
+    "t": "Xem tất cả"
+  },
   "ui.wallet": {
     "en": "Wallet",
     "t": "Ví"
+  },
+  "ui.withdraw": {
+    "en": "Withdraw",
+    "t": "Rút tiền"
   },
   "ui.withdrawUsdt": {
     "en": "Withdraw USDT",
