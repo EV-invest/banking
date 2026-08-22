@@ -1359,6 +1359,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/PayFeeRevenue": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "Pay retained fee revenue out to an account that can withdraw it\n (Dr FEE / Cr \u003cuser claim\u003e).",
+        "description": "The fee plane's last step, and the only one that hands the company its own money.\n It stops short of the chain deliberately: FEE is a retained-earnings account with no\n rail and no address, so paying it out directly would mean a second withdrawal\n pipeline beside the audited one. The revenue becomes an ordinary claim instead and is\n withdrawn through the same machinery every account holder uses.\n\n NOT idempotent — there is no external fact to key on, so a second call is a second\n genuine payout. The gate is the balance: refused, never queued, when revenue is short.",
+        "operationId": "banking.v1.BalanceService.PayFeeRevenue",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.PayFeeRevenueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.PayFeeRevenueResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/PostFundValuation": {
       "post": {
         "tags": [
@@ -5683,6 +5742,35 @@
           }
         },
         "title": "ParkedEventList",
+        "additionalProperties": false
+      },
+      "banking.v1.PayFeeRevenueRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "the account the revenue is assigned to; it withdraws normally afterwards"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "decimal USDT"
+          }
+        },
+        "title": "PayFeeRevenueRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.PayFeeRevenueResponse": {
+        "type": "object",
+        "properties": {
+          "remaining": {
+            "type": "string",
+            "title": "remaining",
+            "description": "retained fee revenue left after this payout, decimal USDT"
+          }
+        },
+        "title": "PayFeeRevenueResponse",
         "additionalProperties": false
       },
       "banking.v1.Position": {

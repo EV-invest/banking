@@ -252,6 +252,54 @@ impl Grpc {
 		Ok(self.fees().get_accrued_fees(bearer(token, req)?).await?.into_inner())
 	}
 
+	// ── operator: the fee plane ──────────────────────────────────────────────
+	// These five are how a fund's fee gets configured, watched and collected at all.
+	// Until they existed the whole plane was unreachable from the cabinet: the sweeper
+	// ran, but nothing could give a fund a policy for it to act on.
+
+	/// Every configured policy, for the operator's fees table.
+	pub async fn fee_policies(&self, token: &str) -> Result<bk::FeePolicyList, Status> {
+		Ok(self.fees().list_fee_policies(bearer(token, bk::ListFeePoliciesRequest {})?).await?.into_inner())
+	}
+
+	/// Write a fund's terms. Upsert — a fund with no policy charges nothing, which is a
+	/// different fact from a policy whose rates are zero.
+	pub async fn set_fee_policy(&self, token: &str, req: bk::SetFeePolicyRequest) -> Result<bk::FeePolicy, Status> {
+		Ok(self.fees().set_fee_policy(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// The manager's uncollected fee units in one fund, and what they are worth now.
+	pub async fn fee_shares(&self, token: &str, service: &str) -> Result<bk::FeeShares, Status> {
+		let req = bk::GetFeeSharesRequest { service: service.to_string() };
+		Ok(self.fees().get_fee_shares(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Convert accumulated fee units into cash. Empty `units` settles the whole balance.
+	pub async fn settle_fee_shares(&self, token: &str, service: &str, units: &str) -> Result<bk::FeeSettlement, Status> {
+		let req = bk::SettleFeeSharesRequest {
+			service: service.to_string(),
+			units: units.to_string(),
+		};
+		Ok(self.fees().settle_fee_shares(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Every charge this fund has made, across all its holders — the audit trail behind
+	/// the units the settlement above is about to convert.
+	pub async fn fund_fee_assessments(&self, token: &str, service: &str) -> Result<bk::FeeAssessmentList, Status> {
+		let req = bk::ListFundFeeAssessmentsRequest { service: service.to_string() };
+		Ok(self.fees().list_fund_fee_assessments(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Pay retained fee revenue out to an account that can withdraw it. Lives on the
+	/// balance service, not the fee service: it moves company cash, not fund units.
+	pub async fn pay_fee_revenue(&self, token: &str, user_id: &str, amount: &str) -> Result<bk::PayFeeRevenueResponse, Status> {
+		let req = bk::PayFeeRevenueRequest {
+			user_id: user_id.to_string(),
+			amount: amount.to_string(),
+		};
+		Ok(self.balance().pay_fee_revenue(bearer(token, req)?).await?.into_inner())
+	}
+
 	pub async fn readiness(&self) -> Result<bk::ReadinessResponse, Status> {
 		Ok(self.health().readiness(bk::ReadinessRequest {}).await?.into_inner())
 	}
