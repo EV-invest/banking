@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -64,6 +64,10 @@ const ADMIN: NavItem[] = [
   { href: "/admin/revenue", label: "Fund revenue", key: "nav.revenue", icon: PiggyBank, active: (p) => p.startsWith("/admin/revenue") },
   { href: "/admin/allocations", label: "Allocations", key: "nav.allocations", icon: Boxes, active: (p) => p.startsWith("/admin/allocations") },
   { href: "/admin/valuation", label: "Valuation & redemptions", key: "nav.valuation", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
+  // After Allocations, because a fee is a property OF a product: you register the fund
+  // first and then price it. Distinct from Fund revenue, which is where the money ends up
+  // once these terms have been charged and settled.
+  { href: "/admin/fees", label: "Fees", key: "nav.fees", icon: Percent, active: (p) => p.startsWith("/admin/fees") },
 ];
 
 // Every rail row is a hand-written Link, so keyboard focus rides on this string. It runs

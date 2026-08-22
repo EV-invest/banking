@@ -20,6 +20,9 @@ import {
   fetchMfeRegistry,
   fetchOverview,
   fetchParkedEvents,
+  fetchFeeAssessments,
+  fetchFeePolicies,
+  fetchFeeShares,
   fetchRedemptionQueue,
   fetchRevenuePayouts,
   fetchTreasury,
@@ -93,6 +96,35 @@ export const revenuePayoutsResource = defineResource({
   fetch: fetchRevenuePayouts,
   revalidate: OPERATIONAL,
   tags: [TAG.adminRevenue],
+});
+
+// Fee terms change only when an operator rewrites them — registry cadence, not
+// operational — so the table opens on what it last showed.
+export const feePoliciesResource = defineResource({
+  name: "admin.feePolicies",
+  fetch: fetchFeePolicies,
+  revalidate: 300,
+  tags: [TAG.adminFees],
+});
+
+// The accumulated units move with every sweep, and their value moves with every mark, so
+// this is operational: an operator deciding whether to settle is looking at it now.
+export const feeSharesResource = defineResource({
+  name: "admin.feeShares",
+  fetch: fetchFeeShares,
+  key: (service) => service,
+  revalidate: OPERATIONAL,
+  tags: [TAG.adminFees],
+  enabled: (service) => service.trim().length > 0,
+});
+
+export const feeAssessmentsResource = defineResource({
+  name: "admin.feeAssessments",
+  fetch: fetchFeeAssessments,
+  key: (service) => service,
+  revalidate: OPERATIONAL,
+  tags: [TAG.adminFees],
+  enabled: (service) => service.trim().length > 0,
 });
 
 export const redemptionQueueResource = defineResource({
