@@ -146,7 +146,7 @@ export function DashboardView() {
                 <EmptyMedia variant="icon">
                   <ArrowLeftRight />
                 </EmptyMedia>
-                <EmptyTitle>{t("dash.noOperations")}</EmptyTitle>
+                <EmptyTitle>{t("ui.noOperations")}</EmptyTitle>
                 <EmptyDescription>{t("dash.noOperationsHint")}</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>

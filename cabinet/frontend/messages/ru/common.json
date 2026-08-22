@@ -55,10 +55,6 @@
     "en": "The fund curve and your participation appear here once there is activity to plot.",
     "t": "Кривая фонда и ваша доля появятся здесь, как только будет что отобразить."
   },
-  "dash.noOperations": {
-    "en": "No operations yet",
-    "t": "Операций пока нет"
-  },
   "dash.noOperationsHint": {
     "en": "Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.",
     "t": "Пополнения, подписки, погашения и выводы появятся здесь сразу после того, как вы их совершите."
@@ -155,6 +151,10 @@
     "en": "Withdrawals",
     "t": "Выводы средств"
   },
+  "ops.filterByKind": {
+    "en": "Filter operations by kind",
+    "t": "Фильтровать операции по типу"
+  },
   "ui.account": {
     "en": "Account",
     "t": "Аккаунт"
@@ -171,6 +171,14 @@
     "en": "Add funds",
     "t": "Пополнить счёт"
   },
+  "ui.allocate": {
+    "en": "Allocate",
+    "t": "Разместить"
+  },
+  "ui.browseFunds": {
+    "en": "Browse funds",
+    "t": "Смотреть фонды"
+  },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
     "t": "Доставка и темы"
@@ -183,6 +191,14 @@
     "en": "Deposit USDT",
     "t": "Пополнить USDT"
   },
+  "ui.destination": {
+    "en": "Destination",
+    "t": "Получатель"
+  },
+  "ui.details": {
+    "en": "Details",
+    "t": "Детали"
+  },
   "ui.email": {
     "en": "Email",
     "t": "Эл. почта"
@@ -190,6 +206,10 @@
   "ui.emailAddress": {
     "en": "Email address",
     "t": "Адрес эл. почты"
+  },
+  "ui.inProgress": {
+    "en": "In progress",
+    "t": "В обработке"
   },
   "ui.inYourCabinet": {
     "en": "In your cabinet",
@@ -199,9 +219,29 @@
     "en": "KYC level",
     "t": "Уровень KYC"
   },
+  "ui.network": {
+    "en": "Network",
+    "t": "Сеть"
+  },
+  "ui.networks": {
+    "en": "Networks",
+    "t": "Сети"
+  },
+  "ui.noOperations": {
+    "en": "No operations yet",
+    "t": "Операций пока нет"
+  },
+  "ui.operations": {
+    "en": "Operations",
+    "t": "Операции"
+  },
   "ui.profile": {
     "en": "Profile",
     "t": "Профиль"
+  },
+  "ui.progress": {
+    "en": "Progress",
+    "t": "Ход выполнения"
   },
   "ui.receiveFunds": {
     "en": "Receive funds into your wallet",
@@ -238,5 +278,73 @@
   "ui.withdrawUsdt": {
     "en": "Withdraw USDT",
     "t": "Вывести USDT"
+  },
+  "wallet.cancelWithdrawal": {
+    "en": "Cancel withdrawal",
+    "t": "Отменить вывод"
+  },
+  "wallet.depositNetwork": {
+    "en": "Deposit network",
+    "t": "Сеть пополнения"
+  },
+  "wallet.destinationAddressCaps": {
+    "en": "DESTINATION ADDRESS",
+    "t": "АДРЕС ПОЛУЧАТЕЛЯ"
+  },
+  "wallet.destinationCaps": {
+    "en": "DESTINATION",
+    "t": "ПОЛУЧАТЕЛЬ"
+  },
+  "wallet.networkCaps": {
+    "en": "NETWORK",
+    "t": "СЕТЬ"
+  },
+  "wallet.networkFee": {
+    "en": "Network fee",
+    "t": "Комиссия сети"
+  },
+  "wallet.networkWarning": {
+    "en": "Network warning",
+    "t": "Предупреждение о сети"
+  },
+  "wallet.newDeposit": {
+    "en": "New deposit",
+    "t": "Новое пополнение"
+  },
+  "wallet.noActivity": {
+    "en": "No activity yet",
+    "t": "Операций пока нет"
+  },
+  "wallet.noActivityHint": {
+    "en": "Your deposits and withdrawals will appear here once you make your first transfer.",
+    "t": "Ваши пополнения и выводы появятся здесь после первого перевода."
+  },
+  "wallet.pendWd": {
+    "en": "PEND WD",
+    "t": "В ВЫВОДЕ"
+  },
+  "wallet.reviewWithdrawal": {
+    "en": "Review withdrawal",
+    "t": "Проверить вывод"
+  },
+  "wallet.selectNetwork": {
+    "en": "SELECT NETWORK",
+    "t": "ВЫБЕРИТЕ СЕТЬ"
+  },
+  "wallet.totalBalance": {
+    "en": "TOTAL BALANCE",
+    "t": "ОБЩИЙ БАЛАНС"
+  },
+  "wallet.withdrawalFailed": {
+    "en": "Withdrawal failed",
+    "t": "Вывод не выполнен"
+  },
+  "wallet.withdrawalNetwork": {
+    "en": "Withdrawal network",
+    "t": "Сеть вывода"
+  },
+  "wallet.youWillReceive": {
+    "en": "You will receive",
+    "t": "Вы получите"
   }
 }

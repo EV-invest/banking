@@ -55,10 +55,6 @@
     "en": "The fund curve and your participation appear here once there is activity to plot.",
     "t": "Đường cong của quỹ và phần tham gia của bạn sẽ hiện ở đây khi có dữ liệu để vẽ."
   },
-  "dash.noOperations": {
-    "en": "No operations yet",
-    "t": "Chưa có giao dịch nào"
-  },
   "dash.noOperationsHint": {
     "en": "Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.",
     "t": "Các khoản nạp, đăng ký, hoàn vốn và rút tiền sẽ xuất hiện ở đây ngay khi bạn thực hiện."
@@ -155,6 +151,10 @@
     "en": "Withdrawals",
     "t": "Rút tiền"
   },
+  "ops.filterByKind": {
+    "en": "Filter operations by kind",
+    "t": "Lọc giao dịch theo loại"
+  },
   "ui.account": {
     "en": "Account",
     "t": "Tài khoản"
@@ -171,6 +171,14 @@
     "en": "Add funds",
     "t": "Nạp thêm tiền"
   },
+  "ui.allocate": {
+    "en": "Allocate",
+    "t": "Phân bổ"
+  },
+  "ui.browseFunds": {
+    "en": "Browse funds",
+    "t": "Xem các quỹ"
+  },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
     "t": "Gửi thông báo & chủ đề"
@@ -183,6 +191,14 @@
     "en": "Deposit USDT",
     "t": "Nạp USDT"
   },
+  "ui.destination": {
+    "en": "Destination",
+    "t": "Người nhận"
+  },
+  "ui.details": {
+    "en": "Details",
+    "t": "Chi tiết"
+  },
   "ui.email": {
     "en": "Email",
     "t": "Email"
@@ -190,6 +206,10 @@
   "ui.emailAddress": {
     "en": "Email address",
     "t": "Địa chỉ email"
+  },
+  "ui.inProgress": {
+    "en": "In progress",
+    "t": "Đang xử lý"
   },
   "ui.inYourCabinet": {
     "en": "In your cabinet",
@@ -199,9 +219,29 @@
     "en": "KYC level",
     "t": "Cấp độ KYC"
   },
+  "ui.network": {
+    "en": "Network",
+    "t": "Mạng"
+  },
+  "ui.networks": {
+    "en": "Networks",
+    "t": "Mạng lưới"
+  },
+  "ui.noOperations": {
+    "en": "No operations yet",
+    "t": "Chưa có giao dịch nào"
+  },
+  "ui.operations": {
+    "en": "Operations",
+    "t": "Giao dịch"
+  },
   "ui.profile": {
     "en": "Profile",
     "t": "Hồ sơ"
+  },
+  "ui.progress": {
+    "en": "Progress",
+    "t": "Tiến trình"
   },
   "ui.receiveFunds": {
     "en": "Receive funds into your wallet",
@@ -238,5 +278,73 @@
   "ui.withdrawUsdt": {
     "en": "Withdraw USDT",
     "t": "Rút USDT"
+  },
+  "wallet.cancelWithdrawal": {
+    "en": "Cancel withdrawal",
+    "t": "Hủy lệnh rút"
+  },
+  "wallet.depositNetwork": {
+    "en": "Deposit network",
+    "t": "Mạng nạp tiền"
+  },
+  "wallet.destinationAddressCaps": {
+    "en": "DESTINATION ADDRESS",
+    "t": "ĐỊA CHỈ NHẬN"
+  },
+  "wallet.destinationCaps": {
+    "en": "DESTINATION",
+    "t": "NGƯỜI NHẬN"
+  },
+  "wallet.networkCaps": {
+    "en": "NETWORK",
+    "t": "MẠNG"
+  },
+  "wallet.networkFee": {
+    "en": "Network fee",
+    "t": "Phí mạng"
+  },
+  "wallet.networkWarning": {
+    "en": "Network warning",
+    "t": "Cảnh báo về mạng"
+  },
+  "wallet.newDeposit": {
+    "en": "New deposit",
+    "t": "Nạp tiền mới"
+  },
+  "wallet.noActivity": {
+    "en": "No activity yet",
+    "t": "Chưa có hoạt động nào"
+  },
+  "wallet.noActivityHint": {
+    "en": "Your deposits and withdrawals will appear here once you make your first transfer.",
+    "t": "Các khoản nạp và rút của bạn sẽ hiện ở đây sau lần chuyển đầu tiên."
+  },
+  "wallet.pendWd": {
+    "en": "PEND WD",
+    "t": "ĐANG RÚT"
+  },
+  "wallet.reviewWithdrawal": {
+    "en": "Review withdrawal",
+    "t": "Xem lại lệnh rút"
+  },
+  "wallet.selectNetwork": {
+    "en": "SELECT NETWORK",
+    "t": "CHỌN MẠNG"
+  },
+  "wallet.totalBalance": {
+    "en": "TOTAL BALANCE",
+    "t": "TỔNG SỐ DƯ"
+  },
+  "wallet.withdrawalFailed": {
+    "en": "Withdrawal failed",
+    "t": "Rút tiền thất bại"
+  },
+  "wallet.withdrawalNetwork": {
+    "en": "Withdrawal network",
+    "t": "Mạng rút tiền"
+  },
+  "wallet.youWillReceive": {
+    "en": "You will receive",
+    "t": "Bạn sẽ nhận được"
   }
 }

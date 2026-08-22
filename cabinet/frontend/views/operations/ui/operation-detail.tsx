@@ -7,6 +7,7 @@ import { Badge, Button, Separator } from "@evinvest/uikit";
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { amountTone, dayLabel, formatUnits, formatUsdt, kindMeta, networkLabel, seconds, stateLabel, stateTone, timeLabel } from "@/views/operations/lib/format";
+import { useT } from "@evinvest/i18n/react";
 
 // The body of the operation detail panel (Figma `Cabinet · Operations` →
 // `popover-operation-detail`). Rendered inside a Popover on the desktop timeline and a
@@ -19,6 +20,7 @@ import { amountTone, dayLabel, formatUnits, formatUsdt, kindMeta, networkLabel, 
 // have to be invented, and an invented number on a money surface is worse than an absent
 // one.
 export function OperationDetail({ operation, title, onManage }: { operation: Operation; title: string; onManage?: `/${string}` | null }) {
+  const t = useT();
   const meta = kindMeta(operation.kind);
   const at = seconds(operation.created_at);
   const steps = progressFor(operation);
@@ -40,7 +42,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
         <>
           <Separator />
           <section className="flex flex-col gap-3 px-4 py-4">
-            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Progress</h3>
+            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("ui.progress")}</h3>
             {steps.map((step) => (
               <div key={step.label} className="flex items-center gap-2.5">
                 <span
@@ -59,7 +61,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
 
       <Separator />
       <section className="flex flex-col gap-2 px-4 py-4">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Details</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("ui.details")}</h3>
         {/* The label is fixed and the value wraps, not the other way round. A deposit
             reference is ~50 characters and a TON address 48; letting the value size the
             row pushed it straight through the panel's right edge and over the row above. */}

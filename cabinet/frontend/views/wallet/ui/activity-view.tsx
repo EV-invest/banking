@@ -12,6 +12,7 @@ import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
 import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
+import { useT } from "@evinvest/i18n/react";
 
 // The desktop table track — network, destination, amount, status. Fixed px columns with no
 // matching step on the spacing scale, so they ride in as a custom property rather than an
@@ -42,6 +43,7 @@ interface Entry {
 }
 
 export function ActivityView() {
+  const t = useT();
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -70,7 +72,7 @@ export function ActivityView() {
   const entries: Entry[] = loading ? [] : buildEntries(rows, credits);
 
   return (
-    <WalletScreen title="Activity" subtitle="Deposits and withdrawals — queued, processing, completed" back="/wallet">
+    <WalletScreen title={t("ui.activity")} subtitle="Deposits and withdrawals — queued, processing, completed" back="/wallet">
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {loading ? (
@@ -83,8 +85,8 @@ export function ActivityView() {
             style={COLUMNS}
             className="hidden grid-cols-(--activity-columns) items-center gap-3 border-b border-border px-5 py-3.5 text-xs font-medium text-muted-foreground lg:grid"
           >
-            <span>NETWORK</span>
-            <span>DESTINATION</span>
+            <span>{t("wallet.networkCaps")}</span>
+            <span>{t("wallet.destinationCaps")}</span>
             <span className="text-right">AMOUNT</span>
             <span className="text-right">STATUS</span>
           </div>
@@ -98,6 +100,7 @@ export function ActivityView() {
 }
 
 function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; busy: boolean; onCancel: () => void }) {
+  const t = useT();
   const rail = railMeta(entry.network);
   return (
     <div style={COLUMNS} className={cn("flex items-center gap-3 px-3.5 py-3 lg:grid lg:grid-cols-(--activity-columns) lg:px-5 lg:py-3.5", !first && "border-t border-border")}>
@@ -125,7 +128,7 @@ function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; b
               type="button"
               disabled={busy}
               onClick={onCancel}
-              aria-label="Cancel withdrawal"
+              aria-label={t("wallet.cancelWithdrawal")}
               className="rounded-md border border-border p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
               {busy ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
@@ -138,15 +141,16 @@ function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; b
 }
 
 function EmptyState() {
+  const t = useT();
   return (
     <div className={cn(WALLET_CARD, "flex flex-col items-center gap-3 px-6 py-12 text-center lg:max-w-100")}>
       <span className="flex size-11 items-center justify-center rounded-xl bg-main-accent-t1/15">
         <ArrowUpRight className="size-5 text-main-accent-t1" />
       </span>
-      <p className="text-sm font-semibold text-foreground">No activity yet</p>
-      <p className="max-w-65 text-xs text-muted-foreground">Your deposits and withdrawals will appear here once you make your first transfer.</p>
+      <p className="text-sm font-semibold text-foreground">{t("wallet.noActivity")}</p>
+      <p className="max-w-65 text-xs text-muted-foreground">{t("wallet.noActivityHint")}</p>
       <Link href="/wallet/deposit" className={cn(WALLET_CTA, "mt-1 px-4 py-2.5 text-sm")}>
-        New deposit
+        {t("wallet.newDeposit")}
       </Link>
     </div>
   );

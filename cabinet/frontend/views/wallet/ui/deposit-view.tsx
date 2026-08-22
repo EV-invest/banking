@@ -85,10 +85,10 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
             <>
               <div className={cn(WALLET_CARD, "flex flex-col gap-3.5 p-4.5 lg:p-6")}>
                 <FieldLabel>
-                  SELECT NETWORK
+                  {t("wallet.selectNetwork")}
                   <TipAnchor anchor="wallet.deposit.network" />
                 </FieldLabel>
-                <NetworkSegments networks={networks} value={network} onChange={selectNetwork} label="Deposit network" />
+                <NetworkSegments networks={networks} value={network} onChange={selectNetwork} label={t("wallet.depositNetwork")} />
               </div>
 
               <div className={cn(WALLET_CARD, "flex flex-col items-center gap-4 p-4.5 lg:gap-4.5 lg:p-6")}>
@@ -135,7 +135,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                 <div className="flex min-w-0 flex-col gap-1">
                   {/* `wallet.deposit.rail-hazard` is a section-type tip (a descriptor block, not an
                       inline ⓘ) — this card already carries that copy, so it isn't anchored here. */}
-                  <p className="text-sm font-semibold text-foreground">Network warning</p>
+                  <p className="text-sm font-semibold text-foreground">{t("wallet.networkWarning")}</p>
                   <p className="text-xs text-muted-foreground">
                     Only send USDT on the {label} network to this address. Funds sent on any other network will be lost permanently.
                     {evmSiblings.length > 0 && (
