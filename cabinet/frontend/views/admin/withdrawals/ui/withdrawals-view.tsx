@@ -10,9 +10,9 @@ import { withdrawalQueueResource } from "@/entities/admin/model/admin-resource";
 import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
-import { Settled } from "@/shared/ui/motion";
+import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ago, formatUsd } from "@/views/admin/lib/format";
-import { AdminHeader } from "@/views/admin/ui/shell";
+import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
 // Which confirm panel is open under a row: settle asks for the mined tx ref,
 // fail asks for an (optional) audit reason and repeats the double-pay warning.
@@ -55,16 +55,16 @@ export function WithdrawalsView() {
   };
 
   return (
-    <div className="space-y-8 px-8 pb-10 pt-6">
+    <AdminScreen className="space-y-8">
       <AdminHeader eyebrow="Administer" title="Withdrawals" subtitle="Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts" />
 
       {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
+        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
           <TriangleAlert className="size-4" /> {error}
-        </p>
+        </StaggerItem>
       )}
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Awaiting action
           {/* The count pill lands on the same step as the label it trails, so its fill and
@@ -141,8 +141,8 @@ export function WithdrawalsView() {
           Dispatch broadcasts a queued withdrawal once its rail has liquidity. Settle records the mined transaction and releases the reservation. Fail voids and
           refunds — ONLY safe when nothing reached the chain; the hub refuses it while a broadcast record exists.
         </p>
-      </section>
-    </div>
+      </StaggerItem>
+    </AdminScreen>
   );
 }
 

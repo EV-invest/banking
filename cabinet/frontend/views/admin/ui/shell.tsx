@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
 import { usePlatform } from "@/shared/lib/use-platform";
+import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { statusTone } from "@/views/admin/lib/format";
 
 // Server-truthful environment (the BFF's APP_ENV); anything unrecognised — including
@@ -18,11 +19,27 @@ const ENV_BADGES: Record<string, { label: string; tone: string }> = {
   staging: { label: "STAGING", tone: "text-main-accent-t3" },
 };
 
+/**
+ * The page column every admin screen is built in, and the entrance it arrives with.
+ *
+ * The console's nine screens all opened the same way — a `div` with the same padding
+ * and its own choice of `space-y` — so the container is stated once here and the
+ * spacing stays the caller's. Sections inside are `StaggerItem`s; `AdminHeader`
+ * already is one, so a screen gets its title arriving for free.
+ */
+export function AdminScreen({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <Stagger step={SECTION_STAGGER} className={cn("px-8 pb-10 pt-6", className)}>
+      {children}
+    </Stagger>
+  );
+}
+
 export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle: string; action?: ReactNode }) {
   const environment = usePlatform()?.environment;
   const badge = environment ? (ENV_BADGES[environment] ?? { label: "DEV", tone: "text-muted-foreground" }) : null;
   return (
-    <header className="flex flex-wrap items-start justify-between gap-4">
+    <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">{eyebrow}</p>
         <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
@@ -37,7 +54,7 @@ export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: str
         )}
         {action}
       </div>
-    </header>
+    </StaggerItem>
   );
 }
 

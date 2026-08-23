@@ -18,6 +18,7 @@ import { formatUsd, num } from "@/shared/lib/money";
 import { useResource } from "@/shared/lib/resource";
 import { CARD, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, type PillTone, Row, RowLabel, RowValue, StackRow } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
+import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { displayName, initialsOfName, truncateName } from "@/views/profile/lib/format";
 
@@ -120,9 +121,9 @@ export function ProfileView() {
     <>
       <MobileAppBar title={t("ui.profile")} backHref="/settings" />
 
-      <div className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-5 lg:px-8 lg:pb-8 lg:pt-6">
+      <Stagger delay={SECTION_STAGGER} step={SECTION_STAGGER} className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-5 lg:px-8 lg:pb-8 lg:pt-6">
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
-        <div className="hidden items-center justify-between gap-4 lg:flex">
+        <StaggerItem className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold text-foreground">Profile</h1>
             <p className="text-sm text-muted-foreground">Your personal details and verification status</p>
@@ -143,12 +144,16 @@ export function ProfileView() {
               </Button>
             )}
           </div>
-        </div>
+        </StaggerItem>
 
-        {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+        {error && (
+          <StaggerItem as="p" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </StaggerItem>
+        )}
 
         {/* card-Hero — centred on mobile (Figma 503:274), a wide chip on desktop (489:258). */}
-        <div className={cn(CARD, "flex flex-col items-center gap-3 px-5 pb-5.5 pt-6 lg:flex-row lg:gap-5 lg:px-6 lg:py-5.5")}>
+        <StaggerItem className={cn(CARD, "flex flex-col items-center gap-3 px-5 pb-5.5 pt-6 lg:flex-row lg:gap-5 lg:px-6 lg:py-5.5")}>
           <InitialsAvatar initials={initialsOfName(name, email)} className="size-16 text-2xl lg:text-xl" />
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center lg:items-start lg:text-left">
             <div className="flex min-w-0 flex-col items-center gap-1 lg:flex-row lg:items-baseline lg:gap-3">
@@ -180,10 +185,13 @@ export function ProfileView() {
               </Button>
             )}
           </div>
-        </div>
+        </StaggerItem>
 
         {/* ── Mobile (Figma cabinet/mobile/profile) ────────────────────────── */}
-        <div className="flex flex-col gap-4 lg:hidden">
+        {/* One item per viewport block rather than per card: `verification` and
+            `snapshot` are the same two elements rendered into both, and giving each a
+            place in the sequence would have them animating twice over. */}
+        <StaggerItem className="flex flex-col gap-4 lg:hidden">
           <ListCard>
             <ListCardTitle sub={profile?.role ? <span className="text-main-accent-t1/85">{titleCase(profile.role)} account</span> : undefined}>Personal information</ListCardTitle>
             {SHOWN.map(({ key, label }, i) => (
@@ -221,10 +229,10 @@ export function ProfileView() {
 
           {verification}
           {snapshot}
-        </div>
+        </StaggerItem>
 
         {/* ── Desktop (Figma cabinet/profile) ──────────────────────────────── */}
-        <div className="hidden items-start gap-5 lg:flex">
+        <StaggerItem className="hidden items-start gap-5 lg:flex">
           <section className={cn(CARD, "w-full flex-1 space-y-4.5 px-6 py-5.5")}>
             <header>
               <h2 className="text-sm font-semibold tracking-normal text-foreground">Personal information</h2>
@@ -263,8 +271,8 @@ export function ProfileView() {
             {verification}
             {snapshot}
           </div>
-        </div>
-      </div>
+        </StaggerItem>
+      </Stagger>
     </>
   );
 }

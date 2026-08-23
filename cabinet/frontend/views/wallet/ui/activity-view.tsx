@@ -10,6 +10,7 @@ import { cancelWithdrawal, depositsResource, withdrawalsResource } from "@/entit
 import type { Deposit, Withdrawal } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { StaggerItem } from "@/shared/ui/motion";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
 import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 import { useT } from "@evinvest/i18n/react";
@@ -73,28 +74,34 @@ export function ActivityView() {
 
   return (
     <WalletScreen title={t("ui.activity")} subtitle="Deposits and withdrawals — queued, processing, completed" back="/wallet">
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {loading ? (
-        <Skeleton className="h-64 w-full rounded-xl lg:max-w-190" />
-      ) : entries.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <div className={cn(WALLET_CARD, "overflow-hidden lg:max-w-190")}>
-          <div
-            style={COLUMNS}
-            className="hidden grid-cols-(--activity-columns) items-center gap-3 border-b border-border px-5 py-3.5 text-xs font-medium text-muted-foreground lg:grid"
-          >
-            <span>{t("wallet.networkCaps")}</span>
-            <span>{t("wallet.destinationCaps")}</span>
-            <span className="text-right">AMOUNT</span>
-            <span className="text-right">STATUS</span>
-          </div>
-          {entries.map((entry, i) => (
-            <Row key={entry.key} entry={entry} first={i === 0} busy={busy === entry.id} onCancel={() => cancel(entry.id)} />
-          ))}
-        </div>
+      {error && (
+        <StaggerItem as="p" className="text-sm text-destructive">
+          {error}
+        </StaggerItem>
       )}
+
+      <StaggerItem>
+        {loading ? (
+          <Skeleton className="h-64 w-full rounded-xl lg:max-w-190" />
+        ) : entries.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className={cn(WALLET_CARD, "overflow-hidden lg:max-w-190")}>
+            <div
+              style={COLUMNS}
+              className="hidden grid-cols-(--activity-columns) items-center gap-3 border-b border-border px-5 py-3.5 text-xs font-medium text-muted-foreground lg:grid"
+            >
+              <span>{t("wallet.networkCaps")}</span>
+              <span>{t("wallet.destinationCaps")}</span>
+              <span className="text-right">AMOUNT</span>
+              <span className="text-right">STATUS</span>
+            </div>
+            {entries.map((entry, i) => (
+              <Row key={entry.key} entry={entry} first={i === 0} busy={busy === entry.id} onCancel={() => cancel(entry.id)} />
+            ))}
+          </div>
+        )}
+      </StaggerItem>
     </WalletScreen>
   );
 }

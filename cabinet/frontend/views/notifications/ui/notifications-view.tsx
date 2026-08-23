@@ -11,6 +11,7 @@ import type { Notification } from "@/shared/contracts/notifications";
 import { isUnread, toDate } from "@/shared/contracts/notifications";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 
 const CARD = "rounded-xl border border-border bg-main-card";
 // Every control on this screen is hand-written rather than a uikit Button, so the keyboard
@@ -120,8 +121,8 @@ export function NotificationsView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-282 px-4 py-6 sm:px-6 lg:px-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    <Stagger step={SECTION_STAGGER} className="mx-auto w-full max-w-282 px-4 py-6 sm:px-6 lg:px-8">
+      <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-foreground">Notifications</h1>
           <p className="mt-1 text-sm text-muted-foreground">Everything you follow — and how you hear about it</p>
@@ -129,9 +130,11 @@ export function NotificationsView() {
         <button type="button" onClick={markAll} disabled={busy || unread === 0} className={GHOST_BUTTON}>
           Mark all read
         </button>
-      </header>
+      </StaggerItem>
 
-      <div className="mt-5 inline-flex gap-0.5 rounded-lg border border-border/60 bg-main-surface p-1">
+      {/* `inline-flex` on the bar itself, so the item that carries it has to stay inline
+          too — a block wrapper would stretch the pill pair across the page. */}
+      <StaggerItem className="mt-5 inline-flex gap-0.5 rounded-lg border border-border/60 bg-main-surface p-1">
         {(["all", "unread"] as const).map((f) => (
           <button
             key={f}
@@ -147,13 +150,15 @@ export function NotificationsView() {
             {f === "all" ? "All" : unread > 0 ? `Unread · ${unread}` : "Unread"}
           </button>
         ))}
-      </div>
+      </StaggerItem>
 
       {error && (
-        <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+        <StaggerItem as="p" className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </StaggerItem>
       )}
 
-      <div className={cn("mt-4 overflow-hidden", CARD)}>
+      <StaggerItem className={cn("mt-4 overflow-hidden", CARD)}>
         {items === null ? (
           <ul>
             {[0, 1, 2].map((i) => (
@@ -175,16 +180,16 @@ export function NotificationsView() {
             ))}
           </ul>
         )}
-      </div>
+      </StaggerItem>
 
       {nextCursor && items && items.length > 0 && (
-        <div className="mt-4 flex justify-center">
+        <StaggerItem className="mt-4 flex justify-center">
           <button type="button" onClick={loadMore} disabled={busy} className={GHOST_BUTTON}>
             {busy ? "Loading…" : "Load older"}
           </button>
-        </div>
+        </StaggerItem>
       )}
-    </div>
+    </Stagger>
   );
 }
 

@@ -5,6 +5,7 @@ import { Link } from "@/shared/ui/cabinet-link";
 import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
+import { Reveal } from "@/shared/ui/motion";
 
 // The mobile app bar (Figma `cabinet/mobile/settings` node 498:260 and
 // `cabinet/mobile/profile` node 503:267). Two shapes from one component: a root
@@ -29,7 +30,14 @@ export function MobileAppBar({
 }) {
   const pushed = !!backHref || !!onBack;
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-main-surface px-5 pb-3.5 pt-4 lg:hidden">
+    // Arrives with the screen it titles, one step ahead of the content column — the
+    // bar is the first thing on a mobile page, and a title that snaps in above cards
+    // that fade would be the loudest seam on the screen.
+    //
+    // The transform this animates is the element's own, which `position: sticky`
+    // resolves after; it is an ancestor's transform that would break it, and this bar
+    // has no positioned descendants to lose either.
+    <Reveal as="header" className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-main-surface px-5 pb-3.5 pt-4 lg:hidden">
       {backHref ? (
         <Link href={backHref} aria-label="Back" className={cn("-ml-1 flex size-6 shrink-0 items-center justify-center text-foreground", BACK_FOCUS)}>
           <ChevronLeft className="size-6" />
@@ -45,6 +53,6 @@ export function MobileAppBar({
           size plus centring rather than the 3px that used to separate them. */}
       <h1 className={cn("min-w-0 flex-1 truncate font-semibold tracking-normal text-foreground", pushed ? "text-center text-base" : "text-lg")}>{title}</h1>
       {pushed && !right ? <span className="size-6 shrink-0" aria-hidden /> : right}
-    </header>
+    </Reveal>
   );
 }

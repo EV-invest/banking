@@ -28,6 +28,7 @@ import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
 import { MobileAppBar } from "@/shared/ui/mobile-appbar";
+import { Reveal, SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { displayName, initialsOfName, truncateName } from "@/views/settings/lib/format";
 
 // The investor settings surface, wired to the backend over the BFF. Two Figma frames,
@@ -177,9 +178,9 @@ export function SettingsView() {
         }
       />
 
-      <div className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
+      <Stagger delay={SECTION_STAGGER} step={SECTION_STAGGER} className="flex flex-col gap-4 px-5 pb-6 pt-4.5 lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
-        <div className="hidden items-center justify-between gap-4 lg:flex">
+        <StaggerItem className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
             <p className="text-sm text-muted-foreground">Manage your account, security and access</p>
@@ -196,9 +197,15 @@ export function SettingsView() {
               </Button>
             </div>
           )}
-        </div>
+        </StaggerItem>
 
-        {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+        {error && (
+          <StaggerItem as="p" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </StaggerItem>
+        )}
+        {/* Not a section: "Saved" appears in answer to a click, long after the page
+            arrived, and belongs to the save rather than to the screen. */}
         {saved && (
           <p className="inline-flex items-center gap-1 text-sm font-medium text-main-accent-t2 lg:hidden">
             <Check className="size-4" /> Saved
@@ -206,24 +213,32 @@ export function SettingsView() {
         )}
 
         {/* ── Mobile (Figma cabinet/mobile/settings) ───────────────────────── */}
-        <div className="flex flex-col gap-4 lg:hidden">
-          {pushed === "sessions" ? (
-            sessionsPanel(false)
-          ) : pushed === "notifications" ? (
-            <NotificationsSection />
-          ) : (
-            <>
-              <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
-              <AccountRowsCard loading={loading} form={form} email={email} fieldErrors={fieldErrors} onChange={set} />
-              <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => setPushed("sessions")} />
-              <MobileNotificationsCard onOpen={() => setPushed("notifications")} />
-              <SignOutButton />
-            </>
-          )}
-        </div>
+        {/* Pushing into Sessions or Notifications replaces the whole stack, so the `key`
+            remounts the reveal and the new screen arrives instead of appearing. It
+            repeats the column because a wrapper that did not would collapse the gap
+            between the five root cards. On the page's own first paint this reveal is
+            nested inside the entrance above it and fades without travelling — one
+            movement, not two (see shared/ui/motion/entrance). */}
+        <StaggerItem className="lg:hidden">
+          <Reveal key={pushed ?? "root"} className="flex flex-col gap-4">
+            {pushed === "sessions" ? (
+              sessionsPanel(false)
+            ) : pushed === "notifications" ? (
+              <NotificationsSection />
+            ) : (
+              <>
+                <ProfileSummaryCard loading={loading} name={name} email={email} verified={!!profile?.email_verified} />
+                <AccountRowsCard loading={loading} form={form} email={email} fieldErrors={fieldErrors} onChange={set} />
+                <MobileSecurityCard loading={loading} email={email} sessions={sessions} onOpenSessions={() => setPushed("sessions")} />
+                <MobileNotificationsCard onOpen={() => setPushed("notifications")} />
+                <SignOutButton />
+              </>
+            )}
+          </Reveal>
+        </StaggerItem>
 
         {/* ── Desktop (Figma cabinet/settings) ─────────────────────────────── */}
-        <div className="hidden gap-6 lg:flex">
+        <StaggerItem className="hidden gap-6 lg:flex">
           {/* Hand-written rail — uikit has no section-nav component, so the items carry their own focus ring. */}
           <nav aria-label="Settings sections" className="flex w-53 shrink-0 flex-col gap-1">
             {NAV.map((item) => {
@@ -247,14 +262,17 @@ export function SettingsView() {
             })}
           </nav>
 
-          <div className="min-w-0 flex-1">
+          {/* Keyed on the section, so choosing one from the rail brings its pane in
+              rather than swapping it under the cursor. The rail beside it does not
+              remount, which is the point — the marker slides, the pane arrives. */}
+          <Reveal key={section} className="min-w-0 flex-1">
             {section === "general" && <GeneralSection loading={loading} form={form} email={email} verified={!!profile?.email_verified} onChange={set} fieldErrors={fieldErrors} />}
             {section === "security" && <SecuritySection email={email} loading={loading} sessions={sessions} onManageSessions={() => setSection("sessions")} />}
             {section === "notifications" && <NotificationsSection />}
             {section === "sessions" && sessionsPanel(true)}
-          </div>
-        </div>
-      </div>
+          </Reveal>
+        </StaggerItem>
+      </Stagger>
     </>
   );
 }

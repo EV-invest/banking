@@ -29,6 +29,7 @@ import type { FeePolicy } from "@/shared/contracts/admin";
 import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { ago, formatUnits, formatUsd } from "@/views/admin/lib/format";
+import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
 const BASES = [
@@ -62,7 +63,10 @@ export function FeesView() {
   const error = catalog.data ? null : (catalog.error?.message ?? null);
 
   return (
-    <div className="space-y-6">
+    // `Stagger` directly rather than `AdminScreen`: this screen is the one in the console
+    // that carries no page padding of its own, and taking it from the shared container
+    // would move the whole page sideways as a side effect of animating it.
+    <Stagger step={SECTION_STAGGER} className="space-y-6">
       <AdminHeader
         eyebrow="Fees"
         title="Fee terms and collection"
@@ -70,30 +74,36 @@ export function FeesView() {
       />
 
       {error && (
-        <Alert variant="destructive">
-          <TriangleAlert className="size-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <StaggerItem>
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </StaggerItem>
       )}
 
       {loading ? (
-        <Skeleton className="h-64 w-full" />
+        <StaggerItem>
+          <Skeleton className="h-64 w-full" />
+        </StaggerItem>
       ) : funds.length === 0 ? (
-        <Empty className="border">
+        <StaggerItem as={Empty} className="border">
           <EmptyTitle>No funds registered</EmptyTitle>
           <EmptyDescription>A fee is a property of a product. Register an allocation first, then price it here.</EmptyDescription>
-        </Empty>
+        </StaggerItem>
       ) : (
         <>
           <FundPicker funds={funds.map((f) => ({ service: f.service, title: f.title }))} selected={selected} onSelect={setService} policies={byService} />
-          <div className="grid gap-5 lg:grid-cols-2">
+          <StaggerItem className="grid gap-5 lg:grid-cols-2">
             <PolicyCard key={selected} service={selected} policy={policy} />
             <CollectCard service={selected} />
-          </div>
-          <AssessmentsCard service={selected} />
+          </StaggerItem>
+          <StaggerItem>
+            <AssessmentsCard service={selected} />
+          </StaggerItem>
         </>
       )}
-    </div>
+    </Stagger>
   );
 }
 
@@ -111,7 +121,7 @@ function FundPicker({
   policies: Map<string, FeePolicy>;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <StaggerItem className="flex flex-wrap gap-2">
       {funds.map((fund) => {
         const policy = policies.get(fund.service);
         const active = fund.service === selected;
@@ -132,7 +142,7 @@ function FundPicker({
           </button>
         );
       })}
-    </div>
+    </StaggerItem>
   );
 }
 

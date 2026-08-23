@@ -12,7 +12,7 @@ import type { NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { Panel, PanelPresence, Settled } from "@/shared/ui/motion";
+import { Panel, PanelPresence, Settled, StaggerItem } from "@/shared/ui/motion";
 import { formatUsdt, fromBaseUnits, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
@@ -93,10 +93,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
 
   return (
     <WalletScreen title={t("ui.withdrawUsdt")} subtitle="Send funds to an external address — one balance, any rail" back="/wallet">
-      <Settled
-        loading={walletLoading}
-        skeleton={<Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />}
-      >
+      <StaggerItem>
+        <Settled
+          loading={walletLoading}
+          skeleton={<Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />}
+        >
         {walletLoading ? null : networks.length === 0 ? (
         <p className="text-sm text-muted-foreground">{error ?? "No withdrawal rails are available right now — check back soon."}</p>
       ) : (
@@ -263,7 +264,8 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
           </div>
         </div>
         )}
-      </Settled>
+        </Settled>
+      </StaggerItem>
     </WalletScreen>
   );
 }

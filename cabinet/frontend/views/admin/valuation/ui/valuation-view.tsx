@@ -12,10 +12,10 @@ import type { Allocation } from "@/shared/contracts/admin";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
-import { Settled } from "@/shared/ui/motion";
+import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor } from "@/shared/tips";
 import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, toBaseUnits } from "@/views/admin/lib/format";
-import { AdminHeader, Toggle } from "@/views/admin/ui/shell";
+import { AdminHeader, AdminScreen, Toggle } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
@@ -105,16 +105,16 @@ export function ValuationView() {
   };
 
   return (
-    <div className="space-y-8 px-8 pb-10 pt-6">
+    <AdminScreen className="space-y-8">
       <AdminHeader eyebrow="Administer" title="Valuation & redemptions" subtitle="Post fund NAV and clear the redemption queue" />
 
       {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
+        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
           <TriangleAlert className="size-4" /> {error}
-        </p>
+        </StaggerItem>
       )}
 
-      <section className="space-y-3" id="post-valuation">
+      <StaggerItem as="section" className="space-y-3" id="post-valuation">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Post valuation</p>
         <Card>
           <CardContent className="space-y-5 py-6">
@@ -196,9 +196,9 @@ export function ValuationView() {
             </div>
           </CardContent>
         </Card>
-      </section>
+      </StaggerItem>
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Unit supply
           <TipAnchor anchor="admin.valuation.post.derived-nav" />
@@ -217,9 +217,9 @@ export function ValuationView() {
           }}
           onError={setActionError}
         />
-      </section>
+      </StaggerItem>
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Redemption queue
           {/* The count pill lands on the same step as the label it trails, so its fill and
@@ -301,8 +301,8 @@ export function ValuationView() {
           </CardContent>
         </Card>
         <p className="max-w-3xl text-xs text-muted-foreground">Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.</p>
-      </section>
-    </div>
+      </StaggerItem>
+    </AdminScreen>
   );
 }
 

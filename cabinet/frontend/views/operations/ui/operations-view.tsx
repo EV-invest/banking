@@ -47,7 +47,7 @@ import { OperationDetail } from "@/views/operations/ui/operation-detail";
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
-import { Settled } from "@/shared/ui/motion";
+import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import {
   amountTone,
   dayLabel,
@@ -120,22 +120,28 @@ export function OperationsView() {
   const groups = useMemo(() => groupByDay(settled), [settled]);
 
   return (
-    <div className="px-4 pb-8 pt-6 lg:px-8">
-      <header className="mb-6 space-y-1">
+    <Stagger step={SECTION_STAGGER} className="px-4 pb-8 pt-6 lg:px-8">
+      <StaggerItem as="header" className="mb-6 space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">{t("ui.operations")}</p>
         <h1 className="text-2xl font-semibold text-foreground">{t("ui.operations")}</h1>
         <p className="text-sm text-muted-foreground">Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.</p>
-      </header>
+      </StaggerItem>
 
       {error && (
-        <Alert variant="destructive" className="mb-6">
-          <TriangleAlert className="size-4" />
-          <AlertTitle>Couldn&apos;t load your operations</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <StaggerItem className="mb-6">
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" />
+            <AlertTitle>Couldn&apos;t load your operations</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </StaggerItem>
       )}
 
-      <Settled
+      {/* The timeline is one section — the filter bar and the table it filters arrive
+          together, because a bar that lands before the rows invites a click that has
+          nothing to act on yet. */}
+      <StaggerItem>
+        <Settled
         loading={loading}
         skeleton={
           <div className="space-y-4">
@@ -257,8 +263,9 @@ export function OperationsView() {
             {truncated && <p className="text-xs text-muted-foreground">Showing your most recent operations — older activity isn&apos;t listed here yet.</p>}
           </div>
         )}
-      </Settled>
-    </div>
+        </Settled>
+      </StaggerItem>
+    </Stagger>
   );
 }
 

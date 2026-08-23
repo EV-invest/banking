@@ -22,6 +22,7 @@ import type { AccruedFees, FeePolicy, FundNav, Position } from "@/shared/contrac
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
+import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { compactUnits, formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
 import { blockedReason, buildProducts, type Product } from "@/views/invest/lib/product";
 import { Note, ProductBadges, Stat, SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
@@ -93,10 +94,12 @@ export function ProductView({ service }: { service: string }) {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <div className="container max-w-4xl space-y-7 py-12">
-      <BackLink />
+    <Stagger step={SECTION_STAGGER} className="container max-w-4xl space-y-7 py-12">
+      <StaggerItem>
+        <BackLink />
+      </StaggerItem>
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
+      <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold">{product.title}</h1>
@@ -119,17 +122,22 @@ export function ProductView({ service }: { service: string }) {
             </Button>
           )}
         </div>
-      </header>
+      </StaggerItem>
 
       {error && (
-        <Alert variant="destructive">
-          <TriangleAlert className="size-4" />
-          <AlertTitle>Couldn&apos;t refresh this fund</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <StaggerItem>
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" />
+            <AlertTitle>Couldn&apos;t refresh this fund</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </StaggerItem>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      {/* The two columns are one section. The dealing panels inside open and close under
+          `Panel`, and a stagger that also owned them would be animating the same elements
+          from two directions the first time one is opened. */}
+      <StaggerItem className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-5">
           {held ? <HoldingStats position={held} /> : <PriceOnly nav={nav} unmarked={unmarked} />}
 
@@ -147,8 +155,8 @@ export function ProductView({ service }: { service: string }) {
           <SupplyCard nav={nav} />
           <FeeCard policy={feePolicy} accrued={held ? accruedFees : null} />
         </div>
-      </div>
-    </div>
+      </StaggerItem>
+    </Stagger>
   );
 }
 

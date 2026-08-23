@@ -3,6 +3,7 @@
 import { type ReactNode, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
+import { useEntranceLive } from "./entrance";
 import { DUR, EASE, RISE } from "./tokens";
 
 export interface SettledProps {
@@ -33,6 +34,11 @@ export interface SettledProps {
  * The caller still owns the empty and error states — pass them as `children`,
  * guarded on the same condition as `loading`, and they arrive with the same
  * motion as content would.
+ *
+ * One more thing it does not do: travel, when the section around it is still
+ * arriving. Two 8px rises composed on top of each other make the card stutter
+ * as it settles, so a handover caught inside a live entrance keeps the fade and
+ * drops the movement. See ./entrance.
  */
 export function Settled({
   loading,
@@ -41,16 +47,25 @@ export function Settled({
   className,
 }: SettledProps) {
   const reduce = useReducedMotion();
+  const entering = useEntranceLive();
 
   // Adjusting state during render rather than in an effect, which is what lets
   // the entrance play on the very first render after `loading` drops: an effect
   // would paint the content opaque once and only then start the fade, and that
   // flash is more noticeable than the cut it was meant to replace.
+  //
+  // `flat` is captured at the same instant for the same reason — it has to be
+  // the answer as of the handover, not as of whenever this happens to re-render
+  // next, by which time the section has landed and the answer has changed.
   const [wasLoading, setWasLoading] = useState(loading);
   const [sawSkeleton, setSawSkeleton] = useState(false);
+  const [flat, setFlat] = useState(false);
   if (wasLoading !== loading) {
     setWasLoading(loading);
-    if (wasLoading) setSawSkeleton(true);
+    if (wasLoading) {
+      setSawSkeleton(true);
+      setFlat(entering);
+    }
   }
 
   // No entrance on this branch. The skeleton's own fade lives on the primitive
@@ -67,7 +82,7 @@ export function Settled({
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y: reduce ? 0 : RISE }}
+      initial={{ opacity: 0, y: reduce || flat ? 0 : RISE }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR.base, ease: EASE.out }}
     >
