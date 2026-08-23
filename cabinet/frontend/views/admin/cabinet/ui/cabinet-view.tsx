@@ -10,7 +10,8 @@ import { cabinetConfigResource, mfeRegistryResource } from "@/entities/admin/mod
 import type { CabinetConfig, FeatureFlag } from "@/shared/contracts/admin";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { AdminHeader, StatusDot, Toggle } from "@/views/admin/ui/shell";
+import { StaggerItem } from "@/shared/ui/motion";
+import { AdminHeader, AdminScreen, StatusDot, Toggle } from "@/views/admin/ui/shell";
 
 export function CabinetView() {
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -54,13 +55,13 @@ export function CabinetView() {
   };
 
   return (
-    <div className="space-y-8 px-8 pb-10 pt-6">
+    <AdminScreen className="space-y-8">
       <AdminHeader eyebrow="Administer" title="Cabinet" subtitle="Host shell — microfrontend registry, feature flags and content" />
 
       {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
+        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
           <TriangleAlert className="size-4" /> {error}
-        </p>
+        </StaggerItem>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -131,13 +132,16 @@ export function CabinetView() {
           )}
         </Panel>
       </div>
-    </div>
+    </AdminScreen>
   );
 }
 
+// The grid this sits in is a plain `div`, which motion's variants pass straight
+// through — so each panel takes its own place in the screen's sequence rather than
+// the four of them arriving as one slab.
 function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return (
-    <Card>
+    <StaggerItem as={Card}>
       <CardContent className="space-y-4 py-5">
         <div>
           <h2 className="text-base font-semibold">{title}</h2>
@@ -145,7 +149,7 @@ function Panel({ title, subtitle, children }: { title: string; subtitle: string;
         </div>
         {children}
       </CardContent>
-    </Card>
+    </StaggerItem>
   );
 }
 

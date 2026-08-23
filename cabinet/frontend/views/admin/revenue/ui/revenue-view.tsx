@@ -21,9 +21,9 @@ import type { RevenuePayout, RevenueRail } from "@/shared/contracts/admin";
 import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag } from "@/shared/lib/resource";
 import { useResource } from "@/shared/lib/resource";
-import { Settled } from "@/shared/ui/motion";
+import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { amount as formatAmount, formatUsd } from "@/views/admin/lib/format";
-import { AdminHeader } from "@/views/admin/ui/shell";
+import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
 const RAIL_LABELS: Record<string, string> = {
   bep20: "BEP20 · BNB Chain",
@@ -109,16 +109,16 @@ export function RevenueView() {
   };
 
   return (
-    <div className="space-y-8 px-8 pb-10 pt-6">
+    <AdminScreen className="space-y-8">
       <AdminHeader eyebrow="Administer" title="Fund revenue" subtitle="What the fund earned — fees and the settled 2-and-20 — and paying it out" />
 
       {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
+        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
           <TriangleAlert className="size-4" /> {error}
-        </p>
+        </StaggerItem>
       )}
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Earned</p>
         <div className="grid gap-4 sm:grid-cols-3">
           <MoneyCard label="Earned · total" value={data?.earned} hint="fees + settled 2-and-20" loading={!data} />
@@ -129,9 +129,9 @@ export function RevenueView() {
           This is the fund&apos;s own money. Client balances and the fund&apos;s seed capital are separate ledger claims and are not included here — and cannot be
           reached from this screen.
         </p>
-      </section>
+      </StaggerItem>
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pay out</p>
         <Card>
           <CardContent className="py-5">
@@ -223,9 +223,9 @@ export function RevenueView() {
             </Settled>
           </CardContent>
         </Card>
-      </section>
+      </StaggerItem>
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Payouts</p>
         <Card>
           <CardContent className="p-0">
@@ -273,8 +273,8 @@ export function RevenueView() {
           A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be
           cancelled — once processing, a broadcast may have landed and voiding it would double-pay.
         </p>
-      </section>
-    </div>
+      </StaggerItem>
+    </AdminScreen>
   );
 }
 

@@ -11,9 +11,9 @@ import type { Allocation, AllocationState } from "@/shared/contracts/admin";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
-import { Settled } from "@/shared/ui/motion";
+import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { compactUnits } from "@/views/admin/lib/format";
-import { AdminHeader } from "@/views/admin/ui/shell";
+import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
@@ -63,7 +63,7 @@ export function AllocationsView() {
   };
 
   return (
-    <div className="space-y-8 px-8 pb-10 pt-6">
+    <AdminScreen className="space-y-8">
       <AdminHeader
         eyebrow="Administer"
         title="Allocations"
@@ -77,14 +77,14 @@ export function AllocationsView() {
       />
 
       {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
+        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
           <TriangleAlert className="size-4" /> {error}
-        </p>
+        </StaggerItem>
       )}
 
       {adding && <RegisterForm busy={busy === "register"} onCancel={() => setAdding(false)} onSubmit={async (body) => (await run("register", () => registerAllocation(body))) && setAdding(false)} />}
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Registry
           {rows && <span className="rounded-full bg-main-accent-t1/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t1">{rows.length}</span>}
@@ -137,8 +137,8 @@ export function AllocationsView() {
           always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may
           ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.
         </p>
-      </section>
-    </div>
+      </StaggerItem>
+    </AdminScreen>
   );
 }
 
@@ -223,7 +223,9 @@ function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: (
   const slugOk = /^[A-Za-z0-9_-]{1,64}$/.test(service);
 
   return (
-    <Card>
+    // A `StaggerItem` although it is not part of the page's own arrival: it mounts when
+    // the operator asks for it, and the parent's variants carry it in the same way.
+    <StaggerItem as={Card}>
       <CardContent className="space-y-4 py-6">
         <div className="grid gap-4 md:grid-cols-3">
           <label className="flex flex-col gap-1.5">
@@ -253,6 +255,6 @@ function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: (
           </Button>
         </div>
       </CardContent>
-    </Card>
+    </StaggerItem>
   );
 }

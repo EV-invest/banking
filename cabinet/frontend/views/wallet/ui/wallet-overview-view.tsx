@@ -9,6 +9,7 @@ import { Skeleton } from "@evinvest/uikit";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatUsdt, railMeta } from "@/views/wallet/lib/format";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
@@ -55,16 +56,16 @@ export function WalletOverviewView() {
       }
     >
       {error && (
-        <div className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-6")}>
+        <StaggerItem className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-6")}>
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">Couldn&apos;t load your wallet</p>
             <p className="text-xs text-muted-foreground">{error}</p>
           </div>
-        </div>
+        </StaggerItem>
       )}
 
-      <div className={cn(WALLET_CARD, "flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-7 lg:py-6")}>
+      <StaggerItem className={cn(WALLET_CARD, "flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-7 lg:py-6")}>
         <div className="flex flex-col gap-2">
           <FieldLabel className="tracking-wider">{t("wallet.totalBalance")}</FieldLabel>
           <div className="flex items-baseline gap-2">
@@ -84,9 +85,9 @@ export function WalletOverviewView() {
           <Chip label="INVEST" wideLabel="INVESTED" dot="bg-main-accent-t3" value={balance?.invested} loading={loading} tip="wallet.balance.invested" />
           <Chip label={t("wallet.pendWd")} wideLabel="PENDING WD" dot="bg-main-accent-t1" value={balance?.pending_withdrawal} loading={loading} tip="wallet.balance.pending-withdrawal" />
         </div>
-      </div>
+      </StaggerItem>
 
-      <div className="grid grid-cols-3 gap-2 lg:hidden">
+      <StaggerItem className="grid grid-cols-3 gap-2 lg:hidden">
         <Link href="/wallet/deposit" className={cn(WALLET_CTA, "py-2.5 text-sm")}>
           {t("ui.deposit")}
         </Link>
@@ -96,32 +97,37 @@ export function WalletOverviewView() {
         <Link href="/invest" className={cn(WALLET_CTA_GHOST, "py-2.5 text-sm")}>
           {t("ui.allocate")}
         </Link>
-      </div>
+      </StaggerItem>
 
-      <div className="flex items-center justify-between">
+      <StaggerItem className="flex items-center justify-between">
         <p className="text-sm font-semibold text-foreground">{t("ui.networks")}</p>
         {/* The Figma frames leave the activity screen with no entry point; this is it. */}
         <Link href="/wallet/activity" className="rounded-md text-xs text-main-accent-t1 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
           {t("ui.activity")}
         </Link>
         <p className="hidden text-xs text-muted-foreground lg:block">deposit &amp; withdrawal rails</p>
-      </div>
+      </StaggerItem>
 
-      {loading ? (
-        <div className="grid gap-3.5 lg:grid-cols-2 lg:gap-5 xl:grid-cols-3">
-          <Skeleton className="h-27 rounded-xl" />
-          <Skeleton className="hidden h-31 rounded-xl lg:block" />
-          <Skeleton className="hidden h-31 rounded-xl xl:block" />
-        </div>
-      ) : rails.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No deposit or withdrawal rails are available right now — check back soon.</p>
-      ) : (
-        <div className="grid gap-3.5 lg:grid-cols-2 lg:gap-5 xl:grid-cols-3">
-          {rails.map((network) => (
-            <RailCard key={network} network={network} canDeposit={depositable.has(network)} canWithdraw={withdrawable.has(network)} />
-          ))}
-        </div>
-      )}
+      {/* One item for all three branches: the rails are a single section of this screen
+          whichever of them it is showing, and giving each branch its own item would make
+          the sequence depend on which one happened to render. */}
+      <StaggerItem>
+        {loading ? (
+          <div className="grid gap-3.5 lg:grid-cols-2 lg:gap-5 xl:grid-cols-3">
+            <Skeleton className="h-27 rounded-xl" />
+            <Skeleton className="hidden h-31 rounded-xl lg:block" />
+            <Skeleton className="hidden h-31 rounded-xl xl:block" />
+          </div>
+        ) : rails.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No deposit or withdrawal rails are available right now — check back soon.</p>
+        ) : (
+          <div className="grid gap-3.5 lg:grid-cols-2 lg:gap-5 xl:grid-cols-3">
+            {rails.map((network) => (
+              <RailCard key={network} network={network} canDeposit={depositable.has(network)} canWithdraw={withdrawable.has(network)} />
+            ))}
+          </div>
+        )}
+      </StaggerItem>
     </WalletScreen>
   );
 }

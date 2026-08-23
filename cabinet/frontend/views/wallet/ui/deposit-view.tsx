@@ -10,7 +10,7 @@ import { Skeleton } from "@evinvest/uikit";
 import { depositAddressResource, walletResource } from "@/entities/wallet/model/wallet-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
-import { Settled } from "@/shared/ui/motion";
+import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor } from "@/shared/tips";
 import { isEvmRail, networkLabel } from "@/views/wallet/lib/format";
@@ -63,7 +63,11 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
 
   return (
     <WalletScreen title={t("ui.depositUsdt")} subtitle={t("ui.receiveFunds")} back="/wallet">
-      <div className="flex w-full flex-col gap-3.5 lg:max-w-160 lg:gap-5">
+      {/* One section, not two: the network picker and the address card are handed over
+          together by the same `Settled`, so they arrive together too. Staggering them
+          would need the stagger to start after the read landed, which is a second
+          entrance stacked on the first — exactly the seam the slice exists to avoid. */}
+      <StaggerItem className="flex w-full flex-col gap-3.5 lg:max-w-160 lg:gap-5">
         {/* The wrapper repeats the column so the two children keep their gap:
             `display: contents` would preserve the parent's layout but makes
             opacity and transform no-ops, which is the whole point here. */}
@@ -151,7 +155,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
             </>
           )}
         </Settled>
-      </div>
+      </StaggerItem>
     </WalletScreen>
   );
 }

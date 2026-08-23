@@ -13,7 +13,8 @@ import { useResource } from "@/shared/lib/resource";
 import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatUsd } from "@/views/admin/lib/format";
-import { AdminHeader } from "@/views/admin/ui/shell";
+import { StaggerItem } from "@/shared/ui/motion";
+import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
@@ -43,7 +44,7 @@ export function TreasuryView() {
   const retry = () => void read.refresh();
 
   return (
-    <div className="space-y-8 px-8 pb-10 pt-6">
+    <AdminScreen className="space-y-8">
       <AdminHeader
         eyebrow="Administer"
         title="Treasury"
@@ -56,17 +57,17 @@ export function TreasuryView() {
       />
 
       {error && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5">
+        <StaggerItem className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5">
           <p className="flex items-center gap-2 text-sm text-destructive">
             <TriangleAlert className="size-4 shrink-0" /> {error}
           </p>
           <Button type="button" variant="outline" size="sm" disabled={loading} onClick={retry}>
             <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} /> Try again
           </Button>
-        </div>
+        </StaggerItem>
       )}
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Layer 1 · Ledger — user claims (USDT)</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MoneyCard label="Claims · total (USDT)" value={treasury?.total_custody} hint="= on-chain custody · backed" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.claims-total" />
@@ -78,9 +79,9 @@ export function TreasuryView() {
           <MoneyCard label="Fund revenue" value={treasury?.fee_revenue} hint="earned — fees + settled 2-and-20" loading={loading && !treasury} unavailable={!loading && !treasury} />
           <MoneyCard label="Reserved · withdrawals" value={treasury?.reserved_for_withdrawals} hint="queued + in-flight (clearing)" loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.reserved-withdrawals" />
         </div>
-      </section>
+      </StaggerItem>
 
-      <section className="space-y-3">
+      <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Layer 2 · Treasury — liquidity by rail</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {treasury ? (
@@ -94,15 +95,15 @@ export function TreasuryView() {
             Array.from({ length: 4 }).map((_, i) => <MoneyCard key={i} label="" value={undefined} loading={loading} unavailable={!loading} />)
           )}
         </div>
-      </section>
+      </StaggerItem>
 
       <RecordArrival rails={treasury?.rails} onRecorded={retry} />
 
-      <p className="max-w-3xl text-xs text-muted-foreground">
+      <StaggerItem as="p" className="max-w-3xl text-xs text-muted-foreground">
         Per-rail backing is the treasury&apos;s job, not the ledger&apos;s: a shortfall on one rail is accept-and-queue, then rebalanced via CEX / alt-rail / top-up. The global invariant is{" "}
         <span className="font-mono-tech">sum(custody) == sum(claims)</span>.
-      </p>
-    </div>
+      </StaggerItem>
+    </AdminScreen>
   );
 }
 
@@ -141,7 +142,7 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
   }, [txRef, network, amount, onRecorded]);
 
   return (
-    <section className="space-y-3">
+    <StaggerItem as="section" className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Record an out-of-band arrival</p>
       <Card>
         <CardContent className="space-y-5 py-6">
@@ -205,7 +206,7 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
           </Button>
         </CardContent>
       </Card>
-    </section>
+    </StaggerItem>
   );
 }
 

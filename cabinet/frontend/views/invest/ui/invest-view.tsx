@@ -21,6 +21,7 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
+import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { formatSignedUsdt, formatUnits, formatUsdt, fromBaseUnits, isNegative, isZero, toBaseUnits } from "@/views/invest/lib/format";
 import { buildProducts, type Product } from "@/views/invest/lib/product";
 import { SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
@@ -51,8 +52,8 @@ export function InvestView() {
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
-    <div className="container max-w-5xl space-y-6 py-10">
-      <header className="space-y-3">
+    <Stagger step={SECTION_STAGGER} className="container max-w-5xl space-y-6 py-10">
+      <StaggerItem as="header" className="space-y-3">
         <h1 className="text-3xl font-semibold leading-tight">Your fund shares</h1>
         {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
             it cannot live inside the heading row: it laid a full-width bordered box across
@@ -60,29 +61,31 @@ export function InvestView() {
             explanation should live (the hand-written subtitle that used to sit here said
             the same thing in slightly different words). */}
         <TipAnchor anchor="invest.overview" />
-      </header>
+      </StaggerItem>
 
       {error && (
-        <Alert variant="destructive">
-          <TriangleAlert className="size-4" />
-          <AlertTitle>Couldn&apos;t load your positions</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <StaggerItem>
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" />
+            <AlertTitle>Couldn&apos;t load your positions</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </StaggerItem>
       )}
 
       {!products ? (
-        <div className="space-y-4">
+        <StaggerItem className="space-y-4">
           <Skeleton className="h-28 w-full" />
           <div className="grid gap-4 lg:grid-cols-2">
             <Skeleton className="h-56 w-full" />
             <Skeleton className="h-56 w-full" />
           </div>
-        </div>
+        </StaggerItem>
       ) : (
         <>
           <PortfolioBand invested={totals.value} cost={totals.cost} funds={held.length} available={available} queued={queued.length} />
 
-          <section className="space-y-3">
+          <StaggerItem as="section" className="space-y-3">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Products
               {products.length > 0 && <span className="rounded-full bg-main-accent-t1/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t1">{products.length}</span>}
@@ -102,10 +105,10 @@ export function InvestView() {
                 ))}
               </div>
             )}
-          </section>
+          </StaggerItem>
         </>
       )}
-    </div>
+    </Stagger>
   );
 }
 
@@ -125,7 +128,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
   const pct = cost > 0n ? Number((pnl * 10_000n) / cost) / 100 : null;
 
   return (
-    <Card>
+    <StaggerItem as={Card}>
       {/* The stacking lives on `max-md:`, not on a `md:` override of a base utility.
           `.flex-col` and `.md\:flex-row` have identical specificity — a media query adds
           none — so whichever Tailwind emits last wins at every width, and it emits the
@@ -164,7 +167,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
           </Button>
         </div>
       </CardContent>
-    </Card>
+    </StaggerItem>
   );
 }
 

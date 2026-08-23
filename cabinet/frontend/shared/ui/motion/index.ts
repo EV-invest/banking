@@ -8,12 +8,19 @@
 //   AnimatedNumber — a figure travels to its new value instead of being replaced
 //   Panel     — a popup/drawer mounts, unmounts, and swaps what it shows
 //   Reveal    — one block arrives on mount
-//   Stagger   — a short list arrives in sequence (+ StaggerItem per row)
+//   Stagger   — a screen, list or grid arrives in sequence (+ StaggerItem per part)
 //
 // All of them respect `prefers-reduced-motion`, animate only `opacity` and
 // `transform`, and play once. The cabinet is a money surface: motion here exists
 // to say what changed, never to decorate, and must never delay a figure landing
 // on screen.
+//
+// A screen arrives through `Stagger` on the container it already has, with each
+// section given its own element via `as` — never a new wrapper, because the
+// sections are grid and flex items carrying their own placement (see
+// ./element). Sections publish "still arriving" to everything inside them, and
+// `Settled` reads it so a skeleton handover caught mid-entrance fades without
+// travelling: one movement per card, never two composed (see ./entrance).
 //
 // The sibling landing (`site_conductor`) has its own slice with the same names
 // and slower tokens. They are intentionally not shared: this one has no
@@ -34,5 +41,6 @@ export {
   StaggerItem,
   type RevealProps,
   type StaggerProps,
+  type StaggerItemProps,
 } from "./reveal";
-export { DUR, EASE, RISE, STAGGER } from "./tokens";
+export { DUR, EASE, RISE, STAGGER, SECTION_STAGGER } from "./tokens";

@@ -11,10 +11,10 @@ import type { AdminUserSummary } from "@/shared/contracts/admin";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
-import { Panel, PanelPresence, PanelSwap, Settled } from "@/shared/ui/motion";
+import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ROLES, ago, formatUsd, statusTone } from "@/views/admin/lib/format";
-import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
+import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
 
 export function UsersView() {
   const [filters, setFilters] = useState<UserFilters>({});
@@ -30,16 +30,16 @@ export function UsersView() {
   const error = users ? null : (list.error?.message ?? null);
 
   return (
-    <div className="space-y-6 px-8 pb-10 pt-6">
+    <AdminScreen className="space-y-6">
       <AdminHeader eyebrow="Administer" title="Users" subtitle="Investors and operators — identities, KYC, roles and sessions" />
 
       {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
+        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
           <TriangleAlert className="size-4" /> {error}
-        </p>
+        </StaggerItem>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <StaggerItem className="flex flex-wrap items-center gap-3">
         <Input
           placeholder="Search email or user id…"
           className="max-w-xs"
@@ -49,9 +49,12 @@ export function UsersView() {
         <FilterSelect label="Role" value={filters.role} onChange={(role) => setFilters((f) => ({ ...f, role }))} options={ROLES} />
         <FilterSelect label="Status" value={filters.status} onChange={(status) => setFilters((f) => ({ ...f, status }))} options={["active", "disabled"]} />
         <span className="ml-auto text-sm text-muted-foreground">{Number(total).toLocaleString("en-US")} users</span>
-      </div>
+      </StaggerItem>
 
-      <div className="flex gap-6">
+      {/* Table and drawer are one section: the drawer's open/close already owns the
+          width of this row, and a second entrance on the same element would be
+          animating against it. */}
+      <StaggerItem className="flex gap-6">
         <Card className="min-w-0 flex-1">
           <CardContent className="p-0">
             <Settled
@@ -150,8 +153,8 @@ export function UsersView() {
             </Panel>
           )}
         </PanelPresence>
-      </div>
-    </div>
+      </StaggerItem>
+    </AdminScreen>
   );
 }
 

@@ -13,7 +13,7 @@ import { walletResource } from "@/entities/wallet/model/wallet-resource";
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
-import { AnimatedNumber, Settled } from "@/shared/ui/motion";
+import { AnimatedNumber, SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
 import { amountTone, kindMeta, networkLabel } from "@/views/operations/lib/format";
@@ -87,12 +87,19 @@ export function DashboardView() {
     // explicitly on a two-column grid so the desktop composition is unchanged. The
     // sidebar track is a fixed 360px with no matching step on the spacing scale, so it
     // rides in as a custom property instead of an arbitrary class.
-    <div
+    //
+    // The grid is also the entrance: `Stagger` renders this same element, and each
+    // section below is a `StaggerItem` rendered as the element it already was, so the
+    // placement classes stay on the grid items that carry them. The sequence follows
+    // DOM order — which on mobile is reading order, and on desktop is close enough
+    // that no section arrives before the one above it.
+    <Stagger
+      step={SECTION_STAGGER}
       className="grid grid-cols-1 gap-4 px-4 pb-6 pt-5 lg:gap-6 lg:px-8 lg:pb-7 lg:pt-6 xl:grid-cols-(--dash-columns) xl:items-start"
       style={{ "--dash-columns": "minmax(0, 1fr) 360px" } as CSSProperties}
     >
       {/* topbar — desktop only; on mobile the shell app bar plus the hero label carry the page */}
-      <div className="hidden items-center justify-between gap-4 lg:flex xl:col-span-2 xl:row-start-1">
+      <StaggerItem className="hidden items-center justify-between gap-4 lg:flex xl:col-span-2 xl:row-start-1">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-2xl font-semibold leading-tight text-foreground">{t("dash.portfolio")}</h1>
           <p className="text-sm text-muted-foreground">{t("dash.portfolioSub")}</p>
@@ -109,12 +116,12 @@ export function DashboardView() {
             <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
           </Button>
         </div>
-      </div>
+      </StaggerItem>
 
       <PerfCard value={balance?.total} loading={walletLoading} allTimePct={allTimePct} className="lg:order-1 xl:col-start-1 xl:row-span-2 xl:row-start-2" />
 
       {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
-      <Card className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
+      <StaggerItem as={Card} className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
         <Stat label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
         <Stat label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
@@ -122,7 +129,7 @@ export function DashboardView() {
         <Stat label={t("dash.activeStrategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
         <Stat label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={formatUsd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
-      </Card>
+      </StaggerItem>
 
       {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop
           sequence for the single-column band between `lg` and `xl`. */}
@@ -130,7 +137,7 @@ export function DashboardView() {
       <MoveMoney className="lg:order-2 xl:col-start-2 xl:row-start-2" />
 
       {/* operations */}
-      <Card className="gap-3 py-4 lg:order-5 lg:gap-4 lg:py-5 xl:col-span-2 xl:col-start-1 xl:row-start-5">
+      <StaggerItem as={Card} className="gap-3 py-4 lg:order-5 lg:gap-4 lg:py-5 xl:col-span-2 xl:col-start-1 xl:row-start-5">
         <CardHeader className={CARD_PAD}>
           <CardTitle>{t("dash.recentOperations")}</CardTitle>
           <CardAction>
@@ -177,8 +184,8 @@ export function DashboardView() {
             </ItemGroup>
           )}
         </CardContent>
-      </Card>
-    </div>
+      </StaggerItem>
+    </Stagger>
   );
 }
 
@@ -193,7 +200,11 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
     // From `xl` the hero spans both rows of the side column, so it has to fill that
     // area — otherwise the plot area keeps its natural height and leaves a gap under
     // the card whenever the side column is the taller of the two.
-    <Card className={cn("flex-1 gap-4 lg:gap-5 xl:h-full", CARD_FROM_LG, className)}>
+    //
+    // A `StaggerItem` rather than a wrapped `Card` because that `xl:h-full` — and the
+    // row-span it fills — are the parent's business, and a wrapper would take them
+    // from the card and keep them for itself.
+    <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5 xl:h-full", CARD_FROM_LG, className)}>
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-main-accent-t1">
@@ -246,7 +257,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
           </EmptyHeader>
         </Empty>
       </CardContent>
-    </Card>
+    </StaggerItem>
   );
 }
 
@@ -263,7 +274,7 @@ function MoveMoney({ className }: { className?: string }) {
   const t = useT();
   const [auto, setAuto] = useState(true);
   return (
-    <Card className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
+    <StaggerItem as={Card} className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
         <CardTitle>{t("dash.moveMoney")}</CardTitle>
       </CardHeader>
@@ -289,14 +300,14 @@ function MoveMoney({ className }: { className?: string }) {
           </ItemActions>
         </Item>
       </CardContent>
-    </Card>
+    </StaggerItem>
   );
 }
 
 function WhatIOwn({ allocations, total, loading, className }: { allocations: { name: string; value: number; accent: Accent }[]; total: number; loading: boolean; className?: string }) {
   const t = useT();
   return (
-    <Card className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
+    <StaggerItem as={Card} className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
         <CardTitle className="flex items-center gap-1.5">
           Invested · what I own
@@ -344,7 +355,7 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
           )}
         </Settled>
       </CardContent>
-    </Card>
+    </StaggerItem>
   );
 }
 

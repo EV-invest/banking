@@ -145,7 +145,8 @@ colour is decided once in the uikit's variables.
 | `Panel` + `PanelPresence` | a popup/drawer/result card mounting and unmounting |
 | `PanelSwap` | the content inside an already-open panel changing record |
 | `Reveal` | a single block arriving on mount |
-| `Stagger` + `StaggerItem` | a short list arriving in sequence |
+| `Stagger` + `StaggerItem` | a screen, list or grid arriving in sequence |
+| `AnimatedNumber` | a figure travelling to its new value instead of being replaced |
 
 Rules:
 
@@ -155,6 +156,25 @@ Rules:
 - **`opacity` and `transform` only**, always once, always collapsing to a plain
   fade under `prefers-reduced-motion` (every primitive handles this; hand-written
   motion must call `useReducedMotion()` itself).
+- **A screen arrives as its sections, and the sections animate in place.** Put
+  `Stagger` on the container the screen already has — the grid, the flex column
+  — and give each section `as` so `StaggerItem` renders the element that was
+  already there. Never wrap a section in a new `div`: the cabinet's sections are
+  grid and flex items carrying their own placement (`xl:col-start-1`,
+  `lg:order-3`, `flex-1`), and a wrapper takes that placement for itself and
+  changes the layout. `SECTION_STAGGER` is the step for cards, `STAGGER` for
+  rows. A component passed to `as` has to spread its unnamed props — `ref` and
+  `style` — onto its DOM node, which is how motion reaches it; the uikit
+  primitives do.
+- **Two entrances never compose on one element.** A skeleton handover, or a
+  nested `Reveal`, that happens while the section around it is still arriving
+  keeps its fade and drops its travel — otherwise the content sets off again as
+  the card is settling and the card stutters. Sections publish this through
+  `shared/ui/motion/entrance`; `Settled`, `Reveal` and `StaggerItem` all read
+  it, so it is automatic and there is nothing to pass down.
+- **Chrome does not animate on navigation.** The rail, the tab bar and the
+  system banner stay put; the entrance belongs to page content. The mobile app
+  bar is the exception, and only because it *is* the page's title.
 - **`Settled` does not animate when no skeleton was shown.** Data already present
   on the first render cuts straight in — fading it would invent a delay the data
   never had. It decides by adjusting state *during render*, not in an effect: an

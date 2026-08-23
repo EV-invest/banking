@@ -10,7 +10,8 @@ import { overviewResource, parkedEventsResource } from "@/entities/admin/model/a
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ago } from "@/views/admin/lib/format";
-import { AdminHeader, StatusDot } from "@/views/admin/ui/shell";
+import { StaggerItem } from "@/shared/ui/motion";
+import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
 
 export function OverviewView() {
   const [refreshing, setRefreshing] = useState(false);
@@ -73,7 +74,7 @@ export function OverviewView() {
   const totalServices = overview?.services.length ?? 0;
 
   return (
-    <div className="space-y-8 px-8 pb-10 pt-6">
+    <AdminScreen className="space-y-8">
       <AdminHeader
         eyebrow="Administer"
         title="Overview"
@@ -86,12 +87,12 @@ export function OverviewView() {
       />
 
       {error && (
-        <p className="flex items-center gap-2 text-sm text-destructive">
+        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
           <TriangleAlert className="size-4" /> {error}
-        </p>
+        </StaggerItem>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <StaggerItem className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi label="Services healthy" value={overview ? `${healthy}/${totalServices}` : undefined} tone="text-main-accent-t2" />
         <Kpi label="Parked rows" value={overview?.parked_rows} hint="Money the relay couldn't apply" tone={overview && overview.parked_rows !== "0" ? "text-destructive" : undefined} tip="admin.overview.kpi.parked-rows" />
         <Kpi label="Dispatch backlog" value={overview?.backlog} hint="Undispatched outbox rows" tip="admin.overview.kpi.dispatch-backlog" />
@@ -103,9 +104,9 @@ export function OverviewView() {
           tone={overview && overview.unseal_failures !== "0" ? "text-destructive" : undefined}
           tip="admin.overview.kpi.dead-key-signings"
         />
-      </div>
+      </StaggerItem>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <StaggerItem className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardContent className="space-y-4 py-5">
             <div>
@@ -150,9 +151,9 @@ export function OverviewView() {
             <ObsPanel label="Event stream" hint="A live outbox/event feed renders here when streaming is enabled." />
           </CardContent>
         </Card>
-      </div>
+      </StaggerItem>
 
-      <Card>
+      <StaggerItem as={Card}>
         <CardContent className="space-y-4 py-5">
           <div>
             <h2 className="text-base font-semibold">Parked events</h2>
@@ -234,8 +235,8 @@ export function OverviewView() {
             </table>
           )}
         </CardContent>
-      </Card>
-    </div>
+      </StaggerItem>
+    </AdminScreen>
   );
 }
 
