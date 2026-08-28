@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Plus, TriangleAlert } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
@@ -12,6 +12,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { compactUnits } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
@@ -76,11 +77,7 @@ export function AllocationsView() {
         }
       />
 
-      {error && (
-        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
-          <TriangleAlert className="size-4" /> {error}
-        </StaggerItem>
-      )}
+      {error && <ResourceError message={error} />}
 
       {adding && <RegisterForm busy={busy === "register"} onCancel={() => setAdding(false)} onSubmit={async (body) => (await run("register", () => registerAllocation(body))) && setAdding(false)} />}
 

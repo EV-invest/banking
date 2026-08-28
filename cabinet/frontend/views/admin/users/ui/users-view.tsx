@@ -12,6 +12,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ROLES, ago, formatUsd, statusTone } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
@@ -33,11 +34,7 @@ export function UsersView() {
     <AdminScreen className="space-y-6">
       <AdminHeader eyebrow="Administer" title="Users" subtitle="Investors and operators — identities, KYC, roles and sessions" />
 
-      {error && (
-        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
-          <TriangleAlert className="size-4" /> {error}
-        </StaggerItem>
-      )}
+      {error && <ResourceError message={error} />}
 
       <StaggerItem className="flex flex-wrap items-center gap-3">
         <Input

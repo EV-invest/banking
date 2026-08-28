@@ -18,10 +18,10 @@
 // existing pipeline with its own rail liquidity and dispatch gates. Duplicating a payout
 // form here would give an operator two doors to the same money.
 
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { Alert, AlertDescription, Button, Card, CardContent, Empty, EmptyDescription, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
 
 import { setFeePolicy, settleFeeShares } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource, feeAssessmentsResource, feePoliciesResource, feeSharesResource } from "@/entities/admin/model/admin-resource";
@@ -30,6 +30,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { ago, formatUnits, formatUsd } from "@/views/admin/lib/format";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { AdminHeader } from "@/views/admin/ui/shell";
 
 const BASES = [
@@ -73,14 +74,7 @@ export function FeesView() {
         subtitle="What each fund charges its investors, and converting what it has already earned into cash."
       />
 
-      {error && (
-        <StaggerItem>
-          <Alert variant="destructive">
-            <TriangleAlert className="size-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        </StaggerItem>
-      )}
+      {error && <ResourceError variant="alert" message={error} />}
 
       {loading ? (
         <StaggerItem>

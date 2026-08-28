@@ -11,6 +11,7 @@ import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { ago, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
@@ -58,11 +59,7 @@ export function WithdrawalsView() {
     <AdminScreen className="space-y-8">
       <AdminHeader eyebrow="Administer" title="Withdrawals" subtitle="Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts" />
 
-      {error && (
-        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
-          <TriangleAlert className="size-4" /> {error}
-        </StaggerItem>
-      )}
+      {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">

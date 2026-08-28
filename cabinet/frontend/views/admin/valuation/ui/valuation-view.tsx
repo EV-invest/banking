@@ -13,6 +13,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor } from "@/shared/tips";
 import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, toBaseUnits } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen, Toggle } from "@/views/admin/ui/shell";
@@ -108,11 +109,7 @@ export function ValuationView() {
     <AdminScreen className="space-y-8">
       <AdminHeader eyebrow="Administer" title="Valuation & redemptions" subtitle="Post fund NAV and clear the redemption queue" />
 
-      {error && (
-        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
-          <TriangleAlert className="size-4" /> {error}
-        </StaggerItem>
-      )}
+      {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3" id="post-valuation">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Post valuation</p>
