@@ -491,31 +491,67 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		branch(&shutdown, "reaper", infallible(reaper.run(shutdown.clone()))),
 		branch(&shutdown, "dispatcher", infallible(dispatcher.run(shutdown.clone()))),
 		branch(&shutdown, "fee sweeper", infallible(fee_sweeper.run(shutdown.clone()))),
-		branch(&shutdown, "bridge", infallible(run_bridge(bridge, shutdown.clone()))),
-		branch(&shutdown, "deposit watcher", infallible(run_watcher(deposit_watcher, shutdown.clone()))),
-		branch(&shutdown, "withdrawal watcher", infallible(run_withdrawal_watcher(withdrawal_watcher, shutdown.clone()))),
-		branch(&shutdown, "sweep", infallible(run_sweep(sweep, shutdown.clone()))),
-		branch(&shutdown, "polygon deposit watcher", infallible(run_watcher(polygon_deposit_watcher, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"bridge",
+			infallible(run_or_idle(shutdown.clone(), bridge.map(|consumer| consumer.run(shutdown.clone()))))
+		),
+		branch(
+			&shutdown,
+			"deposit watcher",
+			infallible(run_or_idle(shutdown.clone(), deposit_watcher.map(|watcher| watcher.run(shutdown.clone()))))
+		),
+		branch(
+			&shutdown,
+			"withdrawal watcher",
+			infallible(run_or_idle(shutdown.clone(), withdrawal_watcher.map(|watcher| watcher.run(shutdown.clone()))))
+		),
+		branch(&shutdown, "sweep", infallible(run_or_idle(shutdown.clone(), sweep.map(|sweep| sweep.run(shutdown.clone()))))),
+		branch(
+			&shutdown,
+			"polygon deposit watcher",
+			infallible(run_or_idle(shutdown.clone(), polygon_deposit_watcher.map(|watcher| watcher.run(shutdown.clone()))))
+		),
 		branch(
 			&shutdown,
 			"polygon withdrawal watcher",
-			infallible(run_withdrawal_watcher(polygon_withdrawal_watcher, shutdown.clone()))
+			infallible(run_or_idle(shutdown.clone(), polygon_withdrawal_watcher.map(|watcher| watcher.run(shutdown.clone()))))
 		),
-		branch(&shutdown, "polygon sweep", infallible(run_sweep(polygon_sweep, shutdown.clone()))),
-		branch(&shutdown, "tron deposit watcher", infallible(run_tron_deposit_watcher(tron_deposit_watcher, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"polygon sweep",
+			infallible(run_or_idle(shutdown.clone(), polygon_sweep.map(|sweep| sweep.run(shutdown.clone()))))
+		),
+		branch(
+			&shutdown,
+			"tron deposit watcher",
+			infallible(run_or_idle(shutdown.clone(), tron_deposit_watcher.map(|watcher| watcher.run(shutdown.clone()))))
+		),
 		branch(
 			&shutdown,
 			"tron withdrawal watcher",
-			infallible(run_tron_withdrawal_watcher(tron_withdrawal_watcher, shutdown.clone()))
+			infallible(run_or_idle(shutdown.clone(), tron_withdrawal_watcher.map(|watcher| watcher.run(shutdown.clone()))))
 		),
-		branch(&shutdown, "tron sweep", infallible(run_tron_sweep(tron_sweep, shutdown.clone()))),
-		branch(&shutdown, "ton deposit watcher", infallible(run_ton_watcher(ton_deposit_watcher, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"tron sweep",
+			infallible(run_or_idle(shutdown.clone(), tron_sweep.map(|sweep| sweep.run(shutdown.clone()))))
+		),
+		branch(
+			&shutdown,
+			"ton deposit watcher",
+			infallible(run_or_idle(shutdown.clone(), ton_deposit_watcher.map(|watcher| watcher.run(shutdown.clone()))))
+		),
 		branch(
 			&shutdown,
 			"ton withdrawal watcher",
-			infallible(run_ton_withdrawal_watcher(ton_withdrawal_watcher, shutdown.clone()))
+			infallible(run_or_idle(shutdown.clone(), ton_withdrawal_watcher.map(|watcher| watcher.run(shutdown.clone()))))
 		),
-		branch(&shutdown, "ton sweep", infallible(run_ton_sweep(ton_sweep, shutdown.clone()))),
+		branch(
+			&shutdown,
+			"ton sweep",
+			infallible(run_or_idle(shutdown.clone(), ton_sweep.map(|sweep| sweep.run(shutdown.clone()))))
+		),
 		branch(
 			&shutdown,
 			"treasury resolve",
@@ -615,8 +651,16 @@ async fn infallible(fut: impl Future<Output = ()>) -> Result<(), std::convert::I
 	Ok(())
 }
 
-/// Run the bridge consumer if configured, else idle until shutdown — so the `join!` branch
-/// exists unconditionally (an unconfigured bridge is a no-op, not a missing branch).
+/// Run an optional rail task if it is configured, else idle until shutdown — so its `join!`
+/// branch exists unconditionally (an unconfigured watcher/sweep/bridge is a no-op, not a
+/// missing branch).
+async fn run_or_idle(shutdown: CancellationToken, task: Option<impl Future<Output = ()>>) {
+	match task {
+		Some(task) => task.await,
+		None => shutdown.cancelled().await,
+	}
+}
+
 /// `--print-required-vars[=PROFILE]` (default `production`). Hand-rolled: this
 /// binary has no other CLI surface, and a whole arg parser for one flag is not
 /// worth the dependency.
@@ -630,90 +674,6 @@ fn print_required_vars_for() -> Option<String> {
 		Some(_) => None,
 		None if arg == FLAG => Some(args.next().unwrap_or_else(|| "production".to_string())),
 		None => None,
-	}
-}
-
-async fn run_bridge(bridge: Option<BridgeConsumer>, shutdown: CancellationToken) {
-	match bridge {
-		Some(consumer) => consumer.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the deposit watcher if configured, else idle until shutdown — so the `join!` branch
-/// exists unconditionally (an unconfigured watcher is a no-op, not a missing branch).
-async fn run_watcher(watcher: Option<DepositWatcher>, shutdown: CancellationToken) {
-	match watcher {
-		Some(watcher) => watcher.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the withdrawal confirmation watcher if configured, else idle until shutdown — the
-/// same unconditional-branch shape as the deposit watcher.
-async fn run_withdrawal_watcher(watcher: Option<WithdrawalWatcher>, shutdown: CancellationToken) {
-	match watcher {
-		Some(watcher) => watcher.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the treasury sweep if enabled, else idle until shutdown — the same unconditional-
-/// branch shape (an un-enabled sweep is a no-op, not a missing branch).
-async fn run_sweep(sweep: Option<Sweep>, shutdown: CancellationToken) {
-	match sweep {
-		Some(sweep) => sweep.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the Tron deposit watcher if configured, else idle until shutdown — same shape as the
-/// BEP20 watcher (an unconfigured Tron rail is a no-op, not a missing branch).
-async fn run_tron_deposit_watcher(watcher: Option<TronDepositWatcher>, shutdown: CancellationToken) {
-	match watcher {
-		Some(watcher) => watcher.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the TON deposit watcher if configured, else idle until shutdown — the same
-/// unconditional-branch shape as its BEP20 sibling.
-async fn run_ton_watcher(watcher: Option<TonDepositWatcher>, shutdown: CancellationToken) {
-	match watcher {
-		Some(watcher) => watcher.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the Tron withdrawal confirmation watcher if configured, else idle until shutdown.
-async fn run_tron_withdrawal_watcher(watcher: Option<TronWithdrawalWatcher>, shutdown: CancellationToken) {
-	match watcher {
-		Some(watcher) => watcher.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the TON withdrawal confirmation watcher if configured, else idle until shutdown.
-async fn run_ton_withdrawal_watcher(watcher: Option<TonWithdrawalWatcher>, shutdown: CancellationToken) {
-	match watcher {
-		Some(watcher) => watcher.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the Tron treasury sweep if enabled, else idle until shutdown.
-async fn run_tron_sweep(sweep: Option<TronSweep>, shutdown: CancellationToken) {
-	match sweep {
-		Some(sweep) => sweep.run(shutdown).await,
-		None => shutdown.cancelled().await,
-	}
-}
-
-/// Run the TON treasury sweep if enabled, else idle until shutdown.
-async fn run_ton_sweep(sweep: Option<TonSweep>, shutdown: CancellationToken) {
-	match sweep {
-		Some(sweep) => sweep.run(shutdown).await,
-		None => shutdown.cancelled().await,
 	}
 }
 
