@@ -51,7 +51,15 @@ const nextConfig: NextConfig = {
     // Explicit /cabinet now that basePath no longer prefixes this for us. Getting
     // this wrong does not 404 — a bare `/api/*` collides with the conductor's own
     // shell-owned auth routes on the same origin.
-    return [{ source: "/cabinet/api/:path*", destination: `${BACKEND}/api/:path*` }];
+    return [
+      { source: "/cabinet/api/:path*", destination: `${BACKEND}/api/:path*` },
+      // `public/` is served from the origin root, so the element-remote bundles
+      // land on `/mfe/*` — but both MFE registries, and therefore the conductor's
+      // injected shell, ask for `/cabinet/mfe/*`. `basePath` used to add that
+      // prefix for free; without it the account chip 404s on every page of the
+      // site. `assetPrefix` does not cover this: it rewrites `/_next/*` only.
+      { source: "/cabinet/mfe/:path*", destination: "/mfe/:path*" },
+    ];
   },
   // Request-invariant hardening on every response, mirroring
   // shared/config/security.ts's staticSecurityHeaders() (kept in sync by

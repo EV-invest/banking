@@ -5,7 +5,7 @@ import { isLocale, negotiate, type Locale } from "@evinvest/i18n";
 
 import { experiments } from "@/application/experiments";
 import { config as appConfig } from "@/config";
-import { BASE_PATH } from "@/shared/config/base-path";
+import { BASE_PATH, isNonPagePath } from "@/shared/config/base-path";
 import { COOKIES } from "@/shared/config/cookies";
 import { contentSecurityPolicy } from "@/shared/config/security";
 
@@ -44,6 +44,16 @@ function localeOf(pathname: string): Locale | null {
 
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+
+  // Assets, the BFF and the MFE bundles are not pages: no locale redirect, no
+  // session gate, no cookie writes. The matcher below excludes them as well, so
+  // this looks redundant — it is not. When that exclusion silently stopped
+  // matching (basePath removal, v0.2.57) it reached production and served every
+  // stylesheet and script as the login page. Correctness lives here, where it is
+  // unit-tested; the matcher is an optimisation that keeps this proxy off the
+  // asset hot path.
+  if (isNonPagePath(pathname)) return NextResponse.next();
+
   const signedIn = Boolean(req.cookies.get(COOKIES.session)?.value);
   const locale = localeOf(pathname);
 
@@ -121,12 +131,20 @@ function withCsp(res: NextResponse, csp: string): NextResponse {
 }
 
 export const config = {
-  // "/" is listed explicitly: the negative-lookahead alone never matches the
-  // bare index (basePath is stripped before matching, leaving the root outside
-  // the pattern), so an unauthenticated visitor reached the (app) shell at the
-  // zone root while every sub-route correctly bounced to /login. Gate the index too.
+  // "/" is listed explicitly: the negative lookahead alone never matches the bare
+  // index, so an unauthenticated visitor reached the (app) shell at the zone root
+  // while every sub-route correctly bounced to /login. Gate the index too.
   // `mfe/` is excluded like `_next/static`: the public/mfe/* element-remote bundles
   // are static assets the conductor injects even for anonymous visitors (the chip
   // renders its own signed-out CTA), so they must be reachable without a session.
-  matcher: ["/", "/((?!api|_next/static|_next/image|favicon.ico|mfe/).*)"],
+  //
+  // Each name is listed twice, bare and `cabinet/`-prefixed, because this zone no
+  // longer has a `basePath` for Next to strip before matching — the real paths are
+  // `/cabinet/_next/static/…`, `/cabinet/api/…`, `/cabinet/mfe/…`. The bare forms
+  // stay for a direct (dev) run of the zone. `isNonPagePath` is the same rule in
+  // code and is what the tests pin; keep the two in step.
+  matcher: [
+    "/",
+    "/((?!(?:cabinet/)?(?:api|_next/static|_next/image|favicon.ico|mfe/)).*)",
+  ],
 };

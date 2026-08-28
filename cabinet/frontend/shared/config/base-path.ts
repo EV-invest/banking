@@ -58,5 +58,30 @@ export const zonePathname = (pathname: string): `/${string}` => {
   return (path.startsWith(`${BASE_PATH}/`) ? path.slice(BASE_PATH.length) : path) as `/${string}`;
 };
 
+/**
+ * Every request shape under this prefix that is NOT a page: Next's build output,
+ * the BFF, and the element-remote bundles the conductor injects for anonymous
+ * visitors. None of them may be locale-redirected or gated behind the session.
+ *
+ * The optional zone prefix is the entire point. `basePath` used to strip
+ * `/cabinet` before the proxy matcher ran, so naming these anchored at the
+ * leading `/` was right. With `basePath` gone (see the note at the top of this
+ * file) the proxy sees the real `/cabinet/_next/...`, an anchored test matches
+ * nothing, and every stylesheet, script, font and API call is treated as a
+ * locale-less page: 307 to `/{locale}/cabinet/…`, then bounced to `/login`,
+ * which answers `200 text/html`. The browser refuses each one for its MIME type,
+ * so the cabinet renders unstyled and never hydrates. That shipped in v0.2.57.
+ *
+ * The set of names is deliberately unchanged from the matcher's original list —
+ * widening it (say, to all of `_next/`) would quietly ungate paths this zone has
+ * never exposed.
+ */
+const NON_PAGE = new RegExp(
+  `^(?:${BASE_PATH})?/(?:_next/static/|_next/image|api/|mfe/|favicon\\.ico$)`
+);
+
+/** @see NON_PAGE — true when `pathname` is an asset, a BFF call or an MFE bundle. */
+export const isNonPagePath = (pathname: string): boolean => NON_PAGE.test(pathname);
+
 /** @deprecated Ambiguous now that pages and assets diverge — say which you mean. */
 export const withBasePath = apiPath;
