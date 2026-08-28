@@ -36,7 +36,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::{application::withdrawals::settle_withdrawal, config::EvmConfig, infrastructure::evm_rpc::EvmRpc, ports::WithdrawalRepository};
+use crate::{application::withdrawals::settle_withdrawal, config::EvmConfig, infrastructure::{evm_rpc::EvmRpc, rails::WatcherError}, ports::WithdrawalRepository};
 
 /// Max poll interval after repeated cycle failures, in seconds — the adaptive ceiling
 /// so a down or rate-limited endpoint isn't hammered at the normal cadence.
@@ -154,14 +154,4 @@ impl WithdrawalWatcher {
 		}
 		Ok(())
 	}
-}
-
-#[derive(Debug, thiserror::Error)]
-enum WatcherError {
-	#[error("rpc: {0}")]
-	Rpc(String),
-	#[error("db: {0}")]
-	Db(String),
-	#[error("decode: {0}")]
-	Decode(String),
 }

@@ -28,6 +28,9 @@
 //!   time-ordered activity timeline (query side only; writes nothing).
 //! - [`telemetry`] — the observability adapter: the one seam that hands errors to
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
+//! - [`rails`] — what the EVM/TON/Tron rails share verbatim: the watcher and sweep error
+//!   taxonomies, the wall clock, and the sweep's Postgres/signer plumbing parameterised by
+//!   network. Per-protocol RPC, node error wording and log prefixes stay in the rail modules.
 
 pub mod allocations;
 pub mod bridge;
@@ -47,6 +50,7 @@ pub mod operation_feed;
 pub mod operations;
 pub mod outbox;
 pub mod positions;
+pub mod rails;
 pub mod reaper;
 pub mod reconciliation;
 pub mod redemptions;

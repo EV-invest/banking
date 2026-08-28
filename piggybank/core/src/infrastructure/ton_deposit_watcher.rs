@@ -48,6 +48,7 @@ use crate::{
 	config::TonConfig,
 	infrastructure::{
 		deposits::PgDeposits,
+		rails::{WatcherError, now_unix_secs, repo},
 		ton_custody::TonCustody,
 		ton_rpc::{JettonDeposit, TonRpc},
 	},
@@ -175,7 +176,7 @@ impl TonDepositWatcher {
 		};
 		if watched.is_empty() && treasury.is_none() {
 			// Nothing fundable yet — fast-forward to now so we don't re-scan an empty window.
-			self.set_cursor(network, now_unix()).await?;
+			self.set_cursor(network, now_unix_secs()).await?;
 			return Ok(());
 		}
 		// `None` marks the treasury owner — its arrivals credit the fund, not a user.
@@ -209,7 +210,9 @@ impl TonDepositWatcher {
 						// entire TON rail on a single unparseable stored address (indexer 422) — the
 						// cursor never advanced and NO user's deposits were seen. Skip just this owner;
 						// a transiently-failed valid owner is re-scanned within the LOOKBACK_SECS window
-						// next cycle, and a permanently-bad address is never a real deposit target.
+						// next cycle, and a permanently-bad address is never a real deposit target. So an RPC
+						// failure never becomes a `WatcherError` here: the only cycle-fatal ones are DB,
+						// decode and credit.
 						warn!(owner, "ton deposit watcher: owner scan failed, skipping this owner this cycle: {err}");
 						all_owners_drained = false;
 						break;
@@ -252,7 +255,7 @@ impl TonDepositWatcher {
 		}
 		// Advance to the newest transaction time seen (never backwards). The next cycle
 		// re-scans `LOOKBACK_SECS` below this; the overlap is deduped by `record_deposit`.
-		let next = next_watermark(cursor, high, all_owners_drained, now_unix());
+		let next = next_watermark(cursor, high, all_owners_drained, now_unix_secs());
 		if next > cursor {
 			self.set_cursor(network, next).await?;
 		}
@@ -305,7 +308,7 @@ impl TonDepositWatcher {
 		if let Some(cursor) = existing {
 			return Ok(cursor.max(0) as u64);
 		}
-		let init = self.config.start_cursor.unwrap_or_else(now_unix);
+		let init = self.config.start_cursor.unwrap_or_else(now_unix_secs);
 		sqlx::query("INSERT INTO deposit_scan_cursor (network, last_scanned_block) VALUES ($1, $2) ON CONFLICT (network) DO NOTHING")
 			.bind(network.as_str())
 			.bind(init as i64)
@@ -357,27 +360,6 @@ impl TonDepositWatcher {
 fn next_watermark(cursor: u64, high: u64, all_owners_drained: bool, now: u64) -> u64 {
 	let floor = if all_owners_drained { now.saturating_sub(LOOKBACK_SECS) } else { 0 };
 	high.max(floor).max(cursor)
-}
-
-/// Current unix time in seconds.
-fn now_unix() -> u64 {
-	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
-}
-
-#[derive(Debug, thiserror::Error)]
-enum WatcherError {
-	// A per-owner RPC failure no longer propagates as a WatcherError — the scan skips that owner
-	// and continues (see `scan_once`), so the only cycle-fatal errors are DB, decode and credit.
-	#[error("decode: {0}")]
-	Decode(String),
-	#[error("credit: {0}")]
-	Credit(String),
-	#[error("db: {0}")]
-	Db(String),
-}
-
-fn repo(err: sqlx::Error) -> WatcherError {
-	WatcherError::Db(err.to_string())
 }
 
 #[cfg(test)]

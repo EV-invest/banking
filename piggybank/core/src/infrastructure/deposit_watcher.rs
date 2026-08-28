@@ -39,6 +39,10 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
+/// The watcher failure taxonomy, shared with every other rail's watcher and defined in
+/// [`rails`](super::rails). Re-exported under this module's original path so importers
+/// outside `infrastructure` are unaffected by the move.
+pub use crate::infrastructure::rails::WatcherError;
 use crate::{
 	application::balance::record_deposit,
 	config::EvmConfig,
@@ -46,6 +50,7 @@ use crate::{
 		custody::ChainCustody,
 		deposits::PgDeposits,
 		evm_rpc::{TRANSFER_TOPIC, address_from_topic, hex_to_u64, word_to_u128},
+		rails::repo,
 	},
 };
 
@@ -579,22 +584,6 @@ fn classify(msg: &str) -> RpcAction {
 fn cycle_backoff_secs(poll_secs: u64, failures: u64) -> u64 {
 	let shift = u32::try_from(failures.saturating_sub(1)).unwrap_or(u32::MAX).min(63);
 	poll_secs.saturating_mul(1u64 << shift).min(CYCLE_MAX_BACKOFF_SECS)
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum WatcherError {
-	#[error("rpc: {0}")]
-	Rpc(String),
-	#[error("decode: {0}")]
-	Decode(String),
-	#[error("credit: {0}")]
-	Credit(String),
-	#[error("db: {0}")]
-	Db(String),
-}
-
-fn repo(err: sqlx::Error) -> WatcherError {
-	WatcherError::Db(err.to_string())
 }
 
 #[cfg(test)]

@@ -28,7 +28,7 @@ use std::{
 };
 
 use evbanking_auth::ServiceTokenSource;
-use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignTrc20TransferRequest, SignTrxTransferRequest, signer_service_client::SignerServiceClient};
+use evbanking_contracts::signer::v1::{SignTrc20TransferRequest, SignTrxTransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
 use tokio_util::sync::CancellationToken;
@@ -38,12 +38,11 @@ use uuid::Uuid;
 
 use crate::{
 	config::{TronConfig, TronSweepConfig},
-	infrastructure::tron_rpc::{RefBlockParams, TronRpc, TronRpcError},
+	infrastructure::{
+		rails::{self, GAS_STATION, SweepError, read_err},
+		tron_rpc::{RefBlockParams, TronRpc, TronRpcError},
+	},
 };
-
-/// The reserved gas-station account id, distinct from the nil treasury: a wallet holding only TRX,
-/// used to top up user deposit addresses with fee budget before their USDT is swept.
-const GAS_STATION: Uuid = Uuid::from_u128(1);
 
 pub struct TronSweep {
 	pool: PgPool,
@@ -100,7 +99,8 @@ impl TronSweep {
 	async fn sweep_once(&self) -> Result<(), SweepError> {
 		let treasury = self.address(&self.treasury, Uuid::nil()).await?;
 		let gas_station = self.address(&self.gas_station, GAS_STATION).await?;
-		for (user_id, address) in self.deposit_addresses().await? {
+		for (user_id, address) in rails::deposit_addresses(&self.pool, "trc20").await? {
+			// Tron base58 is case-SENSITIVE — matched exactly, never case-folded.
 			if address == treasury || address == gas_station {
 				continue; // never sweep a system wallet into itself.
 			}
@@ -117,7 +117,7 @@ impl TronSweep {
 		if usdt < self.config.min_usdt {
 			// Drained (consolidation mined, or dust): stamp the credited deposits so the
 			// address drops out of the scan until a NEW deposit is credited.
-			self.mark_swept(user_id).await?;
+			rails::mark_swept(&self.pool, "trc20", user_id).await?;
 			return Ok(());
 		}
 		// Grace: a sweep we sent moments ago may not be in a block yet, so the balance still reads
@@ -218,53 +218,8 @@ impl TronSweep {
 		}
 	}
 
-	/// A system wallet's Tron address, resolved once via `ProvisionAddress` (`Uuid::nil()` =
-	/// treasury, [`GAS_STATION`] = gas station) and cached.
 	async fn address(&self, cell: &OnceCell<String>, id: Uuid) -> Result<String, SweepError> {
-		cell.get_or_try_init(|| async {
-			let mut request = Request::new(ProvisionAddressRequest {
-				user_id: id.to_string(),
-				network: "trc20".to_owned(),
-			});
-			if let Some(token) = &self.service_token {
-				request = token.authorize(request);
-			}
-			let response = self
-				.signer
-				.clone()
-				.provision_address(request)
-				.await
-				.map_err(|s| SweepError::Signer(format!("resolve system wallet {id}: {}", s.message())))?
-				.into_inner();
-			if response.address_kind != "derived" {
-				return Err(SweepError::Config(format!("system wallet {id} is not a derived address (kind={})", response.address_kind)));
-			}
-			Ok(response.address)
-		})
-		.await
-		.cloned()
-	}
-
-	/// Addresses that can still hold funds: a credited deposit exists that no sweep
-	/// cycle has yet observed drained — O(active deposits), not O(all addresses).
-	async fn deposit_addresses(&self) -> Result<Vec<(Uuid, String)>, SweepError> {
-		sqlx::query_as::<_, (Uuid, String)>(
-			"SELECT DISTINCT a.user_id, a.address FROM deposits d \
-			 JOIN user_deposit_addresses a ON a.user_id::text = d.party_id AND a.network = d.network \
-			 WHERE d.network = 'trc20' AND d.party_kind = 'user' AND d.swept_at IS NULL AND a.address_kind = 'derived'",
-		)
-		.fetch_all(&self.pool)
-		.await
-		.map_err(|e| SweepError::Db(e.to_string()))
-	}
-
-	async fn mark_swept(&self, user_id: Uuid) -> Result<(), SweepError> {
-		sqlx::query("UPDATE deposits SET swept_at = now() WHERE party_kind = 'user' AND party_id = $1 AND network = 'trc20' AND swept_at IS NULL")
-			.bind(user_id.to_string())
-			.execute(&self.pool)
-			.await
-			.map_err(|e| SweepError::Db(e.to_string()))?;
-		Ok(())
+		rails::address(cell, &self.signer, self.service_token.as_ref(), "trc20", id).await
 	}
 
 	/// True if `select` last fired for `address` within `grace_secs` — a best-effort in-memory
@@ -303,22 +258,6 @@ fn is_idempotent(msg: &str) -> bool {
 fn is_insufficient(msg: &str) -> bool {
 	let m = msg.to_lowercase();
 	m.contains("balance is not sufficient") || m.contains("insufficient") || m.contains("out_of_energy") || m.contains("out of energy")
-}
-
-fn read_err(err: TronRpcError) -> SweepError {
-	SweepError::Rpc(err.to_string())
-}
-
-#[derive(Debug, thiserror::Error)]
-enum SweepError {
-	#[error("rpc: {0}")]
-	Rpc(String),
-	#[error("signer: {0}")]
-	Signer(String),
-	#[error("db: {0}")]
-	Db(String),
-	#[error("config: {0}")]
-	Config(String),
 }
 
 #[cfg(test)]

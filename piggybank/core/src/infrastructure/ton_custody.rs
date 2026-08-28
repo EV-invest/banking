@@ -34,7 +34,10 @@ use uuid::Uuid;
 
 use crate::{
 	config::TonConfig,
-	infrastructure::ton_rpc::{RpcError, TonRpc},
+	infrastructure::{
+		rails::now_unix_secs,
+		ton_rpc::{RpcError, TonRpc},
+	},
 	ports::custody::{BroadcastRequest, Custody, CustodyError, InboundTransfer, TreasuryFunding, format_native_units},
 };
 
@@ -296,7 +299,7 @@ impl TonCustody {
 		let Some((seqno, valid_until)) = self.stored_seqno(request.withdrawal_id).await? else {
 			return Ok(false);
 		};
-		if now_unix() < valid_until.max(0) as u64 {
+		if now_unix_secs() < valid_until.max(0) as u64 {
 			return Ok(false);
 		}
 		let treasury = self.treasury_address().await?;
@@ -306,7 +309,7 @@ impl TonCustody {
 			.to_onchain(Network::Ton)
 			.map_err(|e| CustodyError::Rejected(format!("amount not representable on TON: {e}")))?;
 		self.ensure_treasury_funded(&treasury, amount).await?;
-		let fresh_valid_until = (now_unix() + VALID_WINDOW_SECS) as u32;
+		let fresh_valid_until = (now_unix_secs() + VALID_WINDOW_SECS) as u32;
 		let (boc, msg_hash) = self.sign(request, &treasury, &treasury_jetton_wallet, amount, seqno, fresh_valid_until).await?;
 		self.replace_tx(request.withdrawal_id, seqno, fresh_valid_until, &boc, &msg_hash).await?;
 		warn!(withdrawal_id = %request.withdrawal_id, seqno, "ton custody: re-signed a stuck expired send at the same seqno — pipeline unfrozen");
@@ -397,7 +400,7 @@ impl Custody for TonCustody {
 		self.ensure_treasury_funded(&treasury, amount).await?;
 		let plan = self.next_seqno(&treasury).await?;
 		let seqno = plan.next;
-		let valid_until = (now_unix() + VALID_WINDOW_SECS) as u32;
+		let valid_until = (now_unix_secs() + VALID_WINDOW_SECS) as u32;
 		let (boc, msg_hash) = self.sign(request, &treasury, &treasury_jetton_wallet, amount, seqno, valid_until).await?;
 
 		// Persist BEFORE broadcasting — a crash after this re-broadcasts THIS message (same
@@ -553,10 +556,6 @@ impl Custody for TonCustody {
 struct SeqnoPlan {
 	chain: u64,
 	next: u64,
-}
-
-fn now_unix() -> u64 {
-	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
 /// A read-path RPC failure (seqno/jetton-wallet) is always retryable — nothing was sent.
