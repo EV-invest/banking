@@ -41,7 +41,7 @@ use uuid::Uuid;
 use crate::{
 	application::withdrawals::settle_withdrawal,
 	config::TronConfig,
-	infrastructure::{tron_custody::TronCustody, tron_rpc::TronRpc},
+	infrastructure::{rails::WatcherError, tron_custody::TronCustody, tron_rpc::TronRpc},
 	ports::{
 		WithdrawalRepository,
 		custody::{BroadcastRequest, CustodyError},
@@ -190,14 +190,4 @@ impl TronPending {
 			},
 		})
 	}
-}
-
-#[derive(Debug, thiserror::Error)]
-enum WatcherError {
-	#[error("rpc: {0}")]
-	Rpc(String),
-	#[error("db: {0}")]
-	Db(String),
-	#[error("decode: {0}")]
-	Decode(String),
 }

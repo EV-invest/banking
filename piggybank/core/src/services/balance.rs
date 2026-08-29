@@ -306,10 +306,12 @@ impl BalanceService for BalanceSvc {
 		let address = WalletAddress::parse(network, &req.address).map_err(map_err)?;
 		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
 		let payout = withdrawal_app::request_revenue_payout(
-			self.state.withdrawals.as_ref(),
-			self.state.ledger.as_ref(),
-			self.state.custody.as_ref(),
-			&self.state.relay_notify,
+			&withdrawal_app::WithdrawalPorts {
+				withdrawals: self.state.withdrawals.as_ref(),
+				ledger: self.state.ledger.as_ref(),
+				custody: self.state.custody.as_ref(),
+				relay: &self.state.relay_notify,
+			},
 			&self.state.configured_networks,
 			network,
 			address,

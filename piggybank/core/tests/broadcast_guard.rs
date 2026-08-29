@@ -103,6 +103,16 @@ async fn harness() -> Option<Harness> {
 	})
 }
 
+/// The withdrawal ports, borrowed out of the harness for one call.
+fn withdrawal_ports(h: &Harness) -> withdrawal_app::WithdrawalPorts<'_> {
+	withdrawal_app::WithdrawalPorts {
+		withdrawals: h.withdrawals.as_ref(),
+		ledger: h.ledger.as_ref(),
+		custody: &StubCustody,
+		relay: &h.notify,
+	}
+}
+
 fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()
 }
@@ -135,37 +145,15 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 	// Double-submit the full balance WITHOUT draining in between — the exploit window.
 	// The shared rail's liquidity decides queued-vs-dispatched; dispatch explicitly so
 	// both withdrawals carry a Dispatched (broadcast) row regardless of rail state.
-	let first = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination.clone(),
-		usdt("100"),
-	)
-	.await
-	.unwrap();
+	let first = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination.clone(), usdt("100"))
+		.await
+		.unwrap();
 	if first.state() == WithdrawalState::Queued {
 		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, first.id()).await.unwrap();
 	}
-	let second = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination,
-		usdt("100"),
-	)
-	.await
-	.expect("the second request passes the Read-First — TB lags the undrained outbox");
+	let second = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination, usdt("100"))
+		.await
+		.expect("the second request passes the Read-First — TB lags the undrained outbox");
 	if second.state() == WithdrawalState::Queued {
 		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, second.id()).await.unwrap();
 	}

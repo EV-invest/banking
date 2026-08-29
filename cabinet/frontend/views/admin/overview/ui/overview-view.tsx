@@ -11,6 +11,7 @@ import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ago } from "@/views/admin/lib/format";
 import { StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
 
 export function OverviewView() {
@@ -86,11 +87,7 @@ export function OverviewView() {
         }
       />
 
-      {error && (
-        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
-          <TriangleAlert className="size-4" /> {error}
-        </StaggerItem>
-      )}
+      {error && <ResourceError message={error} />}
 
       <StaggerItem className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi label="Services healthy" value={overview ? `${healthy}/${totalServices}` : undefined} tone="text-main-accent-t2" />

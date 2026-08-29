@@ -7,6 +7,44 @@ use evbanking_contracts::banking::v1 as bk;
 use evconcierge_contracts::concierge::v1 as cc;
 use serde::Serialize;
 
+/// Declares one of the list DTOs: a `Vec` of an already-converted element type, the scalar
+/// fields the wire shape carries alongside it, and the `From` that builds it from the proto
+/// message. Every name is spelled out at the call site rather than derived from the DTO's,
+/// because none of them line up reliably — the field is not always the plural of the element
+/// type (`ParkedEventList.events`), and the source message is not always `<Dto>`
+/// (`AdminUserList` comes from `cc::ListUsersResponse`).
+///
+/// The second form names the source binding so extra fields can be given as expressions over
+/// it, which is what a field needing more than a move requires (`total: r.total.to_string()`).
+macro_rules! list_dto {
+	($(#[$meta:meta])* $name:ident from $src:path { $field:ident: Vec<$elem:ty> $(,)? }) => {
+		list_dto! { $(#[$meta])* $name from $src as l { $field: Vec<$elem> } }
+	};
+	(
+		$(#[$meta:meta])*
+		$name:ident from $src:path as $msg:ident {
+			$field:ident: Vec<$elem:ty>
+			$(, $(#[$xmeta:meta])* $extra:ident: $xty:ty = $value:expr)* $(,)?
+		}
+	) => {
+		$(#[$meta])*
+		#[derive(Serialize)]
+		pub struct $name {
+			pub $field: Vec<$elem>,
+			$($(#[$xmeta])* pub $extra: $xty,)*
+		}
+
+		impl From<$src> for $name {
+			fn from($msg: $src) -> Self {
+				Self {
+					$field: $msg.$field.into_iter().map(<$elem>::from).collect(),
+					$($extra: $value,)*
+				}
+			}
+		}
+	};
+}
+
 // ── /api/auth/session ────────────────────────────────────────────────────────
 // Note the camelCase principal: the old BFF mapped the proto `user_id` → `userId`
 // for this endpoint only (the session principal), unlike the snake_case passthroughs.
@@ -163,18 +201,7 @@ impl From<bk::Withdrawal> for Withdrawal {
 	}
 }
 
-#[derive(Serialize)]
-pub struct WithdrawalList {
-	pub withdrawals: Vec<Withdrawal>,
-}
-
-impl From<bk::WithdrawalList> for WithdrawalList {
-	fn from(l: bk::WithdrawalList) -> Self {
-		Self {
-			withdrawals: l.withdrawals.into_iter().map(Withdrawal::from).collect(),
-		}
-	}
-}
+list_dto! { WithdrawalList from bk::WithdrawalList { withdrawals: Vec<Withdrawal> } }
 
 #[derive(Serialize)]
 pub struct Deposit {
@@ -195,18 +222,7 @@ impl From<bk::Deposit> for Deposit {
 	}
 }
 
-#[derive(Serialize)]
-pub struct DepositList {
-	pub deposits: Vec<Deposit>,
-}
-
-impl From<bk::DepositList> for DepositList {
-	fn from(l: bk::DepositList) -> Self {
-		Self {
-			deposits: l.deposits.into_iter().map(Deposit::from).collect(),
-		}
-	}
-}
+list_dto! { DepositList from bk::DepositList { deposits: Vec<Deposit> } }
 
 // ── piggybank: operations (the unified activity timeline) ────────────────────
 
@@ -259,38 +275,21 @@ impl From<bk::Operation> for Operation {
 	}
 }
 
-#[derive(Serialize)]
-pub struct OperationList {
-	pub operations: Vec<Operation>,
-	/// True when the history is longer than the page returned.
-	pub truncated: bool,
-}
-
-impl From<bk::OperationList> for OperationList {
-	fn from(l: bk::OperationList) -> Self {
-		Self {
-			operations: l.operations.into_iter().map(Operation::from).collect(),
-			truncated: l.truncated,
-		}
+list_dto! {
+	OperationList from bk::OperationList as l {
+		operations: Vec<Operation>,
+		/// True when the history is longer than the page returned.
+		truncated: bool = l.truncated,
 	}
 }
 
 // ── piggybank: fees (operator) ───────────────────────────────────────────────
 
-/// Every configured policy, for the operator's fees table. The element type is the same
-/// `FeePolicy` the investor read returns — the operator sees no more of a fund's terms
-/// than the people paying them do.
-#[derive(Serialize)]
-pub struct FeePolicyList {
-	pub policies: Vec<FeePolicy>,
-}
-
-impl From<bk::FeePolicyList> for FeePolicyList {
-	fn from(l: bk::FeePolicyList) -> Self {
-		Self {
-			policies: l.policies.into_iter().map(FeePolicy::from).collect(),
-		}
-	}
+list_dto! {
+	/// Every configured policy, for the operator's fees table. The element type is the same
+	/// `FeePolicy` the investor read returns — the operator sees no more of a fund's terms
+	/// than the people paying them do.
+	FeePolicyList from bk::FeePolicyList { policies: Vec<FeePolicy> }
 }
 
 /// The manager's uncollected fee units in one fund. `value` is `units × current NAV` —
@@ -367,18 +366,7 @@ impl From<bk::FeeAssessment> for FeeAssessment {
 	}
 }
 
-#[derive(Serialize)]
-pub struct FeeAssessmentList {
-	pub assessments: Vec<FeeAssessment>,
-}
-
-impl From<bk::FeeAssessmentList> for FeeAssessmentList {
-	fn from(l: bk::FeeAssessmentList) -> Self {
-		Self {
-			assessments: l.assessments.into_iter().map(FeeAssessment::from).collect(),
-		}
-	}
-}
+list_dto! { FeeAssessmentList from bk::FeeAssessmentList { assessments: Vec<FeeAssessment> } }
 
 // ── piggybank: allocations (the registry of investable products) ─────────────
 
@@ -411,18 +399,7 @@ impl From<bk::Allocation> for Allocation {
 	}
 }
 
-#[derive(Serialize)]
-pub struct AllocationList {
-	pub allocations: Vec<Allocation>,
-}
-
-impl From<bk::AllocationList> for AllocationList {
-	fn from(l: bk::AllocationList) -> Self {
-		Self {
-			allocations: l.allocations.into_iter().map(Allocation::from).collect(),
-		}
-	}
-}
+list_dto! { AllocationList from bk::AllocationList { allocations: Vec<Allocation> } }
 
 // ── piggybank: funds (the service currency) ──────────────────────────────────
 
@@ -451,18 +428,7 @@ impl From<bk::Position> for Position {
 	}
 }
 
-#[derive(Serialize)]
-pub struct PositionList {
-	pub positions: Vec<Position>,
-}
-
-impl From<bk::PositionList> for PositionList {
-	fn from(l: bk::PositionList) -> Self {
-		Self {
-			positions: l.positions.into_iter().map(Position::from).collect(),
-		}
-	}
-}
+list_dto! { PositionList from bk::PositionList { positions: Vec<Position> } }
 
 #[derive(Serialize)]
 pub struct Subscription {
@@ -508,18 +474,7 @@ impl From<bk::Redemption> for Redemption {
 	}
 }
 
-#[derive(Serialize)]
-pub struct RedemptionList {
-	pub redemptions: Vec<Redemption>,
-}
-
-impl From<bk::RedemptionList> for RedemptionList {
-	fn from(l: bk::RedemptionList) -> Self {
-		Self {
-			redemptions: l.redemptions.into_iter().map(Redemption::from).collect(),
-		}
-	}
-}
+list_dto! { RedemptionList from bk::RedemptionList { redemptions: Vec<Redemption> } }
 
 #[derive(Serialize)]
 pub struct FundNav {
@@ -669,18 +624,10 @@ impl From<cc::AdminUserSummary> for AdminUserSummary {
 	}
 }
 
-#[derive(Serialize)]
-pub struct AdminUserList {
-	pub users: Vec<AdminUserSummary>,
-	pub total: String,
-}
-
-impl From<cc::ListUsersResponse> for AdminUserList {
-	fn from(r: cc::ListUsersResponse) -> Self {
-		Self {
-			users: r.users.into_iter().map(AdminUserSummary::from).collect(),
-			total: r.total.to_string(),
-		}
+list_dto! {
+	AdminUserList from cc::ListUsersResponse as r {
+		users: Vec<AdminUserSummary>,
+		total: String = r.total.to_string(),
 	}
 }
 
@@ -791,18 +738,7 @@ impl From<bk::ParkedEvent> for ParkedEvent {
 	}
 }
 
-#[derive(Serialize)]
-pub struct ParkedEventList {
-	pub events: Vec<ParkedEvent>,
-}
-
-impl From<bk::ParkedEventList> for ParkedEventList {
-	fn from(l: bk::ParkedEventList) -> Self {
-		Self {
-			events: l.events.into_iter().map(ParkedEvent::from).collect(),
-		}
-	}
-}
+list_dto! { ParkedEventList from bk::ParkedEventList { events: Vec<ParkedEvent> } }
 
 /// One queued redemption in the Valuation screen's queue.
 #[derive(Serialize)]
@@ -993,11 +929,12 @@ pub struct Notification {
 	pub read_at: String,
 }
 
-#[derive(serde::Serialize)]
-pub struct NotificationList {
-	pub notifications: Vec<Notification>,
-	pub next_cursor: String,
-	pub unread_count: u32,
+list_dto! {
+	NotificationList from cc::ListNotificationsResponse as r {
+		notifications: Vec<Notification>,
+		next_cursor: String = r.next_cursor,
+		unread_count: u32 = r.unread_count,
+	}
 }
 
 #[derive(serde::Serialize)]
@@ -1043,16 +980,6 @@ impl From<cc::Notification> for Notification {
 			occurred_at: n.occurred_at.to_string(),
 			created_at: n.created_at.to_string(),
 			read_at: n.read_at.to_string(),
-		}
-	}
-}
-
-impl From<cc::ListNotificationsResponse> for NotificationList {
-	fn from(r: cc::ListNotificationsResponse) -> Self {
-		Self {
-			notifications: r.notifications.into_iter().map(Into::into).collect(),
-			next_cursor: r.next_cursor,
-			unread_count: r.unread_count,
 		}
 	}
 }

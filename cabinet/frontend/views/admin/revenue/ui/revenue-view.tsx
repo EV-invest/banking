@@ -10,7 +10,7 @@
 // claim's available balance with TigerBeetle's non-negative flag underneath. The form's
 // own cap is a courtesy that stops a typo early, not the control.
 
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button, Card, CardContent, Empty, EmptyDescription, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
@@ -22,6 +22,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag } from "@/shared/lib/resource";
 import { useResource } from "@/shared/lib/resource";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { amount as formatAmount, formatUsd } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
@@ -112,11 +113,7 @@ export function RevenueView() {
     <AdminScreen className="space-y-8">
       <AdminHeader eyebrow="Administer" title="Fund revenue" subtitle="What the fund earned — fees and the settled 2-and-20 — and paying it out" />
 
-      {error && (
-        <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
-          <TriangleAlert className="size-4" /> {error}
-        </StaggerItem>
-      )}
+      {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Earned</p>

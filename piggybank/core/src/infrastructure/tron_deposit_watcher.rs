@@ -32,6 +32,7 @@ use crate::{
 	config::TronConfig,
 	infrastructure::{
 		deposits::PgDeposits,
+		rails::{WatcherError, repo},
 		tron_rpc::{Trc20Transfer, TronRpc},
 	},
 };
@@ -246,20 +247,4 @@ impl TronDepositWatcher {
 			.map_err(repo)?;
 		Ok(())
 	}
-}
-
-#[derive(Debug, thiserror::Error)]
-enum WatcherError {
-	#[error("rpc: {0}")]
-	Rpc(String),
-	#[error("decode: {0}")]
-	Decode(String),
-	#[error("credit: {0}")]
-	Credit(String),
-	#[error("db: {0}")]
-	Db(String),
-}
-
-fn repo(err: sqlx::Error) -> WatcherError {
-	WatcherError::Db(err.to_string())
 }

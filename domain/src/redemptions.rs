@@ -113,7 +113,6 @@ impl Redemption {
 	}
 
 	/// Reconstitute from the store. Raises no events.
-	#[allow(clippy::too_many_arguments)]
 	pub fn rehydrate(id: RedemptionId, user: UserId, service: ServiceId, units: Shares, nav: Option<Nav>, cash: Option<Usdt>, state: RedemptionState) -> Self {
 		Self {
 			id,

@@ -36,7 +36,7 @@ use std::{
 };
 
 use evbanking_auth::ServiceTokenSource;
-use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignJettonTransferRequest, SignTonTransferRequest, signer_service_client::SignerServiceClient};
+use evbanking_contracts::signer::v1::{SignJettonTransferRequest, SignTonTransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
 use tokio_util::sync::CancellationToken;
@@ -46,12 +46,11 @@ use uuid::Uuid;
 
 use crate::{
 	config::{TonConfig, TonSweepConfig},
-	infrastructure::ton_rpc::{RpcError, TonRpc},
+	infrastructure::{
+		rails::{self, GAS_STATION, SweepError, now_unix_secs, read_err},
+		ton_rpc::{RpcError, TonRpc},
+	},
 };
-
-/// The reserved gas-station account id (shared with the EVM sweep): a wallet holding only
-/// Toncoin, used to top up user wallets with gas.
-const GAS_STATION: Uuid = Uuid::from_u128(1);
 
 /// Headroom (nanotons) a user wallet needs beyond the jetton `msg_value` to cover its
 /// one-time self-deploy + compute before a jetton send can succeed.
@@ -122,7 +121,8 @@ impl TonSweep {
 	async fn sweep_once(&self) -> Result<(), SweepError> {
 		let treasury = self.address(&self.treasury, Uuid::nil()).await?;
 		let gas_station = self.address(&self.gas_station, GAS_STATION).await?;
-		for (user_id, address) in self.deposit_addresses().await? {
+		for (user_id, address) in rails::deposit_addresses(&self.pool, "ton").await? {
+			// TON base64 is case-insensitive, so a system wallet is matched case-folded.
 			if address.eq_ignore_ascii_case(&treasury) || address.eq_ignore_ascii_case(&gas_station) {
 				continue;
 			}
@@ -141,7 +141,7 @@ impl TonSweep {
 		if jetton_wallet.balance < self.config.min_usdt {
 			// Drained (consolidation mined, or dust): stamp the credited deposits so the
 			// address drops out of the scan until a NEW deposit is credited.
-			self.mark_swept(user_id).await?;
+			rails::mark_swept(&self.pool, "ton", user_id).await?;
 			return Ok(());
 		}
 		let gas_needed = self.msg_value + GAS_HEADROOM_NANO;
@@ -179,7 +179,7 @@ impl TonSweep {
 		}
 		// Bring the wallet to at least `gas_needed`; never below one configured top-up.
 		let drop = self.config.gas_topup_nano.max(gas_needed);
-		let valid_until = (now_unix() + VALID_WINDOW_SECS) as u32;
+		let valid_until = (now_unix_secs() + VALID_WINDOW_SECS) as u32;
 		let boc = self.sign_native(address, drop, chain, valid_until).await?;
 		// Record the top-up time BEFORE sending so a slow/failed send still gets a grace backoff.
 		if let Ok(mut state) = self.state.lock() {
@@ -205,7 +205,7 @@ impl TonSweep {
 		// Sign at the wallet's current seqno (0 on its first send ⇒ self-deploys); a re-sign
 		// of an unconfirmed sweep is the same deterministic message.
 		let seqno = self.rpc.seqno(address).await.map_err(read_err)?;
-		let valid_until = (now_unix() + VALID_WINDOW_SECS) as u32;
+		let valid_until = (now_unix_secs() + VALID_WINDOW_SECS) as u32;
 		let mut request = Request::new(SignJettonTransferRequest {
 			from_user_id: user_id.to_string(), // the user wallet's owner — the signer holds its key
 			network: "ton".to_owned(),
@@ -290,53 +290,8 @@ impl TonSweep {
 		}
 	}
 
-	/// A system wallet's TON address, resolved once via `ProvisionAddress` (`Uuid::nil()` =
-	/// treasury, [`GAS_STATION`] = gas station) and cached.
 	async fn address(&self, cell: &OnceCell<String>, id: Uuid) -> Result<String, SweepError> {
-		cell.get_or_try_init(|| async {
-			let mut request = Request::new(ProvisionAddressRequest {
-				user_id: id.to_string(),
-				network: "ton".to_owned(),
-			});
-			if let Some(token) = &self.service_token {
-				request = token.authorize(request);
-			}
-			let response = self
-				.signer
-				.clone()
-				.provision_address(request)
-				.await
-				.map_err(|s| SweepError::Signer(format!("resolve system wallet {id}: {}", s.message())))?
-				.into_inner();
-			if response.address_kind != "derived" {
-				return Err(SweepError::Config(format!("system wallet {id} is not a derived address (kind={})", response.address_kind)));
-			}
-			Ok(response.address)
-		})
-		.await
-		.cloned()
-	}
-
-	/// Addresses that can still hold funds: a credited deposit exists that no sweep
-	/// cycle has yet observed drained — O(active deposits), not O(all addresses).
-	async fn deposit_addresses(&self) -> Result<Vec<(Uuid, String)>, SweepError> {
-		sqlx::query_as::<_, (Uuid, String)>(
-			"SELECT DISTINCT a.user_id, a.address FROM deposits d \
-			 JOIN user_deposit_addresses a ON a.user_id::text = d.party_id AND a.network = d.network \
-			 WHERE d.network = 'ton' AND d.party_kind = 'user' AND d.swept_at IS NULL AND a.address_kind = 'derived'",
-		)
-		.fetch_all(&self.pool)
-		.await
-		.map_err(|e| SweepError::Db(e.to_string()))
-	}
-
-	async fn mark_swept(&self, user_id: Uuid) -> Result<(), SweepError> {
-		sqlx::query("UPDATE deposits SET swept_at = now() WHERE party_kind = 'user' AND party_id = $1 AND network = 'ton' AND swept_at IS NULL")
-			.bind(user_id.to_string())
-			.execute(&self.pool)
-			.await
-			.map_err(|e| SweepError::Db(e.to_string()))?;
-		Ok(())
+		rails::address(cell, &self.signer, self.service_token.as_ref(), "ton", id).await
 	}
 }
 
@@ -351,24 +306,4 @@ struct GasState {
 	last_gas_at: Option<Instant>,
 	/// Last time a top-up was sent to an address — a best-effort grace against pile-ups.
 	recent_topups: HashMap<String, Instant>,
-}
-
-fn now_unix() -> u64 {
-	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
-}
-
-fn read_err(err: RpcError) -> SweepError {
-	SweepError::Rpc(err.to_string())
-}
-
-#[derive(Debug, thiserror::Error)]
-enum SweepError {
-	#[error("rpc: {0}")]
-	Rpc(String),
-	#[error("signer: {0}")]
-	Signer(String),
-	#[error("db: {0}")]
-	Db(String),
-	#[error("config: {0}")]
-	Config(String),
 }

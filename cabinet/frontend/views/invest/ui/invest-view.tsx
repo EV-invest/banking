@@ -10,11 +10,11 @@
 // is now a single dense band plus a grid — nothing is sized by anything other than what
 // is in it.
 
-import { ArrowRight, Sparkles, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
+import { ArrowRight, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useMemo } from "react";
 
-import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
+import { Badge, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { allocationsResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
@@ -22,6 +22,7 @@ import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { formatSignedUsdt, formatUnits, formatUsdt, fromBaseUnits, isNegative, isZero, toBaseUnits } from "@/views/invest/lib/format";
 import { buildProducts, type Product } from "@/views/invest/lib/product";
 import { SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
@@ -63,15 +64,7 @@ export function InvestView() {
         <TipAnchor anchor="invest.overview" />
       </StaggerItem>
 
-      {error && (
-        <StaggerItem>
-          <Alert variant="destructive">
-            <TriangleAlert className="size-4" />
-            <AlertTitle>Couldn&apos;t load your positions</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        </StaggerItem>
-      )}
+      {error && <ResourceError variant="alert" title="Couldn't load your positions" message={error} />}
 
       {!products ? (
         <StaggerItem className="space-y-4">

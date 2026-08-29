@@ -27,15 +27,31 @@ use tracing::warn;
 
 use crate::ports::{Custody, UserRepository, WithdrawalRepository, ledger::Ledger};
 
+/// The driven ports the withdrawal write-path borrows: the aggregate's repository, the
+/// ledger both Read-First checks read, the custody gateway the rail-liquidity check asks,
+/// and the relay nudged once the control-plane commit lands. Exactly the set
+/// [`open_withdrawal`] — the shared body of both request paths — needs, so each use-case's
+/// own parameters stay its *request*: which source, which rail, where, how much. The
+/// user-facing entry point's extra gates (the [`UserRepository`] KYC/freeze check, the
+/// configured-rail list) are deliberately NOT here: the revenue path has no user to gate,
+/// and a field it could never use would only invite one. A plain borrow-holder: it owns
+/// nothing and does nothing.
+pub struct WithdrawalPorts<'a> {
+	/// The `withdrawals` aggregate's driven port (Postgres control plane).
+	pub withdrawals: &'a dyn WithdrawalRepository,
+	/// The money gateway (TigerBeetle): the source's claim and the rail's accounting balance.
+	pub ledger: &'a dyn Ledger,
+	/// The custody gateway — read-only here, for the on-chain treasury view.
+	pub custody: &'a dyn Custody,
+	/// Nudged after the commit so the outbox relay broadcasts promptly.
+	pub relay: &'a Notify,
+}
+
 /// The calling user withdraws `amount` (gross) of free balance to `address`. The fee
 /// is the per-network policy fee; the net (`amount − fee`) is what leaves on-chain.
-#[allow(clippy::too_many_arguments)]
 pub async fn request_withdrawal(
-	withdrawals: &dyn WithdrawalRepository,
-	ledger: &dyn Ledger,
+	ports: &WithdrawalPorts<'_>,
 	users: &dyn UserRepository,
-	custody: &dyn Custody,
-	relay: &Notify,
 	configured: &[Network],
 	user: UserId,
 	network: Network,
@@ -58,7 +74,7 @@ pub async fn request_withdrawal(
 		return Err(DomainError::Forbidden("account is not permitted to withdraw".into()));
 	}
 	let source = WithdrawalSource::User(user);
-	open_withdrawal(withdrawals, ledger, custody, relay, source, network, address, amount).await
+	open_withdrawal(ports, source, network, address, amount).await
 }
 
 /// The fund pays **its own earned revenue** out to `address` — the admin/owner payout.
@@ -73,37 +89,17 @@ pub async fn request_withdrawal(
 /// Deliberately NOT gated on `configured` rails alone doing the work: like a user
 /// withdrawal, an underfunded rail queues rather than refusing (the dispatcher ships it
 /// on the next top-up), so a payout is never lost to a transient treasury dip.
-#[allow(clippy::too_many_arguments)]
-pub async fn request_revenue_payout(
-	withdrawals: &dyn WithdrawalRepository,
-	ledger: &dyn Ledger,
-	custody: &dyn Custody,
-	relay: &Notify,
-	configured: &[Network],
-	network: Network,
-	address: WalletAddress,
-	amount: Usdt,
-) -> Result<Withdrawal, DomainError> {
+pub async fn request_revenue_payout(ports: &WithdrawalPorts<'_>, configured: &[Network], network: Network, address: WalletAddress, amount: Usdt) -> Result<Withdrawal, DomainError> {
 	if !configured.contains(&network) {
 		return Err(DomainError::Validation(format!("{network} withdrawals are not available")));
 	}
-	open_withdrawal(withdrawals, ledger, custody, relay, WithdrawalSource::Revenue, network, address, amount).await
+	open_withdrawal(ports, WithdrawalSource::Revenue, network, address, amount).await
 }
 
 /// The shared body of both request paths: validate the shape, Read-First the **source's**
 /// solvency and the rail's liquidity, then record (dispatching straight away when the
 /// rail can already cover it).
-#[allow(clippy::too_many_arguments)]
-async fn open_withdrawal(
-	withdrawals: &dyn WithdrawalRepository,
-	ledger: &dyn Ledger,
-	custody: &dyn Custody,
-	relay: &Notify,
-	source: WithdrawalSource,
-	network: Network,
-	address: WalletAddress,
-	amount: Usdt,
-) -> Result<Withdrawal, DomainError> {
+async fn open_withdrawal(ports: &WithdrawalPorts<'_>, source: WithdrawalSource, network: Network, address: WalletAddress, amount: Usdt) -> Result<Withdrawal, DomainError> {
 	let fee = WithdrawalPolicy::fee_for(source, network);
 	// Validate the request shape (minimum, fee coverage, no on-chain dust, address net).
 	let mut withdrawal = Withdrawal::request(WithdrawalId::new(), source, network, address, amount, fee)?;
@@ -112,7 +108,7 @@ async fn open_withdrawal(
 	// their unified claim; for a payout it is the fund's earned revenue, so this is the
 	// check that makes "only what the fund earned" true rather than aspirational. TB's
 	// flag is the hard backstop either way.
-	let claim = ledger.balance(&source.claim_key()).await?;
+	let claim = ports.ledger.balance(&source.claim_key()).await?;
 	if Usdt::from_base_units(claim.available()) < amount {
 		return Err(DomainError::Validation(if source.is_revenue() {
 			"payout exceeds the fund's available revenue".into()
@@ -128,8 +124,8 @@ async fn open_withdrawal(
 	// the rail is topped up (accept-and-queue). A treasury read failure also degrades to
 	// queued — acceptance and the clearing reserve NEVER depend on rail liquidity, so a
 	// flaky node must not refuse a user.
-	let rail_liquidity = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
-	let dispatchable = match custody.treasury_liquidity(network).await {
+	let rail_liquidity = Usdt::from_base_units(ports.ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
+	let dispatchable = match ports.custody.treasury_liquidity(network).await {
 		Ok(Some(onchain)) => rail_liquidity.min(onchain) >= withdrawal.net_amount(),
 		// No chain view (stub / unwired rail) — the TB accounting balance is all there is.
 		Ok(None) => rail_liquidity >= withdrawal.net_amount(),
@@ -141,8 +137,8 @@ async fn open_withdrawal(
 	if dispatchable {
 		withdrawal.dispatch()?;
 	}
-	withdrawals.open(&mut withdrawal).await?;
-	relay.notify_one();
+	ports.withdrawals.open(&mut withdrawal).await?;
+	ports.relay.notify_one();
 	Ok(withdrawal)
 }
 

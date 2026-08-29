@@ -76,6 +76,17 @@ async fn harness() -> Option<Harness> {
 	})
 }
 
+/// The dealing ports, borrowed out of the harness for one call — the same wiring behind
+/// every fund use-case in this suite.
+fn fund_ports(h: &Harness) -> funds_app::FundPorts<'_> {
+	funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &h.nav,
+		relay: &h.notify,
+	}
+}
+
 fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()
 }
@@ -108,9 +119,7 @@ async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 }
 
 async fn subscribe(h: &Harness, user: UserId, service: &ServiceId, amount: &str) -> Result<(), domain::error::DomainError> {
-	funds_app::subscribe(&h.allocations, &h.subs, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), usdt(amount), now_unix())
-		.await
-		.map(|_| ())
+	funds_app::subscribe(&fund_ports(h), &h.subs, user, service.clone(), usdt(amount), now_unix()).await.map(|_| ())
 }
 
 #[tokio::test]
@@ -167,7 +176,7 @@ async fn closing_stops_new_money_but_never_traps_an_investor() {
 
 	// The asymmetry that matters: the investor can still get out. Refusing here would
 	// lock 100 units of real money inside a wound-down product.
-	let redemption = funds_app::request_redemption(&h.allocations, &h.reds, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), shares("100"), now_unix())
+	let redemption = funds_app::request_redemption(&fund_ports(&h), &h.reds, user, service.clone(), shares("100"), now_unix())
 		.await
 		.expect("a closed allocation must still redeem");
 	assert_eq!(redemption.service(), &service);
@@ -312,7 +321,7 @@ async fn narrowing_the_cap_below_the_issued_supply_stops_issuance_without_trappi
 	assert!(subscribe(&h, user, &service, "1").await.is_err(), "no further issuance");
 
 	// The same asymmetry the lifecycle gate has: the holder still gets out in full.
-	funds_app::request_redemption(&h.allocations, &h.reds, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), shares("100"), now_unix())
+	funds_app::request_redemption(&fund_ports(&h), &h.reds, user, service.clone(), shares("100"), now_unix())
 		.await
 		.expect("a narrowed cap must never block a redemption");
 }

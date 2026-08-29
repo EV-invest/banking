@@ -50,6 +50,7 @@ use crate::{
 	application::withdrawals::settle_withdrawal,
 	config::TonConfig,
 	infrastructure::{
+		rails::{WatcherError, now_unix_secs},
 		ton_custody::TonCustody,
 		ton_rpc::{JettonDeposit, TonRpc},
 	},
@@ -143,7 +144,7 @@ impl TonWithdrawalWatcher {
 					// window has comfortably closed the transfer can no longer be "still landing", so
 					// a missing match is a real stuck payout worth a Sentry error — parity with the
 					// BEP20 watcher's revert alert. Before that, stay at warn to avoid alerting on lag.
-					None if now_unix() > (p.valid_until.max(0) as u64).saturating_add(BOUNCE_GRACE_SECS) => error!(
+					None if now_unix_secs() > (p.valid_until.max(0) as u64).saturating_add(BOUNCE_GRACE_SECS) => error!(
 						withdrawal_id = %p.withdrawal_id,
 						seqno = p.signed_seqno,
 						"ton withdrawal watcher: treasury seqno advanced but NO matching outgoing USDT transfer after the send window closed — likely bounced/stuck, needs operator review (not auto-failed)"
@@ -362,21 +363,6 @@ fn plan_settlements(advanced: &[&PendingBroadcast], outgoing: &[JettonDeposit], 
 		}
 	}
 	settlements
-}
-
-/// Current unix time in seconds.
-fn now_unix() -> u64 {
-	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
-}
-
-#[derive(Debug, thiserror::Error)]
-enum WatcherError {
-	#[error("rpc: {0}")]
-	Rpc(String),
-	#[error("custody: {0}")]
-	Custody(String),
-	#[error("db: {0}")]
-	Db(String),
 }
 
 #[cfg(test)]

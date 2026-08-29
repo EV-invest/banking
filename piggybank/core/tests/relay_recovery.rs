@@ -80,6 +80,16 @@ async fn harness() -> Option<Harness> {
 	})
 }
 
+/// The withdrawal ports, borrowed out of the harness for one call.
+fn withdrawal_ports(h: &Harness) -> withdrawal_app::WithdrawalPorts<'_> {
+	withdrawal_app::WithdrawalPorts {
+		withdrawals: h.withdrawals.as_ref(),
+		ledger: h.ledger.as_ref(),
+		custody: &StubCustody,
+		relay: &h.notify,
+	}
+}
+
 fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()
 }
@@ -160,20 +170,9 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	// Seed the rail so the request auto-dispatches to `processing`.
 	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
 	h.relay.drain().await;
-	let processing = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
-		&Network::ALL,
-		processing_user,
-		network,
-		destination(network),
-		usdt("50"),
-	)
-	.await
-	.unwrap();
+	let processing = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, processing_user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
 	assert_eq!(processing.state(), WithdrawalState::Processing, "a liquid rail auto-dispatches to processing");
 	h.relay.drain().await;
 	backdate_withdrawal(&h.pool, processing.id().raw()).await;
@@ -191,11 +190,8 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 		.unwrap();
 	h.relay.drain().await;
 	let queued = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		queued_user,
 		short_network,
@@ -243,20 +239,9 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination(network),
-		big,
-	)
-	.await
-	.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), big)
+		.await
+		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 
@@ -326,20 +311,9 @@ async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 	// from there — the shape of a real broadcast-then-operator-fail incident).
 	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
 	h.relay.drain().await;
-	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination(network),
-		usdt("50"),
-	)
-	.await
-	.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Processing, "a liquid rail auto-dispatches to processing");
 	h.relay.drain().await;
 	let reserved = h.ledger.balance(&claim).await.unwrap();
@@ -495,20 +469,9 @@ async fn a_redelivered_half_applied_settle_completes_instead_of_parking() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination(network),
-		gross,
-	)
-	.await
-	.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), gross)
+		.await
+		.unwrap();
 	assert_eq!(
 		withdrawal.state(),
 		WithdrawalState::Processing,

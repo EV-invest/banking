@@ -37,6 +37,7 @@ use tracing::{info, warn};
 
 use crate::{
 	application::fees as fee_app,
+	infrastructure::rails::now_unix_i64,
 	ports::{
 		fees::{FeeAssessments, FeePolicies, PositionAccruals},
 		ledger::Ledger,
@@ -87,7 +88,7 @@ impl FeeSweeper {
 	pub async fn run(self, shutdown: CancellationToken) {
 		info!("fee sweeper: assessing due positions every {SWEEP_INTERVAL:?}");
 		loop {
-			match self.sweep(now_unix()).await {
+			match self.sweep(now_unix_i64()).await {
 				Ok(charged) if charged > 0 => info!(charged, "fee sweeper: charged management/performance fees"),
 				Ok(_) => {}
 				Err(err) => warn!("fee sweeper: sweep failed (will retry): {err}"),
@@ -131,8 +132,4 @@ impl FeeSweeper {
 		}
 		Ok(charged)
 	}
-}
-
-fn now_unix() -> i64 {
-	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }

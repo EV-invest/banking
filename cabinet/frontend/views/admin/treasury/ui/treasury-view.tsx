@@ -14,6 +14,7 @@ import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { formatUsd } from "@/views/admin/lib/format";
 import { StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
@@ -56,16 +57,7 @@ export function TreasuryView() {
         }
       />
 
-      {error && (
-        <StaggerItem className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5">
-          <p className="flex items-center gap-2 text-sm text-destructive">
-            <TriangleAlert className="size-4 shrink-0" /> {error}
-          </p>
-          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={retry}>
-            <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} /> Try again
-          </Button>
-        </StaggerItem>
-      )}
+      {error && <ResourceError message={error} onRetry={retry} retrying={loading} />}
 
       <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Layer 1 · Ledger — user claims (USDT)</p>

@@ -41,7 +41,7 @@ use std::{
 
 use domain::money::Network;
 use evbanking_auth::ServiceTokenSource;
-use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignErc20TransferRequest, SignNativeTransferRequest, signer_service_client::SignerServiceClient};
+use evbanking_contracts::signer::v1::{SignErc20TransferRequest, SignNativeTransferRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
 use tokio_util::sync::CancellationToken;
@@ -51,13 +51,11 @@ use uuid::Uuid;
 
 use crate::{
 	config::{EvmConfig, SweepConfig},
-	infrastructure::evm_rpc::{EvmRpc, RpcError},
+	infrastructure::{
+		evm_rpc::{EvmRpc, RpcError},
+		rails::{self, GAS_STATION, SweepError, read_err},
+	},
 };
-
-/// The reserved gas-station account id, distinct from the nil treasury: a wallet holding
-/// only native coin (BNB/POL), used to top up user deposit addresses with gas. A separate account
-/// means a separate nonce sequence, so the sweep never races the withdrawal custody path.
-const GAS_STATION: Uuid = Uuid::from_u128(1);
 
 /// 1 gwei in wei. Gas prices are rounded UP to a whole gwei so minor node-to-node wobble
 /// doesn't change a re-signed transaction's bytes (keeping the idempotent-re-sign property).
@@ -129,9 +127,10 @@ impl Sweep {
 	async fn sweep_once(&self) -> Result<(), SweepError> {
 		let treasury = self.address(&self.treasury, Uuid::nil()).await?;
 		let gas_station = self.address(&self.gas_station, GAS_STATION).await?;
-		for (user_id, address) in self.deposit_addresses().await? {
+		for (user_id, address) in rails::deposit_addresses(&self.pool, self.network.as_str()).await? {
 			// Never sweep a system wallet into itself (they aren't normally in this table, but
-			// guard anyway — a self-transfer would burn gas for nothing).
+			// guard anyway — a self-transfer would burn gas for nothing). EVM hex is
+			// case-insensitive, so the match is case-folded.
 			if address.eq_ignore_ascii_case(&treasury) || address.eq_ignore_ascii_case(&gas_station) {
 				continue;
 			}
@@ -149,7 +148,7 @@ impl Sweep {
 			// Drained: the consolidation mined (or the deposit was dust). Stamp the
 			// user's credited deposits so this address drops out of the scan until a
 			// NEW deposit is credited — the fix for the O(N)-every-cycle RPC melt.
-			self.mark_swept(user_id).await?;
+			rails::mark_swept(&self.pool, self.network.as_str(), user_id).await?;
 			return Ok(());
 		}
 		let gas_price = self.gas_price().await?;
@@ -320,57 +319,8 @@ impl Sweep {
 		}
 	}
 
-	/// A system wallet's on-chain address for this rail, resolved once via `ProvisionAddress`
-	/// (`Uuid::nil()` = treasury, [`GAS_STATION`] = gas station) and cached. A transient failure
-	/// leaves the cell empty so a later cycle retries.
 	async fn address(&self, cell: &OnceCell<String>, id: Uuid) -> Result<String, SweepError> {
-		cell.get_or_try_init(|| async {
-			let mut request = Request::new(ProvisionAddressRequest {
-				user_id: id.to_string(),
-				network: self.network.as_str().to_owned(),
-			});
-			if let Some(token) = &self.service_token {
-				request = token.authorize(request);
-			}
-			let response = self
-				.signer
-				.clone()
-				.provision_address(request)
-				.await
-				.map_err(|s| SweepError::Signer(format!("resolve system wallet {id}: {}", s.message())))?
-				.into_inner();
-			if response.address_kind != "derived" {
-				return Err(SweepError::Config(format!("system wallet {id} is not a derived address (kind={})", response.address_kind)));
-			}
-			Ok(response.address)
-		})
-		.await
-		.cloned()
-	}
-
-	/// Addresses that can still hold funds: a credited deposit exists that no sweep
-	/// cycle has yet observed drained. Everything else is skipped without an RPC —
-	/// the scan is O(active deposits), not O(all addresses ever provisioned).
-	async fn deposit_addresses(&self) -> Result<Vec<(Uuid, String)>, SweepError> {
-		sqlx::query_as::<_, (Uuid, String)>(
-			"SELECT DISTINCT a.user_id, a.address FROM deposits d \
-			 JOIN user_deposit_addresses a ON a.user_id::text = d.party_id AND a.network = d.network \
-			 WHERE d.network = $1 AND d.party_kind = 'user' AND d.swept_at IS NULL AND a.address_kind = 'derived'",
-		)
-		.bind(self.network.as_str())
-		.fetch_all(&self.pool)
-		.await
-		.map_err(|e| SweepError::Db(e.to_string()))
-	}
-
-	async fn mark_swept(&self, user_id: Uuid) -> Result<(), SweepError> {
-		sqlx::query("UPDATE deposits SET swept_at = now() WHERE party_kind = 'user' AND party_id = $1 AND network = $2 AND swept_at IS NULL")
-			.bind(user_id.to_string())
-			.bind(self.network.as_str())
-			.execute(&self.pool)
-			.await
-			.map_err(|e| SweepError::Db(e.to_string()))?;
-		Ok(())
+		rails::address(cell, &self.signer, self.service_token.as_ref(), self.network.as_str(), id).await
 	}
 }
 
@@ -422,22 +372,6 @@ enum Broadcast {
 fn is_idempotent(msg: &str) -> bool {
 	let m = msg.to_lowercase();
 	m.contains("already known") || m.contains("known transaction") || m.contains("nonce too low") || m.contains("replacement transaction underpriced") || m.contains("already imported")
-}
-
-fn read_err(err: RpcError) -> SweepError {
-	SweepError::Rpc(err.to_string())
-}
-
-#[derive(Debug, thiserror::Error)]
-enum SweepError {
-	#[error("rpc: {0}")]
-	Rpc(String),
-	#[error("signer: {0}")]
-	Signer(String),
-	#[error("db: {0}")]
-	Db(String),
-	#[error("config: {0}")]
-	Config(String),
 }
 
 #[cfg(test)]

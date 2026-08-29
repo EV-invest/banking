@@ -68,6 +68,18 @@ async fn harness() -> Option<Harness> {
 	})
 }
 
+/// The withdrawal ports, borrowed out of the harness for one call. `custody` stays a
+/// parameter because it is the one port these tests vary — the whole rail-liquidity
+/// behaviour turns on which chain view answers.
+fn withdrawal_ports<'a>(h: &'a Harness, custody: &'a dyn Custody) -> withdrawal_app::WithdrawalPorts<'a> {
+	withdrawal_app::WithdrawalPorts {
+		withdrawals: h.withdrawals.as_ref(),
+		ledger: h.ledger.as_ref(),
+		custody,
+		relay: &h.notify,
+	}
+}
+
 fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()
 }
@@ -136,11 +148,8 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 
 	// Request a 50 USDT withdrawal (fee 1, net 49) — the gross is reserved as pending.
 	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, &StubCustody),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		user,
 		network,
@@ -187,11 +196,8 @@ async fn withdraw_on_polygon_reserves_then_settles_and_retains_fee() {
 	let fee_before = bal(&h, &fee_account).await.posted;
 
 	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, &StubCustody),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		user,
 		network,
@@ -228,11 +234,8 @@ async fn withdraw_fail_voids_and_refunds_in_full() {
 	deposit(&h, user, network, "100").await;
 
 	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, &StubCustody),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		user,
 		network,
@@ -260,11 +263,8 @@ async fn withdraw_below_minimum_is_rejected() {
 	let user = active_user(&h).await;
 	let network = Network::Ton;
 	let err = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, &StubCustody),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		user,
 		network,
@@ -285,11 +285,8 @@ async fn withdraw_beyond_available_is_rejected_read_first() {
 
 	// 50 clears the minimum but exceeds the available balance — Read-First rejects it.
 	let err = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, &StubCustody),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		user,
 		network,
@@ -311,11 +308,8 @@ async fn a_disabled_user_cannot_withdraw() {
 	h.users.disable(user).await.unwrap();
 
 	let err = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, &StubCustody),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		user,
 		network,
@@ -342,11 +336,8 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	// Withdraw on TON: the user is solvent but the TON rail is short, so the withdrawal
 	// is accepted and QUEUED (accept-and-queue), not refused.
 	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, &StubCustody),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		user,
 		Network::Ton,
@@ -388,11 +379,8 @@ async fn a_queued_withdrawal_can_be_cancelled_and_refunds() {
 
 	// Withdraw on the TRC20 rail, which cannot cover 1e9 → queued (no test seeds TRC20).
 	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, &StubCustody),
 		h.users.as_ref(),
-		&StubCustody,
-		&h.notify,
 		&Network::ALL,
 		user,
 		Network::Trc20,
@@ -428,20 +416,9 @@ async fn an_onchain_short_treasury_queues_despite_a_liquid_tb_rail() {
 	deposit(&h, user, network, "100").await;
 
 	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
-	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&custody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination(network),
-		usdt("50"),
-	)
-	.await
-	.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "an on-chain-short treasury queues, never dispatches");
 	h.relay.drain().await;
 	assert_eq!(bal(&h, &claim).await.locked, usdt("50"), "the clearing reserve holds the gross while queued");
@@ -464,20 +441,9 @@ async fn an_onchain_liquid_treasury_dispatches_immediately() {
 	deposit(&h, user, network, "100").await;
 
 	let custody = TestCustody::with_view(network, TreasuryView::OnChain(usdt("1000000000")));
-	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&custody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination(network),
-		usdt("50"),
-	)
-	.await
-	.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Processing, "both liquidity sources cover the net — dispatched");
 	h.relay.drain().await;
 
@@ -499,20 +465,9 @@ async fn a_treasury_read_failure_queues_and_never_rejects() {
 	deposit(&h, user, network, "100").await;
 
 	let custody = TestCustody::with_view(network, TreasuryView::Unreachable);
-	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&custody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination(network),
-		usdt("50"),
-	)
-	.await
-	.expect("a chain-view outage must not refuse the user");
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.expect("a chain-view outage must not refuse the user");
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "degrade to queued on a treasury read failure");
 	h.relay.drain().await;
 	assert_eq!(bal(&h, &claim).await.locked, usdt("50"), "the reserve is untouched by the degraded gate");
@@ -531,20 +486,9 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 	deposit(&h, user, network, "100").await;
 
 	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
-	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
-		h.users.as_ref(),
-		&custody,
-		&h.notify,
-		&Network::ALL,
-		user,
-		network,
-		destination(network),
-		usdt("50"),
-	)
-	.await
-	.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 
@@ -577,11 +521,8 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 
 	let custody = Arc::new(TestCustody::short_everywhere());
 	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, custody.as_ref()),
 		h.users.as_ref(),
-		custody.as_ref(),
-		&h.notify,
 		&Network::ALL,
 		user,
 		network,
@@ -639,11 +580,8 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 
 	let custody = Arc::new(TestCustody::short_everywhere());
 	let withdrawal = withdrawal_app::request_withdrawal(
-		h.withdrawals.as_ref(),
-		h.ledger.as_ref(),
+		&withdrawal_ports(&h, custody.as_ref()),
 		h.users.as_ref(),
-		custody.as_ref(),
-		&h.notify,
 		&Network::ALL,
 		user,
 		network,
@@ -702,11 +640,8 @@ async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 	let mut withdrawals = Vec::new();
 	for _ in 0..3 {
 		let withdrawal = withdrawal_app::request_withdrawal(
-			h.withdrawals.as_ref(),
-			h.ledger.as_ref(),
+			&withdrawal_ports(&h, custody.as_ref()),
 			h.users.as_ref(),
-			custody.as_ref(),
-			&h.notify,
 			&Network::ALL,
 			user,
 			network,

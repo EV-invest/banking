@@ -1,15 +1,12 @@
 "use client";
 
 import { useT } from "@evinvest/i18n/react";
-import { ArrowLeftRight, ChevronRight, ListChecks, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, ChevronRight, ListChecks } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Fragment, useMemo, useState } from "react";
 
 import {
   ButtonGroup,
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Badge,
   Button,
   Card,
@@ -48,6 +45,7 @@ import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import {
   amountTone,
   dayLabel,
@@ -127,15 +125,7 @@ export function OperationsView() {
         <p className="text-sm text-muted-foreground">Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.</p>
       </StaggerItem>
 
-      {error && (
-        <StaggerItem className="mb-6">
-          <Alert variant="destructive">
-            <TriangleAlert className="size-4" />
-            <AlertTitle>Couldn&apos;t load your operations</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        </StaggerItem>
-      )}
+      {error && <ResourceError variant="alert" title="Couldn't load your operations" message={error} className="mb-6" />}
 
       {/* The timeline is one section — the filter bar and the table it filters arrive
           together, because a bar that lands before the rows invites a click that has

@@ -151,6 +151,17 @@ async fn sweeping() -> tokio::sync::RwLockWriteGuard<'static, ()> {
 	SWEEP.write().await
 }
 
+/// The dealing ports, borrowed out of the harness for one call — the same wiring behind
+/// every fund use-case in this suite.
+fn fund_ports(h: &Harness) -> funds_app::FundPorts<'_> {
+	funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &h.nav,
+		relay: &h.notify,
+	}
+}
+
 fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()
 }
@@ -194,9 +205,7 @@ async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 /// name says.
 async fn subscribe(h: &Harness, user: UserId, service: &ServiceId, amount: &str) {
 	let before = cost_basis_of(h, user, service).await;
-	funds_app::subscribe(&h.allocations, &h.subs, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), usdt(amount), now_unix())
-		.await
-		.unwrap();
+	funds_app::subscribe(&fund_ports(h), &h.subs, user, service.clone(), usdt(amount), now_unix()).await.unwrap();
 	h.relay.drain().await;
 	for _ in 0..100 {
 		if cost_basis_of(h, user, service).await > before {
@@ -536,9 +545,7 @@ async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
 
 	// The investor redeems everything, which really does drain the fund's claim: the
 	// payout settles at NAV 1.0, leaving behind only what the fee units are worth.
-	funds_app::request_redemption(&h.allocations, &h.reds, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), held, now_unix())
-		.await
-		.unwrap();
+	funds_app::request_redemption(&fund_ports(&h), &h.reds, user, service.clone(), held, now_unix()).await.unwrap();
 	h.relay.drain().await;
 
 	// Now mark the remainder up hard. The fee units are suddenly worth several times the
@@ -595,9 +602,7 @@ async fn a_queued_redemption_is_reserved_before_the_manager_is_paid() {
 	// the claim covers the payout; here it does not, so the redemption genuinely QUEUES —
 	// and note what that means: a queue exists precisely because the fund is already short
 	// of what it owes this investor. The queue reserves units, never cash.
-	funds_app::request_redemption(&h.allocations, &h.reds, h.ledger.as_ref(), &h.nav, &h.notify, user, service.clone(), held, now_unix())
-		.await
-		.unwrap();
+	funds_app::request_redemption(&fund_ports(&h), &h.reds, user, service.clone(), held, now_unix()).await.unwrap();
 	h.relay.drain().await;
 
 	// The claim still covers the fee many times over, so a gate reading only `available`
