@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Sidebar } from "@/application/layout/sidebar";
 import { BottomNavbar } from "@/application/layout/bottom-navbar";
 import { CacheWarmer } from "@/application/layout/cache-warmer";
+import { LocaleSync } from "@/application/layout/locale-sync";
 import { SessionKeeper } from "@/application/layout/session-keeper";
 import { SystemBanner } from "@/application/layout/system-banner";
 
@@ -28,6 +29,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] bg-background pb-[var(--cabinet-bottom-nav-h,64px)] lg:pl-[var(--cabinet-rail-w)] lg:pb-0">
       <SessionKeeper />
       <CacheWarmer />
+      {/* Reconciles the URL's locale with the language stored on the account —
+          adopting the stored one when the proxy had to guess, and recording the
+          reader's actual locale when it did not. Renders nothing. */}
+      <LocaleSync />
       <div className="hidden lg:fixed lg:left-0 lg:top-[var(--ev-shell-offset,0px)] lg:flex lg:h-[calc(100dvh-var(--ev-shell-offset,0px))]">
         <Sidebar />
       </div>

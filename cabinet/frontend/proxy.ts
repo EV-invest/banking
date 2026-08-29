@@ -67,14 +67,29 @@ export function proxy(req: NextRequest) {
   // No locale in the path: an old link, a bookmark, or the conductor's unprefixed
   // /cabinet mount. Send them to a real URL rather than 404ing — the cookie is the
   // reader's last choice, Accept-Language the first guess, English the floor.
+  //
+  // The cookie is now written by the public site too (site_conductor
+  // `scripts/locale-cookie.ts`), mirroring the locale of whatever page the reader
+  // was on, so "their last choice" finally includes the language they were reading
+  // on the landing a moment ago rather than only a previous cabinet visit.
   if (!locale && pathname.startsWith(BASE_PATH)) {
-    const chosen =
-      (isLocale(req.cookies.get(COOKIES.locale)?.value)
-        ? (req.cookies.get(COOKIES.locale)!.value as Locale)
-        : null) ?? negotiate(req.headers.get("accept-language"));
+    const remembered = req.cookies.get(COOKIES.locale)?.value;
+    const chosen = isLocale(remembered)
+      ? remembered
+      : negotiate(req.headers.get("accept-language"));
     const url = req.nextUrl.clone();
     url.pathname = `/${chosen}${pathname}`;
-    return withCsp(NextResponse.redirect(url), csp);
+    const res = withCsp(NextResponse.redirect(url), csp);
+    // Accept-Language is a header the reader never set, so a locale derived from it
+    // is a guess, not a preference — and the account holder may well have stored a
+    // real one from another device. The app cannot tell the two apart on its own:
+    // this redirect carries no cookie, but the request it redirects TO does get one
+    // written from the (guessed) URL by `withLocale` below, so by the time any page
+    // renders the evidence is gone. Mark it here, while it is still known;
+    // `LocaleSync` reads the mark, prefers the stored profile language over the
+    // guess, and clears it. Session-scoped: a guess is only about this visit.
+    if (!isLocale(remembered)) res.cookies.set(COOKIES.localeGuessed, "1", { path: "/", sameSite: "lax", secure: appConfig.authCookieSecure, httpOnly: false });
+    return res;
   }
 
   if (!isPublic(pathname) && !signedIn) {
