@@ -202,11 +202,13 @@ async fn an_unconfigured_rail_withdrawal_is_rejected() {
 
 	let destination = WalletAddress::parse(Network::Ton, TON).unwrap();
 	let err = withdrawal_app::request_withdrawal(
-		&withdrawals,
-		ledger.as_ref(),
+		&withdrawal_app::WithdrawalPorts {
+			withdrawals: &withdrawals,
+			ledger: ledger.as_ref(),
+			custody: &StubCustody,
+			relay: &notify,
+		},
 		&users,
-		&StubCustody,
-		&notify,
 		&[Network::Bep20],
 		user,
 		Network::Ton,

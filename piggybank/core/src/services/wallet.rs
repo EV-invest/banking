@@ -84,11 +84,13 @@ impl WalletService for WalletSvc {
 		let address = WalletAddress::parse(network, &req.address).map_err(map_err)?;
 		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
 		let withdrawal = withdrawal_app::request_withdrawal(
-			self.state.withdrawals.as_ref(),
-			self.state.ledger.as_ref(),
+			&withdrawal_app::WithdrawalPorts {
+				withdrawals: self.state.withdrawals.as_ref(),
+				ledger: self.state.ledger.as_ref(),
+				custody: self.state.custody.as_ref(),
+				relay: &self.state.relay_notify,
+			},
 			self.state.users.as_ref(),
-			self.state.custody.as_ref(),
-			&self.state.relay_notify,
 			&self.state.configured_networks,
 			user,
 			network,

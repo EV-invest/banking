@@ -145,7 +145,6 @@ impl User {
 
 	/// Reconstitute an existing user from the store, including the editable profile.
 	/// Raises no events.
-	#[allow(clippy::too_many_arguments)]
 	pub fn rehydrate(id: UserId, auth_subject: AuthSubject, email: Email, email_verified: bool, status: UserStatus, token_version: u64, profile: ProfileFields) -> Self {
 		Self {
 			id,

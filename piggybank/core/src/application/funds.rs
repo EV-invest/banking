@@ -65,6 +65,22 @@ pub struct FundNavView {
 	pub stale: bool,
 }
 
+/// The driven ports a dealing use-case borrows: the registry it gates on, the ledger its
+/// Read-First checks read, the marks it prices at, and the relay it nudges once the
+/// control-plane commit lands. Bundled so a use-case's own parameters are its *request* —
+/// who, which fund, how much, as of when — rather than the wiring the composition root
+/// injects. A plain borrow-holder: it owns nothing, decides nothing, and outlives nothing.
+pub struct FundPorts<'a> {
+	/// The registry of investable products — the gate every deal resolves `service` through.
+	pub allocations: &'a dyn AllocationRegistry,
+	/// The money gateway (TigerBeetle): the authoritative balances the Read-First checks read.
+	pub ledger: &'a dyn Ledger,
+	/// The valuation marks a deal is priced at, staleness guard included.
+	pub nav: &'a dyn NavMarks,
+	/// Nudged after the commit so the outbox relay moves money promptly.
+	pub relay: &'a Notify,
+}
+
 /// The current NAV plus whether it is fresh enough to deal on (`now − posted_at ≤
 /// MAX_NAV_AGE_SECS`). A fund with no mark yet uses the seed NAV and is always fresh
 /// (nothing to be stale against). Subscribe/redeem call this before pricing.
@@ -108,28 +124,17 @@ pub async fn dealing_nav(nav: &dyn NavMarks, service: &ServiceId, now_unix: i64)
 /// mean reconstructing the outstanding supply in Postgres — a second source of truth for
 /// a figure TigerBeetle already owns, which is the trade this architecture refuses
 /// everywhere else.
-#[allow(clippy::too_many_arguments)]
-pub async fn subscribe(
-	allocations: &dyn AllocationRegistry,
-	subscriptions: &dyn SubscriptionRepository,
-	ledger: &dyn Ledger,
-	nav: &dyn NavMarks,
-	relay: &Notify,
-	user: UserId,
-	service: ServiceId,
-	cash: Usdt,
-	now_unix: i64,
-) -> Result<Subscription, DomainError> {
-	let allocation = allocations_app::require_subscribable(allocations, &service).await?;
-	let claim = ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
+pub async fn subscribe(ports: &FundPorts<'_>, subscriptions: &dyn SubscriptionRepository, user: UserId, service: ServiceId, cash: Usdt, now_unix: i64) -> Result<Subscription, DomainError> {
+	let allocation = allocations_app::require_subscribable(ports.allocations, &service).await?;
+	let claim = ports.ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
 	if Usdt::from_base_units(claim.available()) < cash {
 		return Err(DomainError::Validation("insufficient available balance to subscribe".into()));
 	}
-	let price = dealing_nav(nav, &service, now_unix).await?;
-	allocation.ensure_capacity(issued_units(ledger, &service).await?, Shares::from_cash(cash, price)?)?;
+	let price = dealing_nav(ports.nav, &service, now_unix).await?;
+	allocation.ensure_capacity(issued_units(ports.ledger, &service).await?, Shares::from_cash(cash, price)?)?;
 	let mut subscription = Subscription::open(SubscriptionId::new(), user, service, cash, price)?;
 	subscriptions.open(&mut subscription).await?;
-	relay.notify_one();
+	ports.relay.notify_one();
 	Ok(subscription)
 }
 
@@ -155,38 +160,34 @@ async fn issued_units(ledger: &dyn Ledger, service: &ServiceId) -> Result<Shares
 ///
 /// The registry gate here is the **laxer** one: a `closed` allocation still redeems, so
 /// winding a product down never traps an investor's units inside it.
-#[allow(clippy::too_many_arguments)]
 pub async fn request_redemption(
-	allocations: &dyn AllocationRegistry,
+	ports: &FundPorts<'_>,
 	redemptions: &dyn RedemptionRepository,
-	ledger: &dyn Ledger,
-	nav: &dyn NavMarks,
-	relay: &Notify,
 	user: UserId,
 	service: ServiceId,
 	units: Shares,
 	now_unix: i64,
 ) -> Result<Redemption, DomainError> {
-	allocations_app::require_redeemable(allocations, &service).await?;
-	let holding = ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?;
+	allocations_app::require_redeemable(ports.allocations, &service).await?;
+	let holding = ports.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?;
 	if Shares::from_base_units(holding.available()) < units {
 		return Err(DomainError::Validation("insufficient units to redeem".into()));
 	}
 	// Fresh NAV (staleness guard) — also the auto-settle liquidity estimate.
-	let price = dealing_nav(nav, &service, now_unix).await?;
+	let price = dealing_nav(ports.nav, &service, now_unix).await?;
 	let cash_out = price.value(units)?;
 	let mut redemption = Redemption::request(RedemptionId::new(), user, service.clone(), units)?;
 	redemptions.open(&mut redemption).await?;
-	relay.notify_one();
+	ports.relay.notify_one();
 	// Accept-and-queue: settle now (as a separate command) iff the fund's claim can cover
 	// the payout; else leave it queued for the treasury worker.
-	let fund = ledger.balance(&LedgerAccountKey::ServiceClaim(service)).await?;
+	let fund = ports.ledger.balance(&LedgerAccountKey::ServiceClaim(service)).await?;
 	if Usdt::from_base_units(fund.available()) >= cash_out {
 		// The settle can lose a race — to the relay's subscribe projection (rolled back,
 		// stays queued for the operator) or to a concurrent cancel/fail. The redemption
 		// was accepted either way, so a `Conflict` reports its actual current state
 		// rather than surfacing an error for an already-opened redemption.
-		return match settle_redemption(redemptions, nav, relay, redemption.id(), now_unix).await {
+		return match settle_redemption(redemptions, ports.nav, ports.relay, redemption.id(), now_unix).await {
 			Err(DomainError::Conflict(_)) => redemptions.find_by_id(redemption.id()).await?.ok_or_else(|| DomainError::NotFound {
 				entity: "redemption",
 				id: redemption.id().to_string(),
@@ -310,7 +311,6 @@ pub async fn fund_nav_view(allocations: &dyn AllocationRegistry, nav: &dyn NavMa
 /// queued redemptions price correctly). Without this an AUM post would write a valuation
 /// history for a service no registry entry backs — the second way a phantom fund used to
 /// come into being.
-#[allow(clippy::too_many_arguments)]
 pub async fn post_fund_valuation(
 	allocations: &dyn AllocationRegistry,
 	nav: &dyn NavMarks,
