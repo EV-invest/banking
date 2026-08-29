@@ -9,7 +9,7 @@ import { revokeSession, sessionsResource } from "@/entities/session/model/sessio
 import { isLocale } from "@evinvest/i18n";
 import { useLocale } from "@evinvest/i18n/react";
 
-import { cabinetPath, zonePathname } from "@/shared/config/base-path";
+import { relocalise } from "@/shared/config/base-path";
 import { writeLocaleCookie } from "@/shared/lib/locale-cookie";
 import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
@@ -125,8 +125,10 @@ export function SettingsView() {
       if (isLocale(chosen) && chosen !== locale) {
         writeLocaleCookie(chosen);
         // A hard navigation, not router.push: the locale lives in the root layout's
-        // segment, and the catalogue is chosen there at render time.
-        window.location.href = cabinetPath(chosen, zonePathname(window.location.pathname));
+        // segment, and the catalogue is chosen there at render time. `relocalise` is
+        // shared with LocaleSync so the two cannot disagree about what "the same page"
+        // means — it keeps the query and hash, which a hand-rolled version dropped.
+        window.location.href = relocalise(chosen, window.location);
         return;
       }
     } catch (e) {

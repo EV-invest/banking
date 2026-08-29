@@ -88,7 +88,22 @@ export function proxy(req: NextRequest) {
     // renders the evidence is gone. Mark it here, while it is still known;
     // `LocaleSync` reads the mark, prefers the stored profile language over the
     // guess, and clears it. Session-scoped: a guess is only about this visit.
-    if (!isLocale(remembered)) res.cookies.set(COOKIES.localeGuessed, "1", { path: "/", sameSite: "lax", secure: appConfig.authCookieSecure, httpOnly: false });
+    //
+    // The mark carries the guessed locale rather than a bare flag, so it can only
+    // ever describe the page it was minted for. A flag would outlive its redirect
+    // whenever the reader never reaches a page that clears it (the profile fetch
+    // fails, or they land on /login, which mounts no LocaleSync) and would then
+    // read as "this URL was guessed" on the next deliberate /de/cabinet link they
+    // follow — bouncing them off the page they chose. Matching on the value makes
+    // a stale mark inert instead.
+    if (!isLocale(remembered)) {
+      res.cookies.set(COOKIES.localeGuessed, chosen, {
+        path: "/",
+        sameSite: "lax",
+        secure: appConfig.authCookieSecure,
+        httpOnly: false,
+      });
+    }
     return res;
   }
 

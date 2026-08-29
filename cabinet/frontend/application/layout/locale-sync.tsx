@@ -2,12 +2,12 @@
 
 import { useEffect, useRef } from "react";
 
-import { isLocale, type Locale } from "@evinvest/i18n";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@evinvest/i18n";
 import { useLocale } from "@evinvest/i18n/react";
 
 import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
-import { cabinetPath, zonePathname } from "@/shared/config/base-path";
-import { writeLocaleCookie } from "@/shared/lib/locale-cookie";
+import { relocalise } from "@/shared/config/base-path";
+import { readLocaleCookie, writeLocaleCookie } from "@/shared/lib/locale-cookie";
 import { useResource } from "@/shared/lib/resource";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 
@@ -19,31 +19,34 @@ import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
 // exists for a signed-in reader, and `(auth)` deliberately has no session to read one
 // with.
 //
-// The rule is that the most recent thing the reader actually *did* wins, and there are
-// exactly two cases:
+// THE ASYMMETRY THIS IS BUILT AROUND, because getting it wrong quietly destroys data:
+// English is the *unprefixed* locale, so `/` is simultaneously "English" and "no
+// language expressed". Almost every reader arrives there — it is what a search result,
+// a bookmark and every external link point at, and the public site deliberately never
+// auto-switches away from it. Treating that as a choice means a reader who picked
+// Deutsch in settings has `language: "en"` written over it the next time they open the
+// landing and click the account chip, which is most days. So a locale is only ever
+// taken as a *preference* when it could not have arrived by default:
 //
-//   • The proxy had to guess. It reaches an unprefixed `/cabinet/*` with no cookie —
-//     a first visit on this device — and falls back to Accept-Language, a header the
-//     reader never set. It marks that guess (COOKIES.localeGuessed). If the account
-//     has a stored language, it beats the guess: adopt it, and the reader who chose
-//     Deutsch on their laptop opens the cabinet in German on their phone instead of
-//     in whatever their phone's OS language happens to be.
+//   • Accept-Language guesses are never preferences. The proxy marks them (it knows,
+//     and by the time a page renders the evidence is gone). If the account already has
+//     a stored language it wins outright — the reader who chose Deutsch on a laptop
+//     opens the cabinet in German on a phone rather than in the phone's OS language.
+//     If it does not, nothing is stored: a guess must not become the answer to the
+//     question it was guessing at.
 //
-//   • Everything else. The locale in the URL came from somewhere real — the language
-//     they were reading on the public site (site_conductor mirrors it into the cookie,
-//     and the account chip links straight into it), the settings switcher, or a link
-//     they followed. That is a choice, so it becomes the stored one.
+//   • `en` is never written from a URL, for the reason above. It is a real choice only
+//     when made in settings, which writes it directly and does not need this component.
 //
-// The second case is what makes the language "follow" a reader from the landing without
-// them ever opening settings, and it is deliberately a write on arrival rather than a
-// prompt: the alternative is a stored preference that silently disagrees with every page
-// they have seen for months.
+//   • Any of the four prefixed locales IS a signal. `/ru`, `/vi`, `/fr`, `/de` cannot
+//     be reached by accident, so arriving in the cabinet from one is the reader telling
+//     us their language, and it becomes the stored one. That is what makes the language
+//     follow someone in from the landing without them ever opening settings.
 export function LocaleSync() {
   const locale = useLocale();
   const { data: profile } = useResource(profileResource);
-  // One attempt per (locale, stored) pair. Without this a save that keeps failing —
-  // an expired session, a validation rule the stored profile already violates — would
-  // be retried on every render of every page for as long as the tab is open.
+  // One attempt per (locale, stored) pair, so a background revalidation of the profile
+  // does not re-run the write on every refresh.
   const attempted = useRef<string | null>(null);
 
   useEffect(() => {
@@ -53,22 +56,36 @@ export function LocaleSync() {
     if (attempted.current === key) return;
     attempted.current = key;
 
-    if (takeGuessMarker() && isLocale(stored) && stored !== locale) {
-      writeLocaleCookie(stored);
-      // A hard navigation: the locale is a root layout segment, so the catalogue is
-      // chosen server-side and `router.replace` would re-render the same one.
-      // `replace` semantics via location.replace so the guessed URL does not become a
-      // back-button stop the reader has to click past twice.
-      window.location.replace(localeUrl(stored));
+    // Cleared unconditionally: the mark describes the entry that minted it, and this is
+    // the page that entry led to. `guessed` is only true when it names THIS locale, so
+    // a mark left behind by an earlier redirect cannot speak for a URL it never saw.
+    const guessed = takeGuessMarker() === locale;
+    if (guessed) {
+      if (isLocale(stored) && stored !== locale) {
+        writeLocaleCookie(stored);
+        // Hard navigation: the locale is a root layout segment, so the catalogue is
+        // chosen server-side and `router.replace` would re-render the same one.
+        // `location.replace` rather than an assignment, so the guessed URL is not a
+        // back-button stop the reader has to click past twice.
+        window.location.replace(relocalise(stored, window.location));
+      }
+      // Either way the guess itself is not evidence of anything, so nothing is stored.
       return;
     }
 
-    // Already agreed, or the reader stores something more specific than a routable
-    // locale (`en-GB`, `pt-BR`): a regional code is a real preference that this UI
-    // cannot express, so narrowing it to the bare language would be a downgrade, not
-    // a sync. Only overwrite an empty value or another routable locale.
+    if (locale === DEFAULT_LOCALE) return;
     if (stored === locale) return;
+    // A reader who stores something more specific than a routable locale (`en-GB`,
+    // `pt-BR`) has a real preference this UI cannot express; narrowing it to the bare
+    // language would be a downgrade, not a sync.
     if (stored !== "" && !isLocale(stored)) return;
+    // The cookie is written from the URL by the proxy on every request, so the two agree
+    // on any settled page. They disagree in exactly one window: the settings switcher
+    // writes the cookie and *then* navigates, and the page keeps running until unload —
+    // long enough for `saveProfile` to publish, re-render this effect with the new
+    // stored language beside the old URL, and helpfully write the old language back over
+    // the choice the reader just made.
+    if (readLocaleCookie() !== locale) return;
 
     // Best-effort, and deliberately not retried within the page. The cookie already
     // carries this locale, so nothing the reader can see is waiting on it — only the
@@ -82,28 +99,25 @@ export function LocaleSync() {
   return null;
 }
 
-/** The current page, in `locale`, query string and all. */
-function localeUrl(locale: Locale): string {
-  return cabinetPath(locale, zonePathname(window.location.pathname)) + window.location.search;
-}
-
 /**
- * Reads the proxy's "this locale was guessed from Accept-Language" mark and clears it,
- * so the adoption below happens once per guess rather than on every page of the visit.
+ * Reads the proxy's "this locale came from Accept-Language" mark and clears it,
+ * returning the locale it was minted for.
  *
  * The name is derived from the protocol for the same reason as the locale cookie
  * itself — see `shared/lib/locale-cookie.ts`. Expired by setting `max-age=0` on the
  * exact same path the proxy wrote it with; anything else leaves the original in place.
  */
-function takeGuessMarker(): boolean {
+function takeGuessMarker(): Locale | null {
   const name = (location.protocol === "https:" ? "__Host-" : "") + "ev_locale_guessed";
-  const present = document.cookie
-    .split(";")
-    .some((part) => part.trim().split("=")[0] === name);
-  if (present) {
+  let value: string | null = null;
+  for (const part of document.cookie.split(";")) {
+    const [k, ...rest] = part.trim().split("=");
+    if (k === name) value = decodeURIComponent(rest.join("="));
+  }
+  if (value !== null) {
     document.cookie = `${name}=;path=/;max-age=0${location.protocol === "https:" ? ";secure" : ""}`;
   }
-  return present;
+  return isLocale(value) ? value : null;
 }
 
 /**

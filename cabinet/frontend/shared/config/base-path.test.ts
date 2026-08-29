@@ -10,7 +10,7 @@ import test from "node:test";
 
 import { LOCALES } from "@evinvest/i18n";
 
-import { cabinetPath, isNonPagePath, zonePathname } from "./base-path.ts";
+import { cabinetPath, isNonPagePath, relocalise, zonePathname } from "./base-path.ts";
 
 test("every locale round-trips back to the path the app reasons in", () => {
   for (const locale of LOCALES) {
@@ -101,4 +101,25 @@ test("a page that merely mentions an excluded name is still a page", () => {
   ]) {
     assert.equal(isNonPagePath(path), false, path);
   }
+});
+
+test("relocalising a page keeps its query and hash", () => {
+  // Two callers relocalise the current page — the settings language switcher and
+  // LocaleSync — and a version that drops the query string is a bug that only shows up
+  // the first time a cabinet page takes a parameter. Pinned so they cannot diverge.
+  const url = { pathname: "/ru/cabinet/wallet", search: "?filter=deposits", hash: "#top" };
+  assert.equal(relocalise("de", url), "/de/cabinet/wallet?filter=deposits#top");
+});
+
+test("relocalising to English keeps the locale segment the cabinet actually serves", () => {
+  // Unlike the public site, the zone has no unprefixed form: /cabinet/* is the entry
+  // the proxy redirects AWAY from, so English pages really do live under /en.
+  assert.equal(
+    relocalise("en", { pathname: "/de/cabinet/settings", search: "", hash: "" }),
+    "/en/cabinet/settings",
+  );
+});
+
+test("relocalising the cabinet root does not grow a trailing slash", () => {
+  assert.equal(relocalise("vi", { pathname: "/en/cabinet", search: "", hash: "" }), "/vi/cabinet");
 });
