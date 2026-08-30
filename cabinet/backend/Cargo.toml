@@ -31,7 +31,10 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"] }
 
 [dev-dependencies]
+jsonwebtoken.workspace = true
 prost.workspace = true
+tokio-stream.workspace = true
+tower = { workspace = true, features = ["util"] }
 
 [lints]
 workspace = true
