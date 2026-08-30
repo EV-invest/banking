@@ -52,6 +52,19 @@ fn u32_field(v: &Value, key: &str) -> u32 {
 	v.get(key).and_then(Value::as_u64).unwrap_or(0) as u32
 }
 
+/// A REQUIRED basis-point rate: `None` when the field is missing, or is not a whole
+/// non-negative number that fits a `u32`.
+///
+/// Deliberately not [`u32_field`], whose missing-is-zero default is right for an optional
+/// knob and wrong for a price. A rate that arrives as `"200"`, as `2.5`, or not at all is
+/// a client that does not know what it is asking for, and coercing it to zero would set
+/// the fund to charge NOTHING while answering "saved" — the exact silent-zero state this
+/// screen exists to end. The hub caps the value at 10000 bps; refusing a malformed one is
+/// this layer's half.
+fn rate_field(v: &Value, key: &str) -> Option<u32> {
+	v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
+}
+
 // ── overview (fleet health; health RPCs are public — no token) ─────────────────
 
 /// `GET /api/admin/overview` — fleet health across the two hubs + the money plane's
@@ -291,16 +304,23 @@ pub async fn set_fee_policy(State(st): State<AppState>, jar: CookieJar, headers:
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
-	let token = require_money_token(&st, &jar).await?;
+	// Validated before the money token is minted: a request we are going to refuse on its
+	// own contents should not cost an `IssueUserToken` round trip at the banking plane.
 	let v = parse_body(&body);
 	let (Some(service), Some(basis), Some(crystallization)) = (required(&v, "service"), required(&v, "basis"), required(&v, "crystallization")) else {
 		return Err(ApiError::BadRequest("service, basis and crystallization are required".into()));
 	};
+	let (Some(management_bps), Some(performance_bps), Some(hurdle_bps)) = (rate_field(&v, "management_bps"), rate_field(&v, "performance_bps"), rate_field(&v, "hurdle_bps")) else {
+		return Err(ApiError::BadRequest(
+			"management_bps, performance_bps and hurdle_bps are required, each a whole number of basis points".into(),
+		));
+	};
+	let token = require_money_token(&st, &jar).await?;
 	let req = bk::SetFeePolicyRequest {
 		service,
-		management_bps: u32_field(&v, "management_bps"),
-		performance_bps: u32_field(&v, "performance_bps"),
-		hurdle_bps: u32_field(&v, "hurdle_bps"),
+		management_bps,
+		performance_bps,
+		hurdle_bps,
 		basis,
 		crystallization,
 	};
@@ -329,11 +349,11 @@ pub async fn settle_fee_shares(State(st): State<AppState>, jar: CookieJar, heade
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
-	let token = require_money_token(&st, &jar).await?;
 	let v = parse_body(&body);
 	let Some(service) = required(&v, "service") else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
+	let token = require_money_token(&st, &jar).await?;
 	let settlement = st.grpc.settle_fee_shares(&token, &service, &required(&v, "units").unwrap_or_default()).await?;
 	Ok(Json(settlement.into()))
 }
@@ -727,9 +747,8 @@ mod fee_route_tests {
 	#![allow(clippy::result_large_err)]
 
 	use std::{
-		net::{SocketAddr, TcpListener},
+		net::SocketAddr,
 		sync::{Arc, Mutex},
-		time::Duration,
 	};
 
 	use axum::{
@@ -748,6 +767,8 @@ mod fee_route_tests {
 	};
 	use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, get_current_timestamp};
 	use serde_json::Value;
+	use tokio::net::TcpListener;
+	use tokio_stream::wrappers::TcpListenerStream;
 	use tonic::{Code, Request as GrpcRequest, Response as GrpcResponse, Status, transport::Server};
 	use tower::ServiceExt;
 
@@ -769,6 +790,8 @@ mod fee_route_tests {
 	const AUDIENCE: &str = "concierge";
 	const CSRF: &str = "csrf-token-value";
 	const SERVICE: &str = "quy-nhon";
+	/// What the stub's exchange seam mints. The fees RPCs accept nothing else.
+	const MONEY_TOKEN: &str = "banking-access-token";
 
 	// ── the stub hub ────────────────────────────────────────────────────────────
 
@@ -804,6 +827,21 @@ mod fee_route_tests {
 				fail_with: Some(code),
 				..Self::new(role)
 			}
+		}
+
+		/// The fees plane is a MONEY plane: it must be reached with the banking
+		/// (`aud=banking-core`) token minted through the exchange seam, never with the
+		/// concierge identity JWT from the cookie. The two are cryptographically separate,
+		/// so forwarding the wrong one is rejected in production on issuer/audience — but a
+		/// stub that accepts any bearer would let a handler swapping `require_money_token`
+		/// for `require_token` pass every test here and fail only in prod. So the stub
+		/// checks, and the plane crossing is pinned like any other gate.
+		fn guard_money_plane<T>(&self, request: &GrpcRequest<T>) -> Result<(), Status> {
+			let presented = request.metadata().get("authorization").and_then(|v| v.to_str().ok()).unwrap_or_default();
+			if presented != format!("Bearer {MONEY_TOKEN}") {
+				return Err(Status::unauthenticated("the fees plane requires the banking money token, not the concierge identity token"));
+			}
+			self.guard()
 		}
 
 		fn guard(&self) -> Result<(), Status> {
@@ -906,7 +944,7 @@ mod fee_route_tests {
 		async fn issue_user_token(&self, _: GrpcRequest<bk::IssueUserTokenRequest>) -> Result<GrpcResponse<bk::TokenResponse>, Status> {
 			self.seen.lock().unwrap().money_tokens_issued += 1;
 			Ok(GrpcResponse::new(bk::TokenResponse {
-				access_token: "banking-access-token".into(),
+				access_token: MONEY_TOKEN.into(),
 				access_expires_at: now_secs() + 900,
 				refresh_token: "banking-refresh-token".into(),
 				refresh_expires_at: now_secs() + 86_400,
@@ -937,8 +975,8 @@ mod fee_route_tests {
 
 	#[tonic::async_trait]
 	impl FeesService for Hub {
-		async fn list_fee_policies(&self, _: GrpcRequest<bk::ListFeePoliciesRequest>) -> Result<GrpcResponse<bk::FeePolicyList>, Status> {
-			self.guard()?;
+		async fn list_fee_policies(&self, request: GrpcRequest<bk::ListFeePoliciesRequest>) -> Result<GrpcResponse<bk::FeePolicyList>, Status> {
+			self.guard_money_plane(&request)?;
 			Ok(GrpcResponse::new(bk::FeePolicyList {
 				policies: vec![bk::FeePolicy {
 					service: SERVICE.into(),
@@ -954,7 +992,7 @@ mod fee_route_tests {
 		}
 
 		async fn set_fee_policy(&self, request: GrpcRequest<bk::SetFeePolicyRequest>) -> Result<GrpcResponse<bk::FeePolicy>, Status> {
-			self.guard()?;
+			self.guard_money_plane(&request)?;
 			let req = request.into_inner();
 			self.seen.lock().unwrap().set_policy = Some(req.clone());
 			Ok(GrpcResponse::new(bk::FeePolicy {
@@ -969,8 +1007,8 @@ mod fee_route_tests {
 			}))
 		}
 
-		async fn get_fee_shares(&self, _: GrpcRequest<bk::GetFeeSharesRequest>) -> Result<GrpcResponse<bk::FeeShares>, Status> {
-			self.guard()?;
+		async fn get_fee_shares(&self, request: GrpcRequest<bk::GetFeeSharesRequest>) -> Result<GrpcResponse<bk::FeeShares>, Status> {
+			self.guard_money_plane(&request)?;
 			Ok(GrpcResponse::new(bk::FeeShares {
 				service: SERVICE.into(),
 				units: "12.500000".into(),
@@ -979,7 +1017,7 @@ mod fee_route_tests {
 		}
 
 		async fn settle_fee_shares(&self, request: GrpcRequest<bk::SettleFeeSharesRequest>) -> Result<GrpcResponse<bk::FeeSettlement>, Status> {
-			self.guard()?;
+			self.guard_money_plane(&request)?;
 			let req = request.into_inner();
 			self.seen.lock().unwrap().settle = Some(req.clone());
 			Ok(GrpcResponse::new(bk::FeeSettlement {
@@ -990,8 +1028,8 @@ mod fee_route_tests {
 			}))
 		}
 
-		async fn list_fund_fee_assessments(&self, _: GrpcRequest<bk::ListFundFeeAssessmentsRequest>) -> Result<GrpcResponse<bk::FeeAssessmentList>, Status> {
-			self.guard()?;
+		async fn list_fund_fee_assessments(&self, request: GrpcRequest<bk::ListFundFeeAssessmentsRequest>) -> Result<GrpcResponse<bk::FeeAssessmentList>, Status> {
+			self.guard_money_plane(&request)?;
 			Ok(GrpcResponse::new(bk::FeeAssessmentList {
 				assessments: vec![bk::FeeAssessment {
 					service: SERVICE.into(),
@@ -1028,12 +1066,17 @@ mod fee_route_tests {
 		std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
 	}
 
-	/// Serve the stub on an ephemeral port and wait until it accepts, so the first RPC
-	/// does not race the listener.
+	/// Serve the stub on an ephemeral port, handing tonic the listener we already hold.
+	///
+	/// Binding to claim a port and then letting `serve(addr)` bind it again would open a
+	/// window in which a sibling test — these run in parallel, in one process — is handed
+	/// the port this one just released. The loser's `serve` would fail inside a spawned
+	/// task, where the panic is swallowed, and its connect check would then succeed
+	/// against the WINNER's hub: a test asserting on an `investor` role would quietly be
+	/// talking to an `admin` stub. Never re-binding is what rules that out.
 	async fn serve(hub: Hub) -> SocketAddr {
-		// Bind to claim a free port, then hand the address to tonic. `serve_with_incoming`
-		// would close the gap, but it needs a stream adapter this workspace does not carry.
-		let addr = TcpListener::bind("127.0.0.1:0").expect("claim an ephemeral port").local_addr().unwrap();
+		let listener = TcpListener::bind("127.0.0.1:0").await.expect("claim an ephemeral port");
+		let addr = listener.local_addr().expect("the listener has an address");
 
 		tokio::spawn(async move {
 			Server::builder()
@@ -1041,18 +1084,12 @@ mod fee_route_tests {
 				.add_service(UserDirectoryServer::new(hub.clone()))
 				.add_service(BkAuthServiceServer::new(hub.clone()))
 				.add_service(FeesServiceServer::new(hub))
-				.serve(addr)
+				.serve_with_incoming(TcpListenerStream::new(listener))
 				.await
 				.expect("the stub hub serves");
 		});
 
-		for _ in 0..100 {
-			if tokio::net::TcpStream::connect(addr).await.is_ok() {
-				return addr;
-			}
-			tokio::time::sleep(Duration::from_millis(20)).await;
-		}
-		panic!("the stub hub never accepted a connection on {addr}");
+		addr
 	}
 
 	/// The real router over a real `AppState`, with all three upstream channels pointed at
@@ -1230,23 +1267,37 @@ mod fee_route_tests {
 		assert_eq!(body["value"], "1375.00");
 	}
 
-	/// The audit trail. `debt_carried` is the column that explains a charge collecting less
-	/// than it assessed, so it must survive the mapping.
+	/// The audit trail, every column of it. `charged_cash` and `debt_opening` earn their
+	/// place here as much as the rest: `charged_cash` falling short of
+	/// `management + performance` is the ONLY thing that says a holding could not cover its
+	/// charge, and dropping either from the DTO would empty a column of the operator's
+	/// table while every other assertion still passed.
 	#[tokio::test]
 	async fn the_charge_history_keeps_every_column() {
-		let app = app(serve(Hub::new("admin")).await);
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
 
 		let (status, body) = send(&app, signed("GET", "/api/admin/fees/assessments?service=quy-nhon", None, false)).await;
 		assert_eq!(status, StatusCode::OK);
 
 		let row = &body["assessments"][0];
+		assert_eq!(row["service"], SERVICE);
 		assert_eq!(row["trigger"], "period");
+		assert_eq!(row["nav"], "110.00");
 		assert_eq!(row["management"], "20.00");
 		assert_eq!(row["performance"], "80.00");
+		assert_eq!(row["debt_opening"], "0");
 		assert_eq!(row["charged_units"], "0.909090");
+		assert_eq!(row["charged_cash"], "100.00");
 		assert_eq!(row["debt_carried"], "0");
 		assert_eq!(row["high_water_mark"], "110.00");
 		assert_eq!(row["assessed_at"], "1750000200", "assessed_at must serialize as a string, not a number");
+
+		// The mirror of the "rejected requests mint nothing" assertions: a read that DID
+		// reach the hub must have crossed to the money plane to get there. Without this,
+		// every `money_tokens_issued == 0` below would also pass if the seam were dead.
+		assert_eq!(seen.lock().unwrap().money_tokens_issued, 1, "a served fees read must have minted the banking money token");
 	}
 
 	/// Both per-fund reads name their fund in the query string, and a missing one is a
@@ -1305,16 +1356,64 @@ mod fee_route_tests {
 		let app = app(serve(hub).await);
 
 		for body in [
-			r#"{"management_bps":200,"basis":"invested_capital","crystallization":"annual"}"#,
-			r#"{"service":"quy-nhon","management_bps":200,"crystallization":"annual"}"#,
-			r#"{"service":"quy-nhon","management_bps":200,"basis":"invested_capital"}"#,
-			r#"{"service":"quy-nhon","basis":"","crystallization":"annual"}"#,
+			r#"{"management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#,
+			r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"crystallization":"annual"}"#,
+			r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital"}"#,
+			r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"","crystallization":"annual"}"#,
 		] {
 			let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
 			assert_eq!(status, StatusCode::BAD_REQUEST, "an incomplete schedule must be refused: {body}");
 		}
 
-		assert!(seen.lock().unwrap().set_policy.is_none(), "an incomplete schedule must never reach the hub");
+		let seen = seen.lock().unwrap();
+		assert!(seen.set_policy.is_none(), "an incomplete schedule must never reach the hub");
+		assert_eq!(seen.money_tokens_issued, 0, "a body we are going to refuse must not cost a money-token mint");
+	}
+
+	/// The rates are part of "the whole schedule", and a missing or malformed one is the
+	/// dangerous case: coerced to zero it would price the fund at NOTHING while the screen
+	/// answers "saved" — the very silent-zero state this console exists to end. A rate sent
+	/// as a JSON string or a fraction is the same client bug wearing a different hat.
+	#[tokio::test]
+	async fn a_missing_or_malformed_rate_is_refused_rather_than_read_as_zero() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for body in [
+			// No rates at all — the shape that would quietly zero a priced fund.
+			r#"{"service":"quy-nhon","basis":"invested_capital","crystallization":"annual"}"#,
+			// One rate missing.
+			r#"{"service":"quy-nhon","management_bps":200,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#,
+			// Numbers as strings — what a hand-rolled client or a form post sends.
+			r#"{"service":"quy-nhon","management_bps":"200","performance_bps":"2000","hurdle_bps":"0","basis":"invested_capital","crystallization":"annual"}"#,
+			// A fraction of a basis point is not a rate this plane can carry.
+			r#"{"service":"quy-nhon","management_bps":2.5,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#,
+			// Negative.
+			r#"{"service":"quy-nhon","management_bps":-200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#,
+		] {
+			let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "a rate that is not a whole number of bps must be refused: {body}");
+		}
+
+		assert!(seen.lock().unwrap().set_policy.is_none(), "a malformed rate must never reach the hub as a zero");
+	}
+
+	/// Zero IS a legitimate rate — a fund that charges no performance fee is a real
+	/// product. Only an ABSENT or malformed rate is refused, so the guard above must not
+	/// have made an explicit zero unwritable.
+	#[tokio::test]
+	async fn an_explicit_zero_rate_is_still_a_valid_schedule() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let body = r#"{"service":"quy-nhon","management_bps":0,"performance_bps":0,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#;
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+		assert_eq!(status, StatusCode::OK, "a deliberate zero-rate policy must be writable");
+
+		let forwarded = seen.lock().unwrap().set_policy.clone().expect("the hub saw the write");
+		assert_eq!((forwarded.management_bps, forwarded.performance_bps, forwarded.hurdle_bps), (0, 0, 0));
 	}
 
 	/// The ordinary end-of-period call the screen's one button makes: an empty `units`.
@@ -1358,7 +1457,10 @@ mod fee_route_tests {
 
 		let (status, _) = send(&app, signed("POST", "/api/admin/fees/settle", Some(r#"{"units":"1"}"#), true)).await;
 		assert_eq!(status, StatusCode::BAD_REQUEST);
-		assert!(seen.lock().unwrap().settle.is_none(), "a settle with no fund must never reach the hub");
+
+		let seen = seen.lock().unwrap();
+		assert!(seen.settle.is_none(), "a settle with no fund must never reach the hub");
+		assert_eq!(seen.money_tokens_issued, 0, "a body we are going to refuse must not cost a money-token mint");
 	}
 
 	// ── what the hub says back ──────────────────────────────────────────────────
