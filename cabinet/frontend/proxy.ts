@@ -5,7 +5,7 @@ import { isLocale, negotiate, type Locale } from "@evinvest/i18n";
 
 import { experiments } from "@/application/experiments";
 import { config as appConfig } from "@/config";
-import { BASE_PATH, isNonPagePath } from "@/shared/config/base-path";
+import { BASE_PATH, isNonPagePath, localeRepairedPath } from "@/shared/config/base-path";
 import { COOKIES } from "@/shared/config/cookies";
 import { contentSecurityPolicy } from "@/shared/config/security";
 
@@ -64,47 +64,63 @@ export function proxy(req: NextRequest) {
   const csp = contentSecurityPolicy(nonce);
   req.headers.set(CSP_HEADER, csp);
 
-  // No locale in the path: an old link, a bookmark, or the conductor's unprefixed
-  // /cabinet mount. Send them to a real URL rather than 404ing — the cookie is the
+  // No usable locale in the path: an old link, a bookmark, the conductor's
+  // unprefixed /cabinet mount, or a first segment that looks like a locale and is
+  // not one (`/zz/cabinet/wallet`, `/pt/cabinet` — a typo, or a language we do not
+  // serve). Send them all to a real URL rather than 404ing — the cookie is the
   // reader's last choice, Accept-Language the first guess, English the floor.
   //
   // The cookie is now written by the public site too (site_conductor
   // `scripts/locale-cookie.ts`), mirroring the locale of whatever page the reader
   // was on, so "their last choice" finally includes the language they were reading
   // on the landing a moment ago rather than only a previous cabinet visit.
-  if (!locale && pathname.startsWith(BASE_PATH)) {
+  //
+  // The `/<not-a-locale>/cabinet/…` half is why this is not a plain prefix test.
+  // Those requests used to reach `app/[locale]/layout.tsx` and its `notFound()`,
+  // which the ROOT layout throws and so has no `not-found.tsx` above it to render
+  // — the reader got Next's built-in black 404 rather than ours. `localeRepairedPath`
+  // covers both shapes, so repairing the URL fixes the page they land on as well as
+  // the page they would otherwise be shown.
+  if (!locale) {
     const remembered = req.cookies.get(COOKIES.locale)?.value;
     const chosen = isLocale(remembered)
       ? remembered
       : negotiate(req.headers.get("accept-language"));
-    const url = req.nextUrl.clone();
-    url.pathname = `/${chosen}${pathname}`;
-    const res = withCsp(NextResponse.redirect(url), csp);
-    // Accept-Language is a header the reader never set, so a locale derived from it
-    // is a guess, not a preference — and the account holder may well have stored a
-    // real one from another device. The app cannot tell the two apart on its own:
-    // this redirect carries no cookie, but the request it redirects TO does get one
-    // written from the (guessed) URL by `withLocale` below, so by the time any page
-    // renders the evidence is gone. Mark it here, while it is still known;
-    // `LocaleSync` reads the mark, prefers the stored profile language over the
-    // guess, and clears it. Session-scoped: a guess is only about this visit.
-    //
-    // The mark carries the guessed locale rather than a bare flag, so it can only
-    // ever describe the page it was minted for. A flag would outlive its redirect
-    // whenever the reader never reaches a page that clears it (the profile fetch
-    // fails, or they land on /login, which mounts no LocaleSync) and would then
-    // read as "this URL was guessed" on the next deliberate /de/cabinet link they
-    // follow — bouncing them off the page they chose. Matching on the value makes
-    // a stale mark inert instead.
-    if (!isLocale(remembered)) {
-      res.cookies.set(COOKIES.localeGuessed, chosen, {
-        path: "/",
-        sameSite: "lax",
-        secure: appConfig.authCookieSecure,
-        httpOnly: false,
-      });
+    const repaired = localeRepairedPath(pathname, chosen);
+    if (repaired) {
+      const url = req.nextUrl.clone();
+      url.pathname = repaired;
+      const res = withCsp(NextResponse.redirect(url), csp);
+      // Accept-Language is a header the reader never set, so a locale derived from it
+      // is a guess, not a preference — and the account holder may well have stored a
+      // real one from another device. The app cannot tell the two apart on its own:
+      // this redirect carries no cookie, but the request it redirects TO does get one
+      // written from the (guessed) URL by `withLocale` below, so by the time any page
+      // renders the evidence is gone. Mark it here, while it is still known;
+      // `LocaleSync` reads the mark, prefers the stored profile language over the
+      // guess, and clears it. Session-scoped: a guess is only about this visit.
+      //
+      // A bogus locale segment is as much a guess as a missing one — `/pt/cabinet`
+      // tells us which language the reader wanted and precisely that we do not serve
+      // it — so it is marked on the same terms.
+      //
+      // The mark carries the guessed locale rather than a bare flag, so it can only
+      // ever describe the page it was minted for. A flag would outlive its redirect
+      // whenever the reader never reaches a page that clears it (the profile fetch
+      // fails, or they land on /login, which mounts no LocaleSync) and would then
+      // read as "this URL was guessed" on the next deliberate /de/cabinet link they
+      // follow — bouncing them off the page they chose. Matching on the value makes
+      // a stale mark inert instead.
+      if (!isLocale(remembered)) {
+        res.cookies.set(COOKIES.localeGuessed, chosen, {
+          path: "/",
+          sameSite: "lax",
+          secure: appConfig.authCookieSecure,
+          httpOnly: false,
+        });
+      }
+      return res;
     }
-    return res;
   }
 
   if (!isPublic(pathname) && !signedIn) {

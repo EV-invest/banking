@@ -103,6 +103,10 @@
     "en": "Cabinet",
     "t": "Espace client"
   },
+  "nav.fees": {
+    "en": "Fees",
+    "t": "Frais"
+  },
   "nav.home": {
     "en": "Home",
     "t": "Accueil"
@@ -154,6 +158,90 @@
   "ops.filterByKind": {
     "en": "Filter operations by kind",
     "t": "Filtrer les opérations par type"
+  },
+  "status.backHome": {
+    "en": "Back to home",
+    "t": "Retour à l'accueil"
+  },
+  "status.contactTeam": {
+    "en": "Contact the team",
+    "t": "Contacter l'équipe"
+  },
+  "status.forbidden.eyebrow": {
+    "en": "Access forbidden",
+    "t": "Accès refusé"
+  },
+  "status.forbidden.headlineAccent": {
+    "en": "private",
+    "t": "privé"
+  },
+  "status.forbidden.headlineLead": {
+    "en": "This harbour is ",
+    "t": "Ce port est "
+  },
+  "status.forbidden.subtext": {
+    "en": "You don't have the credentials to view this page. If you believe you should, our team can open the right doors.",
+    "t": "Vous n'avez pas les accès nécessaires pour consulter cette page. Si vous pensez qu'il s'agit d'une erreur, notre équipe peut vous ouvrir les bonnes portes."
+  },
+  "status.notFound.eyebrow": {
+    "en": "Page not found",
+    "t": "Page introuvable"
+  },
+  "status.notFound.headlineAccent": {
+    "en": "open water",
+    "t": "large"
+  },
+  "status.notFound.headlineLead": {
+    "en": "You've reached ",
+    "t": "Vous avez gagné le "
+  },
+  "status.notFound.subtext": {
+    "en": "The page you're looking for has drifted off our coastline — moved, renamed, or never charted. Let's get you back to shore.",
+    "t": "La page que vous cherchez a dérivé loin de nos côtes — déplacée, renommée, ou jamais cartographiée. Ramenons-vous à bon port."
+  },
+  "status.requestAccess": {
+    "en": "Request access",
+    "t": "Demander l'accès"
+  },
+  "status.serverError.eyebrow": {
+    "en": "Server error",
+    "t": "Erreur serveur"
+  },
+  "status.serverError.headlineAccent": {
+    "en": "recalibrating",
+    "t": "recalibrent"
+  },
+  "status.serverError.headlineLead": {
+    "en": "Our systems are ",
+    "t": "Nos systèmes se "
+  },
+  "status.serverError.subtext": {
+    "en": "Something broke on our end — not yours. We've been alerted and are restoring service. Please try again in a moment.",
+    "t": "Quelque chose a cédé de notre côté — pas du vôtre. Nous avons été alertés et rétablissons le service. Réessayez dans un instant."
+  },
+  "status.signIn": {
+    "en": "Sign in",
+    "t": "Se connecter"
+  },
+  "status.tryAgain": {
+    "en": "Try again",
+    "t": "Réessayer"
+  },
+  "status.unauthorized.eyebrow": {
+    "en": "Sign-in required",
+    "t": "Connexion requise"
+  },
+  "status.unauthorized.headlineAccent": {
+    "en": "crew only",
+    "t": "réservé à l'équipage"
+  },
+  "status.unauthorized.headlineLead": {
+    "en": "This deck is ",
+    "t": "Ce pont est "
+  },
+  "status.unauthorized.subtext": {
+    "en": "You need to be signed in to view this page. Sign in and we'll bring you right back.",
+    "t": "Vous devez être connecté pour consulter cette page. Connectez-vous et nous vous y ramenons aussitôt."
   },
   "ui.account": {
     "en": "Account",

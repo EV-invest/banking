@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+
 import { RemoteElement } from "@/shared/mfe/RemoteElement";
 import { findMfe } from "@/shared/mfe/registry";
+
+// App surfaces, not marketing pages — keep page MFEs out of the search index.
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 // Page-level microfrontends: a service owns a whole route. The optional catch-all
 // `[[...slug]]` means this also matches the bare `/<service>` index, and the rest
@@ -7,21 +13,20 @@ import { findMfe } from "@/shared/mfe/registry";
 // its chrome; the remote owns the content region. Same custom-element contract as
 // inline widgets — just mounted at a route. (Not Multi-Zones: this is runtime
 // component composition, which also covers inline widgets.)
+//
+// This route sits at the root of the cabinet tree, so it is also what every URL
+// under `/{locale}/cabinet/` that matches nothing else falls into — a typo, a
+// stale bookmark, a scanner. That makes its miss branch the cabinet's real 404,
+// not a developer aside: it used to render a soft-200 "Unknown microfrontend —
+// add it to mfe-registry.json" panel, which the conductor proxies straight onto
+// the public origin. `notFound()` instead, so the reader gets the branded 404 in
+// their own language and crawlers and monitoring get the status code to match.
 export default async function MfePage({ params }: { params: Promise<{ service: string; slug?: string[] }> }) {
   const { service } = await params;
   const entry = await findMfe(service);
 
-  if (!entry || entry.kind !== "page") {
-    return (
-      <div className="container py-24">
-        <h1 className="text-3xl font-semibold">Unknown microfrontend</h1>
-        <p className="mt-2 text-muted-foreground">
-          No page microfrontend is registered for <code>/{service}</code>. Add it to{" "}
-          <code>mfe-registry.json</code>.
-        </p>
-      </div>
-    );
-  }
+  // Unregistered, or registered as an inline component rather than a page.
+  if (!entry || entry.kind !== "page") notFound();
 
   return (
     // The 60vh reserve keeps the page from collapsing while the remote boots. It is

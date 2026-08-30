@@ -33,6 +33,41 @@ export const cabinetPath = (locale: Locale, path: `/${string}`): string =>
   path === "/" ? `/${locale}${BASE_PATH}` : `/${locale}${BASE_PATH}${path}`;
 
 /**
+ * The page URL a cabinet request *should* have had, when its locale segment is
+ * missing or is not a locale we serve — or `null` when the path is not a cabinet
+ * page at all and there is nothing to repair.
+ *
+ *   /cabinet/wallet      → /{locale}/cabinet/wallet   (an old link, or the
+ *                                                      conductor's unprefixed mount)
+ *   /zz/cabinet/wallet   → /{locale}/cabinet/wallet   (a typo, or a language we
+ *                                                      do not serve)
+ *   /zz/anything         → null
+ *
+ * The second case is the one that used to fall through. It is reachable in
+ * production — the conductor proxies `/{anything}/cabinet/*` here verbatim — and
+ * it landed on `app/[locale]/layout.tsx`'s `notFound()`, which is thrown by the
+ * ROOT layout and so has no `not-found.tsx` boundary above it to render: Next
+ * served its own black "404 | This page could not be found" instead of ours.
+ * Repairing the URL is better than any 404 anyway. Someone typing `/pt/cabinet`
+ * wants their cabinet, and we have five languages to offer them.
+ */
+export const localeRepairedPath = (pathname: string, locale: Locale): string | null => {
+  const zone = BASE_PATH.slice(1);
+  const [, first, ...rest] = pathname.split("/");
+  // `/cabinet/…` — nothing in front of the zone prefix.
+  if (first === zone) return cabinetPath(locale, zoneSuffix(rest));
+  // `/<not-a-locale>/cabinet/…` — a segment in front of it that has to go.
+  if (rest[0] === zone) return cabinetPath(locale, zoneSuffix(rest.slice(1)));
+  return null;
+};
+
+/** Path segments after the zone prefix, rebuilt as the `/`-rooted tail `cabinetPath` takes. */
+const zoneSuffix = (parts: string[]): `/${string}` => {
+  const tail = parts.filter(Boolean).join("/");
+  return (tail ? `/${tail}` : "/") as `/${string}`;
+};
+
+/**
  * The inverse of {@link cabinetPath}: a real request path back to the zone-relative
  * one the app reasons in.
  *
