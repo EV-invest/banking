@@ -705,3 +705,702 @@ pub async fn set_flag(State(st): State<AppState>, jar: CookieJar, headers: Heade
 	let config = st.grpc.set_feature_flag(&token, req).await?;
 	Ok(Json(config.into()))
 }
+
+/// The five `/api/admin/fees/*` routes, driven end to end through the real router.
+///
+/// These are the calls the operator's fees screen makes, and they were the one part of
+/// the fee plane with no automated coverage: the hub's own charging is exercised against
+/// Postgres + TigerBeetle in `piggybank/core/tests/fee_policy.rs`, but everything between
+/// the browser and that hub — the admin gate, the CSRF double-submit, the "reject before
+/// any upstream call" validation, and the proto→JSON mapping the screen reads — was only
+/// ever tried by hand against a stub.
+///
+/// So the test stands up the whole seam in process: a tonic server that plays all three
+/// upstreams (the concierge JWKS + directory, the banking token-issuance seam, and the
+/// piggybank fees service), a real `AppState` pointed at it, and the real
+/// [`router`](crate::routes::router). Nothing below the HTTP boundary is faked out, so a
+/// handler that forwards the wrong field, forgets a gate, or renames a JSON key fails
+/// here rather than on the screen.
+#[cfg(test)]
+mod fee_route_tests {
+	// `Status` is a large error type tonic mandates in handler signatures.
+	#![allow(clippy::result_large_err)]
+
+	use std::{
+		net::{SocketAddr, TcpListener},
+		sync::{Arc, Mutex},
+		time::Duration,
+	};
+
+	use axum::{
+		Router,
+		body::Body,
+		http::{Request, StatusCode, header},
+	};
+	use evbanking_contracts::banking::v1::{
+		auth_service_server::{AuthService as BkAuthService, AuthServiceServer as BkAuthServiceServer},
+		fees_service_server::{FeesService, FeesServiceServer},
+	};
+	use evconcierge_auth::{Claims, TokenType, Verifier, VerifierConfig};
+	use evconcierge_contracts::concierge::v1::{
+		auth_service_server::{AuthService as CcAuthService, AuthServiceServer as CcAuthServiceServer},
+		user_directory_server::{UserDirectory, UserDirectoryServer},
+	};
+	use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, get_current_timestamp};
+	use serde_json::Value;
+	use tonic::{Code, Request as GrpcRequest, Response as GrpcResponse, Status, transport::Server};
+	use tower::ServiceExt;
+
+	use super::*;
+	use crate::{
+		config::AppConfig,
+		cookies::CookieNames,
+		routes::router,
+		session::BankingTokens,
+		state::{AppState, Grpc},
+	};
+
+	/// A throwaway Ed25519 keypair (`openssl genpkey -algorithm ed25519`) — the same one
+	/// the concierge verifier's own tests use. It signs nothing outside this file.
+	const TEST_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKolOSMXwE+tafZkX+jkKYJbmJ066f4E12wAwTIkKps6\n-----END PRIVATE KEY-----\n";
+	const TEST_JWK_X: &str = "Z6BCmq9-_wo9d7co5CDW84Wn0sAC3BA0XWK2AOstpV4";
+	const TEST_KID: &str = "test-kid";
+	const ISSUER: &str = "https://auth.test";
+	const AUDIENCE: &str = "concierge";
+	const CSRF: &str = "csrf-token-value";
+	const SERVICE: &str = "quy-nhon";
+
+	// ── the stub hub ────────────────────────────────────────────────────────────
+
+	/// What the BFF actually forwarded upstream, so a test can assert on the request the
+	/// hub would have seen rather than only on the response the browser gets.
+	#[derive(Default)]
+	struct Seen {
+		set_policy: Option<bk::SetFeePolicyRequest>,
+		settle: Option<bk::SettleFeeSharesRequest>,
+		money_tokens_issued: usize,
+	}
+
+	#[derive(Clone)]
+	struct Hub {
+		/// The role `GetMe` reports — what [`require_admin`] gates on.
+		role: String,
+		/// When set, every fees RPC fails with this code (the upstream-refusal cases).
+		fail_with: Option<Code>,
+		seen: Arc<Mutex<Seen>>,
+	}
+
+	impl Hub {
+		fn new(role: &str) -> Self {
+			Self {
+				role: role.to_string(),
+				fail_with: None,
+				seen: Arc::new(Mutex::new(Seen::default())),
+			}
+		}
+
+		fn failing(role: &str, code: Code) -> Self {
+			Self {
+				fail_with: Some(code),
+				..Self::new(role)
+			}
+		}
+
+		fn guard(&self) -> Result<(), Status> {
+			match self.fail_with {
+				Some(code) => Err(Status::new(code, "upstream refused")),
+				None => Ok(()),
+			}
+		}
+	}
+
+	#[tonic::async_trait]
+	impl CcAuthService for Hub {
+		/// The only concierge auth RPC the BFF reaches: the verifier caches these keys and
+		/// checks the `ev_access` cookie against them locally.
+		async fn jwks(&self, _: GrpcRequest<cc::JwksRequest>) -> Result<GrpcResponse<cc::JwksResponse>, Status> {
+			Ok(GrpcResponse::new(cc::JwksResponse {
+				keys: vec![cc::Jwk {
+					kid: TEST_KID.into(),
+					kty: "OKP".into(),
+					crv: "Ed25519".into(),
+					x: TEST_JWK_X.into(),
+					alg: "EdDSA".into(),
+					r#use: "sig".into(),
+				}],
+			}))
+		}
+
+		async fn exchange(&self, _: GrpcRequest<cc::ExchangeRequest>) -> Result<GrpcResponse<cc::TokenResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn refresh(&self, _: GrpcRequest<cc::RefreshRequest>) -> Result<GrpcResponse<cc::TokenResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn logout(&self, _: GrpcRequest<cc::LogoutRequest>) -> Result<GrpcResponse<cc::LogoutResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn list_sessions(&self, _: GrpcRequest<cc::ListSessionsRequest>) -> Result<GrpcResponse<cc::ListSessionsResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn revoke_session(&self, _: GrpcRequest<cc::RevokeSessionRequest>) -> Result<GrpcResponse<cc::RevokeSessionResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+	}
+
+	#[tonic::async_trait]
+	impl UserDirectory for Hub {
+		/// `require_admin` reads the caller's role from here per request — the JWT stays
+		/// role-free on purpose, so this is the only thing standing between an investor
+		/// and the console.
+		async fn get_me(&self, _: GrpcRequest<cc::GetMeRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
+			Ok(GrpcResponse::new(cc::UserProfile {
+				user_id: "user-1".into(),
+				role: self.role.clone(),
+				..Default::default()
+			}))
+		}
+
+		async fn update_profile(&self, _: GrpcRequest<cc::UpdateProfileRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn revoke_tokens(&self, _: GrpcRequest<cc::RevokeTokensRequest>) -> Result<GrpcResponse<cc::RevokeTokensResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn disable_user(&self, _: GrpcRequest<cc::DisableUserRequest>) -> Result<GrpcResponse<cc::DisableUserResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn reinstate_user(&self, _: GrpcRequest<cc::ReinstateUserRequest>) -> Result<GrpcResponse<cc::ReinstateUserResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn set_kyc_level(&self, _: GrpcRequest<cc::SetKycLevelRequest>) -> Result<GrpcResponse<cc::SetKycLevelResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn list_users(&self, _: GrpcRequest<cc::ListUsersRequest>) -> Result<GrpcResponse<cc::ListUsersResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn get_user(&self, _: GrpcRequest<cc::GetUserRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn set_role(&self, _: GrpcRequest<cc::SetRoleRequest>) -> Result<GrpcResponse<cc::SetRoleResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+	}
+
+	#[tonic::async_trait]
+	impl BkAuthService for Hub {
+		/// The concierge→banking exchange seam. Every fees route needs a money token, so
+		/// counting the mints is also how these tests prove a rejected request never got
+		/// far enough to ask for one.
+		async fn issue_user_token(&self, _: GrpcRequest<bk::IssueUserTokenRequest>) -> Result<GrpcResponse<bk::TokenResponse>, Status> {
+			self.seen.lock().unwrap().money_tokens_issued += 1;
+			Ok(GrpcResponse::new(bk::TokenResponse {
+				access_token: "banking-access-token".into(),
+				access_expires_at: now_secs() + 900,
+				refresh_token: "banking-refresh-token".into(),
+				refresh_expires_at: now_secs() + 86_400,
+				user: None,
+			}))
+		}
+
+		async fn refresh(&self, _: GrpcRequest<bk::RefreshRequest>) -> Result<GrpcResponse<bk::TokenResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn logout(&self, _: GrpcRequest<bk::LogoutRequest>) -> Result<GrpcResponse<bk::LogoutResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn list_sessions(&self, _: GrpcRequest<bk::ListSessionsRequest>) -> Result<GrpcResponse<bk::ListSessionsResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn revoke_session(&self, _: GrpcRequest<bk::RevokeSessionRequest>) -> Result<GrpcResponse<bk::RevokeSessionResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn jwks(&self, _: GrpcRequest<bk::JwksRequest>) -> Result<GrpcResponse<bk::JwksResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+	}
+
+	#[tonic::async_trait]
+	impl FeesService for Hub {
+		async fn list_fee_policies(&self, _: GrpcRequest<bk::ListFeePoliciesRequest>) -> Result<GrpcResponse<bk::FeePolicyList>, Status> {
+			self.guard()?;
+			Ok(GrpcResponse::new(bk::FeePolicyList {
+				policies: vec![bk::FeePolicy {
+					service: SERVICE.into(),
+					configured: true,
+					management_bps: 200,
+					performance_bps: 2_000,
+					hurdle_bps: 500,
+					basis: "invested_capital".into(),
+					crystallization: "annual".into(),
+					updated_at: 1_750_000_000,
+				}],
+			}))
+		}
+
+		async fn set_fee_policy(&self, request: GrpcRequest<bk::SetFeePolicyRequest>) -> Result<GrpcResponse<bk::FeePolicy>, Status> {
+			self.guard()?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().set_policy = Some(req.clone());
+			Ok(GrpcResponse::new(bk::FeePolicy {
+				service: req.service,
+				configured: true,
+				management_bps: req.management_bps,
+				performance_bps: req.performance_bps,
+				hurdle_bps: req.hurdle_bps,
+				basis: req.basis,
+				crystallization: req.crystallization,
+				updated_at: 1_750_000_100,
+			}))
+		}
+
+		async fn get_fee_shares(&self, _: GrpcRequest<bk::GetFeeSharesRequest>) -> Result<GrpcResponse<bk::FeeShares>, Status> {
+			self.guard()?;
+			Ok(GrpcResponse::new(bk::FeeShares {
+				service: SERVICE.into(),
+				units: "12.500000".into(),
+				value: "1375.00".into(),
+			}))
+		}
+
+		async fn settle_fee_shares(&self, request: GrpcRequest<bk::SettleFeeSharesRequest>) -> Result<GrpcResponse<bk::FeeSettlement>, Status> {
+			self.guard()?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().settle = Some(req.clone());
+			Ok(GrpcResponse::new(bk::FeeSettlement {
+				service: req.service,
+				units: "12.500000".into(),
+				nav: "110.00".into(),
+				cash: "1375.00".into(),
+			}))
+		}
+
+		async fn list_fund_fee_assessments(&self, _: GrpcRequest<bk::ListFundFeeAssessmentsRequest>) -> Result<GrpcResponse<bk::FeeAssessmentList>, Status> {
+			self.guard()?;
+			Ok(GrpcResponse::new(bk::FeeAssessmentList {
+				assessments: vec![bk::FeeAssessment {
+					service: SERVICE.into(),
+					trigger: "period".into(),
+					nav: "110.00".into(),
+					management: "20.00".into(),
+					performance: "80.00".into(),
+					debt_opening: "0".into(),
+					charged_units: "0.909090".into(),
+					charged_cash: "100.00".into(),
+					debt_carried: "0".into(),
+					high_water_mark: "110.00".into(),
+					assessed_at: 1_750_000_200,
+				}],
+			}))
+		}
+
+		async fn get_fee_policy(&self, _: GrpcRequest<bk::GetFeePolicyRequest>) -> Result<GrpcResponse<bk::FeePolicy>, Status> {
+			Err(Status::unimplemented("not reached by the admin fees routes"))
+		}
+
+		async fn list_fee_assessments(&self, _: GrpcRequest<bk::ListFeeAssessmentsRequest>) -> Result<GrpcResponse<bk::FeeAssessmentList>, Status> {
+			Err(Status::unimplemented("not reached by the admin fees routes"))
+		}
+
+		async fn get_accrued_fees(&self, _: GrpcRequest<bk::GetAccruedFeesRequest>) -> Result<GrpcResponse<bk::AccruedFees>, Status> {
+			Err(Status::unimplemented("not reached by the admin fees routes"))
+		}
+	}
+
+	// ── harness ─────────────────────────────────────────────────────────────────
+
+	fn now_secs() -> i64 {
+		std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
+	}
+
+	/// Serve the stub on an ephemeral port and wait until it accepts, so the first RPC
+	/// does not race the listener.
+	async fn serve(hub: Hub) -> SocketAddr {
+		// Bind to claim a free port, then hand the address to tonic. `serve_with_incoming`
+		// would close the gap, but it needs a stream adapter this workspace does not carry.
+		let addr = TcpListener::bind("127.0.0.1:0").expect("claim an ephemeral port").local_addr().unwrap();
+
+		tokio::spawn(async move {
+			Server::builder()
+				.add_service(CcAuthServiceServer::new(hub.clone()))
+				.add_service(UserDirectoryServer::new(hub.clone()))
+				.add_service(BkAuthServiceServer::new(hub.clone()))
+				.add_service(FeesServiceServer::new(hub))
+				.serve(addr)
+				.await
+				.expect("the stub hub serves");
+		});
+
+		for _ in 0..100 {
+			if tokio::net::TcpStream::connect(addr).await.is_ok() {
+				return addr;
+			}
+			tokio::time::sleep(Duration::from_millis(20)).await;
+		}
+		panic!("the stub hub never accepted a connection on {addr}");
+	}
+
+	/// The real router over a real `AppState`, with all three upstream channels pointed at
+	/// the one stub. Cookies take their insecure (unprefixed) names, as in development.
+	fn app(addr: SocketAddr) -> Router {
+		let env = |var: &str| -> Option<String> {
+			Some(match var {
+				"PIGGYBANK_GRPC_ADDR" | "BANKING_AUTH_GRPC_ADDR" | "CONCIERGE_GRPC_ADDR" => format!("http://{addr}"),
+				"BANKING_ISSUANCE_TOKEN" => "test-issuance".into(),
+				"AUTH_ISSUER" => ISSUER.into(),
+				"AUTH_CLIENT_AUDIENCE" => AUDIENCE.into(),
+				"MFE_REGISTRY_PATH" => "/mfe-registry.json".into(),
+				"APP_ENV" => "development".into(),
+				_ => return None,
+			})
+		};
+		let config = AppConfig::from_source(env).expect("the test env loads");
+		let verifier = Verifier::try_new(VerifierConfig {
+			issuer: ISSUER.into(),
+			audiences: vec![AUDIENCE.into()],
+			allowed_types: vec![TokenType::Access],
+			jwks_grpc_endpoint: format!("http://{addr}"),
+		})
+		.expect("build the verifier");
+		let endpoint = format!("http://{addr}");
+
+		router(AppState {
+			cookies: Arc::new(CookieNames::new(config.cookie_secure())),
+			banking: Arc::new(BankingTokens::new()),
+			verifier,
+			grpc: Grpc::connect_lazy(&endpoint, &endpoint, &endpoint, Some("test-issuance".into())).expect("build the lazy channels"),
+			config: Arc::new(config),
+		})
+	}
+
+	/// A valid `ev_access` cookie value — signed with the key the stub publishes.
+	fn access_token() -> String {
+		let claims = Claims {
+			sub: "user-1".into(),
+			iss: ISSUER.into(),
+			aud: AUDIENCE.into(),
+			exp: get_current_timestamp() + 900,
+			iat: get_current_timestamp(),
+			typ: TokenType::Access,
+			jti: None,
+			token_version: 0,
+		};
+		let mut header = Header::new(Algorithm::EdDSA);
+		header.kid = Some(TEST_KID.into());
+		encode(&header, &claims, &EncodingKey::from_ed_pem(TEST_PEM.as_bytes()).unwrap()).expect("sign the access token")
+	}
+
+	/// A request carrying the signed session cookie (and, for mutations, the matching
+	/// CSRF pair) — what the browser actually sends.
+	fn signed(method: &str, uri: &str, body: Option<&str>, csrf: bool) -> Request<Body> {
+		let cookie = format!("ev_access={}; ev_csrf={CSRF}", access_token());
+		let mut builder = Request::builder().method(method).uri(uri).header(header::COOKIE, cookie);
+		if csrf {
+			builder = builder.header("x-ev-csrf", CSRF);
+		}
+		match body {
+			Some(json) => builder.header(header::CONTENT_TYPE, "application/json").body(Body::from(json.to_owned())),
+			None => builder.body(Body::empty()),
+		}
+		.expect("build the request")
+	}
+
+	async fn send(app: &Router, request: Request<Body>) -> (StatusCode, Value) {
+		let response = app.clone().oneshot(request).await.expect("the router responds");
+		let status = response.status();
+		let bytes = axum::body::to_bytes(response.into_body(), 1 << 20).await.expect("read the body");
+		(status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+	}
+
+	// ── the gates ───────────────────────────────────────────────────────────────
+
+	/// Every fees route is behind the session cookie. Without one nothing is read, nothing
+	/// is written, and no money-plane token is ever minted for the caller.
+	#[tokio::test]
+	async fn no_session_reaches_nothing() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for (method, uri, body) in [
+			("GET", "/api/admin/fees/policies", None),
+			("GET", "/api/admin/fees/shares?service=quy-nhon", None),
+			("GET", "/api/admin/fees/assessments?service=quy-nhon", None),
+			("POST", "/api/admin/fees/policy", Some("{}")),
+			("POST", "/api/admin/fees/settle", Some("{}")),
+		] {
+			let mut builder = Request::builder().method(method).uri(uri);
+			if body.is_some() {
+				builder = builder.header(header::CONTENT_TYPE, "application/json");
+			}
+			let request = builder.body(body.map_or_else(Body::empty, |b: &str| Body::from(b.to_owned()))).unwrap();
+			let (status, _) = send(&app, request).await;
+			assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {uri} must refuse an unauthenticated caller");
+		}
+
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.money_tokens_issued, 0, "an unauthenticated request must never mint a money-plane token");
+		assert!(seen.set_policy.is_none() && seen.settle.is_none(), "an unauthenticated request must never reach the hub");
+	}
+
+	/// A plain investor holds a perfectly valid session — the role is what stops them, and
+	/// it is read from the directory per request rather than trusted from the JWT.
+	#[tokio::test]
+	async fn an_investor_is_refused_the_console() {
+		let hub = Hub::new("investor");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, _) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not read the operator's terms table");
+
+		let body = r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#;
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not price a fund");
+
+		assert!(seen.lock().unwrap().set_policy.is_none(), "a refused caller must never reach the hub");
+	}
+
+	/// The double-submit gate on the two mutations. A valid session is not enough: a
+	/// cross-site post carries the cookie but cannot read it to echo the header.
+	#[tokio::test]
+	async fn a_mutation_without_the_csrf_header_is_refused() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let body = r#"{"service":"quy-nhon","management_bps":200,"performance_bps":2000,"hurdle_bps":0,"basis":"invested_capital","crystallization":"annual"}"#;
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), false)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "pricing a fund must require the CSRF echo");
+
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/settle", Some(r#"{"service":"quy-nhon"}"#), false)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "settling must require the CSRF echo");
+
+		let seen = seen.lock().unwrap();
+		assert!(seen.set_policy.is_none() && seen.settle.is_none(), "a CSRF failure must be decided before the hub is called");
+	}
+
+	// ── reading ─────────────────────────────────────────────────────────────────
+
+	/// The terms table the screen opens on. `updated_at` crosses as a STRING even though
+	/// the proto carries an int64 — the browser contract says string, and a silent switch
+	/// to a JSON number is exactly the drift this pins.
+	#[tokio::test]
+	async fn the_policies_table_reaches_the_browser_intact() {
+		let app = app(serve(Hub::new("admin")).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+
+		let policy = &body["policies"][0];
+		assert_eq!(policy["service"], SERVICE);
+		assert_eq!(policy["configured"], true);
+		assert_eq!(policy["management_bps"], 200);
+		assert_eq!(policy["performance_bps"], 2_000);
+		assert_eq!(policy["hurdle_bps"], 500);
+		assert_eq!(policy["basis"], "invested_capital");
+		assert_eq!(policy["crystallization"], "annual");
+		assert_eq!(policy["updated_at"], "1750000000", "updated_at must serialize as a string, not a number");
+	}
+
+	/// Uncollected units and what they are worth — the right-hand card.
+	#[tokio::test]
+	async fn uncollected_units_carry_their_current_value() {
+		let app = app(serve(Hub::new("admin")).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/shares?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(body["service"], SERVICE);
+		assert_eq!(body["units"], "12.500000");
+		assert_eq!(body["value"], "1375.00");
+	}
+
+	/// The audit trail. `debt_carried` is the column that explains a charge collecting less
+	/// than it assessed, so it must survive the mapping.
+	#[tokio::test]
+	async fn the_charge_history_keeps_every_column() {
+		let app = app(serve(Hub::new("admin")).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/assessments?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+
+		let row = &body["assessments"][0];
+		assert_eq!(row["trigger"], "period");
+		assert_eq!(row["management"], "20.00");
+		assert_eq!(row["performance"], "80.00");
+		assert_eq!(row["charged_units"], "0.909090");
+		assert_eq!(row["debt_carried"], "0");
+		assert_eq!(row["high_water_mark"], "110.00");
+		assert_eq!(row["assessed_at"], "1750000200", "assessed_at must serialize as a string, not a number");
+	}
+
+	/// Both per-fund reads name their fund in the query string, and a missing one is a
+	/// client error decided here — never a call to the hub with an empty service id.
+	#[tokio::test]
+	async fn a_per_fund_read_without_a_fund_is_rejected_locally() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for uri in [
+			"/api/admin/fees/shares",
+			"/api/admin/fees/assessments",
+			"/api/admin/fees/shares?service=",
+			"/api/admin/fees/assessments?service=%20",
+		] {
+			let (status, _) = send(&app, signed("GET", uri, None, false)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "{uri} must be rejected before the hub is called");
+		}
+
+		assert_eq!(seen.lock().unwrap().money_tokens_issued, 0, "a request rejected on its own input must not mint a money token");
+	}
+
+	// ── writing ─────────────────────────────────────────────────────────────────
+
+	/// Pricing a fund. Every rate is forwarded as given — the handler must not reorder,
+	/// default, or drop a field, because the tuple IS the fee schedule.
+	#[tokio::test]
+	async fn pricing_a_fund_forwards_the_whole_schedule() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let body = r#"{"service":"quy-nhon","management_bps":150,"performance_bps":1500,"hurdle_bps":500,"basis":"market_value","crystallization":"quarterly"}"#;
+		let (status, response) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(response["management_bps"], 150);
+		assert_eq!(response["crystallization"], "quarterly");
+
+		let forwarded = seen.lock().unwrap().set_policy.clone().expect("the hub saw the write");
+		assert_eq!(forwarded.service, SERVICE);
+		assert_eq!(forwarded.management_bps, 150);
+		assert_eq!(forwarded.performance_bps, 1_500);
+		assert_eq!(forwarded.hurdle_bps, 500);
+		assert_eq!(forwarded.basis, "market_value");
+		assert_eq!(forwarded.crystallization, "quarterly");
+	}
+
+	/// A fee schedule is read as a whole, so the write is all-or-nothing rather than a
+	/// patch: omitting the fund, the basis or the period must fail loudly here, not
+	/// silently leave a fund on terms nobody chose.
+	#[tokio::test]
+	async fn a_partial_schedule_is_refused_before_it_reaches_the_hub() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for body in [
+			r#"{"management_bps":200,"basis":"invested_capital","crystallization":"annual"}"#,
+			r#"{"service":"quy-nhon","management_bps":200,"crystallization":"annual"}"#,
+			r#"{"service":"quy-nhon","management_bps":200,"basis":"invested_capital"}"#,
+			r#"{"service":"quy-nhon","basis":"","crystallization":"annual"}"#,
+		] {
+			let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "an incomplete schedule must be refused: {body}");
+		}
+
+		assert!(seen.lock().unwrap().set_policy.is_none(), "an incomplete schedule must never reach the hub");
+	}
+
+	/// The ordinary end-of-period call the screen's one button makes: an empty `units`.
+	/// That must forward an EMPTY units string — the hub's "settle the whole balance"
+	/// sentinel — rather than a zero, which would settle nothing.
+	#[tokio::test]
+	async fn settling_without_an_amount_asks_for_the_whole_balance() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(&app, signed("POST", "/api/admin/fees/settle", Some(r#"{"service":"quy-nhon","units":""}"#), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(body["cash"], "1375.00");
+		assert_eq!(body["nav"], "110.00");
+
+		let forwarded = seen.lock().unwrap().settle.clone().expect("the hub saw the settle");
+		assert_eq!(forwarded.service, SERVICE);
+		assert_eq!(forwarded.units, "", "an omitted amount must settle the whole balance, not zero units");
+	}
+
+	/// A partial settlement is a deliberate act, and the amount must survive verbatim —
+	/// a decimal string, never a float that could round the manager's draw.
+	#[tokio::test]
+	async fn a_partial_settlement_forwards_its_exact_amount() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/settle", Some(r#"{"service":"quy-nhon","units":"3.250000"}"#), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(seen.lock().unwrap().settle.clone().unwrap().units, "3.250000");
+	}
+
+	/// Settling without naming a fund is refused locally.
+	#[tokio::test]
+	async fn settling_must_name_its_fund() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/settle", Some(r#"{"units":"1"}"#), true)).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST);
+		assert!(seen.lock().unwrap().settle.is_none(), "a settle with no fund must never reach the hub");
+	}
+
+	// ── what the hub says back ──────────────────────────────────────────────────
+
+	/// The money plane re-checks the specific permission and can refuse a caller this
+	/// coarse gate let through. That refusal must reach the browser as a 403 carrying the
+	/// hub's own client-safe reason — the settle card shows it verbatim.
+	#[tokio::test]
+	async fn an_upstream_refusal_on_a_write_surfaces_with_its_reason() {
+		let app = app(serve(Hub::failing("admin", Code::PermissionDenied)).await);
+
+		let (status, body) = send(&app, signed("POST", "/api/admin/fees/settle", Some(r#"{"service":"quy-nhon","units":""}"#), true)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "the money plane's own permission check must surface as 403");
+		assert_eq!(body["error"], "upstream refused", "a mutation relays the hub's client-safe detail");
+	}
+
+	/// A refused settlement — the fund's claim cannot cover it on top of the queued
+	/// redemptions — is a precondition failure, not a queued job.
+	#[tokio::test]
+	async fn a_settlement_the_fund_cannot_cover_is_a_precondition_failure() {
+		let app = app(serve(Hub::failing("admin", Code::FailedPrecondition)).await);
+
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/settle", Some(r#"{"service":"quy-nhon","units":""}"#), true)).await;
+		assert_eq!(status, StatusCode::PRECONDITION_FAILED, "an uncoverable settlement must be refused, never queued");
+	}
+
+	/// Reads are the other half of the contract: a failing hub must map its code but
+	/// surface the handler's fixed message, so internal detail never rides out on a GET.
+	#[tokio::test]
+	async fn a_failing_read_maps_the_code_but_hides_the_detail() {
+		let app = app(serve(Hub::failing("admin", Code::Internal)).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+		assert_eq!(status, StatusCode::BAD_GATEWAY);
+		assert_eq!(body["error"], "fee policies unavailable", "a read must not relay the hub's own message");
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/shares?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::BAD_GATEWAY);
+		assert_eq!(body["error"], "fee shares unavailable");
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/assessments?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::BAD_GATEWAY);
+		assert_eq!(body["error"], "fee assessments unavailable");
+	}
+}

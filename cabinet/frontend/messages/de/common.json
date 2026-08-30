@@ -103,6 +103,10 @@
     "en": "Cabinet",
     "t": "Kundenbereich"
   },
+  "nav.fees": {
+    "en": "Fees",
+    "t": "Gebühren"
+  },
   "nav.home": {
     "en": "Home",
     "t": "Startseite"

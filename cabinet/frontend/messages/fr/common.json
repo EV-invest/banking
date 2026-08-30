@@ -103,6 +103,10 @@
     "en": "Cabinet",
     "t": "Espace client"
   },
+  "nav.fees": {
+    "en": "Fees",
+    "t": "Frais"
+  },
   "nav.home": {
     "en": "Home",
     "t": "Accueil"
