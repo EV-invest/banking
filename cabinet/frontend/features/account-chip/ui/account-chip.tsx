@@ -4,9 +4,10 @@ import { BadgeCheck, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { profileResource } from "@/entities/user/model/profile-resource";
-import { withBasePath } from "@/shared/config/base-path";
+import { cabinetPath } from "@/shared/config/base-path";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
+import { documentLocale } from "@/shared/lib/locale-cookie";
 import { clearResources, useResource } from "@/shared/lib/resource";
 import { SESSION_UNAVAILABLE, useSession } from "@/shared/lib/use-session";
 
@@ -27,8 +28,18 @@ const CHIP_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
 // Framework-agnostic on purpose: the bundle mounts as a vanilla-React custom element on
 // the CONDUCTOR origin, which has no cabinet Next router — so no next/link or
 // next/navigation. Every destination is a cross-zone hard <a href> (PATTERNS §9), routed
-// back into the zone via withBasePath(). And unlike the sidebar chip it NEVER redirects on
+// back into the zone via cabinetPath(). And unlike the sidebar chip it NEVER redirects on
 // a dropped session: an anonymous visitor on the public site must not be bounced to login.
+//
+// Those destinations are LOCALISED, and that is the whole fix for "the cabinet always opens
+// in Russian". Cabinet page URLs carry the locale first (`/{locale}/cabinet/profile`); the
+// chip used to link to the locale-free `/cabinet/profile`, which the zone proxy then had to
+// resolve on its own — and with nothing carrying the reader's site language across the zone
+// boundary, it resolved from Accept-Language. A reader on the English landing with a
+// Russian-configured browser was sent to /ru/cabinet/profile every time. The document the
+// chip is rendered into already knows the answer, so it links straight there and no guess
+// is ever made. site_conductor also mirrors that locale into the `ev_locale` cookie, which
+// covers the other entry points (bookmarks, old links) the chip is not involved in.
 export function AccountChip({ className }: { className?: string }) {
   const session = useSession();
   // Read once, at mount: the optimistic identity from the last visit.
@@ -106,13 +117,13 @@ function AuthedChip({
     // The reads cached for this account go with the session. The hard navigation below
     // clears the in-memory half anyway; this is what clears the sessionStorage half.
     clearResources();
-    window.location.href = withBasePath("/loggedout");
+    window.location.href = cabinetPath(documentLocale(), "/loggedout");
   }
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <a
-        href={withBasePath("/profile")}
+        href={cabinetPath(documentLocale(), "/profile")}
         className={cn("flex min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-foreground/5", CHIP_FOCUS)}
       >
         <span className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">
@@ -147,7 +158,7 @@ function AuthedChip({
 function SignInCta({ className }: { className?: string }) {
   return (
     <a
-      href={withBasePath("/login")}
+      href={cabinetPath(documentLocale(), "/login")}
       className={cn(
         "inline-flex h-9 items-center justify-center rounded-md border border-main-accent-t1 bg-transparent px-4 font-mono-tech text-xs tracking-wider text-main-accent-t1 transition-all duration-300 hover:bg-primary hover:text-primary-foreground",
         CHIP_FOCUS,

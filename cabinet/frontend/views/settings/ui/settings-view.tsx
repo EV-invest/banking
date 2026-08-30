@@ -6,6 +6,11 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@evinvest/uikit";
 
 import { revokeSession, sessionsResource } from "@/entities/session/model/session-resource";
+import { isLocale } from "@evinvest/i18n";
+import { useLocale } from "@evinvest/i18n/react";
+
+import { relocalise } from "@/shared/config/base-path";
+import { writeLocaleCookie } from "@/shared/lib/locale-cookie";
 import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
@@ -45,6 +50,7 @@ const NAV: { id: Section; label: string; icon: LucideIcon }[] = [
 ];
 
 export function SettingsView() {
+  const locale = useLocale();
   const [section, setSection] = useState<Section>("general");
   // The mobile stack: the root screen, or a section pushed on top of it.
   const [pushed, setPushed] = useState<"sessions" | "notifications" | null>(null);
@@ -103,6 +109,28 @@ export function SettingsView() {
       setSaved(true);
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaved(false), 2500);
+      // Language is the one field that changes the page it was edited on. It was
+      // previously stored and nothing more: the value round-tripped to the profile and
+      // the interface stayed in whatever language it was already in, so the control
+      // looked broken even though it worked. Applying it is two steps, and both are
+      // needed — the cookie so every later entry (a bookmark, the conductor's chip, an
+      // unprefixed /cabinet link) resolves to the new choice, and the navigation so the
+      // page the reader is looking at is actually re-rendered from the new catalogue.
+      //
+      // Server-confirmed value, not the form's: if the backend normalised or rejected
+      // the code, the URL must follow what was actually stored rather than what was
+      // typed. `en-US` and friends are stored fine but are not routable locales, so a
+      // non-locale value simply leaves the interface where it is.
+      const chosen = updated.language;
+      if (isLocale(chosen) && chosen !== locale) {
+        writeLocaleCookie(chosen);
+        // A hard navigation, not router.push: the locale lives in the root layout's
+        // segment, and the catalogue is chosen there at render time. `relocalise` is
+        // shared with LocaleSync so the two cannot disagree about what "the same page"
+        // means — it keeps the query and hash, which a hand-rolled version dropped.
+        window.location.href = relocalise(chosen, window.location);
+        return;
+      }
     } catch (e) {
       setSaveError((e as Error).message);
     } finally {

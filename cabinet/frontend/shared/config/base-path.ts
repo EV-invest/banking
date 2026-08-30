@@ -83,5 +83,19 @@ const NON_PAGE = new RegExp(
 /** @see NON_PAGE — true when `pathname` is an asset, a BFF call or an MFE bundle. */
 export const isNonPagePath = (pathname: string): boolean => NON_PAGE.test(pathname);
 
+/**
+ * The same cabinet page, in another locale — path, query and hash intact.
+ *
+ * Two callers relocalise the current page (the settings language switcher and
+ * `LocaleSync`) and they must agree: one of them dropping the query string is a
+ * bug that only appears the first time a cabinet page takes a parameter. Takes
+ * the URL parts rather than reading `window` so it stays pure and testable
+ * alongside its siblings here.
+ */
+export const relocalise = (
+  locale: Locale,
+  url: { pathname: string; search: string; hash: string },
+): string => cabinetPath(locale, zonePathname(url.pathname)) + url.search + url.hash;
+
 /** @deprecated Ambiguous now that pages and assets diverge — say which you mean. */
 export const withBasePath = apiPath;

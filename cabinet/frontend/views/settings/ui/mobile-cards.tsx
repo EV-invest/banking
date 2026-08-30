@@ -5,7 +5,7 @@
 // sign-out. The two pushed screens they open — Sessions and Notifications — are the same
 // sections the desktop rail shows, so they live beside it rather than here.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { BadgeCheck, Loader2, LogOut } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
@@ -13,7 +13,7 @@ import { type ReactNode, useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";
 
-import { withBasePath } from "@/shared/config/base-path";
+import { cabinetPath } from "@/shared/config/base-path";
 import type { Session } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
@@ -190,12 +190,13 @@ export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
 
 /** `btn-SignOut` — the shell-owned logout, mirroring the header account chip. */
 export function SignOutButton() {
+  const locale = useLocale();
   const [busy, setBusy] = useState(false);
   async function signOut() {
     setBusy(true);
     // Site-root /api/auth: revokes the shared session and clears its cookies for every zone.
     await fetch("/api/auth/logout", { method: "POST", headers: csrfHeader() });
-    window.location.href = withBasePath("/loggedout");
+    window.location.href = cabinetPath(locale, "/loggedout");
   }
   // Kept hand-written: at 48px tall it sits between uikit's `sm` (32) and `lg` (40)
   // Button heights, so it carries its own focus ring rather than being resized.
