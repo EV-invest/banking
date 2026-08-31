@@ -29,9 +29,9 @@ import type { FeePolicy } from "@/shared/contracts/admin";
 import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { ago, formatUnits, formatUsd } from "@/views/admin/lib/format";
-import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
+import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
-import { AdminHeader } from "@/views/admin/ui/shell";
+import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
 const BASES = [
   { value: "invested_capital", label: "Invested capital" },
@@ -64,10 +64,7 @@ export function FeesView() {
   const error = catalog.data ? null : (catalog.error?.message ?? null);
 
   return (
-    // `Stagger` directly rather than `AdminScreen`: this screen is the one in the console
-    // that carries no page padding of its own, and taking it from the shared container
-    // would move the whole page sideways as a side effect of animating it.
-    <Stagger step={SECTION_STAGGER} className="space-y-6">
+    <AdminScreen className="space-y-6">
       <AdminHeader
         eyebrow="Fees"
         title="Fee terms and collection"
@@ -97,7 +94,7 @@ export function FeesView() {
           </StaggerItem>
         </>
       )}
-    </Stagger>
+    </AdminScreen>
   );
 }
 
