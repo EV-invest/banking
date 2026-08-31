@@ -2,6 +2,8 @@
 // (the only real identity the BFF exposes today). Mirrors the sidebar AccountChip /
 // profile derivation so the name reads consistently across the shell.
 
+import type { Translate } from "@evinvest/i18n";
+
 /** Max chars a display name takes up before ellipsis in the chip and headings. */
 const MAX_DISPLAY = 32;
 
@@ -12,10 +14,12 @@ export function truncateName(name: string, max: number = MAX_DISPLAY): string {
   return `${name.slice(0, max - 1)}…`;
 }
 
-/** A human display name from an email handle: "ada.lovelace@x" → "Ada L." */
-export function displayName(email: string | null | undefined): string {
+/** A human display name from an email handle: "ada.lovelace@x" → "Ada L."
+ *  Takes the translator for its one worded fallback — the caller is a client
+ *  component that already holds one, so this module stays React-free. */
+export function displayName(email: string | null | undefined, t: Translate): string {
   if (email === undefined) return "…";
-  if (!email) return "Account";
+  if (!email) return t("ui.account");
   const handle = email.split("@")[0] ?? email;
   const parts = handle.split(/[._-]+/).filter(Boolean);
   const first = parts[0] ? cap(parts[0]) : handle;

@@ -2,8 +2,13 @@
 // the shapes are the proto-derived types from `@/shared/contracts`. Transport, CSRF and
 // session handling belong to `@/shared/lib/api-client`. No tokens are ever seen here —
 // the BFF holds them.
+//
+// The fail-fast guards below reject with a `RequestError` rather than a bare `Error`, for
+// the same reason the transport does: the rejection ends up on screen through
+// `ResourceError`, and only a keyed error can be read there in the reader's language. The
+// status is 400 because that is what the BFF would have answered had the call gone out.
 
-import { getJson, postJson } from "@/shared/lib/api-client";
+import { getJson, postJson, RequestError } from "@/shared/lib/api-client";
 import type { AccruedFees, AllocationList, FeePolicy, FundNav, PositionList, Redemption, RedemptionList, Subscription } from "@/shared/contracts";
 
 /// The investor-facing catalog: `open` allocations only. Subscribing to anything else is
@@ -18,21 +23,21 @@ export function fetchPositions(): Promise<PositionList> {
 
 export function fetchFundNav(service: string): Promise<FundNav> {
   // Never issue a bare `/api/funds/nav` — the BFF 400s without ?service, so fail fast here.
-  if (!service.trim()) return Promise.reject(new Error("fund service required"));
+  if (!service.trim()) return Promise.reject(new RequestError("fund service required", 400, "err.fundServiceRequired"));
   return getJson<FundNav>(`/api/funds/nav?service=${encodeURIComponent(service)}`);
 }
 
 /// What this fund charges. Readable whether or not the caller holds it — the terms are
 /// part of deciding to buy in, not a detail revealed afterwards.
 export function fetchFeePolicy(service: string): Promise<FeePolicy> {
-  if (!service.trim()) return Promise.reject(new Error("fund service required"));
+  if (!service.trim()) return Promise.reject(new RequestError("fund service required", 400, "err.fundServiceRequired"));
   return getJson<FeePolicy>(`/api/funds/fee-policy?service=${encodeURIComponent(service)}`);
 }
 
 /// What the caller's holding owes right now, uncharged — the figure `value` has to be
 /// read net of.
 export function fetchAccruedFees(service: string): Promise<AccruedFees> {
-  if (!service.trim()) return Promise.reject(new Error("fund service required"));
+  if (!service.trim()) return Promise.reject(new RequestError("fund service required", 400, "err.fundServiceRequired"));
   return getJson<AccruedFees>(`/api/funds/accrued-fees?service=${encodeURIComponent(service)}`);
 }
 

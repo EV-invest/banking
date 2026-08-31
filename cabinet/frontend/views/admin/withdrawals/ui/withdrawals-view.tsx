@@ -3,16 +3,18 @@
 import { Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
+import { useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
 import { dispatchWithdrawal, failWithdrawal, settleWithdrawal } from "@/entities/admin/api/admin-client";
 import { withdrawalQueueResource } from "@/entities/admin/model/admin-resource";
 import type { WithdrawalQueueItem } from "@/shared/contracts/admin";
+import { errorMessage } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
-import { ago, formatUsd } from "@/views/admin/lib/format";
+import { ago, formatUsd, stateLabel } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
 // Which confirm panel is open under a row: settle asks for the mined tx ref,
@@ -20,6 +22,7 @@ import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 type Panel = { id: string; kind: "settle" | "fail" };
 
 export function WithdrawalsView() {
+  const t = useT();
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -31,7 +34,7 @@ export function WithdrawalsView() {
   // any other surface reading the same queue in step.
   const read = useResource(withdrawalQueueResource);
   const queue = read.data ? (read.data.items ?? []) : null;
-  const error = actionError ?? (read.data ? null : (read.error?.message ?? null));
+  const error = actionError ?? (read.data || !read.error ? null : errorMessage(read.error, t));
 
   const run = async (id: string, fn: () => Promise<unknown>) => {
     setBusy(id);
@@ -43,7 +46,7 @@ export function WithdrawalsView() {
       setReason("");
       await read.refresh();
     } catch (e) {
-      setActionError((e as Error).message);
+      setActionError(errorMessage(e, t));
     } finally {
       setBusy(null);
     }
@@ -57,16 +60,20 @@ export function WithdrawalsView() {
 
   return (
     <AdminScreen className="space-y-8">
-      <AdminHeader eyebrow="Administer" title="Withdrawals" subtitle="Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts" />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.withdrawals")} subtitle={t("admin.withdrawals.subtitle")} />
 
       {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Awaiting action
+          {t("admin.withdrawals.awaitingAction")}
           {/* The count pill lands on the same step as the label it trails, so its fill and
               accent colour — not a smaller size — are what set it apart. */}
-          {queue && <span className="rounded-full bg-main-accent-t3/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t3">{queue.length} open</span>}
+          {queue && (
+            <span className="whitespace-nowrap rounded-full bg-main-accent-t3/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t3">
+              {t("admin.withdrawals.openCount", { n: queue.length })}
+            </span>
+          )}
         </p>
         <Card>
           <CardContent className="p-0">
@@ -79,32 +86,34 @@ export function WithdrawalsView() {
               }
             >
               {!queue ? null : queue.length === 0 ? (
-                <p className="p-8 text-center text-sm text-muted-foreground">No withdrawals are awaiting action.</p>
+                <p className="p-8 text-center text-sm text-muted-foreground">{t("admin.withdrawals.empty")}</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
+                    {/* i18n-max: 14 per header — auto-layout table with no scroll wrapper;
+                        the address cell is the one that gives width back. */}
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="px-5 py-3 font-medium">User</th>
+                      <th className="px-5 py-3 font-medium">{t("admin.col.user")}</th>
                       <th className="px-5 py-3 font-medium">
                         <span className="flex items-center gap-1.5">
-                          Destination
+                          {t("ui.destination")}
                           <TipAnchor anchor="admin.withdrawals.destination" />
                         </span>
                       </th>
                       <th className="px-5 py-3 font-medium">
                         <span className="flex items-center gap-1.5">
-                          Gross / net
+                          {t("admin.withdrawals.col.grossNet")}
                           <TipAnchor anchor="admin.withdrawals.gross-net" />
                         </span>
                       </th>
                       <th className="px-5 py-3 font-medium">
                         <span className="flex items-center gap-1.5">
-                          State
+                          {t("admin.col.state")}
                           <TipAnchor anchor="admin.withdrawals.state" />
                         </span>
                       </th>
-                      <th className="px-5 py-3 font-medium">Age</th>
-                      <th className="px-5 py-3 text-right font-medium">Actions</th>
+                      <th className="px-5 py-3 font-medium">{t("admin.col.age")}</th>
+                      <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -134,10 +143,7 @@ export function WithdrawalsView() {
             </Settled>
           </CardContent>
         </Card>
-        <p className="max-w-3xl text-xs text-muted-foreground">
-          Dispatch broadcasts a queued withdrawal once its rail has liquidity. Settle records the mined transaction and releases the reservation. Fail voids and
-          refunds — ONLY safe when nothing reached the chain; the hub refuses it while a broadcast record exists.
-        </p>
+        <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.withdrawals.footnote")}</p>
       </StaggerItem>
     </AdminScreen>
   );
@@ -168,6 +174,7 @@ function WithdrawalRow({
   onSettle: () => void;
   onFail: () => void;
 }) {
+  const t = useT();
   const queued = item.state === "queued";
   return (
     <>
@@ -177,7 +184,7 @@ function WithdrawalRow({
               earnings out. Naming that beats rendering a blank User cell, and it tells
               the operator whose money the dispatch/settle below is about to move. */}
           {item.source === "revenue" ? (
-            <p className="font-medium text-main-accent-t2">Fund revenue</p>
+            <p className="font-medium text-main-accent-t2">{t("nav.revenue")}</p>
           ) : (
             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
           )}
@@ -191,23 +198,24 @@ function WithdrawalRow({
         </td>
         <td className="px-5 py-3 tabular-nums">
           <p>{formatUsd(item.amount)}</p>
-          <p className="text-xs text-muted-foreground">{formatUsd(item.net_amount)} net</p>
+          <p className="text-xs text-muted-foreground">{t("admin.withdrawals.netSuffix", { amount: formatUsd(item.net_amount) })}</p>
         </td>
         <td className="px-5 py-3">
-          <span className={queued ? "text-main-accent-t3" : "text-main-accent-t2"}>{item.state}</span>
+          <span className={queued ? "text-main-accent-t3" : "text-main-accent-t2"}>{stateLabel(item.state, t)}</span>
         </td>
-        <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at)}</td>
+        <td className="px-5 py-3 text-muted-foreground">{ago(item.created_at, t)}</td>
         <td className="px-5 py-3">
+          {/* i18n-max: 12 per verb — up to two `shrink-0` Buttons share this cell. */}
           <div className="flex justify-end gap-2">
             {queued ? (
               <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onDispatch}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                Dispatch
+                {t("admin.dispatch")}
               </Button>
             ) : (
               <>
                 <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onOpen({ id: item.withdrawal_id, kind: "settle" })}>
-                  Settle
+                  {t("admin.settle")}
                 </Button>
                 <Button
                   type="button"
@@ -217,7 +225,7 @@ function WithdrawalRow({
                   disabled={busy}
                   onClick={() => onOpen({ id: item.withdrawal_id, kind: "fail" })}
                 >
-                  Fail
+                  {t("admin.fail")}
                 </Button>
               </>
             )}
@@ -232,24 +240,23 @@ function WithdrawalRow({
                 <Input
                   value={txRef}
                   onChange={(e) => onTxRef(e.target.value)}
-                  placeholder="Mined transaction hash (0x…)"
+                  placeholder={t("admin.withdrawals.placeholder.txHash")}
                   spellCheck={false}
                   className="max-w-xl font-mono-tech text-xs"
                 />
                 <TipAnchor anchor="admin.withdrawals.settle.tx-hash" />
                 <Button type="button" size="sm" disabled={busy || !txRef.trim()} onClick={onSettle}>
                   {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                  Confirm settle
+                  {t("admin.withdrawals.confirmSettle")}
                 </Button>
               </div>
             ) : (
               <div className="space-y-2">
                 <p className="flex items-center gap-2 text-xs text-destructive">
-                  <TriangleAlert className="size-4" /> Failing refunds the user. If the broadcast reached the chain this would double-pay — the hub refuses while
-                  a broadcast record exists, but verify on-chain first.
+                  <TriangleAlert className="size-4" /> {t("admin.withdrawals.failWarning")}
                 </p>
                 <div className="flex items-center gap-3">
-                  <Input value={reason} onChange={(e) => onReason(e.target.value)} placeholder="Reason (audit note, optional)" className="max-w-xl text-xs" />
+                  <Input value={reason} onChange={(e) => onReason(e.target.value)} placeholder={t("admin.withdrawals.placeholder.reason")} className="max-w-xl text-xs" />
                   <Button
                     type="button"
                     size="sm"
@@ -259,8 +266,9 @@ function WithdrawalRow({
                     onClick={onFail}
                   >
                     {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                    Confirm fail
+                    {t("admin.withdrawals.confirmFail")}
                   </Button>
+
                 </div>
               </div>
             )}

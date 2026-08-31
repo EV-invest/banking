@@ -3,21 +3,24 @@
 import { Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import { useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
 import type { AdminUserSummary } from "@/shared/contracts/admin";
+import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { ROLES, ago, formatUsd, statusTone } from "@/views/admin/lib/format";
+import { ROLES, ago, formatUsd, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
 
 export function UsersView() {
+  const t = useT();
   const [filters, setFilters] = useState<UserFilters>({});
   const [selected, setSelected] = useState<AdminUserSummary | null>(null);
 
@@ -28,24 +31,39 @@ export function UsersView() {
   const list = useResource(usersResource, filters);
   const users = list.data ? (list.data.users ?? []) : null;
   const total = list.data?.total ?? "0";
-  const error = users ? null : (list.error?.message ?? null);
+  const error = users || !list.error ? null : errorMessage(list.error, t);
 
   return (
     <AdminScreen className="space-y-6">
-      <AdminHeader eyebrow="Administer" title="Users" subtitle="Investors and operators — identities, KYC, roles and sessions" />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.users")} subtitle={t("admin.users.subtitle")} />
 
       {error && <ResourceError message={error} />}
 
       <StaggerItem className="flex flex-wrap items-center gap-3">
         <Input
-          placeholder="Search email or user id…"
+          placeholder={t("admin.users.searchPlaceholder")}
           className="max-w-xs"
           defaultValue={filters.query ?? ""}
           onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value || undefined }))}
         />
-        <FilterSelect label="Role" value={filters.role} onChange={(role) => setFilters((f) => ({ ...f, role }))} options={ROLES} />
-        <FilterSelect label="Status" value={filters.status} onChange={(status) => setFilters((f) => ({ ...f, status }))} options={["active", "disabled"]} />
-        <span className="ml-auto text-sm text-muted-foreground">{Number(total).toLocaleString("en-US")} users</span>
+        <FilterSelect
+          label={t("admin.users.role")}
+          value={filters.role}
+          onChange={(role) => setFilters((f) => ({ ...f, role }))}
+          options={ROLES}
+          optionLabel={(role) => roleLabel(role, t)}
+        />
+        <FilterSelect
+          label={t("admin.col.status")}
+          value={filters.status}
+          onChange={(status) => setFilters((f) => ({ ...f, status }))}
+          options={["active", "disabled"]}
+          optionLabel={(status) => statusLabel(status, t)}
+        />
+        {/* The count is an ICU plural, not `${n} users`: the noun has to agree with the
+            number in most locales, and `#` groups the digits in the reader's own
+            convention — which is also what retires the hard-coded `en-US` here. */}
+        <span className="ml-auto text-sm text-muted-foreground">{t("admin.users.count", { n: Number(total) })}</span>
       </StaggerItem>
 
       {/* Table and drawer are one section: the drawer's open/close already owns the
@@ -63,7 +81,7 @@ export function UsersView() {
               }
             >
               {!users ? null : users.length === 0 ? (
-                <p className="p-8 text-center text-sm text-muted-foreground">No users match these filters.</p>
+                <p className="p-8 text-center text-sm text-muted-foreground">{t("admin.users.noMatch")}</p>
               ) : (
                 // `table-fixed` is load-bearing, not tidiness. Under the default
                 // auto layout a column is as wide as its content, so `truncate` on
@@ -76,11 +94,14 @@ export function UsersView() {
                 // split what User leaves.
                 <table className="w-full table-fixed text-sm">
                   <thead>
+                    {/* i18n-max: 8 per header — `table-fixed` sizes the columns from this
+                        row, so a header that does not fit wraps instead of widening, and
+                        the three right-hand columns share what User leaves. */}
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="w-1/2 px-5 py-3 font-medium">User</th>
-                      <th className="px-5 py-3 font-medium">Role</th>
-                      <th className="px-5 py-3 font-medium">KYC</th>
-                      <th className="px-5 py-3 font-medium">Status</th>
+                      <th className="w-1/2 px-5 py-3 font-medium">{t("admin.col.user")}</th>
+                      <th className="px-5 py-3 font-medium">{t("admin.users.role")}</th>
+                      <th className="px-5 py-3 font-medium">{t("admin.users.kyc")}</th>
+                      <th className="px-5 py-3 font-medium">{t("admin.col.status")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -104,10 +125,10 @@ export function UsersView() {
                             <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
                           </button>
                         </td>
-                        <td className="px-5 py-3 capitalize">{u.role}</td>
-                        <td className="px-5 py-3 text-muted-foreground">L{u.kyc_level}</td>
+                        <td className="px-5 py-3 capitalize">{roleLabel(u.role, t)}</td>
+                        <td className="px-5 py-3 text-muted-foreground">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
                         <td className="px-5 py-3">
-                          <StatusDot status={u.status} />
+                          <StatusDot status={u.status} label={statusLabel(u.status, t)} />
                         </td>
                       </tr>
                     ))}
@@ -158,19 +179,33 @@ export function UsersView() {
 // A `div`, not a `label`: the uikit Select's trigger is a button, which a label has
 // nothing to bind to. "All" stays a real, selectable item — clearing the filter has to
 // be reachable — and maps back to `undefined`.
-function FilterSelect({ label, value, onChange, options }: { label: string; value?: string; onChange: (v: string | undefined) => void; options: readonly string[] }) {
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  optionLabel,
+}: {
+  label: string;
+  value?: string;
+  onChange: (v: string | undefined) => void;
+  options: readonly string[];
+  /** The wire value is what goes back to the API; this is only what the reader sees. */
+  optionLabel: (value: string) => string;
+}) {
+  const t = useT();
   return (
     <div className="inline-flex items-center gap-2 text-sm">
       <span className="text-muted-foreground">{label}:</span>
       <Select value={value ?? ""} onValueChange={(v) => onChange(v || undefined)}>
         <SelectTrigger size="sm" className="border-border bg-main-surface capitalize">
-          <span className="truncate">{value ?? "All"}</span>
+          <span className="truncate">{value === undefined ? t("ui.all") : optionLabel(value)}</span>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">All</SelectItem>
+          <SelectItem value="">{t("ui.all")}</SelectItem>
           {options.map((o) => (
             <SelectItem key={o} value={o} className="capitalize">
-              {o}
+              {optionLabel(o)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -190,6 +225,7 @@ function Avatar({ email }: { email: string }) {
 }
 
 function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {
+  const t = useT();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -198,7 +234,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
   const balanceRead = useResource(adminUserBalanceResource, summary.user_id);
   const profile = detail.data ?? null;
   const balance = balanceRead.data ?? null;
-  const error = actionError ?? (profile ? null : (detail.error?.message ?? null));
+  const error = actionError ?? (profile || !detail.error ? null : errorMessage(detail.error, t));
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -210,7 +246,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
       // parent no longer needs a refresh counter threaded down here.
       revalidateTag(TAG.adminUsers);
     } catch (e) {
-      setActionError((e as Error).message);
+      setActionError(errorMessage(e, t));
     } finally {
       setBusy(null);
     }
@@ -238,17 +274,18 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("ui.close")}
             className="rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-4" />
           </button>
         </div>
 
+        {/* i18n-max: 12 per badge — three chips wrap inside a 340px drawer. */}
         <div className="flex flex-wrap gap-1.5 text-xs">
-          <Badge>{role}</Badge>
-          <Badge>KYC L{profile?.kyc_level ?? summary.kyc_level}</Badge>
-          <span className={cn("rounded-full px-2 py-0.5 font-medium capitalize", statusTone(status))}>{status}</span>
+          <Badge>{roleLabel(role, t)}</Badge>
+          <Badge>{t("admin.users.kycBadge", { n: profile?.kyc_level ?? summary.kyc_level })}</Badge>
+          <span className={cn("rounded-full px-2 py-0.5 font-medium capitalize", statusTone(status))}>{statusLabel(status, t)}</span>
         </div>
 
         {error && (
@@ -257,26 +294,30 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           </p>
         )}
 
-        <Section title="Identity">
-          <Row label="Joined" value={ago(summary.created_at)} />
-          <Row label="Token version" value={`v${profile?.token_version ?? summary.token_version}`} tip="admin.users.identity.token-version" />
-          <Row label="Balance" value={balance ? `${formatUsd(balance.amount)} USDT` : "—"} />
+        <Section title={t("admin.users.identity")}>
+          <Row label={t("admin.users.joined")} value={ago(summary.created_at, t)} />
+          <Row
+            label={t("admin.users.tokenVersion")}
+            value={t("admin.users.tokenVersionValue", { n: profile?.token_version ?? summary.token_version })}
+            tip="admin.users.identity.token-version"
+          />
+          <Row label={t("admin.users.balance")} value={balance ? `${formatUsd(balance.amount)} USDT` : "—"} />
         </Section>
 
-        <Section title="Access & security">
+        <Section title={t("admin.users.accessSecurity")}>
           <div className="flex items-center justify-between gap-2 py-1 text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
-              Role
+              {t("admin.users.role")}
               <TipAnchor anchor="admin.users.access.role" />
             </span>
             <Select value={role} onValueChange={(next) => run("role", () => setUserRole(summary.user_id, next))}>
               <SelectTrigger size="sm" className="border-border bg-main-surface capitalize" disabled={busy === "role"}>
-                <span className="capitalize">{role}</span>
+                <span className="capitalize">{roleLabel(role, t)}</span>
               </SelectTrigger>
               <SelectContent>
                 {ROLES.map((r) => (
                   <SelectItem key={r} value={r} className="capitalize">
-                    {r}
+                    {roleLabel(r, t)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -284,7 +325,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           </div>
           <label className="flex items-center justify-between gap-2 py-1 text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
-              KYC level
+              {t("ui.kycLevel")}
               <TipAnchor anchor="admin.users.access.kyc-level" />
             </span>
             <input
@@ -301,18 +342,20 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           </label>
           <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-destructive/40 text-destructive hover:bg-destructive/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
             {busy === "revoke" ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            Revoke all sessions
+            {t("admin.users.revokeAllSessions")}
           </Button>
           <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-            Bumps token_version — invalidates every JWT issued to this user.
+            {t("admin.users.revokeNote")}
             <TipAnchor anchor="admin.users.access.revoke-sessions" />
           </p>
         </Section>
 
+        {/* i18n-max: 12 per verb — a `flex-1` Button beside a `shrink-0` tip anchor in a
+            340px drawer. */}
         <div className="flex gap-2">
           {status === "disabled" ? (
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy === "status"} onClick={() => run("status", () => reinstateUser(summary.user_id))}>
-              <ShieldCheck className="size-3.5" /> Reinstate
+              <ShieldCheck className="size-3.5" /> {t("admin.users.reinstate")}
             </Button>
           ) : (
             <Button
@@ -323,7 +366,8 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
               disabled={busy === "status"}
               onClick={() => run("status", () => suspendUser(summary.user_id))}
             >
-              <ShieldBan className="size-3.5" /> Suspend
+              <ShieldBan className="size-3.5" /> {t("admin.users.suspend")}
+
             </Button>
           )}
           <TipAnchor anchor="admin.users.status.suspend" className="self-center" />

@@ -4,6 +4,8 @@ import { ChevronLeft } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import type { ReactNode } from "react";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { cn } from "@/shared/lib/cn";
 import { Reveal } from "@/shared/ui/motion";
 
@@ -28,6 +30,7 @@ export function MobileAppBar({
   onBack?: () => void;
   right?: ReactNode;
 }) {
+  const t = useT();
   const pushed = !!backHref || !!onBack;
   return (
     // Arrives with the screen it titles, one step ahead of the content column — the
@@ -39,18 +42,24 @@ export function MobileAppBar({
     // has no positioned descendants to lose either.
     <Reveal as="header" className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-main-surface px-5 pb-3.5 pt-4 lg:hidden">
       {backHref ? (
-        <Link href={backHref} aria-label="Back" className={cn("-ml-1 flex size-6 shrink-0 items-center justify-center text-foreground", BACK_FOCUS)}>
+        <Link href={backHref} aria-label={t("ui.back")} className={cn("-ml-1 flex size-6 shrink-0 items-center justify-center text-foreground", BACK_FOCUS)}>
           <ChevronLeft className="size-6" />
         </Link>
       ) : (
         onBack && (
-          <button type="button" onClick={onBack} aria-label="Back" className={cn("-ml-1 flex size-6 shrink-0 items-center justify-center text-foreground", BACK_FOCUS)}>
+          <button type="button" onClick={onBack} aria-label={t("ui.back")} className={cn("-ml-1 flex size-6 shrink-0 items-center justify-center text-foreground", BACK_FOCUS)}>
             <ChevronLeft className="size-6" />
           </button>
         )
       )}
       {/* Both sizes land on the type scale, so the pushed/root distinction is carried by
-          size plus centring rather than the 3px that used to separate them. */}
+          size plus centring rather than the 3px that used to separate them.
+
+          i18n-max: 20 — the title is caller-supplied, so the budget belongs to whichever
+          key the caller passes. `truncate` means a long one degrades to an ellipsis
+          rather than breaking the bar, but a pushed screen spends 24px on the back
+          chevron and up to a Save button on the right, which leaves roughly 200px at
+          text-base: about twenty characters before the ellipsis starts eating words. */}
       <h1 className={cn("min-w-0 flex-1 truncate font-semibold tracking-normal text-foreground", pushed ? "text-center text-base" : "text-lg")}>{title}</h1>
       {pushed && !right ? <span className="size-6 shrink-0" aria-hidden /> : right}
     </Reveal>

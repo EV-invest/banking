@@ -1,7 +1,1235 @@
 {
+  "admin.ago.days": {
+    "en": "{n, plural, one {#d ago} other {#d ago}}",
+    "t": "{n, plural, other {# ngày trước}}"
+  },
+  "admin.ago.hours": {
+    "en": "{n, plural, one {#h ago} other {#h ago}}",
+    "t": "{n, plural, other {# giờ trước}}"
+  },
+  "admin.ago.minutes": {
+    "en": "{n, plural, one {#m ago} other {#m ago}}",
+    "t": "{n, plural, other {# phút trước}}"
+  },
+  "admin.ago.seconds": {
+    "en": "{n, plural, one {#s ago} other {#s ago}}",
+    "t": "{n, plural, other {# giây trước}}"
+  },
+  "admin.alloc.close": {
+    "en": "Close",
+    "t": "Đóng"
+  },
+  "admin.alloc.col.product": {
+    "en": "Product",
+    "t": "Sản phẩm"
+  },
+  "admin.alloc.col.serviceId": {
+    "en": "Service id",
+    "t": "Mã dịch vụ"
+  },
+  "admin.alloc.col.unitCap": {
+    "en": "Unit cap",
+    "t": "Trần đơn vị"
+  },
+  "admin.alloc.empty": {
+    "en": "No allocations registered yet — until one is, every subscription is refused.",
+    "t": "Chưa có khoản phân bổ nào được đăng ký — khi chưa có, mọi lệnh đăng ký đều bị từ chối."
+  },
+  "admin.alloc.field.summary": {
+    "en": "Summary",
+    "t": "Tóm tắt"
+  },
+  "admin.alloc.field.title": {
+    "en": "Title",
+    "t": "Tiêu đề"
+  },
+  "admin.alloc.footnote": {
+    "en": "Registration lands in {state}, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.",
+    "t": "Đăng ký sản phẩm sẽ nằm ở trạng thái {state}, chưa nhận tiền — mở sản phẩm là một quyết định riêng. Đóng chỉ dừng các lệnh đăng ký mới: nhà đầu tư luôn có thể hoàn vốn khỏi một sản phẩm đã đóng, nên việc đóng không bao giờ khóa cứng đơn vị quỹ của họ. Mã dịch vụ là vĩnh viễn sau khi đăng ký. Trần đơn vị giới hạn tổng số đơn vị quỹ có thể phát hành — thay đổi trên màn hình Định giá, nơi số đã phát hành dùng để đối chiếu nằm ngay trên cùng một trang."
+  },
+  "admin.alloc.hint.closed": {
+    "en": "Closed to new money; redemptions still settle",
+    "t": "Đóng với tiền mới; các lệnh hoàn vốn vẫn được tất toán"
+  },
+  "admin.alloc.hint.draft": {
+    "en": "Registered — accepts no money until opened",
+    "t": "Đã đăng ký — chưa nhận tiền cho tới khi được mở"
+  },
+  "admin.alloc.hint.open": {
+    "en": "Accepting subscriptions and redemptions",
+    "t": "Đang nhận lệnh đăng ký và lệnh hoàn vốn"
+  },
+  "admin.alloc.open": {
+    "en": "Open",
+    "t": "Mở"
+  },
+  "admin.alloc.placeholder.summary": {
+    "en": "One line for the catalog card",
+    "t": "Một dòng cho thẻ danh mục"
+  },
+  "admin.alloc.register": {
+    "en": "Register allocation",
+    "t": "Đăng ký khoản phân bổ"
+  },
+  "admin.alloc.registerHint": {
+    "en": "Registers in draft — open it when the product is ready to take money.",
+    "t": "Đăng ký ở trạng thái nháp — hãy mở khi sản phẩm sẵn sàng nhận tiền."
+  },
+  "admin.alloc.registerSubmit": {
+    "en": "Register",
+    "t": "Đăng ký"
+  },
+  "admin.alloc.registry": {
+    "en": "Registry",
+    "t": "Sổ đăng ký"
+  },
+  "admin.alloc.slugHint": {
+    "en": "Permanent — every fund RPC keys on it",
+    "t": "Vĩnh viễn — mọi lệnh RPC của quỹ đều dựa vào mã này"
+  },
+  "admin.alloc.slugInvalid": {
+    "en": "Letters, digits, - and _ only (1–64)",
+    "t": "Chỉ chữ cái, chữ số, - và _ (1–64)"
+  },
+  "admin.alloc.subtitle": {
+    "en": "The registry of investable products — a fund exists only once it is registered here",
+    "t": "Sổ đăng ký các sản phẩm đầu tư — một quỹ chỉ tồn tại khi đã được đăng ký ở đây"
+  },
+  "admin.cabinet.announcement": {
+    "en": "Announcement",
+    "t": "Thông báo chung"
+  },
+  "admin.cabinet.announcementSub": {
+    "en": "The live banner across the cabinet",
+    "t": "Biểu ngữ đang hiển thị trên toàn bộ cabinet"
+  },
+  "admin.cabinet.featureFlags": {
+    "en": "Feature flags",
+    "t": "Cờ tính năng"
+  },
+  "admin.cabinet.featureFlagsSub": {
+    "en": "Gating cabinet features & MFE mounts",
+    "t": "Kiểm soát tính năng cabinet & việc nạp MFE"
+  },
+  "admin.cabinet.flagRollout": {
+    "en": "{pct}%",
+    "t": "{pct}%"
+  },
+  "admin.cabinet.live": {
+    "en": "Live",
+    "t": "Đang chạy"
+  },
+  "admin.cabinet.liveHint": {
+    "en": "Show the banner now",
+    "t": "Hiển thị biểu ngữ ngay bây giờ"
+  },
+  "admin.cabinet.maintenanceMode": {
+    "en": "Maintenance mode",
+    "t": "Chế độ bảo trì"
+  },
+  "admin.cabinet.maintenanceModeHint": {
+    "en": "Holding page on the cabinet (identity plane)",
+    "t": "Trang chờ trên cabinet (lớp danh tính)"
+  },
+  "admin.cabinet.maintenanceOps": {
+    "en": "Maintenance & operations",
+    "t": "Bảo trì & vận hành"
+  },
+  "admin.cabinet.maintenanceOpsSub": {
+    "en": "Cabinet holding page + money-plane kill-switch",
+    "t": "Trang chờ cabinet + công tắc ngắt lớp tiền tệ"
+  },
+  "admin.cabinet.mfeRegistry": {
+    "en": "Microfrontend registry",
+    "t": "Sổ đăng ký microfrontend"
+  },
+  "admin.cabinet.mfeRegistrySub": {
+    "en": "Resolved by clients/core · /api/mfe-registry",
+    "t": "Được phân giải bởi clients/core · /api/mfe-registry"
+  },
+  "admin.cabinet.noFlags": {
+    "en": "No flags yet. PostHog experiments render here when configured.",
+    "t": "Chưa có cờ nào. Các thử nghiệm PostHog sẽ hiển thị ở đây khi được cấu hình."
+  },
+  "admin.cabinet.noMfes": {
+    "en": "No microfrontends registered.",
+    "t": "Chưa có microfrontend nào được đăng ký."
+  },
+  "admin.cabinet.placeholder.announcementBody": {
+    "en": "Body",
+    "t": "Nội dung"
+  },
+  "admin.cabinet.placeholder.announcementTitle": {
+    "en": "Announcement title",
+    "t": "Tiêu đề thông báo"
+  },
+  "admin.cabinet.readOnlyMode": {
+    "en": "Read-only mode",
+    "t": "Chế độ chỉ đọc"
+  },
+  "admin.cabinet.readOnlyModeHint": {
+    "en": "Pause deposits & withdrawals (money plane)",
+    "t": "Tạm dừng nạp & rút tiền (lớp tiền tệ)"
+  },
+  "admin.cabinet.registered": {
+    "en": "Registered",
+    "t": "Đã đăng ký"
+  },
+  "admin.cabinet.saveAnnouncement": {
+    "en": "Save announcement",
+    "t": "Lưu thông báo"
+  },
+  "admin.cabinet.subtitle": {
+    "en": "Host shell — microfrontend registry, feature flags and content",
+    "t": "Vỏ ứng dụng chủ — sổ đăng ký microfrontend, cờ tính năng và nội dung"
+  },
+  "admin.col.actions": {
+    "en": "Actions",
+    "t": "Thao tác"
+  },
+  "admin.col.age": {
+    "en": "Age",
+    "t": "Thời gian chờ"
+  },
+  "admin.col.state": {
+    "en": "State",
+    "t": "Trạng thái"
+  },
+  "admin.col.status": {
+    "en": "Status",
+    "t": "Trạng thái"
+  },
+  "admin.col.transaction": {
+    "en": "Transaction",
+    "t": "Giao dịch"
+  },
+  "admin.col.user": {
+    "en": "User",
+    "t": "Người dùng"
+  },
+  "admin.col.when": {
+    "en": "When",
+    "t": "Thời điểm"
+  },
+  "admin.dispatch": {
+    "en": "Dispatch",
+    "t": "Gửi lệnh"
+  },
+  "admin.env.dev": {
+    "en": "DEV",
+    "t": "DEV"
+  },
+  "admin.env.prod": {
+    "en": "PROD",
+    "t": "PROD"
+  },
+  "admin.env.staging": {
+    "en": "STAGING",
+    "t": "STAGING"
+  },
+  "admin.eyebrow.administer": {
+    "en": "Administer",
+    "t": "Quản trị"
+  },
+  "admin.fail": {
+    "en": "Fail",
+    "t": "Báo lỗi"
+  },
+  "admin.fees.basis.investedCapital": {
+    "en": "Invested capital",
+    "t": "Vốn đã đầu tư"
+  },
+  "admin.fees.basis.marketValue": {
+    "en": "Market value",
+    "t": "Giá trị thị trường"
+  },
+  "admin.fees.basisNote": {
+    "en": "Invested capital is the house default: it does not swell with a mark you posted, so what the manager earns stays independent of the input the manager supplies.",
+    "t": "Vốn đã đầu tư là lựa chọn mặc định của công ty: nó không phình lên theo mức định giá do chính bạn đăng, nên phần nhà quản lý được hưởng vẫn độc lập với dữ liệu do nhà quản lý cung cấp."
+  },
+  "admin.fees.chargedOn": {
+    "en": "Charged on",
+    "t": "Tính trên"
+  },
+  "admin.fees.charges": {
+    "en": "Charges",
+    "t": "Các khoản thu phí"
+  },
+  "admin.fees.col.deferred": {
+    "en": "Deferred",
+    "t": "Hoãn lại"
+  },
+  "admin.fees.col.trigger": {
+    "en": "Trigger",
+    "t": "Kích hoạt"
+  },
+  "admin.fees.col.unitsTaken": {
+    "en": "Units taken",
+    "t": "Đơn vị đã thu"
+  },
+  "admin.fees.collected": {
+    "en": "Collected, not yet converted",
+    "t": "Đã thu, chưa chuyển thành tiền"
+  },
+  "admin.fees.collectedSub": {
+    "en": "Units the sweeper has clawed back from holders. No cash has moved yet.",
+    "t": "Số đơn vị quỹ mà bộ thu phí đã thu lại từ người nắm giữ. Chưa có dòng tiền nào dịch chuyển."
+  },
+  "admin.fees.crystallizationNote": {
+    "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
+    "t": "Đây là một mức giá, không phải chi tiết nhỏ — chốt phí càng thường xuyên thì tổng chi phí nhà đầu tư trả trong vòng đời quỹ càng cao rõ rệt, vì mỗi lần đặt lại đều chốt cứng phần lãi mà khoản lỗ sau đó không còn bù trừ được."
+  },
+  "admin.fees.err.notInteger": {
+    "en": "{field} must be a whole number of basis points.",
+    "t": "{field} phải là một số nguyên điểm cơ bản."
+  },
+  "admin.fees.err.tooLarge": {
+    "en": "{field} is {pct} — basis points, so 200 is 2%.",
+    "t": "{field} đang là {pct} — đơn vị là điểm cơ bản, nên 200 tương đương 2%."
+  },
+  "admin.fees.field.hurdle": {
+    "en": "Hurdle",
+    "t": "Ngưỡng sinh lời"
+  },
+  "admin.fees.field.management": {
+    "en": "Management",
+    "t": "Phí quản lý"
+  },
+  "admin.fees.field.performance": {
+    "en": "Performance",
+    "t": "Phí hiệu suất"
+  },
+  "admin.fees.hint.ofTheGain": {
+    "en": "of the gain",
+    "t": "của phần lãi"
+  },
+  "admin.fees.hint.perYear": {
+    "en": "per year",
+    "t": "mỗi năm"
+  },
+  "admin.fees.hint.zeroForNone": {
+    "en": "0 for none",
+    "t": "0 nếu không thu"
+  },
+  "admin.fees.lastChanged": {
+    "en": "Last changed {when}. Investors see these on the product page.",
+    "t": "Thay đổi lần cuối {when}. Nhà đầu tư nhìn thấy các mức này trên trang sản phẩm."
+  },
+  "admin.fees.lockedIn": {
+    "en": "Performance locked in",
+    "t": "Hiệu suất đã chốt"
+  },
+  "admin.fees.noCharges": {
+    "en": "No charges yet",
+    "t": "Chưa có khoản phí nào"
+  },
+  "admin.fees.noChargesHint": {
+    "en": "The sweeper charges a holding once its accrual is old enough. Nothing here means nobody has been billed.",
+    "t": "Bộ thu phí sẽ thu trên một khoản nắm giữ khi phần phí tích lũy đã đủ lâu. Trống ở đây nghĩa là chưa ai bị tính phí."
+  },
+  "admin.fees.noFee": {
+    "en": "No fee",
+    "t": "Không thu phí"
+  },
+  "admin.fees.noFunds": {
+    "en": "No funds registered",
+    "t": "Chưa có quỹ nào được đăng ký"
+  },
+  "admin.fees.noFundsHint": {
+    "en": "A fee is a property of a product. Register an allocation first, then price it here.",
+    "t": "Phí là thuộc tính của một sản phẩm. Hãy đăng ký khoản phân bổ trước, rồi định mức phí ở đây."
+  },
+  "admin.fees.notConfigured": {
+    "en": "This fund charges nothing today. Saving these terms starts the clock on every holding in it.",
+    "t": "Hiện quỹ này không thu khoản phí nào. Lưu các điều khoản này sẽ bắt đầu tính phí trên mọi khoản nắm giữ trong quỹ."
+  },
+  "admin.fees.nothingToSettle": {
+    "en": "Nothing to settle — no fee has been charged in this fund yet.",
+    "t": "Không có gì để tất toán — quỹ này chưa thu khoản phí nào."
+  },
+  "admin.fees.period.annual": {
+    "en": "Annually",
+    "t": "Hằng năm"
+  },
+  "admin.fees.period.monthly": {
+    "en": "Monthly",
+    "t": "Hằng tháng"
+  },
+  "admin.fees.period.quarterly": {
+    "en": "Quarterly",
+    "t": "Hằng quý"
+  },
+  "admin.fees.period.semiAnnual": {
+    "en": "Every 6 months",
+    "t": "Mỗi 6 tháng"
+  },
+  "admin.fees.saved": {
+    "en": "Saved. Investors see the new terms immediately.",
+    "t": "Đã lưu. Nhà đầu tư thấy điều khoản mới ngay lập tức."
+  },
+  "admin.fees.settleAll": {
+    "en": "Settle all units",
+    "t": "Tất toán toàn bộ đơn vị"
+  },
+  "admin.fees.settleNote": {
+    "en": "Settling burns these units and moves their value from the fund's claim into fee revenue. It is refused — never queued — when the fund's claim cannot cover it on top of its queued redemptions: investors waiting to exit are paid before the manager is.",
+    "t": "Tất toán sẽ hủy các đơn vị quỹ này và chuyển giá trị của chúng từ quyền đòi của quỹ sang doanh thu phí. Thao tác bị từ chối — không bao giờ xếp hàng chờ — khi quyền đòi của quỹ không đủ trang trải cả phần này lẫn các lệnh hoàn vốn đang chờ: nhà đầu tư chờ rút được trả trước nhà quản lý."
+  },
+  "admin.fees.settledAtNav": {
+    "en": "{cash} settled at NAV {nav}.",
+    "t": "Đã tất toán {cash} tại NAV {nav}."
+  },
+  "admin.fees.startCharging": {
+    "en": "Start charging",
+    "t": "Bắt đầu thu phí"
+  },
+  "admin.fees.subtitle": {
+    "en": "What each fund charges its investors, and converting what it has already earned into cash.",
+    "t": "Mức phí mỗi quỹ thu của nhà đầu tư, và việc chuyển phần đã thu được thành tiền mặt."
+  },
+  "admin.fees.terms": {
+    "en": "Terms",
+    "t": "Điều khoản"
+  },
+  "admin.fees.title": {
+    "en": "Fee terms and collection",
+    "t": "Điều khoản phí và việc thu phí"
+  },
+  "admin.fees.unitsHeld": {
+    "en": "Fee units held",
+    "t": "Đơn vị phí đang nắm giữ"
+  },
+  "admin.fees.updateTerms": {
+    "en": "Update terms",
+    "t": "Cập nhật điều khoản"
+  },
+  "admin.fees.withdrawableFrom": {
+    "en": "It is withdrawable on-chain from {screen}.",
+    "t": "Có thể rút on-chain từ {screen}."
+  },
+  "admin.fees.worthAtNav": {
+    "en": "Worth at current NAV",
+    "t": "Giá trị theo NAV hiện tại"
+  },
+  "admin.overview.col.event": {
+    "en": "Event",
+    "t": "Sự kiện"
+  },
+  "admin.overview.col.kind": {
+    "en": "Kind",
+    "t": "Loại"
+  },
+  "admin.overview.col.parked": {
+    "en": "Parked",
+    "t": "Bị treo"
+  },
+  "admin.overview.col.reason": {
+    "en": "Reason",
+    "t": "Nguyên nhân"
+  },
+  "admin.overview.col.seq": {
+    "en": "Seq",
+    "t": "Seq"
+  },
+  "admin.overview.col.service": {
+    "en": "Service",
+    "t": "Dịch vụ"
+  },
+  "admin.overview.compensated": {
+    "en": "compensated",
+    "t": "đã bù trừ"
+  },
+  "admin.overview.errorsAnalytics": {
+    "en": "Errors & analytics",
+    "t": "Lỗi & phân tích"
+  },
+  "admin.overview.fleetHealth": {
+    "en": "Fleet health",
+    "t": "Tình trạng hệ thống"
+  },
+  "admin.overview.fleetHealthSub": {
+    "en": "Central hub · datastores · microservices",
+    "t": "Hub trung tâm · kho dữ liệu · microservice"
+  },
+  "admin.overview.kpi.deadKeySignings": {
+    "en": "Dead-key signings",
+    "t": "Lần ký khóa hỏng"
+  },
+  "admin.overview.kpi.deadKeySigningsHint": {
+    "en": "Signer couldn't unseal a key — funds stranded",
+    "t": "Bộ ký không mở được khóa — tiền bị mắc kẹt"
+  },
+  "admin.overview.kpi.dispatchBacklog": {
+    "en": "Dispatch backlog",
+    "t": "Tồn đọng gửi đi"
+  },
+  "admin.overview.kpi.dispatchBacklogHint": {
+    "en": "Undispatched outbox rows",
+    "t": "Số bản ghi outbox chưa được gửi"
+  },
+  "admin.overview.kpi.oldestBacklog": {
+    "en": "Oldest backlog",
+    "t": "Tồn đọng lâu nhất"
+  },
+  "admin.overview.kpi.oldestBacklogHint": {
+    "en": "Age of the oldest undispatched row",
+    "t": "Thời gian tồn của bản ghi chưa gửi lâu nhất"
+  },
+  "admin.overview.kpi.oldestBacklogValue": {
+    "en": "{n}s",
+    "t": "{n}s"
+  },
+  "admin.overview.kpi.parkedRows": {
+    "en": "Parked rows",
+    "t": "Bản ghi bị treo"
+  },
+  "admin.overview.kpi.parkedRowsHint": {
+    "en": "Money the relay couldn't apply",
+    "t": "Dòng tiền bộ chuyển tiếp không áp dụng được"
+  },
+  "admin.overview.kpi.servicesHealthy": {
+    "en": "Services healthy",
+    "t": "Dịch vụ khỏe mạnh"
+  },
+  "admin.overview.noParkedEvents": {
+    "en": "No parked events — the relay is clean.",
+    "t": "Không có sự kiện bị treo — bộ chuyển tiếp sạch."
+  },
+  "admin.overview.obs.eventStream": {
+    "en": "A live outbox/event feed renders here when streaming is enabled.",
+    "t": "Luồng outbox/sự kiện trực tiếp sẽ hiển thị ở đây khi bật chế độ phát trực tuyến."
+  },
+  "admin.overview.obs.eventStreamLabel": {
+    "en": "Event stream",
+    "t": "Luồng sự kiện"
+  },
+  "admin.overview.obs.posthog": {
+    "en": "Active investors, sessions and top events surface here once POSTHOG_KEY is configured.",
+    "t": "Nhà đầu tư đang hoạt động, phiên và các sự kiện nổi bật sẽ xuất hiện ở đây khi POSTHOG_KEY được cấu hình."
+  },
+  "admin.overview.obs.sentry": {
+    "en": "Unresolved issues across the fleet surface here once SENTRY_DSN is configured.",
+    "t": "Các sự cố chưa xử lý trên toàn hệ thống sẽ xuất hiện ở đây khi SENTRY_DSN được cấu hình."
+  },
+  "admin.overview.parkedEvents": {
+    "en": "Parked events",
+    "t": "Sự kiện bị treo"
+  },
+  "admin.overview.parkedEventsSub": {
+    "en": "Outbox rows the relay couldn't apply — fix the cause, then unpark to re-drive",
+    "t": "Các bản ghi outbox mà bộ chuyển tiếp không áp dụng được — khắc phục nguyên nhân, rồi gỡ treo để chạy lại"
+  },
+  "admin.overview.runHealthCheck": {
+    "en": "Run health check",
+    "t": "Chạy kiểm tra tình trạng"
+  },
+  "admin.overview.subtitle": {
+    "en": "Central service and microservices — health and throughput",
+    "t": "Dịch vụ trung tâm và các microservice — tình trạng và thông lượng"
+  },
+  "admin.overview.unpark": {
+    "en": "Unpark",
+    "t": "Gỡ treo"
+  },
+  "admin.overview.unparkRefetchFailed": {
+    "en": "Unparked, but refreshing the list failed: {error} — run a health check to resync.",
+    "t": "Đã gỡ treo, nhưng làm mới danh sách thất bại: {error} — hãy chạy kiểm tra tình trạng để đồng bộ lại."
+  },
+  "admin.overview.unparked": {
+    "en": "unparked",
+    "t": "đã gỡ treo"
+  },
+  "admin.rail": {
+    "en": "Rail",
+    "t": "Kênh"
+  },
+  "admin.rail.bep20": {
+    "en": "BEP20 · BNB Chain",
+    "t": "BEP20 · BNB Chain"
+  },
+  "admin.rail.polygon": {
+    "en": "Polygon · PoS",
+    "t": "Polygon · PoS"
+  },
+  "admin.rail.ton": {
+    "en": "TON · Open Network",
+    "t": "TON · Open Network"
+  },
+  "admin.rail.trc20": {
+    "en": "TRC20 · TRON",
+    "t": "TRC20 · TRON"
+  },
+  "admin.revenue.amountUsdt": {
+    "en": "Amount (USDT)",
+    "t": "Số tiền (USDT)"
+  },
+  "admin.revenue.availableHint": {
+    "en": "free of in-flight payouts",
+    "t": "chưa tính các khoản chi trả đang thực hiện"
+  },
+  "admin.revenue.availableToPayOut": {
+    "en": "Available to pay out",
+    "t": "Khả dụng để chi trả"
+  },
+  "admin.revenue.confirmNote": {
+    "en": "No fee is charged on a payout, so the full amount ships. This cannot be reversed once broadcast.",
+    "t": "Không thu phí trên khoản chi trả, nên toàn bộ số tiền được chuyển đi. Không thể đảo ngược sau khi đã phát lên mạng."
+  },
+  "admin.revenue.confirmPayout": {
+    "en": "Confirm payout",
+    "t": "Xác nhận"
+  },
+  "admin.revenue.confirmSentence": {
+    "en": "Send {amount} on {network} to {address}?",
+    "t": "Gửi {amount} qua {network} tới {address}?"
+  },
+  "admin.revenue.destinationAddress": {
+    "en": "Destination address",
+    "t": "Địa chỉ nhận"
+  },
+  "admin.revenue.earned": {
+    "en": "Earned",
+    "t": "Đã thu được"
+  },
+  "admin.revenue.earnedTotal": {
+    "en": "Earned · total",
+    "t": "Đã thu · tổng"
+  },
+  "admin.revenue.earnedTotalHint": {
+    "en": "fees + settled 2-and-20",
+    "t": "phí + phần 2-and-20 đã tất toán"
+  },
+  "admin.revenue.err.belowMinimum": {
+    "en": "Below the {min} minimum for this rail.",
+    "t": "Thấp hơn mức tối thiểu {min} của kênh này."
+  },
+  "admin.revenue.err.enterAmount": {
+    "en": "Enter an amount.",
+    "t": "Hãy nhập số tiền."
+  },
+  "admin.revenue.err.overAvailable": {
+    "en": "Only {available} of earned revenue is available.",
+    "t": "Chỉ có {available} doanh thu đã thu là khả dụng."
+  },
+  "admin.revenue.footnote": {
+    "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
+    "t": "Một khoản chi trả chạy cùng quy trình saga như lệnh rút của người dùng, nên nó cũng xuất hiện trong hàng đợi Rút tiền để gửi lệnh và tất toán. Chỉ khoản chi trả còn đang xếp hàng mới có thể hủy — khi đã chuyển sang xử lý, giao dịch có thể đã lên mạng và việc hủy sẽ dẫn tới trả trùng."
+  },
+  "admin.revenue.inFlight": {
+    "en": "In flight",
+    "t": "Đang thực hiện"
+  },
+  "admin.revenue.instantSuffix": {
+    "en": "{amount} instant",
+    "t": "{amount} tức thì"
+  },
+  "admin.revenue.noPayouts": {
+    "en": "No payouts yet",
+    "t": "Chưa có khoản chi trả nào"
+  },
+  "admin.revenue.noPayoutsHint": {
+    "en": "Revenue the fund has earned stays on the ledger until it is paid out. Payouts appear here once requested.",
+    "t": "Doanh thu quỹ đã thu được nằm trên sổ cái cho tới khi được chi trả. Các khoản chi trả sẽ hiện ở đây sau khi được yêu cầu."
+  },
+  "admin.revenue.noRail": {
+    "en": "No rail is configured",
+    "t": "Chưa cấu hình kênh nào"
+  },
+  "admin.revenue.noRailHint": {
+    "en": "A payout ships on a chain rail with a running watcher. Configure one to enable payouts.",
+    "t": "Khoản chi trả được chuyển qua một kênh blockchain có bộ theo dõi đang chạy. Hãy cấu hình một kênh để bật chức năng chi trả."
+  },
+  "admin.revenue.ownMoneyNote": {
+    "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
+    "t": "Đây là tiền của chính quỹ. Số dư khách hàng và vốn mồi của quỹ là các quyền đòi riêng trên sổ cái, không nằm trong đây — và không thể chạm tới từ màn hình này."
+  },
+  "admin.revenue.payOut": {
+    "en": "Pay out",
+    "t": "Chi trả"
+  },
+  "admin.revenue.payouts": {
+    "en": "Payouts",
+    "t": "Các khoản chi trả"
+  },
+  "admin.revenue.pendingHint": {
+    "en": "queued + in-flight",
+    "t": "đang chờ + đang thực hiện"
+  },
+  "admin.revenue.pendingPayout": {
+    "en": "Pending payout",
+    "t": "Chi trả đang chờ"
+  },
+  "admin.revenue.placeholder.address": {
+    "en": "The wallet that receives the payout",
+    "t": "Ví nhận khoản chi trả"
+  },
+  "admin.revenue.placeholder.minAmount": {
+    "en": "min {n}",
+    "t": "tối thiểu {n}"
+  },
+  "admin.revenue.reviewPayout": {
+    "en": "Review payout",
+    "t": "Xem lại"
+  },
+  "admin.revenue.subtitle": {
+    "en": "What the fund earned — fees and the settled 2-and-20 — and paying it out",
+    "t": "Những gì quỹ đã thu được — phí và phần 2-and-20 đã tất toán — và việc chi trả"
+  },
+  "admin.revenue.willQueue": {
+    "en": "Above the {instant} that ships immediately on this rail — the rest is accepted and queued until the treasury is topped up.",
+    "t": "Vượt mức {instant} được chuyển đi ngay trên kênh này — phần còn lại vẫn được nhận và xếp hàng cho tới khi ngân quỹ được nạp thêm."
+  },
+  "admin.role.admin": {
+    "en": "admin",
+    "t": "quản trị"
+  },
+  "admin.role.investor": {
+    "en": "investor",
+    "t": "nhà đầu tư"
+  },
+  "admin.role.operator": {
+    "en": "operator",
+    "t": "vận hành"
+  },
+  "admin.role.owner": {
+    "en": "owner",
+    "t": "chủ sở hữu"
+  },
+  "admin.settle": {
+    "en": "Settle",
+    "t": "Tất toán"
+  },
+  "admin.state.cancelled": {
+    "en": "cancelled",
+    "t": "đã hủy"
+  },
+  "admin.state.closed": {
+    "en": "closed",
+    "t": "đã đóng"
+  },
+  "admin.state.completed": {
+    "en": "completed",
+    "t": "hoàn tất"
+  },
+  "admin.state.draft": {
+    "en": "draft",
+    "t": "nháp"
+  },
+  "admin.state.failed": {
+    "en": "failed",
+    "t": "thất bại"
+  },
+  "admin.state.open": {
+    "en": "open",
+    "t": "đang mở"
+  },
+  "admin.state.processing": {
+    "en": "processing",
+    "t": "đang xử lý"
+  },
+  "admin.state.queued": {
+    "en": "queued",
+    "t": "đang chờ"
+  },
+  "admin.status.active": {
+    "en": "active",
+    "t": "hoạt động"
+  },
+  "admin.status.blocked": {
+    "en": "blocked",
+    "t": "bị chặn"
+  },
+  "admin.status.degraded": {
+    "en": "degraded",
+    "t": "suy giảm"
+  },
+  "admin.status.disabled": {
+    "en": "disabled",
+    "t": "đã khóa"
+  },
+  "admin.status.error": {
+    "en": "error",
+    "t": "lỗi"
+  },
+  "admin.status.healthy": {
+    "en": "healthy",
+    "t": "khỏe mạnh"
+  },
+  "admin.status.onboarding": {
+    "en": "onboarding",
+    "t": "khởi tạo"
+  },
+  "admin.status.staged": {
+    "en": "staged",
+    "t": "thử nghiệm"
+  },
+  "admin.treasury.a11y.copy": {
+    "en": "Copy {what}",
+    "t": "Sao chép {what}"
+  },
+  "admin.treasury.alreadyRecorded": {
+    "en": "Already recorded — that reference was credited before, nothing changed.",
+    "t": "Đã ghi nhận trước đó — tham chiếu này đã được ghi có, không có gì thay đổi."
+  },
+  "admin.treasury.bank": {
+    "en": "Bank · USD",
+    "t": "Ngân hàng · USD"
+  },
+  "admin.treasury.bankHint": {
+    "en": "off-ramp · FX",
+    "t": "rút về fiat · ngoại hối"
+  },
+  "admin.treasury.claimsTotal": {
+    "en": "Claims · total (USDT)",
+    "t": "Quyền đòi · tổng (USDT)"
+  },
+  "admin.treasury.claimsTotalHint": {
+    "en": "= on-chain custody · backed",
+    "t": "= lưu ký on-chain · được bảo chứng"
+  },
+  "admin.treasury.custodyUnconfigured": {
+    "en": "— · custody unconfigured",
+    "t": "— · chưa cấu hình lưu ký"
+  },
+  "admin.treasury.expectedAmount": {
+    "en": "Expected amount (USDT) · optional",
+    "t": "Số tiền dự kiến (USDT) · không bắt buộc"
+  },
+  "admin.treasury.feeRevenueHint": {
+    "en": "earned — fees + settled 2-and-20",
+    "t": "đã thu — phí + phần 2-and-20 đã tất toán"
+  },
+  "admin.treasury.fundCapital": {
+    "en": "Fund capital",
+    "t": "Vốn của quỹ"
+  },
+  "admin.treasury.fundCapitalHint": {
+    "en": "company's own",
+    "t": "tiền của chính công ty"
+  },
+  "admin.treasury.gas": {
+    "en": "Gas",
+    "t": "Gas"
+  },
+  "admin.treasury.gasStation": {
+    "en": "Gas station",
+    "t": "Trạm gas"
+  },
+  "admin.treasury.gasStationBalance": {
+    "en": "Gas station balance",
+    "t": "Số dư trạm gas"
+  },
+  "admin.treasury.gasStationHint": {
+    "en": "(fund {symbol} here — pays sweep gas drops)",
+    "t": "(nạp {symbol} vào đây — chi trả gas cho các lần gom tiền)"
+  },
+  "admin.treasury.gasWord": {
+    "en": "gas",
+    "t": "gas"
+  },
+  "admin.treasury.heldForClients": {
+    "en": "Held for clients",
+    "t": "Giữ cho khách hàng"
+  },
+  "admin.treasury.heldForClientsHint": {
+    "en": "user + service balances",
+    "t": "số dư người dùng + dịch vụ"
+  },
+  "admin.treasury.invariantNote": {
+    "en": "Per-rail backing is the treasury's job, not the ledger's: a shortfall on one rail is accept-and-queue, then rebalanced via CEX / alt-rail / top-up. The global invariant is {invariant}.",
+    "t": "Bảo chứng theo từng kênh là việc của ngân quỹ, không phải của sổ cái: thiếu hụt trên một kênh sẽ được nhận-và-xếp-hàng, sau đó cân đối lại qua CEX / kênh khác / nạp thêm. Bất biến toàn cục là {invariant}."
+  },
+  "admin.treasury.layer1": {
+    "en": "Layer 1 · Ledger — user claims (USDT)",
+    "t": "Lớp 1 · Sổ cái — quyền đòi của người dùng (USDT)"
+  },
+  "admin.treasury.layer2": {
+    "en": "Layer 2 · Treasury — liquidity by rail",
+    "t": "Lớp 2 · Ngân quỹ — thanh khoản theo từng kênh"
+  },
+  "admin.treasury.noRailWithTreasury": {
+    "en": "No rail with a treasury",
+    "t": "Không có kênh nào có ngân quỹ"
+  },
+  "admin.treasury.onchainRef": {
+    "en": "On-chain reference",
+    "t": "Tham chiếu on-chain"
+  },
+  "admin.treasury.onchainUsdt": {
+    "en": "On-chain USDT",
+    "t": "USDT on-chain"
+  },
+  "admin.treasury.party.fundCapital": {
+    "en": "fund capital",
+    "t": "vốn của quỹ"
+  },
+  "admin.treasury.party.generic": {
+    "en": "{kind} {id}",
+    "t": "{kind} {id}"
+  },
+  "admin.treasury.placeholder.any": {
+    "en": "any",
+    "t": "bất kỳ"
+  },
+  "admin.treasury.recordArrival": {
+    "en": "Record an out-of-band arrival",
+    "t": "Ghi nhận một khoản tiền về ngoài luồng"
+  },
+  "admin.treasury.recordArrivalIntro": {
+    "en": "USDT sent straight to a treasury hot wallet is real money the ledger never saw. Give its on-chain reference and the hub reads the transfer back off the chain — the amount and the party credited come from there, so this records an arrival rather than asserting one.",
+    "t": "USDT gửi thẳng vào ví nóng của ngân quỹ là tiền thật mà sổ cái chưa từng nhìn thấy. Hãy nhập tham chiếu on-chain và hub sẽ đọc lại giao dịch từ blockchain — số tiền và bên được ghi có đều lấy từ đó, nên đây là việc ghi nhận một khoản tiền về chứ không phải khai báo một khoản tiền về."
+  },
+  "admin.treasury.recordArrivalSubmit": {
+    "en": "Record arrival",
+    "t": "Ghi nhận"
+  },
+  "admin.treasury.recorded": {
+    "en": "Recorded — the chain reported {amount}, credited to {party}.",
+    "t": "Đã ghi nhận — blockchain báo {amount}, ghi có cho {party}."
+  },
+  "admin.treasury.refNote": {
+    "en": "The reference is both what gets verified and the idempotency key — {evmRef} on an EVM rail, {tonRef} on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.",
+    "t": "Tham chiếu vừa là thứ được đối chiếu vừa là khóa chống trùng — {evmRef} trên kênh EVM, {tonRef} trên TON. Một tham chiếu không trỏ tới giao dịch đã xác nhận vào một trong các địa chỉ của chúng ta sẽ bị từ chối, và việc gửi lại một tham chiếu đã ghi nhận sẽ không có tác dụng gì. Chỉ điền số tiền khi muốn khẳng định con số bạn kỳ vọng; khi đó sai lệch sẽ thành lỗi thay vì một bất ngờ."
+  },
+  "admin.treasury.reservedWithdrawals": {
+    "en": "Reserved · withdrawals",
+    "t": "Đã giữ · lệnh rút"
+  },
+  "admin.treasury.reservedWithdrawalsHint": {
+    "en": "queued + in-flight (clearing)",
+    "t": "đang chờ + đang thực hiện (tài khoản bù trừ)"
+  },
+  "admin.treasury.selectRail": {
+    "en": "Select a rail…",
+    "t": "Chọn một kênh…"
+  },
+  "admin.treasury.subtitle": {
+    "en": "Two layers — user claims (USDT) vs on-chain liquidity by rail",
+    "t": "Hai lớp — quyền đòi của người dùng (USDT) và thanh khoản on-chain theo từng kênh"
+  },
+  "admin.users.accessSecurity": {
+    "en": "Access & security",
+    "t": "Truy cập & bảo mật"
+  },
+  "admin.users.balance": {
+    "en": "Balance",
+    "t": "Số dư"
+  },
+  "admin.users.count": {
+    "en": "{n, plural, one {# user} other {# users}}",
+    "t": "{n, plural, other {# người dùng}}"
+  },
+  "admin.users.identity": {
+    "en": "Identity",
+    "t": "Danh tính"
+  },
+  "admin.users.joined": {
+    "en": "Joined",
+    "t": "Tham gia"
+  },
+  "admin.users.kyc": {
+    "en": "KYC",
+    "t": "KYC"
+  },
+  "admin.users.kycBadge": {
+    "en": "KYC L{n}",
+    "t": "KYC L{n}"
+  },
+  "admin.users.kycLevelShort": {
+    "en": "L{n}",
+    "t": "L{n}"
+  },
+  "admin.users.noMatch": {
+    "en": "No users match these filters.",
+    "t": "Không có người dùng nào khớp bộ lọc này."
+  },
+  "admin.users.reinstate": {
+    "en": "Reinstate",
+    "t": "Khôi phục"
+  },
+  "admin.users.revokeAllSessions": {
+    "en": "Revoke all sessions",
+    "t": "Thu hồi mọi phiên"
+  },
+  "admin.users.revokeNote": {
+    "en": "Bumps token_version — invalidates every JWT issued to this user.",
+    "t": "Tăng token_version — vô hiệu hóa mọi JWT đã cấp cho người dùng này."
+  },
+  "admin.users.role": {
+    "en": "Role",
+    "t": "Vai trò"
+  },
+  "admin.users.searchPlaceholder": {
+    "en": "Search email or user id…",
+    "t": "Tìm theo email hoặc mã người dùng…"
+  },
+  "admin.users.subtitle": {
+    "en": "Investors and operators — identities, KYC, roles and sessions",
+    "t": "Nhà đầu tư và nhân sự vận hành — danh tính, KYC, vai trò và phiên"
+  },
+  "admin.users.suspend": {
+    "en": "Suspend",
+    "t": "Tạm khóa"
+  },
+  "admin.users.tokenVersion": {
+    "en": "Token version",
+    "t": "Phiên bản token"
+  },
+  "admin.users.tokenVersionValue": {
+    "en": "v{n}",
+    "t": "v{n}"
+  },
+  "admin.valuation.allocationLabel": {
+    "en": "{title} ({service})",
+    "t": "{title} ({service})"
+  },
+  "admin.valuation.allocationLabelWithState": {
+    "en": "{title} ({service}) — {state}",
+    "t": "{title} ({service}) — {state}"
+  },
+  "admin.valuation.approx": {
+    "en": "≈ {amount}",
+    "t": "≈ {amount}"
+  },
+  "admin.valuation.aumUsdt": {
+    "en": "AUM (USDT)",
+    "t": "AUM (USDT)"
+  },
+  "admin.valuation.capBelowIssued": {
+    "en": "Below the {n} units already issued: this stops further issuance. Nothing minted is affected and redemptions keep working.",
+    "t": "Thấp hơn {n} đơn vị quỹ đã phát hành: điều này dừng việc phát hành thêm. Số đã phát hành không bị ảnh hưởng và các lệnh hoàn vốn vẫn hoạt động."
+  },
+  "admin.valuation.capHint": {
+    "en": "Takes effect on the next subscription. Redemptions are never affected.",
+    "t": "Có hiệu lực từ lệnh đăng ký kế tiếp. Các lệnh hoàn vốn không bao giờ bị ảnh hưởng."
+  },
+  "admin.valuation.capInvalid": {
+    "en": "Must be greater than zero — to stop new money entirely, close the allocation instead.",
+    "t": "Phải lớn hơn không — muốn chặn hoàn toàn tiền mới, hãy đóng khoản phân bổ."
+  },
+  "admin.valuation.capUnits": {
+    "en": "Cap (units)",
+    "t": "Trần (đơn vị quỹ)"
+  },
+  "admin.valuation.col.estCash": {
+    "en": "Est. cash",
+    "t": "Tiền ước tính"
+  },
+  "admin.valuation.derivedFormula": {
+    "en": "= AUM / {n, plural, one {# unit} other {# units}}",
+    "t": "= AUM / {n, plural, other {# đơn vị quỹ}}"
+  },
+  "admin.valuation.derivedNav": {
+    "en": "Derived NAV / share",
+    "t": "NAV suy ra / đơn vị"
+  },
+  "admin.valuation.fundService": {
+    "en": "Fund (service)",
+    "t": "Quỹ (dịch vụ)"
+  },
+  "admin.valuation.issuedOfCap": {
+    "en": "{issued} / {cap} units",
+    "t": "{issued} / {cap} đơn vị quỹ"
+  },
+  "admin.valuation.loadingSupply": {
+    "en": "Loading supply… — a subscription that would mint past the cap is refused.",
+    "t": "Đang tải nguồn cung… — lệnh đăng ký làm phát hành vượt trần sẽ bị từ chối."
+  },
+  "admin.valuation.navFormula": {
+    "en": "AUM / units",
+    "t": "AUM / số đơn vị quỹ"
+  },
+  "admin.valuation.navGuardNote": {
+    "en": "NAV-move guard — a post is rejected if NAV moves more than 50% from the last mark, unless override is on.",
+    "t": "Chốt chặn biến động NAV — một lần đăng định giá sẽ bị từ chối nếu NAV lệch quá 50% so với mức gần nhất, trừ khi bật bỏ qua chốt chặn."
+  },
+  "admin.valuation.noAllocations": {
+    "en": "No allocations registered",
+    "t": "Chưa có khoản phân bổ nào được đăng ký"
+  },
+  "admin.valuation.noUnitsNote": {
+    "en": "No units outstanding — NAV is {formula}, so it is undefined until someone subscribes. The fund prices at the seed NAV 1.0 until the first subscription; there is nothing to mark yet.",
+    "t": "Chưa có đơn vị quỹ nào lưu hành — NAV là {formula}, nên chưa xác định được cho tới khi có người đăng ký. Quỹ định giá theo NAV khởi tạo 1.0 cho tới lệnh đăng ký đầu tiên; hiện chưa có gì để định giá."
+  },
+  "admin.valuation.overrideGuard": {
+    "en": "Override guard",
+    "t": "Bỏ qua chốt chặn"
+  },
+  "admin.valuation.overrideGuardHint": {
+    "en": "Allow a >50% NAV move",
+    "t": "Cho phép NAV biến động trên 50%"
+  },
+  "admin.valuation.pickAFund": {
+    "en": "Pick a fund above to see and resize its authorised unit supply.",
+    "t": "Chọn một quỹ ở trên để xem và điều chỉnh nguồn cung đơn vị quỹ được phép phát hành."
+  },
+  "admin.valuation.postValuation": {
+    "en": "Post valuation",
+    "t": "Đăng định giá"
+  },
+  "admin.valuation.queueEmpty": {
+    "en": "The redemption queue is empty.",
+    "t": "Hàng đợi hoàn vốn đang trống."
+  },
+  "admin.valuation.queueFootnote": {
+    "en": "Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.",
+    "t": "Tất toán chi trả theo NAV tại thời điểm tất toán khi quyền đòi của quỹ có thanh khoản; nếu kênh thiếu tiền, khoản chi trả sẽ xếp hàng cho tới khi ngân quỹ được nạp thêm. Báo lỗi hủy bỏ yêu cầu và hoàn lại đơn vị quỹ."
+  },
+  "admin.valuation.queuedCount": {
+    "en": "{n, plural, one {# queued} other {# queued}}",
+    "t": "{n, plural, other {# đang chờ}}"
+  },
+  "admin.valuation.redemptionQueue": {
+    "en": "Redemption queue",
+    "t": "Hàng đợi hoàn vốn"
+  },
+  "admin.valuation.saveCap": {
+    "en": "Save cap",
+    "t": "Lưu trần"
+  },
+  "admin.valuation.stillIssuable": {
+    "en": "{units} units still issuable — a subscription that would mint past the cap is refused.",
+    "t": "Còn {units} đơn vị quỹ có thể phát hành — lệnh đăng ký làm phát hành vượt trần sẽ bị từ chối."
+  },
+  "admin.valuation.subtitle": {
+    "en": "Post fund NAV and clear the redemption queue",
+    "t": "Đăng NAV của quỹ và xử lý hàng đợi hoàn vốn"
+  },
+  "admin.valuation.unitSupply": {
+    "en": "Unit supply",
+    "t": "Nguồn cung đơn vị quỹ"
+  },
+  "admin.valuation.unitsIssuedIn": {
+    "en": "Units issued in {service}",
+    "t": "Đơn vị quỹ đã phát hành trong {service}"
+  },
+  "admin.withdrawals.awaitingAction": {
+    "en": "Awaiting action",
+    "t": "Chờ xử lý"
+  },
+  "admin.withdrawals.col.grossNet": {
+    "en": "Gross / net",
+    "t": "Gộp / ròng"
+  },
+  "admin.withdrawals.confirmFail": {
+    "en": "Confirm fail",
+    "t": "Xác nhận báo lỗi"
+  },
+  "admin.withdrawals.confirmSettle": {
+    "en": "Confirm settle",
+    "t": "Xác nhận tất toán"
+  },
+  "admin.withdrawals.empty": {
+    "en": "No withdrawals are awaiting action.",
+    "t": "Không có lệnh rút nào đang chờ xử lý."
+  },
+  "admin.withdrawals.failWarning": {
+    "en": "Failing refunds the user. If the broadcast reached the chain this would double-pay — the hub refuses while a broadcast record exists, but verify on-chain first.",
+    "t": "Báo lỗi sẽ hoàn tiền cho người dùng. Nếu giao dịch đã được phát lên blockchain thì việc này gây trả trùng — hub sẽ từ chối khi còn bản ghi phát sóng, nhưng hãy kiểm tra on-chain trước."
+  },
+  "admin.withdrawals.footnote": {
+    "en": "Dispatch broadcasts a queued withdrawal once its rail has liquidity. Settle records the mined transaction and releases the reservation. Fail voids and refunds — ONLY safe when nothing reached the chain; the hub refuses it while a broadcast record exists.",
+    "t": "Gửi lệnh sẽ phát một lệnh rút đang chờ lên mạng khi kênh của nó có thanh khoản. Tất toán ghi nhận giao dịch đã được đào và giải phóng phần đã giữ. Báo lỗi hủy bỏ và hoàn tiền — CHỈ an toàn khi chưa có gì lên blockchain; hub từ chối thao tác này khi còn bản ghi phát sóng."
+  },
+  "admin.withdrawals.netSuffix": {
+    "en": "{amount} net",
+    "t": "{amount} ròng"
+  },
+  "admin.withdrawals.openCount": {
+    "en": "{n, plural, one {# open} other {# open}}",
+    "t": "{n, plural, other {# đang mở}}"
+  },
+  "admin.withdrawals.placeholder.reason": {
+    "en": "Reason (audit note, optional)",
+    "t": "Lý do (ghi chú kiểm toán, không bắt buộc)"
+  },
+  "admin.withdrawals.placeholder.txHash": {
+    "en": "Mined transaction hash (0x…)",
+    "t": "Hash giao dịch đã đào (0x…)"
+  },
+  "admin.withdrawals.subtitle": {
+    "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
+    "t": "Gửi lệnh, tất toán hoặc báo lỗi các lệnh rút — của nhà đầu tư và của chính quỹ"
+  },
+  "auth.brandBlurb": {
+    "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
+    "t": "Tiếp cận theo chuẩn tổ chức tới các quỹ bất động sản ven biển và hạ tầng đã được thẩm định — quản lý trọn vẹn từ đầu đến cuối."
+  },
+  "auth.brandHeadline": {
+    "en": "Private capital for Vietnam's coastal economy.",
+    "t": "Vốn tư nhân cho kinh tế biển Việt Nam."
+  },
+  "auth.continueWithGoogle": {
+    "en": "Continue with Google",
+    "t": "Tiếp tục với Google"
+  },
+  "auth.err.denied": {
+    "en": "Sign-in was cancelled.",
+    "t": "Lượt đăng nhập đã bị hủy."
+  },
+  "auth.err.exchange": {
+    "en": "We couldn't complete sign-in. Please try again.",
+    "t": "Chúng tôi không thể hoàn tất đăng nhập. Vui lòng thử lại."
+  },
+  "auth.err.generic": {
+    "en": "Sign-in failed. Please try again.",
+    "t": "Đăng nhập thất bại. Vui lòng thử lại."
+  },
+  "auth.err.invalid": {
+    "en": "That sign-in attempt expired. Please try again.",
+    "t": "Lượt đăng nhập đó đã hết hạn. Vui lòng thử lại."
+  },
+  "auth.investorPortal": {
+    "en": "Investor Portal",
+    "t": "Cổng nhà đầu tư"
+  },
+  "auth.newToEv": {
+    "en": "New to EV Invest? Continuing with Google sets up your cabinet.",
+    "t": "Bạn mới đến với EV Invest? Tiếp tục với Google sẽ thiết lập tài khoản cho bạn."
+  },
+  "auth.notSignedIn": {
+    "en": "Not signed in",
+    "t": "Chưa đăng nhập"
+  },
+  "auth.signInAgain": {
+    "en": "Sign in again",
+    "t": "Đăng nhập lại"
+  },
+  "auth.signInSub": {
+    "en": "Sign in to manage your investments.",
+    "t": "Đăng nhập để quản lý các khoản đầu tư của bạn."
+  },
+  "auth.signOut": {
+    "en": "Sign out",
+    "t": "Đăng xuất"
+  },
+  "auth.signedOut": {
+    "en": "Signed out",
+    "t": "Đã đăng xuất"
+  },
+  "auth.signedOutSub": {
+    "en": "You've been signed out of your cabinet.",
+    "t": "Bạn đã đăng xuất khỏi tài khoản của mình."
+  },
+  "auth.stat.aum": {
+    "en": "Assets under mgmt",
+    "t": "Tài sản quản lý"
+  },
+  "auth.stat.targetIrr": {
+    "en": "Avg. target IRR",
+    "t": "IRR mục tiêu TB"
+  },
+  "auth.welcomeBack": {
+    "en": "Welcome back",
+    "t": "Chào mừng trở lại"
+  },
   "dash.activeStrategies": {
     "en": "Active strategies",
     "t": "Chiến lược đang hoạt động"
+  },
+  "dash.allTimeSuffix": {
+    "en": "{pct} all-time",
+    "t": "{pct} từ trước đến nay"
   },
   "dash.autoDeploy": {
     "en": "Auto-deploy idle cash",
@@ -18,6 +1246,10 @@
   "dash.browseStrategies": {
     "en": "Browse strategies",
     "t": "Xem các chiến lược"
+  },
+  "dash.fundFallback": {
+    "en": "Fund",
+    "t": "Quỹ"
   },
   "dash.fundPerformance": {
     "en": "Fund performance",
@@ -38,6 +1270,10 @@
   "dash.hintFundPositions": {
     "en": "fund positions",
     "t": "vị thế trong quỹ"
+  },
+  "dash.investedWhatIOwn": {
+    "en": "Invested · what I own",
+    "t": "Đã đầu tư · những gì tôi sở hữu"
   },
   "dash.moveMoney": {
     "en": "Move money",
@@ -67,6 +1303,26 @@
     "en": "Subscribe to a strategy and the split of what you own shows up here.",
     "t": "Đăng ký một chiến lược và cơ cấu khoản đầu tư của bạn sẽ hiện ở đây."
   },
+  "dash.op.deposit": {
+    "en": "Deposit · {network}",
+    "t": "Nạp tiền · {network}"
+  },
+  "dash.op.redeemed": {
+    "en": "{fund} — redeemed",
+    "t": "{fund} — đã hoàn vốn"
+  },
+  "dash.op.sub": {
+    "en": "{ref} · {state}",
+    "t": "{ref} · {state}"
+  },
+  "dash.op.subscribed": {
+    "en": "{fund} — subscribed",
+    "t": "{fund} — đã đăng ký mua"
+  },
+  "dash.op.withdrawal": {
+    "en": "Withdrawal · {network}",
+    "t": "Rút tiền · {network}"
+  },
   "dash.portfolio": {
     "en": "Portfolio",
     "t": "Danh mục"
@@ -79,9 +1335,33 @@
     "en": "Portfolio value",
     "t": "Giá trị danh mục"
   },
+  "dash.range.1m": {
+    "en": "1M",
+    "t": "1T"
+  },
+  "dash.range.1y": {
+    "en": "1Y",
+    "t": "1N"
+  },
+  "dash.range.6m": {
+    "en": "6M",
+    "t": "6T"
+  },
+  "dash.range.all": {
+    "en": "All",
+    "t": "All"
+  },
   "dash.recentOperations": {
     "en": "Recent operations",
     "t": "Giao dịch gần đây"
+  },
+  "dash.strategyCount": {
+    "en": "{n, plural, one {# strategy} other {# strategies}}",
+    "t": "{n, plural, other {# chiến lược}}"
+  },
+  "dash.unitsAmount": {
+    "en": "{n, plural, one {{units} unit} other {{units} units}}",
+    "t": "{n, plural, other {{units} đơn vị quỹ}}"
   },
   "dash.unrealizedPnl": {
     "en": "Unrealized P&L",
@@ -91,9 +1371,425 @@
     "en": "Your participation",
     "t": "Phần tham gia của bạn"
   },
+  "err.address.controlChars": {
+    "en": "Residential address must not contain control characters",
+    "t": "Địa chỉ thường trú không được chứa ký tự điều khiển"
+  },
+  "err.address.maxLength": {
+    "en": "Residential address must be at most 256 characters",
+    "t": "Địa chỉ thường trú tối đa 256 ký tự"
+  },
+  "err.authNotConfigured": {
+    "en": "Sign-in is unavailable right now. Please try again shortly.",
+    "t": "Hiện chưa thể đăng nhập. Vui lòng thử lại sau ít phút."
+  },
+  "err.csrf": {
+    "en": "This page went stale. Reload it and try again.",
+    "t": "Trang này đã cũ. Hãy tải lại và thử lần nữa."
+  },
+  "err.currency.format": {
+    "en": "Base currency must be a 3-letter code such as 'USD'",
+    "t": "Tiền tệ cơ sở phải là mã 3 chữ cái, ví dụ 'USD'"
+  },
+  "err.dob.format": {
+    "en": "Date of birth must be a valid YYYY-MM-DD date",
+    "t": "Ngày sinh phải là ngày hợp lệ theo dạng YYYY-MM-DD"
+  },
+  "err.dob.range": {
+    "en": "Date of birth must be a real date between 1900 and 2100",
+    "t": "Ngày sinh phải là một ngày có thật trong khoảng 1900 đến 2100"
+  },
+  "err.email.invalid": {
+    "en": "Enter a valid email address",
+    "t": "Hãy nhập địa chỉ email hợp lệ"
+  },
+  "err.email.maxLength": {
+    "en": "Email address must be at most 320 characters",
+    "t": "Địa chỉ email tối đa 320 ký tự"
+  },
+  "err.feePolicySave": {
+    "en": "Could not save these terms.",
+    "t": "Không thể lưu các điều khoản này."
+  },
+  "err.feeSettle": {
+    "en": "Could not settle these units.",
+    "t": "Không thể tất toán các đơn vị quỹ này."
+  },
+  "err.field.maxLength": {
+    "en": "{field} must be at most {n, plural, one {# character} other {# characters}}",
+    "t": "{field} tối đa {n, plural, other {# ký tự}}"
+  },
+  "err.field.minLetters": {
+    "en": "{field} must contain at least 2 letters",
+    "t": "{field} phải chứa ít nhất 2 chữ cái"
+  },
+  "err.field.nameChars": {
+    "en": "{field} may only contain letters, spaces, hyphens, apostrophes, and periods",
+    "t": "{field} chỉ được chứa chữ cái, dấu cách, dấu gạch nối, dấu nháy đơn và dấu chấm"
+  },
+  "err.forbidden": {
+    "en": "You don't have access to this.",
+    "t": "Bạn không có quyền truy cập mục này."
+  },
+  "err.fundRefresh": {
+    "en": "Couldn't refresh this fund",
+    "t": "Không thể làm mới quỹ này"
+  },
+  "err.fundServiceRequired": {
+    "en": "Select a fund to continue.",
+    "t": "Hãy chọn một quỹ để tiếp tục."
+  },
+  "err.language.format": {
+    "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
+    "t": "Ngôn ngữ phải là mã BCP 47, ví dụ 'en' hoặc 'en-US'"
+  },
+  "err.language.maxLength": {
+    "en": "Language must be at most 16 characters",
+    "t": "Ngôn ngữ tối đa 16 ký tự"
+  },
+  "err.network": {
+    "en": "Can't reach the server. Check your connection and try again.",
+    "t": "Không kết nối được máy chủ. Hãy kiểm tra kết nối và thử lại."
+  },
+  "err.notFound": {
+    "en": "Not found.",
+    "t": "Không tìm thấy."
+  },
+  "err.opsLoad": {
+    "en": "Couldn't load your operations",
+    "t": "Không tải được danh sách giao dịch của bạn"
+  },
+  "err.phone.invalid": {
+    "en": "Enter a valid phone number starting with + or country code",
+    "t": "Hãy nhập số điện thoại hợp lệ, bắt đầu bằng + hoặc mã quốc gia"
+  },
+  "err.phone.maxLength": {
+    "en": "Phone number must be at most 32 characters",
+    "t": "Số điện thoại tối đa 32 ký tự"
+  },
+  "err.positionsLoad": {
+    "en": "Couldn't load your positions",
+    "t": "Không tải được các vị thế của bạn"
+  },
+  "err.rateLimited": {
+    "en": "Too many requests — give it a moment and try again.",
+    "t": "Quá nhiều yêu cầu — hãy đợi một chút rồi thử lại."
+  },
+  "err.requestFailed": {
+    "en": "Something went wrong on our side. Please try again.",
+    "t": "Đã có sự cố từ phía chúng tôi. Vui lòng thử lại."
+  },
+  "err.serverUnavailable": {
+    "en": "The service is temporarily unavailable. Please try again.",
+    "t": "Dịch vụ tạm thời không khả dụng. Vui lòng thử lại."
+  },
+  "err.sessionExpired": {
+    "en": "Your session has ended. Sign in again to continue.",
+    "t": "Phiên của bạn đã kết thúc. Hãy đăng nhập lại để tiếp tục."
+  },
+  "err.timezone.format": {
+    "en": "Time zone must be 'UTC', 'GMT', or an IANA name such as 'Asia/Ho_Chi_Minh'",
+    "t": "Múi giờ phải là 'UTC', 'GMT', hoặc một tên IANA như 'Asia/Ho_Chi_Minh'"
+  },
+  "err.timezone.maxLength": {
+    "en": "Time zone must be at most 64 characters",
+    "t": "Múi giờ tối đa 64 ký tự"
+  },
+  "err.unauthenticated": {
+    "en": "We couldn't confirm your session. Reload the page or sign in again.",
+    "t": "Chúng tôi không xác nhận được phiên của bạn. Hãy tải lại trang hoặc đăng nhập lại."
+  },
+  "err.unparkDeclined": {
+    "en": "The hub declined the unpark.",
+    "t": "Hub đã từ chối thao tác gỡ treo."
+  },
+  "err.walletLoad": {
+    "en": "Couldn't load your wallet",
+    "t": "Không tải được ví của bạn"
+  },
+  "invest.accruedOnHolding": {
+    "en": "Accrued on your holding",
+    "t": "Tích lũy trên khoản nắm giữ của bạn"
+  },
+  "invest.acrossFunds": {
+    "en": "{n, plural, one {Across # fund} other {Across # funds}}",
+    "t": "{n, plural, other {Trên # quỹ}}"
+  },
+  "invest.allProducts": {
+    "en": "All products",
+    "t": "Tất cả sản phẩm"
+  },
+  "invest.availableToInvest": {
+    "en": "Available to invest",
+    "t": "Khả dụng để đầu tư"
+  },
+  "invest.awaitingSettlement": {
+    "en": "Awaiting settlement",
+    "t": "Chờ tất toán"
+  },
+  "invest.badge.open": {
+    "en": "Open",
+    "t": "Đang mở"
+  },
+  "invest.badge.redeemOnly": {
+    "en": "Redeem only",
+    "t": "Chỉ hoàn vốn"
+  },
+  "invest.badge.staleNav": {
+    "en": "Stale NAV",
+    "t": "NAV cũ"
+  },
+  "invest.blocked.capReached": {
+    "en": "This fund has issued its full authorised supply, so it is not minting new units. Redemptions are unaffected.",
+    "t": "Quỹ này đã phát hành hết nguồn cung được phép, nên không phát hành thêm đơn vị quỹ mới. Các lệnh hoàn vốn không bị ảnh hưởng."
+  },
+  "invest.blocked.closed": {
+    "en": "This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full.",
+    "t": "Quỹ này đã đóng với các lệnh đăng ký mới. Đơn vị quỹ của bạn không bị ảnh hưởng — bạn vẫn có thể hoàn vốn toàn bộ."
+  },
+  "invest.blocked.staleNav": {
+    "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",
+    "t": "Định giá của quỹ đã cũ, nên việc giao dịch tạm dừng cho tới khi nhân sự vận hành đăng mức định giá mới."
+  },
+  "invest.buysUnits": {
+    "en": "Buys {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT per unit.",
+    "t": "Mua {n, plural, other {{units} đơn vị quỹ}} với giá {nav} USDT mỗi đơn vị."
+  },
+  "invest.carriedOver": {
+    "en": "Carried over",
+    "t": "Chuyển sang kỳ sau"
+  },
+  "invest.costBasis": {
+    "en": "Cost basis",
+    "t": "Giá gốc"
+  },
+  "invest.dustHint": {
+    "en": "Too small to buy a whole unit at {nav} — increase the amount.",
+    "t": "Quá nhỏ để mua trọn một đơn vị quỹ ở mức {nav} — hãy tăng số tiền."
+  },
+  "invest.feeNoteHolder": {
+    "en": "Fees are taken in units, never in cash — your wallet balance is untouched, and the value shown opposite is before them. The performance fee applies only to gains above your own high-water mark, so a recovery back to it costs nothing.",
+    "t": "Phí được thu bằng đơn vị quỹ, không bao giờ bằng tiền mặt — số dư ví của bạn không bị động đến, và giá trị hiển thị bên cạnh là trước phí. Phí hiệu suất chỉ áp dụng cho phần lãi vượt mốc cao nhất của riêng bạn, nên việc hồi phục trở lại mốc đó không tốn gì."
+  },
+  "invest.feeNoteProspect": {
+    "en": "Fees are taken in units, never in cash. The performance fee applies only to gains above the price you enter at, measured per investor rather than per fund.",
+    "t": "Phí được thu bằng đơn vị quỹ, không bao giờ bằng tiền mặt. Phí hiệu suất chỉ áp dụng cho phần lãi vượt mức giá bạn tham gia, tính theo từng nhà đầu tư chứ không theo từng quỹ."
+  },
+  "invest.fullyIssued": {
+    "en": "Fully issued — not minting new units.",
+    "t": "Đã phát hành hết — không phát hành thêm đơn vị quỹ."
+  },
+  "invest.fundAum": {
+    "en": "Fund AUM",
+    "t": "AUM của quỹ"
+  },
+  "invest.fundsHeld": {
+    "en": "Funds held",
+    "t": "Số quỹ đang nắm giữ"
+  },
+  "invest.hurdleFirst": {
+    "en": "{pct} p.a. first",
+    "t": "{pct}/năm đầu tiên"
+  },
+  "invest.investedValue": {
+    "en": "Invested value",
+    "t": "Giá trị đã đầu tư"
+  },
+  "invest.lockedIn": {
+    "en": "Locked in",
+    "t": "Đã chốt"
+  },
+  "invest.nav": {
+    "en": "NAV",
+    "t": "NAV"
+  },
+  "invest.navPerUnit": {
+    "en": "NAV / unit",
+    "t": "NAV / đơn vị"
+  },
+  "invest.noFunds": {
+    "en": "No funds are open for subscription right now.",
+    "t": "Hiện không có quỹ nào mở nhận đăng ký."
+  },
+  "invest.noFundsHint": {
+    "en": "A fund appears here once an operator registers and opens it. Nothing you hold is affected.",
+    "t": "Một quỹ sẽ xuất hiện ở đây khi nhân sự vận hành đăng ký và mở nó. Những gì bạn đang nắm giữ không bị ảnh hưởng."
+  },
+  "invest.noUnitsHeld": {
+    "en": "You hold no fund units yet.",
+    "t": "Bạn chưa nắm giữ đơn vị quỹ nào."
+  },
+  "invest.noUnitsInFund": {
+    "en": "You hold no units in this fund yet.",
+    "t": "Bạn chưa nắm giữ đơn vị quỹ nào trong quỹ này."
+  },
+  "invest.notInvestedYet": {
+    "en": "Not invested yet",
+    "t": "Chưa đầu tư"
+  },
+  "invest.notRegistered": {
+    "en": "No fund is registered as “{service}”.",
+    "t": "Không có quỹ nào được đăng ký với mã “{service}”."
+  },
+  "invest.notRegisteredHint": {
+    "en": "A fund exists only once an operator registers it. If you followed a link here, the product may never have been opened.",
+    "t": "Một quỹ chỉ tồn tại khi nhân sự vận hành đăng ký nó. Nếu bạn đến đây từ một đường dẫn, có thể sản phẩm này chưa từng được mở."
+  },
+  "invest.notYetValued": {
+    "en": "Not yet valued",
+    "t": "Chưa định giá"
+  },
+  "invest.notYetValuedHint": {
+    "en": "Not yet valued — the first subscription prices at 1.0.",
+    "t": "Chưa định giá — lệnh đăng ký đầu tiên được tính ở mức 1.0."
+  },
+  "invest.ofTheGain": {
+    "en": "{pct} of the gain",
+    "t": "{pct} của phần lãi"
+  },
+  "invest.overCapHint": {
+    "en": "Only {n, plural, one {{units} unit is} other {{units} units are}} left before this fund reaches its cap — reduce the amount.",
+    "t": "Chỉ còn {n, plural, other {{units} đơn vị quỹ}} trước khi quỹ này chạm trần — hãy giảm số tiền."
+  },
+  "invest.perAnnum": {
+    "en": "{pct} p.a.",
+    "t": "{pct}/năm"
+  },
+  "invest.pnl": {
+    "en": "P&L",
+    "t": "Lãi/lỗ"
+  },
+  "invest.products": {
+    "en": "Products",
+    "t": "Sản phẩm"
+  },
+  "invest.redeem": {
+    "en": "Redeem",
+    "t": "Hoàn vốn"
+  },
+  "invest.redeemCompleted": {
+    "en": "Redemption completed",
+    "t": "Đã hoàn vốn xong"
+  },
+  "invest.redeemEstimate": {
+    "en": "≈ {amount} USDT at today's NAV — the settle price may differ.",
+    "t": "≈ {amount} USDT theo NAV hôm nay — giá tất toán có thể khác."
+  },
+  "invest.redeemFailed": {
+    "en": "Redemption failed",
+    "t": "Hoàn vốn thất bại"
+  },
+  "invest.redeemQueued": {
+    "en": "Redemption queued",
+    "t": "Lệnh hoàn vốn đang chờ"
+  },
+  "invest.redeemReceiptCompleted": {
+    "en": "{n, plural, one {{units} unit} other {{units} units}} redeemed for {cash} USDT at {nav} USDT NAV.",
+    "t": "Đã hoàn vốn {n, plural, other {{units} đơn vị quỹ}} lấy {cash} USDT tại NAV {nav} USDT."
+  },
+  "invest.redeemReceiptQueued": {
+    "en": "{n, plural, one {{units} unit} other {{units} units}} reserved — queued until the fund tops up, then priced at the settle NAV.",
+    "t": "Đã giữ {n, plural, other {{units} đơn vị quỹ}} — xếp hàng cho tới khi quỹ được bổ sung, sau đó tính giá theo NAV lúc tất toán."
+  },
+  "invest.redeemTimingNote": {
+    "en": "Your units are reserved the moment you submit, but the cash is priced when the redemption settles — not now. A figure shown here is an estimate at today's NAV.",
+    "t": "Đơn vị quỹ của bạn được giữ ngay khi bạn gửi lệnh, nhưng tiền chỉ được định giá khi lệnh hoàn vốn tất toán — không phải bây giờ. Con số hiển thị ở đây là ước tính theo NAV hôm nay."
+  },
+  "invest.remainingCapacity": {
+    "en": "Remaining capacity",
+    "t": "Sức chứa còn lại"
+  },
+  "invest.reservedPricedAtSettle": {
+    "en": "reserved, priced at settle",
+    "t": "đã giữ, định giá khi tất toán"
+  },
+  "invest.subscribe": {
+    "en": "Subscribe",
+    "t": "Đăng ký mua"
+  },
+  "invest.subscribeFailed": {
+    "en": "Subscription failed",
+    "t": "Đăng ký mua thất bại"
+  },
+  "invest.subscribeIdleHint": {
+    "en": "Units are priced at the current NAV; the unit count is fixed at purchase and does not grow.",
+    "t": "Đơn vị quỹ được định giá theo NAV hiện tại; số đơn vị được cố định tại thời điểm mua và không tăng thêm."
+  },
+  "invest.subscribeReceiptBody": {
+    "en": "Minted {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT NAV — your position updates shortly.",
+    "t": "Đã phát hành {n, plural, other {{units} đơn vị quỹ}} tại NAV {nav} USDT — vị thế của bạn sẽ cập nhật trong giây lát."
+  },
+  "invest.subscribeReceived": {
+    "en": "Subscription received",
+    "t": "Đã nhận lệnh đăng ký"
+  },
+  "invest.supplyNote": {
+    "en": "Subscriptions mint units at the current NAV. Once the cap is reached the fund stops accepting new money; redemptions are unaffected.",
+    "t": "Lệnh đăng ký phát hành đơn vị quỹ theo NAV hiện tại. Khi chạm trần, quỹ ngừng nhận tiền mới; các lệnh hoàn vốn không bị ảnh hưởng."
+  },
+  "invest.title": {
+    "en": "Your fund shares",
+    "t": "Phần quỹ bạn sở hữu"
+  },
+  "invest.topUp": {
+    "en": "Top up",
+    "t": "Nạp thêm"
+  },
+  "invest.units": {
+    "en": "Units",
+    "t": "Đơn vị quỹ"
+  },
+  "invest.unitsHeld": {
+    "en": "{n, plural, one {{units} unit} other {{units} units}} held.",
+    "t": "Đang nắm giữ {n, plural, other {{units} đơn vị quỹ}}."
+  },
+  "invest.unitsIssued": {
+    "en": "Units issued",
+    "t": "Đơn vị đã phát hành"
+  },
+  "invest.unitsToRedeem": {
+    "en": "Units to redeem",
+    "t": "Số đơn vị cần hoàn vốn"
+  },
+  "invest.unmarkedNote": {
+    "en": "No valuation posted yet — units price at the bootstrap NAV of 1.0 until the first mark.",
+    "t": "Chưa có định giá nào được đăng — đơn vị quỹ được tính theo NAV khởi tạo 1.0 cho tới lần định giá đầu tiên."
+  },
+  "invest.value": {
+    "en": "Value",
+    "t": "Giá trị"
+  },
+  "invest.youHoldUnits": {
+    "en": "You hold {n, plural, one {{units} unit} other {{units} units}}.",
+    "t": "Bạn đang nắm giữ {n, plural, other {{units} đơn vị quỹ}}."
+  },
+  "invest.yourMark": {
+    "en": "Your mark",
+    "t": "Mốc của bạn"
+  },
+  "invest.yourPosition": {
+    "en": "Your position",
+    "t": "Vị thế của bạn"
+  },
+  "invest.yourUnits": {
+    "en": "Your units",
+    "t": "Đơn vị của bạn"
+  },
   "lang.switch": {
     "en": "Language",
     "t": "Ngôn ngữ"
+  },
+  "meta.description": {
+    "en": "Your investor cabinet — portfolio, funds and wallet.",
+    "t": "Tài khoản nhà đầu tư của bạn — danh mục, quỹ và ví."
+  },
+  "meta.title": {
+    "en": "EV Investment — Cabinet",
+    "t": "EV Investment — Cabinet"
+  },
+  "mfe.loading": {
+    "en": "Loading {name}…",
+    "t": "Đang tải {name}…"
   },
   "nav.allocations": {
     "en": "Allocations",
@@ -101,7 +1797,7 @@
   },
   "nav.cabinet": {
     "en": "Cabinet",
-    "t": "Tài khoản"
+    "t": "Cabinet"
   },
   "nav.fees": {
     "en": "Fees",
@@ -129,7 +1825,7 @@
   },
   "nav.revenue": {
     "en": "Fund revenue",
-    "t": "Doanh thu quỹ"
+    "t": "Doanh thu"
   },
   "nav.settings": {
     "en": "Settings",
@@ -145,7 +1841,7 @@
   },
   "nav.valuation": {
     "en": "Valuation & redemptions",
-    "t": "Định giá & hoàn vốn"
+    "t": "Định giá"
   },
   "nav.wallet": {
     "en": "Wallet",
@@ -155,9 +1851,689 @@
     "en": "Withdrawals",
     "t": "Rút tiền"
   },
+  "notif.a11y.email": {
+    "en": "Email notifications",
+    "t": "Thông báo qua email"
+  },
+  "notif.a11y.emailCopyFor": {
+    "en": "Email copy for {topic}",
+    "t": "Bản sao qua email cho {topic}"
+  },
+  "notif.a11y.inApp": {
+    "en": "In-app notifications",
+    "t": "Thông báo trong ứng dụng"
+  },
+  "notif.allCaughtUp": {
+    "en": "You're all caught up.",
+    "t": "Bạn đã xem hết thông báo."
+  },
+  "notif.channelsFootnote": {
+    "en": "Turn a channel off and we stop sending on it. Turn both off and we stop notifying you altogether — updates still live on the fund pages whenever you want them.",
+    "t": "Tắt một kênh và chúng tôi ngừng gửi qua kênh đó. Tắt cả hai và chúng tôi ngừng thông báo hoàn toàn — các cập nhật vẫn luôn có trên trang của từng quỹ bất cứ khi nào bạn cần."
+  },
+  "notif.delivery": {
+    "en": "Delivery",
+    "t": "Kênh gửi"
+  },
+  "notif.deliverySub": {
+    "en": "Choose where notifications reach you. Both can be off.",
+    "t": "Chọn nơi bạn nhận thông báo. Có thể tắt cả hai."
+  },
+  "notif.emailUnverified": {
+    "en": "{email} · unverified, so email is not sent",
+    "t": "{email} · chưa xác minh, nên email không được gửi"
+  },
+  "notif.emailVerified": {
+    "en": "Sent to {email} · verified",
+    "t": "Gửi tới {email} · đã xác minh"
+  },
+  "notif.emptyHint": {
+    "en": "Follow a fund and its NAV updates, distributions and research notes land here — and in your inbox too, if you want a copy.",
+    "t": "Theo dõi một quỹ và các cập nhật NAV, phân phối lợi nhuận cùng báo cáo phân tích của quỹ sẽ về đây — và cả hộp thư của bạn, nếu bạn muốn một bản sao."
+  },
+  "notif.follow": {
+    "en": "Follow",
+    "t": "Theo dõi"
+  },
+  "notif.following": {
+    "en": "Following",
+    "t": "Đã theo dõi"
+  },
+  "notif.inAppSub": {
+    "en": "On by default. Turn this off and notifications stop appearing in your cabinet.",
+    "t": "Bật mặc định. Tắt mục này và thông báo sẽ không còn hiện trong tài khoản của bạn."
+  },
+  "notif.loadOlder": {
+    "en": "Load older",
+    "t": "Tải thông báo cũ hơn"
+  },
+  "notif.markAllRead": {
+    "en": "Mark all read",
+    "t": "Đánh dấu đã đọc tất cả"
+  },
+  "notif.nothingUnread": {
+    "en": "Nothing unread",
+    "t": "Không có thông báo chưa đọc"
+  },
+  "notif.nothingYet": {
+    "en": "Nothing yet",
+    "t": "Chưa có gì"
+  },
+  "notif.settingsLink": {
+    "en": "Notification settings",
+    "t": "Cài đặt thông báo"
+  },
+  "notif.subtitle": {
+    "en": "Everything you follow — and how you hear about it",
+    "t": "Mọi thứ bạn theo dõi — và cách bạn nhận tin"
+  },
+  "notif.topicsSub": {
+    "en": "Email a copy for these. Unsubscribing is one click — no confirmation step.",
+    "t": "Gửi một bản sao qua email cho các mục này. Hủy nhận chỉ bằng một cú nhấp — không có bước xác nhận."
+  },
+  "notif.unread": {
+    "en": "Unread",
+    "t": "Chưa đọc"
+  },
+  "notif.unreadCount": {
+    "en": "Unread · {n}",
+    "t": "Chưa đọc · {n}"
+  },
+  "notif.whatYouFollow": {
+    "en": "What you follow",
+    "t": "Những gì bạn theo dõi"
+  },
+  "notif.when.days": {
+    "en": "{n}d",
+    "t": "{n} ngày"
+  },
+  "notif.when.hours": {
+    "en": "{n}h",
+    "t": "{n} giờ"
+  },
+  "notif.when.minutes": {
+    "en": "{n}m",
+    "t": "{n} phút"
+  },
+  "notif.when.now": {
+    "en": "now",
+    "t": "vừa xong"
+  },
+  "ops.a11y.rowDetails": {
+    "en": "{title} — details",
+    "t": "{title} — chi tiết"
+  },
+  "ops.badge.buy": {
+    "en": "BUY",
+    "t": "MUA"
+  },
+  "ops.badge.fee": {
+    "en": "FEE",
+    "t": "PHÍ"
+  },
+  "ops.badge.in": {
+    "en": "IN",
+    "t": "NẠP"
+  },
+  "ops.badge.out": {
+    "en": "OUT",
+    "t": "RÚT"
+  },
+  "ops.badge.sell": {
+    "en": "SELL",
+    "t": "BÁN"
+  },
+  "ops.context.fund": {
+    "en": "Fund · {when}",
+    "t": "Quỹ · {when}"
+  },
+  "ops.context.network": {
+    "en": "{network} · {when}",
+    "t": "{network} · {when}"
+  },
+  "ops.day.today": {
+    "en": "Today",
+    "t": "Hôm nay"
+  },
+  "ops.day.todayInline": {
+    "en": "today",
+    "t": "hôm nay"
+  },
+  "ops.day.undated": {
+    "en": "Undated",
+    "t": "Không rõ ngày"
+  },
+  "ops.day.yesterday": {
+    "en": "Yesterday",
+    "t": "Hôm qua"
+  },
+  "ops.day.yesterdayInline": {
+    "en": "yesterday",
+    "t": "hôm qua"
+  },
+  "ops.detail.amountCredited": {
+    "en": "Amount credited",
+    "t": "Số tiền ghi có"
+  },
+  "ops.detail.amountDebited": {
+    "en": "Amount debited",
+    "t": "Số tiền ghi nợ"
+  },
+  "ops.detail.cashIn": {
+    "en": "Cash in",
+    "t": "Tiền vào"
+  },
+  "ops.detail.cashOut": {
+    "en": "Cash out",
+    "t": "Tiền ra"
+  },
+  "ops.detail.feeDeferred": {
+    "en": "Taken in units — the rest is carried to the next charge",
+    "t": "Thu bằng đơn vị quỹ — phần còn lại chuyển sang lần thu kế tiếp"
+  },
+  "ops.detail.feeTaken": {
+    "en": "Taken in units, not from your wallet",
+    "t": "Thu bằng đơn vị quỹ, không trừ vào ví của bạn"
+  },
+  "ops.detail.managementFee": {
+    "en": "Management fee",
+    "t": "Phí quản lý"
+  },
+  "ops.detail.netArrives": {
+    "en": "{amount} USDT arrives after the network fee",
+    "t": "{amount} USDT về tới nơi sau khi trừ phí mạng"
+  },
+  "ops.detail.netSent": {
+    "en": "Net sent",
+    "t": "Thực gửi"
+  },
+  "ops.detail.notYetBroadcast": {
+    "en": "not yet broadcast",
+    "t": "chưa phát lên mạng"
+  },
+  "ops.detail.performanceFee": {
+    "en": "Performance fee",
+    "t": "Phí hiệu suất"
+  },
+  "ops.detail.pricePerUnit": {
+    "en": "Price per unit",
+    "t": "Giá mỗi đơn vị quỹ"
+  },
+  "ops.detail.pricedAtSettle": {
+    "en": "Priced when the fund settles it",
+    "t": "Được định giá khi quỹ tất toán"
+  },
+  "ops.detail.reference": {
+    "en": "Reference",
+    "t": "Tham chiếu"
+  },
+  "ops.detail.setAtSettle": {
+    "en": "set at settle",
+    "t": "xác định khi tất toán"
+  },
+  "ops.detail.toAddress": {
+    "en": "To address",
+    "t": "Địa chỉ nhận"
+  },
+  "ops.detail.unitsMinted": {
+    "en": "Units minted",
+    "t": "Đơn vị quỹ đã phát hành"
+  },
+  "ops.detail.unitsRedeemed": {
+    "en": "Units redeemed",
+    "t": "Đơn vị quỹ đã hoàn vốn"
+  },
+  "ops.detail.valueTaken": {
+    "en": "Value taken",
+    "t": "Giá trị đã thu"
+  },
+  "ops.empty.deposits": {
+    "en": "No deposits yet",
+    "t": "Chưa có khoản nạp nào"
+  },
+  "ops.empty.fees": {
+    "en": "No fees yet",
+    "t": "Chưa có khoản phí nào"
+  },
+  "ops.empty.redemptions": {
+    "en": "No redemptions yet",
+    "t": "Chưa có lệnh hoàn vốn nào"
+  },
+  "ops.empty.subscriptions": {
+    "en": "No subscriptions yet",
+    "t": "Chưa có lệnh đăng ký nào"
+  },
+  "ops.empty.withdrawals": {
+    "en": "No withdrawals yet",
+    "t": "Chưa có lệnh rút nào"
+  },
+  "ops.emptyHint": {
+    "en": "Add funds to your wallet, then subscribe into a fund — every movement appears here from the moment you make it, not once it settles.",
+    "t": "Hãy nạp tiền vào ví, rồi đăng ký mua một quỹ — mọi chuyển động đều hiện ở đây ngay khi bạn thực hiện, không phải chờ đến lúc tất toán."
+  },
+  "ops.filter.deposits": {
+    "en": "Deposits",
+    "t": "Nạp tiền"
+  },
+  "ops.filter.fees": {
+    "en": "Fees",
+    "t": "Phí"
+  },
+  "ops.filter.redemptions": {
+    "en": "Redemptions",
+    "t": "Hoàn vốn"
+  },
+  "ops.filter.subscriptions": {
+    "en": "Subscriptions",
+    "t": "Đăng ký mua"
+  },
+  "ops.filter.withdrawals": {
+    "en": "Withdrawals",
+    "t": "Rút tiền"
+  },
   "ops.filterByKind": {
     "en": "Filter operations by kind",
     "t": "Lọc giao dịch theo loại"
+  },
+  "ops.filterEmptyHint": {
+    "en": "You have other activity — switch back to All to see it.",
+    "t": "Bạn có hoạt động khác — chuyển về Tất cả để xem."
+  },
+  "ops.kind.deposit": {
+    "en": "Deposit",
+    "t": "Nạp tiền"
+  },
+  "ops.kind.fee": {
+    "en": "Fee",
+    "t": "Phí"
+  },
+  "ops.kind.redemption": {
+    "en": "Redemption",
+    "t": "Hoàn vốn"
+  },
+  "ops.kind.subscription": {
+    "en": "Subscription",
+    "t": "Đăng ký mua"
+  },
+  "ops.kind.unknown": {
+    "en": "Operation",
+    "t": "Giao dịch"
+  },
+  "ops.kind.withdrawal": {
+    "en": "Withdrawal",
+    "t": "Rút tiền"
+  },
+  "ops.op.feeCharged": {
+    "en": "{fund} — fee charged",
+    "t": "{fund} — đã thu phí"
+  },
+  "ops.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Đã hủy"
+  },
+  "ops.state.charged": {
+    "en": "Charged",
+    "t": "Đã thu phí"
+  },
+  "ops.state.completed": {
+    "en": "Completed",
+    "t": "Hoàn tất"
+  },
+  "ops.state.credited": {
+    "en": "Credited",
+    "t": "Đã ghi có"
+  },
+  "ops.state.failed": {
+    "en": "Failed",
+    "t": "Thất bại"
+  },
+  "ops.state.partlyDeferred": {
+    "en": "Partly deferred",
+    "t": "Thu một phần"
+  },
+  "ops.state.processing": {
+    "en": "Processing",
+    "t": "Đang xử lý"
+  },
+  "ops.state.queued": {
+    "en": "Queued",
+    "t": "Đang chờ"
+  },
+  "ops.step.awaitingFund": {
+    "en": "Awaiting fund liquidity",
+    "t": "Chờ thanh khoản của quỹ"
+  },
+  "ops.step.awaitingFundMeta": {
+    "en": "priced at the NAV when it settles",
+    "t": "định giá theo NAV lúc tất toán"
+  },
+  "ops.step.awaitingRail": {
+    "en": "Awaiting a liquid rail",
+    "t": "Chờ một kênh có thanh khoản"
+  },
+  "ops.step.awaitingRailMeta": {
+    "en": "ships as soon as the rail is topped up",
+    "t": "sẽ chuyển đi ngay khi kênh được nạp thêm"
+  },
+  "ops.step.broadcast": {
+    "en": "Broadcast to the network",
+    "t": "Đã phát lên mạng"
+  },
+  "ops.step.burnVoided": {
+    "en": "the reserved burn was voided",
+    "t": "lệnh hủy đơn vị đã giữ được bãi bỏ"
+  },
+  "ops.step.cashPaidOut": {
+    "en": "Cash paid out",
+    "t": "Đã chi trả tiền"
+  },
+  "ops.step.creditedToBalance": {
+    "en": "credited to your balance",
+    "t": "đã ghi có vào số dư của bạn"
+  },
+  "ops.step.inFlight": {
+    "en": "in flight",
+    "t": "đang thực hiện"
+  },
+  "ops.step.leftCustody": {
+    "en": "funds have left custody",
+    "t": "tiền đã rời khỏi lưu ký"
+  },
+  "ops.step.perUnit": {
+    "en": "{nav} per unit",
+    "t": "{nav} mỗi đơn vị quỹ"
+  },
+  "ops.step.pricedAtSettle": {
+    "en": "Priced at the settle NAV",
+    "t": "Định giá theo NAV lúc tất toán"
+  },
+  "ops.step.redCancelled": {
+    "en": "Cancelled — units returned",
+    "t": "Đã hủy — đơn vị quỹ được trả lại"
+  },
+  "ops.step.redFailed": {
+    "en": "Failed — units returned",
+    "t": "Thất bại — đơn vị quỹ được trả lại"
+  },
+  "ops.step.requested": {
+    "en": "Requested",
+    "t": "Đã gửi yêu cầu"
+  },
+  "ops.step.reservationVoided": {
+    "en": "the reservation was voided",
+    "t": "phần đã giữ được bãi bỏ"
+  },
+  "ops.step.settledOnChain": {
+    "en": "Settled on-chain",
+    "t": "Đã tất toán on-chain"
+  },
+  "ops.step.waiting": {
+    "en": "waiting",
+    "t": "đang chờ"
+  },
+  "ops.step.wdCancelled": {
+    "en": "Cancelled — balance returned",
+    "t": "Đã hủy — số dư được hoàn lại"
+  },
+  "ops.step.wdFailed": {
+    "en": "Failed — balance returned",
+    "t": "Thất bại — số dư được hoàn lại"
+  },
+  "ops.sub.deposit": {
+    "en": "{network} · {ref}",
+    "t": "{network} · {ref}"
+  },
+  "ops.sub.managementLeg": {
+    "en": "{amount} management",
+    "t": "{amount} phí quản lý"
+  },
+  "ops.sub.performanceLeg": {
+    "en": "{amount} performance",
+    "t": "{amount} phí hiệu suất"
+  },
+  "ops.sub.withdrawal": {
+    "en": "{network} · {destination}",
+    "t": "{network} · {destination}"
+  },
+  "ops.sub.withdrawalNet": {
+    "en": "{network} · {destination} · {amount} USDT net",
+    "t": "{network} · {destination} · {amount} USDT ròng"
+  },
+  "ops.subtitle": {
+    "en": "Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.",
+    "t": "Mọi khoản nạp, rút, đăng ký mua và hoàn vốn bạn đã thực hiện, cùng mọi khoản phí một quỹ đã thu — trên một dòng thời gian."
+  },
+  "ops.truncatedNote": {
+    "en": "Showing your most recent operations — older activity isn't listed here yet.",
+    "t": "Đang hiển thị các giao dịch gần nhất — hoạt động cũ hơn chưa được liệt kê ở đây."
+  },
+  "profile.accountSnapshot": {
+    "en": "Account snapshot",
+    "t": "Tổng quan tài khoản"
+  },
+  "profile.dateOfBirth": {
+    "en": "Date of birth",
+    "t": "Ngày sinh"
+  },
+  "profile.editProfile": {
+    "en": "Edit profile",
+    "t": "Chỉnh sửa hồ sơ"
+  },
+  "profile.identityVerification": {
+    "en": "Identity verification",
+    "t": "Xác minh danh tính"
+  },
+  "profile.kycLevelPill": {
+    "en": "KYC level {n}",
+    "t": "KYC cấp {n}"
+  },
+  "profile.kycRaisedBy": {
+    "en": "Raised by compliance review",
+    "t": "Do bộ phận tuân thủ nâng cấp"
+  },
+  "profile.legalName": {
+    "en": "Legal name",
+    "t": "Tên pháp lý"
+  },
+  "profile.managedByCompliance": {
+    "en": "Managed by compliance",
+    "t": "Do bộ phận tuân thủ quản lý"
+  },
+  "profile.nationality": {
+    "en": "Nationality",
+    "t": "Quốc tịch"
+  },
+  "profile.personalInformation": {
+    "en": "Personal information",
+    "t": "Thông tin cá nhân"
+  },
+  "profile.personalInformationSub": {
+    "en": "Used for compliance and statements",
+    "t": "Dùng cho tuân thủ và sao kê"
+  },
+  "profile.phoneNumber": {
+    "en": "Phone number",
+    "t": "Số điện thoại"
+  },
+  "profile.platformAccess": {
+    "en": "Platform access",
+    "t": "Quyền truy cập nền tảng"
+  },
+  "profile.preferredName": {
+    "en": "Preferred name",
+    "t": "Tên thường gọi"
+  },
+  "profile.residentialAddress": {
+    "en": "Residential address",
+    "t": "Địa chỉ thường trú"
+  },
+  "profile.roleAccount": {
+    "en": "{role} account",
+    "t": "Tài khoản {role}"
+  },
+  "profile.subtitle": {
+    "en": "Your personal details and verification status",
+    "t": "Thông tin cá nhân và tình trạng xác minh của bạn"
+  },
+  "profile.taxResidence": {
+    "en": "Tax residence",
+    "t": "Nơi cư trú thuế"
+  },
+  "profile.totalInvested": {
+    "en": "Total invested",
+    "t": "Tổng đã đầu tư"
+  },
+  "profile.unverified": {
+    "en": "Unverified",
+    "t": "Chưa xác minh"
+  },
+  "settings.a11y.sections": {
+    "en": "Settings sections",
+    "t": "Các mục cài đặt"
+  },
+  "settings.accountSub": {
+    "en": "Your contact details and preferences",
+    "t": "Thông tin liên hệ và tùy chọn của bạn"
+  },
+  "settings.baseCurrency": {
+    "en": "Base currency",
+    "t": "Tiền tệ cơ sở"
+  },
+  "settings.connected": {
+    "en": "Connected",
+    "t": "Đã kết nối"
+  },
+  "settings.currency.eur": {
+    "en": "EUR (€)",
+    "t": "EUR (€)"
+  },
+  "settings.currency.usd": {
+    "en": "USD ($)",
+    "t": "USD ($)"
+  },
+  "settings.deliveryTopicsSub": {
+    "en": "Where we reach you and what you follow",
+    "t": "Nơi chúng tôi liên hệ và những gì bạn theo dõi"
+  },
+  "settings.device.browser": {
+    "en": "Browser",
+    "t": "Trình duyệt"
+  },
+  "settings.device.generic": {
+    "en": "device",
+    "t": "thiết bị"
+  },
+  "settings.device.label": {
+    "en": "{browser} · {os}",
+    "t": "{browser} · {os}"
+  },
+  "settings.device.unknown": {
+    "en": "Unknown device",
+    "t": "Thiết bị không xác định"
+  },
+  "settings.devicesSignedIn": {
+    "en": "{n, plural, one {# device currently signed in} other {# devices currently signed in}}",
+    "t": "{n, plural, other {# thiết bị đang đăng nhập}}"
+  },
+  "settings.fixHighlighted": {
+    "en": "Please fix the highlighted fields",
+    "t": "Vui lòng sửa các trường được đánh dấu"
+  },
+  "settings.googleManaged": {
+    "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
+    "t": "Việc đăng nhập và mật khẩu của bạn do Google quản lý. Xác thực hai yếu tố và khôi phục được thiết lập trong Tài khoản Google của bạn."
+  },
+  "settings.googleManagedShort": {
+    "en": "Your password, two-factor authentication and recovery are configured in your Google Account.",
+    "t": "Mật khẩu, xác thực hai yếu tố và khôi phục của bạn được thiết lập trong Tài khoản Google."
+  },
+  "settings.nav.general": {
+    "en": "General",
+    "t": "Chung"
+  },
+  "settings.noSessions": {
+    "en": "No active sessions.",
+    "t": "Không có phiên nào đang hoạt động."
+  },
+  "settings.phone": {
+    "en": "Phone",
+    "t": "Điện thoại"
+  },
+  "settings.revoke": {
+    "en": "Revoke",
+    "t": "Thu hồi"
+  },
+  "settings.securitySub": {
+    "en": "How you sign in and where your account is active",
+    "t": "Cách bạn đăng nhập và nơi tài khoản của bạn đang hoạt động"
+  },
+  "settings.selectCurrency": {
+    "en": "Select currency",
+    "t": "Chọn tiền tệ"
+  },
+  "settings.selectLanguage": {
+    "en": "Select language",
+    "t": "Chọn ngôn ngữ"
+  },
+  "settings.selectTimeZone": {
+    "en": "Select time zone",
+    "t": "Chọn múi giờ"
+  },
+  "settings.session.activeNow": {
+    "en": "Active now",
+    "t": "Đang hoạt động"
+  },
+  "settings.session.activeNowLower": {
+    "en": "active now",
+    "t": "đang hoạt động"
+  },
+  "settings.session.activeRecently": {
+    "en": "active recently",
+    "t": "hoạt động gần đây"
+  },
+  "settings.session.lastActiveDays": {
+    "en": "last active {n}d ago",
+    "t": "hoạt động cuối {n} ngày trước"
+  },
+  "settings.session.lastActiveHours": {
+    "en": "last active {n}h ago",
+    "t": "hoạt động cuối {n} giờ trước"
+  },
+  "settings.session.lastActiveMinutes": {
+    "en": "last active {n}m ago",
+    "t": "hoạt động cuối {n} phút trước"
+  },
+  "settings.sessionsLoading": {
+    "en": "Loading active sessions…",
+    "t": "Đang tải các phiên hoạt động…"
+  },
+  "settings.sessionsSub": {
+    "en": "Where you're signed in — revoke anything you don't recognise",
+    "t": "Nơi bạn đang đăng nhập — thu hồi bất kỳ phiên nào bạn không nhận ra"
+  },
+  "settings.signOutOthers": {
+    "en": "Sign out all other devices",
+    "t": "Đăng xuất mọi thiết bị khác"
+  },
+  "settings.subtitle": {
+    "en": "Manage your account, security and access",
+    "t": "Quản lý tài khoản, bảo mật và quyền truy cập của bạn"
+  },
+  "settings.thisDevice": {
+    "en": "This device",
+    "t": "Thiết bị này"
+  },
+  "settings.timeZone": {
+    "en": "Time zone",
+    "t": "Múi giờ"
+  },
+  "settings.trustedSessionsSub": {
+    "en": "Devices signed in to your account",
+    "t": "Các thiết bị đang đăng nhập vào tài khoản của bạn"
+  },
+  "settings.tz.hoChiMinh": {
+    "en": "Asia / Ho Chi Minh",
+    "t": "Châu Á / Hồ Chí Minh"
   },
   "status.backHome": {
     "en": "Back to home",
@@ -243,6 +2619,726 @@
     "en": "You need to be signed in to view this page. Sign in and we'll bring you right back.",
     "t": "Bạn cần đăng nhập để xem trang này. Hãy đăng nhập và chúng tôi sẽ đưa bạn trở lại ngay."
   },
+  "sys.a11y.dismiss": {
+    "en": "Dismiss announcement",
+    "t": "Đóng thông báo"
+  },
+  "sys.maintenance": {
+    "en": "Scheduled maintenance — some actions may be briefly unavailable.",
+    "t": "Bảo trì theo lịch — một số thao tác có thể tạm thời không khả dụng."
+  },
+  "sys.readOnly": {
+    "en": "Withdrawals and investments are temporarily paused (read-only mode). Balances are unaffected.",
+    "t": "Rút tiền và đầu tư đang tạm dừng (chế độ chỉ đọc). Số dư không bị ảnh hưởng."
+  },
+  "tips.a11y.about": {
+    "en": "About: {title}",
+    "t": "Giới thiệu: {title}"
+  },
+  "tips.admin.cabinet.announcement.live.body": {
+    "en": "Publishes the announcement banner across the whole cabinet immediately.",
+    "t": "Đăng biểu ngữ thông báo lên toàn bộ cabinet ngay lập tức."
+  },
+  "tips.admin.cabinet.announcement.live.title": {
+    "en": "Live",
+    "t": "Đang chạy"
+  },
+  "tips.admin.cabinet.flags.body": {
+    "en": "Flags gate cabinet features and MFE mounts. The row toggle flips a flag on or off; the rollout % controls what share of users it is exposed to.",
+    "t": "Cờ kiểm soát các tính năng cabinet và việc nạp MFE. Công tắc trên mỗi dòng bật hoặc tắt một cờ; tỷ lệ triển khai % quyết định phần người dùng được tiếp cận cờ đó."
+  },
+  "tips.admin.cabinet.flags.rollout.body": {
+    "en": "The share of users the flag is enabled for during a staged rollout. 100% is a full rollout; lower values expose it to only that fraction.",
+    "t": "Tỷ lệ người dùng được bật cờ trong một đợt triển khai theo giai đoạn. 100% là triển khai toàn bộ; giá trị thấp hơn chỉ mở cho đúng phần tương ứng."
+  },
+  "tips.admin.cabinet.flags.rollout.title": {
+    "en": "Rollout %",
+    "t": "Tỷ lệ triển khai %"
+  },
+  "tips.admin.cabinet.flags.title": {
+    "en": "Feature flags",
+    "t": "Cờ tính năng"
+  },
+  "tips.admin.cabinet.maintenance.body": {
+    "en": "Swaps the whole cabinet for a holding page for all users — an identity-plane kill-switch. No money movement is affected.",
+    "t": "Thay toàn bộ cabinet bằng một trang chờ cho mọi người dùng — công tắc ngắt ở lớp danh tính. Không ảnh hưởng tới bất kỳ chuyển động tiền nào."
+  },
+  "tips.admin.cabinet.maintenance.title": {
+    "en": "Maintenance mode",
+    "t": "Chế độ bảo trì"
+  },
+  "tips.admin.cabinet.readonly.body": {
+    "en": "Halts all deposit and withdrawal money movement — the money-plane kill-switch.",
+    "t": "Dừng toàn bộ chuyển động tiền nạp và rút — công tắc ngắt ở lớp tiền tệ."
+  },
+  "tips.admin.cabinet.readonly.title": {
+    "en": "Read-only mode",
+    "t": "Chế độ chỉ đọc"
+  },
+  "tips.admin.overview.kpi.dead-key-signings.body": {
+    "en": "The signer couldn't unseal a wallet key (wrong or rotated KEK epoch), so those funds can't be moved. Nonzero is a money-safety alarm — page an operator.",
+    "t": "Bộ ký không mở được khóa ví (sai KEK hoặc KEK đã xoay vòng), nên số tiền đó không thể dịch chuyển. Khác không là báo động an toàn tiền — hãy gọi ngay nhân sự vận hành."
+  },
+  "tips.admin.overview.kpi.dead-key-signings.title": {
+    "en": "Dead-key signings",
+    "t": "Lần ký khóa hỏng"
+  },
+  "tips.admin.overview.kpi.dispatch-backlog.body": {
+    "en": "Undispatched outbox rows — events written but not yet relayed. A healthy relay keeps this near zero.",
+    "t": "Các bản ghi outbox chưa được gửi đi — sự kiện đã ghi nhưng chưa được chuyển tiếp. Một bộ chuyển tiếp khỏe mạnh giữ con số này gần bằng không."
+  },
+  "tips.admin.overview.kpi.dispatch-backlog.title": {
+    "en": "Dispatch backlog",
+    "t": "Tồn đọng gửi đi"
+  },
+  "tips.admin.overview.kpi.oldest-backlog.body": {
+    "en": "Age of the oldest undispatched row. A growing age means the relay is stalled or falling behind.",
+    "t": "Thời gian tồn của bản ghi chưa gửi lâu nhất. Con số tăng dần nghĩa là bộ chuyển tiếp đang tắc hoặc tụt lại phía sau."
+  },
+  "tips.admin.overview.kpi.oldest-backlog.title": {
+    "en": "Oldest backlog",
+    "t": "Tồn đọng lâu nhất"
+  },
+  "tips.admin.overview.kpi.parked-rows.body": {
+    "en": "Money the relay couldn't apply — outbox rows stuck until unparked. Nonzero turns the tile red.",
+    "t": "Dòng tiền mà bộ chuyển tiếp không áp dụng được — các bản ghi outbox kẹt lại cho tới khi được gỡ treo. Khác không sẽ làm ô này chuyển đỏ."
+  },
+  "tips.admin.overview.kpi.parked-rows.title": {
+    "en": "Parked rows",
+    "t": "Bản ghi bị treo"
+  },
+  "tips.admin.overview.parked-events.body": {
+    "en": "A row parks when the relay hits a terminal apply error. Fix the cause shown in the Reason column first, then unpark to re-drive it — otherwise it just re-parks.",
+    "t": "Một bản ghi bị treo khi bộ chuyển tiếp gặp lỗi áp dụng không thể phục hồi. Hãy khắc phục nguyên nhân nêu ở cột Nguyên nhân trước, rồi gỡ treo để chạy lại — nếu không nó sẽ lại bị treo."
+  },
+  "tips.admin.overview.parked-events.title": {
+    "en": "Parked events",
+    "t": "Sự kiện bị treo"
+  },
+  "tips.admin.overview.parked.compensated.body": {
+    "en": "This row's saga was already reversed, so its money effect is undone. Unpark is disabled to avoid re-applying an entry that was intentionally rolled back.",
+    "t": "Saga của bản ghi này đã được đảo ngược, nên tác động tiền tệ của nó đã được hoàn tác. Gỡ treo bị vô hiệu hóa để tránh áp dụng lại một bút toán đã cố ý quay lui."
+  },
+  "tips.admin.overview.parked.compensated.title": {
+    "en": "Compensated",
+    "t": "Đã bù trừ"
+  },
+  "tips.admin.overview.parked.reason.body": {
+    "en": "The relay's failure cause for this parked row — the thing you must fix before unparking.",
+    "t": "Nguyên nhân lỗi mà bộ chuyển tiếp ghi nhận cho bản ghi bị treo này — điều bạn phải khắc phục trước khi gỡ treo."
+  },
+  "tips.admin.overview.parked.reason.title": {
+    "en": "Reason",
+    "t": "Nguyên nhân"
+  },
+  "tips.admin.overview.parked.unpark.body": {
+    "en": "Re-drives this outbox row through the relay after you've fixed its cause. Disabled when the row was compensated, already unparked this session, or while another unpark is in flight.",
+    "t": "Chạy lại bản ghi outbox này qua bộ chuyển tiếp sau khi bạn đã khắc phục nguyên nhân. Bị vô hiệu hóa khi bản ghi đã được bù trừ, đã gỡ treo trong phiên này, hoặc khi một thao tác gỡ treo khác đang chạy."
+  },
+  "tips.admin.overview.parked.unpark.title": {
+    "en": "Unpark",
+    "t": "Gỡ treo"
+  },
+  "tips.admin.treasury.bank.body": {
+    "en": "The fiat USD bank balance used for off-ramp and FX, counted as treasury liquidity alongside the on-chain rails.",
+    "t": "Số dư ngân hàng bằng USD dùng cho việc rút về fiat và ngoại hối, được tính vào thanh khoản ngân quỹ cùng với các kênh on-chain."
+  },
+  "tips.admin.treasury.bank.title": {
+    "en": "Bank · USD",
+    "t": "Ngân hàng · USD"
+  },
+  "tips.admin.treasury.invariant.body": {
+    "en": "Per-rail backing is the treasury's job, not the ledger's: a shortfall on one rail is accept-and-queue, then rebalanced via CEX, alt-rail, or top-up. The global invariant is sum(custody) == sum(claims).",
+    "t": "Bảo chứng theo từng kênh là việc của ngân quỹ, không phải của sổ cái: thiếu hụt trên một kênh sẽ được nhận-và-xếp-hàng, sau đó cân đối lại qua CEX, kênh khác hoặc nạp thêm. Bất biến toàn cục là sum(custody) == sum(claims)."
+  },
+  "tips.admin.treasury.invariant.title": {
+    "en": "The invariant",
+    "t": "Bất biến"
+  },
+  "tips.admin.treasury.layer1.claims-total.body": {
+    "en": "Total user + fund claims. Equals the sum of on-chain custody — every claim is fully backed.",
+    "t": "Tổng quyền đòi của người dùng và của quỹ. Bằng đúng tổng lưu ký on-chain — mọi quyền đòi đều được bảo chứng đầy đủ."
+  },
+  "tips.admin.treasury.layer1.claims-total.title": {
+    "en": "Claims · total",
+    "t": "Quyền đòi · tổng"
+  },
+  "tips.admin.treasury.layer1.fund-capital.body": {
+    "en": "Claims that are the fund's own capital, not client money.",
+    "t": "Các quyền đòi thuộc vốn của chính quỹ, không phải tiền của khách hàng."
+  },
+  "tips.admin.treasury.layer1.fund-capital.title": {
+    "en": "Fund capital",
+    "t": "Vốn của quỹ"
+  },
+  "tips.admin.treasury.layer1.held-for-clients.body": {
+    "en": "The portion of claims owed to clients — user wallet plus service balances.",
+    "t": "Phần quyền đòi thuộc về khách hàng — số dư ví người dùng cộng số dư các dịch vụ."
+  },
+  "tips.admin.treasury.layer1.held-for-clients.title": {
+    "en": "Held for clients",
+    "t": "Giữ cho khách hàng"
+  },
+  "tips.admin.treasury.layer1.ledger.body": {
+    "en": "The ledger's network-agnostic claims in USDT. Total claims equal on-chain custody and break down into held-for-clients, fund capital, and reserved-for-withdrawals.",
+    "t": "Các quyền đòi bằng USDT của sổ cái, không phụ thuộc mạng. Tổng quyền đòi bằng lưu ký on-chain và được chia thành phần giữ cho khách hàng, vốn của quỹ và phần giữ cho lệnh rút."
+  },
+  "tips.admin.treasury.layer1.ledger.title": {
+    "en": "Layer 1 · Ledger",
+    "t": "Lớp 1 · Sổ cái"
+  },
+  "tips.admin.treasury.layer1.reserved-withdrawals.body": {
+    "en": "Claims set aside for queued and in-flight withdrawals, parked in the clearing account until they settle on-chain.",
+    "t": "Các quyền đòi được dành riêng cho những lệnh rút đang chờ và đang thực hiện, nằm ở tài khoản bù trừ cho tới khi tất toán on-chain."
+  },
+  "tips.admin.treasury.layer1.reserved-withdrawals.title": {
+    "en": "Reserved · withdrawals",
+    "t": "Đã giữ · lệnh rút"
+  },
+  "tips.admin.treasury.layer2.rails.body": {
+    "en": "The actual on-chain USDT liquidity held per rail (BEP20 / TRC20 / TON / Polygon), plus the fiat bank balance. This is where the backing physically sits.",
+    "t": "Thanh khoản USDT thực tế trên chuỗi được giữ theo từng kênh (BEP20 / TRC20 / TON / Polygon), cộng số dư ngân hàng bằng fiat. Đây là nơi phần bảo chứng thực sự nằm."
+  },
+  "tips.admin.treasury.layer2.rails.title": {
+    "en": "Layer 2 · Treasury",
+    "t": "Lớp 2 · Ngân quỹ"
+  },
+  "tips.admin.treasury.rail.address.body": {
+    "en": "This rail's on-chain hot-wallet address. BEP20 and Polygon share an identical EVM address format — topping up on the wrong EVM chain, or sending another rail's funds here, is an irreversible mis-send.",
+    "t": "Địa chỉ ví nóng on-chain của kênh này. BEP20 và Polygon dùng chung một định dạng địa chỉ EVM — nạp nhầm chuỗi EVM, hoặc gửi tiền của kênh khác vào đây, là một lần gửi sai không thể đảo ngược."
+  },
+  "tips.admin.treasury.rail.address.title": {
+    "en": "Treasury address",
+    "t": "Địa chỉ ngân quỹ"
+  },
+  "tips.admin.treasury.rail.funding.body": {
+    "en": "The card value is this rail's ledger custody; the footer shows the hot wallet's real on-chain USDT and native gas. The two can legitimately diverge under accept-and-queue.",
+    "t": "Giá trị trên thẻ là phần lưu ký trên sổ cái của kênh này; phần chân thẻ hiển thị USDT on-chain thực tế và token gas gốc trong ví nóng. Hai con số có thể lệch nhau một cách hợp lệ theo cơ chế nhận-và-xếp-hàng."
+  },
+  "tips.admin.treasury.rail.funding.title": {
+    "en": "Rail funding",
+    "t": "Nguồn tiền của kênh"
+  },
+  "tips.admin.treasury.rail.gas-station.body": {
+    "en": "Top this address up with the rail's native token to fund sweep gas. Send the correct native symbol on the correct chain — EVM gas-station addresses are shared, so a wrong-chain top-up is unrecoverable.",
+    "t": "Hãy nạp token gốc của kênh vào địa chỉ này để chi trả gas cho các lần gom tiền. Gửi đúng ký hiệu token gốc trên đúng chuỗi — các địa chỉ trạm gas EVM dùng chung, nên nạp nhầm chuỗi là không thể lấy lại."
+  },
+  "tips.admin.treasury.rail.gas-station.title": {
+    "en": "Gas station",
+    "t": "Trạm gas"
+  },
+  "tips.admin.treasury.two-layer-model.body": {
+    "en": "Layer 1 is the ledger's network-agnostic USDT claims; Layer 2 is the actual on-chain liquidity held per rail. The two must reconcile.",
+    "t": "Lớp 1 là các quyền đòi USDT của sổ cái, không phụ thuộc mạng; Lớp 2 là thanh khoản on-chain thực tế giữ theo từng kênh. Hai lớp phải khớp nhau."
+  },
+  "tips.admin.treasury.two-layer-model.title": {
+    "en": "Two layers",
+    "t": "Hai lớp"
+  },
+  "tips.admin.users.access.kyc-level.body": {
+    "en": "The user's identity-verification tier. Higher levels unlock higher limits and actions per the KYC policy.",
+    "t": "Mức xác minh danh tính của người dùng. Cấp cao hơn mở khóa hạn mức và thao tác cao hơn theo chính sách KYC."
+  },
+  "tips.admin.users.access.kyc-level.title": {
+    "en": "KYC level",
+    "t": "Cấp độ KYC"
+  },
+  "tips.admin.users.access.revoke-sessions.body": {
+    "en": "Bumps token_version — invalidates every JWT issued to this user, signing them out of every active session.",
+    "t": "Tăng token_version — vô hiệu hóa mọi JWT đã cấp cho người dùng này, đăng xuất họ khỏi mọi phiên đang hoạt động."
+  },
+  "tips.admin.users.access.revoke-sessions.title": {
+    "en": "Revoke all sessions",
+    "t": "Thu hồi mọi phiên"
+  },
+  "tips.admin.users.access.role.body": {
+    "en": "The access level for this user: investor, operator, admin, or owner. Raising it grants operator/admin console access immediately on change.",
+    "t": "Mức truy cập của người dùng này: nhà đầu tư, vận hành, quản trị hoặc chủ sở hữu. Nâng vai trò sẽ cấp quyền vào console vận hành/quản trị ngay khi thay đổi."
+  },
+  "tips.admin.users.access.role.title": {
+    "en": "Role",
+    "t": "Vai trò"
+  },
+  "tips.admin.users.identity.token-version.body": {
+    "en": "A per-user counter stamped into every issued JWT. It increments on 'Revoke all sessions', so any token carrying an older version fails verification.",
+    "t": "Một bộ đếm riêng cho mỗi người dùng, được đóng dấu vào mọi JWT đã cấp. Nó tăng lên khi bấm “Thu hồi mọi phiên”, nên mọi token mang phiên bản cũ hơn sẽ không qua được bước xác thực."
+  },
+  "tips.admin.users.identity.token-version.title": {
+    "en": "Token version",
+    "t": "Phiên bản token"
+  },
+  "tips.admin.users.status.suspend.body": {
+    "en": "Suspend disables the account and blocks the user's access; Reinstate re-enables it. Reversible — the button reflects the current status.",
+    "t": "Tạm khóa vô hiệu hóa tài khoản và chặn quyền truy cập của người dùng; Khôi phục bật lại tài khoản. Có thể đảo ngược — nút bấm phản ánh trạng thái hiện tại."
+  },
+  "tips.admin.users.status.suspend.title": {
+    "en": "Suspend / Reinstate",
+    "t": "Tạm khóa / Khôi phục"
+  },
+  "tips.admin.valuation.post.aum.body": {
+    "en": "The fund's total assets under management you're marking. The NAV/share that pays redemptions is derived from it (AUM ÷ units outstanding), so a wrong figure mis-prices every settle.",
+    "t": "Tổng tài sản quản lý của quỹ mà bạn đang định giá. NAV/đơn vị dùng để chi trả các lệnh hoàn vốn được suy ra từ đây (AUM ÷ số đơn vị lưu hành), nên một con số sai sẽ định giá sai mọi lần tất toán."
+  },
+  "tips.admin.valuation.post.aum.title": {
+    "en": "AUM (USDT)",
+    "t": "AUM (USDT)"
+  },
+  "tips.admin.valuation.post.derived-nav.body": {
+    "en": "Entered AUM divided by units outstanding. This is the mark that Post valuation commits.",
+    "t": "AUM đã nhập chia cho số đơn vị quỹ đang lưu hành. Đây chính là mức định giá mà thao tác Đăng định giá sẽ ghi nhận."
+  },
+  "tips.admin.valuation.post.derived-nav.title": {
+    "en": "Derived NAV / share",
+    "t": "NAV suy ra / đơn vị"
+  },
+  "tips.admin.valuation.post.nav-guard.body": {
+    "en": "A post is rejected if the NAV moves more than 50% from the last mark, unless Override guard is on.",
+    "t": "Một lần đăng định giá sẽ bị từ chối nếu NAV lệch quá 50% so với mức gần nhất, trừ khi bật Bỏ qua chốt chặn."
+  },
+  "tips.admin.valuation.post.nav-guard.title": {
+    "en": "NAV-move guard",
+    "t": "Chốt chặn biến động NAV"
+  },
+  "tips.admin.valuation.post.override.body": {
+    "en": "Bypasses the NAV-move guard so a post that moves NAV more than 50% is accepted and settles redemptions at that mark. A fat-fingered AUM then over- or under-pays irreversibly.",
+    "t": "Vô hiệu hóa chốt chặn biến động NAV, để một lần đăng làm NAV lệch hơn 50% vẫn được chấp nhận và tất toán các lệnh hoàn vốn theo mức đó. Khi ấy một con số AUM gõ nhầm sẽ trả thừa hoặc trả thiếu, không thể đảo ngược."
+  },
+  "tips.admin.valuation.post.override.title": {
+    "en": "Override guard",
+    "t": "Bỏ qua chốt chặn"
+  },
+  "tips.admin.valuation.queue.est-cash.body": {
+    "en": "A preview only — approximately units × current NAV. The actual payout settles at the settle-time NAV, not this figure.",
+    "t": "Chỉ là ước tính — xấp xỉ số đơn vị × NAV hiện tại. Khoản chi trả thực tế tất toán theo NAV tại thời điểm tất toán, không phải con số này."
+  },
+  "tips.admin.valuation.queue.est-cash.title": {
+    "en": "Est. cash",
+    "t": "Tiền ước tính"
+  },
+  "tips.admin.valuation.queue.fail.body": {
+    "en": "Voids the request and refunds the units — no cash is paid and the burned units are returned to the user.",
+    "t": "Hủy bỏ yêu cầu và hoàn lại đơn vị quỹ — không chi trả tiền và số đơn vị đã hủy được trả về cho người dùng."
+  },
+  "tips.admin.valuation.queue.fail.title": {
+    "en": "Fail",
+    "t": "Báo lỗi"
+  },
+  "tips.admin.valuation.queue.settle-fail.body": {
+    "en": "Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.",
+    "t": "Tất toán chi trả theo NAV tại thời điểm tất toán khi quyền đòi của quỹ có thanh khoản; nếu kênh thiếu tiền, khoản chi trả sẽ xếp hàng cho tới khi ngân quỹ được nạp thêm. Báo lỗi hủy bỏ yêu cầu và hoàn lại đơn vị quỹ."
+  },
+  "tips.admin.valuation.queue.settle-fail.title": {
+    "en": "Settle vs Fail",
+    "t": "Tất toán và Báo lỗi"
+  },
+  "tips.admin.valuation.queue.settle.body": {
+    "en": "Pays at the settle-time NAV once the fund claim is liquid, queuing if the rail is short. Settle also burns the user's units.",
+    "t": "Chi trả theo NAV tại thời điểm tất toán khi quyền đòi của quỹ có thanh khoản, và xếp hàng nếu kênh thiếu tiền. Tất toán cũng hủy luôn số đơn vị quỹ của người dùng."
+  },
+  "tips.admin.valuation.queue.settle.title": {
+    "en": "Settle",
+    "t": "Tất toán"
+  },
+  "tips.admin.withdrawals.destination.body": {
+    "en": "The user's payout address, bound to this specific rail. Sends are irreversible and rail-specific — verify the address matches the network before dispatching.",
+    "t": "Địa chỉ nhận tiền của người dùng, gắn với đúng kênh này. Giao dịch gửi đi là không thể đảo ngược và riêng cho từng kênh — hãy kiểm tra địa chỉ khớp với mạng trước khi gửi lệnh."
+  },
+  "tips.admin.withdrawals.destination.title": {
+    "en": "Destination",
+    "t": "Người nhận"
+  },
+  "tips.admin.withdrawals.fail.double-pay.body": {
+    "en": "Failing refunds the user. If the broadcast reached the chain this would double-pay — the hub refuses while a broadcast record exists, but verify on-chain first.",
+    "t": "Báo lỗi sẽ hoàn tiền cho người dùng. Nếu giao dịch đã được phát lên blockchain thì việc này gây trả trùng — hub sẽ từ chối khi còn bản ghi phát sóng, nhưng hãy kiểm tra on-chain trước."
+  },
+  "tips.admin.withdrawals.fail.double-pay.title": {
+    "en": "Failing can double-pay",
+    "t": "Báo lỗi có thể gây trả trùng"
+  },
+  "tips.admin.withdrawals.flow.body": {
+    "en": "Dispatch broadcasts a queued withdrawal once its rail has liquidity. Settle records the mined transaction and releases the reservation. Fail voids and refunds — only safe when nothing reached the chain.",
+    "t": "Gửi lệnh sẽ phát một lệnh rút đang chờ lên mạng khi kênh của nó có thanh khoản. Tất toán ghi nhận giao dịch đã được đào và giải phóng phần đã giữ. Báo lỗi hủy bỏ và hoàn tiền — chỉ an toàn khi chưa có gì lên blockchain."
+  },
+  "tips.admin.withdrawals.flow.title": {
+    "en": "Dispatch, settle, fail",
+    "t": "Gửi lệnh, tất toán, báo lỗi"
+  },
+  "tips.admin.withdrawals.gross-net.body": {
+    "en": "Gross is the full amount debited from the user; net is what is actually sent on-chain after the withdrawal fee.",
+    "t": "Gộp là toàn bộ số tiền ghi nợ từ người dùng; ròng là số thực sự được gửi đi on-chain sau khi trừ phí rút."
+  },
+  "tips.admin.withdrawals.gross-net.title": {
+    "en": "Gross / net",
+    "t": "Gộp / ròng"
+  },
+  "tips.admin.withdrawals.settle.tx-hash.body": {
+    "en": "Paste the mined on-chain tx hash. Settling records the mined transaction and releases the reservation — only enter a hash for a tx that actually mined.",
+    "t": "Dán hash giao dịch on-chain đã được đào. Tất toán ghi nhận giao dịch đã đào và giải phóng phần đã giữ — chỉ nhập hash của một giao dịch thực sự đã được đào."
+  },
+  "tips.admin.withdrawals.settle.tx-hash.title": {
+    "en": "Mined transaction hash",
+    "t": "Hash giao dịch đã đào"
+  },
+  "tips.admin.withdrawals.state.body": {
+    "en": "Queued = accepted and reserved but not yet broadcast (Dispatch only). Processing = already broadcast, awaiting a mined tx (Settle or Fail apply).",
+    "t": "Đang chờ = đã tiếp nhận và giữ tiền nhưng chưa phát lên mạng (chỉ áp dụng Gửi lệnh). Đang xử lý = đã phát lên mạng, đang chờ giao dịch được đào (áp dụng Tất toán hoặc Báo lỗi)."
+  },
+  "tips.admin.withdrawals.state.title": {
+    "en": "State",
+    "t": "Trạng thái"
+  },
+  "tips.dashboard.invested.allocation.body": {
+    "en": "Each bar is one strategy's share of your invested value at current NAV. Percentages are of invested value only and exclude your available cash.",
+    "t": "Mỗi thanh là tỷ trọng của một chiến lược trong giá trị đã đầu tư của bạn theo NAV hiện tại. Tỷ lệ phần trăm chỉ tính trên giá trị đã đầu tư và không bao gồm tiền mặt khả dụng."
+  },
+  "tips.dashboard.invested.allocation.title": {
+    "en": "Invested — what I own",
+    "t": "Đã đầu tư — những gì tôi sở hữu"
+  },
+  "tips.dashboard.move-money.auto-deploy.body": {
+    "en": "When on, your available cash is automatically committed into strategies at end of day.",
+    "t": "Khi bật, tiền mặt khả dụng của bạn sẽ tự động được đưa vào các chiến lược vào cuối ngày."
+  },
+  "tips.dashboard.move-money.auto-deploy.title": {
+    "en": "Auto-deploy idle cash",
+    "t": "Tự động phân bổ tiền nhàn rỗi"
+  },
+  "tips.dashboard.performance.all-time-return.body": {
+    "en": "Total unrealized P&L divided by what you put in at cost basis, across every position. A paper figure, not realized cash.",
+    "t": "Tổng lãi/lỗ chưa thực hiện chia cho số tiền bạn bỏ ra theo giá gốc, trên tất cả các vị thế. Đây là con số trên giấy, chưa phải tiền đã thực hiện."
+  },
+  "tips.dashboard.performance.all-time-return.title": {
+    "en": "All-time return",
+    "t": "Lợi nhuận từ trước đến nay"
+  },
+  "tips.dashboard.performance.portfolio-value.body": {
+    "en": "Your whole balance: available + invested + pending withdrawal. Money locked in a queued withdrawal is still counted here.",
+    "t": "Toàn bộ số dư của bạn: khả dụng + đã đầu tư + đang chờ rút. Tiền bị khóa trong một lệnh rút đang chờ vẫn được tính ở đây."
+  },
+  "tips.dashboard.performance.portfolio-value.title": {
+    "en": "Portfolio value",
+    "t": "Giá trị danh mục"
+  },
+  "tips.dashboard.performance.series.body": {
+    "en": "'Fund performance' is the fund's own return; 'Your participation' is how your stake performed, which differs by when you contributed. The live series isn't wired up yet.",
+    "t": "“Hiệu suất quỹ” là lợi nhuận của chính quỹ; “Phần tham gia của bạn” là hiệu quả phần vốn của bạn, khác nhau tùy thời điểm bạn góp vốn. Dữ liệu trực tiếp chưa được kết nối."
+  },
+  "tips.dashboard.performance.series.title": {
+    "en": "Performance chart",
+    "t": "Biểu đồ hiệu suất"
+  },
+  "tips.dashboard.stats.available.body": {
+    "en": "Cash that is free and spendable now — ready to deploy into a strategy or withdraw.",
+    "t": "Tiền mặt đang tự do và có thể dùng ngay — sẵn sàng đưa vào một chiến lược hoặc rút ra."
+  },
+  "tips.dashboard.stats.available.title": {
+    "en": "Available",
+    "t": "Khả dụng"
+  },
+  "tips.dashboard.stats.net-invested.body": {
+    "en": "Total cash you put into strategies at cost basis, net of redemptions — not the current value.",
+    "t": "Tổng số tiền bạn đã đưa vào các chiến lược theo giá gốc, trừ đi phần đã hoàn vốn — không phải giá trị hiện tại."
+  },
+  "tips.dashboard.stats.net-invested.title": {
+    "en": "Net invested",
+    "t": "Đầu tư ròng"
+  },
+  "tips.dashboard.stats.unrealized-pnl.body": {
+    "en": "Paper gain or loss across all positions — current value minus cost basis. It becomes realized cash only when you redeem.",
+    "t": "Lãi hoặc lỗ trên giấy của tất cả các vị thế — giá trị hiện tại trừ giá gốc. Nó chỉ thành tiền thực khi bạn hoàn vốn."
+  },
+  "tips.dashboard.stats.unrealized-pnl.title": {
+    "en": "Unrealized P&L",
+    "t": "Lãi/lỗ chưa thực hiện"
+  },
+  "tips.invest.activity.cancel.body": {
+    "en": "Available only while a redemption is still queued. It withdraws the request and releases the reserved units back to your holding before any settle NAV is applied.",
+    "t": "Chỉ khả dụng khi lệnh hoàn vốn còn đang xếp hàng. Thao tác này rút lại yêu cầu và trả các đơn vị quỹ đã giữ về khoản nắm giữ của bạn trước khi áp dụng bất kỳ NAV tất toán nào."
+  },
+  "tips.invest.activity.cancel.title": {
+    "en": "Cancel",
+    "t": "Hủy"
+  },
+  "tips.invest.activity.status.body": {
+    "en": "Queued (reserved, awaiting settle), completed (paid out at the settle NAV), failed, or cancelled.",
+    "t": "Đang chờ (đã giữ, chờ tất toán), hoàn tất (đã chi trả theo NAV lúc tất toán), thất bại, hoặc đã hủy."
+  },
+  "tips.invest.activity.status.title": {
+    "en": "Redemption status",
+    "t": "Trạng thái hoàn vốn"
+  },
+  "tips.invest.overview.body": {
+    "en": "Subscribe USDT for units — your value tracks the fund's NAV, not the unit count.",
+    "t": "Đăng ký mua bằng USDT để nhận đơn vị quỹ — giá trị của bạn bám theo NAV của quỹ, không theo số lượng đơn vị."
+  },
+  "tips.invest.overview.title": {
+    "en": "Fund shares",
+    "t": "Phần quỹ sở hữu"
+  },
+  "tips.invest.position.nav.body": {
+    "en": "Net asset value per unit — the current price at which units are bought on subscribe and priced on redeem.",
+    "t": "Giá trị tài sản ròng trên mỗi đơn vị quỹ — mức giá hiện tại để mua đơn vị khi đăng ký và để định giá khi hoàn vốn."
+  },
+  "tips.invest.position.nav.title": {
+    "en": "NAV",
+    "t": "NAV"
+  },
+  "tips.invest.position.pnl.body": {
+    "en": "Your position's current value minus what you paid in — green for a gain, red for a loss, driven by the NAV moving.",
+    "t": "Giá trị hiện tại của vị thế trừ đi số bạn đã bỏ ra — xanh là lãi, đỏ là lỗ, do NAV biến động."
+  },
+  "tips.invest.position.pnl.title": {
+    "en": "Profit & loss",
+    "t": "Lãi và lỗ"
+  },
+  "tips.invest.position.stale-nav.body": {
+    "en": "The fund's price feed is out of date, so the value and P&L shown here may lag the true mark until the NAV refreshes.",
+    "t": "Nguồn giá của quỹ đã lỗi thời, nên giá trị và lãi/lỗ hiển thị ở đây có thể trễ so với mức định giá thật cho tới khi NAV được làm mới."
+  },
+  "tips.invest.position.stale-nav.title": {
+    "en": "Stale NAV",
+    "t": "NAV cũ"
+  },
+  "tips.invest.position.units.body": {
+    "en": "Your share count in the fund's pool — a fixed quantity you own until you subscribe or redeem more.",
+    "t": "Số phần bạn sở hữu trong quỹ — một lượng cố định thuộc về bạn cho tới khi bạn đăng ký mua thêm hoặc hoàn vốn."
+  },
+  "tips.invest.position.units.title": {
+    "en": "Units",
+    "t": "Đơn vị quỹ"
+  },
+  "tips.invest.position.value.body": {
+    "en": "Units × current NAV. It rises and falls as the NAV moves, not with the unit count.",
+    "t": "Số đơn vị × NAV hiện tại. Nó tăng giảm theo NAV, không theo số lượng đơn vị."
+  },
+  "tips.invest.position.value.title": {
+    "en": "Value",
+    "t": "Giá trị"
+  },
+  "tips.invest.redeem.queue.body": {
+    "en": "Redemptions are accept-and-queue — your units are reserved now, and cash is priced at the settle-time NAV once the fund tops up.",
+    "t": "Hoàn vốn theo cơ chế nhận-và-xếp-hàng — đơn vị quỹ của bạn được giữ ngay bây giờ, còn tiền được định giá theo NAV tại thời điểm tất toán khi quỹ được bổ sung."
+  },
+  "tips.invest.redeem.queue.title": {
+    "en": "How redemptions settle",
+    "t": "Cách lệnh hoàn vốn tất toán"
+  },
+  "tips.invest.redeem.units.body": {
+    "en": "How many units to redeem — Max fills your full holding. The resulting cash isn't fixed here; it is set at the settle-time NAV.",
+    "t": "Số đơn vị quỹ muốn hoàn vốn — Tối đa điền toàn bộ khoản nắm giữ. Số tiền thu về không cố định ở đây; nó được xác định theo NAV tại thời điểm tất toán."
+  },
+  "tips.invest.redeem.units.title": {
+    "en": "Units to redeem",
+    "t": "Số đơn vị cần hoàn vốn"
+  },
+  "tips.invest.subscribe.amount.body": {
+    "en": "How much USDT to subscribe. It is converted into units at the current NAV when you submit.",
+    "t": "Số USDT muốn đăng ký mua. Nó được quy đổi thành đơn vị quỹ theo NAV hiện tại khi bạn gửi lệnh."
+  },
+  "tips.invest.subscribe.amount.title": {
+    "en": "Amount",
+    "t": "Số tiền"
+  },
+  "tips.profile.email.verified.body": {
+    "en": "Confirms this email address has been verified. It is not identity or KYC verification.",
+    "t": "Xác nhận địa chỉ email này đã được xác minh. Đây không phải xác minh danh tính hay KYC."
+  },
+  "tips.profile.email.verified.title": {
+    "en": "Verified",
+    "t": "Đã xác minh"
+  },
+  "tips.profile.field.legal-name.body": {
+    "en": "Your full name exactly as it appears on official documents — used for compliance and statements, distinct from your preferred name.",
+    "t": "Họ tên đầy đủ đúng như trên giấy tờ chính thức — dùng cho tuân thủ và sao kê, khác với tên thường gọi của bạn."
+  },
+  "tips.profile.field.legal-name.title": {
+    "en": "Legal name",
+    "t": "Tên pháp lý"
+  },
+  "tips.profile.field.nationality.body": {
+    "en": "Collected for compliance and eligibility checks.",
+    "t": "Được thu thập cho mục đích tuân thủ và kiểm tra điều kiện tham gia."
+  },
+  "tips.profile.field.nationality.title": {
+    "en": "Nationality",
+    "t": "Quốc tịch"
+  },
+  "tips.profile.field.tax-residence.body": {
+    "en": "The country where you're liable to pay tax, used for tax reporting. Usually where you live — it can differ from your nationality.",
+    "t": "Quốc gia nơi bạn có nghĩa vụ nộp thuế, dùng cho việc báo cáo thuế. Thường là nơi bạn sinh sống — có thể khác quốc tịch."
+  },
+  "tips.profile.field.tax-residence.title": {
+    "en": "Tax residence",
+    "t": "Nơi cư trú thuế"
+  },
+  "tips.profile.personal.compliance.body": {
+    "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
+    "t": "Những thông tin cá nhân này được thu thập để đáp ứng nghĩa vụ tuân thủ của quỹ và để lập sao kê tài khoản cho bạn. Chúng không được hiển thị công khai."
+  },
+  "tips.profile.personal.compliance.title": {
+    "en": "Why we collect this",
+    "t": "Vì sao chúng tôi thu thập"
+  },
+  "tips.settings.security.google-signin.body": {
+    "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
+    "t": "Việc đăng nhập và mật khẩu của bạn do Google quản lý. Xác thực hai yếu tố và khôi phục được thiết lập trong Tài khoản Google của bạn."
+  },
+  "tips.settings.security.google-signin.title": {
+    "en": "Sign-in is managed by Google",
+    "t": "Việc đăng nhập do Google quản lý"
+  },
+  "tips.settings.sessions.overview.body": {
+    "en": "Where you're signed in — each row is a device or browser with a live session. Revoke anything you don't recognise.",
+    "t": "Nơi bạn đang đăng nhập — mỗi dòng là một thiết bị hoặc trình duyệt có phiên đang hoạt động. Hãy thu hồi bất kỳ phiên nào bạn không nhận ra."
+  },
+  "tips.settings.sessions.overview.title": {
+    "en": "Sessions & devices",
+    "t": "Phiên & thiết bị"
+  },
+  "tips.settings.sessions.revoke-others.body": {
+    "en": "Signs out every device except this one. Use it if a device was lost or you don't recognise a session.",
+    "t": "Đăng xuất mọi thiết bị trừ thiết bị này. Hãy dùng khi bạn làm mất một thiết bị hoặc không nhận ra một phiên."
+  },
+  "tips.settings.sessions.revoke-others.title": {
+    "en": "Sign out all other devices",
+    "t": "Đăng xuất mọi thiết bị khác"
+  },
+  "tips.settings.sessions.revoke.body": {
+    "en": "Signs that device out immediately. It must sign in again with Google to regain access.",
+    "t": "Đăng xuất thiết bị đó ngay lập tức. Thiết bị phải đăng nhập lại bằng Google để có quyền truy cập."
+  },
+  "tips.settings.sessions.revoke.title": {
+    "en": "Revoke",
+    "t": "Thu hồi"
+  },
+  "tips.settings.sessions.this-device.body": {
+    "en": "The browser you're using right now. It stays signed in and can't be revoked from here — use 'Sign out all other devices' to clear the rest.",
+    "t": "Trình duyệt bạn đang dùng ngay bây giờ. Nó vẫn giữ đăng nhập và không thể bị thu hồi từ đây — hãy dùng “Đăng xuất mọi thiết bị khác” để xóa phần còn lại."
+  },
+  "tips.settings.sessions.this-device.title": {
+    "en": "This device",
+    "t": "Thiết bị này"
+  },
+  "tips.wallet.balance.available.body": {
+    "en": "Your spendable USDT right now — what you can invest into fund units or withdraw.",
+    "t": "Số USDT bạn có thể dùng ngay bây giờ — để đầu tư vào đơn vị quỹ hoặc rút ra."
+  },
+  "tips.wallet.balance.available.title": {
+    "en": "Available",
+    "t": "Khả dụng"
+  },
+  "tips.wallet.balance.invested.body": {
+    "en": "Held in fund units, valued at the current NAV.",
+    "t": "Đang nằm trong đơn vị quỹ, định giá theo NAV hiện tại."
+  },
+  "tips.wallet.balance.invested.title": {
+    "en": "Invested",
+    "t": "Đã đầu tư"
+  },
+  "tips.wallet.balance.model.body": {
+    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + Invested + Pending withdrawal.",
+    "t": "Bạn chỉ có một số dư USDT duy nhất — các mạng chỉ là cách bạn nạp và rút. Thẻ này chia số dư đó thành Tổng = Khả dụng + Đã đầu tư + Đang chờ rút."
+  },
+  "tips.wallet.balance.model.title": {
+    "en": "One balance, many rails",
+    "t": "Một số dư, nhiều kênh"
+  },
+  "tips.wallet.balance.pending-withdrawal.body": {
+    "en": "USDT reserved for withdrawals still in flight (queued or processing). It is no longer part of your available balance.",
+    "t": "USDT đã được giữ cho các lệnh rút còn đang thực hiện (đang chờ hoặc đang xử lý). Phần này không còn thuộc số dư khả dụng của bạn."
+  },
+  "tips.wallet.balance.pending-withdrawal.title": {
+    "en": "Pending withdrawal",
+    "t": "Đang chờ rút"
+  },
+  "tips.wallet.deposit.address.body": {
+    "en": "A personal, reusable address for this rail. On TON it is shown in the wallet-friendly UQ… form so an uninitialised wallet doesn't bounce the transfer.",
+    "t": "Một địa chỉ riêng, dùng lại được cho kênh này. Trên TON, địa chỉ hiển thị ở dạng UQ… thân thiện với ví để một ví chưa khởi tạo không làm giao dịch bị trả lại."
+  },
+  "tips.wallet.deposit.address.title": {
+    "en": "Your deposit address",
+    "t": "Địa chỉ nạp của bạn"
+  },
+  "tips.wallet.deposit.min-confirmations.body": {
+    "en": "Credited to your one balance after the required number of network confirmations.",
+    "t": "Được ghi có vào số dư duy nhất của bạn sau khi đủ số lần xác nhận mạng yêu cầu."
+  },
+  "tips.wallet.deposit.min-confirmations.title": {
+    "en": "Network confirmations",
+    "t": "Số lần xác nhận mạng"
+  },
+  "tips.wallet.deposit.network.body": {
+    "en": "Pick the chain you'll send USDT on. Each rail shows its own deposit address below — that address only works on that one chain.",
+    "t": "Chọn chuỗi bạn sẽ gửi USDT. Mỗi kênh hiển thị địa chỉ nạp riêng bên dưới — địa chỉ đó chỉ dùng được trên đúng chuỗi ấy."
+  },
+  "tips.wallet.deposit.network.title": {
+    "en": "Network / rail",
+    "t": "Mạng / kênh"
+  },
+  "tips.wallet.deposit.rail-hazard.body": {
+    "en": "Sending any other asset, or using a different network, loses the funds permanently. This 0x address is NOT your address on the sibling EVM chain — even though both start with 0x, USDT sent on the wrong EVM rail will not be credited.",
+    "t": "Gửi bất kỳ tài sản nào khác, hoặc dùng một mạng khác, sẽ mất tiền vĩnh viễn. Địa chỉ 0x này KHÔNG phải địa chỉ của bạn trên chuỗi EVM anh em — dù cả hai đều bắt đầu bằng 0x, USDT gửi trên kênh EVM sai sẽ không được ghi có."
+  },
+  "tips.wallet.deposit.rail-hazard.title": {
+    "en": "Send only USDT on this rail",
+    "t": "Chỉ gửi USDT trên kênh này"
+  },
+  "tips.wallet.withdraw.available.body": {
+    "en": "The most you can withdraw on this rail right now. Tap Max to fill the amount.",
+    "t": "Số tối đa bạn có thể rút trên kênh này ngay bây giờ. Chạm Tối đa để điền đủ số tiền."
+  },
+  "tips.wallet.withdraw.available.title": {
+    "en": "Available to withdraw",
+    "t": "Khả dụng để rút"
+  },
+  "tips.wallet.withdraw.destination.body": {
+    "en": "The on-chain address the USDT is sent to. Withdrawals are irreversible — make sure it is correct and on the network you selected.",
+    "t": "Địa chỉ on-chain mà USDT được gửi tới. Lệnh rút không thể đảo ngược — hãy chắc chắn địa chỉ đúng và thuộc mạng bạn đã chọn."
+  },
+  "tips.wallet.withdraw.destination.title": {
+    "en": "Destination address",
+    "t": "Địa chỉ nhận"
+  },
+  "tips.wallet.withdraw.network-fee.body": {
+    "en": "A flat on-chain fee for this rail, deducted from your amount before it is sent.",
+    "t": "Một khoản phí on-chain cố định cho kênh này, được trừ vào số tiền của bạn trước khi gửi đi."
+  },
+  "tips.wallet.withdraw.network-fee.title": {
+    "en": "Network fee",
+    "t": "Phí mạng"
+  },
+  "tips.wallet.withdraw.network.body": {
+    "en": "The chain your withdrawal ships on. The destination address must be a valid address on this exact network, or the funds are lost.",
+    "t": "Chuỗi mà lệnh rút của bạn đi qua. Địa chỉ nhận phải là một địa chỉ hợp lệ trên đúng mạng này, nếu không tiền sẽ mất."
+  },
+  "tips.wallet.withdraw.network.title": {
+    "en": "Network / rail",
+    "t": "Mạng / kênh"
+  },
+  "tips.wallet.withdraw.queueing.body": {
+    "en": "Up to your instant limit pays out immediately on this rail; anything above it is queued until the rail is topped up. A minimum applies per withdrawal.",
+    "t": "Phần trong hạn mức tức thì được chi trả ngay trên kênh này; phần vượt sẽ xếp hàng cho tới khi kênh được nạp thêm. Mỗi lệnh rút đều có mức tối thiểu."
+  },
+  "tips.wallet.withdraw.queueing.title": {
+    "en": "How withdrawals work",
+    "t": "Cách lệnh rút hoạt động"
+  },
+  "tips.wallet.withdraw.review.body": {
+    "en": "Review freezes exactly what you'll send. Confirm submits that snapshot — if the rail list changes underneath, the open review is voided and you re-review.",
+    "t": "Bước xem lại đóng băng chính xác những gì bạn sẽ gửi. Xác nhận sẽ gửi đi bản chụp đó — nếu danh sách kênh thay đổi bên dưới, bản xem lại đang mở sẽ bị hủy và bạn phải xem lại từ đầu."
+  },
+  "tips.wallet.withdraw.review.title": {
+    "en": "Review, then confirm",
+    "t": "Xem lại, rồi xác nhận"
+  },
+  "tips.wallet.withdraw.you-receive.body": {
+    "en": "Your amount minus the network fee — this is what actually lands at the destination.",
+    "t": "Số tiền của bạn trừ phí mạng — đây là số thực sự về tới địa chỉ nhận."
+  },
+  "tips.wallet.withdraw.you-receive.title": {
+    "en": "You will receive",
+    "t": "Bạn sẽ nhận được"
+  },
   "ui.account": {
     "en": "Account",
     "t": "Tài khoản"
@@ -259,13 +3355,45 @@
     "en": "Add funds",
     "t": "Nạp thêm tiền"
   },
+  "ui.address": {
+    "en": "address",
+    "t": "địa chỉ"
+  },
+  "ui.all": {
+    "en": "All",
+    "t": "Tất cả"
+  },
   "ui.allocate": {
     "en": "Allocate",
     "t": "Phân bổ"
   },
+  "ui.amount": {
+    "en": "Amount",
+    "t": "Số tiền"
+  },
+  "ui.back": {
+    "en": "Back",
+    "t": "Quay lại"
+  },
   "ui.browseFunds": {
     "en": "Browse funds",
     "t": "Xem các quỹ"
+  },
+  "ui.cancel": {
+    "en": "Cancel",
+    "t": "Hủy"
+  },
+  "ui.close": {
+    "en": "Close",
+    "t": "Đóng"
+  },
+  "ui.copied": {
+    "en": "Copied",
+    "t": "Đã sao chép"
+  },
+  "ui.copy": {
+    "en": "Copy",
+    "t": "Sao chép"
   },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
@@ -287,6 +3415,10 @@
     "en": "Details",
     "t": "Chi tiết"
   },
+  "ui.edit": {
+    "en": "Edit",
+    "t": "Sửa"
+  },
   "ui.email": {
     "en": "Email",
     "t": "Email"
@@ -307,6 +3439,18 @@
     "en": "KYC level",
     "t": "Cấp độ KYC"
   },
+  "ui.loading": {
+    "en": "Loading…",
+    "t": "Đang tải…"
+  },
+  "ui.manage": {
+    "en": "Manage",
+    "t": "Quản lý"
+  },
+  "ui.max": {
+    "en": "Max",
+    "t": "Tối đa"
+  },
   "ui.network": {
     "en": "Network",
     "t": "Mạng"
@@ -318,6 +3462,10 @@
   "ui.noOperations": {
     "en": "No operations yet",
     "t": "Chưa có giao dịch nào"
+  },
+  "ui.none": {
+    "en": "None",
+    "t": "Không có"
   },
   "ui.operations": {
     "en": "Operations",
@@ -335,6 +3483,26 @@
     "en": "Receive funds into your wallet",
     "t": "Nhận tiền vào ví của bạn"
   },
+  "ui.refresh": {
+    "en": "Refresh",
+    "t": "Làm mới"
+  },
+  "ui.reset": {
+    "en": "Reset",
+    "t": "Đặt lại"
+  },
+  "ui.save": {
+    "en": "Save",
+    "t": "Lưu"
+  },
+  "ui.saveChanges": {
+    "en": "Save changes",
+    "t": "Lưu thay đổi"
+  },
+  "ui.saved": {
+    "en": "Saved",
+    "t": "Đã lưu"
+  },
   "ui.security": {
     "en": "Security",
     "t": "Bảo mật"
@@ -347,9 +3515,17 @@
     "en": "Signed in with Google",
     "t": "Đăng nhập bằng Google"
   },
+  "ui.total": {
+    "en": "Total",
+    "t": "Tổng"
+  },
   "ui.trustedSessions": {
     "en": "Trusted sessions",
     "t": "Phiên tin cậy"
+  },
+  "ui.verified": {
+    "en": "Verified",
+    "t": "Đã xác minh"
   },
   "ui.viewAll": {
     "en": "View all",
@@ -367,9 +3543,81 @@
     "en": "Withdraw USDT",
     "t": "Rút USDT"
   },
+  "wallet.acceptedInstantly": {
+    "en": "Accepted instantly; if the {network} rail is short it queues until funded — you'll be notified.",
+    "t": "Được tiếp nhận ngay; nếu kênh {network} thiếu thanh khoản, lệnh sẽ xếp hàng cho tới khi được nạp đủ — bạn sẽ nhận được thông báo."
+  },
+  "wallet.activitySub": {
+    "en": "Deposits and withdrawals — queued, processing, completed",
+    "t": "Nạp và rút tiền — đang chờ, đang xử lý, hoàn tất"
+  },
+  "wallet.amountCaps": {
+    "en": "AMOUNT",
+    "t": "SỐ TIỀN"
+  },
+  "wallet.availPrefix": {
+    "en": "Avail: {amount}",
+    "t": "Khả dụng: {amount}"
+  },
   "wallet.cancelWithdrawal": {
     "en": "Cancel withdrawal",
     "t": "Hủy lệnh rút"
+  },
+  "wallet.chain.bep20": {
+    "en": "BNB Smart Chain",
+    "t": "BNB Smart Chain"
+  },
+  "wallet.chain.polygon": {
+    "en": "Polygon PoS",
+    "t": "Polygon PoS"
+  },
+  "wallet.chain.ton": {
+    "en": "The Open Network",
+    "t": "The Open Network"
+  },
+  "wallet.chain.trc20": {
+    "en": "TRON",
+    "t": "TRON"
+  },
+  "wallet.chain.unknown": {
+    "en": "Network",
+    "t": "Mạng"
+  },
+  "wallet.chip.avail": {
+    "en": "AVAILABLE",
+    "t": "KHẢ DỤNG"
+  },
+  "wallet.chip.availShort": {
+    "en": "AVAIL",
+    "t": "SẴN CÓ"
+  },
+  "wallet.chip.invest": {
+    "en": "INVESTED",
+    "t": "ĐÃ ĐẦU TƯ"
+  },
+  "wallet.chip.investShort": {
+    "en": "INVEST",
+    "t": "ĐẦU TƯ"
+  },
+  "wallet.chip.pendingWd": {
+    "en": "PENDING WD",
+    "t": "CHỜ RÚT TIỀN"
+  },
+  "wallet.confirmWithdrawal": {
+    "en": "Confirm withdrawal",
+    "t": "Xác nhận rút tiền"
+  },
+  "wallet.copyAddress": {
+    "en": "Copy address",
+    "t": "Sao chép địa chỉ"
+  },
+  "wallet.creditedAfterConfirmations": {
+    "en": "Credited to your one balance after {n, plural, one {# network confirmation} other {# network confirmations}}.",
+    "t": "Được ghi có vào số dư duy nhất của bạn sau {n, plural, other {# lần xác nhận mạng}}."
+  },
+  "wallet.depositAddressUnavailable": {
+    "en": "A {network} deposit address isn't available yet — this rail is still being provisioned. Check back soon.",
+    "t": "Địa chỉ nạp {network} chưa sẵn sàng — kênh này vẫn đang được thiết lập. Vui lòng quay lại sau."
   },
   "wallet.depositNetwork": {
     "en": "Deposit network",
@@ -382,6 +3630,18 @@
   "wallet.destinationCaps": {
     "en": "DESTINATION",
     "t": "NGƯỜI NHẬN"
+  },
+  "wallet.evmSiblingHazard": {
+    "en": "This {network} address is not your {siblings} address — even though both start with 0x. USDT sent on {siblingsOr} will not be credited.",
+    "t": "Địa chỉ {network} này không phải địa chỉ {siblings} của bạn — dù cả hai đều bắt đầu bằng 0x. USDT gửi trên {siblingsOr} sẽ không được ghi có."
+  },
+  "wallet.exceedsInstant": {
+    "en": "~{amount} USDT exceeds instant {network} liquidity and will be queued until the rail is topped up.",
+    "t": "~{amount} USDT vượt quá thanh khoản tức thì của {network} và sẽ được xếp hàng cho tới khi kênh được nạp thêm."
+  },
+  "wallet.minInstantQueued": {
+    "en": "Min {min} USDT · instant {network} {instant} · rest queued",
+    "t": "Tối thiểu {min} USDT · {network} tức thì {instant} · phần còn lại xếp hàng"
   },
   "wallet.networkCaps": {
     "en": "NETWORK",
@@ -407,9 +3667,57 @@
     "en": "Your deposits and withdrawals will appear here once you make your first transfer.",
     "t": "Các khoản nạp và rút của bạn sẽ hiện ở đây sau lần chuyển đầu tiên."
   },
+  "wallet.noDepositRails": {
+    "en": "No deposit rails are available right now — check back soon.",
+    "t": "Hiện không có kênh nạp tiền nào khả dụng — vui lòng quay lại sau."
+  },
+  "wallet.noRails": {
+    "en": "No deposit or withdrawal rails are available right now — check back soon.",
+    "t": "Hiện không có kênh nạp hoặc rút tiền nào khả dụng — vui lòng quay lại sau."
+  },
+  "wallet.noWithdrawRails": {
+    "en": "No withdrawal rails are available right now — check back soon.",
+    "t": "Hiện không có kênh rút tiền nào khả dụng — vui lòng quay lại sau."
+  },
+  "wallet.oneFungibleBalance": {
+    "en": "≈ ${amount} · one fungible balance",
+    "t": "≈ ${amount} · một số dư duy nhất"
+  },
+  "wallet.overviewSub": {
+    "en": "One USDT balance · networks are deposit / withdrawal rails",
+    "t": "Một số dư USDT duy nhất · các mạng là kênh nạp / rút"
+  },
   "wallet.pendWd": {
     "en": "PEND WD",
-    "t": "ĐANG RÚT"
+    "t": "CHỜ RÚT"
+  },
+  "wallet.placeholder.railAddress": {
+    "en": "{network} address",
+    "t": "Địa chỉ {network}"
+  },
+  "wallet.railActionUnavailable": {
+    "en": "{action} is not available on this rail yet",
+    "t": "{action} chưa khả dụng trên kênh này"
+  },
+  "wallet.railHazard": {
+    "en": "Only send USDT on the {network} network to this address. Funds sent on any other network will be lost permanently.",
+    "t": "Chỉ gửi USDT trên mạng {network} tới địa chỉ này. Tiền gửi trên bất kỳ mạng nào khác sẽ mất vĩnh viễn."
+  },
+  "wallet.railUsdt": {
+    "en": "{network} · USDT",
+    "t": "{network} · USDT"
+  },
+  "wallet.railsCaption": {
+    "en": "deposit & withdrawal rails",
+    "t": "kênh nạp & rút tiền"
+  },
+  "wallet.receiptQueued": {
+    "en": "{amount} USDT to {address} is queued — it ships once the {network} rail is topped up.",
+    "t": "{amount} USDT tới {address} đang xếp hàng — sẽ được chuyển đi khi kênh {network} được nạp thêm."
+  },
+  "wallet.receiptSubmitted": {
+    "en": "{amount} USDT is on its way to {address} — pending on-chain confirmation.",
+    "t": "{amount} USDT đang trên đường tới {address} — chờ xác nhận on-chain."
   },
   "wallet.reviewWithdrawal": {
     "en": "Review withdrawal",
@@ -419,9 +3727,25 @@
     "en": "SELECT NETWORK",
     "t": "CHỌN MẠNG"
   },
+  "wallet.statusCaps": {
+    "en": "STATUS",
+    "t": "TRẠNG THÁI"
+  },
+  "wallet.toAddressLine": {
+    "en": "To {address}",
+    "t": "Tới {address}"
+  },
   "wallet.totalBalance": {
     "en": "TOTAL BALANCE",
     "t": "TỔNG SỐ DƯ"
+  },
+  "wallet.txRef": {
+    "en": "tx {ref}",
+    "t": "tx {ref}"
+  },
+  "wallet.withdrawSub": {
+    "en": "Send funds to an external address — one balance, any rail",
+    "t": "Gửi tiền tới địa chỉ bên ngoài — một số dư, mọi kênh"
   },
   "wallet.withdrawalFailed": {
     "en": "Withdrawal failed",
@@ -431,8 +3755,20 @@
     "en": "Withdrawal network",
     "t": "Mạng rút tiền"
   },
+  "wallet.withdrawalQueued": {
+    "en": "Withdrawal queued",
+    "t": "Lệnh rút đang chờ"
+  },
+  "wallet.withdrawalSubmitted": {
+    "en": "Withdrawal submitted",
+    "t": "Đã gửi lệnh rút"
+  },
   "wallet.youWillReceive": {
     "en": "You will receive",
     "t": "Bạn sẽ nhận được"
+  },
+  "wallet.yourDepositAddress": {
+    "en": "Your {network} deposit address",
+    "t": "Địa chỉ nạp {network} của bạn"
   }
 }

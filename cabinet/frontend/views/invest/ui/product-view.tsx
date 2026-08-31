@@ -11,6 +11,7 @@
 // a page that rendered an unregistered service would be the same phantom-fund surface the
 // registry exists to close.
 
+import { useT } from "@evinvest/i18n/react";
 import { ArrowDownToLine, ArrowLeft, Loader2, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useState } from "react";
@@ -19,18 +20,20 @@ import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, Skeleto
 
 import { accruedFeesResource, allocationsResource, feePolicyResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import type { AccruedFees, FeePolicy, FundNav, Position } from "@/shared/contracts";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { compactUnits, formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
-import { blockedReason, buildProducts, type Product } from "@/views/invest/lib/product";
+import { blockedReasonKey, buildProducts, type Product } from "@/views/invest/lib/product";
 import { Note, ProductBadges, Stat, SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
 import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-panels";
 
 type Panel = "subscribe" | "redeem" | null;
 
 export function ProductView({ service }: { service: string }) {
+  const t = useT();
   const [panel, setPanel] = useState<Panel>(null);
 
   // The catalog and the positions are both needed to decide what this product *is* to this
@@ -49,7 +52,7 @@ export function ProductView({ service }: { service: string }) {
 
   const resolving = catalogList.isLoading || positionList.isLoading;
   const readFailed = (!catalogList.data && catalogList.error) || (!positionList.data && positionList.error);
-  const error = readFailed ? readFailed.message : null;
+  const error = readFailed ? errorMessage(readFailed, t) : null;
   const product: Product | null | undefined = resolving
     ? undefined
     : (buildProducts(catalogList.data?.allocations ?? [], positionList.data?.positions ?? []).find((p) => p.service === service) ?? null);
@@ -76,8 +79,8 @@ export function ProductView({ service }: { service: string }) {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
             <TriangleAlert className="size-6" />
-            <p className="text-sm">{error ?? `No fund is registered as “${service}”.`}</p>
-            <p className="max-w-sm text-xs">A fund exists only once an operator registers it. If you followed a link here, the product may never have been opened.</p>
+            <p className="text-sm">{error ?? t("invest.notRegistered", { service })}</p>
+            <p className="max-w-sm text-xs">{t("invest.notRegisteredHint")}</p>
           </CardContent>
         </Card>
       </div>
@@ -90,7 +93,7 @@ export function ProductView({ service }: { service: string }) {
   // `posted_at` is 0 until an operator marks the fund, which is exactly when the hub is
   // still pricing at the bootstrap NAV of 1.0.
   const unmarked = nav !== null && Number(nav.posted_at ?? 0) === 0;
-  const blocked = blockedReason(product, nav);
+  const blocked = blockedReasonKey(product, nav);
   const queued = redemptions.filter((r) => r.state === "queued");
 
   return (
@@ -112,13 +115,13 @@ export function ProductView({ service }: { service: string }) {
           {!closed && (
             <Button type="button" className={cn(TEAL_CTA)} disabled={blocked !== null} onClick={() => setPanel((p) => (p === "subscribe" ? null : "subscribe"))}>
               <Sparkles className="size-4" />
-              {panel === "subscribe" ? "Close" : "Subscribe"}
+              {panel === "subscribe" ? t("ui.close") : t("invest.subscribe")}
             </Button>
           )}
           {held && (
             <Button type="button" variant="outline" disabled={stale} onClick={() => setPanel((p) => (p === "redeem" ? null : "redeem"))}>
               <ArrowDownToLine className="size-4" />
-              {panel === "redeem" ? "Close" : "Redeem"}
+              {panel === "redeem" ? t("ui.close") : t("invest.redeem")}
             </Button>
           )}
         </div>
@@ -128,7 +131,7 @@ export function ProductView({ service }: { service: string }) {
         <StaggerItem>
           <Alert variant="destructive">
             <TriangleAlert className="size-4" />
-            <AlertTitle>Couldn&apos;t refresh this fund</AlertTitle>
+            <AlertTitle>{t("err.fundRefresh")}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         </StaggerItem>
@@ -142,8 +145,8 @@ export function ProductView({ service }: { service: string }) {
           {held ? <HoldingStats position={held} /> : <PriceOnly nav={nav} unmarked={unmarked} />}
 
           {/* The gates, stated before the action rather than after a failed submit. */}
-          {blocked && <Note tone="amber">{blocked}</Note>}
-          {unmarked && !closed && <Note tone="muted">No valuation posted yet — units price at the bootstrap NAV of 1.0 until the first mark.</Note>}
+          {blocked && <Note tone="amber">{t(blocked)}</Note>}
+          {unmarked && !closed && <Note tone="muted">{t("invest.unmarkedNote")}</Note>}
 
           {panel === "subscribe" && !blocked && <SubscribePanel service={product.service} nav={nav} />}
           {panel === "redeem" && held && <RedeemPanel service={product.service} position={held} nav={nav} />}
@@ -161,10 +164,11 @@ export function ProductView({ service }: { service: string }) {
 }
 
 function BackLink() {
+  const t = useT();
   return (
     <Link href="/invest" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
       <ArrowLeft className="size-4" />
-      All products
+      {t("invest.allProducts")}
     </Link>
   );
 }
@@ -177,6 +181,7 @@ function BackLink() {
  * refused" is never the first time a holder hears about it.
  */
 function SupplyCard({ nav }: { nav: FundNav | null }) {
+  const t = useT();
   if (!nav) {
     return (
       <Card>
@@ -189,14 +194,17 @@ function SupplyCard({ nav }: { nav: FundNav | null }) {
   return (
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">Unit supply</p>
+        <p className="text-sm font-semibold">{t("admin.valuation.unitSupply")}</p>
         <SupplyBar issued={nav.units_outstanding} cap={nav.unit_cap} />
         <dl className="space-y-2.5 border-t border-border pt-4 text-sm">
-          <Row label="Remaining capacity" value={`${compactUnits(nav.remaining_capacity)} units`} />
-          <Row label="NAV / unit" value={`${formatUsdt(nav.nav)} USDT`} />
-          <Row label="Fund AUM" value={nav.aum ? `${formatUsdt(nav.aum)} USDT` : "Not yet valued"} />
+          <Row
+            label={t("invest.remainingCapacity")}
+            value={t("dash.unitsAmount", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity) })}
+          />
+          <Row label={t("invest.navPerUnit")} value={`${formatUsdt(nav.nav)} USDT`} />
+          <Row label={t("invest.fundAum")} value={nav.aum ? `${formatUsdt(nav.aum)} USDT` : t("invest.notYetValued")} />
         </dl>
-        <p className="text-xs text-muted-foreground">Subscriptions mint units at the current NAV. Once the cap is reached the fund stops accepting new money; redemptions are unaffected.</p>
+        <p className="text-xs text-muted-foreground">{t("invest.supplyNote")}</p>
       </CardContent>
     </Card>
   );
@@ -219,18 +227,23 @@ function SupplyCard({ nav }: { nav: FundNav | null }) {
  * instead of leaving the two to be reconciled by the reader.
  */
 function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: AccruedFees | null }) {
+  const t = useT();
   if (!policy?.configured) return null;
   const owed = accrued?.configured ? accrued : null;
+  const basisKey = BASIS_LABEL_KEYS[policy.basis ?? ""];
+  const periodKey = PERIOD_LABEL_KEYS[policy.crystallization ?? ""];
   return (
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">Fees</p>
+        <p className="text-sm font-semibold">{t("nav.fees")}</p>
         <dl className="space-y-2.5 text-sm">
-          <Row label="Management" value={`${percent(policy.management_bps)} p.a.`} />
-          <Row label="Performance" value={`${percent(policy.performance_bps)} of the gain`} />
-          {policy.hurdle_bps ? <Row label="Hurdle" value={`${percent(policy.hurdle_bps)} p.a. first`} /> : null}
-          <Row label="Charged on" value={BASIS_LABEL[policy.basis ?? ""] ?? policy.basis ?? "—"} />
-          <Row label="Locked in" value={PERIOD_LABEL[policy.crystallization ?? ""] ?? policy.crystallization ?? "—"} />
+          <Row label={t("admin.fees.field.management")} value={t("invest.perAnnum", { pct: percent(policy.management_bps) })} />
+          <Row label={t("admin.fees.field.performance")} value={t("invest.ofTheGain", { pct: percent(policy.performance_bps) })} />
+          {policy.hurdle_bps ? <Row label={t("admin.fees.field.hurdle")} value={t("invest.hurdleFirst", { pct: percent(policy.hurdle_bps) })} /> : null}
+          {/* An unmapped basis/period falls back to the wire identifier — a value the hub
+              added that this build has no word for, shown rather than swallowed. */}
+          <Row label={t("admin.fees.chargedOn")} value={basisKey ? t(basisKey) : (policy.basis ?? "—")} />
+          <Row label={t("invest.lockedIn")} value={periodKey ? t(periodKey) : (policy.crystallization ?? "—")} />
         </dl>
 
         {owed && (
@@ -238,22 +251,18 @@ function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: Accru
             {/* Its own heading, so the rows can be labelled `Management` and `Performance`
                 without colliding with the identically-named terms above. Long enough labels
                 to disambiguate inline would wrap onto two lines in this column. */}
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Accrued on your holding</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("invest.accruedOnHolding")}</p>
             <dl className="space-y-2.5 text-sm">
-              <Row label="Management" value={`${formatUsdt(owed.management)} USDT`} />
-              <Row label="Performance" value={`${formatUsdt(owed.performance)} USDT`} />
-              {isZero(owed.debt) ? null : <Row label="Carried over" value={`${formatUsdt(owed.debt)} USDT`} />}
-              <Row label="Total" value={`${formatUsdt(owed.total)} USDT`} />
-              <Row label="Your mark" value={`${formatUsdt(owed.high_water_mark)} USDT`} />
+              <Row label={t("admin.fees.field.management")} value={`${formatUsdt(owed.management)} USDT`} />
+              <Row label={t("admin.fees.field.performance")} value={`${formatUsdt(owed.performance)} USDT`} />
+              {isZero(owed.debt) ? null : <Row label={t("invest.carriedOver")} value={`${formatUsdt(owed.debt)} USDT`} />}
+              <Row label={t("ui.total")} value={`${formatUsdt(owed.total)} USDT`} />
+              <Row label={t("invest.yourMark")} value={`${formatUsdt(owed.high_water_mark)} USDT`} />
             </dl>
           </div>
         )}
 
-        <p className="text-xs text-muted-foreground">
-          {owed
-            ? "Fees are taken in units, never in cash — your wallet balance is untouched, and the value shown opposite is before them. The performance fee applies only to gains above your own high-water mark, so a recovery back to it costs nothing."
-            : "Fees are taken in units, never in cash. The performance fee applies only to gains above the price you enter at, measured per investor rather than per fund."}
-        </p>
+        <p className="text-xs text-muted-foreground">{t(owed ? "invest.feeNoteHolder" : "invest.feeNoteProspect")}</p>
       </CardContent>
     </Card>
   );
@@ -265,16 +274,18 @@ function percent(bps: number | undefined): string {
   return `${Number.isInteger(value) ? value : Number(value.toFixed(2))}%`;
 }
 
-const BASIS_LABEL: Record<string, string> = {
-  invested_capital: "Invested capital",
-  market_value: "Market value",
+// The same two vocabularies the admin fee console writes, read here — one wire value has
+// one name across the cabinet, so both surfaces point at the same catalogue entries.
+const BASIS_LABEL_KEYS: Record<string, string> = {
+  invested_capital: "admin.fees.basis.investedCapital",
+  market_value: "admin.fees.basis.marketValue",
 };
 
-const PERIOD_LABEL: Record<string, string> = {
-  monthly: "Monthly",
-  quarterly: "Quarterly",
-  semi_annual: "Every 6 months",
-  annual: "Annually",
+const PERIOD_LABEL_KEYS: Record<string, string> = {
+  monthly: "admin.fees.period.monthly",
+  quarterly: "admin.fees.period.quarterly",
+  semi_annual: "admin.fees.period.semiAnnual",
+  annual: "admin.fees.period.annual",
 };
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -287,15 +298,16 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function HoldingStats({ position }: { position: Position }) {
+  const t = useT();
   const loss = isNegative(position.pnl);
   const flat = isZero(position.pnl);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Stat label="Units" value={formatUnits(position.units)} tip="invest.position.units" />
-      <Stat label="NAV" value={formatUsdt(position.nav)} tip="invest.position.nav" />
-      <Stat label="Value" value={`${formatUsdt(position.value)} USDT`} emphasis tip="invest.position.value" />
+      <Stat label={t("invest.units")} value={formatUnits(position.units)} tip="invest.position.units" />
+      <Stat label={t("invest.nav")} value={formatUsdt(position.nav)} tip="invest.position.nav" />
+      <Stat label={t("invest.value")} value={`${formatUsdt(position.value)} USDT`} emphasis tip="invest.position.value" />
       <Stat
-        label="P&L"
+        label={t("invest.pnl")}
         value={`${formatSignedUsdt(position.pnl)} USDT`}
         tip="invest.position.pnl"
         emphasis
@@ -308,17 +320,18 @@ function HoldingStats({ position }: { position: Position }) {
 
 /** A product the caller holds nothing in: the price is all there is to show. */
 function PriceOnly({ nav, unmarked }: { nav: FundNav | null; unmarked: boolean }) {
+  const t = useT();
   return (
     <Card>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 py-6">
         <div className="space-y-1">
           <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-            NAV / unit
+            {t("invest.navPerUnit")}
             <TipAnchor anchor="invest.position.nav" />
           </p>
           <p className="text-2xl font-semibold tabular-nums">{nav ? `${formatUsdt(nav.nav)} USDT` : "—"}</p>
         </div>
-        <p className="max-w-sm text-sm text-muted-foreground">{unmarked ? "Not yet valued — the first subscription prices at 1.0." : "You hold no units in this fund yet."}</p>
+        <p className="max-w-sm text-sm text-muted-foreground">{t(unmarked ? "invest.notYetValuedHint" : "invest.noUnitsInFund")}</p>
       </CardContent>
     </Card>
   );

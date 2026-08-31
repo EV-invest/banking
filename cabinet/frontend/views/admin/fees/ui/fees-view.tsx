@@ -21,11 +21,13 @@
 import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Empty, EmptyDescription, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
 
 import { setFeePolicy, settleFeeShares } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource, feeAssessmentsResource, feePoliciesResource, feeSharesResource } from "@/entities/admin/model/admin-resource";
 import type { FeePolicy } from "@/shared/contracts/admin";
+import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { ago, formatUnits, formatUsd } from "@/views/admin/lib/format";
@@ -33,16 +35,19 @@ import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
+// `value` is the wire enum the money plane stores; `labelKey` is only what a reader sees.
+// Both lists are module scope, where no hook can run, so they carry the key and the
+// `Choice` chips below resolve it against the reader's locale.
 const BASES = [
-  { value: "invested_capital", label: "Invested capital" },
-  { value: "market_value", label: "Market value" },
+  { value: "invested_capital", labelKey: "admin.fees.basis.investedCapital" },
+  { value: "market_value", labelKey: "admin.fees.basis.marketValue" },
 ] as const;
 
 const PERIODS = [
-  { value: "monthly", label: "Monthly" },
-  { value: "quarterly", label: "Quarterly" },
-  { value: "semi_annual", label: "Every 6 months" },
-  { value: "annual", label: "Annually" },
+  { value: "monthly", labelKey: "admin.fees.period.monthly" },
+  { value: "quarterly", labelKey: "admin.fees.period.quarterly" },
+  { value: "semi_annual", labelKey: "admin.fees.period.semiAnnual" },
+  { value: "annual", labelKey: "admin.fees.period.annual" },
 ] as const;
 
 /** The house default, and what an unconfigured fund's form opens on: 2 and 20, no hurdle,
@@ -50,6 +55,7 @@ const PERIODS = [
 const DEFAULTS = { management_bps: 200, performance_bps: 2000, hurdle_bps: 0, basis: "invested_capital", crystallization: "annual" };
 
 export function FeesView() {
+  const t = useT();
   const catalog = useResource(adminAllocationsResource);
   const policies = useResource(feePoliciesResource);
   const [service, setService] = useState("");
@@ -61,15 +67,11 @@ export function FeesView() {
   const policy = byService.get(selected) ?? null;
 
   const loading = catalog.isLoading || policies.isLoading;
-  const error = catalog.data ? null : (catalog.error?.message ?? null);
+  const error = catalog.data || !catalog.error ? null : errorMessage(catalog.error, t);
 
   return (
     <AdminScreen className="space-y-6">
-      <AdminHeader
-        eyebrow="Fees"
-        title="Fee terms and collection"
-        subtitle="What each fund charges its investors, and converting what it has already earned into cash."
-      />
+      <AdminHeader eyebrow={t("nav.fees")} title={t("admin.fees.title")} subtitle={t("admin.fees.subtitle")} />
 
       {error && <ResourceError variant="alert" message={error} />}
 
@@ -79,8 +81,8 @@ export function FeesView() {
         </StaggerItem>
       ) : funds.length === 0 ? (
         <StaggerItem as={Empty} className="border">
-          <EmptyTitle>No funds registered</EmptyTitle>
-          <EmptyDescription>A fee is a property of a product. Register an allocation first, then price it here.</EmptyDescription>
+          <EmptyTitle>{t("admin.fees.noFunds")}</EmptyTitle>
+          <EmptyDescription>{t("admin.fees.noFundsHint")}</EmptyDescription>
         </StaggerItem>
       ) : (
         <>
@@ -111,6 +113,7 @@ function FundPicker({
   onSelect: (service: string) => void;
   policies: Map<string, FeePolicy>;
 }) {
+  const t = useT();
   return (
     <StaggerItem className="flex flex-wrap gap-2">
       {funds.map((fund) => {
@@ -128,7 +131,7 @@ function FundPicker({
           >
             <span className="block font-medium">{fund.title}</span>
             <span className="block text-xs text-muted-foreground">
-              {policy?.configured ? `${pct(policy.management_bps)} / ${pct(policy.performance_bps)}` : "No fee"}
+              {policy?.configured ? `${pct(policy.management_bps)} / ${pct(policy.performance_bps)}` : t("admin.fees.noFee")}
             </span>
           </button>
         );
@@ -138,6 +141,7 @@ function FundPicker({
 }
 
 function PolicyCard({ service, policy }: { service: string; policy: FeePolicy | null }) {
+  const t = useT();
   const initial = policy?.configured ? policy : { ...DEFAULTS };
   const [management, setManagement] = useState(String(initial.management_bps));
   const [performance, setPerformance] = useState(String(initial.performance_bps));
@@ -151,17 +155,19 @@ function PolicyCard({ service, policy }: { service: string; policy: FeePolicy | 
   // Basis points, so 10000 is 100%. A rate above that is always a typo — most often a
   // percentage typed where bps were meant, which would be a hundredfold overcharge.
   const invalid = useMemo(() => {
-    for (const [label, raw] of [
-      ["Management", management],
-      ["Performance", performance],
-      ["Hurdle", hurdle],
+    for (const [labelKey, raw] of [
+      ["admin.fees.field.management", management],
+      ["admin.fees.field.performance", performance],
+      ["admin.fees.field.hurdle", hurdle],
     ] as const) {
       const n = Number(raw);
-      if (!Number.isInteger(n) || n < 0) return `${label} must be a whole number of basis points.`;
-      if (n > 10_000) return `${label} is ${pct(n)} — basis points, so 200 is 2%.`;
+      // The field name is interpolated rather than concatenated onto the front: which end
+      // of the sentence it belongs at is a per-language decision.
+      if (!Number.isInteger(n) || n < 0) return t("admin.fees.err.notInteger", { field: t(labelKey) });
+      if (n > 10_000) return t("admin.fees.err.tooLarge", { field: t(labelKey), pct: pct(n) });
     }
     return null;
-  }, [management, performance, hurdle]);
+  }, [management, performance, hurdle, t]);
 
   async function save() {
     if (invalid) return;
@@ -180,7 +186,7 @@ function PolicyCard({ service, policy }: { service: string; policy: FeePolicy | 
       revalidateTag(TAG.adminFees);
       setSaved(true);
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : "Could not save these terms.");
+      setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feePolicySave"));
     } finally {
       setBusy(false);
     }
@@ -190,39 +196,31 @@ function PolicyCard({ service, policy }: { service: string; policy: FeePolicy | 
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
         <div className="space-y-1">
-          <p className="text-sm font-semibold">Terms</p>
+          <p className="text-sm font-semibold">{t("admin.fees.terms")}</p>
           <p className="text-xs text-muted-foreground">
-            {policy?.configured
-              ? `Last changed ${ago(policy.updated_at)}. Investors see these on the product page.`
-              : "This fund charges nothing today. Saving these terms starts the clock on every holding in it."}
+            {policy?.configured ? t("admin.fees.lastChanged", { when: ago(policy.updated_at, t) }) : t("admin.fees.notConfigured")}
           </p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <BpsField label="Management" value={management} onChange={setManagement} hint="per year" />
-          <BpsField label="Performance" value={performance} onChange={setPerformance} hint="of the gain" />
-          <BpsField label="Hurdle" value={hurdle} onChange={setHurdle} hint="0 for none" />
+          <BpsField label={t("admin.fees.field.management")} value={management} onChange={setManagement} hint={t("admin.fees.hint.perYear")} />
+          <BpsField label={t("admin.fees.field.performance")} value={performance} onChange={setPerformance} hint={t("admin.fees.hint.ofTheGain")} />
+          <BpsField label={t("admin.fees.field.hurdle")} value={hurdle} onChange={setHurdle} hint={t("admin.fees.hint.zeroForNone")} />
         </div>
 
-        <Choice label="Charged on" value={basis} onChange={setBasis} options={BASES} />
-        <p className="text-xs text-muted-foreground">
-          Invested capital is the house default: it does not swell with a mark you posted, so what the manager earns stays independent of the input the manager
-          supplies.
-        </p>
+        <Choice label={t("admin.fees.chargedOn")} value={basis} onChange={setBasis} options={BASES} />
+        <p className="text-xs text-muted-foreground">{t("admin.fees.basisNote")}</p>
 
-        <Choice label="Performance locked in" value={crystallization} onChange={setCrystallization} options={PERIODS} />
-        <p className="text-xs text-muted-foreground">
-          A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund&apos;s life, because each reset locks in gains a
-          later loss can no longer claw back.
-        </p>
+        <Choice label={t("admin.fees.lockedIn")} value={crystallization} onChange={setCrystallization} options={PERIODS} />
+        <p className="text-xs text-muted-foreground">{t("admin.fees.crystallizationNote")}</p>
 
         {invalid && <p className="text-xs text-destructive">{invalid}</p>}
         {problem && <p className="text-xs text-destructive">{problem}</p>}
-        {saved && !problem && <p className="text-xs text-main-accent-t2">Saved. Investors see the new terms immediately.</p>}
+        {saved && !problem && <p className="text-xs text-main-accent-t2">{t("admin.fees.saved")}</p>}
 
         <Button type="button" onClick={save} disabled={busy || invalid !== null}>
           {busy && <Loader2 className="size-4 animate-spin" />}
-          {policy?.configured ? "Update terms" : "Start charging"}
+          {policy?.configured ? t("admin.fees.updateTerms") : t("admin.fees.startCharging")}
         </Button>
       </CardContent>
     </Card>
@@ -231,6 +229,7 @@ function PolicyCard({ service, policy }: { service: string; policy: FeePolicy | 
 
 /** Accumulated units and the one button that turns them into cash. */
 function CollectCard({ service }: { service: string }) {
+  const t = useT();
   const shares = useResource(feeSharesResource, service);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -250,9 +249,9 @@ function CollectCard({ service }: { service: string }) {
       const settlement = await settleFeeShares({ service, units: "" });
       // The settle moves the fee units AND the revenue figure the payout screen reads.
       revalidateTag(TAG.adminFees, TAG.adminRevenue);
-      setDone(`${formatUsd(settlement.cash)} settled at NAV ${settlement.nav}.`);
+      setDone(t("admin.fees.settledAtNav", { cash: formatUsd(settlement.cash), nav: settlement.nav }));
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : "Could not settle these units.");
+      setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feeSettle"));
     } finally {
       setBusy(false);
     }
@@ -262,36 +261,33 @@ function CollectCard({ service }: { service: string }) {
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
         <div className="space-y-1">
-          <p className="text-sm font-semibold">Collected, not yet converted</p>
-          <p className="text-xs text-muted-foreground">Units the sweeper has clawed back from holders. No cash has moved yet.</p>
+          <p className="text-sm font-semibold">{t("admin.fees.collected")}</p>
+          <p className="text-xs text-muted-foreground">{t("admin.fees.collectedSub")}</p>
         </div>
 
         {shares.isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : (
           <dl className="space-y-2.5 text-sm">
-            <Row label="Fee units held" value={formatUnits(data?.units)} />
-            <Row label="Worth at current NAV" value={`${formatUsd(data?.value)} USDT`} />
+            <Row label={t("admin.fees.unitsHeld")} value={formatUnits(data?.units)} />
+            <Row label={t("admin.fees.worthAtNav")} value={`${formatUsd(data?.value)} USDT`} />
           </dl>
         )}
 
-        <p className="text-xs text-muted-foreground">
-          Settling burns these units and moves their value from the fund&apos;s claim into fee revenue. It is refused — never queued — when the fund&apos;s claim
-          cannot cover it on top of its queued redemptions: investors waiting to exit are paid before the manager is.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("admin.fees.settleNote")}</p>
 
         {problem && <p className="text-xs text-destructive">{problem}</p>}
-        {done && !problem && (
-          <p className="text-xs text-main-accent-t2">
-            {done} It is withdrawable on-chain from <span className="font-medium">Fund revenue</span>.
-          </p>
-        )}
+        {/* Two independently complete sentences, so the settlement line and the pointer to
+            the payout screen stay separate keys; the screen's own name is interpolated so it
+            tracks whatever the nav calls it. The emphasis on that name is the one casualty
+            of keeping the sentence whole for translators. */}
+        {done && !problem && <p className="text-xs text-main-accent-t2">{`${done} ${t("admin.fees.withdrawableFrom", { screen: t("nav.revenue") })}`}</p>}
 
         <Button type="button" variant="outline" onClick={settle} disabled={busy || nothing}>
           {busy && <Loader2 className="size-4 animate-spin" />}
-          Settle all units
+          {t("admin.fees.settleAll")}
         </Button>
-        {nothing && !shares.isLoading && <p className="text-xs text-muted-foreground">Nothing to settle — no fee has been charged in this fund yet.</p>}
+        {nothing && !shares.isLoading && <p className="text-xs text-muted-foreground">{t("admin.fees.nothingToSettle")}</p>}
       </CardContent>
     </Card>
   );
@@ -299,37 +295,40 @@ function CollectCard({ service }: { service: string }) {
 
 /** The audit trail: every charge this fund has made, newest first. */
 function AssessmentsCard({ service }: { service: string }) {
+  const t = useT();
   const list = useResource(feeAssessmentsResource, service);
   const rows = list.data?.assessments ?? [];
 
   return (
     <Card>
       <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">Charges</p>
+        <p className="text-sm font-semibold">{t("admin.fees.charges")}</p>
         {list.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : rows.length === 0 ? (
           <Empty className="border">
-            <EmptyTitle>No charges yet</EmptyTitle>
-            <EmptyDescription>The sweeper charges a holding once its accrual is old enough. Nothing here means nobody has been billed.</EmptyDescription>
+            <EmptyTitle>{t("admin.fees.noCharges")}</EmptyTitle>
+            <EmptyDescription>{t("admin.fees.noChargesHint")}</EmptyDescription>
           </Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
+                {/* i18n-max: 14 per header — the wrapper scrolls, so a long header costs a
+                    sideways drag rather than a clipped column. */}
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="pb-2 font-medium">When</th>
-                  <th className="pb-2 font-medium">Trigger</th>
-                  <th className="pb-2 text-right font-medium">Management</th>
-                  <th className="pb-2 text-right font-medium">Performance</th>
-                  <th className="pb-2 text-right font-medium">Units taken</th>
-                  <th className="pb-2 text-right font-medium">Deferred</th>
+                  <th className="pb-2 font-medium">{t("admin.col.when")}</th>
+                  <th className="pb-2 font-medium">{t("admin.fees.col.trigger")}</th>
+                  <th className="pb-2 text-right font-medium">{t("admin.fees.field.management")}</th>
+                  <th className="pb-2 text-right font-medium">{t("admin.fees.field.performance")}</th>
+                  <th className="pb-2 text-right font-medium">{t("admin.fees.col.unitsTaken")}</th>
+                  <th className="pb-2 text-right font-medium">{t("admin.fees.col.deferred")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((a, i) => (
                   <tr key={`${a.assessed_at}-${i}`} className="border-b border-border/50 last:border-0">
-                    <td className="py-2 text-muted-foreground">{ago(a.assessed_at)}</td>
+                    <td className="py-2 text-muted-foreground">{ago(a.assessed_at, t)}</td>
                     <td className="py-2 capitalize">{a.trigger}</td>
                     <td className="py-2 text-right tabular-nums">{formatUsd(a.management)}</td>
                     <td className="py-2 text-right tabular-nums">{formatUsd(a.performance)}</td>
@@ -372,8 +371,9 @@ function Choice<T extends string>({
   label: string;
   value: string;
   onChange: (v: T) => void;
-  options: readonly { value: T; label: string }[];
+  options: readonly { value: T; labelKey: string }[];
 }) {
+  const t = useT();
   return (
     <div className="space-y-1.5 text-sm">
       <span className="block font-medium">{label}</span>
@@ -388,8 +388,9 @@ function Choice<T extends string>({
               value === option.value ? "border-main-accent-t1 bg-main-accent-t1/10" : "border-border hover:bg-muted/50"
             }`}
           >
-            {option.label}
+            {t(option.labelKey)}
           </button>
+
         ))}
       </div>
     </div>

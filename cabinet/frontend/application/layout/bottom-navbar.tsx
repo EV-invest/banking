@@ -86,15 +86,35 @@ export function BottomNavbar() {
             {...prefetchOn(tab.href)}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-xs font-medium transition-colors",
+              // `min-w-0` is load-bearing, not tidiness. A flex item's default
+              // `min-width: auto` refuses to shrink below its content, so a long
+              // label (Russian "Инвестировать", German "Einstellungen") made its
+              // tab wider than the 1/5 share `flex-1` promises and shoved the
+              // others off their marker positions — the marker's width is
+              // computed as an exact fifth of the bar, so the two drift apart the
+              // moment a tab is not that width. With `min-w-0` the tab can shrink
+              // and the label truncates instead of the layout breaking.
+              "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg py-1 font-medium transition-colors",
               // The offset is what earns its keep here: the active tab's fill is the same
               // teal as the ring, so without a gap the ring reads as the pill growing.
               "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-main-surface",
               isActive ? "text-main-accent-t1" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className="size-5" />
-            {t(tab.key)}
+            <Icon className="size-5 shrink-0" />
+            {/* `truncate` is the net, not the plan. Five tabs on a 390px phone give each
+                label a 75px box, measured; every `nav.*` value is authored to fit it.
+                For the record, at 12px/500 Inter: "Operations" 63.1px, "Инвестиции"
+                72.1px, "Paramètres" 65.6px — and the value this replaced, Russian
+                "Инвестировать", 91.3px. That 16px is what broke the bar, because
+                without `min-w-0` above the tab grew to fit rather than the label
+                shrinking, and the marker is positioned as an exact fifth of the bar.
+                German is the tightest case: "Einstellungen" measures 77.1px and does
+                not fit, which is why `nav.settings` is "Optionen" there.
+                `title` keeps a truncated label recoverable on a long press. */}
+            <span className="w-full truncate text-center text-xs" title={t(tab.key)}>
+              {t(tab.key)}
+            </span>
           </Link>
         );
       })}

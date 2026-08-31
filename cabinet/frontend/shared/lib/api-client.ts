@@ -29,21 +29,49 @@ import { cachedSession, refreshIfStale, refreshSession, sessionGeneration } from
 /** The session is provably gone — offer sign-in, not a retry. */
 export class SessionExpiredError extends Error {
   readonly status = 401;
+  readonly code = "err.sessionExpired";
   constructor() {
     super("Your session has ended. Sign in again to continue.");
     this.name = "SessionExpiredError";
   }
 }
 
-/** A failed BFF call, carrying the HTTP status for callers that branch on it. */
+/**
+ * A failed BFF call, carrying the HTTP status for callers that branch on it.
+ *
+ * `code` is a catalogue key, not prose — this module runs in the fetch layer,
+ * far below any component that could hold a translator, so it names the message
+ * and leaves the wording to the render boundary (see {@link errorMessage}).
+ * `message` stays populated with the English text so a `console.error`, a Sentry
+ * breadcrumb, or a caller that never learned about `code` still reads sensibly.
+ *
+ * A `code` of `null` means the BFF sent free-form prose of its own. That text is
+ * already client-safe (see backend/src/error.rs) but it is not ours to key, so it
+ * passes through in whatever language the backend chose.
+ */
 export class RequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = "RequestError";
   }
+}
+
+/**
+ * The one place an error becomes words a reader sees.
+ *
+ * Views render this rather than `error.message`: the message was fixed in English
+ * when the request failed, whereas the key can still be resolved in the reader's
+ * locale at paint time. Anything that is not one of our errors — a thrown string,
+ * a bug — degrades to the generic key rather than leaking a stack trace into the UI.
+ */
+export function errorMessage(error: unknown, t: (key: string) => string): string {
+  if (error instanceof SessionExpiredError) return t(error.code);
+  if (error instanceof RequestError) return error.code ? t(error.code) : error.message;
+  return t("err.requestFailed");
 }
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
@@ -55,22 +83,37 @@ interface JsonRequest {
   scope?: "zone" | "shell";
 }
 
-// The BFF's fixed error strings, in the user's words. Everything else the BFF sends is
-// already client-safe prose (see backend/src/error.rs) and passes through untouched.
-const FRIENDLY: Record<string, string> = {
-  unauthenticated: "We couldn't confirm your session. Reload the page or sign in again.",
-  csrf: "This page went stale. Reload it and try again.",
-  "auth not configured": "Sign-in is unavailable right now. Please try again shortly.",
-  "request failed": "Something went wrong on our side. Please try again.",
+// The BFF's fixed error strings, mapped to catalogue keys and their English text.
+// Everything else the BFF sends is already client-safe prose (see backend/src/error.rs)
+// and passes through untouched — with a null key, since we did not author it.
+const FRIENDLY: Record<string, { code: string; en: string }> = {
+  unauthenticated: {
+    code: "err.unauthenticated",
+    en: "We couldn't confirm your session. Reload the page or sign in again.",
+  },
+  csrf: { code: "err.csrf", en: "This page went stale. Reload it and try again." },
+  "auth not configured": {
+    code: "err.authNotConfigured",
+    en: "Sign-in is unavailable right now. Please try again shortly.",
+  },
+  "request failed": {
+    code: "err.requestFailed",
+    en: "Something went wrong on our side. Please try again.",
+  },
 };
 
 // Fallbacks when the response carries no `{ error }` body at all.
-function statusMessage(status: number): string {
-  if (status === 403) return "You don't have access to this.";
-  if (status === 404) return "Not found.";
-  if (status === 429) return "Too many requests — give it a moment and try again.";
-  if (status >= 500) return "The service is temporarily unavailable. Please try again.";
-  return `Request failed (${status}).`;
+function statusMessage(status: number): { code: string; en: string } {
+  if (status === 403) return { code: "err.forbidden", en: "You don't have access to this." };
+  if (status === 404) return { code: "err.notFound", en: "Not found." };
+  if (status === 429)
+    return { code: "err.rateLimited", en: "Too many requests — give it a moment and try again." };
+  if (status >= 500)
+    return {
+      code: "err.serverUnavailable",
+      en: "The service is temporarily unavailable. Please try again.",
+    };
+  return { code: "err.requestFailed", en: `Request failed (${status}).` };
 }
 
 export async function requestJson<T>(path: `/${string}`, req: JsonRequest = {}): Promise<T> {
@@ -101,8 +144,11 @@ export async function requestJson<T>(path: `/${string}`, req: JsonRequest = {}):
 
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) {
-    const detail = data.error ? (FRIENDLY[data.error] ?? data.error) : statusMessage(res.status);
-    throw new RequestError(detail, res.status);
+    // A BFF string we recognise becomes a key; one we don't stays the backend's own
+    // prose, unkeyed. No `{ error }` body at all falls back to the status.
+    const known = data.error ? FRIENDLY[data.error] : statusMessage(res.status);
+    const detail = known ?? { code: null, en: data.error as string };
+    throw new RequestError(detail.en, res.status, detail.code);
   }
   return data;
 }
@@ -112,7 +158,11 @@ async function send(url: string, init: RequestInit): Promise<Response> {
   try {
     return await fetch(url, init);
   } catch {
-    throw new RequestError("Can't reach the server. Check your connection and try again.", 0);
+    throw new RequestError(
+      "Can't reach the server. Check your connection and try again.",
+      0,
+      "err.network",
+    );
   }
 }
 

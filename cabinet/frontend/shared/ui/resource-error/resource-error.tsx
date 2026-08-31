@@ -35,22 +35,41 @@
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, AlertTitle, Button } from "@evinvest/uikit";
 
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { StaggerItem } from "@/shared/ui/motion";
 
 interface ResourceErrorBase {
-  /** The failure, already derived — the views own how they read it off a resource. */
-  message: ReactNode;
   /** Placement, on whichever element this form's root is. */
   className?: string;
 }
+
+// What is being reported, in one of two shapes, and the union is the point of the
+// distinction rather than a convenience:
+//
+//   `error`   — the thrown failure itself. Preferred. An error's wording was fixed in
+//               English down in the fetch layer, where no translator exists; the key it
+//               carries can still be resolved here, at paint time, in the reader's
+//               language. This is the render boundary `api-client.ts` names, and passing
+//               the error rather than a string is what lets it do its job.
+//   `message` — copy the caller composed itself. For the failures that are not a thrown
+//               request: a form that rejected its own input, a sentence with a value
+//               interpolated into it. Already translated by whoever built it.
+//
+// Passing `error.message` as `message` type-checks and is exactly the mistake this split
+// exists to make visible: it pins the banner to English forever.
+type ResourceErrorSource =
+  | { error: unknown; message?: never }
+  | { message: ReactNode; error?: never };
 
 // The two forms take different props, and the union says so rather than documenting it: an
 // `alert` has no retry button and an `inline` line has no heading, so asking for either is a
 // type error at the call site instead of a prop that silently does nothing.
 export type ResourceErrorProps = ResourceErrorBase &
+  ResourceErrorSource &
   (
     | {
         variant?: "inline";
@@ -75,15 +94,22 @@ export type ResourceErrorProps = ResourceErrorBase &
  * Whether there is anything to report stays with the caller — only it knows whether stale
  * data is still on screen, and a failed *refresh* over figures the reader can already see
  * belongs beside them rather than in place of them.
+ *
+ * Given an `error`, this is where it becomes words, and it is the only place: every banner
+ * in the cabinet lands here, so one call to `errorMessage` translates all of them and no
+ * view has to hold a translator to report a failure it did not cause.
  */
-export function ResourceError({ message, variant = "inline", title, onRetry, retrying = false, className }: ResourceErrorProps) {
+export function ResourceError({ message, error, variant = "inline", title, onRetry, retrying = false, className }: ResourceErrorProps) {
+  const t = useT();
+  const text = error === undefined ? message : errorMessage(error, t);
+
   if (variant === "alert") {
     return (
       <StaggerItem className={className}>
         <Alert variant="destructive">
           <TriangleAlert className="size-4" />
           {title && <AlertTitle>{title}</AlertTitle>}
-          <AlertDescription>{message}</AlertDescription>
+          <AlertDescription>{text}</AlertDescription>
         </Alert>
       </StaggerItem>
     );
@@ -94,11 +120,13 @@ export function ResourceError({ message, variant = "inline", title, onRetry, ret
       <StaggerItem className={cn("flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5", className)}>
         {/* The icon holds its size here: beside the button it is the first thing squeezed
             when the message is long, and a half-width triangle reads as a rendering fault. */}
-        <p className="flex items-center gap-2 text-sm text-destructive">
-          <TriangleAlert className="size-4 shrink-0" /> {message}
+        <p className="flex min-w-0 items-center gap-2 text-sm text-destructive">
+          <TriangleAlert className="size-4 shrink-0" /> {text}
         </p>
+        {/* i18n-max: 16 — the uikit Button is shrink-0, so its label is taken out of the
+            message's share of the row before the row is allowed to wrap. */}
         <Button type="button" variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
-          <RefreshCw className={retrying ? "size-4 animate-spin" : "size-4"} /> Try again
+          <RefreshCw className={retrying ? "size-4 animate-spin" : "size-4"} /> {t("status.tryAgain")}
         </Button>
       </StaggerItem>
     );
@@ -106,7 +134,7 @@ export function ResourceError({ message, variant = "inline", title, onRetry, ret
 
   return (
     <StaggerItem as="p" className={cn("flex items-center gap-2 text-sm text-destructive", className)}>
-      <TriangleAlert className="size-4" /> {message}
+      <TriangleAlert className="size-4" /> {text}
     </StaggerItem>
   );
 }

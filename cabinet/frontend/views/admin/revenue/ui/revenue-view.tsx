@@ -13,30 +13,26 @@
 import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Empty, EmptyDescription, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
 
 import { cancelRevenuePayout, requestRevenuePayout } from "@/entities/admin/api/admin-client";
 import { fundRevenueResource, revenuePayoutsResource } from "@/entities/admin/model/admin-resource";
 import type { RevenuePayout, RevenueRail } from "@/shared/contracts/admin";
+import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag } from "@/shared/lib/resource";
 import { useResource } from "@/shared/lib/resource";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
-import { amount as formatAmount, formatUsd } from "@/views/admin/lib/format";
+import { amount as formatAmount, formatUsd, railLabel, stateLabel } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
-
-const RAIL_LABELS: Record<string, string> = {
-  bep20: "BEP20 · BNB Chain",
-  trc20: "TRC20 · TRON",
-  ton: "TON · Open Network",
-  polygon: "Polygon · PoS",
-};
 
 /** In flight — the operator can still act on these; the rest are history. */
 const OPEN_STATES = new Set(["queued", "processing"]);
 
 export function RevenueView() {
+  const t = useT();
   const revenue = useResource(fundRevenueResource);
   const payouts = useResource(revenuePayoutsResource);
 
@@ -52,7 +48,7 @@ export function RevenueView() {
   // The first configured rail is the default, so the form is usable without a choice.
   const rail = rails.find((r) => r.network === network) ?? rails[0];
   const history = payouts.data?.withdrawals ?? null;
-  const error = actionError ?? (data ? null : (revenue.error?.message ?? null));
+  const error = actionError ?? (data || !revenue.error ? null : errorMessage(revenue.error, t));
 
   const available = Number(data?.available ?? "0");
   const requested = Number(amount);
@@ -61,11 +57,11 @@ export function RevenueView() {
   // spending a round trip on it. The hub still decides.
   const amountProblem = useMemo(() => {
     if (!amount.trim()) return null;
-    if (!Number.isFinite(requested) || requested <= 0) return "Enter an amount.";
-    if (rail && requested < minimum) return `Below the ${formatUsd(rail.minimum)} minimum for this rail.`;
-    if (requested > available) return `Only ${formatUsd(data?.available)} of earned revenue is available.`;
+    if (!Number.isFinite(requested) || requested <= 0) return t("admin.revenue.err.enterAmount");
+    if (rail && requested < minimum) return t("admin.revenue.err.belowMinimum", { min: formatUsd(rail.minimum) });
+    if (requested > available) return t("admin.revenue.err.overAvailable", { available: formatUsd(data?.available) });
     return null;
-  }, [amount, requested, rail, minimum, available, data?.available]);
+  }, [amount, requested, rail, minimum, available, data?.available, t]);
 
   const canSubmit = Boolean(rail) && address.trim().length > 0 && amount.trim().length > 0 && !amountProblem && busy === null;
   // Beyond `instant` the payout is accepted and queued until the treasury is topped up —
@@ -90,7 +86,7 @@ export function RevenueView() {
       setConfirming(false);
       await settle();
     } catch (e) {
-      setActionError((e as Error).message);
+      setActionError(errorMessage(e, t));
     } finally {
       setBusy(null);
     }
@@ -103,7 +99,7 @@ export function RevenueView() {
       await cancelRevenuePayout(id);
       await settle();
     } catch (e) {
-      setActionError((e as Error).message);
+      setActionError(errorMessage(e, t));
     } finally {
       setBusy(null);
     }
@@ -111,25 +107,22 @@ export function RevenueView() {
 
   return (
     <AdminScreen className="space-y-8">
-      <AdminHeader eyebrow="Administer" title="Fund revenue" subtitle="What the fund earned — fees and the settled 2-and-20 — and paying it out" />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.revenue")} subtitle={t("admin.revenue.subtitle")} />
 
       {error && <ResourceError message={error} />}
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Earned</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.revenue.earned")}</p>
         <div className="grid gap-4 sm:grid-cols-3">
-          <MoneyCard label="Earned · total" value={data?.earned} hint="fees + settled 2-and-20" loading={!data} />
-          <MoneyCard label="Available to pay out" value={data?.available} hint="free of in-flight payouts" loading={!data} emphasis />
-          <MoneyCard label="Pending payout" value={data?.pending_payout} hint="queued + in-flight" loading={!data} />
+          <MoneyCard label={t("admin.revenue.earnedTotal")} value={data?.earned} hint={t("admin.revenue.earnedTotalHint")} loading={!data} />
+          <MoneyCard label={t("admin.revenue.availableToPayOut")} value={data?.available} hint={t("admin.revenue.availableHint")} loading={!data} emphasis />
+          <MoneyCard label={t("admin.revenue.pendingPayout")} value={data?.pending_payout} hint={t("admin.revenue.pendingHint")} loading={!data} />
         </div>
-        <p className="max-w-3xl text-xs text-muted-foreground">
-          This is the fund&apos;s own money. Client balances and the fund&apos;s seed capital are separate ledger claims and are not included here — and cannot be
-          reached from this screen.
-        </p>
+        <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.revenue.ownMoneyNote")}</p>
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Pay out</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.revenue.payOut")}</p>
         <Card>
           <CardContent className="py-5">
             {/* The spacing lives on `Settled`, not on CardContent: Settled wraps its children in a
@@ -138,13 +131,13 @@ export function RevenueView() {
             <Settled className="space-y-4" loading={!data} skeleton={<Skeleton className="h-40 w-full" />}>
               {!data ? null : rails.length === 0 ? (
                 <Empty>
-                  <EmptyTitle>No rail is configured</EmptyTitle>
-                  <EmptyDescription>A payout ships on a chain rail with a running watcher. Configure one to enable payouts.</EmptyDescription>
+                  <EmptyTitle>{t("admin.revenue.noRail")}</EmptyTitle>
+                  <EmptyDescription>{t("admin.revenue.noRailHint")}</EmptyDescription>
                 </Empty>
               ) : (
                 <>
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">Rail</p>
+                    <p className="text-xs text-muted-foreground">{t("admin.rail")}</p>
                     <div className="flex flex-wrap gap-2">
                       {rails.map((r) => (
                         <RailChip key={r.network} rail={r} selected={r.network === rail?.network} onSelect={() => setNetwork(r.network)} />
@@ -154,20 +147,20 @@ export function RevenueView() {
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="block space-y-1.5">
-                      <span className="block text-xs text-muted-foreground">Destination address</span>
+                      <span className="block text-xs text-muted-foreground">{t("admin.revenue.destinationAddress")}</span>
                       <Input
                         value={address}
                         onChange={(e) => {
                           setAddress(e.target.value);
                           setConfirming(false);
                         }}
-                        placeholder="The wallet that receives the payout"
+                        placeholder={t("admin.revenue.placeholder.address")}
                         spellCheck={false}
                         className="font-mono-tech text-xs"
                       />
                     </label>
                     <label className="block space-y-1.5">
-                      <span className="block text-xs text-muted-foreground">Amount (USDT)</span>
+                      <span className="block text-xs text-muted-foreground">{t("admin.revenue.amountUsdt")}</span>
                       <Input
                         value={amount}
                         onChange={(e) => {
@@ -175,7 +168,7 @@ export function RevenueView() {
                           setConfirming(false);
                         }}
                         inputMode="decimal"
-                        placeholder={rail ? `min ${formatAmount(rail.minimum)}` : "0.00"}
+                        placeholder={rail ? t("admin.revenue.placeholder.minAmount", { n: formatAmount(rail.minimum) }) : "0.00"}
                         className="tabular-nums"
                       />
                     </label>
@@ -183,9 +176,7 @@ export function RevenueView() {
 
                   {amountProblem && <p className="text-xs text-destructive">{amountProblem}</p>}
                   {!amountProblem && willQueue && (
-                    <p className="text-xs text-main-accent-t3">
-                      Above the {formatUsd(rail?.instant)} that ships immediately on this rail — the rest is accepted and queued until the treasury is topped up.
-                    </p>
+                    <p className="text-xs text-main-accent-t3">{t("admin.revenue.willQueue", { instant: formatUsd(rail?.instant) })}</p>
                   )}
 
                   {/* A second, deliberate click before company money leaves. It restates the
@@ -193,26 +184,33 @@ export function RevenueView() {
                       ruins and the chain will not give back. */}
                   {confirming ? (
                     <div className="space-y-2 rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/5 p-3">
-                      {/* An address is 40-plus unbroken characters — without `break-all` it widens
-                          the panel past the phone. */}
-                      <p className="text-sm">
-                        Send <span className="font-semibold tabular-nums">{formatUsd(amount)}</span> on{" "}
-                        <span className="uppercase">{rail?.network}</span> to <span className="font-mono-tech break-all text-xs">{address.trim()}</span>?
+                      {/* One sentence, one key: which order the amount, the rail and the
+                          address fall in is a per-language decision, so the three are ICU
+                          arguments rather than spans the sentence is cut around. The address
+                          is 40-plus unbroken characters, so `break-words` stays on the
+                          paragraph — without it the panel widens past the phone. */}
+                      <p className="text-sm break-words">
+                        {t("admin.revenue.confirmSentence", {
+                          amount: formatUsd(amount),
+                          network: (rail?.network ?? "").toUpperCase(),
+                          address: address.trim(),
+                        })}
                       </p>
-                      <p className="text-xs text-muted-foreground">No fee is charged on a payout, so the full amount ships. This cannot be reversed once broadcast.</p>
+                      <p className="text-xs text-muted-foreground">{t("admin.revenue.confirmNote")}</p>
+                      {/* i18n-max: 12 per verb — two `shrink-0` Buttons in a ≤400px panel. */}
                       <div className="flex gap-2">
                         <Button type="button" size="sm" disabled={busy !== null} onClick={submit}>
                           {busy === "request" ? <Loader2 className="size-4 animate-spin" /> : null}
-                          Confirm payout
+                          {t("admin.revenue.confirmPayout")}
                         </Button>
                         <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={() => setConfirming(false)}>
-                          Back
+                          {t("ui.back")}
                         </Button>
                       </div>
                     </div>
                   ) : (
                     <Button type="button" size="sm" disabled={!canSubmit} onClick={() => setConfirming(true)}>
-                      Review payout
+                      {t("admin.revenue.reviewPayout")}
                     </Button>
                   )}
                 </>
@@ -223,7 +221,7 @@ export function RevenueView() {
       </StaggerItem>
 
       <StaggerItem as="section" className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Payouts</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.revenue.payouts")}</p>
         <Card>
           <CardContent className="p-0">
             <Settled
@@ -237,8 +235,8 @@ export function RevenueView() {
               {!history ? null : history.length === 0 ? (
                 <div className="p-8">
                   <Empty>
-                    <EmptyTitle>No payouts yet</EmptyTitle>
-                    <EmptyDescription>Revenue the fund has earned stays on the ledger until it is paid out. Payouts appear here once requested.</EmptyDescription>
+                    <EmptyTitle>{t("admin.revenue.noPayouts")}</EmptyTitle>
+                    <EmptyDescription>{t("admin.revenue.noPayoutsHint")}</EmptyDescription>
                   </Empty>
                 </div>
               ) : (
@@ -247,12 +245,14 @@ export function RevenueView() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-140 text-sm">
                     <thead>
+                      {/* i18n-max: 14 per header — the table scrolls inside `min-w-140`, so a
+                          long header widens the scroll rather than clipping a cell. */}
                       <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                        <th className="px-5 py-3 font-medium">Destination</th>
-                        <th className="px-5 py-3 font-medium">Amount</th>
-                        <th className="px-5 py-3 font-medium">State</th>
-                        <th className="px-5 py-3 font-medium">Transaction</th>
-                        <th className="px-5 py-3 text-right font-medium">Actions</th>
+                        <th className="px-5 py-3 font-medium">{t("ui.destination")}</th>
+                        <th className="px-5 py-3 font-medium">{t("ui.amount")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.col.state")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.col.transaction")}</th>
+                        <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -266,10 +266,7 @@ export function RevenueView() {
             </Settled>
           </CardContent>
         </Card>
-        <p className="max-w-3xl text-xs text-muted-foreground">
-          A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be
-          cancelled — once processing, a broadcast may have landed and voiding it would double-pay.
-        </p>
+        <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.revenue.footnote")}</p>
       </StaggerItem>
     </AdminScreen>
   );
@@ -294,6 +291,7 @@ function MoneyCard({ label, value, hint, loading, emphasis }: { label: string; v
 }
 
 function RailChip({ rail, selected, onSelect }: { rail: RevenueRail; selected: boolean; onSelect: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -303,13 +301,14 @@ function RailChip({ rail, selected, onSelect }: { rail: RevenueRail; selected: b
         selected ? "border-primary bg-primary/10" : "border-border hover:bg-foreground/5"
       }`}
     >
-      <span className="block text-xs font-medium">{RAIL_LABELS[rail.network] ?? rail.network}</span>
-      <span className="block text-xs tabular-nums text-muted-foreground">{formatUsd(rail.instant)} instant</span>
+      <span className="block text-xs font-medium">{railLabel(rail.network, t)}</span>
+      <span className="block text-xs tabular-nums text-muted-foreground">{t("admin.revenue.instantSuffix", { amount: formatUsd(rail.instant) })}</span>
     </button>
   );
 }
 
 function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: boolean; onCancel: () => void }) {
+  const t = useT();
   const open = OPEN_STATES.has(payout.state);
   return (
     <tr>
@@ -321,7 +320,7 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
       </td>
       <td className="px-5 py-3 tabular-nums">{formatUsd(payout.amount)}</td>
       <td className="px-5 py-3">
-        <span className={stateTone(payout.state)}>{payout.state}</span>
+        <span className={stateTone(payout.state)}>{stateLabel(payout.state, t)}</span>
       </td>
       <td className="px-5 py-3 font-mono-tech text-xs text-muted-foreground" title={payout.tx_ref || undefined}>
         {payout.tx_ref ? shortAddr(payout.tx_ref) : "—"}
@@ -331,10 +330,11 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
           {payout.state === "queued" ? (
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onCancel}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-              Cancel
+              {t("ui.cancel")}
             </Button>
           ) : (
-            <span className="text-xs text-muted-foreground">{open ? "In flight" : "—"}</span>
+            <span className="text-xs text-muted-foreground">{open ? t("admin.revenue.inFlight") : "—"}</span>
+
           )}
         </div>
       </td>

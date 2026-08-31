@@ -7,13 +7,14 @@ import { Button } from "@evinvest/uikit";
 
 import { revokeSession, sessionsResource } from "@/entities/session/model/session-resource";
 import { isLocale } from "@evinvest/i18n";
-import { useLocale } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { relocalise } from "@/shared/config/base-path";
 import { writeLocaleCookie } from "@/shared/lib/locale-cookie";
 import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { InitialsAvatar } from "@/shared/ui/list-card";
@@ -42,15 +43,18 @@ import { SessionsSection } from "@/views/settings/ui/sessions-section";
 
 type Section = "general" | "security" | "sessions" | "notifications";
 
-const NAV: { id: Section; label: string; icon: LucideIcon }[] = [
-  { id: "general", label: "General", icon: User },
-  { id: "security", label: "Security", icon: Shield },
-  { id: "sessions", label: "Sessions & devices", icon: Monitor },
-  { id: "notifications", label: "Notifications", icon: Bell },
+// Module-scope, so the labels are catalogue keys rather than finished English — the rail
+// resolves them at render.
+const NAV: { id: Section; labelKey: string; icon: LucideIcon }[] = [
+  { id: "general", labelKey: "settings.nav.general", icon: User },
+  { id: "security", labelKey: "ui.security", icon: Shield },
+  { id: "sessions", labelKey: "ui.sessionsDevices", icon: Monitor },
+  { id: "notifications", labelKey: "nav.notifications", icon: Bell },
 ];
 
 export function SettingsView() {
   const locale = useLocale();
+  const t = useT();
   const [section, setSection] = useState<Section>("general");
   // The mobile stack: the root screen, or a section pushed on top of it.
   const [pushed, setPushed] = useState<"sessions" | "notifications" | null>(null);
@@ -69,8 +73,8 @@ export function SettingsView() {
   const { data: profile, error: profileError, isLoading: loading } = useResource(profileResource);
   const sessionList = useResource(sessionsResource);
   const sessions = sessionList.data;
-  const error = saveError ?? (profile ? null : (profileError?.message ?? null));
-  const sessionsError = revokeError ?? (sessions ? null : (sessionList.error?.message ?? null));
+  const error = saveError ?? (profile || !profileError ? null : errorMessage(profileError, t));
+  const sessionsError = revokeError ?? (sessions || !sessionList.error ? null : errorMessage(sessionList.error, t));
 
   // Seeded during render, not in an effect, so a cached profile fills the form on the frame
   // it is read. Held back while the form is dirty: a background refresh must not overwrite
@@ -83,7 +87,7 @@ export function SettingsView() {
   }
 
   const email = profile?.email ?? null;
-  const name = truncateName((profile?.legal_name ?? "").trim()) || displayName(email);
+  const name = truncateName((profile?.legal_name ?? "").trim()) || displayName(email, t);
   const dirty = !pristine;
 
   function set(key: keyof Form, value: string) {
@@ -92,10 +96,10 @@ export function SettingsView() {
   }
   async function save() {
     if (!form || saving) return;
-    const errors = validateProfileForm(form);
+    const errors = validateProfileForm(form, t);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setSaveError("Please fix the highlighted fields");
+      setSaveError(t("settings.fixHighlighted"));
       return;
     }
     setFieldErrors({});
@@ -132,7 +136,7 @@ export function SettingsView() {
         return;
       }
     } catch (e) {
-      setSaveError((e as Error).message);
+      setSaveError(errorMessage(e, t));
     } finally {
       setSaving(false);
     }
@@ -151,7 +155,7 @@ export function SettingsView() {
       // The revoke invalidates the session list, so it refreshes itself.
       await revokeSession(id);
     } catch (e) {
-      setRevokeError((e as Error).message);
+      setRevokeError(errorMessage(e, t));
     } finally {
       setBusy(false);
     }
@@ -164,7 +168,7 @@ export function SettingsView() {
     try {
       for (const s of others) await revokeSession(s.id!);
     } catch (e) {
-      setRevokeError((e as Error).message);
+      setRevokeError(errorMessage(e, t));
     } finally {
       setBusy(false);
     }
@@ -177,12 +181,13 @@ export function SettingsView() {
   return (
     <>
       <MobileAppBar
-        title={pushed === "sessions" ? "Sessions & devices" : pushed === "notifications" ? "Notifications" : "Settings"}
+        title={t(pushed === "sessions" ? "ui.sessionsDevices" : pushed === "notifications" ? "nav.notifications" : "nav.settings")}
         onBack={pushed ? () => setPushed(null) : undefined}
         right={
           dirty ? (
+            // i18n-max: 11 — a `shrink-0` Button in the app bar, beside the truncated title.
             <Button type="button" size="sm" onClick={save} disabled={saving} className="rounded-full font-semibold">
-              {saving && <Loader2 className="size-3.5 animate-spin" />} Save
+              {saving && <Loader2 className="size-3.5 animate-spin" />} {t("ui.save")}
             </Button>
           ) : pushed ? undefined : (
             <InitialsAvatar initials={initialsOfName(name, email)} className="size-8.5 text-sm" />
@@ -194,18 +199,22 @@ export function SettingsView() {
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
         <StaggerItem className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-            <p className="text-sm text-muted-foreground">Manage your account, security and access</p>
+            <h1 className="text-2xl font-semibold text-foreground">{t("nav.settings")}</h1>
+            <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
           </div>
           {section === "general" && (
+            // Both children are `shrink-0` beside a `min-w-0` heading column, so their
+            // combined width comes straight out of the page title.
             <div className="flex shrink-0 items-center gap-3">
               {saved && (
+                // i18n-max: 11
                 <span className="inline-flex items-center gap-1 text-sm font-medium text-main-accent-t2">
-                  <Check className="size-4" /> Saved
+                  <Check className="size-4" /> {t("ui.saved")}
                 </span>
               )}
+              {/* i18n-max: 20 */}
               <Button type="button" onClick={save} disabled={loading || saving || !dirty} className="rounded-lg font-semibold">
-                {saving && <Loader2 className="size-4 animate-spin" />} Save changes
+                {saving && <Loader2 className="size-4 animate-spin" />} {t("ui.saveChanges")}
               </Button>
             </div>
           )}
@@ -220,7 +229,7 @@ export function SettingsView() {
             arrived, and belongs to the save rather than to the screen. */}
         {saved && (
           <p className="inline-flex items-center gap-1 text-sm font-medium text-main-accent-t2 lg:hidden">
-            <Check className="size-4" /> Saved
+            <Check className="size-4" /> {t("ui.saved")}
           </p>
         )}
 
@@ -252,7 +261,7 @@ export function SettingsView() {
         {/* ── Desktop (Figma cabinet/settings) ─────────────────────────────── */}
         <StaggerItem className="hidden gap-6 lg:flex">
           {/* Hand-written rail — uikit has no section-nav component, so the items carry their own focus ring. */}
-          <nav aria-label="Settings sections" className="flex w-53 shrink-0 flex-col gap-1">
+          <nav aria-label={t("settings.a11y.sections")} className="flex w-53 shrink-0 flex-col gap-1">
             {NAV.map((item) => {
               const Icon = item.icon;
               const active = section === item.id;
@@ -268,7 +277,8 @@ export function SettingsView() {
                   )}
                 >
                   <Icon className="size-4.5" />
-                  {item.label}
+                  {/* i18n-max: 20 — a 212px rail row less the icon and padding. */}
+                  <span className="truncate">{t(item.labelKey)}</span>
                 </button>
               );
             })}

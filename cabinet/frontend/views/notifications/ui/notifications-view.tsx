@@ -1,5 +1,8 @@
 "use client";
 
+import type { Locale, Translate } from "@evinvest/i18n";
+import { useLocale, useT } from "@evinvest/i18n/react";
+
 import { Bell } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useEffect, useState } from "react";
@@ -9,6 +12,7 @@ import { markRead, notificationsResource } from "@/entities/notification/model/n
 import { publishUnreadCount } from "@/entities/notification/model/notification-store";
 import type { Notification } from "@/shared/contracts/notifications";
 import { isUnread, toDate } from "@/shared/contracts/notifications";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
@@ -38,6 +42,8 @@ type Filter = "all" | "unread";
  * settings here just to tell them apart.
  */
 export function NotificationsView() {
+  const t = useT();
+  const locale = useLocale();
   const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -63,7 +69,7 @@ export function NotificationsView() {
   const items = page ? [...page.notifications, ...older] : null;
   const nextCursor = cursor ?? page?.next_cursor ?? "";
   const unread = page?.unread_count ?? 0;
-  const error = pageError ?? (page || !first.error ? null : (first.error.message || "could not load notifications"));
+  const error = pageError ?? (page || !first.error ? null : errorMessage(first.error, t));
 
   // The badge in the rail reads the same count this page just learned, without its own poll.
   // In an effect, not during render: it writes to a store other components subscribe to.
@@ -79,7 +85,7 @@ export function NotificationsView() {
       setOlder((prev) => [...prev, ...next.notifications]);
       setCursor(next.next_cursor);
     } catch (e) {
-      setPageError(e instanceof Error ? e.message : "could not load more");
+      setPageError(errorMessage(e, t));
     } finally {
       setBusy(false);
     }
@@ -93,7 +99,7 @@ export function NotificationsView() {
       // that just changed should leave the list, which no local edit would do.
       await markRead();
     } catch (e) {
-      setPageError(e instanceof Error ? e.message : "could not mark as read");
+      setPageError(errorMessage(e, t));
     } finally {
       setBusy(false);
     }
@@ -124,11 +130,11 @@ export function NotificationsView() {
     <Stagger step={SECTION_STAGGER} className="mx-auto w-full max-w-282 px-4 py-6 sm:px-6 lg:px-8">
       <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-foreground">Notifications</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Everything you follow — and how you hear about it</p>
+          <h1 className="text-3xl font-semibold text-foreground">{t("nav.notifications")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("notif.subtitle")}</p>
         </div>
         <button type="button" onClick={markAll} disabled={busy || unread === 0} className={GHOST_BUTTON}>
-          Mark all read
+          {t("notif.markAllRead")}
         </button>
       </StaggerItem>
 
@@ -147,7 +153,8 @@ export function NotificationsView() {
               filter === f ? "bg-primary font-semibold text-primary-foreground" : "font-medium text-foreground hover:bg-foreground/5",
             )}
           >
-            {f === "all" ? "All" : unread > 0 ? `Unread · ${unread}` : "Unread"}
+            {/* i18n-max: 14 — two pills in an `inline-flex` bar that cannot wrap. */}
+            {f === "all" ? t("ui.all") : unread > 0 ? t("notif.unreadCount", { n: unread }) : t("notif.unread")}
           </button>
         ))}
       </StaggerItem>
@@ -172,11 +179,11 @@ export function NotificationsView() {
             ))}
           </ul>
         ) : items.length === 0 ? (
-          <EmptyState filter={filter} />
+          <EmptyState filter={filter} t={t} />
         ) : (
           <ul>
             {items.map((n, i) => (
-              <Row key={n.id} n={n} first={i === 0} onOpen={() => void open(n)} />
+              <Row key={n.id} n={n} first={i === 0} onOpen={() => void open(n)} locale={locale} t={t} />
             ))}
           </ul>
         )}
@@ -185,7 +192,7 @@ export function NotificationsView() {
       {nextCursor && items && items.length > 0 && (
         <StaggerItem className="mt-4 flex justify-center">
           <button type="button" onClick={loadMore} disabled={busy} className={GHOST_BUTTON}>
-            {busy ? "Loading…" : "Load older"}
+            {busy ? t("ui.loading") : t("notif.loadOlder")}
           </button>
         </StaggerItem>
       )}
@@ -193,7 +200,7 @@ export function NotificationsView() {
   );
 }
 
-function Row({ n, first, onOpen }: { n: Notification; first: boolean; onOpen: () => void }) {
+function Row({ n, first, onOpen, locale, t }: { n: Notification; first: boolean; onOpen: () => void; locale: Locale; t: Translate }) {
   const unread = isUnread(n);
   const body = (
     <div className={cn("flex items-center gap-3.5 text-left", ROW_PAD, unread && "bg-foreground/5")}>
@@ -205,7 +212,7 @@ function Row({ n, first, onOpen }: { n: Notification; first: boolean; onOpen: ()
         {n.body && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</p>}
       </div>
       <time className="shrink-0 text-xs tabular-nums text-muted-foreground" dateTime={toDate(n.created_at)?.toISOString()}>
-        {formatWhen(n.created_at)}
+        {formatWhen(n.created_at, locale, t)}
       </time>
     </div>
   );
@@ -225,36 +232,35 @@ function Row({ n, first, onOpen }: { n: Notification; first: boolean; onOpen: ()
   );
 }
 
-function EmptyState({ filter }: { filter: Filter }) {
+function EmptyState({ filter, t }: { filter: Filter; t: Translate }) {
   return (
     <div className="flex flex-col items-center px-10 py-16 text-center">
       <span className="flex size-14 items-center justify-center rounded-xl bg-main-accent-t1/15">
         <Bell className="size-6 text-main-accent-t1" />
       </span>
-      <p className="mt-5 text-base font-semibold text-foreground">{filter === "unread" ? "Nothing unread" : "Nothing yet"}</p>
-      <p className="mt-2 max-w-108 text-sm text-muted-foreground">
-        {filter === "unread"
-          ? "You're all caught up."
-          : "Follow a fund and its NAV updates, distributions and research notes land here — and in your inbox too, if you want a copy."}
-      </p>
+      <p className="mt-5 text-base font-semibold text-foreground">{t(filter === "unread" ? "notif.nothingUnread" : "notif.nothingYet")}</p>
+      <p className="mt-2 max-w-108 text-sm text-muted-foreground">{t(filter === "unread" ? "notif.allCaughtUp" : "notif.emptyHint")}</p>
       <Link
         href="/settings"
         className={cn("mt-5 rounded-lg border border-border px-5.5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-foreground/5", FOCUS)}
       >
-        Notification settings
+        {t("notif.settingsLink")}
       </Link>
     </div>
   );
 }
 
-/** Relative for the first day, then a plain date — matching how the inbox is scanned. */
-function formatWhen(unixSeconds: string): string {
+/** Relative for the first day, then a plain date — matching how the inbox is scanned.
+ *  The date is formatted for the active locale, not the browser's: the cabinet's language
+ *  comes from the URL, and someone reading in Russian on an English machine was getting
+ *  "3 Sep" beside Russian copy. */
+function formatWhen(unixSeconds: string, locale: Locale, t: Translate): string {
   const d = toDate(unixSeconds);
   if (!d) return "";
   const mins = Math.floor((Date.now() - d.getTime()) / 60_000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  if (mins < 60 * 24) return `${Math.floor(mins / 60)}h`;
-  if (mins < 60 * 24 * 7) return `${Math.floor(mins / (60 * 24))}d`;
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (mins < 1) return t("notif.when.now");
+  if (mins < 60) return t("notif.when.minutes", { n: mins });
+  if (mins < 60 * 24) return t("notif.when.hours", { n: Math.floor(mins / 60) });
+  if (mins < 60 * 24 * 7) return t("notif.when.days", { n: Math.floor(mins / (60 * 24)) });
+  return d.toLocaleDateString(locale, { day: "numeric", month: "short" });
 }

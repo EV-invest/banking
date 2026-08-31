@@ -7,6 +7,7 @@ import { Link } from "@/shared/ui/cabinet-link";
 import { Skeleton } from "@evinvest/uikit";
 
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { StaggerItem } from "@/shared/ui/motion";
@@ -24,7 +25,7 @@ export function WalletOverviewView() {
   // any of them shows the figure immediately and refreshes it behind the number. A failed
   // refresh reports itself without blanking what is already on screen.
   const { data: wallet, error: failure, isLoading: loading } = useResource(walletResource);
-  const error = wallet ? null : (failure?.message ?? null);
+  const error = wallet ? null : failure ? errorMessage(failure, t) : null;
 
   const balance = wallet?.balance;
 
@@ -37,7 +38,7 @@ export function WalletOverviewView() {
   return (
     <WalletScreen
       title={t("ui.wallet")}
-      subtitle="One USDT balance · networks are deposit / withdrawal rails"
+      subtitle={t("wallet.overviewSub")}
       actions={
         <>
           <Link href="/wallet/deposit" className={cn(WALLET_CTA, "px-4 py-2.5 text-sm")}>
@@ -59,7 +60,7 @@ export function WalletOverviewView() {
         <StaggerItem className={cn(WALLET_CARD, "flex gap-3 border-destructive/50 p-4.5 lg:p-6")}>
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">Couldn&apos;t load your wallet</p>
+            <p className="text-sm font-semibold text-foreground">{t("err.walletLoad")}</p>
             <p className="text-xs text-muted-foreground">{error}</p>
           </div>
         </StaggerItem>
@@ -78,15 +79,19 @@ export function WalletOverviewView() {
           </div>
           {/* `wallet.balance.model` is a section-type tip (a descriptor block, not an inline ⓘ),
               so it would break this row — the chips carry the inline tips instead. */}
-          <p className="hidden whitespace-nowrap text-sm text-muted-foreground lg:block">≈ ${formatUsdt(balance?.total)} · one fungible balance</p>
+          <p className="hidden whitespace-nowrap text-sm text-muted-foreground lg:block">{t("wallet.oneFungibleBalance", { amount: formatUsdt(balance?.total) })}</p>
         </div>
+        {/* Three equal columns at 390px leave ~76px for a label, which is why the short
+            forms exist at all. i18n-max: 7 on every `label`; the `wideLabel` forms only
+            render from `lg`, where the chips size to their content. */}
         <div className="grid grid-cols-3 gap-2.5 lg:flex lg:shrink-0">
-          <Chip label="AVAIL" wideLabel="AVAILABLE" dot="bg-main-accent-t2" value={balance?.available} loading={loading} tip="wallet.balance.available" />
-          <Chip label="INVEST" wideLabel="INVESTED" dot="bg-main-accent-t3" value={balance?.invested} loading={loading} tip="wallet.balance.invested" />
-          <Chip label={t("wallet.pendWd")} wideLabel="PENDING WD" dot="bg-main-accent-t1" value={balance?.pending_withdrawal} loading={loading} tip="wallet.balance.pending-withdrawal" />
+          <Chip label={t("wallet.chip.availShort")} wideLabel={t("wallet.chip.avail")} dot="bg-main-accent-t2" value={balance?.available} loading={loading} tip="wallet.balance.available" />
+          <Chip label={t("wallet.chip.investShort")} wideLabel={t("wallet.chip.invest")} dot="bg-main-accent-t3" value={balance?.invested} loading={loading} tip="wallet.balance.invested" />
+          <Chip label={t("wallet.pendWd")} wideLabel={t("wallet.chip.pendingWd")} dot="bg-main-accent-t1" value={balance?.pending_withdrawal} loading={loading} tip="wallet.balance.pending-withdrawal" />
         </div>
       </StaggerItem>
 
+      {/* Three equal buttons across a 390px phone, ~113px each. i18n-max: 11 on all three. */}
       <StaggerItem className="grid grid-cols-3 gap-2 lg:hidden">
         <Link href="/wallet/deposit" className={cn(WALLET_CTA, "py-2.5 text-sm")}>
           {t("ui.deposit")}
@@ -105,7 +110,7 @@ export function WalletOverviewView() {
         <Link href="/wallet/activity" className="rounded-md text-xs text-main-accent-t1 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
           {t("ui.activity")}
         </Link>
-        <p className="hidden text-xs text-muted-foreground lg:block">deposit &amp; withdrawal rails</p>
+        <p className="hidden text-xs text-muted-foreground lg:block">{t("wallet.railsCaption")}</p>
       </StaggerItem>
 
       {/* One item for all three branches: the rails are a single section of this screen
@@ -119,7 +124,7 @@ export function WalletOverviewView() {
             <Skeleton className="hidden h-31 rounded-xl xl:block" />
           </div>
         ) : rails.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No deposit or withdrawal rails are available right now — check back soon.</p>
+          <p className="text-sm text-muted-foreground">{t("wallet.noRails")}</p>
         ) : (
           <div className="grid gap-3.5 lg:grid-cols-2 lg:gap-5 xl:grid-cols-3">
             {rails.map((network) => (
@@ -159,7 +164,7 @@ function RailCard({ network, canDeposit, canWithdraw }: { network: string; canDe
         <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold lg:size-8.5 lg:rounded-lg lg:text-sm", rail.tone)}>{rail.badge}</span>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-foreground">{rail.label}</p>
-          <p className="truncate text-xs text-muted-foreground">{rail.chain}</p>
+          <p className="truncate text-xs text-muted-foreground">{t(rail.chainKey)}</p>
         </div>
       </div>
       <div className="flex gap-2">
@@ -177,9 +182,10 @@ function RailCard({ network, canDeposit, canWithdraw }: { network: string; canDe
 // An unavailable direction stays visible but inert, so the card reads the same on every rail
 // and the missing capability is legible rather than silently absent.
 function RailAction({ href, enabled, className, children }: { href: `/${string}`; enabled: boolean; className: string; children: string }) {
+  const t = useT();
   if (!enabled) {
     return (
-      <span aria-disabled className={cn(className, "flex-1 cursor-not-allowed py-2 text-xs opacity-40")} title={`${children} is not available on this rail yet`}>
+      <span aria-disabled className={cn(className, "flex-1 cursor-not-allowed py-2 text-xs opacity-40")} title={t("wallet.railActionUnavailable", { action: children })}>
         {children}
       </span>
     );

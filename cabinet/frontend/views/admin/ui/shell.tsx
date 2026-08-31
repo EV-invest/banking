@@ -7,16 +7,19 @@
 
 import type { ReactNode } from "react";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { cn } from "@/shared/lib/cn";
 import { usePlatform } from "@/shared/lib/use-platform";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { statusTone } from "@/views/admin/lib/format";
 
 // Server-truthful environment (the BFF's APP_ENV); anything unrecognised — including
-// the default "development" — reads as DEV.
-const ENV_BADGES: Record<string, { label: string; tone: string }> = {
-  production: { label: "PROD", tone: "text-main-accent-t2" },
-  staging: { label: "STAGING", tone: "text-main-accent-t3" },
+// the default "development" — reads as DEV. The badge carries a catalogue key rather than
+// a finished word: this map is module scope, where no hook can run.
+const ENV_BADGES: Record<string, { labelKey: string; tone: string }> = {
+  production: { labelKey: "admin.env.prod", tone: "text-main-accent-t2" },
+  staging: { labelKey: "admin.env.staging", tone: "text-main-accent-t3" },
 };
 
 /**
@@ -36,8 +39,9 @@ export function AdminScreen({ className, children }: { className?: string; child
 }
 
 export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle: string; action?: ReactNode }) {
+  const t = useT();
   const environment = usePlatform()?.environment;
-  const badge = environment ? (ENV_BADGES[environment] ?? { label: "DEV", tone: "text-muted-foreground" }) : null;
+  const badge = environment ? (ENV_BADGES[environment] ?? { labelKey: "admin.env.dev", tone: "text-muted-foreground" }) : null;
   return (
     <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
@@ -47,9 +51,10 @@ export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: str
       </div>
       <div className="flex items-center gap-3">
         {badge && (
-          <span className={cn("inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium", badge.tone)}>
+          // i18n-max: 8 — a pill beside the header's action slot; it must not wrap.
+          <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border px-2.5 py-1 text-xs font-medium", badge.tone)}>
             <span className="size-1.5 rounded-full bg-current" />
-            {badge.label}
+            {t(badge.labelKey)}
           </span>
         )}
         {action}

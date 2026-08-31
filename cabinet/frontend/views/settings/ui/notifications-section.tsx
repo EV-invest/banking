@@ -16,6 +16,7 @@ import {
 } from "@/entities/notification/model/notification-resource";
 import { refreshUnreadCount } from "@/entities/notification/model/notification-store";
 import type { NotificationSettings } from "@/shared/contracts/notifications";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Hairline, ListCard, ListCardTitle, Row, RowLabel } from "@/shared/ui/list-card";
@@ -39,7 +40,7 @@ export function NotificationsSection() {
   const settings = read.data ?? null;
   // Only a read that has actually failed reports — while it is still in flight there is
   // nothing wrong, and the skeleton switches below are the right thing to show.
-  const error = writeError ?? (settings || !read.error ? null : (read.error.message || "could not load notification settings"));
+  const error = writeError ?? (settings || !read.error ? null : errorMessage(read.error, t));
 
   async function run(fn: () => Promise<NotificationSettings>) {
     setBusy(true);
@@ -50,7 +51,7 @@ export function NotificationsSection() {
       // sidebar has no other reason to refetch.
       void refreshUnreadCount();
     } catch (e) {
-      setWriteError(e instanceof Error ? e.message : "could not save");
+      setWriteError(errorMessage(e, t));
     } finally {
       setBusy(false);
     }
@@ -63,16 +64,16 @@ export function NotificationsSection() {
   return (
     <div className="flex flex-col gap-4 lg:gap-4.5">
       <ListCard className="lg:px-5.5">
-        <ListCardTitle sub="Choose where notifications reach you. Both can be off.">Delivery</ListCardTitle>
+        <ListCardTitle sub={t("notif.deliverySub")}>{t("notif.delivery")}</ListCardTitle>
         <Hairline />
         <Row>
-          <RowLabel title={t("ui.inYourCabinet")} sub="On by default. Turn this off and notifications stop appearing in your cabinet." />
+          <RowLabel title={t("ui.inYourCabinet")} sub={t("notif.inAppSub")} />
           {settings ? (
             <Switch
               checked={settings.in_app_enabled}
               disabled={busy}
               onCheckedChange={(v) => void run(() => setChannelEnabled("in_app", v))}
-              aria-label="In-app notifications"
+              aria-label={t("notif.a11y.inApp")}
             />
           ) : (
             <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
@@ -82,14 +83,14 @@ export function NotificationsSection() {
         <Row>
           <RowLabel
             title={t("ui.email")}
-            sub={settings ? (settings.email_verified ? `Sent to ${settings.email} · verified` : `${settings.email} · unverified, so email is not sent`) : undefined}
+            sub={settings ? t(settings.email_verified ? "notif.emailVerified" : "notif.emailUnverified", { email: settings.email }) : undefined}
           />
           {settings ? (
             <Switch
               checked={settings.email_enabled}
               disabled={busy || !settings.email_verified}
               onCheckedChange={(v) => void run(() => setChannelEnabled("email", v))}
-              aria-label="Email notifications"
+              aria-label={t("notif.a11y.email")}
             />
           ) : (
             <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
@@ -99,38 +100,46 @@ export function NotificationsSection() {
 
       <ListCard className="lg:px-5.5">
         <div className="flex items-start justify-between gap-4">
-          <ListCardTitle sub="Email a copy for these. Unsubscribing is one click — no confirmation step.">What you follow</ListCardTitle>
-          <p className="shrink-0 pt-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Email</p>
+          <ListCardTitle sub={t("notif.topicsSub")}>{t("notif.whatYouFollow")}</ListCardTitle>
+          {/* i18n-max: 12 — `shrink-0` uppercase column header with `tracking-widest`. */}
+          <p className="shrink-0 pt-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("ui.email")}</p>
         </div>
         {settings
-          ? settings.topics.map((t) => (
-              <div key={t.topic}>
+          ? // Named `topic`, not `t`: the translator is bound above and a `t` here would
+            // shadow it silently — every `t(...)` inside the loop would be a topic row.
+            settings.topics.map((topic) => (
+              <div key={topic.topic}>
                 <Hairline />
                 {/* Wraps rather than switching at a breakpoint: the controls drop under
                     the label only when they genuinely do not fit, so the row is correct at
                     every width instead of at two. The `sm:` variants this replaced were
                     rendering as a permanent centred column — see the PR for detail. */}
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-3.5">
-                  <RowLabel title={t.label} sub={t.description} />
+                  {/* Topic label and description are server data — they arrive already
+                      worded from `NotificationSettings.topics` and render verbatim, so
+                      they stay English until the hub localises them. */}
+                  <RowLabel title={topic.label} sub={topic.description} />
                   <div className="flex shrink-0 items-center gap-3">
                     {/* Kept hand-written: at 28px it is shorter than uikit's smallest Button, and
                         growing it would push the switch beside it out of the row. */}
+                    {/* i18n-max: 12 — the row wraps rather than clips, but a longer label
+                        drops the controls onto their own line on every phone. */}
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void run(() => setTopicSubscription(t.topic, !t.subscribed, t.email_enabled))}
+                      onClick={() => void run(() => setTopicSubscription(topic.topic, !topic.subscribed, topic.email_enabled))}
                       className={cn(
                         "rounded-lg px-3 py-1.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-                        t.subscribed ? "border border-border/60 text-foreground hover:bg-foreground/5" : "border border-main-accent-t1/50 text-main-accent-t1 hover:bg-main-accent-t1/10",
+                        topic.subscribed ? "border border-border/60 text-foreground hover:bg-foreground/5" : "border border-main-accent-t1/50 text-main-accent-t1 hover:bg-main-accent-t1/10",
                       )}
                     >
-                      {t.subscribed ? "Following" : "Follow"}
+                      {topic.subscribed ? t("notif.following") : t("notif.follow")}
                     </button>
                     <Switch
-                      checked={t.subscribed && t.email_enabled && settings.email_enabled}
-                      disabled={busy || !t.subscribed || !settings.email_enabled}
-                      onCheckedChange={(v) => void run(() => setTopicSubscription(t.topic, true, v))}
-                      aria-label={`Email copy for ${t.label}`}
+                      checked={topic.subscribed && topic.email_enabled && settings.email_enabled}
+                      disabled={busy || !topic.subscribed || !settings.email_enabled}
+                      onCheckedChange={(v) => void run(() => setTopicSubscription(topic.topic, true, v))}
+                      aria-label={t("notif.a11y.emailCopyFor", { topic: topic.label })}
                     />
                   </div>
                 </div>
@@ -148,9 +157,7 @@ export function NotificationsSection() {
       </ListCard>
 
       {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        Turn a channel off and we stop sending on it. Turn both off and we stop notifying you altogether — updates still live on the fund pages whenever you want them.
-      </p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{t("notif.channelsFootnote")}</p>
     </div>
   );
 }

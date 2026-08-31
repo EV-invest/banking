@@ -273,8 +273,15 @@ function NavLink({ item, active, section, appear, trailing }: { item: NavItem; a
       )}
     >
       {active && <ActivePill section={section} appear={appear} />}
-      <Icon className="size-4.5" />
-      <span className="flex-1">{t(item.key)}</span>
+      <Icon className="size-4.5 shrink-0" />
+      {/* `min-w-0` for the same reason as the mobile tab bar: without it the
+          label refuses to shrink below its own text, and the rail widens to fit
+          the longest translation instead of the label truncating inside it —
+          German "Benachrichtigungen" and "Bewertung & Rücknahmen" are both wider
+          than the rail. `title` keeps the full label reachable. */}
+      <span className="min-w-0 flex-1 truncate" title={t(item.key)}>
+        {t(item.key)}
+      </span>
       {trailing}
     </Link>
   );
