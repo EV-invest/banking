@@ -159,6 +159,90 @@
     "en": "Filter operations by kind",
     "t": "Lọc giao dịch theo loại"
   },
+  "status.backHome": {
+    "en": "Back to home",
+    "t": "Về trang chủ"
+  },
+  "status.contactTeam": {
+    "en": "Contact the team",
+    "t": "Liên hệ đội ngũ"
+  },
+  "status.forbidden.eyebrow": {
+    "en": "Access forbidden",
+    "t": "Truy cập bị từ chối"
+  },
+  "status.forbidden.headlineAccent": {
+    "en": "private",
+    "t": "riêng tư"
+  },
+  "status.forbidden.headlineLead": {
+    "en": "This harbour is ",
+    "t": "Bến cảng này là "
+  },
+  "status.forbidden.subtext": {
+    "en": "You don't have the credentials to view this page. If you believe you should, our team can open the right doors.",
+    "t": "Bạn không có quyền xem trang này. Nếu bạn cho rằng mình nên có, đội ngũ của chúng tôi có thể mở đúng cánh cửa."
+  },
+  "status.notFound.eyebrow": {
+    "en": "Page not found",
+    "t": "Không tìm thấy trang"
+  },
+  "status.notFound.headlineAccent": {
+    "en": "open water",
+    "t": "vùng biển khơi"
+  },
+  "status.notFound.headlineLead": {
+    "en": "You've reached ",
+    "t": "Bạn đã ra tới "
+  },
+  "status.notFound.subtext": {
+    "en": "The page you're looking for has drifted off our coastline — moved, renamed, or never charted. Let's get you back to shore.",
+    "t": "Trang bạn tìm đã trôi khỏi bờ biển của chúng tôi — được chuyển đi, đổi tên, hoặc chưa từng có trên hải đồ. Hãy để chúng tôi đưa bạn về bờ."
+  },
+  "status.requestAccess": {
+    "en": "Request access",
+    "t": "Yêu cầu quyền truy cập"
+  },
+  "status.serverError.eyebrow": {
+    "en": "Server error",
+    "t": "Lỗi máy chủ"
+  },
+  "status.serverError.headlineAccent": {
+    "en": "recalibrating",
+    "t": "hiệu chỉnh lại"
+  },
+  "status.serverError.headlineLead": {
+    "en": "Our systems are ",
+    "t": "Hệ thống của chúng tôi đang "
+  },
+  "status.serverError.subtext": {
+    "en": "Something broke on our end — not yours. We've been alerted and are restoring service. Please try again in a moment.",
+    "t": "Sự cố xảy ra từ phía chúng tôi — không phải từ bạn. Chúng tôi đã được cảnh báo và đang khôi phục dịch vụ. Vui lòng thử lại sau giây lát."
+  },
+  "status.signIn": {
+    "en": "Sign in",
+    "t": "Đăng nhập"
+  },
+  "status.tryAgain": {
+    "en": "Try again",
+    "t": "Thử lại"
+  },
+  "status.unauthorized.eyebrow": {
+    "en": "Sign-in required",
+    "t": "Cần đăng nhập"
+  },
+  "status.unauthorized.headlineAccent": {
+    "en": "crew only",
+    "t": "chỉ dành cho thủy thủ đoàn"
+  },
+  "status.unauthorized.headlineLead": {
+    "en": "This deck is ",
+    "t": "Boong tàu này "
+  },
+  "status.unauthorized.subtext": {
+    "en": "You need to be signed in to view this page. Sign in and we'll bring you right back.",
+    "t": "Bạn cần đăng nhập để xem trang này. Hãy đăng nhập và chúng tôi sẽ đưa bạn trở lại ngay."
+  },
   "ui.account": {
     "en": "Account",
     "t": "Tài khoản"

@@ -159,6 +159,90 @@
     "en": "Filter operations by kind",
     "t": "Vorgänge nach Art filtern"
   },
+  "status.backHome": {
+    "en": "Back to home",
+    "t": "Zurück zur Startseite"
+  },
+  "status.contactTeam": {
+    "en": "Contact the team",
+    "t": "Team kontaktieren"
+  },
+  "status.forbidden.eyebrow": {
+    "en": "Access forbidden",
+    "t": "Zugriff verweigert"
+  },
+  "status.forbidden.headlineAccent": {
+    "en": "private",
+    "t": "privat"
+  },
+  "status.forbidden.headlineLead": {
+    "en": "This harbour is ",
+    "t": "Dieser Hafen ist "
+  },
+  "status.forbidden.subtext": {
+    "en": "You don't have the credentials to view this page. If you believe you should, our team can open the right doors.",
+    "t": "Ihnen fehlen die Berechtigungen für diese Seite. Sollte das ein Irrtum sein, öffnet unser Team Ihnen die richtigen Türen."
+  },
+  "status.notFound.eyebrow": {
+    "en": "Page not found",
+    "t": "Seite nicht gefunden"
+  },
+  "status.notFound.headlineAccent": {
+    "en": "open water",
+    "t": "offener See"
+  },
+  "status.notFound.headlineLead": {
+    "en": "You've reached ",
+    "t": "Sie sind auf "
+  },
+  "status.notFound.subtext": {
+    "en": "The page you're looking for has drifted off our coastline — moved, renamed, or never charted. Let's get you back to shore.",
+    "t": "Die gesuchte Seite ist von unserer Küste abgetrieben — verschoben, umbenannt oder nie verzeichnet. Bringen wir Sie zurück an Land."
+  },
+  "status.requestAccess": {
+    "en": "Request access",
+    "t": "Zugang anfragen"
+  },
+  "status.serverError.eyebrow": {
+    "en": "Server error",
+    "t": "Serverfehler"
+  },
+  "status.serverError.headlineAccent": {
+    "en": "recalibrating",
+    "t": "justieren nach"
+  },
+  "status.serverError.headlineLead": {
+    "en": "Our systems are ",
+    "t": "Unsere Systeme "
+  },
+  "status.serverError.subtext": {
+    "en": "Something broke on our end — not yours. We've been alerted and are restoring service. Please try again in a moment.",
+    "t": "Auf unserer Seite ist etwas ausgefallen — nicht auf Ihrer. Wir sind alarmiert und stellen den Dienst wieder her. Bitte versuchen Sie es gleich erneut."
+  },
+  "status.signIn": {
+    "en": "Sign in",
+    "t": "Anmelden"
+  },
+  "status.tryAgain": {
+    "en": "Try again",
+    "t": "Erneut versuchen"
+  },
+  "status.unauthorized.eyebrow": {
+    "en": "Sign-in required",
+    "t": "Anmeldung erforderlich"
+  },
+  "status.unauthorized.headlineAccent": {
+    "en": "crew only",
+    "t": "nur für die Crew"
+  },
+  "status.unauthorized.headlineLead": {
+    "en": "This deck is ",
+    "t": "Dieses Deck ist "
+  },
+  "status.unauthorized.subtext": {
+    "en": "You need to be signed in to view this page. Sign in and we'll bring you right back.",
+    "t": "Sie müssen angemeldet sein, um diese Seite zu sehen. Melden Sie sich an — wir bringen Sie direkt zurück."
+  },
   "ui.account": {
     "en": "Account",
     "t": "Konto"

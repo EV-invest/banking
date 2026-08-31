@@ -159,6 +159,90 @@
     "en": "Filter operations by kind",
     "t": "Фильтровать операции по типу"
   },
+  "status.backHome": {
+    "en": "Back to home",
+    "t": "На главную"
+  },
+  "status.contactTeam": {
+    "en": "Contact the team",
+    "t": "Связаться с командой"
+  },
+  "status.forbidden.eyebrow": {
+    "en": "Access forbidden",
+    "t": "Доступ закрыт"
+  },
+  "status.forbidden.headlineAccent": {
+    "en": "private",
+    "t": "частная"
+  },
+  "status.forbidden.headlineLead": {
+    "en": "This harbour is ",
+    "t": "Эта гавань — "
+  },
+  "status.forbidden.subtext": {
+    "en": "You don't have the credentials to view this page. If you believe you should, our team can open the right doors.",
+    "t": "У вас нет прав для просмотра этой страницы. Если вы считаете, что это ошибка, наша команда откроет нужные двери."
+  },
+  "status.notFound.eyebrow": {
+    "en": "Page not found",
+    "t": "Страница не найдена"
+  },
+  "status.notFound.headlineAccent": {
+    "en": "open water",
+    "t": "открытое море"
+  },
+  "status.notFound.headlineLead": {
+    "en": "You've reached ",
+    "t": "Вы вышли в "
+  },
+  "status.notFound.subtext": {
+    "en": "The page you're looking for has drifted off our coastline — moved, renamed, or never charted. Let's get you back to shore.",
+    "t": "Страницу, которую вы ищете, унесло от нашего побережья — её перенесли, переименовали или никогда не наносили на карту. Вернём вас на берег."
+  },
+  "status.requestAccess": {
+    "en": "Request access",
+    "t": "Запросить доступ"
+  },
+  "status.serverError.eyebrow": {
+    "en": "Server error",
+    "t": "Ошибка сервера"
+  },
+  "status.serverError.headlineAccent": {
+    "en": "recalibrating",
+    "t": "перенастраиваются"
+  },
+  "status.serverError.headlineLead": {
+    "en": "Our systems are ",
+    "t": "Наши системы "
+  },
+  "status.serverError.subtext": {
+    "en": "Something broke on our end — not yours. We've been alerted and are restoring service. Please try again in a moment.",
+    "t": "Что-то сломалось на нашей стороне — не на вашей. Мы уже знаем об этом и восстанавливаем работу. Попробуйте через минуту."
+  },
+  "status.signIn": {
+    "en": "Sign in",
+    "t": "Войти"
+  },
+  "status.tryAgain": {
+    "en": "Try again",
+    "t": "Попробовать снова"
+  },
+  "status.unauthorized.eyebrow": {
+    "en": "Sign-in required",
+    "t": "Требуется вход"
+  },
+  "status.unauthorized.headlineAccent": {
+    "en": "crew only",
+    "t": "только для экипажа"
+  },
+  "status.unauthorized.headlineLead": {
+    "en": "This deck is ",
+    "t": "Эта палуба — "
+  },
+  "status.unauthorized.subtext": {
+    "en": "You need to be signed in to view this page. Sign in and we'll bring you right back.",
+    "t": "Чтобы открыть эту страницу, нужно войти. Войдите — и мы вернём вас сюда же."
+  },
   "ui.account": {
     "en": "Account",
     "t": "Аккаунт"
