@@ -10,6 +10,7 @@
 import type { Locale, Translate } from "@evinvest/i18n";
 
 import type { Operation } from "@/shared/contracts";
+import { intlLocale } from "@/shared/lib/intl-locale";
 
 export { formatUnits, formatUsdt, shortAddress } from "@/shared/lib/money";
 // Rails already have one display vocabulary on the wallet surface — a timeline row must
@@ -160,14 +161,6 @@ const DAY_MS = 86_400_000;
 
 function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-}
-
-// The dates used to be pinned to `en-GB`, so a Russian reader's timeline was headed by
-// English months and read the clock in an English convention. `en` keeps the British
-// ordering the cabinet has always rendered ("12 Mar 2026"); the other four locales get
-// their own.
-function intlLocale(locale: Locale): string {
-  return locale === "en" ? "en-GB" : locale;
 }
 
 function daysAgo(unixSeconds: number, now: Date): number {

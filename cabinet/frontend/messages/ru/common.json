@@ -680,88 +680,96 @@
     "t": "Больше {instant}, которые уходят по этому каналу сразу, — остаток принимается и ставится в очередь до пополнения казначейства."
   },
   "admin.role.admin": {
-    "en": "admin",
-    "t": "админ"
+    "en": "Admin",
+    "t": "Админ"
   },
   "admin.role.investor": {
-    "en": "investor",
-    "t": "инвестор"
+    "en": "Investor",
+    "t": "Инвестор"
   },
   "admin.role.operator": {
-    "en": "operator",
-    "t": "оператор"
+    "en": "Operator",
+    "t": "Оператор"
   },
   "admin.role.owner": {
-    "en": "owner",
-    "t": "владелец"
+    "en": "Owner",
+    "t": "Владелец"
   },
   "admin.settle": {
     "en": "Settle",
     "t": "Исполнить"
   },
   "admin.state.cancelled": {
-    "en": "cancelled",
-    "t": "отменено"
+    "en": "Cancelled",
+    "t": "Отменено"
   },
   "admin.state.closed": {
-    "en": "closed",
-    "t": "закрыт"
+    "en": "Closed",
+    "t": "Закрыт"
   },
   "admin.state.completed": {
-    "en": "completed",
-    "t": "завершено"
+    "en": "Completed",
+    "t": "Завершено"
   },
   "admin.state.draft": {
-    "en": "draft",
-    "t": "черновик"
+    "en": "Draft",
+    "t": "Черновик"
   },
   "admin.state.failed": {
-    "en": "failed",
-    "t": "ошибка"
+    "en": "Failed",
+    "t": "Не выполнено"
   },
   "admin.state.open": {
-    "en": "open",
-    "t": "открыт"
+    "en": "Open",
+    "t": "Открыт"
   },
   "admin.state.processing": {
-    "en": "processing",
-    "t": "обработка"
+    "en": "Processing",
+    "t": "В обработке"
   },
   "admin.state.queued": {
-    "en": "queued",
-    "t": "очередь"
+    "en": "Queued",
+    "t": "В очереди"
   },
   "admin.status.active": {
-    "en": "active",
-    "t": "активен"
+    "en": "Active",
+    "t": "Активен"
   },
   "admin.status.blocked": {
-    "en": "blocked",
-    "t": "заблокирован"
+    "en": "Blocked",
+    "t": "Заблокирован"
   },
   "admin.status.degraded": {
-    "en": "degraded",
-    "t": "деградация"
+    "en": "Degraded",
+    "t": "Деградация"
   },
   "admin.status.disabled": {
-    "en": "disabled",
-    "t": "отключён"
+    "en": "Disabled",
+    "t": "Отключён"
   },
   "admin.status.error": {
-    "en": "error",
-    "t": "ошибка"
+    "en": "Error",
+    "t": "Ошибка"
   },
   "admin.status.healthy": {
-    "en": "healthy",
-    "t": "исправен"
+    "en": "Healthy",
+    "t": "Исправен"
   },
   "admin.status.onboarding": {
-    "en": "onboarding",
-    "t": "регистрация"
+    "en": "Onboarding",
+    "t": "Регистрация"
+  },
+  "admin.status.pending": {
+    "en": "Pending",
+    "t": "Ожидает"
+  },
+  "admin.status.review": {
+    "en": "Review",
+    "t": "На проверке"
   },
   "admin.status.staged": {
-    "en": "staged",
-    "t": "подготовлен"
+    "en": "Staged",
+    "t": "Подготовлен"
   },
   "admin.treasury.a11y.copy": {
     "en": "Copy {what}",
@@ -1791,6 +1799,14 @@
     "en": "Loading {name}…",
     "t": "Загрузка {name}…"
   },
+  "nav.a11y.primary": {
+    "en": "Primary",
+    "t": "Основная"
+  },
+  "nav.a11y.secondary": {
+    "en": "Secondary",
+    "t": "Дополнительная"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Продукты"
@@ -1802,6 +1818,10 @@
   "nav.fees": {
     "en": "Fees",
     "t": "Комиссии"
+  },
+  "nav.group.fund": {
+    "en": "Fund",
+    "t": "Фонд"
   },
   "nav.home": {
     "en": "Home",

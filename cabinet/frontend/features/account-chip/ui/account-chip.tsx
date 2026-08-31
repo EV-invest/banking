@@ -7,7 +7,7 @@ import { translator, type Translate } from "@evinvest/i18n";
 
 import { profileResource } from "@/entities/user/model/profile-resource";
 import { cabinetPath } from "@/shared/config/base-path";
-import { messagesFor } from "@/shared/config/i18n";
+import { chipMessages } from "@/features/account-chip/model/chip-messages";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { documentLocale } from "@/shared/lib/locale-cookie";
@@ -27,10 +27,13 @@ const CHIP_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
  * below: this bundle mounts on the CONDUCTOR origin, where none of the cabinet's React
  * tree — and so no `I18nProvider` — exists above it. The hook would throw. It reads the
  * locale the way it already reads it for every link it builds, off the document it was
- * mounted into, and constructs a translator over the same catalogues the cabinet uses. One
- * source of copy for both sides of the boundary; no strings threaded through custom-element
- * attributes, which would put four English literals back in the conductor's markup and
- * leave them there.
+ * mounted into, and constructs a translator over `chip-messages.ts` — the four strings
+ * this component renders, and nothing else. Not the cabinet's `messagesFor()`: that pulls
+ * all five `common.json` files and runs the resolve policy over them at module scope,
+ * which put 532 KB of catalogue into a bundle the conductor injects on every page of the
+ * public site. An anonymous visitor was downloading the German admin-treasury copy to
+ * render the word "Verified". `chip-messages.test.ts` keeps the small copy in step with
+ * the real catalogues, so there is still one source of truth — just not one bundle.
  *
  * Not memoised, and deliberately not: `documentLocale()` is two property reads and
  * `translator()` closes over a catalogue it does not copy, so caching the pair would cost
@@ -39,7 +42,7 @@ const CHIP_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
  */
 function chipTranslator(): Translate {
   const locale = documentLocale();
-  return translator(messagesFor(locale), locale);
+  return translator(chipMessages(locale), locale);
 }
 
 // The account chip, rendered as a cabinet microfrontend inside the conductor's shared

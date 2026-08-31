@@ -65,7 +65,7 @@ export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: str
 
 export function StatusDot({ status, label }: { status: string; label?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-sm font-medium capitalize", statusTone(status))}>
+    <span className={cn("inline-flex items-center gap-1.5 text-sm font-medium", statusTone(status))}>
       <span className="size-1.5 rounded-full bg-current" />
       {label ?? status}
     </span>

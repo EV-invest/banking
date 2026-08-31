@@ -680,88 +680,96 @@
     "t": "Vượt mức {instant} được chuyển đi ngay trên kênh này — phần còn lại vẫn được nhận và xếp hàng cho tới khi ngân quỹ được nạp thêm."
   },
   "admin.role.admin": {
-    "en": "admin",
-    "t": "quản trị"
+    "en": "Admin",
+    "t": "Quản trị"
   },
   "admin.role.investor": {
-    "en": "investor",
-    "t": "nhà đầu tư"
+    "en": "Investor",
+    "t": "Nhà đầu tư"
   },
   "admin.role.operator": {
-    "en": "operator",
-    "t": "vận hành"
+    "en": "Operator",
+    "t": "Vận hành"
   },
   "admin.role.owner": {
-    "en": "owner",
-    "t": "chủ sở hữu"
+    "en": "Owner",
+    "t": "Chủ sở hữu"
   },
   "admin.settle": {
     "en": "Settle",
     "t": "Tất toán"
   },
   "admin.state.cancelled": {
-    "en": "cancelled",
-    "t": "đã hủy"
+    "en": "Cancelled",
+    "t": "Đã hủy"
   },
   "admin.state.closed": {
-    "en": "closed",
-    "t": "đã đóng"
+    "en": "Closed",
+    "t": "Đã đóng"
   },
   "admin.state.completed": {
-    "en": "completed",
-    "t": "hoàn tất"
+    "en": "Completed",
+    "t": "Hoàn tất"
   },
   "admin.state.draft": {
-    "en": "draft",
-    "t": "nháp"
+    "en": "Draft",
+    "t": "Nháp"
   },
   "admin.state.failed": {
-    "en": "failed",
-    "t": "thất bại"
+    "en": "Failed",
+    "t": "Thất bại"
   },
   "admin.state.open": {
-    "en": "open",
-    "t": "đang mở"
+    "en": "Open",
+    "t": "Đang mở"
   },
   "admin.state.processing": {
-    "en": "processing",
-    "t": "đang xử lý"
+    "en": "Processing",
+    "t": "Đang xử lý"
   },
   "admin.state.queued": {
-    "en": "queued",
-    "t": "đang chờ"
+    "en": "Queued",
+    "t": "Đang chờ"
   },
   "admin.status.active": {
-    "en": "active",
-    "t": "hoạt động"
+    "en": "Active",
+    "t": "Hoạt động"
   },
   "admin.status.blocked": {
-    "en": "blocked",
-    "t": "bị chặn"
+    "en": "Blocked",
+    "t": "Bị chặn"
   },
   "admin.status.degraded": {
-    "en": "degraded",
-    "t": "suy giảm"
+    "en": "Degraded",
+    "t": "Suy giảm"
   },
   "admin.status.disabled": {
-    "en": "disabled",
-    "t": "đã khóa"
+    "en": "Disabled",
+    "t": "Đã khóa"
   },
   "admin.status.error": {
-    "en": "error",
-    "t": "lỗi"
+    "en": "Error",
+    "t": "Lỗi"
   },
   "admin.status.healthy": {
-    "en": "healthy",
-    "t": "khỏe mạnh"
+    "en": "Healthy",
+    "t": "Khỏe mạnh"
   },
   "admin.status.onboarding": {
-    "en": "onboarding",
-    "t": "khởi tạo"
+    "en": "Onboarding",
+    "t": "Khởi tạo"
+  },
+  "admin.status.pending": {
+    "en": "Pending",
+    "t": "Đang chờ"
+  },
+  "admin.status.review": {
+    "en": "Review",
+    "t": "Đang duyệt"
   },
   "admin.status.staged": {
-    "en": "staged",
-    "t": "thử nghiệm"
+    "en": "Staged",
+    "t": "Thử nghiệm"
   },
   "admin.treasury.a11y.copy": {
     "en": "Copy {what}",
@@ -1791,6 +1799,14 @@
     "en": "Loading {name}…",
     "t": "Đang tải {name}…"
   },
+  "nav.a11y.primary": {
+    "en": "Primary",
+    "t": "Điều hướng chính"
+  },
+  "nav.a11y.secondary": {
+    "en": "Secondary",
+    "t": "Điều hướng phụ"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Phân bổ"
@@ -1802,6 +1818,10 @@
   "nav.fees": {
     "en": "Fees",
     "t": "Phí"
+  },
+  "nav.group.fund": {
+    "en": "Fund",
+    "t": "Quỹ"
   },
   "nav.home": {
     "en": "Home",

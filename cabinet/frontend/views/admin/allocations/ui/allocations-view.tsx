@@ -172,9 +172,11 @@ function AllocationRow({
         </td>
         <td className="px-5 py-3 font-mono-tech text-xs text-muted-foreground">{row.service}</td>
         <td className="px-5 py-3">
-          {/* i18n-max: 12 — a chip in a table cell; `capitalize` stays a CSS decision, so
-              the catalogue value is the lowercase wire word, as it renders today. */}
-          <span className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium capitalize", STATE_TONE[row.state])} title={t(STATE_HINT[row.state])}>
+          {/* i18n-max: 12 — a chip in a table cell. The value is authored in display
+              case rather than lowercased and fixed with CSS `capitalize`: that rule
+              title-cases every word, which is invisible on a one-word English enum and
+              wrong the moment it is translated ("en cours" → "En Cours"). */}
+          <span className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", STATE_TONE[row.state])} title={t(STATE_HINT[row.state])}>
             {stateLabel(row.state, t)}
           </span>
         </td>

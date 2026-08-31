@@ -146,7 +146,18 @@ export async function requestJson<T>(path: `/${string}`, req: JsonRequest = {}):
   if (!res.ok) {
     // A BFF string we recognise becomes a key; one we don't stays the backend's own
     // prose, unkeyed. No `{ error }` body at all falls back to the status.
-    const known = data.error ? FRIENDLY[data.error] : statusMessage(res.status);
+    //
+    // `Object.hasOwn`, not a bare index: `FRIENDLY` is an object literal, so
+    // `FRIENDLY["toString"]` resolves up the prototype chain to a function. That is
+    // truthy, so `??` would not fire, `detail.en` would be `undefined`, and the
+    // banner would render empty — a silent blank alert for any BFF error string that
+    // happens to name an Object.prototype member.
+    const known =
+      data.error !== undefined
+        ? Object.hasOwn(FRIENDLY, data.error)
+          ? FRIENDLY[data.error]
+          : undefined
+        : statusMessage(res.status);
     const detail = known ?? { code: null, en: data.error as string };
     throw new RequestError(detail.en, res.status, detail.code);
   }

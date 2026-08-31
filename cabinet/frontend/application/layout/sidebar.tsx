@@ -86,6 +86,7 @@ const NAV_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring foc
 export function Sidebar() {
   // Zone-relative, so the `active` predicates below can stay written in the paths
   // the app reasons in rather than the ones the browser shows.
+  const t = useT();
   const pathname = useCabinetPathname();
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
@@ -116,14 +117,14 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-4.5 pb-5 pt-6">
-      <nav aria-label="Primary" className="flex flex-col gap-4.5">
-        <Group label="Fund">
+      <nav aria-label={t("nav.a11y.primary")} className="flex flex-col gap-4.5">
+        <Group label={t("nav.group.fund")}>
           {FUND.map((item) => (
             <NavLink key={item.label} item={item} active={item.active(pathname)} section="fund" appear={crossed} />
           ))}
         </Group>
         {products.length > 0 && (
-          <Group label="Products">
+          <Group label={t("invest.products")}>
             {products.map((p, i) => {
               // Every row pointed at `/invest`, so naming a product in the rail took you to
               // the list of all of them. The product's own page is keyed by its service id.
@@ -155,7 +156,7 @@ export function Sidebar() {
           </Group>
         )}
         {isAdmin && (
-          <Group label="Administer">
+          <Group label={t("admin.eyebrow.administer")}>
             {ADMIN.map((item) => (
               <NavLink key={item.label} item={item} active={item.active(pathname)} section="administer" appear={crossed} />
             ))}
@@ -165,7 +166,7 @@ export function Sidebar() {
 
       <div className="flex-1" />
 
-      <nav aria-label="Secondary" className="flex flex-col gap-1">
+      <nav aria-label={t("nav.a11y.secondary")} className="flex flex-col gap-1">
         <NavLink
           item={{ href: "/notifications", label: "Notifications", key: "nav.notifications", icon: Bell, active: (p) => p.startsWith("/notifications") }}
           active={pathname.startsWith("/notifications")}
@@ -289,9 +290,10 @@ function NavLink({ item, active, section, appear, trailing }: { item: NavItem; a
 
 // Capped at 99+ so a long-neglected inbox cannot widen the rail.
 function UnreadPill({ count, active }: { count: number; active: boolean }) {
+  const t = useT();
   return (
     <span
-      aria-label={`${count} unread`}
+      aria-label={t("notif.unreadCount", { n: count })}
       className={cn(
         "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
         active ? "bg-main-black text-foreground" : "bg-main-accent-t1/15 text-main-accent-t1",

@@ -680,19 +680,19 @@
     "t": "Mehr als {instant}, was auf diesem Kanal sofort hinausgeht — der Rest wird angenommen und wartet, bis das Treasury aufgefüllt ist."
   },
   "admin.role.admin": {
-    "en": "admin",
+    "en": "Admin",
     "t": "Admin"
   },
   "admin.role.investor": {
-    "en": "investor",
+    "en": "Investor",
     "t": "Investor"
   },
   "admin.role.operator": {
-    "en": "operator",
+    "en": "Operator",
     "t": "Operator"
   },
   "admin.role.owner": {
-    "en": "owner",
+    "en": "Owner",
     "t": "Eigentümer"
   },
   "admin.settle": {
@@ -700,68 +700,76 @@
     "t": "Abrechnen"
   },
   "admin.state.cancelled": {
-    "en": "cancelled",
-    "t": "storniert"
+    "en": "Cancelled",
+    "t": "Storniert"
   },
   "admin.state.closed": {
-    "en": "closed",
-    "t": "geschlossen"
+    "en": "Closed",
+    "t": "Geschlossen"
   },
   "admin.state.completed": {
-    "en": "completed",
-    "t": "ausgeführt"
+    "en": "Completed",
+    "t": "Ausgeführt"
   },
   "admin.state.draft": {
-    "en": "draft",
+    "en": "Draft",
     "t": "Entwurf"
   },
   "admin.state.failed": {
-    "en": "failed",
-    "t": "gescheitert"
+    "en": "Failed",
+    "t": "Gescheitert"
   },
   "admin.state.open": {
-    "en": "open",
-    "t": "offen"
+    "en": "Open",
+    "t": "Offen"
   },
   "admin.state.processing": {
-    "en": "processing",
-    "t": "in Arbeit"
+    "en": "Processing",
+    "t": "In Arbeit"
   },
   "admin.state.queued": {
-    "en": "queued",
-    "t": "wartend"
+    "en": "Queued",
+    "t": "Wartend"
   },
   "admin.status.active": {
-    "en": "active",
-    "t": "aktiv"
+    "en": "Active",
+    "t": "Aktiv"
   },
   "admin.status.blocked": {
-    "en": "blocked",
-    "t": "gesperrt"
+    "en": "Blocked",
+    "t": "Gesperrt"
   },
   "admin.status.degraded": {
-    "en": "degraded",
-    "t": "gestört"
+    "en": "Degraded",
+    "t": "Gestört"
   },
   "admin.status.disabled": {
-    "en": "disabled",
-    "t": "deaktiviert"
+    "en": "Disabled",
+    "t": "Deaktiviert"
   },
   "admin.status.error": {
-    "en": "error",
+    "en": "Error",
     "t": "Fehler"
   },
   "admin.status.healthy": {
-    "en": "healthy",
-    "t": "gesund"
+    "en": "Healthy",
+    "t": "Gesund"
   },
   "admin.status.onboarding": {
-    "en": "onboarding",
+    "en": "Onboarding",
     "t": "Onboarding"
   },
+  "admin.status.pending": {
+    "en": "Pending",
+    "t": "Ausstehend"
+  },
+  "admin.status.review": {
+    "en": "Review",
+    "t": "In Prüfung"
+  },
   "admin.status.staged": {
-    "en": "staged",
-    "t": "vorbereitet"
+    "en": "Staged",
+    "t": "Vorbereitet"
   },
   "admin.treasury.a11y.copy": {
     "en": "Copy {what}",
@@ -1791,6 +1799,14 @@
     "en": "Loading {name}…",
     "t": "{name} wird geladen…"
   },
+  "nav.a11y.primary": {
+    "en": "Primary",
+    "t": "Hauptnavigation"
+  },
+  "nav.a11y.secondary": {
+    "en": "Secondary",
+    "t": "Sekundärnavigation"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Allokation"
@@ -1802,6 +1818,10 @@
   "nav.fees": {
     "en": "Fees",
     "t": "Gebühren"
+  },
+  "nav.group.fund": {
+    "en": "Fund",
+    "t": "Fonds"
   },
   "nav.home": {
     "en": "Home",

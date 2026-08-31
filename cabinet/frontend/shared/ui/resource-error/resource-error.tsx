@@ -61,6 +61,14 @@ interface ResourceErrorBase {
 //
 // Passing `error.message` as `message` type-checks and is exactly the mistake this split
 // exists to make visible: it pins the banner to English forever.
+//
+// Note what the ten current callers actually do: they pass `message`, having already run
+// `errorMessage(err, t)` themselves. That is not the mistake above — it is the correct
+// second branch. Every one of them either folds an action error in ahead of the read's
+// (`actionError ?? …`) or gates on `data` first, and several also pass a translated
+// `title`, so they hold a translator regardless and composing the string is the simpler
+// call. `error` is here for the caller that has nothing but the thrown failure; it is not
+// the path the console happens to take today.
 type ResourceErrorSource =
   | { error: unknown; message?: never }
   | { message: ReactNode; error?: never };

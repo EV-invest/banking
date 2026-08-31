@@ -45,7 +45,7 @@
   },
   "admin.alloc.footnote": {
     "en": "Registration lands in {state}, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.",
-    "t": "L’inscription se fait en {state}, ce qui n’engage aucun capital — l’ouverture est une décision distincte. La fermeture n’arrête que les nouvelles souscriptions : les investisseurs peuvent toujours racheter leurs parts d’un produit fermé, si bien qu’une mise en extinction ne bloque jamais leurs parts. L’id de service est définitif une fois inscrit. Le plafond de parts borne le nombre de parts qui pourront être émises — redimensionnez-le sur l’écran Valorisation, où figure sur la même page le nombre de parts émises auquel il est comparé."
+    "t": "L’inscription se fait à l’état {state}, ce qui n’engage aucun capital — l’ouverture est une décision distincte. La fermeture n’arrête que les nouvelles souscriptions : les investisseurs peuvent toujours racheter leurs parts d’un produit fermé, si bien qu’une mise en extinction ne bloque jamais leurs parts. L’id de service est définitif une fois inscrit. Le plafond de parts borne le nombre de parts qui pourront être émises — redimensionnez-le sur l’écran Valorisation, où figure sur la même page le nombre de parts émises auquel il est comparé."
   },
   "admin.alloc.hint.closed": {
     "en": "Closed to new money; redemptions still settle",
@@ -680,88 +680,96 @@
     "t": "Au-delà des {instant} expédiés immédiatement sur ce rail — le reste est accepté et mis en file jusqu’au réapprovisionnement de la trésorerie."
   },
   "admin.role.admin": {
-    "en": "admin",
-    "t": "admin"
+    "en": "Admin",
+    "t": "Admin"
   },
   "admin.role.investor": {
-    "en": "investor",
-    "t": "investisseur"
+    "en": "Investor",
+    "t": "Investisseur"
   },
   "admin.role.operator": {
-    "en": "operator",
-    "t": "opérateur"
+    "en": "Operator",
+    "t": "Opérateur"
   },
   "admin.role.owner": {
-    "en": "owner",
-    "t": "propriétaire"
+    "en": "Owner",
+    "t": "Propriétaire"
   },
   "admin.settle": {
     "en": "Settle",
     "t": "Régler"
   },
   "admin.state.cancelled": {
-    "en": "cancelled",
-    "t": "annulé"
+    "en": "Cancelled",
+    "t": "Annulé"
   },
   "admin.state.closed": {
-    "en": "closed",
-    "t": "fermé"
+    "en": "Closed",
+    "t": "Fermé"
   },
   "admin.state.completed": {
-    "en": "completed",
-    "t": "terminé"
+    "en": "Completed",
+    "t": "Terminé"
   },
   "admin.state.draft": {
-    "en": "draft",
-    "t": "brouillon"
+    "en": "Draft",
+    "t": "Brouillon"
   },
   "admin.state.failed": {
-    "en": "failed",
-    "t": "échoué"
+    "en": "Failed",
+    "t": "Échoué"
   },
   "admin.state.open": {
-    "en": "open",
-    "t": "ouvert"
+    "en": "Open",
+    "t": "Ouvert"
   },
   "admin.state.processing": {
-    "en": "processing",
-    "t": "en cours"
+    "en": "Processing",
+    "t": "En cours"
   },
   "admin.state.queued": {
-    "en": "queued",
-    "t": "en file"
+    "en": "Queued",
+    "t": "En file"
   },
   "admin.status.active": {
-    "en": "active",
-    "t": "actif"
+    "en": "Active",
+    "t": "Actif"
   },
   "admin.status.blocked": {
-    "en": "blocked",
-    "t": "bloqué"
+    "en": "Blocked",
+    "t": "Bloqué"
   },
   "admin.status.degraded": {
-    "en": "degraded",
-    "t": "dégradé"
+    "en": "Degraded",
+    "t": "Dégradé"
   },
   "admin.status.disabled": {
-    "en": "disabled",
-    "t": "désactivé"
+    "en": "Disabled",
+    "t": "Désactivé"
   },
   "admin.status.error": {
-    "en": "error",
-    "t": "erreur"
+    "en": "Error",
+    "t": "Erreur"
   },
   "admin.status.healthy": {
-    "en": "healthy",
-    "t": "opérationnel"
+    "en": "Healthy",
+    "t": "Opérationnel"
   },
   "admin.status.onboarding": {
-    "en": "onboarding",
-    "t": "onboarding"
+    "en": "Onboarding",
+    "t": "Onboarding"
+  },
+  "admin.status.pending": {
+    "en": "Pending",
+    "t": "En attente"
+  },
+  "admin.status.review": {
+    "en": "Review",
+    "t": "En examen"
   },
   "admin.status.staged": {
-    "en": "staged",
-    "t": "préparé"
+    "en": "Staged",
+    "t": "Préparé"
   },
   "admin.treasury.a11y.copy": {
     "en": "Copy {what}",
@@ -1791,6 +1799,14 @@
     "en": "Loading {name}…",
     "t": "Chargement de {name}…"
   },
+  "nav.a11y.primary": {
+    "en": "Primary",
+    "t": "Navigation principale"
+  },
+  "nav.a11y.secondary": {
+    "en": "Secondary",
+    "t": "Navigation secondaire"
+  },
   "nav.allocations": {
     "en": "Allocations",
     "t": "Produits"
@@ -1802,6 +1818,10 @@
   "nav.fees": {
     "en": "Fees",
     "t": "Frais"
+  },
+  "nav.group.fund": {
+    "en": "Fund",
+    "t": "Fonds"
   },
   "nav.home": {
     "en": "Home",

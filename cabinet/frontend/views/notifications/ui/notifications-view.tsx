@@ -3,6 +3,8 @@
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 
+import { intlLocale } from "@/shared/lib/intl-locale";
+
 import { Bell } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useEffect, useState } from "react";
@@ -262,5 +264,7 @@ function formatWhen(unixSeconds: string, locale: Locale, t: Translate): string {
   if (mins < 60) return t("notif.when.minutes", { n: mins });
   if (mins < 60 * 24) return t("notif.when.hours", { n: Math.floor(mins / 60) });
   if (mins < 60 * 24 * 7) return t("notif.when.days", { n: Math.floor(mins / (60 * 24)) });
-  return d.toLocaleDateString(locale, { day: "numeric", month: "short" });
+  // `intlLocale`, not `locale`: bare "en" means en-US to Intl ("Mar 12"), while the
+  // operations timeline renders "12 Mar". One English reader, one convention.
+  return d.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short" });
 }

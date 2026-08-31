@@ -111,7 +111,10 @@ export function BottomNavbar() {
                 shrinking, and the marker is positioned as an exact fifth of the bar.
                 German is the tightest case: "Einstellungen" measures 77.1px and does
                 not fit, which is why `nav.settings` is "Optionen" there.
-                `title` keeps a truncated label recoverable on a long press. */}
+                The `title` is for assistive tech and for a desktop browser at a narrow
+                width — not a touch affordance, since neither iOS nor Android surfaces
+                one, and this bar is `lg:hidden`. The label is authored to fit; nothing
+                here depends on the tooltip. */}
             <span className="w-full truncate text-center text-xs" title={t(tab.key)}>
               {t(tab.key)}
             </span>

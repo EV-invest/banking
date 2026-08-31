@@ -125,7 +125,7 @@ export function UsersView() {
                             <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
                           </button>
                         </td>
-                        <td className="px-5 py-3 capitalize">{roleLabel(u.role, t)}</td>
+                        <td className="px-5 py-3">{roleLabel(u.role, t)}</td>
                         <td className="px-5 py-3 text-muted-foreground">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
                         <td className="px-5 py-3">
                           <StatusDot status={u.status} label={statusLabel(u.status, t)} />
@@ -198,13 +198,13 @@ function FilterSelect({
     <div className="inline-flex items-center gap-2 text-sm">
       <span className="text-muted-foreground">{label}:</span>
       <Select value={value ?? ""} onValueChange={(v) => onChange(v || undefined)}>
-        <SelectTrigger size="sm" className="border-border bg-main-surface capitalize">
+        <SelectTrigger size="sm" className="border-border bg-main-surface">
           <span className="truncate">{value === undefined ? t("ui.all") : optionLabel(value)}</span>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="">{t("ui.all")}</SelectItem>
           {options.map((o) => (
-            <SelectItem key={o} value={o} className="capitalize">
+            <SelectItem key={o} value={o}>
               {optionLabel(o)}
             </SelectItem>
           ))}
@@ -285,7 +285,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
         <div className="flex flex-wrap gap-1.5 text-xs">
           <Badge>{roleLabel(role, t)}</Badge>
           <Badge>{t("admin.users.kycBadge", { n: profile?.kyc_level ?? summary.kyc_level })}</Badge>
-          <span className={cn("rounded-full px-2 py-0.5 font-medium capitalize", statusTone(status))}>{statusLabel(status, t)}</span>
+          <span className={cn("rounded-full px-2 py-0.5 font-medium", statusTone(status))}>{statusLabel(status, t)}</span>
         </div>
 
         {error && (
@@ -311,12 +311,12 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
               <TipAnchor anchor="admin.users.access.role" />
             </span>
             <Select value={role} onValueChange={(next) => run("role", () => setUserRole(summary.user_id, next))}>
-              <SelectTrigger size="sm" className="border-border bg-main-surface capitalize" disabled={busy === "role"}>
-                <span className="capitalize">{roleLabel(role, t)}</span>
+              <SelectTrigger size="sm" className="border-border bg-main-surface" disabled={busy === "role"}>
+                <span>{roleLabel(role, t)}</span>
               </SelectTrigger>
               <SelectContent>
                 {ROLES.map((r) => (
-                  <SelectItem key={r} value={r} className="capitalize">
+                  <SelectItem key={r} value={r}>
                     {roleLabel(r, t)}
                   </SelectItem>
                 ))}
@@ -399,5 +399,5 @@ function Row({ label, value, tip }: { label: string; value: string; tip?: TipKey
 }
 
 function Badge({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-foreground/5 px-2 py-0.5 font-medium capitalize text-foreground">{children}</span>;
+  return <span className="rounded-full bg-foreground/5 px-2 py-0.5 font-medium text-foreground">{children}</span>;
 }

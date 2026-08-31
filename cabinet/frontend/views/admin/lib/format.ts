@@ -50,6 +50,12 @@ const KNOWN_STATUSES: ReadonlySet<string> = new Set([
   "onboarding",
   "staged",
   "blocked",
+  // `statusTone` in `views/profile/ui/profile-view.tsx` already branches on these two,
+  // so they are statuses the UI expects to see even though the hub does not emit them
+  // yet. Without them here the guard falls through and the reader gets the bare wire
+  // word — which is the safe failure, but a needless one for a value we can name.
+  "pending",
+  "review",
 ]);
 
 const KNOWN_STATES: ReadonlySet<string> = new Set([
@@ -63,13 +69,22 @@ const KNOWN_STATES: ReadonlySet<string> = new Set([
   "cancelled",
 ]);
 
-/** A `Role` wire value as a reader sees it. Lowercase, like the wire value — the badges
- *  and table cells that render it carry `capitalize`, so the case stays a CSS decision. */
+/** A `Role` wire value as a reader sees it.
+ *
+ *  The catalogue values are authored in **display case**, and the render sites carry no
+ *  `capitalize`. They used to do the opposite — lowercase values, cased by CSS — which is
+ *  invisible while the value is a one-word English wire identifier and wrong the moment it
+ *  is translated: `capitalize` title-cases every word, so "nhà đầu tư" rendered as "Nhà Đầu
+ *  Tư" and "en cours" as "En Cours". Do not re-lowercase these on the assumption that CSS
+ *  will fix them up.
+ *
+ *  An unrecognised value falls back to the raw wire word rather than `t()`, so a status the
+ *  hub adds tomorrow shows as `reconciling` and not as `admin.status.reconciling`. */
 export function roleLabel(role: string, t: Translate): string {
   return KNOWN_ROLES.has(role) ? t(`admin.role.${role}`) : role;
 }
 
-/** A health/lifecycle status as a reader sees it (see {@link roleLabel} on casing). */
+/** A health/lifecycle status as a reader sees it (see {@link roleLabel} on casing and fallback). */
 export function statusLabel(status: string, t: Translate): string {
   return KNOWN_STATUSES.has(status) ? t(`admin.status.${status}`) : status;
 }
