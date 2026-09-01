@@ -1,8 +1,16 @@
 // Display vocabulary for the activity timeline. Amounts are formatted by the cabinet's
 // one money module (`@/shared/lib/money`); everything here is the mapping from a wire
 // `kind`/`state` onto the badge, tone and wording the Figma `operations` screens use.
+//
+// The wording is carried as *catalogue keys*, not as English: this is a plain module and
+// cannot call `useT()`, so a label resolves at the render site (`kindLabel`, `stateLabel`)
+// or takes the translator as an argument. Tone, direction and the settled/failed sets stay
+// literal — they are logic, not copy, and no locale changes what a withdrawal is.
+
+import type { Locale, Translate } from "@evinvest/i18n";
 
 import type { Operation } from "@/shared/contracts";
+import { intlLocale } from "@/shared/lib/intl-locale";
 
 export { formatUnits, formatUsdt, shortAddress } from "@/shared/lib/money";
 // Rails already have one display vocabulary on the wallet surface — a timeline row must
@@ -24,27 +32,53 @@ export const KIND_FILTERS = ["deposit", "withdrawal", "subscription", "redemptio
 export type Direction = "in" | "out" | "move";
 
 export interface KindMeta {
-  /** The badge glyph text — `IN` / `OUT` / `BUY` / `SELL` in the Figma. */
-  badge: string;
-  label: string;
+  /** Catalogue key for the badge glyph — `IN` / `OUT` / `BUY` / `SELL` in the Figma.
+   *  `null` for a kind the hub added after this build, whose badge falls back to the
+   *  wire id itself (see {@link kindBadge}). */
+  badgeKey: string | null;
+  /** Catalogue key for the kind's name, or `null` for an unrecognised kind. */
+  labelKey: string | null;
   direction: Direction;
   /** Badge tint. Semantic tokens only — these are the accent tiers, not raw colour. */
   tone: string;
 }
 
 const KINDS: Record<string, KindMeta> = {
-  deposit: { badge: "IN", label: "Deposit", direction: "in", tone: "bg-main-accent-t2/15 text-main-accent-t2" },
-  withdrawal: { badge: "OUT", label: "Withdrawal", direction: "out", tone: "bg-destructive/15 text-destructive" },
-  subscription: { badge: "BUY", label: "Subscription", direction: "move", tone: "bg-main-accent-t1/15 text-main-accent-t1" },
-  redemption: { badge: "SELL", label: "Redemption", direction: "move", tone: "bg-main-accent-t3/15 text-main-accent-t3" },
-  fee: { badge: "FEE", label: "Fee", direction: "out", tone: "bg-destructive/15 text-destructive" },
+  // `ops.kind.deposit`, not `ui.deposit`: this titles a row in the timeline, where the
+  // word is a noun ("a deposit"), while `ui.deposit` is the wallet button, where it is a
+  // verb ("deposit funds"). English spells both "Deposit" and hid the difference; German
+  // and Russian each have to pick one, and both translators raised it independently.
+  deposit: { badgeKey: "ops.badge.in", labelKey: "ops.kind.deposit", direction: "in", tone: "bg-main-accent-t2/15 text-main-accent-t2" },
+  withdrawal: { badgeKey: "ops.badge.out", labelKey: "ops.kind.withdrawal", direction: "out", tone: "bg-destructive/15 text-destructive" },
+  subscription: { badgeKey: "ops.badge.buy", labelKey: "ops.kind.subscription", direction: "move", tone: "bg-main-accent-t1/15 text-main-accent-t1" },
+  redemption: { badgeKey: "ops.badge.sell", labelKey: "ops.kind.redemption", direction: "move", tone: "bg-main-accent-t3/15 text-main-accent-t3" },
+  fee: { badgeKey: "ops.badge.fee", labelKey: "ops.kind.fee", direction: "out", tone: "bg-destructive/15 text-destructive" },
 };
+
+const UNKNOWN_KIND: KindMeta = { badgeKey: null, labelKey: null, direction: "move", tone: "bg-muted text-muted-foreground" };
 
 /** An unrecognised kind renders neutrally rather than disappearing — a new hub kind is
  *  visible as an unstyled row instead of a silent gap in someone's history. */
 export function kindMeta(kind: string | undefined): KindMeta {
+  return KINDS[kind ?? ""] ?? UNKNOWN_KIND;
+}
+
+/** The badge glyph for a kind. An unrecognised kind wears its own wire id, which is an
+ *  identifier rather than copy and so is never translated.
+ *
+ *  i18n-max: 4 — the badge sits in a `shrink-0` column beside a truncating row title. */
+export function kindBadge(kind: string | undefined, t: Translate): string {
   const id = kind ?? "";
-  return KINDS[id] ?? { badge: id.slice(0, 4).toUpperCase() || "—", label: id || "Operation", direction: "move", tone: "bg-muted text-muted-foreground" };
+  const key = KINDS[id]?.badgeKey;
+  return key ? t(key) : id.slice(0, 4).toUpperCase() || "—";
+}
+
+/** The kind's name. Same fallback rule as {@link kindBadge}: the wire id when there is
+ *  one, and a generic noun only when the hub sent no kind at all. */
+export function kindLabel(kind: string | undefined, t: Translate): string {
+  const id = kind ?? "";
+  const key = KINDS[id]?.labelKey;
+  return key ? t(key) : id || t("ops.kind.unknown");
 }
 
 /** The amount colour that goes with a direction. Neutral moves keep the body colour. */
@@ -65,11 +99,29 @@ export function isPending(operation: Operation): boolean {
   return !SETTLED.has(state) && !FAILED.has(state);
 }
 
-/** A lifecycle state as a human reads it. Every state the hub sends is a lowercase
- *  identifier that `capitalize` alone renders correctly — except the compound ones, where
- *  it would leave the underscore in ("Partly_deferred"). */
-export function stateLabel(state: string | undefined): string {
-  return (state ?? "").replace(/_/g, " ");
+// Every lifecycle state the hub sends, as a catalogue key. It used to be the wire
+// identifier with its underscores swapped for spaces, leaned on by a `capitalize` class —
+// English-shaped twice over: `capitalize` left "Partly Deferred" on a compound state, and
+// a translated label is not a lowercase identifier waiting to be title-cased.
+const STATES: Record<string, string> = {
+  queued: "ops.state.queued",
+  processing: "ops.state.processing",
+  completed: "ops.state.completed",
+  credited: "ops.state.credited",
+  charged: "ops.state.charged",
+  partly_deferred: "ops.state.partlyDeferred",
+  failed: "ops.state.failed",
+  cancelled: "ops.state.cancelled",
+};
+
+/** A lifecycle state as a human reads it. An unmapped state falls back to the wire
+ *  identifier rather than an empty badge, so a new hub state is visible, not invisible.
+ *
+ *  i18n-max: 12 — badge in a `shrink-0` column; a longer label eats the row title. */
+export function stateLabel(state: string | undefined, t: Translate): string {
+  const id = state ?? "";
+  const key = STATES[id];
+  return key ? t(key) : id.replace(/_/g, " ");
 }
 
 /** Badge tint for a lifecycle state, matching the wallet activity screen's vocabulary. */
@@ -111,18 +163,39 @@ function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+function daysAgo(unixSeconds: number, now: Date): number {
+  return Math.round((startOfDay(now) - startOfDay(new Date(unixSeconds * 1000))) / DAY_MS);
+}
+
+function calendarDate(unixSeconds: number, locale: Locale): string {
+  return new Date(unixSeconds * 1000).toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric" });
+}
+
 /** The date heading a run of rows sits under: `Today`, `Yesterday`, or `12 Mar 2026`. */
-export function dayLabel(unixSeconds: number, now: Date = new Date()): string {
-  if (!unixSeconds) return "Undated";
-  const date = new Date(unixSeconds * 1000);
-  const days = Math.round((startOfDay(now) - startOfDay(date)) / DAY_MS);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+export function dayLabel(unixSeconds: number, t: Translate, locale: Locale, now: Date = new Date()): string {
+  if (!unixSeconds) return t("ops.day.undated");
+  const days = daysAgo(unixSeconds, now);
+  if (days === 0) return t("ops.day.today");
+  if (days === 1) return t("ops.day.yesterday");
+  return calendarDate(unixSeconds, locale);
+}
+
+/** The same day, worded to sit mid-sentence after a rail name: "TON · today 14:32".
+ *
+ *  Its own keys rather than `dayLabel(...).toLowerCase()`. Lower-casing a *translated*
+ *  word is wrong in German, where a noun is capitalised in every position, and it also
+ *  mangled the dated case into "12 mar 2026" — a calendar date is not a word, so it is
+ *  left exactly as the locale formatted it. */
+export function dayLabelInline(unixSeconds: number, t: Translate, locale: Locale, now: Date = new Date()): string {
+  if (!unixSeconds) return t("ops.day.undated");
+  const days = daysAgo(unixSeconds, now);
+  if (days === 0) return t("ops.day.todayInline");
+  if (days === 1) return t("ops.day.yesterdayInline");
+  return calendarDate(unixSeconds, locale);
 }
 
 /** The clock time on a row — the day is already carried by its group heading. */
-export function timeLabel(unixSeconds: number): string {
+export function timeLabel(unixSeconds: number, locale: Locale): string {
   if (!unixSeconds) return "—";
-  return new Date(unixSeconds * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return new Date(unixSeconds * 1000).toLocaleTimeString(intlLocale(locale), { hour: "2-digit", minute: "2-digit" });
 }

@@ -3,6 +3,8 @@
 import { TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { usePlatform } from "@/shared/lib/use-platform";
 
 const DISMISS_KEY = "ev-announcement-dismissed";
@@ -19,8 +21,14 @@ function storedDismissal(): string | null {
 // read-only states (amber, not dismissible) plus the operator announcement (neutral,
 // dismissible per tab-session — keyed on title+body so an EDITED announcement
 // re-appears). Best-effort by design: no platform data renders nothing.
+//
+// The two amber states are ours and are translated; the announcement is not. An operator
+// writes that one by hand in the admin console, in whichever language they wrote it, and
+// there is no second version of it to pick from — so it renders as authored, in every
+// locale. Translating the chrome around it is the most this surface can honestly do.
 export function SystemBanner() {
   const platform = usePlatform();
+  const t = useT();
   const [dismissedKey, setDismissedKey] = useState<string | null>(storedDismissal);
 
   if (!platform) return null;
@@ -40,8 +48,8 @@ export function SystemBanner() {
 
   return (
     <div className="space-y-2 px-8 pt-4">
-      {platform.maintenance_mode && <AmberStrip>Scheduled maintenance — some actions may be briefly unavailable.</AmberStrip>}
-      {platform.read_only && <AmberStrip>Withdrawals and investments are temporarily paused (read-only mode). Balances are unaffected.</AmberStrip>}
+      {platform.maintenance_mode && <AmberStrip>{t("sys.maintenance")}</AmberStrip>}
+      {platform.read_only && <AmberStrip>{t("sys.readOnly")}</AmberStrip>}
       {showAnnouncement && (
         <div className="flex items-start gap-3 rounded-lg border border-border bg-main-card px-4 py-2.5 text-sm">
           <div className="min-w-0 flex-1">
@@ -50,7 +58,7 @@ export function SystemBanner() {
           </div>
           <button
             type="button"
-            aria-label="Dismiss announcement"
+            aria-label={t("sys.a11y.dismiss")}
             onClick={dismiss}
             className="shrink-0 rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >

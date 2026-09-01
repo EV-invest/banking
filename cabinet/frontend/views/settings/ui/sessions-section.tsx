@@ -4,6 +4,8 @@
 // One list serves both breakpoints — the desktop rail renders it titled, the mobile stack
 // pushes it as its own screen under the app bar.
 
+import { useT } from "@evinvest/i18n/react";
+
 import { Loader2 } from "lucide-react";
 
 import { Button, Skeleton } from "@evinvest/uikit";
@@ -30,15 +32,16 @@ export function SessionsSection({
   onRevoke: (id: string) => void;
   onRevokeOthers: () => void;
 }) {
+  const t = useT();
   const loading = sessions === undefined;
   const list = sessions ?? [];
   const hasOthers = list.some((s) => !s.current);
   return (
     <ListCard className="lg:px-6 lg:pb-5.5 lg:pt-2">
       {titled ? (
-        <ListCardTitle sub="Where you're signed in — revoke anything you don't recognise">Sessions &amp; devices</ListCardTitle>
+        <ListCardTitle sub={t("settings.sessionsSub")}>{t("ui.sessionsDevices")}</ListCardTitle>
       ) : (
-        <p className="pb-2 pt-3 text-xs font-medium text-muted-foreground">Where you&apos;re signed in — revoke anything you don&apos;t recognise</p>
+        <p className="pb-2 pt-3 text-xs font-medium text-muted-foreground">{t("settings.sessionsSub")}</p>
       )}
 
       {error && <p className="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
@@ -55,10 +58,10 @@ export function SessionsSection({
           </div>
         ))
       ) : list.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">No active sessions.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">{t("settings.noSessions")}</p>
       ) : (
         list.map((s, i) => {
-          const { label, icon: Icon } = deviceOf(s.user_agent);
+          const { label, icon: Icon } = deviceOf(s.user_agent, t);
           return (
             <div key={s.id ?? i}>
               {i > 0 && <Hairline />}
@@ -71,17 +74,19 @@ export function SessionsSection({
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-foreground">{label}</p>
-                    <p className="break-words text-xs leading-snug text-muted-foreground">{metaOf(s, name)}</p>
+                    <p className="break-words text-xs leading-snug text-muted-foreground">{metaOf(s, name, t)}</p>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5 pl-12 sm:pl-0">
                   {s.current ? (
                     <>
-                      <Pill>This device</Pill>
+                      {/* i18n-max: 12 — a `shrink-0` Pill in the row's action slot. */}
+                      <Pill>{t("settings.thisDevice")}</Pill>
                       <TipAnchor anchor="settings.sessions.this-device" />
                     </>
                   ) : (
                     <>
+                      {/* i18n-max: 12 — a `shrink-0` Button beside its tip anchor. */}
                       <Button
                         variant="outline"
                         size="sm"
@@ -89,7 +94,7 @@ export function SessionsSection({
                         onClick={() => s.id && onRevoke(s.id)}
                         className="border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
                       >
-                        Revoke
+                        {t("settings.revoke")}
                       </Button>
                       <TipAnchor anchor="settings.sessions.revoke" />
                     </>
@@ -103,13 +108,18 @@ export function SessionsSection({
 
       {!loading && hasOthers && (
         <div className="mb-2 mt-3 flex items-center gap-1.5">
+          {/* uikit's Button is `shrink-0 whitespace-nowrap`, so a `w-full` one in a flex
+              row keeps its full label width and shoves the tip anchor beside it out of
+              the card. `min-w-0 shrink truncate` lets the label give way instead — a
+              longer translation is then clipped, not destructive. */}
+          {/* i18n-max: 30 */}
           <Button
             variant="outline"
             disabled={busy}
             onClick={onRevokeOthers}
-            className="w-full border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
+            className="w-full min-w-0 shrink truncate border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
           >
-            {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />} Sign out all other devices
+            {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />} {t("settings.signOutOthers")}
           </Button>
           <TipAnchor anchor="settings.sessions.revoke-others" />
         </div>

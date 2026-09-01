@@ -72,10 +72,13 @@ export function cashForUnits(units: string, nav: string | undefined): bigint | n
  * *after* the submit into a sentence *before* it. `remaining_capacity` already nets off
  * in-flight mints server-side, so a client that trusts it can never offer headroom the
  * hub would refuse.
+ *
+ * Returns the catalogue key rather than the sentence: this module is pure and has no
+ * translator, and the reason flows into exactly one render site, which does have one.
  */
-export function blockedReason(product: Product, nav: FundNav | null): string | null {
-  if (product.allocation === null) return "This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full.";
-  if (nav?.stale) return "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.";
-  if (nav && toBaseUnits(nav.remaining_capacity) <= 0n) return "This fund has issued its full authorised supply, so it is not minting new units. Redemptions are unaffected.";
+export function blockedReasonKey(product: Product, nav: FundNav | null): string | null {
+  if (product.allocation === null) return "invest.blocked.closed";
+  if (nav?.stale) return "invest.blocked.staleNav";
+  if (nav && toBaseUnits(nav.remaining_capacity) <= 0n) return "invest.blocked.capReached";
   return null;
 }

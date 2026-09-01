@@ -19,12 +19,13 @@ import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
 import { CARD, Chevron, Hairline, InitialsAvatar, ListCard, ListCardTitle, Pill, Row, RowLabel, RowValue } from "@/shared/ui/list-card";
 import { formatEmail, formatPhone } from "@/views/settings/lib/contact";
-import { CURRENCIES, type Form, labelOf, LANGUAGES, TIMEZONES } from "@/views/settings/lib/form";
+import { CURRENCIES, type Form, labelOf, LANGUAGES, optionsOf, TIMEZONES } from "@/views/settings/lib/form";
 import { initialsOfName } from "@/views/settings/lib/format";
 import { PhoneField, ThemedSelect } from "@/views/settings/ui/fields";
 
 /** `card-ProfileSummary` — the tap target into the full profile. */
 export function ProfileSummaryCard({ loading, name, email, verified }: { loading: boolean; name: string; email: string | null; verified: boolean }) {
+  const t = useT();
   return (
     <Link
       href="/profile"
@@ -37,10 +38,11 @@ export function ProfileSummaryCard({ loading, name, email, verified }: { loading
         ) : (
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm font-semibold text-foreground">{name}</span>
-            {verified && <Pill icon={BadgeCheck}>Verified</Pill>}
+            {/* i18n-max: 12 — a `shrink-0` Pill beside the truncated display name. */}
+            {verified && <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill>}
           </div>
         )}
-        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-xs text-muted-foreground">{formatEmail(email) || "Not signed in"}</span>}
+        {loading ? <Skeleton className="h-3 w-40" /> : <span className="truncate text-xs text-muted-foreground">{formatEmail(email) || t("auth.notSignedIn")}</span>}
       </div>
       <Chevron className="size-5" />
     </Link>
@@ -61,32 +63,37 @@ export function AccountRowsCard({
   fieldErrors: Record<string, string>;
   onChange: (key: keyof Form, value: string) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<keyof Form | null>(null);
   const ready = !loading && !!form;
   const toggle = (key: keyof Form) => setOpen((k) => (k === key ? null : key));
+  // Resolved once per render, so the row's collapsed value and the open editor's menu
+  // cannot disagree about what an option is called.
+  const currencies = optionsOf(CURRENCIES, t);
+  const timezones = optionsOf(TIMEZONES, t);
 
   return (
     <ListCard>
       {/* Email is the IdP's — displayed, never editable here. */}
       <Row>
-        <span className="shrink-0 text-sm font-medium text-foreground">Email</span>
+        <span className="shrink-0 text-sm font-medium text-foreground">{t("ui.email")}</span>
         {loading ? <Skeleton className="h-3.5 w-36" /> : <RowValue>{formatEmail(email) || "—"}</RowValue>}
       </Row>
       <Hairline />
-      <ExpandableRow label="Phone" value={form ? formatPhone(form.phone) : ""} loading={!ready} open={open === "phone"} onToggle={() => toggle("phone")}>
+      <ExpandableRow label={t("settings.phone")} value={form ? formatPhone(form.phone) : ""} loading={!ready} open={open === "phone"} onToggle={() => toggle("phone")}>
         {form && <PhoneField initial={form.phone} onChange={(v) => onChange("phone", v)} error={fieldErrors.phone} />}
       </ExpandableRow>
       <Hairline />
-      <ExpandableRow label="Language" value={form ? labelOf(LANGUAGES, form.language) : ""} loading={!ready} open={open === "language"} onToggle={() => toggle("language")}>
-        {form && <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder="Select language" error={fieldErrors.language} />}
+      <ExpandableRow label={t("lang.switch")} value={form ? labelOf(LANGUAGES, form.language) : ""} loading={!ready} open={open === "language"} onToggle={() => toggle("language")}>
+        {form && <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder={t("settings.selectLanguage")} error={fieldErrors.language} />}
       </ExpandableRow>
       <Hairline />
-      <ExpandableRow label="Base currency" value={form ? labelOf(CURRENCIES, form.base_currency) : ""} loading={!ready} open={open === "base_currency"} onToggle={() => toggle("base_currency")}>
-        {form && <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={CURRENCIES} placeholder="Select currency" error={fieldErrors.base_currency} />}
+      <ExpandableRow label={t("settings.baseCurrency")} value={form ? labelOf(currencies, form.base_currency) : ""} loading={!ready} open={open === "base_currency"} onToggle={() => toggle("base_currency")}>
+        {form && <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={currencies} placeholder={t("settings.selectCurrency")} error={fieldErrors.base_currency} />}
       </ExpandableRow>
       <Hairline />
-      <ExpandableRow label="Time zone" value={form ? labelOf(TIMEZONES, form.timezone) : ""} loading={!ready} open={open === "timezone"} onToggle={() => toggle("timezone")}>
-        {form && <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={TIMEZONES} placeholder="Select time zone" error={fieldErrors.timezone} />}
+      <ExpandableRow label={t("settings.timeZone")} value={form ? labelOf(timezones, form.timezone) : ""} loading={!ready} open={open === "timezone"} onToggle={() => toggle("timezone")}>
+        {form && <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={timezones} placeholder={t("settings.selectTimeZone")} error={fieldErrors.timezone} />}
       </ExpandableRow>
     </ListCard>
   );
@@ -142,11 +149,12 @@ export function MobileSecurityCard({
   const t = useT();
   return (
     <ListCard>
-      <ListCardTitle>Security</ListCardTitle>
+      <ListCardTitle>{t("ui.security")}</ListCardTitle>
       <Hairline />
       <Row>
         <RowLabel title={t("ui.signedInGoogle")} sub={loading ? "…" : formatEmail(email) || "—"} />
-        <Pill>Connected</Pill>
+        {/* i18n-max: 12 — a `shrink-0` Pill beside the `min-w-0` row label. */}
+        <Pill>{t("settings.connected")}</Pill>
       </Row>
       <Hairline />
       <button
@@ -154,16 +162,14 @@ export function MobileSecurityCard({
         onClick={onOpenSessions}
         className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <RowLabel title={t("ui.trustedSessions")} sub="Devices signed in to your account" />
+        <RowLabel title={t("ui.trustedSessions")} sub={t("settings.trustedSessionsSub")} />
         <span className="flex shrink-0 items-center gap-2">
           {sessions === undefined ? <Skeleton className="h-3.5 w-4" /> : <RowValue>{sessions.length}</RowValue>}
           <Chevron />
         </span>
       </button>
       <Hairline />
-      <p className="py-3 text-xs leading-relaxed text-muted-foreground">
-        Your password, two-factor authentication and recovery are configured in your Google Account.
-      </p>
+      <p className="py-3 text-xs leading-relaxed text-muted-foreground">{t("settings.googleManagedShort")}</p>
     </ListCard>
   );
 }
@@ -174,14 +180,14 @@ export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
   const t = useT();
   return (
     <ListCard>
-      <ListCardTitle>Notifications</ListCardTitle>
+      <ListCardTitle>{t("nav.notifications")}</ListCardTitle>
       <Hairline />
       <button
         type="button"
         onClick={onOpen}
         className="flex min-w-0 items-center justify-between gap-3 rounded-md py-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <RowLabel title={t("ui.deliveryTopics")} sub="Where we reach you and what you follow" />
+        <RowLabel title={t("ui.deliveryTopics")} sub={t("settings.deliveryTopicsSub")} />
         <Chevron />
       </button>
     </ListCard>
@@ -191,6 +197,7 @@ export function MobileNotificationsCard({ onOpen }: { onOpen: () => void }) {
 /** `btn-SignOut` — the shell-owned logout, mirroring the header account chip. */
 export function SignOutButton() {
   const locale = useLocale();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   async function signOut() {
     setBusy(true);
@@ -207,7 +214,7 @@ export function SignOutButton() {
       disabled={busy}
       className="flex w-full items-center justify-center gap-2 rounded-lg border border-border py-3.5 text-sm font-semibold text-destructive outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:bg-destructive/10 disabled:opacity-60"
     >
-      {busy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />} Sign out
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />} {t("auth.signOut")}
     </button>
   );
 }

@@ -4,6 +4,7 @@
 // bar, and the state badges. They live here rather than in either screen because the
 // list and the product page must not describe the same fund two different ways.
 
+import { useT } from "@evinvest/i18n/react";
 import { Clock } from "lucide-react";
 
 import { Badge } from "@evinvest/uikit";
@@ -60,13 +61,14 @@ export function Note({ tone, children }: { tone: "amber" | "muted"; children: Re
  * signal — there is nothing to do about it, so it earns attention, not alarm.
  */
 export function SupplyBar({ issued, cap, className }: { issued: string | undefined; cap: string | undefined; className?: string }) {
+  const t = useT();
   const fraction = fractionOfCap(issued, cap);
   const full = fraction >= 1;
   const near = fraction >= 0.9;
   return (
     <div className={cn("space-y-1.5", className)}>
       <div className="flex items-baseline justify-between gap-3 text-xs">
-        <span className="text-muted-foreground">Units issued</span>
+        <span className="text-muted-foreground">{t("invest.unitsIssued")}</span>
         <span className={cn("tabular-nums", near ? "font-medium text-main-accent-t3" : "text-muted-foreground")}>
           {compactUnits(issued)} / {compactUnits(cap)}
         </span>
@@ -78,24 +80,27 @@ export function SupplyBar({ issued, cap, className }: { issued: string | undefin
             exact, not for a bar whose job is "how full is it?". */}
         <div className={cn("h-full rounded-full", near ? "bg-main-accent-t3" : "bg-main-accent-t1")} style={{ width: `${fraction * 100}%` }} />
       </div>
-      {full && <p className="text-xs text-main-accent-t3">Fully issued — not minting new units.</p>}
+      {full && <p className="text-xs text-main-accent-t3">{t("invest.fullyIssued")}</p>}
     </div>
   );
 }
 
 /** The badges that qualify a product: closed to new money, or priced off a stale mark. */
 export function ProductBadges({ closed, stale }: { closed: boolean; stale: boolean }) {
+  const t = useT();
   if (!closed && !stale) return null;
+  // Inside a `flex-wrap` row here, so these two are safe at any length — the same two
+  // strings are NOT safe on the list card (see `invest-view`), which sets the cap.
   return (
     <div className="flex flex-wrap items-center gap-2">
       {closed && (
         <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
-          Redeem only
+          {t("invest.badge.redeemOnly")}
         </Badge>
       )}
       {stale && (
         <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
-          <Clock className="size-3" /> Stale NAV
+          <Clock className="size-3" /> {t("invest.badge.staleNav")}
           <TipAnchor anchor="invest.position.stale-nav" />
         </Badge>
       )}

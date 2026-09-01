@@ -1,7 +1,1243 @@
 {
+  "admin.ago.days": {
+    "en": "{n, plural, one {#d ago} other {#d ago}}",
+    "t": "{n, plural, one {il y a # j} many {il y a # j} other {il y a # j}}"
+  },
+  "admin.ago.hours": {
+    "en": "{n, plural, one {#h ago} other {#h ago}}",
+    "t": "{n, plural, one {il y a # h} many {il y a # h} other {il y a # h}}"
+  },
+  "admin.ago.minutes": {
+    "en": "{n, plural, one {#m ago} other {#m ago}}",
+    "t": "{n, plural, one {il y a # min} many {il y a # min} other {il y a # min}}"
+  },
+  "admin.ago.seconds": {
+    "en": "{n, plural, one {#s ago} other {#s ago}}",
+    "t": "{n, plural, one {il y a # s} many {il y a # s} other {il y a # s}}"
+  },
+  "admin.alloc.close": {
+    "en": "Close",
+    "t": "Fermer"
+  },
+  "admin.alloc.col.product": {
+    "en": "Product",
+    "t": "Produit"
+  },
+  "admin.alloc.col.serviceId": {
+    "en": "Service id",
+    "t": "Id service"
+  },
+  "admin.alloc.col.unitCap": {
+    "en": "Unit cap",
+    "t": "Plafond parts"
+  },
+  "admin.alloc.empty": {
+    "en": "No allocations registered yet — until one is, every subscription is refused.",
+    "t": "Aucune allocation inscrite pour l’instant — tant qu’il n’y en a pas, toute souscription est refusée."
+  },
+  "admin.alloc.field.summary": {
+    "en": "Summary",
+    "t": "Résumé"
+  },
+  "admin.alloc.field.title": {
+    "en": "Title",
+    "t": "Intitulé"
+  },
+  "admin.alloc.footnote": {
+    "en": "Registration lands in {state}, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.",
+    "t": "L’inscription se fait à l’état {state}, ce qui n’engage aucun capital — l’ouverture est une décision distincte. La fermeture n’arrête que les nouvelles souscriptions : les investisseurs peuvent toujours racheter leurs parts d’un produit fermé, si bien qu’une mise en extinction ne bloque jamais leurs parts. L’id de service est définitif une fois inscrit. Le plafond de parts borne le nombre de parts qui pourront être émises — redimensionnez-le sur l’écran Valorisation, où figure sur la même page le nombre de parts émises auquel il est comparé."
+  },
+  "admin.alloc.hint.closed": {
+    "en": "Closed to new money; redemptions still settle",
+    "t": "Fermé aux nouveaux capitaux ; les rachats sont toujours réglés"
+  },
+  "admin.alloc.hint.draft": {
+    "en": "Registered — accepts no money until opened",
+    "t": "Inscrit — n’accepte aucun capital avant ouverture"
+  },
+  "admin.alloc.hint.open": {
+    "en": "Accepting subscriptions and redemptions",
+    "t": "Accepte souscriptions et rachats"
+  },
+  "admin.alloc.open": {
+    "en": "Open",
+    "t": "Ouvrir"
+  },
+  "admin.alloc.placeholder.summary": {
+    "en": "One line for the catalog card",
+    "t": "Une ligne pour la fiche du catalogue"
+  },
+  "admin.alloc.register": {
+    "en": "Register allocation",
+    "t": "Inscrire une allocation"
+  },
+  "admin.alloc.registerHint": {
+    "en": "Registers in draft — open it when the product is ready to take money.",
+    "t": "Inscrit en brouillon — ouvrez-la quand le produit est prêt à recevoir des capitaux."
+  },
+  "admin.alloc.registerSubmit": {
+    "en": "Register",
+    "t": "Inscrire"
+  },
+  "admin.alloc.registry": {
+    "en": "Registry",
+    "t": "Registre"
+  },
+  "admin.alloc.slugHint": {
+    "en": "Permanent — every fund RPC keys on it",
+    "t": "Définitif — chaque RPC du fonds s’y réfère"
+  },
+  "admin.alloc.slugInvalid": {
+    "en": "Letters, digits, - and _ only (1–64)",
+    "t": "Lettres, chiffres, - et _ uniquement (1–64)"
+  },
+  "admin.alloc.subtitle": {
+    "en": "The registry of investable products — a fund exists only once it is registered here",
+    "t": "Le registre des produits investissables — un fonds n’existe qu’une fois inscrit ici"
+  },
+  "admin.cabinet.announcement": {
+    "en": "Announcement",
+    "t": "Annonce"
+  },
+  "admin.cabinet.announcementSub": {
+    "en": "The live banner across the cabinet",
+    "t": "La bannière affichée dans tout l’espace client"
+  },
+  "admin.cabinet.featureFlags": {
+    "en": "Feature flags",
+    "t": "Feature flags"
+  },
+  "admin.cabinet.featureFlagsSub": {
+    "en": "Gating cabinet features & MFE mounts",
+    "t": "Contrôle des fonctionnalités et des montages MFE"
+  },
+  "admin.cabinet.flagRollout": {
+    "en": "{pct}%",
+    "t": "{pct} %"
+  },
+  "admin.cabinet.live": {
+    "en": "Live",
+    "t": "En ligne"
+  },
+  "admin.cabinet.liveHint": {
+    "en": "Show the banner now",
+    "t": "Afficher la bannière maintenant"
+  },
+  "admin.cabinet.maintenanceMode": {
+    "en": "Maintenance mode",
+    "t": "Mode maintenance"
+  },
+  "admin.cabinet.maintenanceModeHint": {
+    "en": "Holding page on the cabinet (identity plane)",
+    "t": "Page d’attente sur l’espace client (plan identité)"
+  },
+  "admin.cabinet.maintenanceOps": {
+    "en": "Maintenance & operations",
+    "t": "Maintenance & exploitation"
+  },
+  "admin.cabinet.maintenanceOpsSub": {
+    "en": "Cabinet holding page + money-plane kill-switch",
+    "t": "Page d’attente + coupe-circuit du plan monétaire"
+  },
+  "admin.cabinet.mfeRegistry": {
+    "en": "Microfrontend registry",
+    "t": "Registre des microfrontends"
+  },
+  "admin.cabinet.mfeRegistrySub": {
+    "en": "Resolved by clients/core · /api/mfe-registry",
+    "t": "Résolu par clients/core · /api/mfe-registry"
+  },
+  "admin.cabinet.noFlags": {
+    "en": "No flags yet. PostHog experiments render here when configured.",
+    "t": "Aucun flag pour l’instant. Les expériences PostHog s’affichent ici une fois configurées."
+  },
+  "admin.cabinet.noMfes": {
+    "en": "No microfrontends registered.",
+    "t": "Aucun microfrontend enregistré."
+  },
+  "admin.cabinet.placeholder.announcementBody": {
+    "en": "Body",
+    "t": "Corps du message"
+  },
+  "admin.cabinet.placeholder.announcementTitle": {
+    "en": "Announcement title",
+    "t": "Titre de l’annonce"
+  },
+  "admin.cabinet.readOnlyMode": {
+    "en": "Read-only mode",
+    "t": "Mode lecture seule"
+  },
+  "admin.cabinet.readOnlyModeHint": {
+    "en": "Pause deposits & withdrawals (money plane)",
+    "t": "Suspendre dépôts & retraits (plan monétaire)"
+  },
+  "admin.cabinet.registered": {
+    "en": "Registered",
+    "t": "Enregistré"
+  },
+  "admin.cabinet.saveAnnouncement": {
+    "en": "Save announcement",
+    "t": "Enregistrer l’annonce"
+  },
+  "admin.cabinet.subtitle": {
+    "en": "Host shell — microfrontend registry, feature flags and content",
+    "t": "Shell hôte — registre des microfrontends, feature flags et contenu"
+  },
+  "admin.col.actions": {
+    "en": "Actions",
+    "t": "Actions"
+  },
+  "admin.col.age": {
+    "en": "Age",
+    "t": "Âge"
+  },
+  "admin.col.state": {
+    "en": "State",
+    "t": "État"
+  },
+  "admin.col.status": {
+    "en": "Status",
+    "t": "Statut"
+  },
+  "admin.col.transaction": {
+    "en": "Transaction",
+    "t": "Transaction"
+  },
+  "admin.col.user": {
+    "en": "User",
+    "t": "Compte"
+  },
+  "admin.col.when": {
+    "en": "When",
+    "t": "Date"
+  },
+  "admin.dispatch": {
+    "en": "Dispatch",
+    "t": "Expédier"
+  },
+  "admin.env.dev": {
+    "en": "DEV",
+    "t": "DEV"
+  },
+  "admin.env.prod": {
+    "en": "PROD",
+    "t": "PROD"
+  },
+  "admin.env.staging": {
+    "en": "STAGING",
+    "t": "STAGING"
+  },
+  "admin.eyebrow.administer": {
+    "en": "Administer",
+    "t": "Administrer"
+  },
+  "admin.fail": {
+    "en": "Fail",
+    "t": "Échouer"
+  },
+  "admin.fees.basis.investedCapital": {
+    "en": "Invested capital",
+    "t": "Capital investi"
+  },
+  "admin.fees.basis.marketValue": {
+    "en": "Market value",
+    "t": "Valeur de marché"
+  },
+  "admin.fees.basisNote": {
+    "en": "Invested capital is the house default: it does not swell with a mark you posted, so what the manager earns stays independent of the input the manager supplies.",
+    "t": "Le capital investi est le réglage par défaut de la maison : il n’enfle pas avec une valorisation que le gérant a lui-même publiée, si bien que sa rémunération reste indépendante de la donnée qu’il fournit."
+  },
+  "admin.fees.chargedOn": {
+    "en": "Charged on",
+    "t": "Assiette"
+  },
+  "admin.fees.charges": {
+    "en": "Charges",
+    "t": "Prélèvements"
+  },
+  "admin.fees.col.deferred": {
+    "en": "Deferred",
+    "t": "Reporté"
+  },
+  "admin.fees.col.trigger": {
+    "en": "Trigger",
+    "t": "Déclencheur"
+  },
+  "admin.fees.col.unitsTaken": {
+    "en": "Units taken",
+    "t": "Parts prises"
+  },
+  "admin.fees.collected": {
+    "en": "Collected, not yet converted",
+    "t": "Collecté, non converti"
+  },
+  "admin.fees.collectedSub": {
+    "en": "Units the sweeper has clawed back from holders. No cash has moved yet.",
+    "t": "Parts que le collecteur a reprises aux porteurs. Aucun mouvement de trésorerie n’a encore eu lieu."
+  },
+  "admin.fees.crystallizationNote": {
+    "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
+    "t": "Un coût, pas un détail — cristalliser plus souvent augmente sensiblement ce que paie un investisseur sur la durée de vie d’un fonds, car chaque réinitialisation fige des gains qu’une perte ultérieure ne pourra plus reprendre."
+  },
+  "admin.fees.err.notInteger": {
+    "en": "{field} must be a whole number of basis points.",
+    "t": "{field} doit être un nombre entier de points de base."
+  },
+  "admin.fees.err.tooLarge": {
+    "en": "{field} is {pct} — basis points, so 200 is 2%.",
+    "t": "{field} vaut {pct} — ce sont des points de base : 200 correspond à 2 %."
+  },
+  "admin.fees.field.hurdle": {
+    "en": "Hurdle",
+    "t": "Seuil"
+  },
+  "admin.fees.field.management": {
+    "en": "Management",
+    "t": "Gestion"
+  },
+  "admin.fees.field.performance": {
+    "en": "Performance",
+    "t": "Performance"
+  },
+  "admin.fees.hint.ofTheGain": {
+    "en": "of the gain",
+    "t": "du gain"
+  },
+  "admin.fees.hint.perYear": {
+    "en": "per year",
+    "t": "par an"
+  },
+  "admin.fees.hint.zeroForNone": {
+    "en": "0 for none",
+    "t": "0 pour aucun"
+  },
+  "admin.fees.lastChanged": {
+    "en": "Last changed {when}. Investors see these on the product page.",
+    "t": "Dernière modification {when}. Les investisseurs voient ces conditions sur la page du produit."
+  },
+  "admin.fees.lockedIn": {
+    "en": "Performance locked in",
+    "t": "Performance cristallisée"
+  },
+  "admin.fees.noCharges": {
+    "en": "No charges yet",
+    "t": "Aucun prélèvement"
+  },
+  "admin.fees.noChargesHint": {
+    "en": "The sweeper charges a holding once its accrual is old enough. Nothing here means nobody has been billed.",
+    "t": "Le collecteur prélève sur une position dès que sa provision est assez ancienne. Rien ici signifie que personne n’a encore été prélevé."
+  },
+  "admin.fees.noFee": {
+    "en": "No fee",
+    "t": "Aucun frais"
+  },
+  "admin.fees.noFunds": {
+    "en": "No funds registered",
+    "t": "Aucun fonds inscrit"
+  },
+  "admin.fees.noFundsHint": {
+    "en": "A fee is a property of a product. Register an allocation first, then price it here.",
+    "t": "Les frais sont une propriété du produit. Inscrivez d’abord une allocation, puis tarifez-la ici."
+  },
+  "admin.fees.notConfigured": {
+    "en": "This fund charges nothing today. Saving these terms starts the clock on every holding in it.",
+    "t": "Ce fonds ne prélève rien aujourd’hui. Enregistrer ces conditions déclenche le compteur sur chacune de ses positions."
+  },
+  "admin.fees.nothingToSettle": {
+    "en": "Nothing to settle — no fee has been charged in this fund yet.",
+    "t": "Rien à régler — aucun frais n’a encore été prélevé dans ce fonds."
+  },
+  "admin.fees.period.annual": {
+    "en": "Annually",
+    "t": "Annuelle"
+  },
+  "admin.fees.period.monthly": {
+    "en": "Monthly",
+    "t": "Mensuelle"
+  },
+  "admin.fees.period.quarterly": {
+    "en": "Quarterly",
+    "t": "Trimestrielle"
+  },
+  "admin.fees.period.semiAnnual": {
+    "en": "Every 6 months",
+    "t": "Tous les 6 mois"
+  },
+  "admin.fees.saved": {
+    "en": "Saved. Investors see the new terms immediately.",
+    "t": "Enregistré. Les investisseurs voient immédiatement les nouvelles conditions."
+  },
+  "admin.fees.settleAll": {
+    "en": "Settle all units",
+    "t": "Régler toutes les parts"
+  },
+  "admin.fees.settleNote": {
+    "en": "Settling burns these units and moves their value from the fund's claim into fee revenue. It is refused — never queued — when the fund's claim cannot cover it on top of its queued redemptions: investors waiting to exit are paid before the manager is.",
+    "t": "Le règlement détruit ces parts et transfère leur valeur de la créance du fonds vers les revenus de frais. Il est refusé — jamais mis en file — lorsque la créance du fonds ne peut le couvrir en plus de ses rachats en file : les investisseurs qui attendent de sortir sont payés avant le gérant."
+  },
+  "admin.fees.settledAtNav": {
+    "en": "{cash} settled at NAV {nav}.",
+    "t": "{cash} réglé à une VL de {nav}."
+  },
+  "admin.fees.startCharging": {
+    "en": "Start charging",
+    "t": "Commencer à prélever"
+  },
+  "admin.fees.subtitle": {
+    "en": "What each fund charges its investors, and converting what it has already earned into cash.",
+    "t": "Ce que chaque fonds facture à ses investisseurs, et la conversion en cash de ce qu’il a déjà gagné."
+  },
+  "admin.fees.terms": {
+    "en": "Terms",
+    "t": "Conditions"
+  },
+  "admin.fees.title": {
+    "en": "Fee terms and collection",
+    "t": "Conditions et collecte des frais"
+  },
+  "admin.fees.unitsHeld": {
+    "en": "Fee units held",
+    "t": "Parts de frais détenues"
+  },
+  "admin.fees.updateTerms": {
+    "en": "Update terms",
+    "t": "Mettre à jour les conditions"
+  },
+  "admin.fees.withdrawableFrom": {
+    "en": "It is withdrawable on-chain from {screen}.",
+    "t": "Ils sont retirables on-chain depuis {screen}."
+  },
+  "admin.fees.worthAtNav": {
+    "en": "Worth at current NAV",
+    "t": "Valeur à la VL actuelle"
+  },
+  "admin.overview.col.event": {
+    "en": "Event",
+    "t": "Événement"
+  },
+  "admin.overview.col.kind": {
+    "en": "Kind",
+    "t": "Type"
+  },
+  "admin.overview.col.parked": {
+    "en": "Parked",
+    "t": "Depuis"
+  },
+  "admin.overview.col.reason": {
+    "en": "Reason",
+    "t": "Motif"
+  },
+  "admin.overview.col.seq": {
+    "en": "Seq",
+    "t": "Seq"
+  },
+  "admin.overview.col.service": {
+    "en": "Service",
+    "t": "Service"
+  },
+  "admin.overview.compensated": {
+    "en": "compensated",
+    "t": "compensé"
+  },
+  "admin.overview.errorsAnalytics": {
+    "en": "Errors & analytics",
+    "t": "Erreurs & analytics"
+  },
+  "admin.overview.fleetHealth": {
+    "en": "Fleet health",
+    "t": "Santé de la flotte"
+  },
+  "admin.overview.fleetHealthSub": {
+    "en": "Central hub · datastores · microservices",
+    "t": "Hub central · datastores · microservices"
+  },
+  "admin.overview.kpi.deadKeySignings": {
+    "en": "Dead-key signings",
+    "t": "Signatures à clé morte"
+  },
+  "admin.overview.kpi.deadKeySigningsHint": {
+    "en": "Signer couldn't unseal a key — funds stranded",
+    "t": "Le signataire n’a pas pu déverrouiller une clé — fonds bloqués"
+  },
+  "admin.overview.kpi.dispatchBacklog": {
+    "en": "Dispatch backlog",
+    "t": "File d’expédition"
+  },
+  "admin.overview.kpi.dispatchBacklogHint": {
+    "en": "Undispatched outbox rows",
+    "t": "Lignes d’outbox non expédiées"
+  },
+  "admin.overview.kpi.oldestBacklog": {
+    "en": "Oldest backlog",
+    "t": "Plus ancienne en file"
+  },
+  "admin.overview.kpi.oldestBacklogHint": {
+    "en": "Age of the oldest undispatched row",
+    "t": "Âge de la plus ancienne ligne non expédiée"
+  },
+  "admin.overview.kpi.oldestBacklogValue": {
+    "en": "{n}s",
+    "t": "{n} s"
+  },
+  "admin.overview.kpi.parkedRows": {
+    "en": "Parked rows",
+    "t": "Lignes en quarantaine"
+  },
+  "admin.overview.kpi.parkedRowsHint": {
+    "en": "Money the relay couldn't apply",
+    "t": "De l’argent que le relais n’a pas pu appliquer"
+  },
+  "admin.overview.kpi.servicesHealthy": {
+    "en": "Services healthy",
+    "t": "Services opérationnels"
+  },
+  "admin.overview.noParkedEvents": {
+    "en": "No parked events — the relay is clean.",
+    "t": "Aucun événement en quarantaine — le relais est sain."
+  },
+  "admin.overview.obs.eventStream": {
+    "en": "A live outbox/event feed renders here when streaming is enabled.",
+    "t": "Un flux outbox/événements en direct s’affiche ici lorsque le streaming est activé."
+  },
+  "admin.overview.obs.eventStreamLabel": {
+    "en": "Event stream",
+    "t": "Flux d’événements"
+  },
+  "admin.overview.obs.posthog": {
+    "en": "Active investors, sessions and top events surface here once POSTHOG_KEY is configured.",
+    "t": "Les investisseurs actifs, les sessions et les principaux événements apparaîtront ici une fois POSTHOG_KEY configurée."
+  },
+  "admin.overview.obs.sentry": {
+    "en": "Unresolved issues across the fleet surface here once SENTRY_DSN is configured.",
+    "t": "Les incidents non résolus de la flotte apparaîtront ici une fois SENTRY_DSN configuré."
+  },
+  "admin.overview.parkedEvents": {
+    "en": "Parked events",
+    "t": "Événements en quarantaine"
+  },
+  "admin.overview.parkedEventsSub": {
+    "en": "Outbox rows the relay couldn't apply — fix the cause, then unpark to re-drive",
+    "t": "Lignes d’outbox que le relais n’a pas pu appliquer — corrigez la cause, puis réinjectez pour les rejouer"
+  },
+  "admin.overview.runHealthCheck": {
+    "en": "Run health check",
+    "t": "Lancer un contrôle de santé"
+  },
+  "admin.overview.subtitle": {
+    "en": "Central service and microservices — health and throughput",
+    "t": "Service central et microservices — santé et débit"
+  },
+  "admin.overview.unpark": {
+    "en": "Unpark",
+    "t": "Réinjecter"
+  },
+  "admin.overview.unparkRefetchFailed": {
+    "en": "Unparked, but refreshing the list failed: {error} — run a health check to resync.",
+    "t": "Réinjecté, mais l’actualisation de la liste a échoué : {error} — lancez un contrôle de santé pour resynchroniser."
+  },
+  "admin.overview.unparked": {
+    "en": "unparked",
+    "t": "réinjecté"
+  },
+  "admin.rail": {
+    "en": "Rail",
+    "t": "Rail"
+  },
+  "admin.rail.bep20": {
+    "en": "BEP20 · BNB Chain",
+    "t": "BEP20 · BNB Chain"
+  },
+  "admin.rail.polygon": {
+    "en": "Polygon · PoS",
+    "t": "Polygon · PoS"
+  },
+  "admin.rail.ton": {
+    "en": "TON · Open Network",
+    "t": "TON · Open Network"
+  },
+  "admin.rail.trc20": {
+    "en": "TRC20 · TRON",
+    "t": "TRC20 · TRON"
+  },
+  "admin.revenue.amountUsdt": {
+    "en": "Amount (USDT)",
+    "t": "Montant (USDT)"
+  },
+  "admin.revenue.availableHint": {
+    "en": "free of in-flight payouts",
+    "t": "hors versements en cours"
+  },
+  "admin.revenue.availableToPayOut": {
+    "en": "Available to pay out",
+    "t": "Disponible au versement"
+  },
+  "admin.revenue.confirmNote": {
+    "en": "No fee is charged on a payout, so the full amount ships. This cannot be reversed once broadcast.",
+    "t": "Aucun frais n’est prélevé sur un versement : le montant intégral est envoyé. L’opération est irréversible une fois diffusée."
+  },
+  "admin.revenue.confirmPayout": {
+    "en": "Confirm payout",
+    "t": "Confirmer"
+  },
+  "admin.revenue.confirmSentence": {
+    "en": "Send {amount} on {network} to {address}?",
+    "t": "Envoyer {amount} sur {network} à {address} ?"
+  },
+  "admin.revenue.destinationAddress": {
+    "en": "Destination address",
+    "t": "Adresse du destinataire"
+  },
+  "admin.revenue.earned": {
+    "en": "Earned",
+    "t": "Gagné"
+  },
+  "admin.revenue.earnedTotal": {
+    "en": "Earned · total",
+    "t": "Gagné · total"
+  },
+  "admin.revenue.earnedTotalHint": {
+    "en": "fees + settled 2-and-20",
+    "t": "frais + 2-et-20 réglés"
+  },
+  "admin.revenue.err.belowMinimum": {
+    "en": "Below the {min} minimum for this rail.",
+    "t": "En dessous du minimum de {min} pour ce rail."
+  },
+  "admin.revenue.err.enterAmount": {
+    "en": "Enter an amount.",
+    "t": "Saisissez un montant."
+  },
+  "admin.revenue.err.overAvailable": {
+    "en": "Only {available} of earned revenue is available.",
+    "t": "Seuls {available} de revenus gagnés sont disponibles."
+  },
+  "admin.revenue.footnote": {
+    "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
+    "t": "Un versement suit la même saga qu’un retrait client : il apparaît donc aussi dans la file Retraits, pour expédition puis règlement. Seul un versement encore en file peut être annulé — une fois en cours de traitement, une diffusion a pu aboutir et l’annuler reviendrait à payer deux fois."
+  },
+  "admin.revenue.inFlight": {
+    "en": "In flight",
+    "t": "En cours d’envoi"
+  },
+  "admin.revenue.instantSuffix": {
+    "en": "{amount} instant",
+    "t": "{amount} instantané"
+  },
+  "admin.revenue.noPayouts": {
+    "en": "No payouts yet",
+    "t": "Aucun versement pour l’instant"
+  },
+  "admin.revenue.noPayoutsHint": {
+    "en": "Revenue the fund has earned stays on the ledger until it is paid out. Payouts appear here once requested.",
+    "t": "Les revenus gagnés par le fonds restent au registre jusqu’à leur versement. Les versements apparaissent ici une fois demandés."
+  },
+  "admin.revenue.noRail": {
+    "en": "No rail is configured",
+    "t": "Aucun rail configuré"
+  },
+  "admin.revenue.noRailHint": {
+    "en": "A payout ships on a chain rail with a running watcher. Configure one to enable payouts.",
+    "t": "Un versement part sur un rail de chaîne doté d’un watcher actif. Configurez-en un pour activer les versements."
+  },
+  "admin.revenue.ownMoneyNote": {
+    "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
+    "t": "Il s’agit des fonds propres de la société. Les soldes des clients et le capital d’amorçage du fonds sont des créances distinctes au registre : ils ne sont pas comptés ici et ne sont pas accessibles depuis cet écran."
+  },
+  "admin.revenue.payOut": {
+    "en": "Pay out",
+    "t": "Verser"
+  },
+  "admin.revenue.payouts": {
+    "en": "Payouts",
+    "t": "Versements"
+  },
+  "admin.revenue.pendingHint": {
+    "en": "queued + in-flight",
+    "t": "en file + en cours d’envoi"
+  },
+  "admin.revenue.pendingPayout": {
+    "en": "Pending payout",
+    "t": "Versement en attente"
+  },
+  "admin.revenue.placeholder.address": {
+    "en": "The wallet that receives the payout",
+    "t": "Le wallet qui reçoit le versement"
+  },
+  "admin.revenue.placeholder.minAmount": {
+    "en": "min {n}",
+    "t": "min {n}"
+  },
+  "admin.revenue.reviewPayout": {
+    "en": "Review payout",
+    "t": "Vérifier le versement"
+  },
+  "admin.revenue.subtitle": {
+    "en": "What the fund earned — fees and the settled 2-and-20 — and paying it out",
+    "t": "Ce que le fonds a gagné — frais et 2-et-20 réglés — et son versement"
+  },
+  "admin.revenue.willQueue": {
+    "en": "Above the {instant} that ships immediately on this rail — the rest is accepted and queued until the treasury is topped up.",
+    "t": "Au-delà des {instant} expédiés immédiatement sur ce rail — le reste est accepté et mis en file jusqu’au réapprovisionnement de la trésorerie."
+  },
+  "admin.role.admin": {
+    "en": "Admin",
+    "t": "Admin"
+  },
+  "admin.role.investor": {
+    "en": "Investor",
+    "t": "Investisseur"
+  },
+  "admin.role.operator": {
+    "en": "Operator",
+    "t": "Opérateur"
+  },
+  "admin.role.owner": {
+    "en": "Owner",
+    "t": "Propriétaire"
+  },
+  "admin.settle": {
+    "en": "Settle",
+    "t": "Régler"
+  },
+  "admin.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Annulé"
+  },
+  "admin.state.closed": {
+    "en": "Closed",
+    "t": "Fermé"
+  },
+  "admin.state.completed": {
+    "en": "Completed",
+    "t": "Terminé"
+  },
+  "admin.state.draft": {
+    "en": "Draft",
+    "t": "Brouillon"
+  },
+  "admin.state.failed": {
+    "en": "Failed",
+    "t": "Échoué"
+  },
+  "admin.state.open": {
+    "en": "Open",
+    "t": "Ouvert"
+  },
+  "admin.state.processing": {
+    "en": "Processing",
+    "t": "En cours"
+  },
+  "admin.state.queued": {
+    "en": "Queued",
+    "t": "En file"
+  },
+  "admin.status.active": {
+    "en": "Active",
+    "t": "Actif"
+  },
+  "admin.status.blocked": {
+    "en": "Blocked",
+    "t": "Bloqué"
+  },
+  "admin.status.degraded": {
+    "en": "Degraded",
+    "t": "Dégradé"
+  },
+  "admin.status.disabled": {
+    "en": "Disabled",
+    "t": "Désactivé"
+  },
+  "admin.status.error": {
+    "en": "Error",
+    "t": "Erreur"
+  },
+  "admin.status.healthy": {
+    "en": "Healthy",
+    "t": "Opérationnel"
+  },
+  "admin.status.onboarding": {
+    "en": "Onboarding",
+    "t": "Onboarding"
+  },
+  "admin.status.pending": {
+    "en": "Pending",
+    "t": "En attente"
+  },
+  "admin.status.review": {
+    "en": "Review",
+    "t": "En examen"
+  },
+  "admin.status.staged": {
+    "en": "Staged",
+    "t": "Préparé"
+  },
+  "admin.treasury.a11y.copy": {
+    "en": "Copy {what}",
+    "t": "Copier {what}"
+  },
+  "admin.treasury.alreadyRecorded": {
+    "en": "Already recorded — that reference was credited before, nothing changed.",
+    "t": "Déjà enregistré — cette référence a déjà été créditée, rien n’a changé."
+  },
+  "admin.treasury.bank": {
+    "en": "Bank · USD",
+    "t": "Banque · USD"
+  },
+  "admin.treasury.bankHint": {
+    "en": "off-ramp · FX",
+    "t": "off-ramp · change"
+  },
+  "admin.treasury.claimsTotal": {
+    "en": "Claims · total (USDT)",
+    "t": "Créances · total (USDT)"
+  },
+  "admin.treasury.claimsTotalHint": {
+    "en": "= on-chain custody · backed",
+    "t": "= conservation on-chain · couvert"
+  },
+  "admin.treasury.custodyUnconfigured": {
+    "en": "— · custody unconfigured",
+    "t": "— · conservation non configurée"
+  },
+  "admin.treasury.expectedAmount": {
+    "en": "Expected amount (USDT) · optional",
+    "t": "Montant attendu (USDT) · facultatif"
+  },
+  "admin.treasury.feeRevenueHint": {
+    "en": "earned — fees + settled 2-and-20",
+    "t": "gagné — frais + 2-et-20 réglés"
+  },
+  "admin.treasury.fundCapital": {
+    "en": "Fund capital",
+    "t": "Capital du fonds"
+  },
+  "admin.treasury.fundCapitalHint": {
+    "en": "company's own",
+    "t": "fonds propres de la société"
+  },
+  "admin.treasury.gas": {
+    "en": "Gas",
+    "t": "Gas"
+  },
+  "admin.treasury.gasStation": {
+    "en": "Gas station",
+    "t": "Station de gas"
+  },
+  "admin.treasury.gasStationBalance": {
+    "en": "Gas station balance",
+    "t": "Solde de la station de gas"
+  },
+  "admin.treasury.gasStationHint": {
+    "en": "(fund {symbol} here — pays sweep gas drops)",
+    "t": "(approvisionnez en {symbol} ici — paie le gas des balayages)"
+  },
+  "admin.treasury.gasWord": {
+    "en": "gas",
+    "t": "gas"
+  },
+  "admin.treasury.heldForClients": {
+    "en": "Held for clients",
+    "t": "Détenu pour les clients"
+  },
+  "admin.treasury.heldForClientsHint": {
+    "en": "user + service balances",
+    "t": "soldes utilisateurs + services"
+  },
+  "admin.treasury.invariantNote": {
+    "en": "Per-rail backing is the treasury's job, not the ledger's: a shortfall on one rail is accept-and-queue, then rebalanced via CEX / alt-rail / top-up. The global invariant is {invariant}.",
+    "t": "La couverture rail par rail relève de la trésorerie, pas du registre : un déficit sur un rail est accepté et mis en file, puis rééquilibré via CEX, rail alternatif ou réapprovisionnement. L’invariant global est {invariant}."
+  },
+  "admin.treasury.layer1": {
+    "en": "Layer 1 · Ledger — user claims (USDT)",
+    "t": "Couche 1 · Registre — créances clients (USDT)"
+  },
+  "admin.treasury.layer2": {
+    "en": "Layer 2 · Treasury — liquidity by rail",
+    "t": "Couche 2 · Trésorerie — liquidité par rail"
+  },
+  "admin.treasury.noRailWithTreasury": {
+    "en": "No rail with a treasury",
+    "t": "Aucun rail doté d’une trésorerie"
+  },
+  "admin.treasury.onchainRef": {
+    "en": "On-chain reference",
+    "t": "Référence on-chain"
+  },
+  "admin.treasury.onchainUsdt": {
+    "en": "On-chain USDT",
+    "t": "USDT on-chain"
+  },
+  "admin.treasury.party.fundCapital": {
+    "en": "fund capital",
+    "t": "capital du fonds"
+  },
+  "admin.treasury.party.generic": {
+    "en": "{kind} {id}",
+    "t": "{kind} {id}"
+  },
+  "admin.treasury.placeholder.any": {
+    "en": "any",
+    "t": "indifférent"
+  },
+  "admin.treasury.recordArrival": {
+    "en": "Record an out-of-band arrival",
+    "t": "Enregistrer une arrivée hors circuit"
+  },
+  "admin.treasury.recordArrivalIntro": {
+    "en": "USDT sent straight to a treasury hot wallet is real money the ledger never saw. Give its on-chain reference and the hub reads the transfer back off the chain — the amount and the party credited come from there, so this records an arrival rather than asserting one.",
+    "t": "Des USDT envoyés directement à un hot wallet de trésorerie sont de l’argent réel que le registre n’a jamais vu. Donnez leur référence on-chain et le hub relit le transfert sur la chaîne — le montant et la partie créditée en proviennent, si bien que cette action enregistre une arrivée plutôt qu’elle ne l’affirme."
+  },
+  "admin.treasury.recordArrivalSubmit": {
+    "en": "Record arrival",
+    "t": "Enregistrer l’arrivée"
+  },
+  "admin.treasury.recorded": {
+    "en": "Recorded — the chain reported {amount}, credited to {party}.",
+    "t": "Enregistré — la chaîne a rapporté {amount}, crédité à {party}."
+  },
+  "admin.treasury.refNote": {
+    "en": "The reference is both what gets verified and the idempotency key — {evmRef} on an EVM rail, {tonRef} on TON. A reference that names no confirmed transfer to one of our addresses is refused, and a re-submission of one already recorded is a no-op. Fill the amount only to assert what you expect; a mismatch is then an error instead of a surprise.",
+    "t": "La référence est à la fois ce qui est vérifié et la clé d’idempotence — {evmRef} sur un rail EVM, {tonRef} sur TON. Une référence qui ne désigne aucun transfert confirmé vers l’une de nos adresses est refusée, et une nouvelle soumission d’une référence déjà enregistrée est sans effet. Ne renseignez le montant que pour affirmer ce que vous attendez : un écart devient alors une erreur plutôt qu’une surprise."
+  },
+  "admin.treasury.reservedWithdrawals": {
+    "en": "Reserved · withdrawals",
+    "t": "Réservé · retraits"
+  },
+  "admin.treasury.reservedWithdrawalsHint": {
+    "en": "queued + in-flight (clearing)",
+    "t": "en file + en cours (compensation)"
+  },
+  "admin.treasury.selectRail": {
+    "en": "Select a rail…",
+    "t": "Choisir un rail…"
+  },
+  "admin.treasury.subtitle": {
+    "en": "Two layers — user claims (USDT) vs on-chain liquidity by rail",
+    "t": "Deux couches — créances clients (USDT) et liquidité on-chain par rail"
+  },
+  "admin.users.accessSecurity": {
+    "en": "Access & security",
+    "t": "Accès & sécurité"
+  },
+  "admin.users.balance": {
+    "en": "Balance",
+    "t": "Solde"
+  },
+  "admin.users.count": {
+    "en": "{n, plural, one {# user} other {# users}}",
+    "t": "{n, plural, one {# utilisateur} many {# utilisateurs} other {# utilisateurs}}"
+  },
+  "admin.users.identity": {
+    "en": "Identity",
+    "t": "Identité"
+  },
+  "admin.users.joined": {
+    "en": "Joined",
+    "t": "Inscrit"
+  },
+  "admin.users.kyc": {
+    "en": "KYC",
+    "t": "KYC"
+  },
+  "admin.users.kycBadge": {
+    "en": "KYC L{n}",
+    "t": "KYC N{n}"
+  },
+  "admin.users.kycLevelShort": {
+    "en": "L{n}",
+    "t": "N{n}"
+  },
+  "admin.users.noMatch": {
+    "en": "No users match these filters.",
+    "t": "Aucun utilisateur ne correspond à ces filtres."
+  },
+  "admin.users.reinstate": {
+    "en": "Reinstate",
+    "t": "Réactiver"
+  },
+  "admin.users.revokeAllSessions": {
+    "en": "Revoke all sessions",
+    "t": "Révoquer toutes les sessions"
+  },
+  "admin.users.revokeNote": {
+    "en": "Bumps token_version — invalidates every JWT issued to this user.",
+    "t": "Incrémente token_version — invalide tous les JWT émis pour cet utilisateur."
+  },
+  "admin.users.role": {
+    "en": "Role",
+    "t": "Rôle"
+  },
+  "admin.users.searchPlaceholder": {
+    "en": "Search email or user id…",
+    "t": "Rechercher un e-mail ou un id utilisateur…"
+  },
+  "admin.users.subtitle": {
+    "en": "Investors and operators — identities, KYC, roles and sessions",
+    "t": "Investisseurs et opérateurs — identités, KYC, rôles et sessions"
+  },
+  "admin.users.suspend": {
+    "en": "Suspend",
+    "t": "Suspendre"
+  },
+  "admin.users.tokenVersion": {
+    "en": "Token version",
+    "t": "Version de jeton"
+  },
+  "admin.users.tokenVersionValue": {
+    "en": "v{n}",
+    "t": "v{n}"
+  },
+  "admin.valuation.allocationLabel": {
+    "en": "{title} ({service})",
+    "t": "{title} ({service})"
+  },
+  "admin.valuation.allocationLabelWithState": {
+    "en": "{title} ({service}) — {state}",
+    "t": "{title} ({service}) — {state}"
+  },
+  "admin.valuation.approx": {
+    "en": "≈ {amount}",
+    "t": "≈ {amount}"
+  },
+  "admin.valuation.aumUsdt": {
+    "en": "AUM (USDT)",
+    "t": "AUM (USDT)"
+  },
+  "admin.valuation.capBelowIssued": {
+    "en": "Below the {n} units already issued: this stops further issuance. Nothing minted is affected and redemptions keep working.",
+    "t": "En dessous des {n} parts déjà émises : cela arrête toute nouvelle émission. Rien de ce qui a été émis n’est affecté et les rachats continuent de fonctionner."
+  },
+  "admin.valuation.capHint": {
+    "en": "Takes effect on the next subscription. Redemptions are never affected.",
+    "t": "Prend effet à la prochaine souscription. Les rachats ne sont jamais affectés."
+  },
+  "admin.valuation.capInvalid": {
+    "en": "Must be greater than zero — to stop new money entirely, close the allocation instead.",
+    "t": "Doit être supérieur à zéro — pour arrêter complètement les entrées de capitaux, fermez plutôt l’allocation."
+  },
+  "admin.valuation.capUnits": {
+    "en": "Cap (units)",
+    "t": "Plafond (parts)"
+  },
+  "admin.valuation.col.estCash": {
+    "en": "Est. cash",
+    "t": "Cash est."
+  },
+  "admin.valuation.derivedFormula": {
+    "en": "= AUM / {n, plural, one {# unit} other {# units}}",
+    "t": "= AUM / {n, plural, one {# part} many {# parts} other {# parts}}"
+  },
+  "admin.valuation.derivedNav": {
+    "en": "Derived NAV / share",
+    "t": "VL dérivée / part"
+  },
+  "admin.valuation.fundService": {
+    "en": "Fund (service)",
+    "t": "Fonds (service)"
+  },
+  "admin.valuation.issuedOfCap": {
+    "en": "{issued} / {cap} units",
+    "t": "{issued} / {cap} parts"
+  },
+  "admin.valuation.loadingSupply": {
+    "en": "Loading supply… — a subscription that would mint past the cap is refused.",
+    "t": "Chargement de l’encours… — une souscription qui émettrait au-delà du plafond est refusée."
+  },
+  "admin.valuation.navFormula": {
+    "en": "AUM / units",
+    "t": "AUM / parts"
+  },
+  "admin.valuation.navGuardNote": {
+    "en": "NAV-move guard — a post is rejected if NAV moves more than 50% from the last mark, unless override is on.",
+    "t": "Garde-fou de variation de VL — une publication est rejetée si la VL s’écarte de plus de 50 % de la dernière valorisation, sauf si la dérogation est active."
+  },
+  "admin.valuation.noAllocations": {
+    "en": "No allocations registered",
+    "t": "Aucune allocation inscrite"
+  },
+  "admin.valuation.noUnitsNote": {
+    "en": "No units outstanding — NAV is {formula}, so it is undefined until someone subscribes. The fund prices at the seed NAV 1.0 until the first subscription; there is nothing to mark yet.",
+    "t": "Aucune part en circulation — la VL vaut {formula}, elle est donc indéfinie tant que personne n’a souscrit. Le fonds est valorisé à la VL d’amorçage de 1,0 jusqu’à la première souscription ; il n’y a rien à valoriser pour l’instant."
+  },
+  "admin.valuation.overrideGuard": {
+    "en": "Override guard",
+    "t": "Dérogation"
+  },
+  "admin.valuation.overrideGuardHint": {
+    "en": "Allow a >50% NAV move",
+    "t": "Autoriser une variation de VL supérieure à 50 %"
+  },
+  "admin.valuation.pickAFund": {
+    "en": "Pick a fund above to see and resize its authorised unit supply.",
+    "t": "Choisissez un fonds ci-dessus pour voir et redimensionner son encours de parts autorisé."
+  },
+  "admin.valuation.postValuation": {
+    "en": "Post valuation",
+    "t": "Publier la valorisation"
+  },
+  "admin.valuation.queueEmpty": {
+    "en": "The redemption queue is empty.",
+    "t": "La file de rachats est vide."
+  },
+  "admin.valuation.queueFootnote": {
+    "en": "Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.",
+    "t": "Régler paie à la VL du moment du règlement dès que la créance du fonds est liquide ; si le rail est à court, le versement est mis en file jusqu’au réapprovisionnement de la trésorerie. Échouer annule la demande et restitue les parts."
+  },
+  "admin.valuation.queuedCount": {
+    "en": "{n, plural, one {# queued} other {# queued}}",
+    "t": "{n, plural, one {# en file} many {# en file} other {# en file}}"
+  },
+  "admin.valuation.redemptionQueue": {
+    "en": "Redemption queue",
+    "t": "File de rachats"
+  },
+  "admin.valuation.saveCap": {
+    "en": "Save cap",
+    "t": "Enregistrer le plafond"
+  },
+  "admin.valuation.stillIssuable": {
+    "en": "{units} units still issuable — a subscription that would mint past the cap is refused.",
+    "t": "{units} parts encore émissibles — une souscription qui émettrait au-delà du plafond est refusée."
+  },
+  "admin.valuation.subtitle": {
+    "en": "Post fund NAV and clear the redemption queue",
+    "t": "Publier la VL du fonds et vider la file de rachats"
+  },
+  "admin.valuation.unitSupply": {
+    "en": "Unit supply",
+    "t": "Encours de parts"
+  },
+  "admin.valuation.unitsIssuedIn": {
+    "en": "Units issued in {service}",
+    "t": "Parts émises dans {service}"
+  },
+  "admin.withdrawals.awaitingAction": {
+    "en": "Awaiting action",
+    "t": "En attente d’action"
+  },
+  "admin.withdrawals.col.grossNet": {
+    "en": "Gross / net",
+    "t": "Brut / net"
+  },
+  "admin.withdrawals.confirmFail": {
+    "en": "Confirm fail",
+    "t": "Confirmer l’échec"
+  },
+  "admin.withdrawals.confirmSettle": {
+    "en": "Confirm settle",
+    "t": "Confirmer le règlement"
+  },
+  "admin.withdrawals.empty": {
+    "en": "No withdrawals are awaiting action.",
+    "t": "Aucun retrait n’attend d’action."
+  },
+  "admin.withdrawals.failWarning": {
+    "en": "Failing refunds the user. If the broadcast reached the chain this would double-pay — the hub refuses while a broadcast record exists, but verify on-chain first.",
+    "t": "Déclarer l’échec rembourse l’utilisateur. Si la diffusion a atteint la chaîne, cela reviendrait à payer deux fois — le hub refuse tant qu’un enregistrement de diffusion existe, mais vérifiez d’abord on-chain."
+  },
+  "admin.withdrawals.footnote": {
+    "en": "Dispatch broadcasts a queued withdrawal once its rail has liquidity. Settle records the mined transaction and releases the reservation. Fail voids and refunds — ONLY safe when nothing reached the chain; the hub refuses it while a broadcast record exists.",
+    "t": "Expédier diffuse un retrait en file dès que son rail dispose de liquidité. Régler enregistre la transaction minée et libère la réservation. Échouer annule et rembourse — sûr UNIQUEMENT si rien n’a atteint la chaîne ; le hub le refuse tant qu’un enregistrement de diffusion existe."
+  },
+  "admin.withdrawals.netSuffix": {
+    "en": "{amount} net",
+    "t": "{amount} net"
+  },
+  "admin.withdrawals.openCount": {
+    "en": "{n, plural, one {# open} other {# open}}",
+    "t": "{n, plural, one {# ouvert} many {# ouverts} other {# ouverts}}"
+  },
+  "admin.withdrawals.placeholder.reason": {
+    "en": "Reason (audit note, optional)",
+    "t": "Motif (note d’audit, facultatif)"
+  },
+  "admin.withdrawals.placeholder.txHash": {
+    "en": "Mined transaction hash (0x…)",
+    "t": "Hash de la transaction minée (0x…)"
+  },
+  "admin.withdrawals.subtitle": {
+    "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
+    "t": "Expédier, régler ou faire échouer les retraits — ceux des investisseurs et les versements du fonds"
+  },
+  "auth.brandBlurb": {
+    "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
+    "t": "Un accès de qualité institutionnelle à des fonds sélectionnés d’immobilier côtier et d’infrastructures — gérés de bout en bout."
+  },
+  "auth.brandHeadline": {
+    "en": "Private capital for Vietnam's coastal economy.",
+    "t": "Du capital privé pour l’économie côtière du Vietnam."
+  },
+  "auth.continueWithGoogle": {
+    "en": "Continue with Google",
+    "t": "Continuer avec Google"
+  },
+  "auth.err.denied": {
+    "en": "Sign-in was cancelled.",
+    "t": "La connexion a été annulée."
+  },
+  "auth.err.exchange": {
+    "en": "We couldn't complete sign-in. Please try again.",
+    "t": "Nous n’avons pas pu finaliser la connexion. Veuillez réessayer."
+  },
+  "auth.err.generic": {
+    "en": "Sign-in failed. Please try again.",
+    "t": "Échec de la connexion. Veuillez réessayer."
+  },
+  "auth.err.invalid": {
+    "en": "That sign-in attempt expired. Please try again.",
+    "t": "Cette tentative de connexion a expiré. Veuillez réessayer."
+  },
+  "auth.investorPortal": {
+    "en": "Investor Portal",
+    "t": "Espace investisseur"
+  },
+  "auth.newToEv": {
+    "en": "New to EV Invest? Continuing with Google sets up your cabinet.",
+    "t": "Nouveau chez EV Invest ? Continuer avec Google crée votre espace."
+  },
+  "auth.notSignedIn": {
+    "en": "Not signed in",
+    "t": "Non connecté"
+  },
+  "auth.signInAgain": {
+    "en": "Sign in again",
+    "t": "Se reconnecter"
+  },
+  "auth.signInSub": {
+    "en": "Sign in to manage your investments.",
+    "t": "Connectez-vous pour gérer vos investissements."
+  },
+  "auth.signOut": {
+    "en": "Sign out",
+    "t": "Se déconnecter"
+  },
+  "auth.signedOut": {
+    "en": "Signed out",
+    "t": "Déconnecté"
+  },
+  "auth.signedOutSub": {
+    "en": "You've been signed out of your cabinet.",
+    "t": "Vous avez été déconnecté de votre espace."
+  },
+  "auth.stat.aum": {
+    "en": "Assets under mgmt",
+    "t": "Actifs sous gestion"
+  },
+  "auth.stat.targetIrr": {
+    "en": "Avg. target IRR",
+    "t": "TRI cible moyen"
+  },
+  "auth.welcomeBack": {
+    "en": "Welcome back",
+    "t": "Bon retour"
+  },
   "dash.activeStrategies": {
     "en": "Active strategies",
     "t": "Stratégies actives"
+  },
+  "dash.allTimeSuffix": {
+    "en": "{pct} all-time",
+    "t": "{pct} depuis l’origine"
   },
   "dash.autoDeploy": {
     "en": "Auto-deploy idle cash",
@@ -19,13 +1255,17 @@
     "en": "Browse strategies",
     "t": "Parcourir les stratégies"
   },
+  "dash.fundFallback": {
+    "en": "Fund",
+    "t": "Fonds"
+  },
   "dash.fundPerformance": {
     "en": "Fund performance",
     "t": "Performance du fonds"
   },
   "dash.hintAcrossPositions": {
     "en": "across all positions",
-    "t": "sur l'ensemble des positions"
+    "t": "sur l’ensemble des positions"
   },
   "dash.hintAtCostBasis": {
     "en": "at cost basis",
@@ -39,6 +1279,10 @@
     "en": "fund positions",
     "t": "positions en fonds"
   },
+  "dash.investedWhatIOwn": {
+    "en": "Invested · what I own",
+    "t": "Investi · mes avoirs"
+  },
   "dash.moveMoney": {
     "en": "Move money",
     "t": "Mouvements de fonds"
@@ -49,11 +1293,11 @@
   },
   "dash.noHistory": {
     "en": "No performance history yet",
-    "t": "Pas encore d'historique de performance"
+    "t": "Pas encore d’historique de performance"
   },
   "dash.noHistoryHint": {
     "en": "The fund curve and your participation appear here once there is activity to plot.",
-    "t": "La courbe du fonds et votre participation s'affichent ici dès qu'il y a de quoi tracer."
+    "t": "La courbe du fonds et votre participation s’affichent ici dès qu’il y a de quoi tracer."
   },
   "dash.noOperationsHint": {
     "en": "Deposits, subscriptions, redemptions and withdrawals land here the moment you make them.",
@@ -61,11 +1305,31 @@
   },
   "dash.nothingInvested": {
     "en": "Nothing invested yet",
-    "t": "Rien d'investi pour l'instant"
+    "t": "Rien d’investi pour l’instant"
   },
   "dash.nothingInvestedHint": {
     "en": "Subscribe to a strategy and the split of what you own shows up here.",
-    "t": "Souscrivez à une stratégie et la répartition de vos avoirs s'affichera ici."
+    "t": "Souscrivez à une stratégie et la répartition de vos avoirs s’affichera ici."
+  },
+  "dash.op.deposit": {
+    "en": "Deposit · {network}",
+    "t": "Dépôt · {network}"
+  },
+  "dash.op.redeemed": {
+    "en": "{fund} — redeemed",
+    "t": "{fund} — racheté"
+  },
+  "dash.op.sub": {
+    "en": "{ref} · {state}",
+    "t": "{ref} · {state}"
+  },
+  "dash.op.subscribed": {
+    "en": "{fund} — subscribed",
+    "t": "{fund} — souscrit"
+  },
+  "dash.op.withdrawal": {
+    "en": "Withdrawal · {network}",
+    "t": "Retrait · {network}"
   },
   "dash.portfolio": {
     "en": "Portfolio",
@@ -73,15 +1337,39 @@
   },
   "dash.portfolioSub": {
     "en": "All-time performance and your participation",
-    "t": "Performance depuis l'origine et votre participation"
+    "t": "Performance depuis l’origine et votre participation"
   },
   "dash.portfolioValue": {
     "en": "Portfolio value",
     "t": "Valeur du portefeuille"
   },
+  "dash.range.1m": {
+    "en": "1M",
+    "t": "1M"
+  },
+  "dash.range.1y": {
+    "en": "1Y",
+    "t": "1A"
+  },
+  "dash.range.6m": {
+    "en": "6M",
+    "t": "6M"
+  },
+  "dash.range.all": {
+    "en": "All",
+    "t": "Tout"
+  },
   "dash.recentOperations": {
     "en": "Recent operations",
     "t": "Opérations récentes"
+  },
+  "dash.strategyCount": {
+    "en": "{n, plural, one {# strategy} other {# strategies}}",
+    "t": "{n, plural, one {# stratégie} many {# stratégies} other {# stratégies}}"
+  },
+  "dash.unitsAmount": {
+    "en": "{n, plural, one {{units} unit} other {{units} units}}",
+    "t": "{n, plural, one {{units} part} many {{units} parts} other {{units} parts}}"
   },
   "dash.unrealizedPnl": {
     "en": "Unrealized P&L",
@@ -91,21 +1379,449 @@
     "en": "Your participation",
     "t": "Votre participation"
   },
+  "err.address.controlChars": {
+    "en": "Residential address must not contain control characters",
+    "t": "L’adresse de résidence ne doit pas contenir de caractères de contrôle"
+  },
+  "err.address.maxLength": {
+    "en": "Residential address must be at most 256 characters",
+    "t": "L’adresse de résidence ne doit pas dépasser 256 caractères"
+  },
+  "err.authNotConfigured": {
+    "en": "Sign-in is unavailable right now. Please try again shortly.",
+    "t": "La connexion est indisponible pour le moment. Veuillez réessayer sous peu."
+  },
+  "err.csrf": {
+    "en": "This page went stale. Reload it and try again.",
+    "t": "Cette page n’est plus à jour. Rechargez-la et réessayez."
+  },
+  "err.currency.format": {
+    "en": "Base currency must be a 3-letter code such as 'USD'",
+    "t": "La devise de référence doit être un code à 3 lettres tel que « USD »"
+  },
+  "err.dob.format": {
+    "en": "Date of birth must be a valid YYYY-MM-DD date",
+    "t": "La date de naissance doit être une date valide au format AAAA-MM-JJ"
+  },
+  "err.dob.range": {
+    "en": "Date of birth must be a real date between 1900 and 2100",
+    "t": "La date de naissance doit être une date réelle comprise entre 1900 et 2100"
+  },
+  "err.email.invalid": {
+    "en": "Enter a valid email address",
+    "t": "Saisissez une adresse e-mail valide"
+  },
+  "err.email.maxLength": {
+    "en": "Email address must be at most 320 characters",
+    "t": "L’adresse e-mail ne doit pas dépasser 320 caractères"
+  },
+  "err.feePolicySave": {
+    "en": "Could not save these terms.",
+    "t": "Impossible d’enregistrer ces conditions."
+  },
+  "err.feeSettle": {
+    "en": "Could not settle these units.",
+    "t": "Impossible de régler ces parts."
+  },
+  "err.field.maxLength": {
+    "en": "{field} must be at most {n, plural, one {# character} other {# characters}}",
+    "t": "{field} ne doit pas dépasser {n, plural, one {# caractère} many {# caractères} other {# caractères}}"
+  },
+  "err.field.minLetters": {
+    "en": "{field} must contain at least 2 letters",
+    "t": "{field} doit contenir au moins 2 lettres"
+  },
+  "err.field.nameChars": {
+    "en": "{field} may only contain letters, spaces, hyphens, apostrophes, and periods",
+    "t": "{field} ne peut contenir que des lettres, des espaces, des traits d’union, des apostrophes et des points"
+  },
+  "err.forbidden": {
+    "en": "You don't have access to this.",
+    "t": "Vous n’y avez pas accès."
+  },
+  "err.fundRefresh": {
+    "en": "Couldn't refresh this fund",
+    "t": "Impossible d’actualiser ce fonds"
+  },
+  "err.fundServiceRequired": {
+    "en": "Select a fund to continue.",
+    "t": "Sélectionnez un fonds pour continuer."
+  },
+  "err.language.format": {
+    "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
+    "t": "La langue doit être un code BCP 47 tel que « en » ou « en-US »"
+  },
+  "err.language.maxLength": {
+    "en": "Language must be at most 16 characters",
+    "t": "La langue ne doit pas dépasser 16 caractères"
+  },
+  "err.network": {
+    "en": "Can't reach the server. Check your connection and try again.",
+    "t": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+  },
+  "err.notFound": {
+    "en": "Not found.",
+    "t": "Introuvable."
+  },
+  "err.opsLoad": {
+    "en": "Couldn't load your operations",
+    "t": "Impossible de charger vos opérations"
+  },
+  "err.phone.invalid": {
+    "en": "Enter a valid phone number starting with + or country code",
+    "t": "Saisissez un numéro de téléphone valide commençant par + ou par un indicatif pays"
+  },
+  "err.phone.maxLength": {
+    "en": "Phone number must be at most 32 characters",
+    "t": "Le numéro de téléphone ne doit pas dépasser 32 caractères"
+  },
+  "err.positionsLoad": {
+    "en": "Couldn't load your positions",
+    "t": "Impossible de charger vos positions"
+  },
+  "err.rateLimited": {
+    "en": "Too many requests — give it a moment and try again.",
+    "t": "Trop de requêtes — patientez un instant et réessayez."
+  },
+  "err.requestFailed": {
+    "en": "Something went wrong on our side. Please try again.",
+    "t": "Un problème est survenu de notre côté. Veuillez réessayer."
+  },
+  "err.serverUnavailable": {
+    "en": "The service is temporarily unavailable. Please try again.",
+    "t": "Le service est temporairement indisponible. Veuillez réessayer."
+  },
+  "err.sessionExpired": {
+    "en": "Your session has ended. Sign in again to continue.",
+    "t": "Votre session a pris fin. Reconnectez-vous pour continuer."
+  },
+  "err.timezone.format": {
+    "en": "Time zone must be 'UTC', 'GMT', or an IANA name such as 'Asia/Ho_Chi_Minh'",
+    "t": "Le fuseau horaire doit valoir « UTC », « GMT » ou un nom IANA tel que « Asia/Ho_Chi_Minh »"
+  },
+  "err.timezone.maxLength": {
+    "en": "Time zone must be at most 64 characters",
+    "t": "Le fuseau horaire ne doit pas dépasser 64 caractères"
+  },
+  "err.unauthenticated": {
+    "en": "We couldn't confirm your session. Reload the page or sign in again.",
+    "t": "Nous n’avons pas pu confirmer votre session. Rechargez la page ou reconnectez-vous."
+  },
+  "err.unparkDeclined": {
+    "en": "The hub declined the unpark.",
+    "t": "Le hub a refusé la réinjection."
+  },
+  "err.walletLoad": {
+    "en": "Couldn't load your wallet",
+    "t": "Impossible de charger votre wallet"
+  },
+  "invest.accruedOnHolding": {
+    "en": "Accrued on your holding",
+    "t": "Couru sur votre position"
+  },
+  "invest.acrossFunds": {
+    "en": "{n, plural, one {Across # fund} other {Across # funds}}",
+    "t": "{n, plural, one {Sur # fonds} many {Sur # fonds} other {Sur # fonds}}"
+  },
+  "invest.allProducts": {
+    "en": "All products",
+    "t": "Tous les produits"
+  },
+  "invest.availableToInvest": {
+    "en": "Available to invest",
+    "t": "Disponible à investir"
+  },
+  "invest.awaitingSettlement": {
+    "en": "Awaiting settlement",
+    "t": "En attente de règlement"
+  },
+  "invest.badge.open": {
+    "en": "Open",
+    "t": "Ouvert"
+  },
+  "invest.badge.redeemOnly": {
+    "en": "Redeem only",
+    "t": "Rachat seul"
+  },
+  "invest.badge.staleNav": {
+    "en": "Stale NAV",
+    "t": "VL obsolète"
+  },
+  "invest.blocked.capReached": {
+    "en": "This fund has issued its full authorised supply, so it is not minting new units. Redemptions are unaffected.",
+    "t": "Ce fonds a émis la totalité de son encours autorisé : il ne crée donc plus de nouvelles parts. Les rachats ne sont pas affectés."
+  },
+  "invest.blocked.closed": {
+    "en": "This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full.",
+    "t": "Ce fonds est fermé aux nouvelles souscriptions. Vos parts ne sont pas affectées — vous pouvez toujours les racheter intégralement."
+  },
+  "invest.blocked.staleNav": {
+    "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",
+    "t": "La valorisation du fonds n’est plus à jour : les opérations sont suspendues jusqu’à ce qu’un opérateur en publie une nouvelle."
+  },
+  "invest.buysUnits": {
+    "en": "Buys {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT per unit.",
+    "t": "Achète {n, plural, one {{units} part} many {{units} parts} other {{units} parts}} à {nav} USDT la part."
+  },
+  "invest.carriedOver": {
+    "en": "Carried over",
+    "t": "Reporté"
+  },
+  "invest.costBasis": {
+    "en": "Cost basis",
+    "t": "Prix de revient"
+  },
+  "invest.dustHint": {
+    "en": "Too small to buy a whole unit at {nav} — increase the amount.",
+    "t": "Trop faible pour acheter une part entière à {nav} — augmentez le montant."
+  },
+  "invest.feeNoteHolder": {
+    "en": "Fees are taken in units, never in cash — your wallet balance is untouched, and the value shown opposite is before them. The performance fee applies only to gains above your own high-water mark, so a recovery back to it costs nothing.",
+    "t": "Les frais sont prélevés en parts, jamais en cash — votre solde n’est pas touché, et la valeur indiquée en regard s’entend avant frais. La commission de surperformance ne s’applique qu’aux gains supérieurs à votre propre high-water mark : un simple retour à ce niveau ne coûte rien."
+  },
+  "invest.feeNoteProspect": {
+    "en": "Fees are taken in units, never in cash. The performance fee applies only to gains above the price you enter at, measured per investor rather than per fund.",
+    "t": "Les frais sont prélevés en parts, jamais en cash. La commission de surperformance ne s’applique qu’aux gains supérieurs au prix auquel vous entrez, mesurés par investisseur et non par fonds."
+  },
+  "invest.fullyIssued": {
+    "en": "Fully issued — not minting new units.",
+    "t": "Intégralement émis — plus aucune part n’est créée."
+  },
+  "invest.fundAum": {
+    "en": "Fund AUM",
+    "t": "AUM du fonds"
+  },
+  "invest.fundsHeld": {
+    "en": "Funds held",
+    "t": "Fonds détenus"
+  },
+  "invest.hurdleFirst": {
+    "en": "{pct} p.a. first",
+    "t": "d’abord {pct} par an"
+  },
+  "invest.investedValue": {
+    "en": "Invested value",
+    "t": "Valeur investie"
+  },
+  "invest.lockedIn": {
+    "en": "Locked in",
+    "t": "Cristallisation"
+  },
+  "invest.nav": {
+    "en": "NAV",
+    "t": "VL"
+  },
+  "invest.navPerUnit": {
+    "en": "NAV / unit",
+    "t": "VL / part"
+  },
+  "invest.noFunds": {
+    "en": "No funds are open for subscription right now.",
+    "t": "Aucun fonds n’est ouvert à la souscription pour l’instant."
+  },
+  "invest.noFundsHint": {
+    "en": "A fund appears here once an operator registers and opens it. Nothing you hold is affected.",
+    "t": "Un fonds apparaît ici une fois qu’un opérateur l’a inscrit et ouvert. Rien de ce que vous détenez n’est affecté."
+  },
+  "invest.noUnitsHeld": {
+    "en": "You hold no fund units yet.",
+    "t": "Vous ne détenez encore aucune part de fonds."
+  },
+  "invest.noUnitsInFund": {
+    "en": "You hold no units in this fund yet.",
+    "t": "Vous ne détenez encore aucune part dans ce fonds."
+  },
+  "invest.notInvestedYet": {
+    "en": "Not invested yet",
+    "t": "Pas encore investi"
+  },
+  "invest.notRegistered": {
+    "en": "No fund is registered as “{service}”.",
+    "t": "Aucun fonds n’est inscrit sous « {service} »."
+  },
+  "invest.notRegisteredHint": {
+    "en": "A fund exists only once an operator registers it. If you followed a link here, the product may never have been opened.",
+    "t": "Un fonds n’existe qu’une fois inscrit par un opérateur. Si vous avez suivi un lien, le produit n’a peut-être jamais été ouvert."
+  },
+  "invest.notYetValued": {
+    "en": "Not yet valued",
+    "t": "Pas encore valorisé"
+  },
+  "invest.notYetValuedHint": {
+    "en": "Not yet valued — the first subscription prices at 1.0.",
+    "t": "Pas encore valorisé — la première souscription se fait à 1,0."
+  },
+  "invest.ofTheGain": {
+    "en": "{pct} of the gain",
+    "t": "{pct} du gain"
+  },
+  "invest.overCapHint": {
+    "en": "Only {n, plural, one {{units} unit is} other {{units} units are}} left before this fund reaches its cap — reduce the amount.",
+    "t": "Il ne reste que {n, plural, one {{units} part} many {{units} parts} other {{units} parts}} avant que ce fonds n’atteigne son plafond — réduisez le montant."
+  },
+  "invest.perAnnum": {
+    "en": "{pct} p.a.",
+    "t": "{pct} par an"
+  },
+  "invest.pnl": {
+    "en": "P&L",
+    "t": "P&L"
+  },
+  "invest.products": {
+    "en": "Products",
+    "t": "Produits"
+  },
+  "invest.redeem": {
+    "en": "Redeem",
+    "t": "Racheter"
+  },
+  "invest.redeemCompleted": {
+    "en": "Redemption completed",
+    "t": "Rachat effectué"
+  },
+  "invest.redeemEstimate": {
+    "en": "≈ {amount} USDT at today's NAV — the settle price may differ.",
+    "t": "≈ {amount} USDT à la VL du jour — le prix de règlement peut différer."
+  },
+  "invest.redeemFailed": {
+    "en": "Redemption failed",
+    "t": "Échec du rachat"
+  },
+  "invest.redeemQueued": {
+    "en": "Redemption queued",
+    "t": "Rachat en file"
+  },
+  "invest.redeemReceiptCompleted": {
+    "en": "{n, plural, one {{units} unit} other {{units} units}} redeemed for {cash} USDT at {nav} USDT NAV.",
+    "t": "{n, plural, one {{units} part rachetée} many {{units} parts rachetées} other {{units} parts rachetées}} pour {cash} USDT à une VL de {nav} USDT."
+  },
+  "invest.redeemReceiptQueued": {
+    "en": "{n, plural, one {{units} unit} other {{units} units}} reserved — queued until the fund tops up, then priced at the settle NAV.",
+    "t": "{n, plural, one {{units} part réservée} many {{units} parts réservées} other {{units} parts réservées}} — en file jusqu’au réapprovisionnement du fonds, puis valorisation à la VL de règlement."
+  },
+  "invest.redeemTimingNote": {
+    "en": "Your units are reserved the moment you submit, but the cash is priced when the redemption settles — not now. A figure shown here is an estimate at today's NAV.",
+    "t": "Vos parts sont réservées dès la soumission, mais le montant en cash est fixé au règlement du rachat, pas maintenant. Tout chiffre affiché ici est une estimation à la VL du jour."
+  },
+  "invest.remainingCapacity": {
+    "en": "Remaining capacity",
+    "t": "Capacité restante"
+  },
+  "invest.reservedPricedAtSettle": {
+    "en": "reserved, priced at settle",
+    "t": "réservé, valorisé au règlement"
+  },
+  "invest.subscribe": {
+    "en": "Subscribe",
+    "t": "Souscrire"
+  },
+  "invest.subscribeFailed": {
+    "en": "Subscription failed",
+    "t": "Échec de la souscription"
+  },
+  "invest.subscribeIdleHint": {
+    "en": "Units are priced at the current NAV; the unit count is fixed at purchase and does not grow.",
+    "t": "Les parts sont valorisées à la VL courante ; leur nombre est fixé à l’achat et n’augmente pas."
+  },
+  "invest.subscribeReceiptBody": {
+    "en": "Minted {n, plural, one {{units} unit} other {{units} units}} at {nav} USDT NAV — your position updates shortly.",
+    "t": "Émission de {n, plural, one {{units} part} many {{units} parts} other {{units} parts}} à une VL de {nav} USDT — votre position sera mise à jour sous peu."
+  },
+  "invest.subscribeReceived": {
+    "en": "Subscription received",
+    "t": "Souscription reçue"
+  },
+  "invest.supplyNote": {
+    "en": "Subscriptions mint units at the current NAV. Once the cap is reached the fund stops accepting new money; redemptions are unaffected.",
+    "t": "Les souscriptions créent des parts à la VL courante. Une fois le plafond atteint, le fonds cesse d’accepter de nouveaux capitaux ; les rachats ne sont pas affectés."
+  },
+  "invest.title": {
+    "en": "Your fund shares",
+    "t": "Vos parts de fonds"
+  },
+  "invest.topUp": {
+    "en": "Top up",
+    "t": "Alimenter"
+  },
+  "invest.units": {
+    "en": "Units",
+    "t": "Parts"
+  },
+  "invest.unitsHeld": {
+    "en": "{n, plural, one {{units} unit} other {{units} units}} held.",
+    "t": "{n, plural, one {{units} part détenue} many {{units} parts détenues} other {{units} parts détenues}}."
+  },
+  "invest.unitsIssued": {
+    "en": "Units issued",
+    "t": "Parts émises"
+  },
+  "invest.unitsToRedeem": {
+    "en": "Units to redeem",
+    "t": "Parts à racheter"
+  },
+  "invest.unmarkedNote": {
+    "en": "No valuation posted yet — units price at the bootstrap NAV of 1.0 until the first mark.",
+    "t": "Aucune valorisation publiée — les parts sont valorisées à la VL d’amorçage de 1,0 jusqu’à la première cotation."
+  },
+  "invest.value": {
+    "en": "Value",
+    "t": "Valeur"
+  },
+  "invest.youHoldUnits": {
+    "en": "You hold {n, plural, one {{units} unit} other {{units} units}}.",
+    "t": "Vous détenez {n, plural, one {{units} part} many {{units} parts} other {{units} parts}}."
+  },
+  "invest.yourMark": {
+    "en": "Your mark",
+    "t": "Votre high-water mark"
+  },
+  "invest.yourPosition": {
+    "en": "Your position",
+    "t": "Votre position"
+  },
+  "invest.yourUnits": {
+    "en": "Your units",
+    "t": "Vos parts"
+  },
   "lang.switch": {
     "en": "Language",
     "t": "Langue"
   },
+  "meta.description": {
+    "en": "Your investor cabinet — portfolio, funds and wallet.",
+    "t": "Votre espace investisseur — portefeuille, fonds et wallet."
+  },
+  "meta.title": {
+    "en": "EV Investment — Cabinet",
+    "t": "EV Investment — Espace client"
+  },
+  "mfe.loading": {
+    "en": "Loading {name}…",
+    "t": "Chargement de {name}…"
+  },
+  "nav.a11y.primary": {
+    "en": "Primary",
+    "t": "Navigation principale"
+  },
+  "nav.a11y.secondary": {
+    "en": "Secondary",
+    "t": "Navigation secondaire"
+  },
   "nav.allocations": {
     "en": "Allocations",
-    "t": "Allocations"
+    "t": "Produits"
   },
   "nav.cabinet": {
     "en": "Cabinet",
-    "t": "Espace client"
+    "t": "Mon espace"
   },
   "nav.fees": {
     "en": "Fees",
     "t": "Frais"
+  },
+  "nav.group.fund": {
+    "en": "Fund",
+    "t": "Fonds"
   },
   "nav.home": {
     "en": "Home",
@@ -117,7 +1833,7 @@
   },
   "nav.notifications": {
     "en": "Notifications",
-    "t": "Notifications"
+    "t": "Alertes"
   },
   "nav.operations": {
     "en": "Operations",
@@ -125,11 +1841,11 @@
   },
   "nav.overview": {
     "en": "Overview",
-    "t": "Vue d'ensemble"
+    "t": "Synthèse"
   },
   "nav.revenue": {
     "en": "Fund revenue",
-    "t": "Revenus du fonds"
+    "t": "Revenus"
   },
   "nav.settings": {
     "en": "Settings",
@@ -141,17 +1857,297 @@
   },
   "nav.users": {
     "en": "Users",
-    "t": "Utilisateurs"
+    "t": "Comptes"
   },
   "nav.valuation": {
     "en": "Valuation & redemptions",
-    "t": "Valorisation & rachats"
+    "t": "VL/Rachats"
   },
   "nav.wallet": {
     "en": "Wallet",
-    "t": "Portefeuille"
+    "t": "Wallet"
   },
   "nav.withdrawals": {
+    "en": "Withdrawals",
+    "t": "Retraits"
+  },
+  "notif.a11y.email": {
+    "en": "Email notifications",
+    "t": "Notifications par e-mail"
+  },
+  "notif.a11y.emailCopyFor": {
+    "en": "Email copy for {topic}",
+    "t": "Copie par e-mail pour {topic}"
+  },
+  "notif.a11y.inApp": {
+    "en": "In-app notifications",
+    "t": "Notifications dans l’application"
+  },
+  "notif.allCaughtUp": {
+    "en": "You're all caught up.",
+    "t": "Vous êtes à jour."
+  },
+  "notif.channelsFootnote": {
+    "en": "Turn a channel off and we stop sending on it. Turn both off and we stop notifying you altogether — updates still live on the fund pages whenever you want them.",
+    "t": "Désactivez un canal et nous cessons d’y envoyer. Désactivez les deux et nous cessons de vous notifier — les actualités restent consultables sur les pages des fonds quand vous le souhaitez."
+  },
+  "notif.delivery": {
+    "en": "Delivery",
+    "t": "Diffusion"
+  },
+  "notif.deliverySub": {
+    "en": "Choose where notifications reach you. Both can be off.",
+    "t": "Choisissez où les notifications vous parviennent. Les deux peuvent être désactivés."
+  },
+  "notif.emailUnverified": {
+    "en": "{email} · unverified, so email is not sent",
+    "t": "{email} · non vérifiée, aucun e-mail n’est envoyé"
+  },
+  "notif.emailVerified": {
+    "en": "Sent to {email} · verified",
+    "t": "Envoyé à {email} · vérifiée"
+  },
+  "notif.emptyHint": {
+    "en": "Follow a fund and its NAV updates, distributions and research notes land here — and in your inbox too, if you want a copy.",
+    "t": "Suivez un fonds et ses mises à jour de VL, ses distributions et ses notes de recherche arrivent ici — et dans votre boîte mail aussi, si vous en voulez une copie."
+  },
+  "notif.follow": {
+    "en": "Follow",
+    "t": "Suivre"
+  },
+  "notif.following": {
+    "en": "Following",
+    "t": "Suivi"
+  },
+  "notif.inAppSub": {
+    "en": "On by default. Turn this off and notifications stop appearing in your cabinet.",
+    "t": "Activé par défaut. Désactivez-le et les notifications cessent d’apparaître dans votre espace."
+  },
+  "notif.loadOlder": {
+    "en": "Load older",
+    "t": "Charger les plus anciennes"
+  },
+  "notif.markAllRead": {
+    "en": "Mark all read",
+    "t": "Tout marquer comme lu"
+  },
+  "notif.nothingUnread": {
+    "en": "Nothing unread",
+    "t": "Rien de non lu"
+  },
+  "notif.nothingYet": {
+    "en": "Nothing yet",
+    "t": "Rien pour l’instant"
+  },
+  "notif.settingsLink": {
+    "en": "Notification settings",
+    "t": "Paramètres de notification"
+  },
+  "notif.subtitle": {
+    "en": "Everything you follow — and how you hear about it",
+    "t": "Tout ce que vous suivez — et comment vous en êtes informé"
+  },
+  "notif.topicsSub": {
+    "en": "Email a copy for these. Unsubscribing is one click — no confirmation step.",
+    "t": "Recevez-en une copie par e-mail. Se désabonner tient en un clic, sans confirmation."
+  },
+  "notif.unread": {
+    "en": "Unread",
+    "t": "Non lus"
+  },
+  "notif.unreadCount": {
+    "en": "Unread · {n}",
+    "t": "Non lus · {n}"
+  },
+  "notif.whatYouFollow": {
+    "en": "What you follow",
+    "t": "Ce que vous suivez"
+  },
+  "notif.when.days": {
+    "en": "{n}d",
+    "t": "{n} j"
+  },
+  "notif.when.hours": {
+    "en": "{n}h",
+    "t": "{n} h"
+  },
+  "notif.when.minutes": {
+    "en": "{n}m",
+    "t": "{n} min"
+  },
+  "notif.when.now": {
+    "en": "now",
+    "t": "à l’instant"
+  },
+  "ops.a11y.rowDetails": {
+    "en": "{title} — details",
+    "t": "{title} — détails"
+  },
+  "ops.badge.buy": {
+    "en": "BUY",
+    "t": "BUY"
+  },
+  "ops.badge.fee": {
+    "en": "FEE",
+    "t": "FEE"
+  },
+  "ops.badge.in": {
+    "en": "IN",
+    "t": "IN"
+  },
+  "ops.badge.out": {
+    "en": "OUT",
+    "t": "OUT"
+  },
+  "ops.badge.sell": {
+    "en": "SELL",
+    "t": "SELL"
+  },
+  "ops.context.fund": {
+    "en": "Fund · {when}",
+    "t": "Fonds · {when}"
+  },
+  "ops.context.network": {
+    "en": "{network} · {when}",
+    "t": "{network} · {when}"
+  },
+  "ops.day.today": {
+    "en": "Today",
+    "t": "Aujourd’hui"
+  },
+  "ops.day.todayInline": {
+    "en": "today",
+    "t": "aujourd’hui"
+  },
+  "ops.day.undated": {
+    "en": "Undated",
+    "t": "Sans date"
+  },
+  "ops.day.yesterday": {
+    "en": "Yesterday",
+    "t": "Hier"
+  },
+  "ops.day.yesterdayInline": {
+    "en": "yesterday",
+    "t": "hier"
+  },
+  "ops.detail.amountCredited": {
+    "en": "Amount credited",
+    "t": "Montant crédité"
+  },
+  "ops.detail.amountDebited": {
+    "en": "Amount debited",
+    "t": "Montant débité"
+  },
+  "ops.detail.cashIn": {
+    "en": "Cash in",
+    "t": "Cash entrant"
+  },
+  "ops.detail.cashOut": {
+    "en": "Cash out",
+    "t": "Cash sortant"
+  },
+  "ops.detail.feeDeferred": {
+    "en": "Taken in units — the rest is carried to the next charge",
+    "t": "Prélevé en parts — le reste est reporté sur le prochain prélèvement"
+  },
+  "ops.detail.feeTaken": {
+    "en": "Taken in units, not from your wallet",
+    "t": "Prélevé en parts, pas sur votre solde"
+  },
+  "ops.detail.managementFee": {
+    "en": "Management fee",
+    "t": "Frais de gestion"
+  },
+  "ops.detail.netArrives": {
+    "en": "{amount} USDT arrives after the network fee",
+    "t": "{amount} USDT arrivent après les frais de réseau"
+  },
+  "ops.detail.netSent": {
+    "en": "Net sent",
+    "t": "Net envoyé"
+  },
+  "ops.detail.notYetBroadcast": {
+    "en": "not yet broadcast",
+    "t": "pas encore diffusé"
+  },
+  "ops.detail.performanceFee": {
+    "en": "Performance fee",
+    "t": "Commission de surperformance"
+  },
+  "ops.detail.pricePerUnit": {
+    "en": "Price per unit",
+    "t": "Prix par part"
+  },
+  "ops.detail.pricedAtSettle": {
+    "en": "Priced when the fund settles it",
+    "t": "Valorisé au règlement par le fonds"
+  },
+  "ops.detail.reference": {
+    "en": "Reference",
+    "t": "Référence"
+  },
+  "ops.detail.setAtSettle": {
+    "en": "set at settle",
+    "t": "fixé au règlement"
+  },
+  "ops.detail.toAddress": {
+    "en": "To address",
+    "t": "Adresse de destination"
+  },
+  "ops.detail.unitsMinted": {
+    "en": "Units minted",
+    "t": "Parts émises"
+  },
+  "ops.detail.unitsRedeemed": {
+    "en": "Units redeemed",
+    "t": "Parts rachetées"
+  },
+  "ops.detail.valueTaken": {
+    "en": "Value taken",
+    "t": "Valeur prélevée"
+  },
+  "ops.empty.deposits": {
+    "en": "No deposits yet",
+    "t": "Aucun dépôt pour l’instant"
+  },
+  "ops.empty.fees": {
+    "en": "No fees yet",
+    "t": "Aucun frais pour l’instant"
+  },
+  "ops.empty.redemptions": {
+    "en": "No redemptions yet",
+    "t": "Aucun rachat pour l’instant"
+  },
+  "ops.empty.subscriptions": {
+    "en": "No subscriptions yet",
+    "t": "Aucune souscription pour l’instant"
+  },
+  "ops.empty.withdrawals": {
+    "en": "No withdrawals yet",
+    "t": "Aucun retrait pour l’instant"
+  },
+  "ops.emptyHint": {
+    "en": "Add funds to your wallet, then subscribe into a fund — every movement appears here from the moment you make it, not once it settles.",
+    "t": "Alimentez votre wallet, puis souscrivez à un fonds — chaque mouvement apparaît ici dès que vous l’effectuez, et non une fois réglé."
+  },
+  "ops.filter.deposits": {
+    "en": "Deposits",
+    "t": "Dépôts"
+  },
+  "ops.filter.fees": {
+    "en": "Fees",
+    "t": "Frais"
+  },
+  "ops.filter.redemptions": {
+    "en": "Redemptions",
+    "t": "Rachats"
+  },
+  "ops.filter.subscriptions": {
+    "en": "Subscriptions",
+    "t": "Souscriptions"
+  },
+  "ops.filter.withdrawals": {
     "en": "Withdrawals",
     "t": "Retraits"
   },
@@ -159,13 +2155,413 @@
     "en": "Filter operations by kind",
     "t": "Filtrer les opérations par type"
   },
+  "ops.filterEmptyHint": {
+    "en": "You have other activity — switch back to All to see it.",
+    "t": "Vous avez d’autres mouvements — revenez sur Tout pour les voir."
+  },
+  "ops.kind.deposit": {
+    "en": "Deposit",
+    "t": "Dépôt"
+  },
+  "ops.kind.fee": {
+    "en": "Fee",
+    "t": "Frais"
+  },
+  "ops.kind.redemption": {
+    "en": "Redemption",
+    "t": "Rachat"
+  },
+  "ops.kind.subscription": {
+    "en": "Subscription",
+    "t": "Souscription"
+  },
+  "ops.kind.unknown": {
+    "en": "Operation",
+    "t": "Opération"
+  },
+  "ops.kind.withdrawal": {
+    "en": "Withdrawal",
+    "t": "Retrait"
+  },
+  "ops.op.feeCharged": {
+    "en": "{fund} — fee charged",
+    "t": "{fund} — frais prélevés"
+  },
+  "ops.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Annulé"
+  },
+  "ops.state.charged": {
+    "en": "Charged",
+    "t": "Prélevé"
+  },
+  "ops.state.completed": {
+    "en": "Completed",
+    "t": "Terminé"
+  },
+  "ops.state.credited": {
+    "en": "Credited",
+    "t": "Crédité"
+  },
+  "ops.state.failed": {
+    "en": "Failed",
+    "t": "Échec"
+  },
+  "ops.state.partlyDeferred": {
+    "en": "Partly deferred",
+    "t": "Reporté"
+  },
+  "ops.state.processing": {
+    "en": "Processing",
+    "t": "En cours"
+  },
+  "ops.state.queued": {
+    "en": "Queued",
+    "t": "En file"
+  },
+  "ops.step.awaitingFund": {
+    "en": "Awaiting fund liquidity",
+    "t": "En attente de liquidité du fonds"
+  },
+  "ops.step.awaitingFundMeta": {
+    "en": "priced at the NAV when it settles",
+    "t": "valorisé à la VL du règlement"
+  },
+  "ops.step.awaitingRail": {
+    "en": "Awaiting a liquid rail",
+    "t": "En attente d’un rail liquide"
+  },
+  "ops.step.awaitingRailMeta": {
+    "en": "ships as soon as the rail is topped up",
+    "t": "part dès que le rail est réapprovisionné"
+  },
+  "ops.step.broadcast": {
+    "en": "Broadcast to the network",
+    "t": "Diffusé sur le réseau"
+  },
+  "ops.step.burnVoided": {
+    "en": "the reserved burn was voided",
+    "t": "la destruction réservée a été annulée"
+  },
+  "ops.step.cashPaidOut": {
+    "en": "Cash paid out",
+    "t": "Cash versé"
+  },
+  "ops.step.creditedToBalance": {
+    "en": "credited to your balance",
+    "t": "crédité sur votre solde"
+  },
+  "ops.step.inFlight": {
+    "en": "in flight",
+    "t": "en cours d’envoi"
+  },
+  "ops.step.leftCustody": {
+    "en": "funds have left custody",
+    "t": "les fonds ont quitté la conservation"
+  },
+  "ops.step.perUnit": {
+    "en": "{nav} per unit",
+    "t": "{nav} par part"
+  },
+  "ops.step.pricedAtSettle": {
+    "en": "Priced at the settle NAV",
+    "t": "Valorisé à la VL de règlement"
+  },
+  "ops.step.redCancelled": {
+    "en": "Cancelled — units returned",
+    "t": "Annulé — parts restituées"
+  },
+  "ops.step.redFailed": {
+    "en": "Failed — units returned",
+    "t": "Échec — parts restituées"
+  },
+  "ops.step.requested": {
+    "en": "Requested",
+    "t": "Demandé"
+  },
+  "ops.step.reservationVoided": {
+    "en": "the reservation was voided",
+    "t": "la réservation a été annulée"
+  },
+  "ops.step.settledOnChain": {
+    "en": "Settled on-chain",
+    "t": "Réglé on-chain"
+  },
+  "ops.step.waiting": {
+    "en": "waiting",
+    "t": "en attente"
+  },
+  "ops.step.wdCancelled": {
+    "en": "Cancelled — balance returned",
+    "t": "Annulé — solde restitué"
+  },
+  "ops.step.wdFailed": {
+    "en": "Failed — balance returned",
+    "t": "Échec — solde restitué"
+  },
+  "ops.sub.deposit": {
+    "en": "{network} · {ref}",
+    "t": "{network} · {ref}"
+  },
+  "ops.sub.managementLeg": {
+    "en": "{amount} management",
+    "t": "{amount} gestion"
+  },
+  "ops.sub.performanceLeg": {
+    "en": "{amount} performance",
+    "t": "{amount} performance"
+  },
+  "ops.sub.withdrawal": {
+    "en": "{network} · {destination}",
+    "t": "{network} · {destination}"
+  },
+  "ops.sub.withdrawalNet": {
+    "en": "{network} · {destination} · {amount} USDT net",
+    "t": "{network} · {destination} · {amount} USDT net"
+  },
+  "ops.subtitle": {
+    "en": "Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.",
+    "t": "Chaque dépôt, retrait, souscription et rachat que vous avez effectué, et chaque frais prélevé par un fonds — un seul fil."
+  },
+  "ops.truncatedNote": {
+    "en": "Showing your most recent operations — older activity isn't listed here yet.",
+    "t": "Affichage de vos opérations les plus récentes — l’activité plus ancienne n’est pas encore listée ici."
+  },
+  "profile.accountSnapshot": {
+    "en": "Account snapshot",
+    "t": "Aperçu du compte"
+  },
+  "profile.dateOfBirth": {
+    "en": "Date of birth",
+    "t": "Date de naissance"
+  },
+  "profile.editProfile": {
+    "en": "Edit profile",
+    "t": "Modifier le profil"
+  },
+  "profile.identityVerification": {
+    "en": "Identity verification",
+    "t": "Vérification d’identité"
+  },
+  "profile.kycLevelPill": {
+    "en": "KYC level {n}",
+    "t": "KYC niv. {n}"
+  },
+  "profile.kycRaisedBy": {
+    "en": "Raised by compliance review",
+    "t": "Relevé après examen de conformité"
+  },
+  "profile.legalName": {
+    "en": "Legal name",
+    "t": "Nom légal"
+  },
+  "profile.managedByCompliance": {
+    "en": "Managed by compliance",
+    "t": "Géré par la conformité"
+  },
+  "profile.nationality": {
+    "en": "Nationality",
+    "t": "Nationalité"
+  },
+  "profile.personalInformation": {
+    "en": "Personal information",
+    "t": "Informations personnelles"
+  },
+  "profile.personalInformationSub": {
+    "en": "Used for compliance and statements",
+    "t": "Utilisées pour la conformité et les relevés"
+  },
+  "profile.phoneNumber": {
+    "en": "Phone number",
+    "t": "Numéro de téléphone"
+  },
+  "profile.platformAccess": {
+    "en": "Platform access",
+    "t": "Accès à la plateforme"
+  },
+  "profile.preferredName": {
+    "en": "Preferred name",
+    "t": "Nom d’usage"
+  },
+  "profile.residentialAddress": {
+    "en": "Residential address",
+    "t": "Adresse de résidence"
+  },
+  "profile.roleAccount": {
+    "en": "{role} account",
+    "t": "Compte {role}"
+  },
+  "profile.subtitle": {
+    "en": "Your personal details and verification status",
+    "t": "Vos informations personnelles et votre statut de vérification"
+  },
+  "profile.taxResidence": {
+    "en": "Tax residence",
+    "t": "Résidence fiscale"
+  },
+  "profile.totalInvested": {
+    "en": "Total invested",
+    "t": "Total investi"
+  },
+  "profile.unverified": {
+    "en": "Unverified",
+    "t": "Non vérifié"
+  },
+  "settings.a11y.sections": {
+    "en": "Settings sections",
+    "t": "Sections des paramètres"
+  },
+  "settings.accountSub": {
+    "en": "Your contact details and preferences",
+    "t": "Vos coordonnées et vos préférences"
+  },
+  "settings.baseCurrency": {
+    "en": "Base currency",
+    "t": "Devise de référence"
+  },
+  "settings.connected": {
+    "en": "Connected",
+    "t": "Connecté"
+  },
+  "settings.currency.eur": {
+    "en": "EUR (€)",
+    "t": "EUR (€)"
+  },
+  "settings.currency.usd": {
+    "en": "USD ($)",
+    "t": "USD ($)"
+  },
+  "settings.deliveryTopicsSub": {
+    "en": "Where we reach you and what you follow",
+    "t": "Où nous vous joignons et ce que vous suivez"
+  },
+  "settings.device.browser": {
+    "en": "Browser",
+    "t": "Navigateur"
+  },
+  "settings.device.generic": {
+    "en": "device",
+    "t": "appareil"
+  },
+  "settings.device.label": {
+    "en": "{browser} · {os}",
+    "t": "{browser} · {os}"
+  },
+  "settings.device.unknown": {
+    "en": "Unknown device",
+    "t": "Appareil inconnu"
+  },
+  "settings.devicesSignedIn": {
+    "en": "{n, plural, one {# device currently signed in} other {# devices currently signed in}}",
+    "t": "{n, plural, one {# appareil actuellement connecté} many {# appareils actuellement connectés} other {# appareils actuellement connectés}}"
+  },
+  "settings.fixHighlighted": {
+    "en": "Please fix the highlighted fields",
+    "t": "Veuillez corriger les champs signalés"
+  },
+  "settings.googleManaged": {
+    "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
+    "t": "Votre connexion et votre mot de passe sont gérés par Google. L’authentification à deux facteurs et la récupération se configurent dans votre compte Google."
+  },
+  "settings.googleManagedShort": {
+    "en": "Your password, two-factor authentication and recovery are configured in your Google Account.",
+    "t": "Votre mot de passe, l’authentification à deux facteurs et la récupération se configurent dans votre compte Google."
+  },
+  "settings.nav.general": {
+    "en": "General",
+    "t": "Général"
+  },
+  "settings.noSessions": {
+    "en": "No active sessions.",
+    "t": "Aucune session active."
+  },
+  "settings.phone": {
+    "en": "Phone",
+    "t": "Téléphone"
+  },
+  "settings.revoke": {
+    "en": "Revoke",
+    "t": "Révoquer"
+  },
+  "settings.securitySub": {
+    "en": "How you sign in and where your account is active",
+    "t": "Comment vous vous connectez et où votre compte est actif"
+  },
+  "settings.selectCurrency": {
+    "en": "Select currency",
+    "t": "Choisir la devise"
+  },
+  "settings.selectLanguage": {
+    "en": "Select language",
+    "t": "Choisir la langue"
+  },
+  "settings.selectTimeZone": {
+    "en": "Select time zone",
+    "t": "Choisir le fuseau horaire"
+  },
+  "settings.session.activeNow": {
+    "en": "Active now",
+    "t": "Actif maintenant"
+  },
+  "settings.session.activeNowLower": {
+    "en": "active now",
+    "t": "actif maintenant"
+  },
+  "settings.session.activeRecently": {
+    "en": "active recently",
+    "t": "actif récemment"
+  },
+  "settings.session.lastActiveDays": {
+    "en": "last active {n}d ago",
+    "t": "actif il y a {n} j"
+  },
+  "settings.session.lastActiveHours": {
+    "en": "last active {n}h ago",
+    "t": "actif il y a {n} h"
+  },
+  "settings.session.lastActiveMinutes": {
+    "en": "last active {n}m ago",
+    "t": "actif il y a {n} min"
+  },
+  "settings.sessionsLoading": {
+    "en": "Loading active sessions…",
+    "t": "Chargement des sessions actives…"
+  },
+  "settings.sessionsSub": {
+    "en": "Where you're signed in — revoke anything you don't recognise",
+    "t": "Où vous êtes connecté — révoquez tout ce que vous ne reconnaissez pas"
+  },
+  "settings.signOutOthers": {
+    "en": "Sign out all other devices",
+    "t": "Déconnecter les autres"
+  },
+  "settings.subtitle": {
+    "en": "Manage your account, security and access",
+    "t": "Gérez votre compte, votre sécurité et vos accès"
+  },
+  "settings.thisDevice": {
+    "en": "This device",
+    "t": "Cet appareil"
+  },
+  "settings.timeZone": {
+    "en": "Time zone",
+    "t": "Fuseau horaire"
+  },
+  "settings.trustedSessionsSub": {
+    "en": "Devices signed in to your account",
+    "t": "Appareils connectés à votre compte"
+  },
+  "settings.tz.hoChiMinh": {
+    "en": "Asia / Ho Chi Minh",
+    "t": "Asie / Hô Chi Minh"
+  },
   "status.backHome": {
     "en": "Back to home",
-    "t": "Retour à l'accueil"
+    "t": "Retour à l’accueil"
   },
   "status.contactTeam": {
     "en": "Contact the team",
-    "t": "Contacter l'équipe"
+    "t": "Contacter l’équipe"
   },
   "status.forbidden.eyebrow": {
     "en": "Access forbidden",
@@ -181,7 +2577,7 @@
   },
   "status.forbidden.subtext": {
     "en": "You don't have the credentials to view this page. If you believe you should, our team can open the right doors.",
-    "t": "Vous n'avez pas les accès nécessaires pour consulter cette page. Si vous pensez qu'il s'agit d'une erreur, notre équipe peut vous ouvrir les bonnes portes."
+    "t": "Vous n’avez pas les accès nécessaires pour consulter cette page. Si vous pensez qu’il s’agit d’une erreur, notre équipe peut vous ouvrir les bonnes portes."
   },
   "status.notFound.eyebrow": {
     "en": "Page not found",
@@ -201,7 +2597,7 @@
   },
   "status.requestAccess": {
     "en": "Request access",
-    "t": "Demander l'accès"
+    "t": "Demander l’accès"
   },
   "status.serverError.eyebrow": {
     "en": "Server error",
@@ -233,7 +2629,7 @@
   },
   "status.unauthorized.headlineAccent": {
     "en": "crew only",
-    "t": "réservé à l'équipage"
+    "t": "réservé à l’équipage"
   },
   "status.unauthorized.headlineLead": {
     "en": "This deck is ",
@@ -242,6 +2638,726 @@
   "status.unauthorized.subtext": {
     "en": "You need to be signed in to view this page. Sign in and we'll bring you right back.",
     "t": "Vous devez être connecté pour consulter cette page. Connectez-vous et nous vous y ramenons aussitôt."
+  },
+  "sys.a11y.dismiss": {
+    "en": "Dismiss announcement",
+    "t": "Masquer l’annonce"
+  },
+  "sys.maintenance": {
+    "en": "Scheduled maintenance — some actions may be briefly unavailable.",
+    "t": "Maintenance planifiée — certaines actions peuvent être brièvement indisponibles."
+  },
+  "sys.readOnly": {
+    "en": "Withdrawals and investments are temporarily paused (read-only mode). Balances are unaffected.",
+    "t": "Les retraits et les investissements sont temporairement suspendus (mode lecture seule). Les soldes ne sont pas affectés."
+  },
+  "tips.a11y.about": {
+    "en": "About: {title}",
+    "t": "À propos : {title}"
+  },
+  "tips.admin.cabinet.announcement.live.body": {
+    "en": "Publishes the announcement banner across the whole cabinet immediately.",
+    "t": "Publie immédiatement la bannière d’annonce dans tout l’espace client."
+  },
+  "tips.admin.cabinet.announcement.live.title": {
+    "en": "Live",
+    "t": "En ligne"
+  },
+  "tips.admin.cabinet.flags.body": {
+    "en": "Flags gate cabinet features and MFE mounts. The row toggle flips a flag on or off; the rollout % controls what share of users it is exposed to.",
+    "t": "Les flags conditionnent les fonctionnalités de l’espace client et les montages MFE. L’interrupteur de la ligne active ou désactive un flag ; le % de déploiement détermine à quelle part des utilisateurs il est exposé."
+  },
+  "tips.admin.cabinet.flags.rollout.body": {
+    "en": "The share of users the flag is enabled for during a staged rollout. 100% is a full rollout; lower values expose it to only that fraction.",
+    "t": "La part des utilisateurs pour laquelle le flag est activé pendant un déploiement progressif. 100 % correspond à un déploiement complet ; une valeur inférieure ne l’expose qu’à cette fraction."
+  },
+  "tips.admin.cabinet.flags.rollout.title": {
+    "en": "Rollout %",
+    "t": "% de déploiement"
+  },
+  "tips.admin.cabinet.flags.title": {
+    "en": "Feature flags",
+    "t": "Feature flags"
+  },
+  "tips.admin.cabinet.maintenance.body": {
+    "en": "Swaps the whole cabinet for a holding page for all users — an identity-plane kill-switch. No money movement is affected.",
+    "t": "Remplace tout l’espace client par une page d’attente pour tous les utilisateurs — un coupe-circuit du plan identité. Aucun mouvement de fonds n’est affecté."
+  },
+  "tips.admin.cabinet.maintenance.title": {
+    "en": "Maintenance mode",
+    "t": "Mode maintenance"
+  },
+  "tips.admin.cabinet.readonly.body": {
+    "en": "Halts all deposit and withdrawal money movement — the money-plane kill-switch.",
+    "t": "Arrête tous les mouvements de fonds, dépôts comme retraits — le coupe-circuit du plan monétaire."
+  },
+  "tips.admin.cabinet.readonly.title": {
+    "en": "Read-only mode",
+    "t": "Mode lecture seule"
+  },
+  "tips.admin.overview.kpi.dead-key-signings.body": {
+    "en": "The signer couldn't unseal a wallet key (wrong or rotated KEK epoch), so those funds can't be moved. Nonzero is a money-safety alarm — page an operator.",
+    "t": "Le signataire n’a pas pu déverrouiller une clé de wallet (époque KEK erronée ou renouvelée), si bien que ces fonds ne peuvent plus être déplacés. Une valeur non nulle est une alerte de sécurité monétaire — appelez un opérateur."
+  },
+  "tips.admin.overview.kpi.dead-key-signings.title": {
+    "en": "Dead-key signings",
+    "t": "Signatures à clé morte"
+  },
+  "tips.admin.overview.kpi.dispatch-backlog.body": {
+    "en": "Undispatched outbox rows — events written but not yet relayed. A healthy relay keeps this near zero.",
+    "t": "Lignes d’outbox non expédiées — des événements écrits mais pas encore relayés. Un relais sain maintient ce chiffre proche de zéro."
+  },
+  "tips.admin.overview.kpi.dispatch-backlog.title": {
+    "en": "Dispatch backlog",
+    "t": "File d’expédition"
+  },
+  "tips.admin.overview.kpi.oldest-backlog.body": {
+    "en": "Age of the oldest undispatched row. A growing age means the relay is stalled or falling behind.",
+    "t": "Âge de la plus ancienne ligne non expédiée. Un âge qui augmente signifie que le relais est bloqué ou qu’il prend du retard."
+  },
+  "tips.admin.overview.kpi.oldest-backlog.title": {
+    "en": "Oldest backlog",
+    "t": "Plus ancienne en file"
+  },
+  "tips.admin.overview.kpi.parked-rows.body": {
+    "en": "Money the relay couldn't apply — outbox rows stuck until unparked. Nonzero turns the tile red.",
+    "t": "De l’argent que le relais n’a pas pu appliquer — des lignes d’outbox bloquées tant qu’elles ne sont pas réinjectées. Une valeur non nulle fait passer la tuile au rouge."
+  },
+  "tips.admin.overview.kpi.parked-rows.title": {
+    "en": "Parked rows",
+    "t": "Lignes en quarantaine"
+  },
+  "tips.admin.overview.parked-events.body": {
+    "en": "A row parks when the relay hits a terminal apply error. Fix the cause shown in the Reason column first, then unpark to re-drive it — otherwise it just re-parks.",
+    "t": "Une ligne est mise en quarantaine lorsque le relais rencontre une erreur d’application définitive. Corrigez d’abord la cause indiquée dans la colonne Motif, puis réinjectez-la pour la rejouer — sinon elle repart aussitôt en quarantaine."
+  },
+  "tips.admin.overview.parked-events.title": {
+    "en": "Parked events",
+    "t": "Événements en quarantaine"
+  },
+  "tips.admin.overview.parked.compensated.body": {
+    "en": "This row's saga was already reversed, so its money effect is undone. Unpark is disabled to avoid re-applying an entry that was intentionally rolled back.",
+    "t": "La saga de cette ligne a déjà été inversée, son effet monétaire est donc annulé. La réinjection est désactivée afin de ne pas réappliquer une écriture volontairement annulée."
+  },
+  "tips.admin.overview.parked.compensated.title": {
+    "en": "Compensated",
+    "t": "Compensé"
+  },
+  "tips.admin.overview.parked.reason.body": {
+    "en": "The relay's failure cause for this parked row — the thing you must fix before unparking.",
+    "t": "La cause de l’échec relevée par le relais pour cette ligne en quarantaine — ce qu’il faut corriger avant de la réinjecter."
+  },
+  "tips.admin.overview.parked.reason.title": {
+    "en": "Reason",
+    "t": "Motif"
+  },
+  "tips.admin.overview.parked.unpark.body": {
+    "en": "Re-drives this outbox row through the relay after you've fixed its cause. Disabled when the row was compensated, already unparked this session, or while another unpark is in flight.",
+    "t": "Rejoue cette ligne d’outbox dans le relais une fois sa cause corrigée. Désactivé lorsque la ligne a été compensée, qu’elle a déjà été réinjectée pendant cette session, ou qu’une autre réinjection est en cours."
+  },
+  "tips.admin.overview.parked.unpark.title": {
+    "en": "Unpark",
+    "t": "Réinjecter"
+  },
+  "tips.admin.treasury.bank.body": {
+    "en": "The fiat USD bank balance used for off-ramp and FX, counted as treasury liquidity alongside the on-chain rails.",
+    "t": "Le solde bancaire en USD utilisé pour l’off-ramp et le change, compté comme liquidité de trésorerie au même titre que les rails on-chain."
+  },
+  "tips.admin.treasury.bank.title": {
+    "en": "Bank · USD",
+    "t": "Banque · USD"
+  },
+  "tips.admin.treasury.invariant.body": {
+    "en": "Per-rail backing is the treasury's job, not the ledger's: a shortfall on one rail is accept-and-queue, then rebalanced via CEX, alt-rail, or top-up. The global invariant is sum(custody) == sum(claims).",
+    "t": "La couverture rail par rail relève de la trésorerie, pas du registre : un déficit sur un rail est accepté et mis en file, puis rééquilibré via CEX, rail alternatif ou réapprovisionnement. L’invariant global est sum(custody) == sum(claims)."
+  },
+  "tips.admin.treasury.invariant.title": {
+    "en": "The invariant",
+    "t": "L’invariant"
+  },
+  "tips.admin.treasury.layer1.claims-total.body": {
+    "en": "Total user + fund claims. Equals the sum of on-chain custody — every claim is fully backed.",
+    "t": "Total des créances des utilisateurs et du fonds. Égal à la somme de la conservation on-chain — chaque créance est intégralement couverte."
+  },
+  "tips.admin.treasury.layer1.claims-total.title": {
+    "en": "Claims · total",
+    "t": "Créances · total"
+  },
+  "tips.admin.treasury.layer1.fund-capital.body": {
+    "en": "Claims that are the fund's own capital, not client money.",
+    "t": "Les créances qui constituent les fonds propres de la société, et non l’argent des clients."
+  },
+  "tips.admin.treasury.layer1.fund-capital.title": {
+    "en": "Fund capital",
+    "t": "Capital du fonds"
+  },
+  "tips.admin.treasury.layer1.held-for-clients.body": {
+    "en": "The portion of claims owed to clients — user wallet plus service balances.",
+    "t": "La part des créances due aux clients — soldes des wallets utilisateurs et soldes de service."
+  },
+  "tips.admin.treasury.layer1.held-for-clients.title": {
+    "en": "Held for clients",
+    "t": "Détenu pour les clients"
+  },
+  "tips.admin.treasury.layer1.ledger.body": {
+    "en": "The ledger's network-agnostic claims in USDT. Total claims equal on-chain custody and break down into held-for-clients, fund capital, and reserved-for-withdrawals.",
+    "t": "Les créances du registre, exprimées en USDT et indépendantes du réseau. Le total des créances est égal à la conservation on-chain et se décompose en détenu pour les clients, capital du fonds et réservé pour les retraits."
+  },
+  "tips.admin.treasury.layer1.ledger.title": {
+    "en": "Layer 1 · Ledger",
+    "t": "Couche 1 · Registre"
+  },
+  "tips.admin.treasury.layer1.reserved-withdrawals.body": {
+    "en": "Claims set aside for queued and in-flight withdrawals, parked in the clearing account until they settle on-chain.",
+    "t": "Créances mises de côté pour les retraits en file et en cours d’envoi, logées sur le compte de compensation jusqu’à leur règlement on-chain."
+  },
+  "tips.admin.treasury.layer1.reserved-withdrawals.title": {
+    "en": "Reserved · withdrawals",
+    "t": "Réservé · retraits"
+  },
+  "tips.admin.treasury.layer2.rails.body": {
+    "en": "The actual on-chain USDT liquidity held per rail (BEP20 / TRC20 / TON / Polygon), plus the fiat bank balance. This is where the backing physically sits.",
+    "t": "La liquidité USDT réellement détenue on-chain sur chaque rail (BEP20 / TRC20 / TON / Polygon), plus le solde bancaire. C’est là que la couverture se trouve physiquement."
+  },
+  "tips.admin.treasury.layer2.rails.title": {
+    "en": "Layer 2 · Treasury",
+    "t": "Couche 2 · Trésorerie"
+  },
+  "tips.admin.treasury.rail.address.body": {
+    "en": "This rail's on-chain hot-wallet address. BEP20 and Polygon share an identical EVM address format — topping up on the wrong EVM chain, or sending another rail's funds here, is an irreversible mis-send.",
+    "t": "L’adresse du hot wallet on-chain de ce rail. BEP20 et Polygon partagent un format d’adresse EVM identique — réapprovisionner sur la mauvaise chaîne EVM, ou envoyer ici les fonds d’un autre rail, est une erreur d’envoi irréversible."
+  },
+  "tips.admin.treasury.rail.address.title": {
+    "en": "Treasury address",
+    "t": "Adresse de trésorerie"
+  },
+  "tips.admin.treasury.rail.funding.body": {
+    "en": "The card value is this rail's ledger custody; the footer shows the hot wallet's real on-chain USDT and native gas. The two can legitimately diverge under accept-and-queue.",
+    "t": "La valeur affichée sur la carte est la conservation de ce rail au registre ; le pied de carte montre les USDT et le gas natif réellement présents dans le hot wallet. Les deux peuvent légitimement diverger sous le régime accepter-et-mettre-en-file."
+  },
+  "tips.admin.treasury.rail.funding.title": {
+    "en": "Rail funding",
+    "t": "Approvisionnement du rail"
+  },
+  "tips.admin.treasury.rail.gas-station.body": {
+    "en": "Top this address up with the rail's native token to fund sweep gas. Send the correct native symbol on the correct chain — EVM gas-station addresses are shared, so a wrong-chain top-up is unrecoverable.",
+    "t": "Approvisionnez cette adresse avec le jeton natif du rail pour financer le gas des balayages. Envoyez le bon symbole natif sur la bonne chaîne — les adresses de station de gas EVM sont partagées, si bien qu’un réapprovisionnement sur la mauvaise chaîne est irrécupérable."
+  },
+  "tips.admin.treasury.rail.gas-station.title": {
+    "en": "Gas station",
+    "t": "Station de gas"
+  },
+  "tips.admin.treasury.two-layer-model.body": {
+    "en": "Layer 1 is the ledger's network-agnostic USDT claims; Layer 2 is the actual on-chain liquidity held per rail. The two must reconcile.",
+    "t": "La couche 1, ce sont les créances en USDT du registre, indépendantes du réseau ; la couche 2, c’est la liquidité réellement détenue on-chain sur chaque rail. Les deux doivent se réconcilier."
+  },
+  "tips.admin.treasury.two-layer-model.title": {
+    "en": "Two layers",
+    "t": "Deux couches"
+  },
+  "tips.admin.users.access.kyc-level.body": {
+    "en": "The user's identity-verification tier. Higher levels unlock higher limits and actions per the KYC policy.",
+    "t": "Le niveau de vérification d’identité de l’utilisateur. Les niveaux supérieurs débloquent des plafonds et des actions supplémentaires, selon la politique KYC."
+  },
+  "tips.admin.users.access.kyc-level.title": {
+    "en": "KYC level",
+    "t": "Niveau KYC"
+  },
+  "tips.admin.users.access.revoke-sessions.body": {
+    "en": "Bumps token_version — invalidates every JWT issued to this user, signing them out of every active session.",
+    "t": "Incrémente token_version — invalide tous les JWT émis pour cet utilisateur et le déconnecte de chacune de ses sessions actives."
+  },
+  "tips.admin.users.access.revoke-sessions.title": {
+    "en": "Revoke all sessions",
+    "t": "Révoquer toutes les sessions"
+  },
+  "tips.admin.users.access.role.body": {
+    "en": "The access level for this user: investor, operator, admin, or owner. Raising it grants operator/admin console access immediately on change.",
+    "t": "Le niveau d’accès de cet utilisateur : investisseur, opérateur, admin ou propriétaire. L’élever donne accès à la console opérateur/admin dès la modification."
+  },
+  "tips.admin.users.access.role.title": {
+    "en": "Role",
+    "t": "Rôle"
+  },
+  "tips.admin.users.identity.token-version.body": {
+    "en": "A per-user counter stamped into every issued JWT. It increments on 'Revoke all sessions', so any token carrying an older version fails verification.",
+    "t": "Un compteur propre à chaque utilisateur, apposé sur tout JWT émis. Il s’incrémente lors d’un « Révoquer toutes les sessions », si bien que tout jeton portant une version antérieure échoue à la vérification."
+  },
+  "tips.admin.users.identity.token-version.title": {
+    "en": "Token version",
+    "t": "Version de jeton"
+  },
+  "tips.admin.users.status.suspend.body": {
+    "en": "Suspend disables the account and blocks the user's access; Reinstate re-enables it. Reversible — the button reflects the current status.",
+    "t": "Suspendre désactive le compte et bloque l’accès de l’utilisateur ; Réactiver le rétablit. Réversible — le bouton reflète le statut actuel."
+  },
+  "tips.admin.users.status.suspend.title": {
+    "en": "Suspend / Reinstate",
+    "t": "Suspendre / Réactiver"
+  },
+  "tips.admin.valuation.post.aum.body": {
+    "en": "The fund's total assets under management you're marking. The NAV/share that pays redemptions is derived from it (AUM ÷ units outstanding), so a wrong figure mis-prices every settle.",
+    "t": "Le total des actifs sous gestion du fonds que vous valorisez. La VL par part qui paie les rachats en découle (AUM ÷ parts en circulation) : un chiffre erroné valorise mal chaque règlement."
+  },
+  "tips.admin.valuation.post.aum.title": {
+    "en": "AUM (USDT)",
+    "t": "AUM (USDT)"
+  },
+  "tips.admin.valuation.post.derived-nav.body": {
+    "en": "Entered AUM divided by units outstanding. This is the mark that Post valuation commits.",
+    "t": "L’AUM saisi divisé par les parts en circulation. C’est la valorisation que Publier la valorisation engage."
+  },
+  "tips.admin.valuation.post.derived-nav.title": {
+    "en": "Derived NAV / share",
+    "t": "VL dérivée / part"
+  },
+  "tips.admin.valuation.post.nav-guard.body": {
+    "en": "A post is rejected if the NAV moves more than 50% from the last mark, unless Override guard is on.",
+    "t": "Une publication est rejetée si la VL s’écarte de plus de 50 % de la dernière valorisation, sauf si la Dérogation est active."
+  },
+  "tips.admin.valuation.post.nav-guard.title": {
+    "en": "NAV-move guard",
+    "t": "Garde-fou de variation de VL"
+  },
+  "tips.admin.valuation.post.override.body": {
+    "en": "Bypasses the NAV-move guard so a post that moves NAV more than 50% is accepted and settles redemptions at that mark. A fat-fingered AUM then over- or under-pays irreversibly.",
+    "t": "Contourne le garde-fou de variation de VL : une publication qui fait bouger la VL de plus de 50 % est alors acceptée et règle les rachats à cette valorisation. Un AUM saisi de travers sur- ou sous-paie alors irréversiblement."
+  },
+  "tips.admin.valuation.post.override.title": {
+    "en": "Override guard",
+    "t": "Dérogation"
+  },
+  "tips.admin.valuation.queue.est-cash.body": {
+    "en": "A preview only — approximately units × current NAV. The actual payout settles at the settle-time NAV, not this figure.",
+    "t": "Un aperçu seulement — environ parts × VL actuelle. Le versement réel se règle à la VL du moment du règlement, pas à ce chiffre."
+  },
+  "tips.admin.valuation.queue.est-cash.title": {
+    "en": "Est. cash",
+    "t": "Cash estimé"
+  },
+  "tips.admin.valuation.queue.fail.body": {
+    "en": "Voids the request and refunds the units — no cash is paid and the burned units are returned to the user.",
+    "t": "Annule la demande et restitue les parts — aucun cash n’est versé et les parts détruites sont rendues à l’utilisateur."
+  },
+  "tips.admin.valuation.queue.fail.title": {
+    "en": "Fail",
+    "t": "Échouer"
+  },
+  "tips.admin.valuation.queue.settle-fail.body": {
+    "en": "Settle pays at settle-time NAV once the fund claim is liquid; if the rail is short the payout queues until treasury tops up. Fail voids the request and refunds the units.",
+    "t": "Régler paie à la VL du moment du règlement dès que la créance du fonds est liquide ; si le rail est à court, le versement est mis en file jusqu’au réapprovisionnement de la trésorerie. Échouer annule la demande et restitue les parts."
+  },
+  "tips.admin.valuation.queue.settle-fail.title": {
+    "en": "Settle vs Fail",
+    "t": "Régler ou échouer"
+  },
+  "tips.admin.valuation.queue.settle.body": {
+    "en": "Pays at the settle-time NAV once the fund claim is liquid, queuing if the rail is short. Settle also burns the user's units.",
+    "t": "Paie à la VL du moment du règlement dès que la créance du fonds est liquide, en mettant en file si le rail est à court. Régler détruit aussi les parts de l’utilisateur."
+  },
+  "tips.admin.valuation.queue.settle.title": {
+    "en": "Settle",
+    "t": "Régler"
+  },
+  "tips.admin.withdrawals.destination.body": {
+    "en": "The user's payout address, bound to this specific rail. Sends are irreversible and rail-specific — verify the address matches the network before dispatching.",
+    "t": "L’adresse de versement de l’utilisateur, liée à ce rail précis. Les envois sont irréversibles et propres au rail — vérifiez que l’adresse correspond au réseau avant d’expédier."
+  },
+  "tips.admin.withdrawals.destination.title": {
+    "en": "Destination",
+    "t": "Destinataire"
+  },
+  "tips.admin.withdrawals.fail.double-pay.body": {
+    "en": "Failing refunds the user. If the broadcast reached the chain this would double-pay — the hub refuses while a broadcast record exists, but verify on-chain first.",
+    "t": "Déclarer l’échec rembourse l’utilisateur. Si la diffusion a atteint la chaîne, cela reviendrait à payer deux fois — le hub refuse tant qu’un enregistrement de diffusion existe, mais vérifiez d’abord on-chain."
+  },
+  "tips.admin.withdrawals.fail.double-pay.title": {
+    "en": "Failing can double-pay",
+    "t": "Un échec peut payer deux fois"
+  },
+  "tips.admin.withdrawals.flow.body": {
+    "en": "Dispatch broadcasts a queued withdrawal once its rail has liquidity. Settle records the mined transaction and releases the reservation. Fail voids and refunds — only safe when nothing reached the chain.",
+    "t": "Expédier diffuse un retrait en file dès que son rail dispose de liquidité. Régler enregistre la transaction minée et libère la réservation. Échouer annule et rembourse — sûr uniquement si rien n’a atteint la chaîne."
+  },
+  "tips.admin.withdrawals.flow.title": {
+    "en": "Dispatch, settle, fail",
+    "t": "Expédier, régler, échouer"
+  },
+  "tips.admin.withdrawals.gross-net.body": {
+    "en": "Gross is the full amount debited from the user; net is what is actually sent on-chain after the withdrawal fee.",
+    "t": "Le brut est le montant total débité à l’utilisateur ; le net est ce qui est réellement envoyé on-chain après les frais de retrait."
+  },
+  "tips.admin.withdrawals.gross-net.title": {
+    "en": "Gross / net",
+    "t": "Brut / net"
+  },
+  "tips.admin.withdrawals.settle.tx-hash.body": {
+    "en": "Paste the mined on-chain tx hash. Settling records the mined transaction and releases the reservation — only enter a hash for a tx that actually mined.",
+    "t": "Collez le hash de la transaction minée on-chain. Régler enregistre la transaction minée et libère la réservation — ne saisissez un hash que pour une transaction réellement minée."
+  },
+  "tips.admin.withdrawals.settle.tx-hash.title": {
+    "en": "Mined transaction hash",
+    "t": "Hash de la transaction minée"
+  },
+  "tips.admin.withdrawals.state.body": {
+    "en": "Queued = accepted and reserved but not yet broadcast (Dispatch only). Processing = already broadcast, awaiting a mined tx (Settle or Fail apply).",
+    "t": "En file = accepté et réservé, mais pas encore diffusé (seul Expédier s’applique). En cours = déjà diffusé, en attente d’une transaction minée (Régler ou Échouer s’appliquent)."
+  },
+  "tips.admin.withdrawals.state.title": {
+    "en": "State",
+    "t": "État"
+  },
+  "tips.dashboard.invested.allocation.body": {
+    "en": "Each bar is one strategy's share of your invested value at current NAV. Percentages are of invested value only and exclude your available cash.",
+    "t": "Chaque barre représente la part d’une stratégie dans votre valeur investie, à la VL actuelle. Les pourcentages portent sur la seule valeur investie et excluent vos liquidités disponibles."
+  },
+  "tips.dashboard.invested.allocation.title": {
+    "en": "Invested — what I own",
+    "t": "Investi — mes avoirs"
+  },
+  "tips.dashboard.move-money.auto-deploy.body": {
+    "en": "When on, your available cash is automatically committed into strategies at end of day.",
+    "t": "Lorsque l’option est active, vos liquidités disponibles sont automatiquement engagées dans des stratégies en fin de journée."
+  },
+  "tips.dashboard.move-money.auto-deploy.title": {
+    "en": "Auto-deploy idle cash",
+    "t": "Déployer automatiquement les liquidités"
+  },
+  "tips.dashboard.performance.all-time-return.body": {
+    "en": "Total unrealized P&L divided by what you put in at cost basis, across every position. A paper figure, not realized cash.",
+    "t": "Le P&L latent total divisé par ce que vous avez apporté au prix de revient, sur l’ensemble des positions. Un chiffre sur le papier, pas du cash réalisé."
+  },
+  "tips.dashboard.performance.all-time-return.title": {
+    "en": "All-time return",
+    "t": "Performance depuis l’origine"
+  },
+  "tips.dashboard.performance.portfolio-value.body": {
+    "en": "Your whole balance: available + invested + pending withdrawal. Money locked in a queued withdrawal is still counted here.",
+    "t": "L’intégralité de votre solde : disponible + investi + retrait en attente. L’argent immobilisé par un retrait en file y est toujours compté."
+  },
+  "tips.dashboard.performance.portfolio-value.title": {
+    "en": "Portfolio value",
+    "t": "Valeur du portefeuille"
+  },
+  "tips.dashboard.performance.series.body": {
+    "en": "'Fund performance' is the fund's own return; 'Your participation' is how your stake performed, which differs by when you contributed. The live series isn't wired up yet.",
+    "t": "« Performance du fonds » est le rendement propre du fonds ; « Votre participation » est la performance de votre quote-part, qui diffère selon le moment de vos apports. La série en direct n’est pas encore branchée."
+  },
+  "tips.dashboard.performance.series.title": {
+    "en": "Performance chart",
+    "t": "Graphique de performance"
+  },
+  "tips.dashboard.stats.available.body": {
+    "en": "Cash that is free and spendable now — ready to deploy into a strategy or withdraw.",
+    "t": "Les liquidités libres et immédiatement utilisables — prêtes à être déployées dans une stratégie ou retirées."
+  },
+  "tips.dashboard.stats.available.title": {
+    "en": "Available",
+    "t": "Disponible"
+  },
+  "tips.dashboard.stats.net-invested.body": {
+    "en": "Total cash you put into strategies at cost basis, net of redemptions — not the current value.",
+    "t": "Le total des liquidités que vous avez placées dans des stratégies au prix de revient, net des rachats — et non leur valeur actuelle."
+  },
+  "tips.dashboard.stats.net-invested.title": {
+    "en": "Net invested",
+    "t": "Investi net"
+  },
+  "tips.dashboard.stats.unrealized-pnl.body": {
+    "en": "Paper gain or loss across all positions — current value minus cost basis. It becomes realized cash only when you redeem.",
+    "t": "Gain ou perte sur le papier, sur l’ensemble des positions — valeur actuelle moins prix de revient. Il ne devient du cash réalisé qu’au moment du rachat."
+  },
+  "tips.dashboard.stats.unrealized-pnl.title": {
+    "en": "Unrealized P&L",
+    "t": "P&L latent"
+  },
+  "tips.invest.activity.cancel.body": {
+    "en": "Available only while a redemption is still queued. It withdraws the request and releases the reserved units back to your holding before any settle NAV is applied.",
+    "t": "Disponible uniquement tant qu’un rachat est encore en file. L’annulation retire la demande et rend les parts réservées à votre position avant qu’une VL de règlement ne soit appliquée."
+  },
+  "tips.invest.activity.cancel.title": {
+    "en": "Cancel",
+    "t": "Annuler"
+  },
+  "tips.invest.activity.status.body": {
+    "en": "Queued (reserved, awaiting settle), completed (paid out at the settle NAV), failed, or cancelled.",
+    "t": "En file (réservé, en attente de règlement), terminé (versé à la VL de règlement), échec ou annulé."
+  },
+  "tips.invest.activity.status.title": {
+    "en": "Redemption status",
+    "t": "Statut du rachat"
+  },
+  "tips.invest.overview.body": {
+    "en": "Subscribe USDT for units — your value tracks the fund's NAV, not the unit count.",
+    "t": "Souscrivez des USDT contre des parts — votre valeur suit la VL du fonds, pas le nombre de parts."
+  },
+  "tips.invest.overview.title": {
+    "en": "Fund shares",
+    "t": "Parts de fonds"
+  },
+  "tips.invest.position.nav.body": {
+    "en": "Net asset value per unit — the current price at which units are bought on subscribe and priced on redeem.",
+    "t": "La valeur liquidative par part — le prix courant auquel les parts sont achetées à la souscription et valorisées au rachat."
+  },
+  "tips.invest.position.nav.title": {
+    "en": "NAV",
+    "t": "VL"
+  },
+  "tips.invest.position.pnl.body": {
+    "en": "Your position's current value minus what you paid in — green for a gain, red for a loss, driven by the NAV moving.",
+    "t": "La valeur actuelle de votre position moins ce que vous y avez apporté — vert en cas de gain, rouge en cas de perte, sous l’effet des mouvements de la VL."
+  },
+  "tips.invest.position.pnl.title": {
+    "en": "Profit & loss",
+    "t": "Résultat (P&L)"
+  },
+  "tips.invest.position.stale-nav.body": {
+    "en": "The fund's price feed is out of date, so the value and P&L shown here may lag the true mark until the NAV refreshes.",
+    "t": "Le flux de prix du fonds n’est plus à jour : la valeur et le P&L affichés ici peuvent être en retard sur la valorisation réelle jusqu’à l’actualisation de la VL."
+  },
+  "tips.invest.position.stale-nav.title": {
+    "en": "Stale NAV",
+    "t": "VL obsolète"
+  },
+  "tips.invest.position.units.body": {
+    "en": "Your share count in the fund's pool — a fixed quantity you own until you subscribe or redeem more.",
+    "t": "Votre nombre de parts dans la masse du fonds — une quantité fixe qui vous appartient jusqu’à votre prochaine souscription ou votre prochain rachat."
+  },
+  "tips.invest.position.units.title": {
+    "en": "Units",
+    "t": "Parts"
+  },
+  "tips.invest.position.value.body": {
+    "en": "Units × current NAV. It rises and falls as the NAV moves, not with the unit count.",
+    "t": "Parts × VL actuelle. Elle monte et descend au gré de la VL, et non du nombre de parts."
+  },
+  "tips.invest.position.value.title": {
+    "en": "Value",
+    "t": "Valeur"
+  },
+  "tips.invest.redeem.queue.body": {
+    "en": "Redemptions are accept-and-queue — your units are reserved now, and cash is priced at the settle-time NAV once the fund tops up.",
+    "t": "Les rachats fonctionnent en accepter-et-mettre-en-file — vos parts sont réservées dès maintenant, et le cash est valorisé à la VL du moment du règlement, une fois le fonds réapprovisionné."
+  },
+  "tips.invest.redeem.queue.title": {
+    "en": "How redemptions settle",
+    "t": "Comment les rachats se règlent"
+  },
+  "tips.invest.redeem.units.body": {
+    "en": "How many units to redeem — Max fills your full holding. The resulting cash isn't fixed here; it is set at the settle-time NAV.",
+    "t": "Le nombre de parts à racheter — Max prend l’intégralité de votre position. Le montant en cash n’est pas figé ici : il est fixé à la VL du moment du règlement."
+  },
+  "tips.invest.redeem.units.title": {
+    "en": "Units to redeem",
+    "t": "Parts à racheter"
+  },
+  "tips.invest.subscribe.amount.body": {
+    "en": "How much USDT to subscribe. It is converted into units at the current NAV when you submit.",
+    "t": "Le montant d’USDT à souscrire. Il est converti en parts à la VL courante au moment où vous validez."
+  },
+  "tips.invest.subscribe.amount.title": {
+    "en": "Amount",
+    "t": "Montant"
+  },
+  "tips.profile.email.verified.body": {
+    "en": "Confirms this email address has been verified. It is not identity or KYC verification.",
+    "t": "Confirme que cette adresse e-mail a été vérifiée. Il ne s’agit pas d’une vérification d’identité ni du KYC."
+  },
+  "tips.profile.email.verified.title": {
+    "en": "Verified",
+    "t": "Vérifié"
+  },
+  "tips.profile.field.legal-name.body": {
+    "en": "Your full name exactly as it appears on official documents — used for compliance and statements, distinct from your preferred name.",
+    "t": "Votre nom complet tel qu’il figure sur vos documents officiels — utilisé pour la conformité et les relevés, distinct de votre nom d’usage."
+  },
+  "tips.profile.field.legal-name.title": {
+    "en": "Legal name",
+    "t": "Nom légal"
+  },
+  "tips.profile.field.nationality.body": {
+    "en": "Collected for compliance and eligibility checks.",
+    "t": "Collectée pour les contrôles de conformité et d’éligibilité."
+  },
+  "tips.profile.field.nationality.title": {
+    "en": "Nationality",
+    "t": "Nationalité"
+  },
+  "tips.profile.field.tax-residence.body": {
+    "en": "The country where you're liable to pay tax, used for tax reporting. Usually where you live — it can differ from your nationality.",
+    "t": "Le pays où vous êtes redevable de l’impôt, utilisé pour les déclarations fiscales. En général celui où vous résidez — il peut différer de votre nationalité."
+  },
+  "tips.profile.field.tax-residence.title": {
+    "en": "Tax residence",
+    "t": "Résidence fiscale"
+  },
+  "tips.profile.personal.compliance.body": {
+    "en": "These personal details are collected to meet the fund's compliance obligations and to produce your account statements. They are not shown publicly.",
+    "t": "Ces informations personnelles sont collectées pour satisfaire aux obligations de conformité du fonds et pour établir vos relevés de compte. Elles ne sont pas rendues publiques."
+  },
+  "tips.profile.personal.compliance.title": {
+    "en": "Why we collect this",
+    "t": "Pourquoi nous collectons ces données"
+  },
+  "tips.settings.security.google-signin.body": {
+    "en": "Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.",
+    "t": "Votre connexion et votre mot de passe sont gérés par Google. L’authentification à deux facteurs et la récupération se configurent dans votre compte Google."
+  },
+  "tips.settings.security.google-signin.title": {
+    "en": "Sign-in is managed by Google",
+    "t": "La connexion est gérée par Google"
+  },
+  "tips.settings.sessions.overview.body": {
+    "en": "Where you're signed in — each row is a device or browser with a live session. Revoke anything you don't recognise.",
+    "t": "Où vous êtes connecté — chaque ligne est un appareil ou un navigateur doté d’une session active. Révoquez tout ce que vous ne reconnaissez pas."
+  },
+  "tips.settings.sessions.overview.title": {
+    "en": "Sessions & devices",
+    "t": "Sessions & appareils"
+  },
+  "tips.settings.sessions.revoke-others.body": {
+    "en": "Signs out every device except this one. Use it if a device was lost or you don't recognise a session.",
+    "t": "Déconnecte tous les appareils sauf celui-ci. Utilisez-le si un appareil a été perdu ou si vous ne reconnaissez pas une session."
+  },
+  "tips.settings.sessions.revoke-others.title": {
+    "en": "Sign out all other devices",
+    "t": "Déconnecter tous les autres appareils"
+  },
+  "tips.settings.sessions.revoke.body": {
+    "en": "Signs that device out immediately. It must sign in again with Google to regain access.",
+    "t": "Déconnecte cet appareil immédiatement. Il devra se reconnecter avec Google pour retrouver l’accès."
+  },
+  "tips.settings.sessions.revoke.title": {
+    "en": "Revoke",
+    "t": "Révoquer"
+  },
+  "tips.settings.sessions.this-device.body": {
+    "en": "The browser you're using right now. It stays signed in and can't be revoked from here — use 'Sign out all other devices' to clear the rest.",
+    "t": "Le navigateur que vous utilisez en ce moment. Il reste connecté et ne peut pas être révoqué d’ici — utilisez « Déconnecter les autres » pour effacer le reste."
+  },
+  "tips.settings.sessions.this-device.title": {
+    "en": "This device",
+    "t": "Cet appareil"
+  },
+  "tips.wallet.balance.available.body": {
+    "en": "Your spendable USDT right now — what you can invest into fund units or withdraw.",
+    "t": "Vos USDT immédiatement utilisables — ce que vous pouvez investir en parts de fonds ou retirer."
+  },
+  "tips.wallet.balance.available.title": {
+    "en": "Available",
+    "t": "Disponible"
+  },
+  "tips.wallet.balance.invested.body": {
+    "en": "Held in fund units, valued at the current NAV.",
+    "t": "Détenu en parts de fonds, valorisé à la VL actuelle."
+  },
+  "tips.wallet.balance.invested.title": {
+    "en": "Invested",
+    "t": "Investi"
+  },
+  "tips.wallet.balance.model.body": {
+    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + Invested + Pending withdrawal.",
+    "t": "Vous avez un solde USDT unique — les réseaux ne sont que la manière dont vous déposez et retirez. Cette carte le décompose en Total = Disponible + Investi + Retrait en attente."
+  },
+  "tips.wallet.balance.model.title": {
+    "en": "One balance, many rails",
+    "t": "Un seul solde, plusieurs rails"
+  },
+  "tips.wallet.balance.pending-withdrawal.body": {
+    "en": "USDT reserved for withdrawals still in flight (queued or processing). It is no longer part of your available balance.",
+    "t": "Les USDT réservés pour des retraits encore en cours (en file ou en traitement). Ils ne font plus partie de votre solde disponible."
+  },
+  "tips.wallet.balance.pending-withdrawal.title": {
+    "en": "Pending withdrawal",
+    "t": "Retrait en attente"
+  },
+  "tips.wallet.deposit.address.body": {
+    "en": "A personal, reusable address for this rail. On TON it is shown in the wallet-friendly UQ… form so an uninitialised wallet doesn't bounce the transfer.",
+    "t": "Une adresse personnelle et réutilisable pour ce rail. Sur TON, elle est affichée sous la forme UQ… compatible wallet, afin qu’un wallet non initialisé ne rejette pas le transfert."
+  },
+  "tips.wallet.deposit.address.title": {
+    "en": "Your deposit address",
+    "t": "Votre adresse de dépôt"
+  },
+  "tips.wallet.deposit.min-confirmations.body": {
+    "en": "Credited to your one balance after the required number of network confirmations.",
+    "t": "Crédité sur votre solde unique après le nombre requis de confirmations réseau."
+  },
+  "tips.wallet.deposit.min-confirmations.title": {
+    "en": "Network confirmations",
+    "t": "Confirmations réseau"
+  },
+  "tips.wallet.deposit.network.body": {
+    "en": "Pick the chain you'll send USDT on. Each rail shows its own deposit address below — that address only works on that one chain.",
+    "t": "Choisissez la chaîne sur laquelle vous enverrez les USDT. Chaque rail affiche sa propre adresse de dépôt ci-dessous — cette adresse ne fonctionne que sur cette chaîne."
+  },
+  "tips.wallet.deposit.network.title": {
+    "en": "Network / rail",
+    "t": "Réseau / rail"
+  },
+  "tips.wallet.deposit.rail-hazard.body": {
+    "en": "Sending any other asset, or using a different network, loses the funds permanently. This 0x address is NOT your address on the sibling EVM chain — even though both start with 0x, USDT sent on the wrong EVM rail will not be credited.",
+    "t": "Envoyer un autre actif, ou passer par un autre réseau, fait perdre les fonds définitivement. Cette adresse 0x n’est PAS votre adresse sur la chaîne EVM jumelle — même si toutes deux commencent par 0x, des USDT envoyés sur le mauvais rail EVM ne seront pas crédités."
+  },
+  "tips.wallet.deposit.rail-hazard.title": {
+    "en": "Send only USDT on this rail",
+    "t": "N’envoyez que des USDT sur ce rail"
+  },
+  "tips.wallet.withdraw.available.body": {
+    "en": "The most you can withdraw on this rail right now. Tap Max to fill the amount.",
+    "t": "Le maximum que vous pouvez retirer sur ce rail à cet instant. Touchez Max pour remplir le montant."
+  },
+  "tips.wallet.withdraw.available.title": {
+    "en": "Available to withdraw",
+    "t": "Disponible au retrait"
+  },
+  "tips.wallet.withdraw.destination.body": {
+    "en": "The on-chain address the USDT is sent to. Withdrawals are irreversible — make sure it is correct and on the network you selected.",
+    "t": "L’adresse on-chain à laquelle les USDT sont envoyés. Les retraits sont irréversibles — assurez-vous qu’elle est correcte et qu’elle appartient au réseau que vous avez choisi."
+  },
+  "tips.wallet.withdraw.destination.title": {
+    "en": "Destination address",
+    "t": "Adresse du destinataire"
+  },
+  "tips.wallet.withdraw.network-fee.body": {
+    "en": "A flat on-chain fee for this rail, deducted from your amount before it is sent.",
+    "t": "Des frais on-chain forfaitaires propres à ce rail, déduits de votre montant avant l’envoi."
+  },
+  "tips.wallet.withdraw.network-fee.title": {
+    "en": "Network fee",
+    "t": "Frais de réseau"
+  },
+  "tips.wallet.withdraw.network.body": {
+    "en": "The chain your withdrawal ships on. The destination address must be a valid address on this exact network, or the funds are lost.",
+    "t": "La chaîne sur laquelle part votre retrait. L’adresse de destination doit être une adresse valide sur ce réseau précis, faute de quoi les fonds sont perdus."
+  },
+  "tips.wallet.withdraw.network.title": {
+    "en": "Network / rail",
+    "t": "Réseau / rail"
+  },
+  "tips.wallet.withdraw.queueing.body": {
+    "en": "Up to your instant limit pays out immediately on this rail; anything above it is queued until the rail is topped up. A minimum applies per withdrawal.",
+    "t": "Jusqu’à votre limite instantanée, le versement part immédiatement sur ce rail ; tout ce qui la dépasse est mis en file jusqu’au réapprovisionnement du rail. Un minimum s’applique à chaque retrait."
+  },
+  "tips.wallet.withdraw.queueing.title": {
+    "en": "How withdrawals work",
+    "t": "Comment fonctionnent les retraits"
+  },
+  "tips.wallet.withdraw.review.body": {
+    "en": "Review freezes exactly what you'll send. Confirm submits that snapshot — if the rail list changes underneath, the open review is voided and you re-review.",
+    "t": "Vérifier fige exactement ce que vous allez envoyer. Confirmer valide cet instantané — si la liste des rails change entre-temps, la vérification ouverte est annulée et vous recommencez."
+  },
+  "tips.wallet.withdraw.review.title": {
+    "en": "Review, then confirm",
+    "t": "Vérifier, puis confirmer"
+  },
+  "tips.wallet.withdraw.you-receive.body": {
+    "en": "Your amount minus the network fee — this is what actually lands at the destination.",
+    "t": "Votre montant moins les frais de réseau — c’est ce qui arrive réellement à destination."
+  },
+  "tips.wallet.withdraw.you-receive.title": {
+    "en": "You will receive",
+    "t": "Vous recevrez"
   },
   "ui.account": {
     "en": "Account",
@@ -259,13 +3375,45 @@
     "en": "Add funds",
     "t": "Alimenter le compte"
   },
+  "ui.address": {
+    "en": "address",
+    "t": "adresse"
+  },
+  "ui.all": {
+    "en": "All",
+    "t": "Tout"
+  },
   "ui.allocate": {
     "en": "Allocate",
     "t": "Allouer"
   },
+  "ui.amount": {
+    "en": "Amount",
+    "t": "Montant"
+  },
+  "ui.back": {
+    "en": "Back",
+    "t": "Retour"
+  },
   "ui.browseFunds": {
     "en": "Browse funds",
     "t": "Parcourir les fonds"
+  },
+  "ui.cancel": {
+    "en": "Cancel",
+    "t": "Annuler"
+  },
+  "ui.close": {
+    "en": "Close",
+    "t": "Fermer"
+  },
+  "ui.copied": {
+    "en": "Copied",
+    "t": "Copié"
+  },
+  "ui.copy": {
+    "en": "Copy",
+    "t": "Copier"
   },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
@@ -287,6 +3435,10 @@
     "en": "Details",
     "t": "Détails"
   },
+  "ui.edit": {
+    "en": "Edit",
+    "t": "Modifier"
+  },
   "ui.email": {
     "en": "Email",
     "t": "E-mail"
@@ -307,6 +3459,18 @@
     "en": "KYC level",
     "t": "Niveau KYC"
   },
+  "ui.loading": {
+    "en": "Loading…",
+    "t": "Chargement…"
+  },
+  "ui.manage": {
+    "en": "Manage",
+    "t": "Gérer"
+  },
+  "ui.max": {
+    "en": "Max",
+    "t": "Max"
+  },
   "ui.network": {
     "en": "Network",
     "t": "Réseau"
@@ -317,7 +3481,11 @@
   },
   "ui.noOperations": {
     "en": "No operations yet",
-    "t": "Aucune opération pour l'instant"
+    "t": "Aucune opération pour l’instant"
+  },
+  "ui.none": {
+    "en": "None",
+    "t": "Aucun"
   },
   "ui.operations": {
     "en": "Operations",
@@ -333,7 +3501,27 @@
   },
   "ui.receiveFunds": {
     "en": "Receive funds into your wallet",
-    "t": "Recevoir des fonds sur votre portefeuille"
+    "t": "Recevoir des fonds sur votre wallet"
+  },
+  "ui.refresh": {
+    "en": "Refresh",
+    "t": "Actualiser"
+  },
+  "ui.reset": {
+    "en": "Reset",
+    "t": "Rétablir"
+  },
+  "ui.save": {
+    "en": "Save",
+    "t": "Enregistrer"
+  },
+  "ui.saveChanges": {
+    "en": "Save changes",
+    "t": "Enregistrer"
+  },
+  "ui.saved": {
+    "en": "Saved",
+    "t": "Enregistré"
   },
   "ui.security": {
     "en": "Security",
@@ -347,9 +3535,17 @@
     "en": "Signed in with Google",
     "t": "Connecté avec Google"
   },
+  "ui.total": {
+    "en": "Total",
+    "t": "Total"
+  },
   "ui.trustedSessions": {
     "en": "Trusted sessions",
     "t": "Sessions de confiance"
+  },
+  "ui.verified": {
+    "en": "Verified",
+    "t": "Vérifié"
   },
   "ui.viewAll": {
     "en": "View all",
@@ -357,7 +3553,7 @@
   },
   "ui.wallet": {
     "en": "Wallet",
-    "t": "Portefeuille"
+    "t": "Wallet"
   },
   "ui.withdraw": {
     "en": "Withdraw",
@@ -367,9 +3563,81 @@
     "en": "Withdraw USDT",
     "t": "Retirer des USDT"
   },
+  "wallet.acceptedInstantly": {
+    "en": "Accepted instantly; if the {network} rail is short it queues until funded — you'll be notified.",
+    "t": "Accepté instantanément ; si le rail {network} est à court, la demande est mise en file jusqu’à son réapprovisionnement — vous serez notifié."
+  },
+  "wallet.activitySub": {
+    "en": "Deposits and withdrawals — queued, processing, completed",
+    "t": "Dépôts et retraits — en file, en cours, terminés"
+  },
+  "wallet.amountCaps": {
+    "en": "AMOUNT",
+    "t": "MONTANT"
+  },
+  "wallet.availPrefix": {
+    "en": "Avail: {amount}",
+    "t": "Dispo : {amount}"
+  },
   "wallet.cancelWithdrawal": {
     "en": "Cancel withdrawal",
     "t": "Annuler le retrait"
+  },
+  "wallet.chain.bep20": {
+    "en": "BNB Smart Chain",
+    "t": "BNB Smart Chain"
+  },
+  "wallet.chain.polygon": {
+    "en": "Polygon PoS",
+    "t": "Polygon PoS"
+  },
+  "wallet.chain.ton": {
+    "en": "The Open Network",
+    "t": "The Open Network"
+  },
+  "wallet.chain.trc20": {
+    "en": "TRON",
+    "t": "TRON"
+  },
+  "wallet.chain.unknown": {
+    "en": "Network",
+    "t": "Réseau"
+  },
+  "wallet.chip.avail": {
+    "en": "AVAILABLE",
+    "t": "DISPONIBLE"
+  },
+  "wallet.chip.availShort": {
+    "en": "AVAIL",
+    "t": "DISPO"
+  },
+  "wallet.chip.invest": {
+    "en": "INVESTED",
+    "t": "INVESTI"
+  },
+  "wallet.chip.investShort": {
+    "en": "INVEST",
+    "t": "INVESTI"
+  },
+  "wallet.chip.pendingWd": {
+    "en": "PENDING WD",
+    "t": "RETRAIT EN ATTENTE"
+  },
+  "wallet.confirmWithdrawal": {
+    "en": "Confirm withdrawal",
+    "t": "Confirmer le retrait"
+  },
+  "wallet.copyAddress": {
+    "en": "Copy address",
+    "t": "Copier l’adresse"
+  },
+  "wallet.creditedAfterConfirmations": {
+    "en": "Credited to your one balance after {n, plural, one {# network confirmation} other {# network confirmations}}.",
+    "t": "Crédité sur votre solde unique après {n, plural, one {# confirmation réseau} many {# confirmations réseau} other {# confirmations réseau}}."
+  },
+  "wallet.depositAddressUnavailable": {
+    "en": "A {network} deposit address isn't available yet — this rail is still being provisioned. Check back soon.",
+    "t": "Aucune adresse de dépôt {network} n’est encore disponible — ce rail est en cours de mise en service. Revenez bientôt."
   },
   "wallet.depositNetwork": {
     "en": "Deposit network",
@@ -382,6 +3650,18 @@
   "wallet.destinationCaps": {
     "en": "DESTINATION",
     "t": "DESTINATAIRE"
+  },
+  "wallet.evmSiblingHazard": {
+    "en": "This {network} address is not your {siblings} address — even though both start with 0x. USDT sent on {siblingsOr} will not be credited.",
+    "t": "Cette adresse {network} n’est pas votre adresse {siblings}, même si toutes deux commencent par 0x. Les USDT envoyés sur {siblingsOr} ne seront pas crédités."
+  },
+  "wallet.exceedsInstant": {
+    "en": "~{amount} USDT exceeds instant {network} liquidity and will be queued until the rail is topped up.",
+    "t": "~{amount} USDT dépasse la liquidité instantanée du rail {network} et sera mis en file jusqu’à son réapprovisionnement."
+  },
+  "wallet.minInstantQueued": {
+    "en": "Min {min} USDT · instant {network} {instant} · rest queued",
+    "t": "Min {min} USDT · {network} instantané {instant} · reste en file"
   },
   "wallet.networkCaps": {
     "en": "NETWORK",
@@ -401,15 +3681,63 @@
   },
   "wallet.noActivity": {
     "en": "No activity yet",
-    "t": "Aucune activité pour l'instant"
+    "t": "Aucune activité pour l’instant"
   },
   "wallet.noActivityHint": {
     "en": "Your deposits and withdrawals will appear here once you make your first transfer.",
     "t": "Vos dépôts et retraits apparaîtront ici dès votre premier transfert."
   },
+  "wallet.noDepositRails": {
+    "en": "No deposit rails are available right now — check back soon.",
+    "t": "Aucun rail de dépôt n’est disponible pour l’instant — revenez bientôt."
+  },
+  "wallet.noRails": {
+    "en": "No deposit or withdrawal rails are available right now — check back soon.",
+    "t": "Aucun rail de dépôt ou de retrait n’est disponible pour l’instant — revenez bientôt."
+  },
+  "wallet.noWithdrawRails": {
+    "en": "No withdrawal rails are available right now — check back soon.",
+    "t": "Aucun rail de retrait n’est disponible pour l’instant — revenez bientôt."
+  },
+  "wallet.oneFungibleBalance": {
+    "en": "≈ ${amount} · one fungible balance",
+    "t": "≈ {amount} $ · un seul solde fongible"
+  },
+  "wallet.overviewSub": {
+    "en": "One USDT balance · networks are deposit / withdrawal rails",
+    "t": "Un solde USDT unique · les réseaux sont des rails de dépôt / retrait"
+  },
   "wallet.pendWd": {
     "en": "PEND WD",
-    "t": "RETRAIT EN COURS"
+    "t": "RET ATT"
+  },
+  "wallet.placeholder.railAddress": {
+    "en": "{network} address",
+    "t": "Adresse {network}"
+  },
+  "wallet.railActionUnavailable": {
+    "en": "{action} is not available on this rail yet",
+    "t": "{action} n’est pas encore disponible sur ce rail"
+  },
+  "wallet.railHazard": {
+    "en": "Only send USDT on the {network} network to this address. Funds sent on any other network will be lost permanently.",
+    "t": "N’envoyez à cette adresse que des USDT sur le réseau {network}. Les fonds envoyés sur un autre réseau seront définitivement perdus."
+  },
+  "wallet.railUsdt": {
+    "en": "{network} · USDT",
+    "t": "{network} · USDT"
+  },
+  "wallet.railsCaption": {
+    "en": "deposit & withdrawal rails",
+    "t": "rails de dépôt & de retrait"
+  },
+  "wallet.receiptQueued": {
+    "en": "{amount} USDT to {address} is queued — it ships once the {network} rail is topped up.",
+    "t": "{amount} USDT vers {address} sont en file — l’envoi partira dès que le rail {network} sera réapprovisionné."
+  },
+  "wallet.receiptSubmitted": {
+    "en": "{amount} USDT is on its way to {address} — pending on-chain confirmation.",
+    "t": "{amount} USDT sont en route vers {address} — en attente de confirmation on-chain."
   },
   "wallet.reviewWithdrawal": {
     "en": "Review withdrawal",
@@ -419,9 +3747,25 @@
     "en": "SELECT NETWORK",
     "t": "CHOISIR LE RÉSEAU"
   },
+  "wallet.statusCaps": {
+    "en": "STATUS",
+    "t": "STATUT"
+  },
+  "wallet.toAddressLine": {
+    "en": "To {address}",
+    "t": "Vers {address}"
+  },
   "wallet.totalBalance": {
     "en": "TOTAL BALANCE",
     "t": "SOLDE TOTAL"
+  },
+  "wallet.txRef": {
+    "en": "tx {ref}",
+    "t": "tx {ref}"
+  },
+  "wallet.withdrawSub": {
+    "en": "Send funds to an external address — one balance, any rail",
+    "t": "Envoyez des fonds vers une adresse externe — un solde unique, tous les rails"
   },
   "wallet.withdrawalFailed": {
     "en": "Withdrawal failed",
@@ -431,8 +3775,20 @@
     "en": "Withdrawal network",
     "t": "Réseau de retrait"
   },
+  "wallet.withdrawalQueued": {
+    "en": "Withdrawal queued",
+    "t": "Retrait en file"
+  },
+  "wallet.withdrawalSubmitted": {
+    "en": "Withdrawal submitted",
+    "t": "Retrait soumis"
+  },
   "wallet.youWillReceive": {
     "en": "You will receive",
     "t": "Vous recevrez"
+  },
+  "wallet.yourDepositAddress": {
+    "en": "Your {network} deposit address",
+    "t": "Votre adresse de dépôt {network}"
   }
 }

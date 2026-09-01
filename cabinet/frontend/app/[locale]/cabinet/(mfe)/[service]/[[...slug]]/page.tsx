@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { translator } from "@evinvest/i18n";
+
+import { messagesFor } from "@/shared/config/i18n";
+import { currentLocale } from "@/shared/config/locale";
 import { RemoteElement } from "@/shared/mfe/RemoteElement";
 import { findMfe } from "@/shared/mfe/registry";
 
@@ -28,6 +32,12 @@ export default async function MfePage({ params }: { params: Promise<{ service: s
   // Unregistered, or registered as an inline component rather than a page.
   if (!entry || entry.kind !== "page") notFound();
 
+  // A Server Component, so no hook: the locale comes from `next/root-params` the same way
+  // the status pages read it. `entry.name` stays as the registry wrote it — a service's
+  // name is its name in every language.
+  const locale = await currentLocale();
+  const t = translator(messagesFor(locale), locale);
+
   return (
     // The 60vh reserve keeps the page from collapsing while the remote boots. It is
     // viewport maths, not a spacing step — a fixed height would over-reserve on a short
@@ -37,7 +47,7 @@ export default async function MfePage({ params }: { params: Promise<{ service: s
       scriptUrl={entry.scriptUrl}
       integrity={entry.integrity}
       className="block min-h-[60vh]"
-      fallback={<div className="container py-24 text-muted-foreground">Loading {entry.name}…</div>}
+      fallback={<div className="container py-24 text-muted-foreground">{t("mfe.loading", { name: entry.name })}</div>}
     />
   );
 }
