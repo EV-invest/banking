@@ -29,6 +29,7 @@ import { adminAllocationsResource, feeAssessmentsResource, feePoliciesResource, 
 import type { FeePolicy } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
+import { pct, toBps, toPercentInput } from "@/shared/lib/rate";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { ago, formatUnits, formatUsd } from "@/views/admin/lib/format";
 import { StaggerItem } from "@/shared/ui/motion";
@@ -143,43 +144,57 @@ function FundPicker({
 function PolicyCard({ service, policy }: { service: string; policy: FeePolicy | null }) {
   const t = useT();
   const initial = policy?.configured ? policy : { ...DEFAULTS };
-  const [management, setManagement] = useState(String(initial.management_bps));
-  const [performance, setPerformance] = useState(String(initial.performance_bps));
-  const [hurdle, setHurdle] = useState(String(initial.hurdle_bps));
+  // The stored policy is basis points; the form is percent. Seeding through
+  // `toPercentInput` is what keeps that round trip lossless — a 2.55% rate opens on
+  // "2.55" and saves back as the same 255 bps if the operator never touches it.
+  const [management, setManagement] = useState(() => toPercentInput(initial.management_bps));
+  const [performance, setPerformance] = useState(() => toPercentInput(initial.performance_bps));
+  const [hurdle, setHurdle] = useState(() => toPercentInput(initial.hurdle_bps));
   const [basis, setBasis] = useState(initial.basis);
   const [crystallization, setCrystallization] = useState(initial.crystallization);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  // Basis points, so 10000 is 100%. A rate above that is always a typo — most often a
-  // percentage typed where bps were meant, which would be a hundredfold overcharge.
+  // One conversion, read by the validator, the showcase and the save alike, so the figure
+  // the operator is shown before saving is the same integer the request carries. `null`
+  // means "does not parse as a percent" — the only state a field can hold that has no bps.
+  const bps = useMemo(
+    () => ({ management: toBps(management), performance: toBps(performance), hurdle: toBps(hurdle) }),
+    [management, performance, hurdle],
+  );
+
+  // 100% is the domain's cap on every rate (`FeePolicy::new`): a fee larger than the thing
+  // it is charged on is a fat finger, never a term. The old hundredfold-overcharge risk —
+  // a percentage typed into a basis-points field — is gone by construction now that the
+  // field *is* percent: 200 typed here means 200%, which this refuses outright.
   const invalid = useMemo(() => {
-    for (const [labelKey, raw] of [
-      ["admin.fees.field.management", management],
-      ["admin.fees.field.performance", performance],
-      ["admin.fees.field.hurdle", hurdle],
+    for (const [labelKey, value] of [
+      ["admin.fees.field.management", bps.management],
+      ["admin.fees.field.performance", bps.performance],
+      ["admin.fees.field.hurdle", bps.hurdle],
     ] as const) {
-      const n = Number(raw);
       // The field name is interpolated rather than concatenated onto the front: which end
       // of the sentence it belongs at is a per-language decision.
-      if (!Number.isInteger(n) || n < 0) return t("admin.fees.err.notInteger", { field: t(labelKey) });
-      if (n > 10_000) return t("admin.fees.err.tooLarge", { field: t(labelKey), pct: pct(n) });
+      if (value === null) return t("admin.fees.err.notPercent", { field: t(labelKey) });
+      if (value > 10_000) return t("admin.fees.err.overHundred", { field: t(labelKey) });
     }
     return null;
-  }, [management, performance, hurdle, t]);
+  }, [bps, t]);
 
   async function save() {
-    if (invalid) return;
+    // The null checks restate what `invalid` has already proved; they are here so the
+    // types agree that every rate reaching the wire is a number.
+    if (invalid || bps.management === null || bps.performance === null || bps.hurdle === null) return;
     setBusy(true);
     setProblem(null);
     setSaved(false);
     try {
       await setFeePolicy({
         service,
-        management_bps: Number(management),
-        performance_bps: Number(performance),
-        hurdle_bps: Number(hurdle),
+        management_bps: bps.management,
+        performance_bps: bps.performance,
+        hurdle_bps: bps.hurdle,
         basis,
         crystallization,
       });
@@ -203,10 +218,12 @@ function PolicyCard({ service, policy }: { service: string; policy: FeePolicy | 
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <BpsField label={t("admin.fees.field.management")} value={management} onChange={setManagement} hint={t("admin.fees.hint.perYear")} />
-          <BpsField label={t("admin.fees.field.performance")} value={performance} onChange={setPerformance} hint={t("admin.fees.hint.ofTheGain")} />
-          <BpsField label={t("admin.fees.field.hurdle")} value={hurdle} onChange={setHurdle} hint={t("admin.fees.hint.zeroForNone")} />
+          <PercentField label={t("admin.fees.field.management")} value={management} onChange={setManagement} hint={t("admin.fees.hint.perYear")} />
+          <PercentField label={t("admin.fees.field.performance")} value={performance} onChange={setPerformance} hint={t("admin.fees.hint.ofTheGain")} />
+          <PercentField label={t("admin.fees.field.hurdle")} value={hurdle} onChange={setHurdle} hint={t("admin.fees.hint.zeroForNone")} />
         </div>
+
+        <Showcase bps={bps} />
 
         <Choice label={t("admin.fees.chargedOn")} value={basis} onChange={setBasis} options={BASES} />
         <p className="text-xs text-muted-foreground">{t("admin.fees.basisNote")}</p>
@@ -350,15 +367,81 @@ function AssessmentsCard({ service }: { service: string }) {
   );
 }
 
-function BpsField({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint: string }) {
+/** A rate, as a term sheet states one. The percent sign is furniture inside the field
+ *  rather than a character the operator types, so what the value means is legible while
+ *  the box still holds nothing but the number `toBps` parses. */
+function PercentField({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint: string }) {
   return (
     <label className="space-y-1.5 text-sm">
       <span className="block font-medium">{label}</span>
-      <Input inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value)} />
-      <span className="block text-xs text-muted-foreground">
-        {pct(Number(value) || 0)} {hint}
-      </span>
+      <div className="relative">
+        {/* `decimal` rather than `numeric`: half a percent is a rate someone will charge,
+            and a numeric keypad on a phone has no decimal separator. */}
+        <Input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="pr-8 tabular-nums" />
+        {/* Inside the `label`, so it joins the field's accessible name — "Management %
+            per year". Not decorative: the unit is the whole point of this screen's
+            change, and a reader who cannot see it is the one who most needs telling. */}
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">%</span>
+      </div>
+      <span className="block text-xs text-muted-foreground">{hint}</span>
     </label>
+  );
+}
+
+/** The reference position the worked example prices. A round hundred thousand: big enough
+ *  that the management line lands on a figure worth arguing about, round enough that a
+ *  reader can move the decimal point to their own fund size in their head. */
+const REFERENCE_POSITION = 100_000;
+
+/** What the percentages above come to.
+ *
+ *  The form takes a price the way a term sheet states one — "2 and 20" — while the money
+ *  plane stores and charges basis points. Both belong on screen: the bps figure is what
+ *  this screen is about to write, and the money figure is the only form in which a fee is
+ *  actually argued about. Neither is an input, so nothing here can drift from what saves. */
+function Showcase({ bps }: { bps: { management: number | null; performance: number | null; hurdle: number | null } }) {
+  const t = useT();
+
+  const rows = [
+    { key: "admin.fees.field.management", value: bps.management },
+    { key: "admin.fees.field.performance", value: bps.performance },
+    { key: "admin.fees.field.hurdle", value: bps.hurdle },
+  ] as const;
+
+  // Withheld rather than guessed while any rate is unparsable: a sentence assembled from
+  // a field the form is about to reject would price terms nobody can save.
+  const example =
+    bps.management === null || bps.performance === null || bps.hurdle === null
+      ? null
+      : t(bps.hurdle > 0 ? "admin.fees.showcase.exampleHurdle" : "admin.fees.showcase.example", {
+          amount: formatUsd(REFERENCE_POSITION),
+          management: formatUsd((REFERENCE_POSITION * bps.management) / 10_000),
+          performance: pct(bps.performance),
+          hurdle: pct(bps.hurdle),
+        });
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+      <p className="text-xs font-medium text-muted-foreground">{t("admin.fees.showcase.title")}</p>
+      <dl className="grid gap-3 sm:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.key} className="space-y-0.5">
+            <dt className="text-xs text-muted-foreground">{t(row.key)}</dt>
+            <dd className="text-sm tabular-nums">
+              {row.value === null ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <>
+                  <span className="font-medium">{pct(row.value)}</span>{" "}
+                  <span className="text-xs text-muted-foreground">{t("admin.fees.showcase.bps", { n: row.value })}</span>
+                </>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {example && <p className="text-xs text-muted-foreground">{example}</p>}
+    </div>
   );
 }
 
@@ -404,10 +487,4 @@ function Row({ label, value }: { label: string; value: string }) {
       <dd className="font-medium tabular-nums">{value}</dd>
     </div>
   );
-}
-
-/** Basis points as a human reads them: 200 → "2%", 250 → "2.5%". */
-function pct(bps: number): string {
-  const value = bps / 100;
-  return `${Number.isInteger(value) ? value : Number(value.toFixed(2))}%`;
 }

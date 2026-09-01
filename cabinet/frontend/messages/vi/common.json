@@ -279,13 +279,13 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Đây là một mức giá, không phải chi tiết nhỏ — chốt phí càng thường xuyên thì tổng chi phí nhà đầu tư trả trong vòng đời quỹ càng cao rõ rệt, vì mỗi lần đặt lại đều chốt cứng phần lãi mà khoản lỗ sau đó không còn bù trừ được."
   },
-  "admin.fees.err.notInteger": {
-    "en": "{field} must be a whole number of basis points.",
-    "t": "{field} phải là một số nguyên điểm cơ bản."
+  "admin.fees.err.notPercent": {
+    "en": "{field} must be a percentage — 2, or 2.5 for a half.",
+    "t": "{field} phải là phần trăm — 2, hoặc 2.5 cho nửa phần trăm."
   },
-  "admin.fees.err.tooLarge": {
-    "en": "{field} is {pct} — basis points, so 200 is 2%.",
-    "t": "{field} đang là {pct} — đơn vị là điểm cơ bản, nên 200 tương đương 2%."
+  "admin.fees.err.overHundred": {
+    "en": "{field} cannot be more than 100%.",
+    "t": "{field} không được vượt quá 100%."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
@@ -378,6 +378,22 @@
   "admin.fees.settledAtNav": {
     "en": "{cash} settled at NAV {nav}.",
     "t": "Đã tất toán {cash} tại NAV {nav}."
+  },
+  "admin.fees.showcase.bps": {
+    "en": "{n} bps",
+    "t": "{n} điểm cơ bản"
+  },
+  "admin.fees.showcase.example": {
+    "en": "On a {amount} position: {management} a year, plus {performance} of any gain.",
+    "t": "Trên một vị thế {amount}: {management} mỗi năm, cộng {performance} của mọi khoản lãi."
+  },
+  "admin.fees.showcase.exampleHurdle": {
+    "en": "On a {amount} position: {management} a year, plus {performance} of any gain above a mark rising {hurdle} a year.",
+    "t": "Trên một vị thế {amount}: {management} mỗi năm, cộng {performance} của khoản lãi vượt mốc tăng {hurdle} mỗi năm."
+  },
+  "admin.fees.showcase.title": {
+    "en": "What gets saved",
+    "t": "Những gì sẽ được lưu"
   },
   "admin.fees.startCharging": {
     "en": "Start charging",

@@ -22,6 +22,7 @@ import { accruedFeesResource, allocationsResource, feePolicyResource, fundNavRes
 import type { AccruedFees, FeePolicy, FundNav, Position } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
+import { pct } from "@/shared/lib/rate";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
@@ -237,9 +238,9 @@ function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: Accru
       <CardContent className="space-y-4 py-6">
         <p className="text-sm font-semibold">{t("nav.fees")}</p>
         <dl className="space-y-2.5 text-sm">
-          <Row label={t("admin.fees.field.management")} value={t("invest.perAnnum", { pct: percent(policy.management_bps) })} />
-          <Row label={t("admin.fees.field.performance")} value={t("invest.ofTheGain", { pct: percent(policy.performance_bps) })} />
-          {policy.hurdle_bps ? <Row label={t("admin.fees.field.hurdle")} value={t("invest.hurdleFirst", { pct: percent(policy.hurdle_bps) })} /> : null}
+          <Row label={t("admin.fees.field.management")} value={t("invest.perAnnum", { pct: pct(policy.management_bps) })} />
+          <Row label={t("admin.fees.field.performance")} value={t("invest.ofTheGain", { pct: pct(policy.performance_bps) })} />
+          {policy.hurdle_bps ? <Row label={t("admin.fees.field.hurdle")} value={t("invest.hurdleFirst", { pct: pct(policy.hurdle_bps) })} /> : null}
           {/* An unmapped basis/period falls back to the wire identifier — a value the hub
               added that this build has no word for, shown rather than swallowed. */}
           <Row label={t("admin.fees.chargedOn")} value={basisKey ? t(basisKey) : (policy.basis ?? "—")} />
@@ -266,12 +267,6 @@ function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: Accru
       </CardContent>
     </Card>
   );
-}
-
-/** Basis points as an investor reads them: 200 → "2%", 250 → "2.5%". */
-function percent(bps: number | undefined): string {
-  const value = (bps ?? 0) / 100;
-  return `${Number.isInteger(value) ? value : Number(value.toFixed(2))}%`;
 }
 
 // The same two vocabularies the admin fee console writes, read here — one wire value has
