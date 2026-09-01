@@ -279,13 +279,13 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Ein Preis, kein Detail — häufigeres Kristallisieren erhöht messbar, was ein Investor über die Laufzeit eines Fonds zahlt, weil jeder Reset Gewinne festschreibt, die ein späterer Verlust nicht mehr zurückholen kann."
   },
-  "admin.fees.err.notInteger": {
-    "en": "{field} must be a whole number of basis points.",
-    "t": "{field} muss eine ganze Zahl in Basispunkten sein."
+  "admin.fees.err.notPercent": {
+    "en": "{field} must be a percentage — 2, or 2.5 for a half.",
+    "t": "{field} muss ein Prozentsatz sein — 2, oder 2.5 für ein halbes Prozent."
   },
-  "admin.fees.err.tooLarge": {
-    "en": "{field} is {pct} — basis points, so 200 is 2%.",
-    "t": "{field} entspricht {pct} — es sind Basispunkte, 200 ergibt also 2 %."
+  "admin.fees.err.overHundred": {
+    "en": "{field} cannot be more than 100%.",
+    "t": "{field} darf 100 % nicht überschreiten."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
@@ -378,6 +378,22 @@
   "admin.fees.settledAtNav": {
     "en": "{cash} settled at NAV {nav}.",
     "t": "{cash} zum NAV {nav} abgerechnet."
+  },
+  "admin.fees.showcase.bps": {
+    "en": "{n} bps",
+    "t": "{n} Bp."
+  },
+  "admin.fees.showcase.example": {
+    "en": "On a {amount} position: {management} a year, plus {performance} of any gain.",
+    "t": "Auf eine Position von {amount}: {management} pro Jahr, plus {performance} jedes Gewinns."
+  },
+  "admin.fees.showcase.exampleHurdle": {
+    "en": "On a {amount} position: {management} a year, plus {performance} of any gain above a mark rising {hurdle} a year.",
+    "t": "Auf eine Position von {amount}: {management} pro Jahr, plus {performance} des Gewinns über einer Marke, die um {hurdle} pro Jahr steigt."
+  },
+  "admin.fees.showcase.title": {
+    "en": "What gets saved",
+    "t": "Was gespeichert wird"
   },
   "admin.fees.startCharging": {
     "en": "Start charging",

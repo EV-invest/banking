@@ -279,13 +279,13 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Это цена, а не деталь: чем чаще происходит фиксация, тем ощутимо больше платит инвестор за всё время жизни фонда, потому что каждый сброс закрепляет прибыль, которую последующий убыток уже не вернёт."
   },
-  "admin.fees.err.notInteger": {
-    "en": "{field} must be a whole number of basis points.",
-    "t": "{field}: значение должно быть целым числом базисных пунктов."
+  "admin.fees.err.notPercent": {
+    "en": "{field} must be a percentage — 2, or 2.5 for a half.",
+    "t": "{field}: нужны проценты — 2 или 2.5 для половины."
   },
-  "admin.fees.err.tooLarge": {
-    "en": "{field} is {pct} — basis points, so 200 is 2%.",
-    "t": "{field}: {pct} — это базисные пункты, поэтому 200 означает 2%."
+  "admin.fees.err.overHundred": {
+    "en": "{field} cannot be more than 100%.",
+    "t": "{field}: не больше 100%."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
@@ -378,6 +378,22 @@
   "admin.fees.settledAtNav": {
     "en": "{cash} settled at NAV {nav}.",
     "t": "{cash} исполнено по NAV {nav}."
+  },
+  "admin.fees.showcase.bps": {
+    "en": "{n} bps",
+    "t": "{n} б. п."
+  },
+  "admin.fees.showcase.example": {
+    "en": "On a {amount} position: {management} a year, plus {performance} of any gain.",
+    "t": "На позицию {amount}: {management} в год плюс {performance} от любой прибыли."
+  },
+  "admin.fees.showcase.exampleHurdle": {
+    "en": "On a {amount} position: {management} a year, plus {performance} of any gain above a mark rising {hurdle} a year.",
+    "t": "На позицию {amount}: {management} в год плюс {performance} от прибыли сверх отметки, растущей на {hurdle} в год."
+  },
+  "admin.fees.showcase.title": {
+    "en": "What gets saved",
+    "t": "Что будет сохранено"
   },
   "admin.fees.startCharging": {
     "en": "Start charging",
