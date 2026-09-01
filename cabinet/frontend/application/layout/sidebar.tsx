@@ -289,6 +289,12 @@ function NavLink({ item, active, section, appear, trailing }: { item: NavItem; a
 }
 
 // Capped at 99+ so a long-neglected inbox cannot widen the rail.
+//
+// The label and the text deliberately disagree past 99: the pill shows "99+" because the
+// rail has no room for more, while the accessible name carries the real number, which is
+// the one piece of information the cap throws away. The label was `${count} unread` — an
+// English plural assembled by concatenation, hidden where nothing renders it, so every
+// locale announced it in English.
 function UnreadPill({ count, active }: { count: number; active: boolean }) {
   const t = useT();
   return (
