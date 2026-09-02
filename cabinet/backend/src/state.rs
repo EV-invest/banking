@@ -7,7 +7,7 @@ use tonic::{
 	transport::{Channel, Endpoint},
 };
 
-use crate::{config::AppConfig, cookies::CookieNames, session::BankingTokens};
+use crate::{config::AppConfig, cookies::CookieNames, routes::approval::AttemptLimiter, session::BankingTokens};
 
 /// Cap on establishing a TCP/TLS connection to an upstream plane: a black-holed or
 /// half-open replica must fail fast rather than wedge the awaiting request task.
@@ -29,6 +29,9 @@ pub struct AppState {
 	/// is shell-owned and the request credential is the verified access-JWT cookie).
 	pub banking: Arc<BankingTokens>,
 	pub cookies: Arc<CookieNames>,
+	/// The per-IP bound on the public approval vote — see [`crate::routes::approval`].
+	/// Not a session and not a credential: the only state here that no cookie reaches.
+	pub approvals: Arc<AttemptLimiter>,
 	/// Local verifier for the shared concierge access JWT (JWKS-cached — no
 	/// per-request round trip).
 	pub verifier: evconcierge_auth::Verifier,
@@ -96,6 +99,14 @@ impl Grpc {
 
 	fn balance(&self) -> bk::balance_service_client::BalanceServiceClient<Channel> {
 		bk::balance_service_client::BalanceServiceClient::new(self.piggybank.clone())
+	}
+
+	fn consilium(&self) -> bk::consilium_service_client::ConsiliumServiceClient<Channel> {
+		bk::consilium_service_client::ConsiliumServiceClient::new(self.piggybank.clone())
+	}
+
+	fn consilium_approval(&self) -> bk::consilium_approval_service_client::ConsiliumApprovalServiceClient<Channel> {
+		bk::consilium_approval_service_client::ConsiliumApprovalServiceClient::new(self.piggybank.clone())
 	}
 
 	fn platform(&self) -> cc::platform_service_client::PlatformServiceClient<Channel> {
@@ -480,6 +491,53 @@ impl Grpc {
 
 	pub async fn revenue_payouts(&self, token: &str) -> Result<bk::WithdrawalList, Status> {
 		Ok(self.balance().list_revenue_payouts(bearer(token, bk::ListRevenuePayoutsRequest {})?).await?.into_inner())
+	}
+
+	// ── consilium: multi-owner authorization for a revenue payout ──────────────
+	// The tally lives in the MONEY plane, against the owner roster this plane already
+	// mirrors: `docs/ARCHITECTURE.md` rejects letting a concierge-signed artifact
+	// authorize money movement, and a consilium verdict is exactly such an artifact.
+	// So these carry the banking money token, never the concierge one.
+
+	pub async fn list_consilia(&self, token: &str, limit: u32) -> Result<bk::ConsiliumList, Status> {
+		let req = bk::ListConsiliaRequest { limit };
+		Ok(self.consilium().list_consilia(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn get_consilium(&self, token: &str, consilium_id: &str) -> Result<bk::Consilium, Status> {
+		let req = bk::GetConsiliumRequest {
+			consilium_id: consilium_id.to_string(),
+		};
+		Ok(self.consilium().get_consilium(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn open_revenue_payout(&self, token: &str, terms: bk::RevenuePayoutTerms) -> Result<bk::Consilium, Status> {
+		let req = bk::OpenRevenuePayoutRequest { terms: Some(terms) };
+		Ok(self.consilium().open_revenue_payout(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_consilium(&self, token: &str, consilium_id: &str) -> Result<bk::Consilium, Status> {
+		let req = bk::CancelConsiliumRequest {
+			consilium_id: consilium_id.to_string(),
+		};
+		Ok(self.consilium().cancel_consilium(bearer(token, req)?).await?.into_inner())
+	}
+
+	// The two below carry NO bearer, deliberately: the emailed token IS the credential and
+	// the owner clicking it may not be signed in. Attaching a user token here would invent
+	// an authorization the flow does not have.
+
+	/// The redacted invitation behind an emailed token. Side-effect free — mail scanners
+	/// issue automatic GETs for every URL in a message.
+	pub async fn consilium_invitation(&self, token: &str) -> Result<bk::ConsiliumInvitation, Status> {
+		let req = bk::GetInvitationRequest { token: token.to_string() };
+		Ok(self.consilium_approval().get_invitation(req).await?.into_inner())
+	}
+
+	/// Cast the emailed owner's vote. `client_ip`/`user_agent` on the request are AUDIT
+	/// fields only; the plane never treats them as authorization.
+	pub async fn submit_consilium_decision(&self, req: bk::SubmitDecisionRequest) -> Result<bk::SubmitDecisionResponse, Status> {
+		Ok(self.consilium_approval().submit_decision(req).await?.into_inner())
 	}
 
 	pub async fn parked_events(&self, token: &str) -> Result<bk::ParkedEventList, Status> {
