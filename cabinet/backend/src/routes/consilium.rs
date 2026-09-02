@@ -4,11 +4,12 @@
 //! Two planes, two tokens, and the split is the point. Paying the fund's own revenue out
 //! is authorized in the MONEY plane, against the owner roster it already mirrors, because
 //! `docs/ARCHITECTURE.md` refuses to let a concierge-signed artifact move money — and a
-//! consilium verdict is exactly such an artifact. Taking a seat away is authorized in the
-//! OWNERSHIP plane, because `Role::Owner` is a concierge-owned fact and the bridge between
-//! the planes is one-way. So the money handlers forward the banking token and never the
-//! concierge one; the ownership handlers forward the concierge token and never the banking
-//! one. Neither plane trusts the other's verdict.
+//! consilium verdict is exactly such an artifact. Moving a seat — granting one or taking
+//! one away — is authorized in the OWNERSHIP plane, because `Role::Owner` is a
+//! concierge-owned fact and the bridge between the planes is one-way. So the money
+//! handlers forward the banking token and never the concierge one; the ownership handlers
+//! forward the concierge token and never the banking one. Neither plane trusts the other's
+//! verdict.
 
 use axum::{
 	Json,
@@ -23,7 +24,7 @@ use serde::Deserialize;
 use crate::{
 	dto,
 	error::ApiError,
-	governance::{self, RemovalVote},
+	governance::{AdmissionVote, RemovalVote},
 	routes::{parse_body, require_money_token, require_token, required, verify_csrf},
 	state::AppState,
 };
@@ -83,24 +84,40 @@ pub async fn cancel(State(st): State<AppState>, jar: CookieJar, Path(id): Path<S
 	Ok(Json(st.grpc.cancel_consilium(&token, &id).await?.into()))
 }
 
-// ── ownership plane: the roster and its removals ─────────────────────────────
+// ── ownership plane: the roster, its removals and its admissions ─────────────
 
 /// `GET /api/owners` — the current roster, with the below-three-owners warning that says
-/// the fund can no longer authorize a payout at all.
+/// the fund can no longer authorize a payout.
 pub async fn owners(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::OwnerList>, ApiError> {
 	let token = require_token(&st, &jar).await?;
-	let owners = governance::owners(&st.grpc, &token).await.map_err(|s| ApiError::read(s, "owners unavailable"))?;
-	Ok(Json(owners))
+	let owners = st.grpc.list_owners(&token).await.map_err(|s| ApiError::read(s, "owners unavailable"))?;
+	Ok(Json(owners.into()))
+}
+
+/// `POST /api/owners/resign` — CSRF-checked: give up your own seat. No consilium, but the
+/// floor still applies, and `confirm_email` must be the caller's own address — resigning
+/// cannot be a stray click.
+pub async fn resign(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::OwnerList>, ApiError> {
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_token(&st, &jar).await?;
+	let Some(confirm_email) = required(&parse_body(&body), "confirm_email") else {
+		return Err(ApiError::BadRequest("confirm_email is required".into()));
+	};
+	Ok(Json(st.grpc.resign_ownership(&token, &confirm_email).await?.into()))
 }
 
 /// `GET /api/owners/removals` — every proposal, open and closed. Nothing is deleted: a
 /// rejected, expired or void removal stays readable.
 pub async fn list_removals(State(st): State<AppState>, jar: CookieJar, Query(q): Query<LimitQuery>) -> Result<Json<dto::OwnerRemovalList>, ApiError> {
 	let token = require_token(&st, &jar).await?;
-	let list = governance::list_removals(&st.grpc, &token, q.limit.unwrap_or(0))
+	let list = st
+		.grpc
+		.list_owner_removals(&token, q.limit.unwrap_or(0))
 		.await
 		.map_err(|s| ApiError::read(s, "removals unavailable"))?;
-	Ok(Json(list))
+	Ok(Json(list.into()))
 }
 
 /// `POST /api/owners/removals` — CSRF-checked: propose removing an owner. The reason is
@@ -115,7 +132,7 @@ pub async fn open_removal(State(st): State<AppState>, jar: CookieJar, headers: H
 	let (Some(target_user_id), Some(reason)) = (required(&v, "target_user_id"), required(&v, "reason")) else {
 		return Err(ApiError::BadRequest("target_user_id and reason are required".into()));
 	};
-	Ok(Json(governance::open_removal(&st.grpc, &token, &target_user_id, &reason).await?))
+	Ok(Json(st.grpc.open_owner_removal(&token, &target_user_id, &reason).await?.into()))
 }
 
 /// `POST /api/owners/removals/{id}/vote` — CSRF-checked: a peer's live vote, cast in the
@@ -128,7 +145,7 @@ pub async fn vote_removal(State(st): State<AppState>, jar: CookieJar, Path(id): 
 	let Some(vote) = required(&parse_body(&body), "vote").as_deref().and_then(RemovalVote::parse) else {
 		return Err(ApiError::BadRequest("vote must be \"remove\" or \"keep\"".into()));
 	};
-	Ok(Json(governance::peer_vote(&st.grpc, &token, &id, vote).await?))
+	Ok(Json(st.grpc.submit_peer_vote(&token, &id, vote.wire()).await?.into()))
 }
 
 /// `POST /api/owners/removals/{id}/cancel` — CSRF-checked: withdraw a proposal the caller
@@ -138,21 +155,58 @@ pub async fn cancel_removal(State(st): State<AppState>, jar: CookieJar, Path(id)
 		return Err(ApiError::Csrf);
 	}
 	let token = require_token(&st, &jar).await?;
-	Ok(Json(governance::cancel_removal(&st.grpc, &token, &id).await?))
+	Ok(Json(st.grpc.cancel_owner_removal(&token, &id).await?.into()))
 }
 
-/// `POST /api/owners/resign` — CSRF-checked: give up your own seat. No consilium, but the
-/// floor of three still applies, and `confirm_email` must be the caller's own address —
-/// resigning cannot be a stray click.
-pub async fn resign(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::OwnerList>, ApiError> {
+/// `GET /api/owners/admissions` — every admission, open and closed.
+pub async fn list_admissions(State(st): State<AppState>, jar: CookieJar, Query(q): Query<LimitQuery>) -> Result<Json<dto::OwnerAdmissionList>, ApiError> {
+	let token = require_token(&st, &jar).await?;
+	let list = st
+		.grpc
+		.list_owner_admissions(&token, q.limit.unwrap_or(0))
+		.await
+		.map_err(|s| ApiError::read(s, "admissions unavailable"))?;
+	Ok(Json(list.into()))
+}
+
+/// `POST /api/owners/admissions` — CSRF-checked: propose granting a seat. This is the ONLY
+/// way `Role::Owner` is granted — the directory's `SetRole` refuses it outside an executed
+/// admission — and it passes only on unanimity of every other owner, so a minority can
+/// never grow itself into the majority a payout needs.
+pub async fn open_admission(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::OwnerAdmission>, ApiError> {
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
 	let token = require_token(&st, &jar).await?;
-	let Some(confirm_email) = required(&parse_body(&body), "confirm_email") else {
-		return Err(ApiError::BadRequest("confirm_email is required".into()));
+	let v = parse_body(&body);
+	let (Some(candidate_user_id), Some(reason)) = (required(&v, "candidate_user_id"), required(&v, "reason")) else {
+		return Err(ApiError::BadRequest("candidate_user_id and reason are required".into()));
 	};
-	Ok(Json(governance::resign(&st.grpc, &token, &confirm_email).await?))
+	Ok(Json(st.grpc.open_owner_admission(&token, &candidate_user_id, &reason).await?.into()))
+}
+
+/// `POST /api/owners/admissions/{id}/vote` — CSRF-checked: a peer's vote on an admission.
+/// Its own vocabulary, not the removal one: "admit"/"reject" is a different question from
+/// "remove"/"keep", and a page that submitted the wrong verb here would seat someone.
+pub async fn vote_admission(State(st): State<AppState>, jar: CookieJar, Path(id): Path<String>, headers: HeaderMap, body: Bytes) -> Result<Json<dto::OwnerAdmission>, ApiError> {
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_token(&st, &jar).await?;
+	let Some(vote) = required(&parse_body(&body), "vote").as_deref().and_then(AdmissionVote::parse) else {
+		return Err(ApiError::BadRequest("vote must be \"admit\" or \"reject\"".into()));
+	};
+	Ok(Json(st.grpc.submit_admission_vote(&token, &id, vote.wire()).await?.into()))
+}
+
+/// `POST /api/owners/admissions/{id}/cancel` — CSRF-checked: withdraw an admission the
+/// caller opened, while it is still open.
+pub async fn cancel_admission(State(st): State<AppState>, jar: CookieJar, Path(id): Path<String>, headers: HeaderMap) -> Result<Json<dto::OwnerAdmission>, ApiError> {
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let token = require_token(&st, &jar).await?;
+	Ok(Json(st.grpc.cancel_owner_admission(&token, &id).await?.into()))
 }
 
 #[cfg(test)]
@@ -230,7 +284,14 @@ mod route_tests {
 	/// plane is touched — and in particular before a money-plane token could be minted.
 	#[tokio::test]
 	async fn the_signed_in_surface_refuses_an_anonymous_caller() {
-		for (method, uri) in [("GET", "/api/consilium"), ("GET", "/api/consilium/c-1"), ("GET", "/api/owners"), ("GET", "/api/owners/removals")] {
+		let reads = [
+			("GET", "/api/consilium"),
+			("GET", "/api/consilium/c-1"),
+			("GET", "/api/owners"),
+			("GET", "/api/owners/removals"),
+			("GET", "/api/owners/admissions"),
+		];
+		for (method, uri) in reads {
 			let (status, _) = send(method, uri, None).await;
 			assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {uri}");
 		}
@@ -247,6 +308,9 @@ mod route_tests {
 			("/api/owners/removals", r#"{"target_user_id":"u-2","reason":"inactive"}"#),
 			("/api/owners/removals/r-1/vote", r#"{"vote":"remove"}"#),
 			("/api/owners/removals/r-1/cancel", "{}"),
+			("/api/owners/admissions", r#"{"candidate_user_id":"u-3","reason":"co-founder"}"#),
+			("/api/owners/admissions/a-1/vote", r#"{"vote":"admit"}"#),
+			("/api/owners/admissions/a-1/cancel", "{}"),
 			("/api/owners/resign", r#"{"confirm_email":"ada@example.com"}"#),
 		];
 		for (uri, body) in mutations {

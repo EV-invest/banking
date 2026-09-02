@@ -1,46 +1,23 @@
-//! The concierge OWNERSHIP plane — the owner roster, owner removals, and the live
-//! governance feed — behind one seam.
+//! The ownership plane's two browser-facing vocabularies, and the live feed's pump.
 //!
-//! Ownership is `Role::Owner`, a concierge-owned fact, so only that plane may mutate it
-//! and only that plane may authorize the mutation. Every call here therefore forwards the
-//! **concierge** identity token; the banking money token has a different issuer and
-//! `aud`, and the two-plane separation is what stops one plane's credential from
-//! authorizing the other's decisions. The money plane runs its own, separate consilium
-//! over its own mirrored roster (see [`crate::state::Grpc::list_consilia`]).
-//!
-//! # TODO(pin-bump): this module is a stub, and it is the ONLY one
-//!
-//! `evconcierge_contracts` is pinned in the workspace manifest to a git rev
-//! (`34dc166016351917c7db6f6fe7f2da183b8316b8`) that predates
-//! `contracts/proto/concierge/v1/governance.proto`, so `GovernanceService`,
-//! `OwnerRemovalApprovalService` and their message types **do not exist** in the
-//! generated crate yet. Every function below is `Unimplemented` (→ HTTP 501) until that
-//! pin is bumped; nothing else in this crate names those types, so the rest of the
-//! consilium surface — routes, CSRF, DTOs, error mapping, the socket — compiles, is
-//! clippy-clean and is tested today.
-//!
-//! Bumping the pin means, here and nowhere else:
-//! 1. add `fn concierge_channel(&self) -> Channel` to [`crate::state::Grpc`] (the field
-//!    is private to that module) and build the two clients from it;
-//! 2. fill in each function against the RPC named in its doc line, forwarding `token` as
-//!    `authorization: Bearer` exactly as [`crate::state`] does — except the two public
-//!    approval calls, which carry NO bearer: the emailed token IS the credential;
-//! 3. write the `From<cc::…>` conversions for the governance DTOs in [`crate::dto`],
-//!    re-checking every field against the proto, and mask both addresses on
-//!    `OwnerRemovalInvitation` the way the banking invitation already does;
-//! 4. make [`watch`] spawn one pump task per socket that forwards `GovernanceTick`s into
-//!    the returned channel and exits when either end drops;
-//! 5. delete the module-level `allow` below and this section.
-// Every parameter of every stub is unused until step 2 above lands. The allow is scoped
-// to this quarantined module and goes away with the TODO.
-#![allow(unused_variables)]
+//! The RPCs themselves live with every other plane's in [`crate::state`], and the wire
+//! conversions in [`crate::dto`]. What is left here is what belongs to neither: the words
+//! a browser is allowed to vote with, and the task that turns concierge's server-stream
+//! into something a websocket can own.
 
+use evconcierge_contracts::concierge::v1 as cc;
 use tokio::sync::mpsc;
 use tonic::Status;
 
-use crate::{dto, state::Grpc};
+use crate::state::Grpc;
 
-/// What a peer owner may answer on a removal. `Remove` carries the proposal; a single
+/// How many ticks may sit between the upstream stream and the socket. Small on purpose:
+/// a tick carries no payload the client needs, only the news that the revision moved, so
+/// a slow browser should back-pressure the pump rather than accumulate a backlog of
+/// revisions it will collapse into one refetch anyway.
+const TICK_BUFFER: usize = 16;
+
+/// What a peer owner may answer on a REMOVAL. `Remove` carries the proposal; a single
 /// `Keep` ends the peer-unanimity path.
 #[derive(Clone, Copy)]
 pub enum RemovalVote {
@@ -58,11 +35,49 @@ impl RemovalVote {
 			_ => None,
 		}
 	}
+
+	pub fn wire(self) -> cc::RemovalVote {
+		match self {
+			Self::Remove => cc::RemovalVote::Remove,
+			Self::Keep => cc::RemovalVote::Keep,
+		}
+	}
+}
+
+/// What a peer owner may answer on an ADMISSION.
+///
+/// Deliberately NOT [`RemovalVote`], mirroring the proto's own split: "remove/keep" and
+/// "admit/reject" are different questions, and a surface that renders the wrong verb on a
+/// governance vote is a surface that gets a vote cast by mistake. Sharing one enum here
+/// would put a single rename between those two meanings.
+#[derive(Clone, Copy)]
+pub enum AdmissionVote {
+	Admit,
+	Reject,
+}
+
+impl AdmissionVote {
+	pub fn parse(raw: &str) -> Option<Self> {
+		match raw {
+			"admit" => Some(Self::Admit),
+			"reject" => Some(Self::Reject),
+			_ => None,
+		}
+	}
+
+	pub fn wire(self) -> cc::AdmissionVote {
+		match self {
+			Self::Admit => cc::AdmissionVote::Admit,
+			Self::Reject => cc::AdmissionVote::Reject,
+		}
+	}
 }
 
 /// One frame of the live governance feed: a REVISION and when it was produced, never a
-/// tally and never a secret. The client refetches the authoritative snapshot when the
-/// revision moves, so a stale or replayed frame can never render a wrong count.
+/// tally and never a secret. One revision covers removals and admissions together, so a
+/// single subscription follows the whole ownership surface, and the client refetches the
+/// authoritative snapshot when it moves — a stale or replayed frame cannot render a wrong
+/// count.
 pub struct Tick {
 	pub revision: u64,
 	pub at: i64,
@@ -70,65 +85,40 @@ pub struct Tick {
 	pub heartbeat: bool,
 }
 
-/// `GovernanceService.ListOwners` — the current roster (Owner only).
-pub async fn owners(grpc: &Grpc, token: &str) -> Result<dto::OwnerList, Status> {
-	Err(unavailable())
-}
-
-/// `GovernanceService.ListOwnerRemovals` — newest first, including closed proposals.
-pub async fn list_removals(grpc: &Grpc, token: &str, limit: u32) -> Result<dto::OwnerRemovalList, Status> {
-	Err(unavailable())
-}
-
-/// `GovernanceService.OpenOwnerRemoval` — propose. The initiator casts no vote.
-pub async fn open_removal(grpc: &Grpc, token: &str, target_user_id: &str, reason: &str) -> Result<dto::OwnerRemoval, Status> {
-	Err(unavailable())
-}
-
-/// `GovernanceService.SubmitPeerVote` — a peer's live vote, cast while signed in. The
-/// target and the initiator are both refused by the plane.
-pub async fn peer_vote(grpc: &Grpc, token: &str, removal_id: &str, vote: RemovalVote) -> Result<dto::OwnerRemoval, Status> {
-	Err(unavailable())
-}
-
-/// `GovernanceService.CancelOwnerRemoval` — withdraw a proposal the caller opened.
-pub async fn cancel_removal(grpc: &Grpc, token: &str, removal_id: &str) -> Result<dto::OwnerRemoval, Status> {
-	Err(unavailable())
-}
-
-/// `GovernanceService.ResignOwnership` — no consilium, but the floor of three still
-/// applies. `confirm_email` is the typed confirmation the plane checks against the
-/// caller's own address, so a resignation cannot be a stray click.
-pub async fn resign(grpc: &Grpc, token: &str, confirm_email: &str) -> Result<dto::OwnerList, Status> {
-	Err(unavailable())
-}
-
-/// `OwnerRemovalApprovalService.GetInvitation` — public, side-effect free, no bearer.
-pub async fn removal_invitation(grpc: &Grpc, token: &str) -> Result<dto::OwnerRemovalInvitation, Status> {
-	Err(unavailable())
-}
-
-/// `OwnerRemovalApprovalService.SubmitSelfDecision` — public, no bearer: the target
-/// accepting or refusing their own removal with the code from the same mail. `client_ip`
-/// and `user_agent` are AUDIT fields only.
-pub async fn submit_self_decision(grpc: &Grpc, token: &str, code: &str, vote: RemovalVote, client_ip: &str, user_agent: &str) -> Result<dto::RemovalDecision, Status> {
-	Err(unavailable())
-}
-
-/// `GovernanceService.WatchGovernance` — the live feed, one receiver per socket.
+/// Subscribe to the ownership plane's revision feed.
 ///
-/// The pump task that will own the upstream stream is spawned per subscription and both
-/// ends are dropped together, so a browser that disconnects takes its task with it rather
-/// than leaking one per reconnect.
+/// The upstream stream is established before this returns, so a plane that cannot serve
+/// the feed is refused at the handshake rather than by a socket that opens and then never
+/// ticks. The pump task owns the stream and holds only the sender: when the socket drops
+/// its receiver the next send fails and the task returns, so a browser that disconnects
+/// takes its task and its subscription with it instead of leaking one per reconnect.
 pub async fn watch(grpc: &Grpc, token: &str) -> Result<mpsc::Receiver<Tick>, Status> {
-	Err(unavailable())
-}
+	let mut stream = grpc.watch_governance(token).await?;
+	let (ticks, receiver) = mpsc::channel(TICK_BUFFER);
 
-/// The one verdict every stub returns. `Unimplemented` and not `Unavailable`: the RPC is
-/// genuinely absent from the deployed contract rather than momentarily unreachable, and
-/// the 501 it maps to says exactly that to the browser.
-fn unavailable() -> Status {
-	Status::unimplemented("the ownership plane is not wired up in this build")
+	tokio::spawn(async move {
+		loop {
+			match stream.message().await {
+				Ok(Some(tick)) => {
+					let tick = Tick {
+						revision: tick.revision,
+						at: tick.at,
+						heartbeat: tick.heartbeat,
+					};
+					if ticks.send(tick).await.is_err() {
+						break;
+					}
+				}
+				Ok(None) => break,
+				Err(status) => {
+					tracing::warn!(code = ?status.code(), "governance feed ended with an error");
+					break;
+				}
+			}
+		}
+	});
+
+	Ok(receiver)
 }
 
 #[cfg(test)]
@@ -138,7 +128,7 @@ mod tests {
 	/// A vote arrives as a word from a browser. Anything outside the vocabulary must be
 	/// refused rather than folded into a default — the default would itself be a vote.
 	#[test]
-	fn only_the_two_votes_parse() {
+	fn only_the_two_removal_votes_parse() {
 		assert!(matches!(RemovalVote::parse("remove"), Some(RemovalVote::Remove)));
 		assert!(matches!(RemovalVote::parse("keep"), Some(RemovalVote::Keep)));
 		assert!(RemovalVote::parse("REMOVE").is_none());
@@ -146,14 +136,26 @@ mod tests {
 		assert!(RemovalVote::parse("approve").is_none());
 	}
 
-	/// Until the pin moves, every ownership call must fail as NOT IMPLEMENTED — never as
-	/// a silent success, and never as an empty roster a page would render as "no owners".
-	#[tokio::test]
-	async fn the_stubbed_plane_never_answers_with_data() {
-		let grpc = Grpc::connect_lazy("http://127.0.0.1:1", "http://127.0.0.1:1", "http://127.0.0.1:1", None).expect("lazy channels");
-		let Err(status) = owners(&grpc, "token").await else {
-			panic!("the stub cannot answer with a roster");
-		};
-		assert_eq!(status.code(), tonic::Code::Unimplemented);
+	/// The two vocabularies must not be interchangeable: an admission cannot be voted on
+	/// with a removal's words, or a page rendering the wrong verb would still submit.
+	#[test]
+	fn the_two_vocabularies_do_not_overlap() {
+		assert!(matches!(AdmissionVote::parse("admit"), Some(AdmissionVote::Admit)));
+		assert!(matches!(AdmissionVote::parse("reject"), Some(AdmissionVote::Reject)));
+		assert!(AdmissionVote::parse("remove").is_none());
+		assert!(AdmissionVote::parse("keep").is_none());
+		assert!(RemovalVote::parse("admit").is_none());
+		assert!(RemovalVote::parse("reject").is_none());
+	}
+
+	/// The words the browser sends must land on the proto variants they name, and not on
+	/// the plane's `UNSPECIFIED`/`PENDING` — either of which a server could read as "no
+	/// answer yet" while the owner believes they voted.
+	#[test]
+	fn every_vote_maps_onto_its_own_proto_variant() {
+		assert_eq!(RemovalVote::Remove.wire(), cc::RemovalVote::Remove);
+		assert_eq!(RemovalVote::Keep.wire(), cc::RemovalVote::Keep);
+		assert_eq!(AdmissionVote::Admit.wire(), cc::AdmissionVote::Admit);
+		assert_eq!(AdmissionVote::Reject.wire(), cc::AdmissionVote::Reject);
 	}
 }

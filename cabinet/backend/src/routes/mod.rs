@@ -129,12 +129,16 @@ fn requests(state: AppState) -> Router {
 		.route("/api/consilium/revenue-payout", post(consilium::open_revenue_payout))
 		.route("/api/consilium/{id}", get(consilium::get))
 		.route("/api/consilium/{id}/cancel", post(consilium::cancel))
-		// Ownership — seats and their removal. Concierge plane: `Role::Owner` is its fact.
+		// Ownership — seats, and the two consilia that move them. Concierge plane:
+		// `Role::Owner` is its fact. Admission is the only way a seat is GRANTED.
 		.route("/api/owners", get(consilium::owners))
 		.route("/api/owners/resign", post(consilium::resign))
 		.route("/api/owners/removals", get(consilium::list_removals).post(consilium::open_removal))
 		.route("/api/owners/removals/{id}/vote", post(consilium::vote_removal))
 		.route("/api/owners/removals/{id}/cancel", post(consilium::cancel_removal))
+		.route("/api/owners/admissions", get(consilium::list_admissions).post(consilium::open_admission))
+		.route("/api/owners/admissions/{id}/vote", post(consilium::vote_admission))
+		.route("/api/owners/admissions/{id}/cancel", post(consilium::cancel_admission))
 		// The public approval surface. NO session, NO CSRF, and no session cookie is even
 		// read: the emailed token in the path is the whole credential. See `approval`.
 		.route("/api/approval/payout/{token}", get(approval::payout_invitation).post(approval::payout_decision))

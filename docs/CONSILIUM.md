@@ -73,6 +73,12 @@ that set is **empty**, and "everyone in an empty set agreed" is vacuously true �
 would let either owner unilaterally expel the other. Path (b) therefore additionally
 requires **at least one eligible peer voter**; with two owners only path (a) exists.
 
+**Two different floors live in this feature, and they are not interchangeable.** The
+**payout** floor is **3** — below it `floor(N/2)+1` is unreachable, and it is what
+`OwnerList.below_payout_floor` reports. The **removal** floor is **2** — how far the
+roster may actually shrink. A reader who assumes one constant will get one of them
+wrong; a fund of exactly 2 is legal, and simply cannot pay out until it admits a third.
+
 **Floor.** A removal may not leave fewer than **2** owners. Dropping to 2 does suspend
 payouts — the table above shows why — but that is a *recoverable* state: two owners can
 still admit a third and resume. An earlier draft of this policy set the floor at 3, and

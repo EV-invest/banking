@@ -34,16 +34,11 @@ use axum::{
 	response::{IntoResponse, Response},
 };
 use evbanking_contracts::banking::v1 as bk;
+use evconcierge_contracts::concierge::v1 as cc;
 use serde::Serialize;
 use tonic::{Code, Status};
 
-use crate::{
-	dto,
-	error::ApiError,
-	governance::{self, RemovalVote},
-	routes::parse_body,
-	state::AppState,
-};
+use crate::{dto, error::ApiError, governance::RemovalVote, routes::parse_body, state::AppState};
 
 /// The body every refusal on this surface carries, whatever the token actually was.
 const NOT_FOUND: &str = "invitation not found";
@@ -77,7 +72,7 @@ pub async fn payout_decision(State(st): State<AppState>, Path(token): Path<Strin
 
 /// `GET /api/approval/removal/{token}` — the redacted removal invitation, for its target.
 pub async fn removal_invitation(State(st): State<AppState>, Path(token): Path<String>) -> Response {
-	respond(governance::removal_invitation(&st.grpc, &token).await)
+	respond(st.grpc.removal_invitation(&token).await.map(dto::OwnerRemovalInvitation::from))
 }
 
 /// `POST /api/approval/removal/{token}` — the target accepting or refusing their own
@@ -87,7 +82,14 @@ pub async fn removal_decision(State(st): State<AppState>, Path(token): Path<Stri
 		Ok(accepted) => accepted,
 		Err(refusal) => return refusal,
 	};
-	respond(governance::submit_self_decision(&st.grpc, &token, &ballot.code, ballot.decision.removal_vote(), &audit.client_ip, &audit.user_agent).await)
+	let request = cc::SubmitSelfDecisionRequest {
+		token,
+		code: ballot.code,
+		vote: ballot.decision.removal_vote().wire() as i32,
+		client_ip: audit.client_ip,
+		user_agent: audit.user_agent,
+	};
+	respond(st.grpc.submit_self_decision(request).await.map(dto::RemovalDecision::from))
 }
 
 // ── the shared shape ─────────────────────────────────────────────────────────

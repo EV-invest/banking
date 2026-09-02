@@ -51,6 +51,7 @@ policy and the threat model.
 | `POST /api/consilium/revenue-payout`, `POST /api/consilium/{id}/cancel` | money | banking |
 | `GET /api/owners`, `POST /api/owners/resign` | ownership | concierge |
 | `GET`/`POST /api/owners/removals`, `POST /api/owners/removals/{id}/vote`, `…/cancel` | ownership | concierge |
+| `GET`/`POST /api/owners/admissions`, `POST /api/owners/admissions/{id}/vote`, `…/cancel` | ownership | concierge |
 | `GET /api/owners/consilium/ws` | ownership | concierge |
 
 The split is architectural: the money plane must be able to audit its own authorization, so
@@ -58,7 +59,17 @@ its tally is computed against the owner roster it already mirrors; ownership is 
 concierge-owned fact, so only that plane may mutate it. Each handler forwards its own
 plane's token and never the other's.
 
-**The websocket** bridges `GovernanceService.WatchGovernance` to the browser. A frame
+**Admission is governed too**, and it is why the rest holds: granting a seat needs
+unanimity of every other owner, and it is the ONLY way `Role::Owner` is granted — the
+directory's `SetRole` refuses it outside an executed admission. Without that, a bad actor
+would mint sock puppets *before* opening an invoice and then reach quorum legitimately,
+which snapshotting the roster cannot prevent because the stuffing already happened.
+Admission and removal share one governance revision, so the socket follows both. Note the
+two votes have deliberately different vocabularies — `admit`/`reject` against
+`remove`/`keep` — because a page that rendered the wrong verb would still submit.
+
+**The websocket** bridges `GovernanceService.WatchGovernance` to the browser — one revision covers removals and
+admissions together, so a single subscription follows the whole ownership surface. A frame
 carries a revision and a timestamp — never a tally, never a secret — and the client
 refetches the authoritative snapshot when the revision moves. It verifies `ev_access` at
 the handshake exactly as the REST routes do, checks the handshake `Origin` against
@@ -76,11 +87,6 @@ secret code from the same mail. Every response sends `Referrer-Policy: no-referr
 wrong-state — produces one identical 404, so the endpoint cannot be used to probe which is
 which. The POST is bounded by a small in-process per-IP limiter; the real anti-brute-force
 bound is the plane's five-attempt token burn.
-
-> **Pin note.** `evconcierge_contracts` is pinned to a rev that predates
-> `concierge/v1/governance.proto`, so the ownership-plane RPCs above are stubs returning
-> `501` today. Every reference to those types is quarantined in `governance.rs`; see the
-> `TODO(pin-bump)` there for the exact steps.
 
 ## Run
 

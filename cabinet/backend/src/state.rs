@@ -117,6 +117,14 @@ impl Grpc {
 		cc::notification_service_client::NotificationServiceClient::new(self.concierge.clone())
 	}
 
+	fn governance(&self) -> cc::governance_service_client::GovernanceServiceClient<Channel> {
+		cc::governance_service_client::GovernanceServiceClient::new(self.concierge.clone())
+	}
+
+	fn removal_approval(&self) -> cc::owner_removal_approval_service_client::OwnerRemovalApprovalServiceClient<Channel> {
+		cc::owner_removal_approval_service_client::OwnerRemovalApprovalServiceClient::new(self.concierge.clone())
+	}
+
 	fn concierge_health(&self) -> cc::health_service_client::HealthServiceClient<Channel> {
 		cc::health_service_client::HealthServiceClient::new(self.concierge.clone())
 	}
@@ -386,6 +394,100 @@ impl Grpc {
 
 	pub async fn set_notification_topic(&self, token: &str, req: cc::SetTopicSubscriptionRequest) -> Result<cc::NotificationSettings, Status> {
 		Ok(self.notifications().set_topic_subscription(bearer(token, req)?).await?.into_inner())
+	}
+
+	// ── concierge ownership plane (governance) ─────────────────────────────────
+	// A seat is `users.role`, a concierge-owned fact, so only this plane may mutate it
+	// and only this plane may authorize the mutation. Every call here forwards the
+	// CONCIERGE token — the banking money token has a different issuer and audience, and
+	// the separation is what stops one plane's credential authorizing the other's
+	// decisions. The money plane runs its own consilium over its own mirrored roster.
+
+	pub async fn list_owners(&self, token: &str) -> Result<cc::OwnerList, Status> {
+		Ok(self.governance().list_owners(bearer(token, cc::ListOwnersRequest {})?).await?.into_inner())
+	}
+
+	pub async fn resign_ownership(&self, token: &str, confirm_email: &str) -> Result<cc::OwnerList, Status> {
+		let req = cc::ResignOwnershipRequest {
+			confirm_email: confirm_email.to_string(),
+		};
+		Ok(self.governance().resign_ownership(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn list_owner_removals(&self, token: &str, limit: u32) -> Result<cc::OwnerRemovalList, Status> {
+		let req = cc::ListOwnerRemovalsRequest { limit };
+		Ok(self.governance().list_owner_removals(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn open_owner_removal(&self, token: &str, target_user_id: &str, reason: &str) -> Result<cc::OwnerRemoval, Status> {
+		let req = cc::OpenOwnerRemovalRequest {
+			target_user_id: target_user_id.to_string(),
+			reason: reason.to_string(),
+		};
+		Ok(self.governance().open_owner_removal(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn submit_peer_vote(&self, token: &str, removal_id: &str, vote: cc::RemovalVote) -> Result<cc::OwnerRemoval, Status> {
+		let req = cc::SubmitPeerVoteRequest {
+			removal_id: removal_id.to_string(),
+			vote: vote as i32,
+		};
+		Ok(self.governance().submit_peer_vote(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_owner_removal(&self, token: &str, removal_id: &str) -> Result<cc::OwnerRemoval, Status> {
+		let req = cc::CancelOwnerRemovalRequest { removal_id: removal_id.to_string() };
+		Ok(self.governance().cancel_owner_removal(bearer(token, req)?).await?.into_inner())
+	}
+
+	// Admission is the ONLY way `Role::Owner` is granted — `SetRole` refuses it outside an
+	// executed admission — and it passes only on unanimity of every other owner, so a
+	// minority can never grow itself into a majority ahead of opening a payout.
+
+	pub async fn list_owner_admissions(&self, token: &str, limit: u32) -> Result<cc::OwnerAdmissionList, Status> {
+		let req = cc::ListOwnerAdmissionsRequest { limit };
+		Ok(self.governance().list_owner_admissions(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn open_owner_admission(&self, token: &str, candidate_user_id: &str, reason: &str) -> Result<cc::OwnerAdmission, Status> {
+		let req = cc::OpenOwnerAdmissionRequest {
+			candidate_user_id: candidate_user_id.to_string(),
+			reason: reason.to_string(),
+		};
+		Ok(self.governance().open_owner_admission(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn submit_admission_vote(&self, token: &str, admission_id: &str, vote: cc::AdmissionVote) -> Result<cc::OwnerAdmission, Status> {
+		let req = cc::SubmitAdmissionVoteRequest {
+			admission_id: admission_id.to_string(),
+			vote: vote as i32,
+		};
+		Ok(self.governance().submit_admission_vote(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_owner_admission(&self, token: &str, admission_id: &str) -> Result<cc::OwnerAdmission, Status> {
+		let req = cc::CancelOwnerAdmissionRequest {
+			admission_id: admission_id.to_string(),
+		};
+		Ok(self.governance().cancel_owner_admission(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// The live ownership feed. ONE revision covers removals and admissions together, so
+	/// a single subscription follows the whole surface.
+	pub async fn watch_governance(&self, token: &str) -> Result<tonic::Streaming<cc::GovernanceTick>, Status> {
+		Ok(self.governance().watch_governance(bearer(token, cc::WatchGovernanceRequest {})?).await?.into_inner())
+	}
+
+	// The two below carry NO bearer: the emailed token IS the credential and the target
+	// clicking it may not be signed in.
+
+	pub async fn removal_invitation(&self, token: &str) -> Result<cc::OwnerRemovalInvitation, Status> {
+		let req = cc::GetRemovalInvitationRequest { token: token.to_string() };
+		Ok(self.removal_approval().get_invitation(req).await?.into_inner())
+	}
+
+	pub async fn submit_self_decision(&self, req: cc::SubmitSelfDecisionRequest) -> Result<cc::SubmitSelfDecisionResponse, Status> {
+		Ok(self.removal_approval().submit_self_decision(req).await?.into_inner())
 	}
 
 	pub async fn set_maintenance_mode(&self, token: &str, enabled: bool) -> Result<cc::PlatformConfig, Status> {

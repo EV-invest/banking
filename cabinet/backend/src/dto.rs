@@ -1202,12 +1202,12 @@ impl From<bk::SubmitDecisionResponse> for ConsiliumDecision {
 	}
 }
 
-// ── governance: the owner roster and removals (ownership plane) ──────────────
+// ── governance: the roster, its removals and its admissions (ownership plane) ─
 //
-// These mirror `concierge/v1/governance.proto` field for field but carry NO `From<cc::…>`
-// yet: the pinned `evconcierge_contracts` rev predates that file. The conversions land in
-// [`crate::governance`] with the pin bump — see the TODO there, and re-check every field
-// below against the proto when it does.
+// A seat changes hands only through a consilium in this plane. Removal passes when the
+// target accepts from their mailbox OR every eligible peer votes to remove; admission
+// passes only on unanimity of every other owner, which is what stops a minority minting
+// sock puppets into a majority before opening a payout.
 
 #[derive(Serialize)]
 pub struct Owner {
@@ -1217,12 +1217,26 @@ pub struct Owner {
 	pub owner_since: String,
 }
 
-#[derive(Serialize)]
-pub struct OwnerList {
-	pub items: Vec<Owner>,
-	/// True below three owners: the money plane's `floor(N/2)+1` threshold is then
-	/// unreachable and the fund can no longer authorize a payout at all.
-	pub below_payout_floor: bool,
+impl From<cc::Owner> for Owner {
+	fn from(o: cc::Owner) -> Self {
+		Self {
+			user_id: o.user_id,
+			email: o.email,
+			display_name: o.display_name,
+			owner_since: o.owner_since.to_string(),
+		}
+	}
+}
+
+list_dto! {
+	OwnerList from cc::OwnerList as l {
+		items: Vec<Owner>,
+		/// True below THREE owners, where the money plane's `floor(N/2)+1` threshold is
+		/// unreachable and no payout can be authorized. Distinct from the removal floor,
+		/// which is two: two owners is a recoverable pause, because two can still admit a
+		/// third, whereas a floor of three would make a bad actor unremovable.
+		below_payout_floor: bool = l.below_payout_floor,
+	}
 }
 
 #[derive(Serialize)]
@@ -1231,6 +1245,18 @@ pub struct RemovalPeer {
 	pub email: String,
 	pub vote: String,
 	pub voted_at: String,
+}
+
+impl From<cc::RemovalPeer> for RemovalPeer {
+	fn from(p: cc::RemovalPeer) -> Self {
+		let vote = enum_label(p.vote().as_str_name(), "REMOVAL_VOTE_");
+		Self {
+			user_id: p.user_id,
+			email: p.email,
+			vote,
+			voted_at: p.voted_at.to_string(),
+		}
+	}
 }
 
 #[derive(Serialize)]
@@ -1256,10 +1282,100 @@ pub struct OwnerRemoval {
 	pub version: String,
 }
 
-#[derive(Serialize)]
-pub struct OwnerRemovalList {
-	pub items: Vec<OwnerRemoval>,
+impl From<cc::OwnerRemoval> for OwnerRemoval {
+	fn from(r: cc::OwnerRemoval) -> Self {
+		let state = enum_label(r.state().as_str_name(), "OWNER_REMOVAL_STATE_");
+		let target_decision = enum_label(r.target_decision().as_str_name(), "REMOVAL_VOTE_");
+		Self {
+			id: r.id,
+			state,
+			target_user_id: r.target_user_id,
+			target_email: r.target_email,
+			initiator_user_id: r.initiator_user_id,
+			initiator_email: r.initiator_email,
+			reason: r.reason,
+			peers: r.peers.into_iter().map(RemovalPeer::from).collect(),
+			target_decision,
+			target_decided_at: r.target_decided_at.to_string(),
+			target_notified: r.target_notified,
+			owner_count: r.owner_count,
+			created_at: r.created_at.to_string(),
+			expires_at: r.expires_at.to_string(),
+			decided_at: r.decided_at.to_string(),
+			void_reason: r.void_reason,
+			version: r.version.to_string(),
+		}
+	}
 }
+
+list_dto! { OwnerRemovalList from cc::OwnerRemovalList { items: Vec<OwnerRemoval> } }
+
+#[derive(Serialize)]
+pub struct AdmissionPeer {
+	pub user_id: String,
+	pub email: String,
+	pub vote: String,
+	pub voted_at: String,
+}
+
+impl From<cc::AdmissionPeer> for AdmissionPeer {
+	fn from(p: cc::AdmissionPeer) -> Self {
+		let vote = enum_label(p.vote().as_str_name(), "ADMISSION_VOTE_");
+		Self {
+			user_id: p.user_id,
+			email: p.email,
+			vote,
+			voted_at: p.voted_at.to_string(),
+		}
+	}
+}
+
+/// Granting a seat. The shape differs from [`OwnerRemoval`] by more than a rename: there
+/// is no target-decision trio, because the candidate does not vote on their own admission
+/// — they are not an owner yet.
+#[derive(Serialize)]
+pub struct OwnerAdmission {
+	pub id: String,
+	pub state: String,
+	pub candidate_user_id: String,
+	pub candidate_email: String,
+	pub initiator_user_id: String,
+	pub initiator_email: String,
+	pub reason: String,
+	/// Every owner except the initiator. Never empty: an admission with nobody to agree
+	/// is refused at open rather than left open and unpassable.
+	pub peers: Vec<AdmissionPeer>,
+	pub owner_count: u32,
+	pub created_at: String,
+	pub expires_at: String,
+	pub decided_at: String,
+	pub void_reason: String,
+	pub version: String,
+}
+
+impl From<cc::OwnerAdmission> for OwnerAdmission {
+	fn from(a: cc::OwnerAdmission) -> Self {
+		let state = enum_label(a.state().as_str_name(), "OWNER_ADMISSION_STATE_");
+		Self {
+			id: a.id,
+			state,
+			candidate_user_id: a.candidate_user_id,
+			candidate_email: a.candidate_email,
+			initiator_user_id: a.initiator_user_id,
+			initiator_email: a.initiator_email,
+			reason: a.reason,
+			peers: a.peers.into_iter().map(AdmissionPeer::from).collect(),
+			owner_count: a.owner_count,
+			created_at: a.created_at.to_string(),
+			expires_at: a.expires_at.to_string(),
+			decided_at: a.decided_at.to_string(),
+			void_reason: a.void_reason,
+			version: a.version.to_string(),
+		}
+	}
+}
+
+list_dto! { OwnerAdmissionList from cc::OwnerAdmissionList { items: Vec<OwnerAdmission> } }
 
 /// What the TARGET is shown before answering: no peer identities, no vote breakdown.
 /// Both addresses are masked — this surface, too, needs no session.
@@ -1276,10 +1392,37 @@ pub struct OwnerRemovalInvitation {
 	pub attempts_remaining: u32,
 }
 
+impl From<cc::OwnerRemovalInvitation> for OwnerRemovalInvitation {
+	fn from(i: cc::OwnerRemovalInvitation) -> Self {
+		let state = enum_label(i.state().as_str_name(), "OWNER_REMOVAL_STATE_");
+		let decision = enum_label(i.decision().as_str_name(), "REMOVAL_VOTE_");
+		Self {
+			removal_id: i.removal_id,
+			state,
+			initiator_email: mask_email(&i.initiator_email),
+			target_email: mask_email(&i.target_email),
+			reason: i.reason,
+			created_at: i.created_at.to_string(),
+			expires_at: i.expires_at.to_string(),
+			decision,
+			attempts_remaining: i.attempts_remaining,
+		}
+	}
+}
+
 #[derive(Serialize)]
 pub struct RemovalDecision {
 	pub invitation: OwnerRemovalInvitation,
 	pub decided: bool,
+}
+
+impl From<cc::SubmitSelfDecisionResponse> for RemovalDecision {
+	fn from(r: cc::SubmitSelfDecisionResponse) -> Self {
+		Self {
+			invitation: r.invitation.map(OwnerRemovalInvitation::from).unwrap_or_default(),
+			decided: r.decided,
+		}
+	}
 }
 
 #[cfg(test)]
