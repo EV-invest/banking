@@ -92,7 +92,24 @@ const nextConfig: NextConfig = {
         value: "max-age=63072000; includeSubDomains; preload",
       });
     }
-    return [{ source: "/:path*", headers }];
+    // The two token approval pages need `no-referrer`, not the site-wide
+    // `strict-origin-when-cross-origin`: their URL contains a single-use approval
+    // credential, and the default still sends the whole URL to same-origin destinations
+    // (docs/CONSILIUM.md, policy 6). `proxy.ts` sets the same header per-request; stating
+    // it here as well makes the outcome deterministic rather than depending on which of
+    // the two writers Next lets win. A more specific `source` is listed first so it is not
+    // shadowed by the catch-all below.
+    //
+    // `:locale` matches the one segment, so this covers `/en/cabinet/approve/<token>` and
+    // its four siblings without matching anything deeper.
+    const tokenPageHeaders = headers
+      .filter((h) => h.key !== "Referrer-Policy")
+      .concat({ key: "Referrer-Policy", value: "no-referrer" });
+    return [
+      { source: "/:locale/cabinet/approve/:token", headers: tokenPageHeaders },
+      { source: "/:locale/cabinet/owner-removal/:token", headers: tokenPageHeaders },
+      { source: "/:path*", headers },
+    ];
   },
 };
 
