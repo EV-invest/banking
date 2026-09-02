@@ -12,10 +12,11 @@ name = "piggybank"
 path = "src/main.rs"
 
 [features]
-# The concierge governance-mail transport. OFF by default because
-# `evconcierge_contracts` is pinned to a rev that predates
-# `concierge/v1/governance.proto`; enabling it before that pin moves will not compile.
-# See infrastructure/governance_mail.rs for the pin-bump TODO.
+# The concierge governance-mail transport — how an owner is actually told that a payout
+# is waiting on them. ON by default: a consilium nobody can be emailed about is one
+# nobody can vote on, so `OpenRevenuePayout` refuses outright when no mailer is wired
+# rather than opening a request that can never reach quorum.
+default = ["concierge_governance_mail"]
 concierge_governance_mail = []
 
 [dependencies]

@@ -10,17 +10,16 @@
 //! diverge silently the moment the real proto changed a field number, so this file does not
 //! do that.
 //!
-//! Instead the whole transport lives behind the off-by-default `concierge_governance_mail`
-//! feature, and the default build wires **no** mailer at all. The queue still fills — every
-//! mail is written in the same transaction as the consilium fact it announces, so nothing is
-//! lost — it simply is not drained until the seam is live.
+//! The transport lives behind the `concierge_governance_mail` feature, which is now **on by
+//! default**: the pin moved to the concierge rev that ships
+//! `contracts/proto/concierge/v1/governance.proto`, so the seam compiles against the real
+//! generated stubs rather than a hand-written guess.
 //!
-//! **TODO(consilium): once the concierge governance PR merges, bump the
-//! `evconcierge_contracts` (and `evconcierge_auth`) rev in the workspace `Cargo.toml` to the
-//! rev that ships `contracts/proto/concierge/v1/governance.proto`, then make
-//! `concierge_governance_mail` a default feature of `piggybank-core` and delete this
-//! paragraph.** Until that lands, an operator sees the backlog through the boot warning and
-//! the mailer's own logs, and no owner is ever emailed a payout approval.
+//! The feature survives as a build-off switch, not as a silent one. A build without it wires
+//! no mailer, and `OpenRevenuePayout` then **refuses** rather than opening a consilium nobody
+//! can be emailed about — a request that could never reach quorum is worse than an honest
+//! refusal. Every mail is still written in the same transaction as the consilium fact it
+//! announces, so a mailer outage queues rather than loses.
 
 use domain::error::DomainError;
 
