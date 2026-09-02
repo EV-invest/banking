@@ -1615,6 +1615,14 @@
     "en": "Expires {at} · {left}",
     "t": "Истекает {at} · {left}"
   },
+  "consilium.payout.failedBody": {
+    "en": "Until it loads, the page cannot tell you whether a payout is open and waiting on the other owners — so do not read this as there being none. The rest of the page is unaffected.",
+    "t": "Пока они не загрузятся, страница не может сказать, открыта ли сейчас выплата и ждёт ли она ответа других владельцев, — не читайте это как «выплат нет». Остальная часть страницы не затронута."
+  },
+  "consilium.payout.failedTitle": {
+    "en": "Fund payouts did not load",
+    "t": "Выплаты фонда не загрузились"
+  },
   "consilium.payout.fingerprint": {
     "en": "Fingerprint · {hash}",
     "t": "Отпечаток · {hash}"
@@ -1698,6 +1706,14 @@
   "consilium.propose.title": {
     "en": "Propose a removal",
     "t": "Предложить прекращение владения"
+  },
+  "consilium.propose.unknownBody": {
+    "en": "Proposing a removal means choosing an owner, and the owner list did not load — so the page does not know who could be proposed, or whether there is anyone here but you. Load it and this form comes back.",
+    "t": "Чтобы предложить исключение, нужно выбрать владельца, а список владельцев не загрузился — страница не знает, кого можно предложить и есть ли здесь кто-то, кроме вас. Загрузите его, и форма вернётся."
+  },
+  "consilium.propose.unknownTitle": {
+    "en": "This cannot be offered right now",
+    "t": "Сейчас это предложить нельзя"
   },
   "consilium.removal.cancel": {
     "en": "Withdraw this proposal",
@@ -1783,6 +1799,14 @@
     "en": "Nothing is being decided",
     "t": "Сейчас ничего не решается"
   },
+  "consilium.removals.failedBody": {
+    "en": "Until it loads, the page cannot tell you whether anyone's ownership is being decided right now — so do not read this as nothing being underway. The rest of the page is unaffected.",
+    "t": "Пока они не загрузятся, страница не может сказать, решается ли сейчас чьё-то владение, — не читайте это как «ничего не происходит». Остальная часть страницы не затронута."
+  },
+  "consilium.removals.failedTitle": {
+    "en": "Owner removals did not load",
+    "t": "Прекращения владения не загрузились"
+  },
   "consilium.removals.sub": {
     "en": "Proposals to end someone's ownership.",
     "t": "Предложения прекратить чьё-либо владение."
@@ -1838,6 +1862,14 @@
   "consilium.roster.emptyTitle": {
     "en": "No owners listed",
     "t": "Владельцы не найдены"
+  },
+  "consilium.roster.failedBody": {
+    "en": "Until it loads, the page cannot say who owns this fund or how many owners it has, so it says nothing rather than guessing at it. The rest of the page is unaffected.",
+    "t": "Пока он не загрузится, страница не может сказать, кто владеет фондом и сколько здесь владельцев, — поэтому она молчит, а не гадает. Остальная часть страницы не затронута."
+  },
+  "consilium.roster.failedTitle": {
+    "en": "The owner list did not load",
+    "t": "Список владельцев не загрузился"
   },
   "consilium.roster.since": {
     "en": "Owner since {at}",
@@ -1918,6 +1950,14 @@
   "consilium.title": {
     "en": "Consilium",
     "t": "Консилиум"
+  },
+  "consilium.unavailable.body": {
+    "en": "Every one of the reads this room is built from failed, so the page cannot show who owns the fund, what is being decided, or where any vote stands. Nothing here should be trusted until it loads. Try again — and if it keeps failing, this data is unreachable rather than empty, which is worth raising.",
+    "t": "Ни один из запросов, на которых построена эта комната, не вернулся: страница не может показать, кто владеет фондом, что сейчас решается и как идёт голосование. Ничему здесь нельзя доверять, пока данные не загрузятся. Попробуйте ещё раз — а если не выходит и дальше, эти данные недоступны, а не пусты, и об этом стоит сообщить."
+  },
+  "consilium.unavailable.title": {
+    "en": "The owners' room could not be loaded",
+    "t": "Комнату владельцев не удалось загрузить"
   },
   "consilium.vote.keep": {
     "en": "To keep",

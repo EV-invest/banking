@@ -44,9 +44,16 @@ import {
 } from "@evinvest/uikit";
 
 import { useConsiliumStream, type StreamStatus } from "@/entities/governance/model/consilium-socket";
-import { cancelConsilium, consiliumResource, ownersResource, removalsResource, resignOwnership } from "@/entities/governance/model/governance-resource";
+import {
+  cancelConsilium,
+  consiliumResource,
+  ownersResource,
+  refreshGovernance,
+  removalsResource,
+  resignOwnership,
+} from "@/entities/governance/model/governance-resource";
 import { profileResource } from "@/entities/user/model/profile-resource";
-import type { Consilium, Owner } from "@/shared/contracts/governance";
+import type { Consilium, ConsiliumList, OwnerList } from "@/shared/contracts/governance";
 import { RequestError, errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { expiresIn, formatDay, formatMoment } from "@/shared/lib/datetime";
@@ -59,6 +66,16 @@ import { Link } from "@/shared/ui/cabinet-link";
 import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { EMPTY_BOX, isSettled, stateLabel, stateTone } from "@/views/consilium/lib/format";
+import {
+  everyReadFailed,
+  knownValue,
+  mapRead,
+  ownerCount,
+  readOf,
+  type Read,
+} from "@/views/consilium/lib/reads";
+import { PayoutSkeleton, RosterSkeleton } from "@/views/consilium/ui/loading";
+import { ReadFailure } from "@/views/consilium/ui/read-failure";
 import { ProposeRemoval, RemovalList } from "@/views/consilium/ui/removals";
 
 const isForbidden = (error: unknown): boolean => error instanceof RequestError && error.status === 403;
@@ -100,20 +117,28 @@ export function ConsiliumView() {
 
   const userId = profile.data?.user_id ?? null;
   const myEmail = profile.data?.email ?? "";
-  const roster = owners.data?.items ?? [];
-  const openRemovals = (removals.data?.items ?? []).filter((r) => !isSettled(r.state, r.decided_at));
-  const items = consilia.data?.items ?? [];
-  const openPayouts = items.filter((c) => !isSettled(c.state, c.decided_at));
-  const pastPayouts = items.filter((c) => isSettled(c.state, c.decided_at));
 
-  // One derivation per read, and each is only an error when there is nothing to show in its
-  // place — a stale roster beside a "couldn't refresh" line beats a blank column. Kept
-  // separate on purpose: folding them into one page-level banner is what let a failed
-  // consilium read fall through to "No payout is open", which is the one thing this page
-  // must never say when it does not actually know.
-  const rosterError = owners.data || !owners.error ? null : owners.error;
-  const payoutError = consilia.data || !consilia.error ? null : consilia.error;
-  const removalError = removals.data || !removals.error ? null : removals.error;
+  // One `Read` per endpoint, and nothing below this line touches `.data` with a fallback.
+  // `owners.data?.items ?? []` is what turned a 404 into an empty roster, which the header
+  // then published as "0 owners" and the propose form as "you are the only owner listed" —
+  // see `views/consilium/lib/reads.ts` for why the shape, not the care of the author, is
+  // what has to prevent that.
+  const rosterRead = readOf(owners);
+  const payoutsRead = readOf(consilia);
+  // `items ?? []` on a read that ARRIVED: proto3 JSON omits an empty repeated field, so an
+  // absent list here means there are none, not that nothing came back.
+  const removalsRead = mapRead(readOf(removals), (list) => (list.items ?? []).filter((r) => !isSettled(r.state, r.decided_at)));
+
+  const roster = knownValue(rosterRead);
+
+  // All three reads are the same session against the same BFF, so they fail together far
+  // more often than they fail alone. When every one of them is down, three identical boxes
+  // stacked down the page report one event three times and imply three independent faults;
+  // one failure with one retry is the truth. A PARTIAL failure is never folded in here —
+  // "the roster loaded but the payouts did not" says which half of the room can be trusted,
+  // and that is worth a card of its own.
+  const outage = everyReadFailed([rosterRead, payoutsRead, removalsRead]);
+  const refreshingAll = owners.isValidating || removals.isValidating || consilia.isValidating;
 
   return (
     <Stagger
@@ -129,7 +154,7 @@ export function ConsiliumView() {
         <StreamChip status={stream.status} />
       </StaggerItem>
 
-      {owners.data?.below_payout_floor && (
+      {roster?.below_payout_floor && (
         // Not styled as an error: nothing has failed. It is a standing fact about the fund
         // that changes what it can do, and it is the first thing an owner should know.
         // Body copy is `text-foreground`, not muted — muted on a tinted ground is the
@@ -138,30 +163,42 @@ export function ConsiliumView() {
           <ShieldAlert className="mt-0.5 size-4 shrink-0 text-main-accent-t3" />
           <div className="flex min-w-0 flex-col gap-1">
             <p className="text-sm font-semibold text-foreground">{t("consilium.floor.title")}</p>
-            <p className="text-sm leading-relaxed text-foreground">{t("consilium.floor.body", { n: roster.length })}</p>
+            <p className="text-sm leading-relaxed text-foreground">{t("consilium.floor.body", { n: roster.items?.length ?? 0 })}</p>
           </div>
         </StaggerItem>
       )}
 
-      <StaggerItem className="flex flex-col gap-4 lg:gap-6 xl:col-start-1 xl:row-start-3">
-        <PayoutSection open={openPayouts} past={pastPayouts} loading={consilia.isLoading} error={payoutError} onRetry={() => void consilia.refresh()} retrying={consilia.isValidating} />
-        <RemovalList
-          removals={openRemovals}
-          userId={userId}
-          loading={removals.isLoading}
-          error={removalError}
-          onRetry={() => void removals.refresh()}
-          retrying={removals.isValidating}
-        />
-        {/* Held back until the roster has actually arrived: rendered against an empty list
-            it would flash "There is nobody to propose" before the owners land. */}
-        {!owners.isLoading && <ProposeRemoval owners={roster} userId={userId} />}
-      </StaggerItem>
+      {outage ? (
+        // A plain grid child rather than a StaggerItem: this mounts after the page's
+        // entrance has already finished, so it must not depend on that sequence being
+        // re-run to become visible. See `./read-failure.tsx`.
+        <div className="xl:col-span-2">
+          <ReadFailure
+            className="mx-auto max-w-160 rounded-xl p-6 md:p-8"
+            title={t("consilium.unavailable.title")}
+            body={t("consilium.unavailable.body")}
+            onRetry={refreshGovernance}
+            retrying={refreshingAll}
+          />
+        </div>
+      ) : (
+        <>
+          <StaggerItem className="flex flex-col gap-4 lg:gap-6 xl:col-start-1 xl:row-start-3">
+            <PayoutSection read={payoutsRead} onRetry={() => void consilia.refresh()} retrying={consilia.isValidating} />
+            <RemovalList read={removalsRead} userId={userId} onRetry={() => void removals.refresh()} retrying={removals.isValidating} />
+            {/* Always rendered, and it is the roster's own `Read` that decides what it
+                shows: gated on `!isLoading` it vanished from the layout while the owners
+                were in flight, and gated on nothing at all it announced "There is nobody to
+                propose" on the strength of a read that had failed. */}
+            <ProposeRemoval roster={rosterRead} userId={userId} onRetry={() => void owners.refresh()} retrying={owners.isValidating} />
+          </StaggerItem>
 
-      <StaggerItem className="flex flex-col gap-4 lg:gap-6 xl:col-start-2 xl:row-start-3">
-        <Roster owners={roster} loading={owners.isLoading} userId={userId} error={rosterError} onRetry={() => void owners.refresh()} retrying={owners.isValidating} />
-        <ResignCard email={myEmail} loadingProfile={profile.isLoading} />
-      </StaggerItem>
+          <StaggerItem className="flex flex-col gap-4 lg:gap-6 xl:col-start-2 xl:row-start-3">
+            <Roster read={rosterRead} userId={userId} onRetry={() => void owners.refresh()} retrying={owners.isValidating} />
+            <ResignCard email={myEmail} loadingProfile={profile.isLoading} />
+          </StaggerItem>
+        </>
+      )}
     </Stagger>
   );
 }
@@ -191,34 +228,42 @@ function StreamChip({ status }: { status: StreamStatus }) {
 }
 
 function Roster({
-  owners,
-  loading,
+  read,
   userId,
-  error,
   onRetry,
   retrying,
 }: {
-  owners: Owner[];
-  loading: boolean;
+  read: Read<OwnerList>;
   userId: string | null;
-  error: unknown;
   onRetry: () => void;
   retrying: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
+  const count = ownerCount(read);
+  const owners = knownValue(read)?.items ?? [];
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{t("consilium.roster.title")}</CardTitle>
-        <CardAction className="text-xs font-medium tabular-nums text-muted-foreground">
-          {t("consilium.roster.count", { n: owners.length })}
-        </CardAction>
+        {/* How many owners there are is a fact about the fund, so it is printed only when
+            the roster arrived. Printed unconditionally, it reported a 404 as "0 owners" —
+            in the same header as a card that was showing the reader nothing at all. */}
+        {count !== null && (
+          <CardAction className="text-xs font-medium tabular-nums text-muted-foreground">
+            {t("consilium.roster.count", { n: count })}
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent>
-        <Settled loading={loading} skeleton={<Skeleton className="h-40 w-full" />}>
-          {loading ? null : error ? (
-            <ResourceError error={error} onRetry={onRetry} retrying={retrying} />
+        <Settled loading={read.status === "loading"} skeleton={<RosterSkeleton />}>
+          {read.status === "loading" ? null : read.status === "failed" ? (
+            <ReadFailure
+              title={t("consilium.roster.failedTitle")}
+              body={t("consilium.roster.failedBody")}
+              onRetry={onRetry}
+              retrying={retrying}
+            />
           ) : owners.length === 0 ? (
             <Empty className={EMPTY_BOX}>
               <EmptyHeader>
@@ -263,22 +308,19 @@ function Roster({
 }
 
 function PayoutSection({
-  open,
-  past,
-  loading,
-  error,
+  read,
   onRetry,
   retrying,
 }: {
-  open: Consilium[];
-  past: Consilium[];
-  loading: boolean;
-  error: unknown;
+  read: Read<ConsiliumList>;
   onRetry: () => void;
   retrying: boolean;
 }) {
   const t = useT();
   const locale = useLocale();
+  const items = knownValue(read)?.items ?? [];
+  const open = items.filter((c) => !isSettled(c.state, c.decided_at));
+  const past = items.filter((c) => isSettled(c.state, c.decided_at));
   return (
     <Card>
       <CardHeader>
@@ -286,11 +328,16 @@ function PayoutSection({
         <CardDescription>{t("consilium.payout.sub")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <Settled loading={loading} skeleton={<Skeleton className="h-40 w-full" />}>
-          {loading ? null : error ? (
+        <Settled loading={read.status === "loading"} skeleton={<PayoutSkeleton />}>
+          {read.status === "loading" ? null : read.status === "failed" ? (
             // In place of the empty state, never beside it. "No payout is open" is a claim
             // about the fund, and a read that failed is not entitled to make it.
-            <ResourceError error={error} onRetry={onRetry} retrying={retrying} />
+            <ReadFailure
+              title={t("consilium.payout.failedTitle")}
+              body={t("consilium.payout.failedBody")}
+              onRetry={onRetry}
+              retrying={retrying}
+            />
           ) : open.length === 0 ? (
             <Empty className={EMPTY_BOX}>
               <EmptyHeader>
@@ -315,7 +362,7 @@ function PayoutSection({
           )}
         </Settled>
 
-        {past.length > 0 && !error && (
+        {past.length > 0 && (
           <>
             <Separator />
             <div className="flex flex-col gap-2">
