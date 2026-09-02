@@ -40,12 +40,11 @@ import {
   SelectTrigger,
   SelectValue,
   Separator,
-  Skeleton,
   Textarea,
 } from "@evinvest/uikit";
 
 import { cancelRemoval, proposeRemoval, voteOnRemoval } from "@/entities/governance/model/governance-resource";
-import type { Owner, OwnerRemoval, RemovalVote } from "@/shared/contracts/governance";
+import type { OwnerList, OwnerRemoval, RemovalVote } from "@/shared/contracts/governance";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { ResourceError } from "@/shared/ui/resource-error";
@@ -62,6 +61,9 @@ import {
   voteLabel,
   voteTone,
 } from "@/views/consilium/lib/format";
+import { knownValue, removalCandidates, type Read } from "@/views/consilium/lib/reads";
+import { ProposeSkeleton, RemovalsSkeleton } from "@/views/consilium/ui/loading";
+import { ReadFailure } from "@/views/consilium/ui/read-failure";
 
 /**
  * The removals section: its heading, and either the proposals or an honest account of why
@@ -72,21 +74,18 @@ import {
  * removal" with nothing saying what they were.
  */
 export function RemovalList({
-  removals,
+  read,
   userId,
-  loading,
-  error,
   onRetry,
   retrying,
 }: {
-  removals: OwnerRemoval[];
+  read: Read<OwnerRemoval[]>;
   userId: string | null;
-  loading: boolean;
-  error: unknown;
   onRetry: () => void;
   retrying: boolean;
 }) {
   const t = useT();
+  const removals = knownValue(read) ?? [];
 
   return (
     <Card>
@@ -95,11 +94,16 @@ export function RemovalList({
         <CardDescription>{t("consilium.removals.sub")}</CardDescription>
       </CardHeader>
       <CardContent>
-        <Settled loading={loading} skeleton={<Skeleton className="h-40 w-full" />}>
-          {loading ? null : error ? (
+        <Settled loading={read.status === "loading"} skeleton={<RemovalsSkeleton />}>
+          {read.status === "loading" ? null : read.status === "failed" ? (
             // In place of the empty state: "Nothing is being decided" is a claim about the
             // fund, and a read that failed has not earned the right to make it.
-            <ResourceError error={error} onRetry={onRetry} retrying={retrying} />
+            <ReadFailure
+              title={t("consilium.removals.failedTitle")}
+              body={t("consilium.removals.failedBody")}
+              onRetry={onRetry}
+              retrying={retrying}
+            />
           ) : removals.length === 0 ? (
             <Empty className={EMPTY_BOX}>
               <EmptyHeader>
@@ -308,7 +312,17 @@ function WhyNoVote({ standing, removal }: { standing: ReturnType<typeof standing
  * legitimate action. So the note explains what will happen; the button stays live and the
  * server's own refusal is what appears if it does.
  */
-export function ProposeRemoval({ owners, userId }: { owners: Owner[]; userId: string | null }) {
+export function ProposeRemoval({
+  roster,
+  userId,
+  onRetry,
+  retrying,
+}: {
+  roster: Read<OwnerList>;
+  userId: string | null;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
   const t = useT();
   const [target, setTarget] = useState("");
   const [reason, setReason] = useState("");
@@ -316,7 +330,12 @@ export function ProposeRemoval({ owners, userId }: { owners: Owner[]; userId: st
   const [error, setError] = useState<unknown>(null);
   const [opened, setOpened] = useState(false);
 
-  const candidates = owners.filter((o) => o.user_id !== userId);
+  // `null` and `[]` are different answers and this card renders them differently. `null` is
+  // "the roster did not load, so the page has no idea who is in this fund"; `[]` is "the
+  // roster loaded and you really are the only owner in it". Collapsing the first into the
+  // second is what put "There is nobody to propose — you are the only owner listed" on
+  // screen while three reads were answering 404.
+  const candidates = removalCandidates(roster, userId);
 
   const submit = async () => {
     if (busy || !target || reason.trim().length === 0) return;
@@ -341,83 +360,96 @@ export function ProposeRemoval({ owners, userId }: { owners: Owner[]; userId: st
         <CardTitle className="text-base">{t("consilium.propose.title")}</CardTitle>
         <CardDescription className="text-balance">{t("consilium.propose.sub")}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {candidates.length === 0 ? (
-          <Empty className={EMPTY_BOX}>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <UserMinus />
-              </EmptyMedia>
-              <EmptyTitle>{t("consilium.propose.noneTitle")}</EmptyTitle>
-              <EmptyDescription>{t("consilium.propose.noneBody")}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="removal-target">{t("consilium.propose.targetLabel")}</Label>
-              <Select
-                value={target}
-                onValueChange={(next) => {
-                  setTarget(next);
-                  setOpened(false);
-                }}
+      <CardContent>
+        <Settled
+          className="flex flex-col gap-4"
+          loading={roster.status === "loading"}
+          skeleton={<ProposeSkeleton />}
+        >
+          {roster.status === "loading" ? null : candidates === null ? (
+            <ReadFailure
+              title={t("consilium.propose.unknownTitle")}
+              body={t("consilium.propose.unknownBody")}
+              onRetry={onRetry}
+              retrying={retrying}
+            />
+          ) : candidates.length === 0 ? (
+            <Empty className={EMPTY_BOX}>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <UserMinus />
+                </EmptyMedia>
+                <EmptyTitle>{t("consilium.propose.noneTitle")}</EmptyTitle>
+                <EmptyDescription>{t("consilium.propose.noneBody")}</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="removal-target">{t("consilium.propose.targetLabel")}</Label>
+                <Select
+                  value={target}
+                  onValueChange={(next) => {
+                    setTarget(next);
+                    setOpened(false);
+                  }}
+                >
+                  <SelectTrigger id="removal-target" className="w-full">
+                    <SelectValue placeholder={t("consilium.propose.targetPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {candidates.map((owner) => (
+                      <SelectItem key={owner.user_id} value={owner.user_id}>
+                        {owner.display_name ? `${owner.display_name} · ${owner.email}` : owner.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="removal-reason">{t("consilium.propose.reasonLabel")}</Label>
+                <Textarea
+                  id="removal-reason"
+                  value={reason}
+                  onChange={(e) => {
+                    setReason(e.target.value);
+                    setOpened(false);
+                  }}
+                  rows={3}
+                  maxLength={1000}
+                  placeholder={t("consilium.propose.reasonPlaceholder")}
+                />
+                {/* The reason is emailed to the person it is about, in these words. Saying so
+                    before it is written is worth more than any amount of moderation after. */}
+                <p className="text-xs text-muted-foreground">{t("consilium.propose.reasonHint")}</p>
+              </div>
+
+              {/* Stated unconditionally, because it is the rule rather than a verdict about
+                  this roster. Re-deriving "would this breach the floor?" in the browser means
+                  a client that can disagree with the server — and the direction it would be
+                  wrong in is blocking a removal the fund is entitled to make. */}
+              <p className="text-xs text-muted-foreground">{t("consilium.propose.floorWarning")}</p>
+
+              {error !== null && <ResourceError message={errorMessage(error, t)} />}
+              {opened && (
+                <p className="text-sm text-main-accent-t2" role="status">
+                  {t("consilium.propose.opened")}
+                </p>
+              )}
+
+              <Button
+                variant="outline"
+                className="self-start border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={busy || !target || reason.trim().length === 0}
+                onClick={() => void submit()}
               >
-                <SelectTrigger id="removal-target" className="w-full">
-                  <SelectValue placeholder={t("consilium.propose.targetPlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {candidates.map((owner) => (
-                    <SelectItem key={owner.user_id} value={owner.user_id}>
-                      {owner.display_name ? `${owner.display_name} · ${owner.email}` : owner.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="removal-reason">{t("consilium.propose.reasonLabel")}</Label>
-              <Textarea
-                id="removal-reason"
-                value={reason}
-                onChange={(e) => {
-                  setReason(e.target.value);
-                  setOpened(false);
-                }}
-                rows={3}
-                maxLength={1000}
-                placeholder={t("consilium.propose.reasonPlaceholder")}
-              />
-              {/* The reason is emailed to the person it is about, in these words. Saying so
-                  before it is written is worth more than any amount of moderation after. */}
-              <p className="text-xs text-muted-foreground">{t("consilium.propose.reasonHint")}</p>
-            </div>
-
-            {/* Stated unconditionally, because it is the rule rather than a verdict about
-                this roster. Re-deriving "would this breach the floor?" in the browser means
-                a client that can disagree with the server — and the direction it would be
-                wrong in is blocking a removal the fund is entitled to make. */}
-            <p className="text-xs text-muted-foreground">{t("consilium.propose.floorWarning")}</p>
-
-            {error !== null && <ResourceError message={errorMessage(error, t)} />}
-            {opened && (
-              <p className="text-sm text-main-accent-t2" role="status">
-                {t("consilium.propose.opened")}
-              </p>
-            )}
-
-            <Button
-              variant="outline"
-              className="self-start border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={busy || !target || reason.trim().length === 0}
-              onClick={() => void submit()}
-            >
-              {busy && <Loader2 className="size-4 animate-spin" />}
-              {t("consilium.propose.submit")}
-            </Button>
-          </>
-        )}
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                {t("consilium.propose.submit")}
+              </Button>
+            </>
+          )}
+        </Settled>
       </CardContent>
     </Card>
   );
