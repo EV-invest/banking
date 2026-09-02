@@ -162,6 +162,16 @@ export type BankingV1Balance = {
 };
 
 /**
+ * CancelConsiliumRequest
+ */
+export type BankingV1CancelConsiliumRequest = {
+    /**
+     * consilium_id
+     */
+    consilium_id?: string;
+};
+
+/**
  * CancelRedemptionRequest
  */
 export type BankingV1CancelRedemptionRequest = {
@@ -206,6 +216,213 @@ export type BankingV1CheckResponse = {
      * status
      */
     status?: string;
+};
+
+/**
+ * Consilium
+ */
+export type BankingV1Consilium = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * state
+     */
+    state?: BankingV1ConsiliumState;
+    /**
+     * revenue_payout
+     */
+    revenue_payout?: BankingV1RevenuePayoutTerms;
+    /**
+     * payload_hash
+     *
+     * Hex SHA-256 over the canonical terms. Shown (short prefix) in the mail so an owner
+     * can tell that what they approved is what will execute.
+     */
+    payload_hash?: string;
+    /**
+     * initiator_user_id
+     */
+    initiator_user_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * owner_count
+     *
+     * N — owners at open. The threshold is frozen from this, never recomputed later.
+     */
+    owner_count?: number;
+    /**
+     * threshold
+     */
+    threshold?: number;
+    /**
+     * approvals
+     *
+     * Votes that are still valid: an approver who has since lost ownership does not count.
+     */
+    approvals?: number;
+    /**
+     * rejections
+     */
+    rejections?: number;
+    /**
+     * voters
+     */
+    voters?: Array<BankingV1ConsiliumVoter>;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decided_at
+     */
+    decided_at?: number | string;
+    /**
+     * executed_withdrawal_id
+     *
+     * Set exactly once, on EXECUTED.
+     */
+    executed_withdrawal_id?: string;
+    /**
+     * failure_reason
+     */
+    failure_reason?: string;
+    /**
+     * version
+     *
+     * Monotonic per consilium. The live page watches this and refetches when it moves —
+     * the socket carries a version, never a tally.
+     */
+    version?: number | string;
+};
+
+/**
+ * ConsiliumInvitation
+ *
+ * What the emailed owner is shown BEFORE they vote. Deliberately narrower than
+ * `Consilium`: no other owner's identity, no vote-by-vote breakdown.
+ */
+export type BankingV1ConsiliumInvitation = {
+    /**
+     * consilium_id
+     */
+    consilium_id?: string;
+    /**
+     * state
+     */
+    state?: BankingV1ConsiliumState;
+    /**
+     * revenue_payout
+     */
+    revenue_payout?: BankingV1RevenuePayoutTerms;
+    /**
+     * payload_hash
+     */
+    payload_hash?: string;
+    /**
+     * initiator_email
+     *
+     * Who opened it, masked.
+     */
+    initiator_email?: string;
+    /**
+     * voter_email
+     *
+     * The recipient's own masked address, so they can confirm the mail reached the right
+     * seat before typing the code.
+     */
+    voter_email?: string;
+    /**
+     * threshold
+     */
+    threshold?: number;
+    /**
+     * approvals
+     */
+    approvals?: number;
+    /**
+     * owner_count
+     */
+    owner_count?: number;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decision
+     *
+     * This seat's own answer, so a reopened link shows what was already said.
+     */
+    decision?: BankingV1VoteDecision;
+    /**
+     * attempts_remaining
+     *
+     * Code attempts left before the token burns.
+     */
+    attempts_remaining?: number;
+};
+
+/**
+ * ConsiliumList
+ */
+export type BankingV1ConsiliumList = {
+    /**
+     * items
+     */
+    items?: Array<BankingV1Consilium>;
+};
+
+/**
+ * ConsiliumState
+ *
+ * Where a consilium stands. Terminal everywhere except OPEN.
+ */
+export type BankingV1ConsiliumState = 'CONSILIUM_STATE_UNSPECIFIED' | 'CONSILIUM_STATE_OPEN' | 'CONSILIUM_STATE_APPROVED' | 'CONSILIUM_STATE_REJECTED' | 'CONSILIUM_STATE_EXPIRED' | 'CONSILIUM_STATE_CANCELLED' | 'CONSILIUM_STATE_EXECUTED' | 'CONSILIUM_STATE_EXECUTION_FAILED';
+
+/**
+ * ConsiliumVoter
+ *
+ * One owner's seat in a consilium.
+ */
+export type BankingV1ConsiliumVoter = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     *
+     * Masked (`a***@example.com`) on every surface a non-owner can reach.
+     */
+    email?: string;
+    /**
+     * decision
+     */
+    decision?: BankingV1VoteDecision;
+    /**
+     * decided_at
+     *
+     * Unix seconds; 0 while pending.
+     */
+    decided_at?: number | string;
+    /**
+     * notified
+     *
+     * True once the mail has actually been handed to the delivery queue.
+     */
+    notified?: boolean;
 };
 
 /**
@@ -666,6 +883,16 @@ export type BankingV1GetAllocationRequest = {
 };
 
 /**
+ * GetConsiliumRequest
+ */
+export type BankingV1GetConsiliumRequest = {
+    /**
+     * consilium_id
+     */
+    consilium_id?: string;
+};
+
+/**
  * GetDepositAddressRequest
  */
 export type BankingV1GetDepositAddressRequest = {
@@ -712,6 +939,18 @@ export type BankingV1GetFundNavRequest = {
  */
 export type BankingV1GetFundRevenueRequest = {
     [key: string]: never;
+};
+
+/**
+ * GetInvitationRequest
+ */
+export type BankingV1GetInvitationRequest = {
+    /**
+     * token
+     *
+     * The opaque single-use token from the mail. Never the code.
+     */
+    token?: string;
 };
 
 /**
@@ -846,6 +1085,18 @@ export type BankingV1ListAllocationsRequest = {
      * without it is refused rather than silently downgraded to the open-only list.
      */
     include_unlisted?: boolean;
+};
+
+/**
+ * ListConsiliaRequest
+ */
+export type BankingV1ListConsiliaRequest = {
+    /**
+     * limit
+     *
+     * 0 means the server default.
+     */
+    limit?: number;
 };
 
 /**
@@ -1024,6 +1275,16 @@ export type BankingV1NetworkWithdrawable = {
      * flat network fee retained on a withdrawal
      */
     withdrawal_fee?: string;
+};
+
+/**
+ * OpenRevenuePayoutRequest
+ */
+export type BankingV1OpenRevenuePayoutRequest = {
+    /**
+     * terms
+     */
+    terms?: BankingV1RevenuePayoutTerms;
 };
 
 /**
@@ -1688,6 +1949,40 @@ export type BankingV1RequestWithdrawalRequest = {
 };
 
 /**
+ * RevenuePayoutTerms
+ *
+ * The immutable subject of a revenue payout. Amounts are decimal USDT STRINGS, as
+ * everywhere else on this wire.
+ */
+export type BankingV1RevenuePayoutTerms = {
+    /**
+     * network
+     *
+     * Rail the payout ships on (BEP20 / POLYGON / TRC20 / TON).
+     */
+    network?: string;
+    /**
+     * address
+     *
+     * Destination address, rendered in FULL wherever a human approves it — a truncated
+     * address in an approval mail is an invitation to approve the wrong one.
+     */
+    address?: string;
+    /**
+     * amount
+     *
+     * Gross USDT to pay out, capped by FundRevenue.available at execution.
+     */
+    amount?: string;
+    /**
+     * memo
+     *
+     * Free-text note from the initiator, shown in the mail. Never interpreted.
+     */
+    memo?: string;
+};
+
+/**
  * RevenueRail
  *
  * Per-rail payout options, the mirror of WalletService's `NetworkWithdrawable`.
@@ -1974,6 +2269,56 @@ export type BankingV1SettleWithdrawalRequest = {
  */
 export type BankingV1SettleWithdrawalResponse = {
     [key: string]: never;
+};
+
+/**
+ * SubmitDecisionRequest
+ */
+export type BankingV1SubmitDecisionRequest = {
+    /**
+     * token
+     */
+    token?: string;
+    /**
+     * code
+     *
+     * The secret code from the same mail. Compared in constant time, as a hash.
+     */
+    code?: string;
+    /**
+     * decision
+     *
+     * APPROVE or REJECT. PENDING is rejected as an invalid argument.
+     */
+    decision?: BankingV1VoteDecision;
+    /**
+     * client_ip
+     *
+     * Audit only — the edge supplies these; they are never trusted for authorization.
+     */
+    client_ip?: string;
+    /**
+     * user_agent
+     */
+    user_agent?: string;
+};
+
+/**
+ * SubmitDecisionResponse
+ */
+export type BankingV1SubmitDecisionResponse = {
+    /**
+     * invitation
+     *
+     * The invitation as it stands after the vote.
+     */
+    invitation?: BankingV1ConsiliumInvitation;
+    /**
+     * decided
+     *
+     * True when this vote carried the consilium to its verdict.
+     */
+    decided?: boolean;
 };
 
 /**
@@ -2340,6 +2685,13 @@ export type BankingV1UserSummary = {
 };
 
 /**
+ * VoteDecision
+ *
+ * How one voter answered.
+ */
+export type BankingV1VoteDecision = 'VOTE_DECISION_UNSPECIFIED' | 'VOTE_DECISION_PENDING' | 'VOTE_DECISION_APPROVE' | 'VOTE_DECISION_REJECT';
+
+/**
  * Wallet
  */
 export type BankingV1Wallet = {
@@ -2542,6 +2894,57 @@ export type ConciergeV1AdminUserSummary = {
 };
 
 /**
+ * AdmissionPeer
+ */
+export type ConciergeV1AdmissionPeer = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * vote
+     */
+    vote?: ConciergeV1AdmissionVote;
+    /**
+     * voted_at
+     */
+    voted_at?: number | string;
+};
+
+/**
+ * AdmissionVote
+ *
+ * Deliberately its own enum rather than a reuse of RemovalVote: "remove/keep" and
+ * "admit/reject" are different questions, and a surface that renders the wrong verb on
+ * a governance vote is a surface that gets a vote cast by mistake.
+ */
+export type ConciergeV1AdmissionVote = 'ADMISSION_VOTE_UNSPECIFIED' | 'ADMISSION_VOTE_PENDING' | 'ADMISSION_VOTE_ADMIT' | 'ADMISSION_VOTE_REJECT';
+
+/**
+ * CancelOwnerAdmissionRequest
+ */
+export type ConciergeV1CancelOwnerAdmissionRequest = {
+    /**
+     * admission_id
+     */
+    admission_id?: string;
+};
+
+/**
+ * CancelOwnerRemovalRequest
+ */
+export type ConciergeV1CancelOwnerRemovalRequest = {
+    /**
+     * removal_id
+     */
+    removal_id?: string;
+};
+
+/**
  * DisableUserRequest
  */
 export type ConciergeV1DisableUserRequest = {
@@ -2607,6 +3010,36 @@ export type ConciergeV1GetMeRequest = {
 };
 
 /**
+ * GetOwnerAdmissionRequest
+ */
+export type ConciergeV1GetOwnerAdmissionRequest = {
+    /**
+     * admission_id
+     */
+    admission_id?: string;
+};
+
+/**
+ * GetOwnerRemovalRequest
+ */
+export type ConciergeV1GetOwnerRemovalRequest = {
+    /**
+     * removal_id
+     */
+    removal_id?: string;
+};
+
+/**
+ * GetRemovalInvitationRequest
+ */
+export type ConciergeV1GetRemovalInvitationRequest = {
+    /**
+     * token
+     */
+    token?: string;
+};
+
+/**
  * GetUserRequest
  */
 export type ConciergeV1GetUserRequest = {
@@ -2614,6 +3047,38 @@ export type ConciergeV1GetUserRequest = {
      * user_id
      */
     user_id?: string;
+};
+
+/**
+ * GovernanceMailKind
+ *
+ * The typed governance mails this plane knows how to render.
+ */
+export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED';
+
+/**
+ * GovernanceTick
+ */
+export type ConciergeV1GovernanceTick = {
+    /**
+     * revision
+     *
+     * Monotonic across the whole governance surface. Refetch when it moves.
+     */
+    revision?: number | string;
+    /**
+     * at
+     *
+     * Unix seconds the tick was produced, so a client can tell a live stream from a
+     * wedged one.
+     */
+    at?: number | string;
+    /**
+     * heartbeat
+     *
+     * True for the periodic keepalive, which carries the current revision unchanged.
+     */
+    heartbeat?: boolean;
 };
 
 /**
@@ -2664,6 +3129,37 @@ export type ConciergeV1JwksResponse = {
      * keys
      */
     keys?: Array<ConciergeV1Jwk>;
+};
+
+/**
+ * ListOwnerAdmissionsRequest
+ */
+export type ConciergeV1ListOwnerAdmissionsRequest = {
+    /**
+     * limit
+     *
+     * 0 means the server default. Includes closed proposals — nothing is deleted.
+     */
+    limit?: number;
+};
+
+/**
+ * ListOwnerRemovalsRequest
+ */
+export type ConciergeV1ListOwnerRemovalsRequest = {
+    /**
+     * limit
+     *
+     * 0 means the server default. Includes closed proposals — nothing is deleted.
+     */
+    limit?: number;
+};
+
+/**
+ * ListOwnersRequest
+ */
+export type ConciergeV1ListOwnersRequest = {
+    [key: string]: never;
 };
 
 /**
@@ -2761,6 +3257,400 @@ export type ConciergeV1LogoutResponse = {
 };
 
 /**
+ * OpenOwnerAdmissionRequest
+ */
+export type ConciergeV1OpenOwnerAdmissionRequest = {
+    /**
+     * candidate_user_id
+     *
+     * The user to seat. Must not already be an owner.
+     */
+    candidate_user_id?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+};
+
+/**
+ * OpenOwnerRemovalRequest
+ */
+export type ConciergeV1OpenOwnerRemovalRequest = {
+    /**
+     * target_user_id
+     */
+    target_user_id?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+};
+
+/**
+ * Owner
+ */
+export type ConciergeV1Owner = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     *
+     * Masked on every surface a non-owner can reach.
+     */
+    email?: string;
+    /**
+     * display_name
+     */
+    display_name?: string;
+    /**
+     * owner_since
+     */
+    owner_since?: number | string;
+};
+
+/**
+ * OwnerAdmission
+ */
+export type ConciergeV1OwnerAdmission = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * state
+     */
+    state?: ConciergeV1OwnerAdmissionState;
+    /**
+     * candidate_user_id
+     */
+    candidate_user_id?: string;
+    /**
+     * candidate_email
+     */
+    candidate_email?: string;
+    /**
+     * initiator_user_id
+     */
+    initiator_user_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * reason
+     *
+     * Why, in the initiator's words. Shown to every voter.
+     */
+    reason?: string;
+    /**
+     * peers
+     *
+     * Every owner except the initiator, with their answers. Never empty: an admission
+     * with nobody to agree is refused at open rather than left open and unpassable.
+     */
+    peers?: Array<ConciergeV1AdmissionPeer>;
+    /**
+     * owner_count
+     *
+     * Owners at open. The initiator is counted but does not vote.
+     */
+    owner_count?: number;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decided_at
+     */
+    decided_at?: number | string;
+    /**
+     * void_reason
+     */
+    void_reason?: string;
+    /**
+     * version
+     */
+    version?: number | string;
+};
+
+/**
+ * OwnerAdmissionList
+ */
+export type ConciergeV1OwnerAdmissionList = {
+    /**
+     * items
+     */
+    items?: Array<ConciergeV1OwnerAdmission>;
+};
+
+/**
+ * OwnerAdmissionState
+ *
+ * The six states a proposal of either kind can be in. A separate enum from
+ * OwnerRemovalState only because proto enum VALUES share one namespace per package;
+ * the states themselves are identical, and the domain models them with one type.
+ */
+export type ConciergeV1OwnerAdmissionState = 'OWNER_ADMISSION_STATE_UNSPECIFIED' | 'OWNER_ADMISSION_STATE_OPEN' | 'OWNER_ADMISSION_STATE_EXECUTED' | 'OWNER_ADMISSION_STATE_REJECTED' | 'OWNER_ADMISSION_STATE_EXPIRED' | 'OWNER_ADMISSION_STATE_CANCELLED' | 'OWNER_ADMISSION_STATE_VOID';
+
+/**
+ * OwnerList
+ */
+export type ConciergeV1OwnerList = {
+    /**
+     * items
+     */
+    items?: Array<ConciergeV1Owner>;
+    /**
+     * below_payout_floor
+     *
+     * Below three, the money plane can no longer reach its payout threshold.
+     */
+    below_payout_floor?: boolean;
+};
+
+/**
+ * OwnerRemoval
+ */
+export type ConciergeV1OwnerRemoval = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * state
+     */
+    state?: ConciergeV1OwnerRemovalState;
+    /**
+     * target_user_id
+     */
+    target_user_id?: string;
+    /**
+     * target_email
+     */
+    target_email?: string;
+    /**
+     * initiator_user_id
+     */
+    initiator_user_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * reason
+     *
+     * Why, in the initiator's words. Shown to the target and to every peer.
+     */
+    reason?: string;
+    /**
+     * peers
+     *
+     * Every owner except the target and the initiator, with their answers. Empty means
+     * path (b) is unavailable and only the target's own acceptance can carry this.
+     */
+    peers?: Array<ConciergeV1RemovalPeer>;
+    /**
+     * target_decision
+     *
+     * How the target answered from their mailbox.
+     */
+    target_decision?: ConciergeV1RemovalVote;
+    /**
+     * target_decided_at
+     */
+    target_decided_at?: number | string;
+    /**
+     * target_notified
+     */
+    target_notified?: boolean;
+    /**
+     * owner_count
+     *
+     * Owners at open, and the count that would remain. The floor is checked at open AND
+     * at execution, because the roster can move underneath an open proposal.
+     */
+    owner_count?: number;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decided_at
+     */
+    decided_at?: number | string;
+    /**
+     * void_reason
+     */
+    void_reason?: string;
+    /**
+     * version
+     */
+    version?: number | string;
+};
+
+/**
+ * OwnerRemovalInvitation
+ *
+ * What the TARGET is shown before answering. No peer identities, no vote breakdown —
+ * knowing exactly who voted to remove you, before you answer, is not information this
+ * flow needs to hand over.
+ */
+export type ConciergeV1OwnerRemovalInvitation = {
+    /**
+     * removal_id
+     */
+    removal_id?: string;
+    /**
+     * state
+     */
+    state?: ConciergeV1OwnerRemovalState;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * target_email
+     */
+    target_email?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decision
+     */
+    decision?: ConciergeV1RemovalVote;
+    /**
+     * attempts_remaining
+     */
+    attempts_remaining?: number;
+};
+
+/**
+ * OwnerRemovalList
+ */
+export type ConciergeV1OwnerRemovalList = {
+    /**
+     * items
+     */
+    items?: Array<ConciergeV1OwnerRemoval>;
+};
+
+/**
+ * OwnerRemovalState
+ */
+export type ConciergeV1OwnerRemovalState = 'OWNER_REMOVAL_STATE_UNSPECIFIED' | 'OWNER_REMOVAL_STATE_OPEN' | 'OWNER_REMOVAL_STATE_EXECUTED' | 'OWNER_REMOVAL_STATE_REJECTED' | 'OWNER_REMOVAL_STATE_EXPIRED' | 'OWNER_REMOVAL_STATE_CANCELLED' | 'OWNER_REMOVAL_STATE_VOID';
+
+/**
+ * PayoutApprovalMail
+ */
+export type ConciergeV1PayoutApprovalMail = {
+    /**
+     * consilium_id
+     */
+    consilium_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * network
+     */
+    network?: string;
+    /**
+     * address
+     */
+    address?: string;
+    /**
+     * amount
+     */
+    amount?: string;
+    /**
+     * memo
+     */
+    memo?: string;
+    /**
+     * payload_hash
+     */
+    payload_hash?: string;
+    /**
+     * threshold
+     */
+    threshold?: number;
+    /**
+     * owner_count
+     */
+    owner_count?: number;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * approval_url
+     *
+     * Absolute URL of the approval page, carrying the opaque token.
+     */
+    approval_url?: string;
+    /**
+     * code
+     *
+     * The secret code the owner types on that page. Held only until the mail is sent,
+     * then cleared from the delivery row.
+     */
+    code?: string;
+};
+
+/**
+ * PayoutOutcomeMail
+ */
+export type ConciergeV1PayoutOutcomeMail = {
+    /**
+     * consilium_id
+     */
+    consilium_id?: string;
+    /**
+     * outcome
+     *
+     * APPROVED / REJECTED / EXPIRED / CANCELLED / EXECUTED / EXECUTION_FAILED.
+     */
+    outcome?: string;
+    /**
+     * network
+     */
+    network?: string;
+    /**
+     * address
+     */
+    address?: string;
+    /**
+     * amount
+     */
+    amount?: string;
+    /**
+     * detail
+     */
+    detail?: string;
+};
+
+/**
  * RefreshRequest
  */
 export type ConciergeV1RefreshRequest = {
@@ -2785,6 +3675,46 @@ export type ConciergeV1ReinstateUserRequest = {
  */
 export type ConciergeV1ReinstateUserResponse = {
     [key: string]: never;
+};
+
+/**
+ * RemovalPeer
+ */
+export type ConciergeV1RemovalPeer = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * vote
+     */
+    vote?: ConciergeV1RemovalVote;
+    /**
+     * voted_at
+     */
+    voted_at?: number | string;
+};
+
+/**
+ * RemovalVote
+ */
+export type ConciergeV1RemovalVote = 'REMOVAL_VOTE_UNSPECIFIED' | 'REMOVAL_VOTE_PENDING' | 'REMOVAL_VOTE_REMOVE' | 'REMOVAL_VOTE_KEEP';
+
+/**
+ * ResignOwnershipRequest
+ */
+export type ConciergeV1ResignOwnershipRequest = {
+    /**
+     * confirm_email
+     *
+     * Typed confirmation, so a resignation cannot be a stray click. The server checks it
+     * equals the caller's own email.
+     */
+    confirm_email?: string;
 };
 
 /**
@@ -2830,6 +3760,51 @@ export type ConciergeV1RevokeTokensResponse = {
      * token_version
      */
     token_version?: number | string;
+};
+
+/**
+ * SendGovernanceMailRequest
+ */
+export type ConciergeV1SendGovernanceMailRequest = {
+    /**
+     * kind
+     */
+    kind?: ConciergeV1GovernanceMailKind;
+    /**
+     * user_id
+     *
+     * Concierge canonical user id of the recipient. The address is resolved HERE, from
+     * the identity record, so the money plane cannot redirect a governance mail.
+     */
+    user_id?: string;
+    /**
+     * dedupe_key
+     *
+     * Idempotency key. The same key never sends twice.
+     */
+    dedupe_key?: string;
+    /**
+     * payout_approval
+     *
+     * Typed fields the template consumes. Escaped at render; never interpreted as markup.
+     */
+    payout_approval?: ConciergeV1PayoutApprovalMail;
+    /**
+     * payout_outcome
+     */
+    payout_outcome?: ConciergeV1PayoutOutcomeMail;
+};
+
+/**
+ * SendGovernanceMailResponse
+ */
+export type ConciergeV1SendGovernanceMailResponse = {
+    /**
+     * enqueued
+     *
+     * False when `dedupe_key` had already been accepted.
+     */
+    enqueued?: boolean;
 };
 
 /**
@@ -2918,6 +3893,76 @@ export type ConciergeV1SetRoleResponse = {
      * The role now in effect (echoes the applied role).
      */
     role?: string;
+};
+
+/**
+ * SubmitAdmissionVoteRequest
+ */
+export type ConciergeV1SubmitAdmissionVoteRequest = {
+    /**
+     * admission_id
+     */
+    admission_id?: string;
+    /**
+     * vote
+     */
+    vote?: ConciergeV1AdmissionVote;
+};
+
+/**
+ * SubmitPeerVoteRequest
+ */
+export type ConciergeV1SubmitPeerVoteRequest = {
+    /**
+     * removal_id
+     */
+    removal_id?: string;
+    /**
+     * vote
+     */
+    vote?: ConciergeV1RemovalVote;
+};
+
+/**
+ * SubmitSelfDecisionRequest
+ */
+export type ConciergeV1SubmitSelfDecisionRequest = {
+    /**
+     * token
+     */
+    token?: string;
+    /**
+     * code
+     */
+    code?: string;
+    /**
+     * vote
+     *
+     * REMOVE accepts the expulsion; KEEP refuses it.
+     */
+    vote?: ConciergeV1RemovalVote;
+    /**
+     * client_ip
+     */
+    client_ip?: string;
+    /**
+     * user_agent
+     */
+    user_agent?: string;
+};
+
+/**
+ * SubmitSelfDecisionResponse
+ */
+export type ConciergeV1SubmitSelfDecisionResponse = {
+    /**
+     * invitation
+     */
+    invitation?: ConciergeV1OwnerRemovalInvitation;
+    /**
+     * decided
+     */
+    decided?: boolean;
 };
 
 /**
@@ -3113,6 +4158,13 @@ export type ConciergeV1UserSummary = {
      * BFF can gate the admin console at sign-in without a second round trip. Read-only.
      */
     role?: string;
+};
+
+/**
+ * WatchGovernanceRequest
+ */
+export type ConciergeV1WatchGovernanceRequest = {
+    [key: string]: never;
 };
 
 /**
@@ -4100,6 +5152,180 @@ export type BankingV1BalanceServiceUnparkEventResponses = {
 };
 
 export type BankingV1BalanceServiceUnparkEventResponse = BankingV1BalanceServiceUnparkEventResponses[keyof BankingV1BalanceServiceUnparkEventResponses];
+
+export type BankingV1ConsiliumApprovalServiceGetInvitationData = {
+    body: BankingV1GetInvitationRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.ConsiliumApprovalService/GetInvitation';
+};
+
+export type BankingV1ConsiliumApprovalServiceGetInvitationErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1ConsiliumApprovalServiceGetInvitationError = BankingV1ConsiliumApprovalServiceGetInvitationErrors[keyof BankingV1ConsiliumApprovalServiceGetInvitationErrors];
+
+export type BankingV1ConsiliumApprovalServiceGetInvitationResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1ConsiliumInvitation;
+};
+
+export type BankingV1ConsiliumApprovalServiceGetInvitationResponse = BankingV1ConsiliumApprovalServiceGetInvitationResponses[keyof BankingV1ConsiliumApprovalServiceGetInvitationResponses];
+
+export type BankingV1ConsiliumApprovalServiceSubmitDecisionData = {
+    body: BankingV1SubmitDecisionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.ConsiliumApprovalService/SubmitDecision';
+};
+
+export type BankingV1ConsiliumApprovalServiceSubmitDecisionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1ConsiliumApprovalServiceSubmitDecisionError = BankingV1ConsiliumApprovalServiceSubmitDecisionErrors[keyof BankingV1ConsiliumApprovalServiceSubmitDecisionErrors];
+
+export type BankingV1ConsiliumApprovalServiceSubmitDecisionResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1SubmitDecisionResponse;
+};
+
+export type BankingV1ConsiliumApprovalServiceSubmitDecisionResponse = BankingV1ConsiliumApprovalServiceSubmitDecisionResponses[keyof BankingV1ConsiliumApprovalServiceSubmitDecisionResponses];
+
+export type BankingV1ConsiliumServiceCancelConsiliumData = {
+    body: BankingV1CancelConsiliumRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.ConsiliumService/CancelConsilium';
+};
+
+export type BankingV1ConsiliumServiceCancelConsiliumErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1ConsiliumServiceCancelConsiliumError = BankingV1ConsiliumServiceCancelConsiliumErrors[keyof BankingV1ConsiliumServiceCancelConsiliumErrors];
+
+export type BankingV1ConsiliumServiceCancelConsiliumResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Consilium;
+};
+
+export type BankingV1ConsiliumServiceCancelConsiliumResponse = BankingV1ConsiliumServiceCancelConsiliumResponses[keyof BankingV1ConsiliumServiceCancelConsiliumResponses];
+
+export type BankingV1ConsiliumServiceGetConsiliumData = {
+    body: BankingV1GetConsiliumRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.ConsiliumService/GetConsilium';
+};
+
+export type BankingV1ConsiliumServiceGetConsiliumErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1ConsiliumServiceGetConsiliumError = BankingV1ConsiliumServiceGetConsiliumErrors[keyof BankingV1ConsiliumServiceGetConsiliumErrors];
+
+export type BankingV1ConsiliumServiceGetConsiliumResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Consilium;
+};
+
+export type BankingV1ConsiliumServiceGetConsiliumResponse = BankingV1ConsiliumServiceGetConsiliumResponses[keyof BankingV1ConsiliumServiceGetConsiliumResponses];
+
+export type BankingV1ConsiliumServiceListConsiliaData = {
+    body: BankingV1ListConsiliaRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.ConsiliumService/ListConsilia';
+};
+
+export type BankingV1ConsiliumServiceListConsiliaErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1ConsiliumServiceListConsiliaError = BankingV1ConsiliumServiceListConsiliaErrors[keyof BankingV1ConsiliumServiceListConsiliaErrors];
+
+export type BankingV1ConsiliumServiceListConsiliaResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1ConsiliumList;
+};
+
+export type BankingV1ConsiliumServiceListConsiliaResponse = BankingV1ConsiliumServiceListConsiliaResponses[keyof BankingV1ConsiliumServiceListConsiliaResponses];
+
+export type BankingV1ConsiliumServiceOpenRevenuePayoutData = {
+    body: BankingV1OpenRevenuePayoutRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.ConsiliumService/OpenRevenuePayout';
+};
+
+export type BankingV1ConsiliumServiceOpenRevenuePayoutErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1ConsiliumServiceOpenRevenuePayoutError = BankingV1ConsiliumServiceOpenRevenuePayoutErrors[keyof BankingV1ConsiliumServiceOpenRevenuePayoutErrors];
+
+export type BankingV1ConsiliumServiceOpenRevenuePayoutResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Consilium;
+};
+
+export type BankingV1ConsiliumServiceOpenRevenuePayoutResponse = BankingV1ConsiliumServiceOpenRevenuePayoutResponses[keyof BankingV1ConsiliumServiceOpenRevenuePayoutResponses];
 
 export type BankingV1FeesServiceGetAccruedFeesData = {
     body: BankingV1GetAccruedFeesRequest;
@@ -5144,6 +6370,441 @@ export type ConciergeV1AuthServiceRevokeSessionResponses = {
 };
 
 export type ConciergeV1AuthServiceRevokeSessionResponse = ConciergeV1AuthServiceRevokeSessionResponses[keyof ConciergeV1AuthServiceRevokeSessionResponses];
+
+export type ConciergeV1GovernanceServiceCancelOwnerAdmissionData = {
+    body: ConciergeV1CancelOwnerAdmissionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/CancelOwnerAdmission';
+};
+
+export type ConciergeV1GovernanceServiceCancelOwnerAdmissionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceCancelOwnerAdmissionError = ConciergeV1GovernanceServiceCancelOwnerAdmissionErrors[keyof ConciergeV1GovernanceServiceCancelOwnerAdmissionErrors];
+
+export type ConciergeV1GovernanceServiceCancelOwnerAdmissionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerAdmission;
+};
+
+export type ConciergeV1GovernanceServiceCancelOwnerAdmissionResponse = ConciergeV1GovernanceServiceCancelOwnerAdmissionResponses[keyof ConciergeV1GovernanceServiceCancelOwnerAdmissionResponses];
+
+export type ConciergeV1GovernanceServiceCancelOwnerRemovalData = {
+    body: ConciergeV1CancelOwnerRemovalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/CancelOwnerRemoval';
+};
+
+export type ConciergeV1GovernanceServiceCancelOwnerRemovalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceCancelOwnerRemovalError = ConciergeV1GovernanceServiceCancelOwnerRemovalErrors[keyof ConciergeV1GovernanceServiceCancelOwnerRemovalErrors];
+
+export type ConciergeV1GovernanceServiceCancelOwnerRemovalResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerRemoval;
+};
+
+export type ConciergeV1GovernanceServiceCancelOwnerRemovalResponse = ConciergeV1GovernanceServiceCancelOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceCancelOwnerRemovalResponses];
+
+export type ConciergeV1GovernanceServiceGetOwnerAdmissionData = {
+    body: ConciergeV1GetOwnerAdmissionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/GetOwnerAdmission';
+};
+
+export type ConciergeV1GovernanceServiceGetOwnerAdmissionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceGetOwnerAdmissionError = ConciergeV1GovernanceServiceGetOwnerAdmissionErrors[keyof ConciergeV1GovernanceServiceGetOwnerAdmissionErrors];
+
+export type ConciergeV1GovernanceServiceGetOwnerAdmissionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerAdmission;
+};
+
+export type ConciergeV1GovernanceServiceGetOwnerAdmissionResponse = ConciergeV1GovernanceServiceGetOwnerAdmissionResponses[keyof ConciergeV1GovernanceServiceGetOwnerAdmissionResponses];
+
+export type ConciergeV1GovernanceServiceGetOwnerRemovalData = {
+    body: ConciergeV1GetOwnerRemovalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/GetOwnerRemoval';
+};
+
+export type ConciergeV1GovernanceServiceGetOwnerRemovalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceGetOwnerRemovalError = ConciergeV1GovernanceServiceGetOwnerRemovalErrors[keyof ConciergeV1GovernanceServiceGetOwnerRemovalErrors];
+
+export type ConciergeV1GovernanceServiceGetOwnerRemovalResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerRemoval;
+};
+
+export type ConciergeV1GovernanceServiceGetOwnerRemovalResponse = ConciergeV1GovernanceServiceGetOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceGetOwnerRemovalResponses];
+
+export type ConciergeV1GovernanceServiceListOwnerAdmissionsData = {
+    body: ConciergeV1ListOwnerAdmissionsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/ListOwnerAdmissions';
+};
+
+export type ConciergeV1GovernanceServiceListOwnerAdmissionsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceListOwnerAdmissionsError = ConciergeV1GovernanceServiceListOwnerAdmissionsErrors[keyof ConciergeV1GovernanceServiceListOwnerAdmissionsErrors];
+
+export type ConciergeV1GovernanceServiceListOwnerAdmissionsResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerAdmissionList;
+};
+
+export type ConciergeV1GovernanceServiceListOwnerAdmissionsResponse = ConciergeV1GovernanceServiceListOwnerAdmissionsResponses[keyof ConciergeV1GovernanceServiceListOwnerAdmissionsResponses];
+
+export type ConciergeV1GovernanceServiceListOwnerRemovalsData = {
+    body: ConciergeV1ListOwnerRemovalsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/ListOwnerRemovals';
+};
+
+export type ConciergeV1GovernanceServiceListOwnerRemovalsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceListOwnerRemovalsError = ConciergeV1GovernanceServiceListOwnerRemovalsErrors[keyof ConciergeV1GovernanceServiceListOwnerRemovalsErrors];
+
+export type ConciergeV1GovernanceServiceListOwnerRemovalsResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerRemovalList;
+};
+
+export type ConciergeV1GovernanceServiceListOwnerRemovalsResponse = ConciergeV1GovernanceServiceListOwnerRemovalsResponses[keyof ConciergeV1GovernanceServiceListOwnerRemovalsResponses];
+
+export type ConciergeV1GovernanceServiceListOwnersData = {
+    body: ConciergeV1ListOwnersRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/ListOwners';
+};
+
+export type ConciergeV1GovernanceServiceListOwnersErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceListOwnersError = ConciergeV1GovernanceServiceListOwnersErrors[keyof ConciergeV1GovernanceServiceListOwnersErrors];
+
+export type ConciergeV1GovernanceServiceListOwnersResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerList;
+};
+
+export type ConciergeV1GovernanceServiceListOwnersResponse = ConciergeV1GovernanceServiceListOwnersResponses[keyof ConciergeV1GovernanceServiceListOwnersResponses];
+
+export type ConciergeV1GovernanceServiceOpenOwnerAdmissionData = {
+    body: ConciergeV1OpenOwnerAdmissionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/OpenOwnerAdmission';
+};
+
+export type ConciergeV1GovernanceServiceOpenOwnerAdmissionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceOpenOwnerAdmissionError = ConciergeV1GovernanceServiceOpenOwnerAdmissionErrors[keyof ConciergeV1GovernanceServiceOpenOwnerAdmissionErrors];
+
+export type ConciergeV1GovernanceServiceOpenOwnerAdmissionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerAdmission;
+};
+
+export type ConciergeV1GovernanceServiceOpenOwnerAdmissionResponse = ConciergeV1GovernanceServiceOpenOwnerAdmissionResponses[keyof ConciergeV1GovernanceServiceOpenOwnerAdmissionResponses];
+
+export type ConciergeV1GovernanceServiceOpenOwnerRemovalData = {
+    body: ConciergeV1OpenOwnerRemovalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/OpenOwnerRemoval';
+};
+
+export type ConciergeV1GovernanceServiceOpenOwnerRemovalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceOpenOwnerRemovalError = ConciergeV1GovernanceServiceOpenOwnerRemovalErrors[keyof ConciergeV1GovernanceServiceOpenOwnerRemovalErrors];
+
+export type ConciergeV1GovernanceServiceOpenOwnerRemovalResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerRemoval;
+};
+
+export type ConciergeV1GovernanceServiceOpenOwnerRemovalResponse = ConciergeV1GovernanceServiceOpenOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceOpenOwnerRemovalResponses];
+
+export type ConciergeV1GovernanceServiceResignOwnershipData = {
+    body: ConciergeV1ResignOwnershipRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/ResignOwnership';
+};
+
+export type ConciergeV1GovernanceServiceResignOwnershipErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceResignOwnershipError = ConciergeV1GovernanceServiceResignOwnershipErrors[keyof ConciergeV1GovernanceServiceResignOwnershipErrors];
+
+export type ConciergeV1GovernanceServiceResignOwnershipResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerList;
+};
+
+export type ConciergeV1GovernanceServiceResignOwnershipResponse = ConciergeV1GovernanceServiceResignOwnershipResponses[keyof ConciergeV1GovernanceServiceResignOwnershipResponses];
+
+export type ConciergeV1GovernanceServiceSubmitAdmissionVoteData = {
+    body: ConciergeV1SubmitAdmissionVoteRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/SubmitAdmissionVote';
+};
+
+export type ConciergeV1GovernanceServiceSubmitAdmissionVoteErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceSubmitAdmissionVoteError = ConciergeV1GovernanceServiceSubmitAdmissionVoteErrors[keyof ConciergeV1GovernanceServiceSubmitAdmissionVoteErrors];
+
+export type ConciergeV1GovernanceServiceSubmitAdmissionVoteResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerAdmission;
+};
+
+export type ConciergeV1GovernanceServiceSubmitAdmissionVoteResponse = ConciergeV1GovernanceServiceSubmitAdmissionVoteResponses[keyof ConciergeV1GovernanceServiceSubmitAdmissionVoteResponses];
+
+export type ConciergeV1GovernanceServiceSubmitPeerVoteData = {
+    body: ConciergeV1SubmitPeerVoteRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/SubmitPeerVote';
+};
+
+export type ConciergeV1GovernanceServiceSubmitPeerVoteErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceSubmitPeerVoteError = ConciergeV1GovernanceServiceSubmitPeerVoteErrors[keyof ConciergeV1GovernanceServiceSubmitPeerVoteErrors];
+
+export type ConciergeV1GovernanceServiceSubmitPeerVoteResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerRemoval;
+};
+
+export type ConciergeV1GovernanceServiceSubmitPeerVoteResponse = ConciergeV1GovernanceServiceSubmitPeerVoteResponses[keyof ConciergeV1GovernanceServiceSubmitPeerVoteResponses];
+
+export type ConciergeV1MailRelayServiceSendGovernanceMailData = {
+    body: ConciergeV1SendGovernanceMailRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.MailRelayService/SendGovernanceMail';
+};
+
+export type ConciergeV1MailRelayServiceSendGovernanceMailErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1MailRelayServiceSendGovernanceMailError = ConciergeV1MailRelayServiceSendGovernanceMailErrors[keyof ConciergeV1MailRelayServiceSendGovernanceMailErrors];
+
+export type ConciergeV1MailRelayServiceSendGovernanceMailResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1SendGovernanceMailResponse;
+};
+
+export type ConciergeV1MailRelayServiceSendGovernanceMailResponse = ConciergeV1MailRelayServiceSendGovernanceMailResponses[keyof ConciergeV1MailRelayServiceSendGovernanceMailResponses];
+
+export type ConciergeV1OwnerRemovalApprovalServiceGetInvitationData = {
+    body: ConciergeV1GetRemovalInvitationRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.OwnerRemovalApprovalService/GetInvitation';
+};
+
+export type ConciergeV1OwnerRemovalApprovalServiceGetInvitationErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1OwnerRemovalApprovalServiceGetInvitationError = ConciergeV1OwnerRemovalApprovalServiceGetInvitationErrors[keyof ConciergeV1OwnerRemovalApprovalServiceGetInvitationErrors];
+
+export type ConciergeV1OwnerRemovalApprovalServiceGetInvitationResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1OwnerRemovalInvitation;
+};
+
+export type ConciergeV1OwnerRemovalApprovalServiceGetInvitationResponse = ConciergeV1OwnerRemovalApprovalServiceGetInvitationResponses[keyof ConciergeV1OwnerRemovalApprovalServiceGetInvitationResponses];
+
+export type ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionData = {
+    body: ConciergeV1SubmitSelfDecisionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.OwnerRemovalApprovalService/SubmitSelfDecision';
+};
+
+export type ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionError = ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionErrors[keyof ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionErrors];
+
+export type ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1SubmitSelfDecisionResponse;
+};
+
+export type ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionResponse = ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionResponses[keyof ConciergeV1OwnerRemovalApprovalServiceSubmitSelfDecisionResponses];
 
 export type ConciergeV1UserDirectoryDisableUserData = {
     body: ConciergeV1DisableUserRequest;
