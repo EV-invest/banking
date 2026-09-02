@@ -204,12 +204,37 @@ impl BridgeConsumer {
 					.await?;
 			}
 			Kind::RoleChanged => {
-				sqlx::query("UPDATE users SET role = $2, last_lifecycle_sequence = $3, updated_at = now() WHERE auth_subject = $1")
-					.bind(subject)
-					.bind(role.as_str())
-					.bind(sequence)
-					.execute(&mut *tx)
-					.await?;
+				// `FROM users old` reads the PRE-update snapshot, so one statement both
+				// mirrors the new role and reports the one it replaced.
+				let previous: Option<(uuid::Uuid, String)> = sqlx::query_as(
+					"UPDATE users u SET role = $2, last_lifecycle_sequence = $3, updated_at = now() \
+					 FROM users old WHERE u.auth_subject = $1 AND old.id = u.id RETURNING u.id, old.role",
+				)
+				.bind(subject)
+				.bind(role.as_str())
+				.bind(sequence)
+				.fetch_optional(&mut *tx)
+				.await?;
+
+				// A CHANGE TO THE VOTING ROSTER STARTS A COOLING-OFF PERIOD.
+				//
+				// Only owner-affecting transitions are recorded: an investor promoted to
+				// admin, or a KYC level moving, does not change who can authorize a payout
+				// and must not delay a legitimate one. Written in the SAME transaction as
+				// the role itself, so the roster and the clock measuring it can never
+				// disagree — see `application::consilium::ROSTER_COOLING_OFF_SECS`.
+				if let Some((user_id, from_role)) = previous
+					&& from_role != role.as_str()
+					&& (from_role == "owner" || role.as_str() == "owner")
+				{
+					sqlx::query("INSERT INTO governance_roster_change (user_id, from_role, to_role) VALUES ($1, $2, $3)")
+						.bind(user_id)
+						.bind(&from_role)
+						.bind(role.as_str())
+						.execute(&mut *tx)
+						.await?;
+					tracing::warn!(%user_id, %from_role, to_role = role.as_str(), "governance: the owner roster changed — payout proposals are frozen for the cooling-off period");
+				}
 			}
 			Kind::SessionsRevoked => {
 				// The revoke FLOOR only ratchets up — GREATEST guards against an out-of-order

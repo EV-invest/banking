@@ -23,6 +23,9 @@ use piggybank_core::{
 		allocations::PgAllocations,
 		bridge::BridgeConsumer,
 		config_drift,
+		consilium::PgConsilia,
+		consilium_mailer::{self, ConsiliumMailer},
+		consilium_sweeper::ConsiliumSweeper,
 		custody::{ChainCustody, MultiChainCustody, StubCustody},
 		db,
 		deposit_watcher::DepositWatcher,
@@ -30,6 +33,7 @@ use piggybank_core::{
 		dispatcher::Dispatcher,
 		fee_sweeper::FeeSweeper,
 		fees::{PgFeeAssessments, PgFeePolicies, PgFeeSettlements, PgPositionAccruals},
+		governance_mail,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		operation_feed::PgOperationFeed,
@@ -56,8 +60,8 @@ use piggybank_core::{
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		AllocationRegistry, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository, UserRepository,
-		WithdrawalRepository, ledger::Ledger,
+		AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository,
+		UserRepository, WithdrawalRepository, ledger::Ledger,
 	},
 	services,
 };
@@ -198,6 +202,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
+	let consilia: Arc<dyn ConsiliumRepository> = Arc::new(PgConsilia::new(pool.clone()));
 	let allocations: Arc<dyn AllocationRegistry> = Arc::new(PgAllocations::new(pool.clone()));
 	let subscriptions: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(pool.clone()));
 	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
@@ -418,6 +423,27 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		_ => None,
 	};
 
+	// ── consilium (multi-owner payout authorization) ───────────────────────────
+	// The sweeper owns the two things the governance aggregate cannot hear on its own: a
+	// 72h window running out, and an approval whose payout never got created (a crash
+	// between the verdict and the money). Both are idempotent.
+	let consilium_sweeper = ConsiliumSweeper {
+		pool: pool.clone(),
+		consilia: consilia.clone(),
+		withdrawals: withdrawals.clone(),
+		ledger: ledger.clone(),
+		custody: custody.clone(),
+		notify: relay_notify.clone(),
+		configured: Arc::from(rails.configured_networks()),
+		approval_url_base: config.consilium_approval_url_base.clone(),
+	};
+	// The mail worker exists only when the seam is compiled in — see
+	// `infrastructure::governance_mail`. Unwired, the queue still fills (nothing is lost)
+	// and the boot line below says so loudly, because an approval mail that never goes out
+	// is a consilium that can never reach quorum.
+	let consilium_mailer = governance_mail_adapter(&config).map(|mailer| ConsiliumMailer::new(pool.clone(), mailer));
+	governance_mail::announce_wiring(consilium_mailer::pending_count(&pool).await.unwrap_or_default());
+
 	let (provisioner, provision_rx) = provisioner_channel();
 	let (auth_service, authorizer) = AuthService::try_new(auth_config, provisioner).await.context("failed to build the auth service")?;
 
@@ -427,7 +453,8 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		authorizer,
 		analytics,
 		users.clone(),
-		withdrawals,
+		withdrawals.clone(),
+		consilia.clone(),
 		allocations,
 		subscriptions,
 		redemptions,
@@ -441,6 +468,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		Arc::from(rails.configured_networks()),
 		relay_notify,
 		config.admin_subjects.clone(),
+		config.consilium_approval_url_base.clone(),
 		rails.ton.as_ref().is_some_and(|ton| ton.is_testnet),
 	);
 
@@ -480,6 +508,8 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		ton_withdrawal_watcher_done,
 		ton_sweep_done,
 		treasury_resolve_done,
+		consilium_sweeper_done,
+		consilium_mailer_done,
 	) = tokio::join!(
 		await_signal(shutdown.clone()),
 		branch(&shutdown, "core gRPC server", services::serve(config.grpc_addr, state, shutdown.clone().cancelled_owned())),
@@ -557,6 +587,12 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 			"treasury resolve",
 			infallible(resolve_treasuries(bsc_custody, polygon_custody, tron_custody, ton_custody, shutdown.clone()))
 		),
+		branch(&shutdown, "consilium sweeper", infallible(consilium_sweeper.run(shutdown.clone()))),
+		branch(
+			&shutdown,
+			"consilium mailer",
+			infallible(run_or_idle(shutdown.clone(), consilium_mailer.map(|mailer| mailer.run(shutdown.clone()))))
+		),
 	);
 	let () = signal;
 	// The first error (if any) becomes the process result; a clean shutdown is `Ok`.
@@ -582,6 +618,30 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		.and(ton_withdrawal_watcher_done)
 		.and(ton_sweep_done)
 		.and(treasury_resolve_done)
+		.and(consilium_sweeper_done)
+		.and(consilium_mailer_done)
+}
+
+/// Build the governance-mail adapter, or `None` when the seam is not compiled in.
+///
+/// It rides the SAME channel and the SAME shared secret as the one-way lifecycle bridge:
+/// banking↔concierge is one trust relationship, and giving the mail relay a second one would
+/// mean a second thing to rotate and a second thing to get wrong.
+#[allow(unused_variables)]
+fn governance_mail_adapter(config: &config::AppConfig) -> Option<Arc<dyn piggybank_core::ports::GovernanceMailer>> {
+	#[cfg(feature = "concierge_governance_mail")]
+	{
+		let endpoint = Endpoint::from_shared(config.concierge_bridge_addr.clone())
+			.ok()?
+			.connect_timeout(Duration::from_secs(3))
+			.timeout(Duration::from_secs(10));
+		return Some(Arc::new(governance_mail::wired::ConciergeGovernanceMailer::new(
+			endpoint.connect_lazy(),
+			config.bridge_service_token.clone(),
+		)));
+	}
+	#[cfg(not(feature = "concierge_governance_mail"))]
+	None
 }
 
 /// Resolve + log each configured rail's treasury hot wallet so the operator can fund it

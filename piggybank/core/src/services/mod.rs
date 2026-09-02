@@ -16,8 +16,9 @@ use std::{future::Future, net::SocketAddr};
 
 use evbanking_auth::{TokenClass, grpc_auth_layer};
 use evbanking_contracts::banking::v1::{
-	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, fees_service_server::FeesServiceServer, funds_service_server::FundsServiceServer,
-	health_service_server::HealthServiceServer, operations_service_server::OperationsServiceServer, users_service_server::UsersServiceServer, wallet_service_server::WalletServiceServer,
+	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, consilium_approval_service_server::ConsiliumApprovalServiceServer,
+	consilium_service_server::ConsiliumServiceServer, fees_service_server::FeesServiceServer, funds_service_server::FundsServiceServer, health_service_server::HealthServiceServer,
+	operations_service_server::OperationsServiceServer, users_service_server::UsersServiceServer, wallet_service_server::WalletServiceServer,
 };
 use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
@@ -26,16 +27,27 @@ use tower_http::trace::TraceLayer;
 
 use crate::{
 	AppState,
-	services::{allocations::AllocationsSvc, balance::BalanceSvc, fees::FeesSvc, funds::FundsSvc, health::Health, operations::OperationsSvc, users::UsersSvc, wallet::WalletSvc},
+	services::{
+		allocations::AllocationsSvc,
+		balance::BalanceSvc,
+		consilium::{ConsiliumApprovalSvc, ConsiliumSvc},
+		fees::FeesSvc,
+		funds::FundsSvc,
+		health::Health,
+		operations::OperationsSvc,
+		users::UsersSvc,
+		wallet::WalletSvc,
+	},
 };
 
 pub mod allocations;
 pub mod balance;
+pub mod consilium;
 pub mod fees;
 pub mod funds;
 pub mod health;
 pub mod operations;
-mod support;
+pub(crate) mod support;
 pub mod users;
 pub mod wallet;
 
@@ -53,6 +65,14 @@ pub mod wallet;
 /// future inter-service surfaces). `HealthService` is left **unwrapped** so its liveness
 /// (`Check`) and readiness (`Readiness`) probes stay public for the BFF and any
 /// orchestrator/LB — they are infrastructure probes, not data services.
+///
+/// `ConsiliumApprovalService` is the one DATA service left unwrapped, for the same reason
+/// the auth service's own routes are: the emailed approval token IS its credential. An owner
+/// answering from their mailbox may not be signed in, and requiring a session would make the
+/// mail useless. Its own surface is what carries the authorization — a single-use hashed
+/// token with a 72h TTL, plus a secret code compared in constant time — and every unusable
+/// token gets one identical `NOT_FOUND`. `ConsiliumService`, the owners' own surface, stays
+/// behind the layer like every other data service.
 pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Output = ()>) -> Result<(), tonic::transport::Error> {
 	let auth = grpc_auth_layer(state.authorizer.for_class(TokenClass::Client));
 	let health = Health::new(state.pool.clone(), state.ledger.clone(), state.configured_networks.clone());
@@ -73,6 +93,8 @@ pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Outp
 		.add_service(auth.layer(AllocationsServiceServer::new(AllocationsSvc::new(state.clone()))))
 		.add_service(auth.layer(FeesServiceServer::new(FeesSvc::new(state.clone()))))
 		.add_service(auth.layer(OperationsServiceServer::new(OperationsSvc::new(state.clone()))))
+		.add_service(auth.layer(ConsiliumServiceServer::new(ConsiliumSvc::new(state.clone()))))
+		.add_service(ConsiliumApprovalServiceServer::new(ConsiliumApprovalSvc::new(state.clone())))
 		.add_service(auth.layer(WalletServiceServer::new(WalletSvc::new(state))))
 		.serve_with_shutdown(addr, shutdown)
 		.await
