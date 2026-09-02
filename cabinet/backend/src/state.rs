@@ -7,7 +7,7 @@ use tonic::{
 	transport::{Channel, Endpoint},
 };
 
-use crate::{config::AppConfig, cookies::CookieNames, session::BankingTokens};
+use crate::{config::AppConfig, cookies::CookieNames, routes::approval::AttemptLimiter, session::BankingTokens};
 
 /// Cap on establishing a TCP/TLS connection to an upstream plane: a black-holed or
 /// half-open replica must fail fast rather than wedge the awaiting request task.
@@ -29,6 +29,9 @@ pub struct AppState {
 	/// is shell-owned and the request credential is the verified access-JWT cookie).
 	pub banking: Arc<BankingTokens>,
 	pub cookies: Arc<CookieNames>,
+	/// The per-IP bound on the public approval vote — see [`crate::routes::approval`].
+	/// Not a session and not a credential: the only state here that no cookie reaches.
+	pub approvals: Arc<AttemptLimiter>,
 	/// Local verifier for the shared concierge access JWT (JWKS-cached — no
 	/// per-request round trip).
 	pub verifier: evconcierge_auth::Verifier,
@@ -98,12 +101,28 @@ impl Grpc {
 		bk::balance_service_client::BalanceServiceClient::new(self.piggybank.clone())
 	}
 
+	fn consilium(&self) -> bk::consilium_service_client::ConsiliumServiceClient<Channel> {
+		bk::consilium_service_client::ConsiliumServiceClient::new(self.piggybank.clone())
+	}
+
+	fn consilium_approval(&self) -> bk::consilium_approval_service_client::ConsiliumApprovalServiceClient<Channel> {
+		bk::consilium_approval_service_client::ConsiliumApprovalServiceClient::new(self.piggybank.clone())
+	}
+
 	fn platform(&self) -> cc::platform_service_client::PlatformServiceClient<Channel> {
 		cc::platform_service_client::PlatformServiceClient::new(self.concierge.clone())
 	}
 
 	fn notifications(&self) -> cc::notification_service_client::NotificationServiceClient<Channel> {
 		cc::notification_service_client::NotificationServiceClient::new(self.concierge.clone())
+	}
+
+	fn governance(&self) -> cc::governance_service_client::GovernanceServiceClient<Channel> {
+		cc::governance_service_client::GovernanceServiceClient::new(self.concierge.clone())
+	}
+
+	fn removal_approval(&self) -> cc::owner_removal_approval_service_client::OwnerRemovalApprovalServiceClient<Channel> {
+		cc::owner_removal_approval_service_client::OwnerRemovalApprovalServiceClient::new(self.concierge.clone())
 	}
 
 	fn concierge_health(&self) -> cc::health_service_client::HealthServiceClient<Channel> {
@@ -377,6 +396,100 @@ impl Grpc {
 		Ok(self.notifications().set_topic_subscription(bearer(token, req)?).await?.into_inner())
 	}
 
+	// ── concierge ownership plane (governance) ─────────────────────────────────
+	// A seat is `users.role`, a concierge-owned fact, so only this plane may mutate it
+	// and only this plane may authorize the mutation. Every call here forwards the
+	// CONCIERGE token — the banking money token has a different issuer and audience, and
+	// the separation is what stops one plane's credential authorizing the other's
+	// decisions. The money plane runs its own consilium over its own mirrored roster.
+
+	pub async fn list_owners(&self, token: &str) -> Result<cc::OwnerList, Status> {
+		Ok(self.governance().list_owners(bearer(token, cc::ListOwnersRequest {})?).await?.into_inner())
+	}
+
+	pub async fn resign_ownership(&self, token: &str, confirm_email: &str) -> Result<cc::OwnerList, Status> {
+		let req = cc::ResignOwnershipRequest {
+			confirm_email: confirm_email.to_string(),
+		};
+		Ok(self.governance().resign_ownership(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn list_owner_removals(&self, token: &str, limit: u32) -> Result<cc::OwnerRemovalList, Status> {
+		let req = cc::ListOwnerRemovalsRequest { limit };
+		Ok(self.governance().list_owner_removals(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn open_owner_removal(&self, token: &str, target_user_id: &str, reason: &str) -> Result<cc::OwnerRemoval, Status> {
+		let req = cc::OpenOwnerRemovalRequest {
+			target_user_id: target_user_id.to_string(),
+			reason: reason.to_string(),
+		};
+		Ok(self.governance().open_owner_removal(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn submit_peer_vote(&self, token: &str, removal_id: &str, vote: cc::RemovalVote) -> Result<cc::OwnerRemoval, Status> {
+		let req = cc::SubmitPeerVoteRequest {
+			removal_id: removal_id.to_string(),
+			vote: vote as i32,
+		};
+		Ok(self.governance().submit_peer_vote(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_owner_removal(&self, token: &str, removal_id: &str) -> Result<cc::OwnerRemoval, Status> {
+		let req = cc::CancelOwnerRemovalRequest { removal_id: removal_id.to_string() };
+		Ok(self.governance().cancel_owner_removal(bearer(token, req)?).await?.into_inner())
+	}
+
+	// Admission is the ONLY way `Role::Owner` is granted — `SetRole` refuses it outside an
+	// executed admission — and it passes only on unanimity of every other owner, so a
+	// minority can never grow itself into a majority ahead of opening a payout.
+
+	pub async fn list_owner_admissions(&self, token: &str, limit: u32) -> Result<cc::OwnerAdmissionList, Status> {
+		let req = cc::ListOwnerAdmissionsRequest { limit };
+		Ok(self.governance().list_owner_admissions(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn open_owner_admission(&self, token: &str, candidate_user_id: &str, reason: &str) -> Result<cc::OwnerAdmission, Status> {
+		let req = cc::OpenOwnerAdmissionRequest {
+			candidate_user_id: candidate_user_id.to_string(),
+			reason: reason.to_string(),
+		};
+		Ok(self.governance().open_owner_admission(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn submit_admission_vote(&self, token: &str, admission_id: &str, vote: cc::AdmissionVote) -> Result<cc::OwnerAdmission, Status> {
+		let req = cc::SubmitAdmissionVoteRequest {
+			admission_id: admission_id.to_string(),
+			vote: vote as i32,
+		};
+		Ok(self.governance().submit_admission_vote(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_owner_admission(&self, token: &str, admission_id: &str) -> Result<cc::OwnerAdmission, Status> {
+		let req = cc::CancelOwnerAdmissionRequest {
+			admission_id: admission_id.to_string(),
+		};
+		Ok(self.governance().cancel_owner_admission(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// The live ownership feed. ONE revision covers removals and admissions together, so
+	/// a single subscription follows the whole surface.
+	pub async fn watch_governance(&self, token: &str) -> Result<tonic::Streaming<cc::GovernanceTick>, Status> {
+		Ok(self.governance().watch_governance(bearer(token, cc::WatchGovernanceRequest {})?).await?.into_inner())
+	}
+
+	// The two below carry NO bearer: the emailed token IS the credential and the target
+	// clicking it may not be signed in.
+
+	pub async fn removal_invitation(&self, token: &str) -> Result<cc::OwnerRemovalInvitation, Status> {
+		let req = cc::GetRemovalInvitationRequest { token: token.to_string() };
+		Ok(self.removal_approval().get_invitation(req).await?.into_inner())
+	}
+
+	pub async fn submit_self_decision(&self, req: cc::SubmitSelfDecisionRequest) -> Result<cc::SubmitSelfDecisionResponse, Status> {
+		Ok(self.removal_approval().submit_self_decision(req).await?.into_inner())
+	}
+
 	pub async fn set_maintenance_mode(&self, token: &str, enabled: bool) -> Result<cc::PlatformConfig, Status> {
 		let req = cc::SetMaintenanceModeRequest { enabled };
 		Ok(self.platform().set_maintenance_mode(bearer(token, req)?).await?.into_inner())
@@ -480,6 +593,53 @@ impl Grpc {
 
 	pub async fn revenue_payouts(&self, token: &str) -> Result<bk::WithdrawalList, Status> {
 		Ok(self.balance().list_revenue_payouts(bearer(token, bk::ListRevenuePayoutsRequest {})?).await?.into_inner())
+	}
+
+	// ── consilium: multi-owner authorization for a revenue payout ──────────────
+	// The tally lives in the MONEY plane, against the owner roster this plane already
+	// mirrors: `docs/ARCHITECTURE.md` rejects letting a concierge-signed artifact
+	// authorize money movement, and a consilium verdict is exactly such an artifact.
+	// So these carry the banking money token, never the concierge one.
+
+	pub async fn list_consilia(&self, token: &str, limit: u32) -> Result<bk::ConsiliumList, Status> {
+		let req = bk::ListConsiliaRequest { limit };
+		Ok(self.consilium().list_consilia(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn get_consilium(&self, token: &str, consilium_id: &str) -> Result<bk::Consilium, Status> {
+		let req = bk::GetConsiliumRequest {
+			consilium_id: consilium_id.to_string(),
+		};
+		Ok(self.consilium().get_consilium(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn open_revenue_payout(&self, token: &str, terms: bk::RevenuePayoutTerms) -> Result<bk::Consilium, Status> {
+		let req = bk::OpenRevenuePayoutRequest { terms: Some(terms) };
+		Ok(self.consilium().open_revenue_payout(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_consilium(&self, token: &str, consilium_id: &str) -> Result<bk::Consilium, Status> {
+		let req = bk::CancelConsiliumRequest {
+			consilium_id: consilium_id.to_string(),
+		};
+		Ok(self.consilium().cancel_consilium(bearer(token, req)?).await?.into_inner())
+	}
+
+	// The two below carry NO bearer, deliberately: the emailed token IS the credential and
+	// the owner clicking it may not be signed in. Attaching a user token here would invent
+	// an authorization the flow does not have.
+
+	/// The redacted invitation behind an emailed token. Side-effect free — mail scanners
+	/// issue automatic GETs for every URL in a message.
+	pub async fn consilium_invitation(&self, token: &str) -> Result<bk::ConsiliumInvitation, Status> {
+		let req = bk::GetInvitationRequest { token: token.to_string() };
+		Ok(self.consilium_approval().get_invitation(req).await?.into_inner())
+	}
+
+	/// Cast the emailed owner's vote. `client_ip`/`user_agent` on the request are AUDIT
+	/// fields only; the plane never treats them as authorization.
+	pub async fn submit_consilium_decision(&self, req: bk::SubmitDecisionRequest) -> Result<bk::SubmitDecisionResponse, Status> {
+		Ok(self.consilium_approval().submit_decision(req).await?.into_inner())
 	}
 
 	pub async fn parked_events(&self, token: &str) -> Result<bk::ParkedEventList, Status> {

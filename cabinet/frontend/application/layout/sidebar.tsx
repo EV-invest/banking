@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowUpFromLine, Bell, Boxes, Gavel, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type ReactNode, useState } from "react";
@@ -62,6 +62,11 @@ const ADMIN: NavItem[] = [
   // Sits next to Treasury, not to Withdrawals: the question it answers is "what did the
   // fund earn", which belongs with the chart of accounts rather than with the user queue.
   { href: "/admin/revenue", label: "Fund revenue", key: "nav.revenue", icon: PiggyBank, active: (p) => p.startsWith("/admin/revenue") },
+  // Directly under Fund revenue, because the consilium is what authorizes money leaving it
+  // — the page and the balance it governs read as one thought. Shown to every operator
+  // session like its neighbours; only owners have a room to be in, and the BFF answers 403
+  // to anyone else (the page renders that as its own state, not as an error).
+  { href: "/consilium", label: "Consilium", key: "nav.consilium", icon: Gavel, active: (p) => p.startsWith("/consilium") },
   { href: "/admin/allocations", label: "Allocations", key: "nav.allocations", icon: Boxes, active: (p) => p.startsWith("/admin/allocations") },
   { href: "/admin/valuation", label: "Valuation & redemptions", key: "nav.valuation", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
   // After Allocations, because a fee is a property OF a product: you register the fund

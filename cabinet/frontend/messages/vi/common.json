@@ -587,18 +587,6 @@
     "en": "Available to pay out",
     "t": "Khả dụng để chi trả"
   },
-  "admin.revenue.confirmNote": {
-    "en": "No fee is charged on a payout, so the full amount ships. This cannot be reversed once broadcast.",
-    "t": "Không thu phí trên khoản chi trả, nên toàn bộ số tiền được chuyển đi. Không thể đảo ngược sau khi đã phát lên mạng."
-  },
-  "admin.revenue.confirmPayout": {
-    "en": "Confirm payout",
-    "t": "Xác nhận"
-  },
-  "admin.revenue.confirmSentence": {
-    "en": "Send {amount} on {network} to {address}?",
-    "t": "Gửi {amount} qua {network} tới {address}?"
-  },
   "admin.revenue.destinationAddress": {
     "en": "Destination address",
     "t": "Địa chỉ nhận"
@@ -643,10 +631,6 @@
     "en": "No payouts yet",
     "t": "Chưa có khoản chi trả nào"
   },
-  "admin.revenue.noPayoutsHint": {
-    "en": "Revenue the fund has earned stays on the ledger until it is paid out. Payouts appear here once requested.",
-    "t": "Doanh thu quỹ đã thu được nằm trên sổ cái cho tới khi được chi trả. Các khoản chi trả sẽ hiện ở đây sau khi được yêu cầu."
-  },
   "admin.revenue.noRail": {
     "en": "No rail is configured",
     "t": "Chưa cấu hình kênh nào"
@@ -658,10 +642,6 @@
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Đây là tiền của chính quỹ. Số dư khách hàng và vốn mồi của quỹ là các quyền đòi riêng trên sổ cái, không nằm trong đây — và không thể chạm tới từ màn hình này."
-  },
-  "admin.revenue.payOut": {
-    "en": "Pay out",
-    "t": "Chi trả"
   },
   "admin.revenue.payouts": {
     "en": "Payouts",
@@ -682,18 +662,6 @@
   "admin.revenue.placeholder.minAmount": {
     "en": "min {n}",
     "t": "tối thiểu {n}"
-  },
-  "admin.revenue.reviewPayout": {
-    "en": "Review payout",
-    "t": "Xem lại"
-  },
-  "admin.revenue.subtitle": {
-    "en": "What the fund earned — fees and the settled 2-and-20 — and paying it out",
-    "t": "Những gì quỹ đã thu được — phí và phần 2-and-20 đã tất toán — và việc chi trả"
-  },
-  "admin.revenue.willQueue": {
-    "en": "Above the {instant} that ships immediately on this rail — the rest is accepted and queued until the treasury is topped up.",
-    "t": "Vượt mức {instant} được chuyển đi ngay trên kênh này — phần còn lại vẫn được nhận và xếp hàng cho tới khi ngân quỹ được nạp thêm."
   },
   "admin.role.admin": {
     "en": "Admin",

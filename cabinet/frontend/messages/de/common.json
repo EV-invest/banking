@@ -587,18 +587,6 @@
     "en": "Available to pay out",
     "t": "Verfügbar zur Ausschüttung"
   },
-  "admin.revenue.confirmNote": {
-    "en": "No fee is charged on a payout, so the full amount ships. This cannot be reversed once broadcast.",
-    "t": "Auf eine Ausschüttung wird keine Gebühr erhoben, es geht also der volle Betrag hinaus. Einmal übertragen, lässt sich das nicht mehr rückgängig machen."
-  },
-  "admin.revenue.confirmPayout": {
-    "en": "Confirm payout",
-    "t": "Bestätigen"
-  },
-  "admin.revenue.confirmSentence": {
-    "en": "Send {amount} on {network} to {address}?",
-    "t": "{amount} über {network} an {address} senden?"
-  },
   "admin.revenue.destinationAddress": {
     "en": "Destination address",
     "t": "Empfängeradresse"
@@ -643,10 +631,6 @@
     "en": "No payouts yet",
     "t": "Noch keine Ausschüttungen"
   },
-  "admin.revenue.noPayoutsHint": {
-    "en": "Revenue the fund has earned stays on the ledger until it is paid out. Payouts appear here once requested.",
-    "t": "Erträge, die der Fonds verdient hat, bleiben im Ledger, bis sie ausgeschüttet werden. Ausschüttungen erscheinen hier, sobald sie angefordert wurden."
-  },
   "admin.revenue.noRail": {
     "en": "No rail is configured",
     "t": "Kein Kanal konfiguriert"
@@ -658,10 +642,6 @@
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Das ist das eigene Geld des Fonds. Kundenguthaben und das Seed-Kapital des Fonds sind getrennte Ledger-Ansprüche, sind hier nicht enthalten — und von diesem Bereich aus nicht erreichbar."
-  },
-  "admin.revenue.payOut": {
-    "en": "Pay out",
-    "t": "Ausschütten"
   },
   "admin.revenue.payouts": {
     "en": "Payouts",
@@ -682,18 +662,6 @@
   "admin.revenue.placeholder.minAmount": {
     "en": "min {n}",
     "t": "min. {n}"
-  },
-  "admin.revenue.reviewPayout": {
-    "en": "Review payout",
-    "t": "Ausschüttung prüfen"
-  },
-  "admin.revenue.subtitle": {
-    "en": "What the fund earned — fees and the settled 2-and-20 — and paying it out",
-    "t": "Was der Fonds verdient hat — Gebühren und die abgerechneten 2-and-20 — und die Ausschüttung davon"
-  },
-  "admin.revenue.willQueue": {
-    "en": "Above the {instant} that ships immediately on this rail — the rest is accepted and queued until the treasury is topped up.",
-    "t": "Mehr als {instant}, was auf diesem Kanal sofort hinausgeht — der Rest wird angenommen und wartet, bis das Treasury aufgefüllt ist."
   },
   "admin.role.admin": {
     "en": "Admin",

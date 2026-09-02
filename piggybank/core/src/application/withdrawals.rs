@@ -58,13 +58,7 @@ pub async fn request_withdrawal(
 	address: WalletAddress,
 	amount: Usdt,
 ) -> Result<Withdrawal, DomainError> {
-	// Rail gate — the withdrawable view no longer offers an unconfigured rail, but a
-	// direct API caller could otherwise queue a withdrawal that only a manual operator
-	// settle (the stub custody fallthrough) could ever ship. Pre-existing withdrawals
-	// on a since-de-configured rail stay listable/cancellable.
-	if !configured.contains(&network) {
-		return Err(DomainError::Validation(format!("{network} withdrawals are not available")));
-	}
+	require_configured(configured, network)?;
 	// KYC/freeze gate — a disabled account may not move money out.
 	let account = users.find_by_id(user).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "user",
@@ -74,7 +68,53 @@ pub async fn request_withdrawal(
 		return Err(DomainError::Forbidden("account is not permitted to withdraw".into()));
 	}
 	let source = WithdrawalSource::User(user);
-	open_withdrawal(ports, source, network, address, amount).await
+	open_withdrawal(ports, WithdrawalId::new(), source, network, address, amount).await
+}
+
+/// Rail gate — the withdrawable view no longer offers an unconfigured rail, but a direct
+/// API caller could otherwise queue a withdrawal that only a manual operator settle (the
+/// stub custody fallthrough) could ever ship. Pre-existing withdrawals on a since-
+/// de-configured rail stay listable/cancellable.
+fn require_configured(configured: &[Network], network: Network) -> Result<(), DomainError> {
+	if configured.contains(&network) {
+		Ok(())
+	} else {
+		Err(DomainError::Validation(format!("{network} withdrawals are not available")))
+	}
+}
+
+/// Would this revenue payout be accepted *right now*, without recording anything?
+///
+/// The consilium calls this at OPEN so an impossible payout — an unconfigured rail, a
+/// sub-minimum amount, an address for the wrong chain, more than the fund has earned — is
+/// refused before three owners spend 72 hours approving it. It runs the same three gates
+/// [`open_withdrawal`] does, through the same code, so the answer cannot drift from what
+/// execution will actually do. It is a *pre*-check, not a guarantee: revenue can still fall
+/// between here and execution, which is what `ExecutionFailed` exists for.
+pub async fn check_revenue_payout(ledger: &dyn Ledger, configured: &[Network], network: Network, address: WalletAddress, amount: Usdt) -> Result<(), DomainError> {
+	require_configured(configured, network)?;
+	let source = WithdrawalSource::Revenue;
+	// `Withdrawal::request` IS the shape validator (minimum, fee coverage, on-chain dust,
+	// address network), so the check is the constructor rather than a copy of its rules.
+	Withdrawal::request(WithdrawalId::new(), source, network, address, amount, WithdrawalPolicy::fee_for(source, network))?;
+	require_solvent(ledger, source, amount).await
+}
+
+/// Read-First on the source's claim: the spendable balance (posted minus what other
+/// in-flight withdrawals have already reserved) must cover the gross. For a user that is
+/// their unified claim; for a payout it is the fund's earned revenue, so this is the check
+/// that makes "only what the fund earned" true rather than aspirational. TigerBeetle's
+/// non-negative flag is the hard backstop either way.
+async fn require_solvent(ledger: &dyn Ledger, source: WithdrawalSource, amount: Usdt) -> Result<(), DomainError> {
+	let claim = ledger.balance(&source.claim_key()).await?;
+	if Usdt::from_base_units(claim.available()) < amount {
+		return Err(DomainError::Validation(if source.is_revenue() {
+			"payout exceeds the fund's available revenue".into()
+		} else {
+			"insufficient available balance to withdraw".to_owned()
+		}));
+	}
+	Ok(())
 }
 
 /// The fund pays **its own earned revenue** out to `address` — the admin/owner payout.
@@ -89,33 +129,31 @@ pub async fn request_withdrawal(
 /// Deliberately NOT gated on `configured` rails alone doing the work: like a user
 /// withdrawal, an underfunded rail queues rather than refusing (the dispatcher ships it
 /// on the next top-up), so a payout is never lost to a transient treasury dip.
-pub async fn request_revenue_payout(ports: &WithdrawalPorts<'_>, configured: &[Network], network: Network, address: WalletAddress, amount: Usdt) -> Result<Withdrawal, DomainError> {
-	if !configured.contains(&network) {
-		return Err(DomainError::Validation(format!("{network} withdrawals are not available")));
-	}
-	open_withdrawal(ports, WithdrawalSource::Revenue, network, address, amount).await
+/// `id` is supplied by the caller so a consilium can derive it deterministically
+/// (`uuid_v5(consilium_id, "consilium:revenue-payout")`) and have a retried execution
+/// re-create the same row instead of a second payout. The ad-hoc admin path passes a fresh
+/// [`WithdrawalId::new`].
+pub async fn request_revenue_payout(
+	ports: &WithdrawalPorts<'_>,
+	configured: &[Network],
+	id: WithdrawalId,
+	network: Network,
+	address: WalletAddress,
+	amount: Usdt,
+) -> Result<Withdrawal, DomainError> {
+	require_configured(configured, network)?;
+	open_withdrawal(ports, id, WithdrawalSource::Revenue, network, address, amount).await
 }
 
 /// The shared body of both request paths: validate the shape, Read-First the **source's**
 /// solvency and the rail's liquidity, then record (dispatching straight away when the
 /// rail can already cover it).
-async fn open_withdrawal(ports: &WithdrawalPorts<'_>, source: WithdrawalSource, network: Network, address: WalletAddress, amount: Usdt) -> Result<Withdrawal, DomainError> {
+async fn open_withdrawal(ports: &WithdrawalPorts<'_>, id: WithdrawalId, source: WithdrawalSource, network: Network, address: WalletAddress, amount: Usdt) -> Result<Withdrawal, DomainError> {
 	let fee = WithdrawalPolicy::fee_for(source, network);
 	// Validate the request shape (minimum, fee coverage, no on-chain dust, address net).
-	let mut withdrawal = Withdrawal::request(WithdrawalId::new(), source, network, address, amount, fee)?;
-	// Read-First #1 — source solvency: the spendable claim (posted minus what's already
-	// reserved by other in-flight withdrawals) must cover the gross. For a user that is
-	// their unified claim; for a payout it is the fund's earned revenue, so this is the
-	// check that makes "only what the fund earned" true rather than aspirational. TB's
-	// flag is the hard backstop either way.
-	let claim = ports.ledger.balance(&source.claim_key()).await?;
-	if Usdt::from_base_units(claim.available()) < amount {
-		return Err(DomainError::Validation(if source.is_revenue() {
-			"payout exceeds the fund's available revenue".into()
-		} else {
-			"insufficient available balance to withdraw".to_owned()
-		}));
-	}
+	let mut withdrawal = Withdrawal::request(id, source, network, address, amount, fee)?;
+	// Read-First #1 — the source can actually cover the gross.
+	require_solvent(ports.ledger, source, amount).await?;
 	// Read-First #2 — rail liquidity: dispatchable liquidity is `min(TB rail, on-chain
 	// treasury)`. The TB `wallet:<net>` balance alone over-counts — it includes confirmed
 	// deposits still sitting on users' derived addresses, which the treasury hot wallet

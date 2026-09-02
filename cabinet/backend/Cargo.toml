@@ -2,7 +2,7 @@
 name = "cabinet-backend"
 version = "0.1.0"
 edition = "2024"
-description = "The cabinet BFF — a standalone HTTP service that runs the OAuth confidential-client flow, holds the user's session (and the plane tokens) server-side, and proxies the browser's JSON requests to the concierge identity plane and the piggybank money plane over gRPC."
+description = "The cabinet BFF — a standalone, stateless HTTP service that verifies the shell-set access-JWT cookie against the concierge JWKS and proxies the browser's JSON requests to the concierge identity plane and the piggybank money plane over gRPC."
 license = "BlueOak-1.0.0"
 publish = false
 default-run = "cabinet-backend"
@@ -12,7 +12,8 @@ name = "cabinet-backend"
 path = "src/main.rs"
 
 [dependencies]
-axum.workspace = true
+# `ws` for the governance socket only — the rest of the surface is plain JSON.
+axum = { workspace = true, features = ["ws"] }
 axum-extra = { workspace = true, features = ["cookie"] }
 color-eyre.workspace = true
 dotenvy.workspace = true

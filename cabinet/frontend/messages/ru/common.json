@@ -587,17 +587,13 @@
     "en": "Available to pay out",
     "t": "Доступно к выплате"
   },
-  "admin.revenue.confirmNote": {
-    "en": "No fee is charged on a payout, so the full amount ships. This cannot be reversed once broadcast.",
-    "t": "С выплаты не удерживается комиссия, поэтому уходит вся сумма. После отправки в сеть операцию нельзя отменить."
+  "admin.revenue.confirmPropose": {
+    "en": "Propose payout",
+    "t": "Предложить выплату"
   },
-  "admin.revenue.confirmPayout": {
-    "en": "Confirm payout",
-    "t": "Подтвердить"
-  },
-  "admin.revenue.confirmSentence": {
-    "en": "Send {amount} on {network} to {address}?",
-    "t": "Отправить {amount} по сети {network} на адрес {address}?"
+  "admin.revenue.consiliumNote": {
+    "en": "Paying the fund's revenue out is not one person's decision. Submitting here proposes a payout and emails every other owner a link to confirm it; the money moves only once enough of them have.",
+    "t": "Выплата доходов фонда не решается одним человеком. Отправка формы предлагает выплату и рассылает всем остальным владельцам письма со ссылкой для подтверждения; деньги уйдут, только когда согласится достаточное их число."
   },
   "admin.revenue.destinationAddress": {
     "en": "Destination address",
@@ -627,6 +623,10 @@
     "en": "Only {available} of earned revenue is available.",
     "t": "Из заработанного дохода доступно только {available}."
   },
+  "admin.revenue.floorBody": {
+    "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar cannot be met. A proposal made now will be refused; adding owners restores it.",
+    "t": "Для выплаты нужно согласие больше половины владельцев, а при {n, plural, one {# владельце} few {# владельцах} many {# владельцах} other {# владельцах}} этот порог недостижим. Предложение, поданное сейчас, будет отклонено; добавление владельцев вернёт эту возможность."
+  },
   "admin.revenue.footnote": {
     "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
     "t": "Выплата проходит по той же саге, что и вывод пользователя, поэтому она также появляется в очереди выводов для отправки и исполнения. Отменить можно только выплату, которая ещё стоит в очереди: после начала обработки транзакция могла уже уйти в сеть, и её аннулирование привело бы к двойной оплате."
@@ -639,13 +639,21 @@
     "en": "{amount} instant",
     "t": "{amount} мгновенно"
   },
+  "admin.revenue.memoHint": {
+    "en": "Part of what the owners are asked to approve, and covered by the request fingerprint — it cannot be changed afterwards.",
+    "t": "Входит в то, что будут подтверждать владельцы, и покрывается отпечатком запроса — изменить его потом нельзя."
+  },
+  "admin.revenue.memoOptional": {
+    "en": "Memo (optional)",
+    "t": "Memo (необязательно)"
+  },
   "admin.revenue.noPayouts": {
     "en": "No payouts yet",
     "t": "Выплат пока нет"
   },
-  "admin.revenue.noPayoutsHint": {
-    "en": "Revenue the fund has earned stays on the ledger until it is paid out. Payouts appear here once requested.",
-    "t": "Заработанный фондом доход остаётся в реестре до выплаты. Выплаты появятся здесь после того, как будут запрошены."
+  "admin.revenue.noPayoutsHintConsilium": {
+    "en": "Revenue the fund has earned stays on the ledger until the owners approve a payout. Approved payouts appear here once they execute.",
+    "t": "Заработанные фондом средства остаются на балансе, пока владельцы не одобрят выплату. Одобренные выплаты появятся здесь после исполнения."
   },
   "admin.revenue.noRail": {
     "en": "No rail is configured",
@@ -658,10 +666,6 @@
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Это собственные деньги фонда. Балансы клиентов и стартовый капитал фонда — отдельные требования в реестре, они сюда не входят и недоступны с этого экрана."
-  },
-  "admin.revenue.payOut": {
-    "en": "Pay out",
-    "t": "Выплатить"
   },
   "admin.revenue.payouts": {
     "en": "Payouts",
@@ -679,21 +683,93 @@
     "en": "The wallet that receives the payout",
     "t": "Кошелёк, который получит выплату"
   },
+  "admin.revenue.placeholder.memo": {
+    "en": "Required by some rails to credit the destination",
+    "t": "Нужен в некоторых сетях, чтобы зачислить средства получателю"
+  },
   "admin.revenue.placeholder.minAmount": {
     "en": "min {n}",
     "t": "мин. {n}"
   },
-  "admin.revenue.reviewPayout": {
-    "en": "Review payout",
-    "t": "Проверить"
+  "admin.revenue.propose": {
+    "en": "Propose a payout",
+    "t": "Предложить выплату"
+  },
+  "admin.revenue.proposeMemoLine": {
+    "en": "With memo: {memo}",
+    "t": "С memo: {memo}"
+  },
+  "admin.revenue.proposeNote": {
+    "en": "The terms are fixed once proposed. Every owner is emailed exactly these, and they are checked again before any money moves — so changing anything means cancelling and starting over, and votes are not carried across.",
+    "t": "После подачи условия зафиксированы. Каждому владельцу отправят именно их, и перед переводом денег они будут проверены заново — поэтому любое изменение означает отмену и подачу заново, а голоса не переносятся."
+  },
+  "admin.revenue.proposeSentence": {
+    "en": "Propose paying {amount} on {network} to {address}?",
+    "t": "Предложить выплату {amount} в сети {network} на адрес {address}?"
+  },
+  "admin.revenue.proposedBody": {
+    "en": "{threshold} of the fund's {owners, plural, one {# owner} other {# owners}} must confirm this from their own mailbox, and each has been emailed a link. Nothing is paid out until enough of them answer.",
+    "t": "Подтвердить это из своей почты должны {threshold} из {owners, plural, one {# владельца} few {# владельцев} many {# владельцев} other {# владельцев}} фонда; каждому отправлено письмо со ссылкой. Никакая выплата не произойдёт, пока не ответит достаточное их число."
+  },
+  "admin.revenue.proposedExpires": {
+    "en": "Expires {at} · {left}",
+    "t": "Истекает {at} · {left}"
+  },
+  "admin.revenue.proposedOpenConsilium": {
+    "en": "Open the consilium",
+    "t": "Открыть консилиум"
+  },
+  "admin.revenue.proposedTally": {
+    "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}} so far",
+    "t": "{approvals} из {threshold, plural, one {# подтверждения} few {# подтверждений} many {# подтверждений} other {# подтверждений}} на этот момент"
+  },
+  "admin.revenue.proposedTitle": {
+    "en": "Proposed — no money has moved",
+    "t": "Предложено — деньги никуда не ушли"
+  },
+  "admin.revenue.refusal.coolingBody": {
+    "en": "The list of owners changed within the last 48 hours. Payouts resume at {at}. The pause is deliberate: it keeps a change of ownership and a payout as two separate, visible events rather than one motion.",
+    "t": "Список владельцев менялся в последние 48 часов. Выплаты возобновятся {at}. Пауза сделана намеренно: она разделяет смену состава владельцев и выплату на два отдельных заметных события вместо одного слитного действия."
+  },
+  "admin.revenue.refusal.coolingBodyNoTime": {
+    "en": "The list of owners changed within the last 48 hours, and payouts stay paused until that period lifts. The pause is deliberate: it keeps a change of ownership and a payout as two separate, visible events rather than one motion.",
+    "t": "Список владельцев менялся в последние 48 часов, и выплаты остаются приостановленными, пока этот срок не истечёт. Пауза сделана намеренно: она разделяет смену состава владельцев и выплату на два отдельных заметных события вместо одного слитного действия."
+  },
+  "admin.revenue.refusal.coolingTitle": {
+    "en": "Payouts are paused while the roster settles",
+    "t": "Выплаты приостановлены, пока состав владельцев не устоится"
+  },
+  "admin.revenue.refusal.floorBody": {
+    "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it.",
+    "t": "Для выплаты нужно согласие больше половины владельцев, а при {n, plural, one {# владельце} few {# владельцах} many {# владельцах} other {# владельцах}} этот порог недостижим. Добавление владельцев вернёт эту возможность."
+  },
+  "admin.revenue.refusal.floorBodyNoCount": {
+    "en": "A payout needs more than half of the owners to agree, and this fund has too few owners for that bar to be met. Adding owners restores it.",
+    "t": "Для выплаты нужно согласие больше половины владельцев, а владельцев в этом фонде слишком мало, чтобы его достичь. Добавление владельцев вернёт эту возможность."
+  },
+  "admin.revenue.refusal.floorTitle": {
+    "en": "This fund cannot authorise a payout",
+    "t": "Этот фонд не может авторизовать выплату"
+  },
+  "admin.revenue.refusal.mailBody": {
+    "en": "Owners receive their approval link by email, and no mailer is wired — so a proposal opened now could never be voted on and would simply expire. This has to be configured before the fund can pay itself out.",
+    "t": "Владельцы получают ссылку для подтверждения по электронной почте, а отправка не настроена — поэтому за поданное сейчас предложение никто не смог бы проголосовать, и оно просто истекло бы. Это нужно настроить, прежде чем фонд сможет выплачивать свои средства."
+  },
+  "admin.revenue.refusal.mailTitle": {
+    "en": "Governance mail is not configured",
+    "t": "Служебная почта не настроена"
+  },
+  "admin.revenue.reviewPropose": {
+    "en": "Review proposal",
+    "t": "Проверить предложение"
   },
   "admin.revenue.subtitle": {
-    "en": "What the fund earned — fees and the settled 2-and-20 — and paying it out",
-    "t": "Что заработал фонд — комиссии и исполненные 2-and-20 — и как это выплачивается"
+    "en": "What the fund earned — fees and the settled 2-and-20 — and proposing that it be paid out",
+    "t": "Что заработал фонд — комиссии и рассчитанные 2-и-20 — и предложение выплатить эти средства"
   },
-  "admin.revenue.willQueue": {
-    "en": "Above the {instant} that ships immediately on this rail — the rest is accepted and queued until the treasury is topped up.",
-    "t": "Больше {instant}, которые уходят по этому каналу сразу, — остаток принимается и ставится в очередь до пополнения казначейства."
+  "admin.revenue.willQueueIfApproved": {
+    "en": "Above the {instant} that ships immediately on this rail — if the owners approve it, the remainder is queued until the treasury is topped up.",
+    "t": "Больше суммы {instant}, которая уходит на этой сети сразу, — если владельцы одобрят, остаток встанет в очередь до пополнения казначейства."
   },
   "admin.role.admin": {
     "en": "Admin",
@@ -1175,6 +1251,254 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Отправка, исполнение и отклонение выводов — как инвесторов, так и собственных выплат фонда"
   },
+  "approval.amount": {
+    "en": "Amount",
+    "t": "Сумма"
+  },
+  "approval.approve": {
+    "en": "Approve this payout",
+    "t": "Подтвердить выплату"
+  },
+  "approval.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and no money has moved. Ask whoever opened the request to send a new one.",
+    "t": "Код вводили неверно слишком много раз, поэтому ссылка закрыта, а все владельцы уведомлены. Ничего не подтверждено, деньги никуда не ушли. Попросите того, кто открыл запрос, прислать новую ссылку."
+  },
+  "approval.burned.title": {
+    "en": "This link has been closed",
+    "t": "Эта ссылка закрыта"
+  },
+  "approval.codeHint": {
+    "en": "Ten characters, printed in the message that brought you here. It is what tells us a person opened this, and not an automatic link checker.",
+    "t": "Десять символов, напечатанных в письме, из которого вы сюда перешли. Именно код подтверждает, что письмо открыл человек, а не автоматическая проверка ссылок."
+  },
+  "approval.codeLabel": {
+    "en": "Code from your email",
+    "t": "Код из письма"
+  },
+  "approval.codePlaceholder": {
+    "en": "e.g. K3M9XR2Q7T",
+    "t": "например, K3M9XR2Q7T"
+  },
+  "approval.codeWrong": {
+    "en": "That code didn't match. {n, plural, one {# attempt remains} other {# attempts remain}} before this link closes for good.",
+    "t": "Код не подошёл. {n, plural, one {Осталась # попытка} few {Осталось # попытки} many {Осталось # попыток} other {Осталось # попытки}}, после чего ссылка закроется окончательно."
+  },
+  "approval.decided.approvedTitle": {
+    "en": "You approved this payout",
+    "t": "Вы подтвердили эту выплату"
+  },
+  "approval.decided.body": {
+    "en": "You answered this earlier, and that answer stands. An answer cannot be changed once it is given.",
+    "t": "Вы ответили на это ранее, и ваш ответ остаётся в силе. Изменить данный ответ нельзя."
+  },
+  "approval.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
+    "t": "Ваш ответ записан. Больше здесь делать нечего — выплата пройдёт, когда согласится достаточно владельцев."
+  },
+  "approval.decided.rejectedTitle": {
+    "en": "You rejected this payout",
+    "t": "Вы отклонили эту выплату"
+  },
+  "approval.decisionLead": {
+    "en": "Both answers need the code from your email. Enter it once, then choose.",
+    "t": "Для любого ответа нужен код из письма. Введите его один раз, затем выберите."
+  },
+  "approval.decisionTitle": {
+    "en": "Your decision",
+    "t": "Ваше решение"
+  },
+  "approval.destination": {
+    "en": "Destination address",
+    "t": "Адрес получателя"
+  },
+  "approval.expired.title": {
+    "en": "The deadline for this request has passed",
+    "t": "Срок ответа на этот запрос истёк"
+  },
+  "approval.expiredNote": {
+    "en": "The deadline for this request has passed, so it can no longer be answered. Nothing was decided.",
+    "t": "Срок ответа на этот запрос истёк, ответить на него больше нельзя. Ничего не решено."
+  },
+  "approval.expires": {
+    "en": "Expires",
+    "t": "Истекает"
+  },
+  "approval.expiresValue": {
+    "en": "{at} · {left}",
+    "t": "{at} · {left}"
+  },
+  "approval.expiry.days": {
+    "en": "{n, plural, one {# day left} other {# days left}}",
+    "t": "{n, plural, one {остался # день} few {осталось # дня} many {осталось # дней} other {осталось # дня}}"
+  },
+  "approval.expiry.hours": {
+    "en": "{n, plural, one {# hour left} other {# hours left}}",
+    "t": "{n, plural, one {остался # час} few {осталось # часа} many {осталось # часов} other {осталось # часа}}"
+  },
+  "approval.expiry.minutes": {
+    "en": "{n, plural, one {# minute left} other {# minutes left}}",
+    "t": "{n, plural, one {осталась # минута} few {осталось # минуты} many {осталось # минут} other {осталось # минуты}}"
+  },
+  "approval.expiry.passed": {
+    "en": "The deadline has passed",
+    "t": "Срок истёк"
+  },
+  "approval.footnote": {
+    "en": "This link was made for you alone. It works once, expires 72 hours after it was sent, and should not be forwarded.",
+    "t": "Эта ссылка сделана лично для вас. Она срабатывает один раз, истекает через 72 часа после отправки, и её не следует пересылать."
+  },
+  "approval.gone.body": {
+    "en": "Approval links work once and expire after 72 hours. This one may have been used already, run out of time, or been closed — which of those it was cannot be told from here. Ask whoever opened the request to send a new one.",
+    "t": "Ссылки для подтверждения срабатывают один раз и истекают через 72 часа. Возможно, эта уже использована, просрочена или закрыта — отсюда определить, что именно, невозможно. Попросите того, кто открыл запрос, прислать новую."
+  },
+  "approval.gone.title": {
+    "en": "This link can no longer be used",
+    "t": "Эта ссылка больше не действует"
+  },
+  "approval.loadFailed": {
+    "en": "We couldn't load this request",
+    "t": "Не удалось загрузить запрос"
+  },
+  "approval.loadFailedHint": {
+    "en": "The link itself may be perfectly fine — this looks like a problem reaching us. Try again in a moment.",
+    "t": "Сама ссылка, скорее всего, в порядке — похоже на проблему со связью. Попробуйте ещё раз через минуту."
+  },
+  "approval.memo": {
+    "en": "Memo",
+    "t": "Memo"
+  },
+  "approval.network": {
+    "en": "Network",
+    "t": "Сеть"
+  },
+  "approval.openedAt": {
+    "en": "Opened",
+    "t": "Открыт"
+  },
+  "approval.openedBy": {
+    "en": "Opened by",
+    "t": "Кто открыл"
+  },
+  "approval.payloadHash": {
+    "en": "Request fingerprint",
+    "t": "Отпечаток запроса"
+  },
+  "approval.payloadHashHint": {
+    "en": "The fingerprint is taken over the amount, the address, the network and the memo above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
+    "t": "Отпечаток вычислен по сумме, адресу, сети и memo выше. Он проверяется заново перед переводом денег, поэтому изменить запрос после вашего согласия невозможно."
+  },
+  "approval.payout.lead": {
+    "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} просит выплатить деньги, которые заработал фонд. Выплата собственных средств фонда никогда не решается одним человеком, поэтому нужно согласие владельцев."
+  },
+  "approval.payout.title": {
+    "en": "Approve a fund payout",
+    "t": "Подтверждение выплаты фонда"
+  },
+  "approval.reject": {
+    "en": "Reject",
+    "t": "Отклонить"
+  },
+  "approval.removal.about": {
+    "en": "About",
+    "t": "О ком"
+  },
+  "approval.removal.accept": {
+    "en": "Accept and give up my seat",
+    "t": "Согласиться и уступить место"
+  },
+  "approval.removal.accepted.body": {
+    "en": "You accepted this earlier. Your ownership has ended.",
+    "t": "Вы согласились с этим ранее. Ваше владение прекращено."
+  },
+  "approval.removal.accepted.freshBody": {
+    "en": "Your ownership has ended and the other owners have been told. Nothing else about your account has changed.",
+    "t": "Ваше владение прекращено, остальные владельцы уведомлены. Больше в вашем аккаунте ничего не изменилось."
+  },
+  "approval.removal.accepted.title": {
+    "en": "You gave up your seat",
+    "t": "Вы уступили своё место"
+  },
+  "approval.removal.confirmAction": {
+    "en": "Give up my seat",
+    "t": "Уступить место"
+  },
+  "approval.removal.confirmBody": {
+    "en": "Your owner seat ends immediately and cannot be restored from here. You would need the remaining owners to make you an owner again. Nothing else about your account changes.",
+    "t": "Ваше место владельца прекращается немедленно, и вернуть его отсюда нельзя. Чтобы снова стать владельцем, потребуется решение оставшихся владельцев. Больше в вашем аккаунте ничего не изменится."
+  },
+  "approval.removal.confirmTitle": {
+    "en": "This ends your ownership",
+    "t": "Это прекращает ваше владение"
+  },
+  "approval.removal.decisionLead": {
+    "en": "You can accept this or refuse it, and either answer needs the code from your email. Refusing does not end the matter: the other owners can still decide it between them, and that takes all of them agreeing.",
+    "t": "Вы можете согласиться или отказаться; для любого ответа нужен код из письма. Отказ не закрывает вопрос: остальные владельцы всё ещё могут решить его между собой, и для этого нужно согласие их всех."
+  },
+  "approval.removal.decisionTitle": {
+    "en": "Your answer",
+    "t": "Ваш ответ"
+  },
+  "approval.removal.irreversible": {
+    "en": "Accepting is final. Your ownership ends as soon as it is recorded, and it cannot be undone from this page or any other.",
+    "t": "Согласие окончательно. Ваше владение прекращается сразу после записи ответа, и отменить это ни с этой страницы, ни с какой-либо другой нельзя."
+  },
+  "approval.removal.lead": {
+    "en": "{initiator} has proposed that you stop being an owner of the fund. You have a say in it, and there is a deadline.",
+    "t": "{initiator} предлагает лишить вас статуса владельца фонда. Ваш голос учитывается, и у ответа есть срок."
+  },
+  "approval.removal.noReason": {
+    "en": "No reason was given.",
+    "t": "Причина не указана."
+  },
+  "approval.removal.proposedBy": {
+    "en": "Proposed by",
+    "t": "Кто предложил"
+  },
+  "approval.removal.reasonLabel": {
+    "en": "Reason given",
+    "t": "Указанная причина"
+  },
+  "approval.removal.refuse": {
+    "en": "Refuse — keep my seat",
+    "t": "Отказаться — оставить своё место"
+  },
+  "approval.removal.refused.body": {
+    "en": "Your answer has been recorded. You keep your seat unless every other eligible owner agrees to end it, and you will be told either way.",
+    "t": "Ваш ответ записан. Вы сохраняете своё место, если только все остальные владельцы, имеющие право голоса, не согласятся его прекратить. Вам сообщат в любом случае."
+  },
+  "approval.removal.refused.title": {
+    "en": "You refused this",
+    "t": "Вы отказались"
+  },
+  "approval.removal.title": {
+    "en": "A request to end your ownership",
+    "t": "Просьба прекратить ваше владение"
+  },
+  "approval.tally": {
+    "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}} so far",
+    "t": "{approvals} из {threshold, plural, one {# подтверждения} few {# подтверждений} many {# подтверждений} other {# подтверждений}} на этот момент"
+  },
+  "approval.tallyHint": {
+    "en": "More than half of the owners must approve before any money moves. You are one of them.",
+    "t": "Прежде чем деньги уйдут, выплату должны подтвердить больше половины владельцев. Вы — один из них."
+  },
+  "approval.tallyOwners": {
+    "en": "{owners, plural, one {# owner} other {# owners}} in total",
+    "t": "{owners, plural, one {# владелец} few {# владельца} many {# владельцев} other {# владельца}} всего"
+  },
+  "approval.unavailableBody": {
+    "en": "The terms of this payout didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.",
+    "t": "Условия выплаты не пришли, поэтому соглашаться здесь не с чем и решение не предлагается. Это проблема на нашей стороне, а не с вашей ссылкой. Попробуйте ещё раз через минуту."
+  },
+  "approval.unavailableTitle": {
+    "en": "We can't show this request",
+    "t": "Не удаётся показать этот запрос"
+  },
+  "approval.votingAs": {
+    "en": "You are answering as {email}.",
+    "t": "Вы отвечаете как {email}."
+  },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
     "t": "Доступ институционального уровня к проверенным фондам прибрежной недвижимости и инфраструктуры — под управлением на всех этапах."
@@ -1246,6 +1570,366 @@
   "auth.welcomeBack": {
     "en": "Welcome back",
     "t": "С возвращением"
+  },
+  "consilium.floor.body": {
+    "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can no longer be cleared. Adding owners restores it.",
+    "t": "Для выплаты нужно согласие больше половины владельцев, а при {n, plural, one {# владельце} few {# владельцах} many {# владельцах} other {# владельцах}} этот порог уже недостижим. Добавление владельцев вернёт эту возможность."
+  },
+  "consilium.floor.title": {
+    "en": "The fund cannot authorise a payout",
+    "t": "Фонд не может авторизовать выплату"
+  },
+  "consilium.forbidden.body": {
+    "en": "Only owners can see and take part in what is decided here. If that should include you, ask an existing owner.",
+    "t": "Видеть и решать то, что здесь происходит, могут только владельцы. Если вы должны быть среди них, обратитесь к действующему владельцу."
+  },
+  "consilium.forbidden.title": {
+    "en": "This room is for the fund's owners",
+    "t": "Эта комната — для владельцев фонда"
+  },
+  "consilium.payout.cancel": {
+    "en": "Cancel this request",
+    "t": "Отменить запрос"
+  },
+  "consilium.payout.cancelConfirm": {
+    "en": "Cancel and void the votes",
+    "t": "Отменить и аннулировать голоса"
+  },
+  "consilium.payout.cancelWarning": {
+    "en": "Cancelling voids every approval collected so far. Votes are not carried over if the request is reopened, so the owners who have already answered would each have to answer again.",
+    "t": "Отмена аннулирует все собранные подтверждения. При повторном открытии запроса голоса не переносятся, поэтому каждому из уже ответивших владельцев придётся отвечать заново."
+  },
+  "consilium.payout.emptyAction": {
+    "en": "Go to fund revenue",
+    "t": "Перейти к доходу фонда"
+  },
+  "consilium.payout.emptyBody": {
+    "en": "When someone asks to pay out the fund's earnings, it appears here with its running tally, and every owner is emailed a link to answer from.",
+    "t": "Когда кто-нибудь запросит выплату заработанного фондом, запрос появится здесь вместе с текущим подсчётом, а каждому владельцу придёт письмо со ссылкой для ответа."
+  },
+  "consilium.payout.emptyTitle": {
+    "en": "No payout is open",
+    "t": "Открытых выплат нет"
+  },
+  "consilium.payout.expires": {
+    "en": "Expires {at} · {left}",
+    "t": "Истекает {at} · {left}"
+  },
+  "consilium.payout.fingerprint": {
+    "en": "Fingerprint · {hash}",
+    "t": "Отпечаток · {hash}"
+  },
+  "consilium.payout.network": {
+    "en": "Network · {network}",
+    "t": "Сеть · {network}"
+  },
+  "consilium.payout.openedBy": {
+    "en": "Opened by {initiator}",
+    "t": "Открыл {initiator}"
+  },
+  "consilium.payout.owners": {
+    "en": "{n, plural, one {# owner} other {# owners}}",
+    "t": "{n, plural, one {# владелец} few {# владельца} many {# владельцев} other {# владельца}}"
+  },
+  "consilium.payout.past": {
+    "en": "Earlier requests",
+    "t": "Прошлые запросы"
+  },
+  "consilium.payout.sub": {
+    "en": "Paying out money the fund has earned. One request at a time, and never one person's decision.",
+    "t": "Выплата денег, которые заработал фонд. По одному запросу за раз, и никогда — решением одного человека."
+  },
+  "consilium.payout.tally": {
+    "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",
+    "t": "{approvals} из {threshold, plural, one {# подтверждения} few {# подтверждений} many {# подтверждений} other {# подтверждений}}"
+  },
+  "consilium.payout.title": {
+    "en": "Fund payout",
+    "t": "Выплата фонда"
+  },
+  "consilium.payout.voteByEmail": {
+    "en": "Owners answer from the link emailed to them, not from this page — the code in that message is what makes an answer deliberate.",
+    "t": "Владельцы отвечают по ссылке из письма, а не с этой страницы: именно код в письме делает ответ осознанным."
+  },
+  "consilium.propose.floorWarning": {
+    "en": "A fund needs at least three owners to authorise a payout, so a removal that would leave fewer than three is refused.",
+    "t": "Чтобы фонд мог авторизовать выплату, владельцев должно быть не меньше трёх, поэтому прекращение, после которого их останется меньше трёх, будет отклонено."
+  },
+  "consilium.propose.noneBody": {
+    "en": "You are the only owner listed. A removal is always about someone else — to stand down yourself, use Stand down as an owner.",
+    "t": "В списке вы единственный владелец. Прекращение владения всегда касается кого-то другого — чтобы сложить полномочия самому, воспользуйтесь разделом «Сложить полномочия владельца»."
+  },
+  "consilium.propose.noneTitle": {
+    "en": "There is nobody to propose",
+    "t": "Предлагать некого"
+  },
+  "consilium.propose.opened": {
+    "en": "Proposed. Everyone who can vote has been emailed, and so has the person it concerns.",
+    "t": "Предложение подано. Всем, кто может голосовать, отправлены письма — как и тому, кого оно касается."
+  },
+  "consilium.propose.reasonHint": {
+    "en": "This is emailed to them, in these words, and stays on the record. Write it as though they are reading it, because they are.",
+    "t": "Этот текст отправят ему письмом — ровно в таком виде — и он останется в записях. Пишите так, будто он это читает, потому что так и будет."
+  },
+  "consilium.propose.reasonLabel": {
+    "en": "Reason",
+    "t": "Причина"
+  },
+  "consilium.propose.reasonPlaceholder": {
+    "en": "Why this seat should end",
+    "t": "Почему это владение должно прекратиться"
+  },
+  "consilium.propose.sub": {
+    "en": "Ends someone's ownership if it carries. They are told at once, in your words.",
+    "t": "Если предложение пройдёт, чьё-то владение прекратится. Человек узнает об этом сразу, вашими словами."
+  },
+  "consilium.propose.submit": {
+    "en": "Propose removal",
+    "t": "Предложить прекращение"
+  },
+  "consilium.propose.targetLabel": {
+    "en": "Owner",
+    "t": "Владелец"
+  },
+  "consilium.propose.targetPlaceholder": {
+    "en": "Choose an owner",
+    "t": "Выберите владельца"
+  },
+  "consilium.propose.title": {
+    "en": "Propose a removal",
+    "t": "Предложить прекращение владения"
+  },
+  "consilium.removal.cancel": {
+    "en": "Withdraw this proposal",
+    "t": "Отозвать предложение"
+  },
+  "consilium.removal.expires": {
+    "en": "Expires {at} · {left}",
+    "t": "Истекает {at} · {left}"
+  },
+  "consilium.removal.heading": {
+    "en": "Removing {target}",
+    "t": "Прекращение владения: {target}"
+  },
+  "consilium.removal.noPeers": {
+    "en": "With this few owners there is nobody eligible to vote, so this can only carry if the person it concerns accepts it themselves. That is deliberate: otherwise either of two owners could remove the other unopposed.",
+    "t": "При таком числе владельцев голосовать некому, поэтому решение может состояться, только если тот, кого оно касается, согласится сам. Так задумано: иначе любой из двух владельцев мог бы без возражений лишить владения другого."
+  },
+  "consilium.removal.noReason": {
+    "en": "No reason was given.",
+    "t": "Причина не указана."
+  },
+  "consilium.removal.notAVoter": {
+    "en": "The owners who may vote on this were fixed when it was opened, so it is not yours to answer. That is what stops new owners being added to reach a result. Nothing is hidden from you — everything about it is on this page.",
+    "t": "Круг голосующих был зафиксирован в момент открытия запроса, поэтому отвечать на него не вам. Именно это не даёт добавлять новых владельцев ради нужного результата. От вас ничего не скрыто — всё об этом запросе есть на этой странице."
+  },
+  "consilium.removal.openedBy": {
+    "en": "Opened by {initiator} on {at}",
+    "t": "Открыл {initiator}, {at}"
+  },
+  "consilium.removal.peerTally": {
+    "en": "{removed} of {total, plural, one {# owner} other {# owners}} voted to remove",
+    "t": "{removed} из {total, plural, one {# владельца} few {# владельцев} many {# владельцев} other {# владельцев}} проголосовали за прекращение"
+  },
+  "consilium.removal.reason": {
+    "en": "Reason given",
+    "t": "Указанная причина"
+  },
+  "consilium.removal.targetAccepted": {
+    "en": "{target} accepted this on {at}.",
+    "t": "{target} согласился с этим {at}."
+  },
+  "consilium.removal.targetNotYetTold": {
+    "en": "{target} has not been notified yet.",
+    "t": "{target} ещё не уведомлён."
+  },
+  "consilium.removal.targetPending": {
+    "en": "{target} has been emailed and has not answered yet.",
+    "t": "{target} получил письмо и пока не ответил."
+  },
+  "consilium.removal.targetRefused": {
+    "en": "{target} has refused this.",
+    "t": "{target} отказался."
+  },
+  "consilium.removal.unanimityNote": {
+    "en": "All of them must agree",
+    "t": "Нужно согласие их всех"
+  },
+  "consilium.removal.voteKeep": {
+    "en": "Keep the seat",
+    "t": "Оставить место"
+  },
+  "consilium.removal.voteRemove": {
+    "en": "Vote to remove",
+    "t": "За прекращение"
+  },
+  "consilium.removal.youAreTarget": {
+    "en": "This is about your seat. Your answer is not given here — it is in the message sent to your own mailbox, so it stays yours alone to give.",
+    "t": "Это касается вашего места. Ваш ответ даётся не здесь — он в письме, отправленном на вашу почту, и остаётся только вашим."
+  },
+  "consilium.removal.youOpened": {
+    "en": "You opened this, so you have no vote on removing {target}. You are still counted in the number it has to clear: if opening a request took you out of that count, opening one would be a way to lower the bar.",
+    "t": "Вы открыли этот запрос, поэтому голоса по прекращению владения {target} у вас нет. Вас всё равно учитывают в числе, которое нужно набрать: если бы открытие запроса выводило вас из этого числа, открывать запросы было бы способом понизить планку."
+  },
+  "consilium.removal.youVoted": {
+    "en": "You voted: {vote}. A vote cannot be changed once it is cast.",
+    "t": "Ваш голос: {vote}. Изменить поданный голос нельзя."
+  },
+  "consilium.removals.emptyBody": {
+    "en": "No removal has been proposed. If one is, it appears here with every vote on it, and the person it concerns is told at the same time as everyone else.",
+    "t": "Ни одного предложения не подано. Если оно появится, вы увидите его здесь вместе со всеми голосами, а тот, кого оно касается, узнает об этом одновременно со всеми."
+  },
+  "consilium.removals.emptyTitle": {
+    "en": "Nothing is being decided",
+    "t": "Сейчас ничего не решается"
+  },
+  "consilium.removals.sub": {
+    "en": "Proposals to end someone's ownership.",
+    "t": "Предложения прекратить чьё-либо владение."
+  },
+  "consilium.removals.title": {
+    "en": "Owner removals",
+    "t": "Прекращение владения"
+  },
+  "consilium.resign.confirm": {
+    "en": "Stand down as an owner",
+    "t": "Сложить полномочия владельца"
+  },
+  "consilium.resign.confirmLabel": {
+    "en": "Type {email} to confirm",
+    "t": "Введите {email} для подтверждения"
+  },
+  "consilium.resign.done": {
+    "en": "You are no longer an owner.",
+    "t": "Вы больше не владелец."
+  },
+  "consilium.resign.floorWarning": {
+    "en": "A fund needs at least three owners to authorise a payout. If standing down would leave fewer than three, it is refused.",
+    "t": "Чтобы фонд мог авторизовать выплату, владельцев должно быть не меньше трёх. Если после вашего ухода их останется меньше трёх, действие будет отклонено."
+  },
+  "consilium.resign.start": {
+    "en": "Stand down",
+    "t": "Сложить полномочия"
+  },
+  "consilium.resign.sub": {
+    "en": "Give up your own seat. Nobody has to agree to let you leave.",
+    "t": "Отказаться от своего места. Ничьё согласие для этого не нужно."
+  },
+  "consilium.resign.title": {
+    "en": "Stand down as an owner",
+    "t": "Сложить полномочия владельца"
+  },
+  "consilium.resign.unavailable": {
+    "en": "We couldn't load your account, so this can't be confirmed right now. Reload the page and try again.",
+    "t": "Не удалось загрузить ваш аккаунт, поэтому подтвердить это сейчас нельзя. Обновите страницу и попробуйте снова."
+  },
+  "consilium.resign.warning": {
+    "en": "Your ownership ends as soon as this is recorded. You would need the remaining owners to make you an owner again. Nothing else about your account changes.",
+    "t": "Ваше владение прекратится, как только это будет записано. Чтобы снова стать владельцем, потребуется решение оставшихся владельцев. Больше в вашем аккаунте ничего не изменится."
+  },
+  "consilium.roster.count": {
+    "en": "{n, plural, one {# owner} other {# owners}}",
+    "t": "{n, plural, one {# владелец} few {# владельца} many {# владельцев} other {# владельца}}"
+  },
+  "consilium.roster.emptyBody": {
+    "en": "The roster came back empty, which should not be possible while you are reading this page. Reload it; if it stays empty, the page is not showing you the truth and it is worth raising.",
+    "t": "Список вернулся пустым, чего не должно быть, пока вы читаете эту страницу. Перезагрузите её; если он останется пустым, страница показывает неверные данные и об этом стоит сообщить."
+  },
+  "consilium.roster.emptyTitle": {
+    "en": "No owners listed",
+    "t": "Владельцы не найдены"
+  },
+  "consilium.roster.since": {
+    "en": "Owner since {at}",
+    "t": "Владелец с {at}"
+  },
+  "consilium.roster.title": {
+    "en": "Owners",
+    "t": "Владельцы"
+  },
+  "consilium.roster.you": {
+    "en": "(you)",
+    "t": "(вы)"
+  },
+  "consilium.state.approved": {
+    "en": "Approved",
+    "t": "Подтверждён"
+  },
+  "consilium.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Отменён"
+  },
+  "consilium.state.executed": {
+    "en": "Paid out",
+    "t": "Выплачено"
+  },
+  "consilium.state.executionfailed": {
+    "en": "Payout failed",
+    "t": "Выплата не прошла"
+  },
+  "consilium.state.expired": {
+    "en": "Expired",
+    "t": "Истёк"
+  },
+  "consilium.state.failed": {
+    "en": "Failed",
+    "t": "Ошибка"
+  },
+  "consilium.state.kept": {
+    "en": "Seat kept",
+    "t": "Место сохранено"
+  },
+  "consilium.state.open": {
+    "en": "Open",
+    "t": "Открыт"
+  },
+  "consilium.state.pending": {
+    "en": "Pending",
+    "t": "В ожидании"
+  },
+  "consilium.state.rejected": {
+    "en": "Rejected",
+    "t": "Отклонён"
+  },
+  "consilium.state.removed": {
+    "en": "Removed",
+    "t": "Владение прекращено"
+  },
+  "consilium.state.void": {
+    "en": "Void",
+    "t": "Недействителен"
+  },
+  "consilium.stream.live": {
+    "en": "Live",
+    "t": "Онлайн"
+  },
+  "consilium.stream.paused": {
+    "en": "Paused",
+    "t": "Пауза"
+  },
+  "consilium.stream.reconnecting": {
+    "en": "Reconnecting",
+    "t": "Переподключение"
+  },
+  "consilium.sub": {
+    "en": "The owners' room — who the owners are, and what is being decided.",
+    "t": "Комната владельцев — кто владеет фондом и что сейчас решается."
+  },
+  "consilium.title": {
+    "en": "Consilium",
+    "t": "Консилиум"
+  },
+  "consilium.vote.keep": {
+    "en": "To keep",
+    "t": "За сохранение"
+  },
+  "consilium.vote.remove": {
+    "en": "To remove",
+    "t": "За прекращение"
+  },
+  "consilium.vote.waiting": {
+    "en": "Not answered",
+    "t": "Нет ответа"
   },
   "dash.activeStrategies": {
     "en": "Active strategies",
@@ -1830,6 +2514,10 @@
   "nav.cabinet": {
     "en": "Cabinet",
     "t": "Кабинет"
+  },
+  "nav.consilium": {
+    "en": "Consilium",
+    "t": "Консилиум"
   },
   "nav.fees": {
     "en": "Fees",

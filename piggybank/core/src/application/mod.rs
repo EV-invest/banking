@@ -33,6 +33,7 @@
 pub mod allocations;
 pub mod auth_sync;
 pub mod balance;
+pub mod consilium;
 pub mod fees;
 pub mod funds;
 pub mod operations;

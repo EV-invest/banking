@@ -1020,3 +1020,451 @@ impl From<cc::NotificationSettings> for NotificationSettings {
 		}
 	}
 }
+
+// ── consilium: multi-owner authorization (money plane) ───────────────────────
+
+/// A proto enum on the browser wire: the generated `as_str_name()` minus its
+/// `SCREAMING_PREFIX_`, lowercased. Derived rather than hand-matched so a variant added
+/// to the proto reaches the browser as itself instead of falling through a stale arm.
+fn enum_label(name: &str, prefix: &str) -> String {
+	name.strip_prefix(prefix).unwrap_or(name).to_ascii_lowercase()
+}
+
+/// `ada@example.com` → `a***@example.com`. Applied on every redacted surface a non-owner
+/// can reach; idempotent, so re-masking what the plane already masked is safe and this
+/// stays a second line of defense rather than a substitute for the plane's own. A value
+/// with no `@`, or with no local part, is replaced wholesale — something that is not an
+/// address is not something to reveal a prefix of.
+pub fn mask_email(email: &str) -> String {
+	if email.is_empty() {
+		return String::new();
+	}
+	match email.split_once('@') {
+		// `chars().next()` and not `&local[..1]`: a non-ASCII local part would put that
+		// slice inside a UTF-8 character and panic.
+		Some((local, domain)) if !domain.is_empty() => match local.chars().next() {
+			Some(first) => format!("{first}***@{domain}"),
+			None => "***".to_string(),
+		},
+		_ => "***".to_string(),
+	}
+}
+
+/// The immutable subject of a revenue payout. The address is carried in FULL — a
+/// truncated address on a surface where a human approves it is an invitation to approve
+/// the wrong one.
+#[derive(Default, Serialize)]
+pub struct RevenuePayoutTerms {
+	pub network: String,
+	pub address: String,
+	pub amount: String,
+	pub memo: String,
+}
+
+impl From<bk::RevenuePayoutTerms> for RevenuePayoutTerms {
+	fn from(t: bk::RevenuePayoutTerms) -> Self {
+		Self {
+			network: t.network,
+			address: t.address,
+			amount: t.amount,
+			memo: t.memo,
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct ConsiliumVoter {
+	pub user_id: String,
+	pub email: String,
+	pub decision: String,
+	pub decided_at: String,
+	pub notified: bool,
+}
+
+impl From<bk::ConsiliumVoter> for ConsiliumVoter {
+	fn from(v: bk::ConsiliumVoter) -> Self {
+		let decision = enum_label(v.decision().as_str_name(), "VOTE_DECISION_");
+		Self {
+			user_id: v.user_id,
+			email: v.email,
+			decision,
+			decided_at: v.decided_at.to_string(),
+			notified: v.notified,
+		}
+	}
+}
+
+/// One consilium in full — the owner-only view, with the per-voter breakdown.
+#[derive(Serialize)]
+pub struct Consilium {
+	pub id: String,
+	pub state: String,
+	pub revenue_payout: RevenuePayoutTerms,
+	pub payload_hash: String,
+	pub initiator_user_id: String,
+	pub initiator_email: String,
+	pub owner_count: u32,
+	pub threshold: u32,
+	pub approvals: u32,
+	pub rejections: u32,
+	pub voters: Vec<ConsiliumVoter>,
+	pub created_at: String,
+	pub expires_at: String,
+	pub decided_at: String,
+	pub executed_withdrawal_id: String,
+	pub failure_reason: String,
+	/// Monotonic per consilium. The live page watches this and refetches when it moves.
+	pub version: String,
+}
+
+impl From<bk::Consilium> for Consilium {
+	fn from(c: bk::Consilium) -> Self {
+		let state = enum_label(c.state().as_str_name(), "CONSILIUM_STATE_");
+		Self {
+			id: c.id,
+			state,
+			revenue_payout: c.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
+			payload_hash: c.payload_hash,
+			initiator_user_id: c.initiator_user_id,
+			initiator_email: c.initiator_email,
+			owner_count: c.owner_count,
+			threshold: c.threshold,
+			approvals: c.approvals,
+			rejections: c.rejections,
+			voters: c.voters.into_iter().map(ConsiliumVoter::from).collect(),
+			created_at: c.created_at.to_string(),
+			expires_at: c.expires_at.to_string(),
+			decided_at: c.decided_at.to_string(),
+			executed_withdrawal_id: c.executed_withdrawal_id,
+			failure_reason: c.failure_reason,
+			version: c.version.to_string(),
+		}
+	}
+}
+
+list_dto! { ConsiliumList from bk::ConsiliumList { items: Vec<Consilium> } }
+
+/// What the emailed owner is shown before voting. Deliberately narrower than
+/// [`Consilium`]: no other owner's identity and no vote-by-vote breakdown — and both
+/// addresses are masked, because this is the one surface reachable with no session.
+#[derive(Default, Serialize)]
+pub struct ConsiliumInvitation {
+	pub consilium_id: String,
+	pub state: String,
+	pub revenue_payout: RevenuePayoutTerms,
+	pub payload_hash: String,
+	pub initiator_email: String,
+	pub voter_email: String,
+	pub threshold: u32,
+	pub approvals: u32,
+	pub owner_count: u32,
+	pub created_at: String,
+	pub expires_at: String,
+	pub decision: String,
+	pub attempts_remaining: u32,
+}
+
+impl From<bk::ConsiliumInvitation> for ConsiliumInvitation {
+	fn from(i: bk::ConsiliumInvitation) -> Self {
+		let state = enum_label(i.state().as_str_name(), "CONSILIUM_STATE_");
+		let decision = enum_label(i.decision().as_str_name(), "VOTE_DECISION_");
+		Self {
+			consilium_id: i.consilium_id,
+			state,
+			revenue_payout: i.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
+			payload_hash: i.payload_hash,
+			initiator_email: mask_email(&i.initiator_email),
+			voter_email: mask_email(&i.voter_email),
+			threshold: i.threshold,
+			approvals: i.approvals,
+			owner_count: i.owner_count,
+			created_at: i.created_at.to_string(),
+			expires_at: i.expires_at.to_string(),
+			decision,
+			attempts_remaining: i.attempts_remaining,
+		}
+	}
+}
+
+/// The invitation as it stands after a vote, plus whether this vote carried the verdict.
+#[derive(Serialize)]
+pub struct ConsiliumDecision {
+	pub invitation: ConsiliumInvitation,
+	pub decided: bool,
+}
+
+impl From<bk::SubmitDecisionResponse> for ConsiliumDecision {
+	fn from(r: bk::SubmitDecisionResponse) -> Self {
+		Self {
+			invitation: r.invitation.map(ConsiliumInvitation::from).unwrap_or_default(),
+			decided: r.decided,
+		}
+	}
+}
+
+// ── governance: the roster, its removals and its admissions (ownership plane) ─
+//
+// A seat changes hands only through a consilium in this plane. Removal passes when the
+// target accepts from their mailbox OR every eligible peer votes to remove; admission
+// passes only on unanimity of every other owner, which is what stops a minority minting
+// sock puppets into a majority before opening a payout.
+
+#[derive(Serialize)]
+pub struct Owner {
+	pub user_id: String,
+	pub email: String,
+	pub display_name: String,
+	pub owner_since: String,
+}
+
+impl From<cc::Owner> for Owner {
+	fn from(o: cc::Owner) -> Self {
+		Self {
+			user_id: o.user_id,
+			email: o.email,
+			display_name: o.display_name,
+			owner_since: o.owner_since.to_string(),
+		}
+	}
+}
+
+list_dto! {
+	OwnerList from cc::OwnerList as l {
+		items: Vec<Owner>,
+		/// True below THREE owners, where the money plane's `floor(N/2)+1` threshold is
+		/// unreachable and no payout can be authorized. Distinct from the removal floor,
+		/// which is two: two owners is a recoverable pause, because two can still admit a
+		/// third, whereas a floor of three would make a bad actor unremovable.
+		below_payout_floor: bool = l.below_payout_floor,
+	}
+}
+
+#[derive(Serialize)]
+pub struct RemovalPeer {
+	pub user_id: String,
+	pub email: String,
+	pub vote: String,
+	pub voted_at: String,
+}
+
+impl From<cc::RemovalPeer> for RemovalPeer {
+	fn from(p: cc::RemovalPeer) -> Self {
+		let vote = enum_label(p.vote().as_str_name(), "REMOVAL_VOTE_");
+		Self {
+			user_id: p.user_id,
+			email: p.email,
+			vote,
+			voted_at: p.voted_at.to_string(),
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct OwnerRemoval {
+	pub id: String,
+	pub state: String,
+	pub target_user_id: String,
+	pub target_email: String,
+	pub initiator_user_id: String,
+	pub initiator_email: String,
+	pub reason: String,
+	/// Every owner except the target and the initiator. Empty means peer unanimity is
+	/// unavailable and only the target's own acceptance can carry this.
+	pub peers: Vec<RemovalPeer>,
+	pub target_decision: String,
+	pub target_decided_at: String,
+	pub target_notified: bool,
+	pub owner_count: u32,
+	pub created_at: String,
+	pub expires_at: String,
+	pub decided_at: String,
+	pub void_reason: String,
+	pub version: String,
+}
+
+impl From<cc::OwnerRemoval> for OwnerRemoval {
+	fn from(r: cc::OwnerRemoval) -> Self {
+		let state = enum_label(r.state().as_str_name(), "OWNER_REMOVAL_STATE_");
+		let target_decision = enum_label(r.target_decision().as_str_name(), "REMOVAL_VOTE_");
+		Self {
+			id: r.id,
+			state,
+			target_user_id: r.target_user_id,
+			target_email: r.target_email,
+			initiator_user_id: r.initiator_user_id,
+			initiator_email: r.initiator_email,
+			reason: r.reason,
+			peers: r.peers.into_iter().map(RemovalPeer::from).collect(),
+			target_decision,
+			target_decided_at: r.target_decided_at.to_string(),
+			target_notified: r.target_notified,
+			owner_count: r.owner_count,
+			created_at: r.created_at.to_string(),
+			expires_at: r.expires_at.to_string(),
+			decided_at: r.decided_at.to_string(),
+			void_reason: r.void_reason,
+			version: r.version.to_string(),
+		}
+	}
+}
+
+list_dto! { OwnerRemovalList from cc::OwnerRemovalList { items: Vec<OwnerRemoval> } }
+
+#[derive(Serialize)]
+pub struct AdmissionPeer {
+	pub user_id: String,
+	pub email: String,
+	pub vote: String,
+	pub voted_at: String,
+}
+
+impl From<cc::AdmissionPeer> for AdmissionPeer {
+	fn from(p: cc::AdmissionPeer) -> Self {
+		let vote = enum_label(p.vote().as_str_name(), "ADMISSION_VOTE_");
+		Self {
+			user_id: p.user_id,
+			email: p.email,
+			vote,
+			voted_at: p.voted_at.to_string(),
+		}
+	}
+}
+
+/// Granting a seat. The shape differs from [`OwnerRemoval`] by more than a rename: there
+/// is no target-decision trio, because the candidate does not vote on their own admission
+/// — they are not an owner yet.
+#[derive(Serialize)]
+pub struct OwnerAdmission {
+	pub id: String,
+	pub state: String,
+	pub candidate_user_id: String,
+	pub candidate_email: String,
+	pub initiator_user_id: String,
+	pub initiator_email: String,
+	pub reason: String,
+	/// Every owner except the initiator. Never empty: an admission with nobody to agree
+	/// is refused at open rather than left open and unpassable.
+	pub peers: Vec<AdmissionPeer>,
+	pub owner_count: u32,
+	pub created_at: String,
+	pub expires_at: String,
+	pub decided_at: String,
+	pub void_reason: String,
+	pub version: String,
+}
+
+impl From<cc::OwnerAdmission> for OwnerAdmission {
+	fn from(a: cc::OwnerAdmission) -> Self {
+		let state = enum_label(a.state().as_str_name(), "OWNER_ADMISSION_STATE_");
+		Self {
+			id: a.id,
+			state,
+			candidate_user_id: a.candidate_user_id,
+			candidate_email: a.candidate_email,
+			initiator_user_id: a.initiator_user_id,
+			initiator_email: a.initiator_email,
+			reason: a.reason,
+			peers: a.peers.into_iter().map(AdmissionPeer::from).collect(),
+			owner_count: a.owner_count,
+			created_at: a.created_at.to_string(),
+			expires_at: a.expires_at.to_string(),
+			decided_at: a.decided_at.to_string(),
+			void_reason: a.void_reason,
+			version: a.version.to_string(),
+		}
+	}
+}
+
+list_dto! { OwnerAdmissionList from cc::OwnerAdmissionList { items: Vec<OwnerAdmission> } }
+
+/// What the TARGET is shown before answering: no peer identities, no vote breakdown.
+/// Both addresses are masked — this surface, too, needs no session.
+#[derive(Default, Serialize)]
+pub struct OwnerRemovalInvitation {
+	pub removal_id: String,
+	pub state: String,
+	pub initiator_email: String,
+	pub target_email: String,
+	pub reason: String,
+	pub created_at: String,
+	pub expires_at: String,
+	pub decision: String,
+	pub attempts_remaining: u32,
+}
+
+impl From<cc::OwnerRemovalInvitation> for OwnerRemovalInvitation {
+	fn from(i: cc::OwnerRemovalInvitation) -> Self {
+		let state = enum_label(i.state().as_str_name(), "OWNER_REMOVAL_STATE_");
+		let decision = enum_label(i.decision().as_str_name(), "REMOVAL_VOTE_");
+		Self {
+			removal_id: i.removal_id,
+			state,
+			initiator_email: mask_email(&i.initiator_email),
+			target_email: mask_email(&i.target_email),
+			reason: i.reason,
+			created_at: i.created_at.to_string(),
+			expires_at: i.expires_at.to_string(),
+			decision,
+			attempts_remaining: i.attempts_remaining,
+		}
+	}
+}
+
+#[derive(Serialize)]
+pub struct RemovalDecision {
+	pub invitation: OwnerRemovalInvitation,
+	pub decided: bool,
+}
+
+impl From<cc::SubmitSelfDecisionResponse> for RemovalDecision {
+	fn from(r: cc::SubmitSelfDecisionResponse) -> Self {
+		Self {
+			invitation: r.invitation.map(OwnerRemovalInvitation::from).unwrap_or_default(),
+			decided: r.decided,
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn masking_keeps_one_character_and_is_idempotent() {
+		assert_eq!(mask_email("ada@example.com"), "a***@example.com");
+		assert_eq!(mask_email("a***@example.com"), "a***@example.com");
+		assert_eq!(mask_email(""), "");
+		assert_eq!(mask_email("not-an-address"), "***");
+		assert_eq!(mask_email("@example.com"), "***");
+		assert_eq!(mask_email("ada@"), "***");
+	}
+
+	/// A non-ASCII local part must not be sliced mid-character — a byte slice would panic
+	/// on one, and a panic inside a handler is a 500 on a page a stranger can reach.
+	#[test]
+	fn masking_survives_a_non_ascii_local_part() {
+		assert_eq!(mask_email("ада@example.com"), "а***@example.com");
+	}
+
+	/// The browser vocabulary is derived from the proto, so a state added upstream
+	/// arrives as itself rather than through a stale hand-written arm.
+	#[test]
+	fn enum_labels_are_the_proto_name_without_its_prefix() {
+		assert_eq!(enum_label(bk::ConsiliumState::Open.as_str_name(), "CONSILIUM_STATE_"), "open");
+		assert_eq!(enum_label(bk::ConsiliumState::ExecutionFailed.as_str_name(), "CONSILIUM_STATE_"), "execution_failed");
+		assert_eq!(enum_label(bk::VoteDecision::Approve.as_str_name(), "VOTE_DECISION_"), "approve");
+	}
+
+	/// The redacted invitation is the one surface a stranger holding a link can read: no
+	/// address on it may be renderable back to a real mailbox.
+	#[test]
+	fn the_public_invitation_masks_both_addresses() {
+		let invitation = ConsiliumInvitation::from(bk::ConsiliumInvitation {
+			initiator_email: "ada@example.com".into(),
+			voter_email: "grace@example.com".into(),
+			..Default::default()
+		});
+		assert_eq!(invitation.initiator_email, "a***@example.com");
+		assert_eq!(invitation.voter_email, "g***@example.com");
+	}
+}

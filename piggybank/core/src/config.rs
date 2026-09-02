@@ -68,6 +68,11 @@ ev::settings! {
 		bridge_service_token: String,
 		/// Seconds between bridge pulls when the backlog is drained.
 		bridge_poll_secs: u64 = "5",
+		/// Base URL of the consilium approval page the emailed link points at
+		/// (`<base>/<token>`). The page is served by the cabinet; the hub only mints the
+		/// link. A wrong value here sends owners somewhere that cannot take their vote, so
+		/// it is worth checking per environment.
+		consilium_approval_url_base: String = "https://evinvest.ltd/cabinet/approve",
 	}
 }
 
@@ -592,7 +597,46 @@ mod tests {
 				"CONCIERGE_BRIDGE_ADDR",
 				"BRIDGE_SERVICE_TOKEN",
 				"BRIDGE_POLL_SECS",
+				"CONSILIUM_APPROVAL_URL_BASE",
 			]
+		);
+	}
+
+	/// THE APPROVAL LINK MUST LAND ON A PUBLIC ROUTE.
+	///
+	/// An owner opens their approval mail on whatever device the mail is on — a phone with no
+	/// session, someone else's laptop — holding a single-use token with a 72h life. The
+	/// cabinet's `/cabinet/consilium` is the OWNER-ONLY console and is not in the frontend's
+	/// public-route list, so a signed-out owner following a link there is bounced to
+	/// `/login`; by the time they have signed in, the deep link is gone and so, often, is the
+	/// token. `/cabinet/approve/{token}` is the public page built for exactly this.
+	///
+	/// This default was `/cabinet/consilium` and would have shipped a governance mechanism
+	/// whose every invitation dead-ended at a login wall.
+	#[test]
+	fn the_default_approval_url_points_at_the_public_approval_route() {
+		let minimal: std::collections::HashMap<&str, &str> = [
+			("DATABASE_URL", "postgres://localhost/banking"),
+			("APP_ENV", "development"),
+			("TIGERBEETLE_ADDRESS", "3033"),
+			("TIGERBEETLE_CLUSTER_ID", "0"),
+			("SIGNER_GRPC_ADDR", "http://127.0.0.1:50053"),
+			("CONCIERGE_BRIDGE_ADDR", "http://127.0.0.1:55670"),
+			("BRIDGE_SERVICE_TOKEN", "test-bridge"),
+		]
+		.into_iter()
+		.collect();
+		let base = AppConfig::from_source(|var| minimal.get(var).map(|v| v.to_string()))
+			.expect("minimal env loads")
+			.consilium_approval_url_base;
+		assert!(base.ends_with("/cabinet/approve"), "the approval base must be the public approval route, got {base}");
+		assert!(
+			!base.contains("/cabinet/consilium"),
+			"/cabinet/consilium is the owner-only console and is not a public route — a signed-out owner would be bounced to /login and lose the token"
+		);
+		assert!(
+			base.starts_with("https://"),
+			"an approval link carries a bearer token in its path and must never be sent over http, got {base}"
 		);
 	}
 

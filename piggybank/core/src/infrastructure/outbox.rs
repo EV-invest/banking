@@ -76,8 +76,7 @@ pub async fn insert_event(conn: &mut PgConnection, event_id: Uuid, aggregate: &s
 pub async fn drain_to_outbox<A>(conn: &mut PgConnection, aggregate: &mut A, relay: bool) -> Result<(), DomainError>
 where
 	A: EmitsEvents,
-	<A as Entity>::Id: Identifier<Underlying = Uuid>,
-{
+	<A as Entity>::Id: Identifier<Underlying = Uuid>, {
 	let aggregate_id = Entity::id(aggregate).underlying();
 	for event in aggregate.drain_events() {
 		let payload = serde_json::to_string(&event).map_err(|e| DomainError::Repository(e.to_string()))?;

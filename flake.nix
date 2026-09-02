@@ -635,7 +635,8 @@
               --connect-openapi_opt=format=json,path=openapi.json,with-proto-names \
               contracts/proto/banking/v1/*.proto \
               "$cc_dir/proto/concierge/v1/directory.proto" \
-              "$cc_dir/proto/concierge/v1/auth.proto"
+              "$cc_dir/proto/concierge/v1/auth.proto" \
+              "$cc_dir/proto/concierge/v1/governance.proto"
             echo "▶ openapi.json → cabinet TypeScript types"
             [ -d node_modules ] || npm install
             npm run gen:api --workspace @evbanking/cabinet

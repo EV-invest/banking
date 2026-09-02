@@ -21,10 +21,12 @@
 //! [`FeeSettlements`] (converting accumulated fee units to cash).
 
 pub mod allocations;
+pub mod consilium;
 pub mod custody;
 pub mod deposit_addresses;
 pub mod deposits;
 pub mod fees;
+pub mod governance_mail;
 pub mod ledger;
 pub mod nav;
 pub mod operations;
@@ -35,6 +37,7 @@ pub mod withdrawals;
 
 pub use allocations::{AllocationRecord, AllocationRegistry};
 use async_trait::async_trait;
+pub use consilium::ConsiliumRepository;
 pub use custody::{BroadcastRequest, Custody, CustodyError};
 pub use deposit_addresses::DepositAddresses;
 pub use deposits::Deposits;
@@ -45,6 +48,7 @@ use domain::{
 	users::{ConciergeUserId, Email, ProfileFields, User, UserId},
 };
 pub use fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeePorts, FeeSettlements, PositionAccrual, PositionAccruals, SettlementRecord};
+pub use governance_mail::GovernanceMailer;
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
 pub use nav::{NavMarks, Valuation};
 pub use operations::OperationFeed;

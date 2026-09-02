@@ -37,6 +37,17 @@ export const TAG = {
   /** The caller's active device sessions. */
   sessions: "sessions",
 
+  // ── fund governance ───────────────────────────────────────────────────────────
+  // Three facts, not three endpoints, and they move together often enough that the
+  // websocket names all three at once: a removal that carries changes the roster, and a
+  // roster that shrinks past the floor changes whether a payout can be opened at all.
+  /** Who the fund's owners are, and whether the roster is below the payout floor. */
+  owners: "owners",
+  /** Open and settled owner-removal proposals, with their per-peer votes. */
+  removals: "owners.removals",
+  /** Payout consilia and their tallies. */
+  consilium: "consilium",
+
   // ── operator console ──────────────────────────────────────────────────────────
   /** Fleet health and the parked-event backlog — one screen, two reads that move together. */
   adminFleet: "admin.fleet",

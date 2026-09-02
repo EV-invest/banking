@@ -9,7 +9,7 @@
 use domain::{
 	authz::Permission,
 	balance::ServiceId,
-	money::{Network, TxRef, Usdt, WalletAddress},
+	money::{Network, TxRef, Usdt},
 };
 use evbanking_auth::claims_of;
 use evbanking_contracts::banking::v1::{self as pb, balance_service_server::BalanceService};
@@ -300,29 +300,29 @@ impl BalanceService for BalanceSvc {
 	}
 
 	async fn request_revenue_payout(&self, request: Request<pb::RequestRevenuePayoutRequest>) -> Result<Response<pb::Withdrawal>, Status> {
+		// CLOSED ON PURPOSE. This RPC used to pay the fund's revenue out on one Admin/Owner's
+		// say-so, gated on the very permission that merely lets someone OPEN a consilium. That
+		// made the whole governance mechanism decorative: any principal who could propose a
+		// payout could equally well skip the proposal and take the money.
+		//
+		// The permission check stays FIRST so the refusal reads the same to everyone who could
+		// once call this, and tells nobody else that the path exists at all.
+		//
+		// `consilium_app::execute` is now the only caller that reaches
+		// `withdrawal_app::request_revenue_payout` for fund revenue, and it gets there with a
+		// withdrawal id DERIVED from the consilium — so the payout path itself carries the
+		// proof of authorization rather than trusting its caller.
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let req = request.into_inner();
-		let network = Network::parse(&req.network).map_err(map_err)?;
-		let address = WalletAddress::parse(network, &req.address).map_err(map_err)?;
-		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
-		let payout = withdrawal_app::request_revenue_payout(
-			&withdrawal_app::WithdrawalPorts {
-				withdrawals: self.state.withdrawals.as_ref(),
-				ledger: self.state.ledger.as_ref(),
-				custody: self.state.custody.as_ref(),
-				relay: &self.state.relay_notify,
-			},
-			&self.state.configured_networks,
-			network,
-			address,
-			amount,
-		)
-		.await
-		.map_err(map_err)?;
-		// WARN on success on purpose: company money leaving the fund is worth an audit
-		// line that stands out, the same way a deposit-address rotation is.
-		tracing::warn!(payout_id = %payout.id(), network = %req.network, address = %req.address, amount = %req.amount, "requested a fund revenue payout");
-		Ok(Response::new(withdrawal_to_proto(&payout)))
+		tracing::warn!(
+			network = %req.network,
+			address = %req.address,
+			amount = %req.amount,
+			"refused a direct fund revenue payout: revenue leaves only through an approved consilium"
+		);
+		Err(Status::failed_precondition(
+			"the fund's revenue can only be paid out by an approved consilium; open one with ConsiliumService.OpenRevenuePayout and have a quorum of owners approve it",
+		))
 	}
 
 	async fn cancel_revenue_payout(&self, request: Request<pb::CancelRevenuePayoutRequest>) -> Result<Response<pb::Withdrawal>, Status> {

@@ -587,18 +587,6 @@
     "en": "Available to pay out",
     "t": "Disponible au versement"
   },
-  "admin.revenue.confirmNote": {
-    "en": "No fee is charged on a payout, so the full amount ships. This cannot be reversed once broadcast.",
-    "t": "Aucun frais n’est prélevé sur un versement : le montant intégral est envoyé. L’opération est irréversible une fois diffusée."
-  },
-  "admin.revenue.confirmPayout": {
-    "en": "Confirm payout",
-    "t": "Confirmer"
-  },
-  "admin.revenue.confirmSentence": {
-    "en": "Send {amount} on {network} to {address}?",
-    "t": "Envoyer {amount} sur {network} à {address} ?"
-  },
   "admin.revenue.destinationAddress": {
     "en": "Destination address",
     "t": "Adresse du destinataire"
@@ -643,10 +631,6 @@
     "en": "No payouts yet",
     "t": "Aucun versement pour l’instant"
   },
-  "admin.revenue.noPayoutsHint": {
-    "en": "Revenue the fund has earned stays on the ledger until it is paid out. Payouts appear here once requested.",
-    "t": "Les revenus gagnés par le fonds restent au registre jusqu’à leur versement. Les versements apparaissent ici une fois demandés."
-  },
   "admin.revenue.noRail": {
     "en": "No rail is configured",
     "t": "Aucun rail configuré"
@@ -658,10 +642,6 @@
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Il s’agit des fonds propres de la société. Les soldes des clients et le capital d’amorçage du fonds sont des créances distinctes au registre : ils ne sont pas comptés ici et ne sont pas accessibles depuis cet écran."
-  },
-  "admin.revenue.payOut": {
-    "en": "Pay out",
-    "t": "Verser"
   },
   "admin.revenue.payouts": {
     "en": "Payouts",
@@ -682,18 +662,6 @@
   "admin.revenue.placeholder.minAmount": {
     "en": "min {n}",
     "t": "min {n}"
-  },
-  "admin.revenue.reviewPayout": {
-    "en": "Review payout",
-    "t": "Vérifier le versement"
-  },
-  "admin.revenue.subtitle": {
-    "en": "What the fund earned — fees and the settled 2-and-20 — and paying it out",
-    "t": "Ce que le fonds a gagné — frais et 2-et-20 réglés — et son versement"
-  },
-  "admin.revenue.willQueue": {
-    "en": "Above the {instant} that ships immediately on this rail — the rest is accepted and queued until the treasury is topped up.",
-    "t": "Au-delà des {instant} expédiés immédiatement sur ce rail — le reste est accepté et mis en file jusqu’au réapprovisionnement de la trésorerie."
   },
   "admin.role.admin": {
     "en": "Admin",

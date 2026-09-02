@@ -1890,6 +1890,360 @@
         }
       }
     },
+    "/banking.v1.ConsiliumApprovalService/GetInvitation": {
+      "post": {
+        "tags": [
+          "banking.v1.ConsiliumApprovalService"
+        ],
+        "summary": "GetInvitation",
+        "description": "The redacted invitation behind an emailed token. Side-effect free. Unknown,\n expired, spent and wrong-state tokens all return the SAME NOT_FOUND, so this\n cannot be used to probe which is which.",
+        "operationId": "banking.v1.ConsiliumApprovalService.GetInvitation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.ConsiliumInvitation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.ConsiliumApprovalService/SubmitDecision": {
+      "post": {
+        "tags": [
+          "banking.v1.ConsiliumApprovalService"
+        ],
+        "summary": "SubmitDecision",
+        "description": "Cast this owner's vote. Requires the token AND the secret code from the mail.\n Five failed code attempts burn the token permanently.",
+        "operationId": "banking.v1.ConsiliumApprovalService.SubmitDecision",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SubmitDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.SubmitDecisionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.ConsiliumService/CancelConsilium": {
+      "post": {
+        "tags": [
+          "banking.v1.ConsiliumService"
+        ],
+        "summary": "CancelConsilium",
+        "description": "Withdraw an invoice the caller opened, while it is still OPEN.",
+        "operationId": "banking.v1.ConsiliumService.CancelConsilium",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CancelConsiliumRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Consilium"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.ConsiliumService/GetConsilium": {
+      "post": {
+        "tags": [
+          "banking.v1.ConsiliumService"
+        ],
+        "summary": "GetConsilium",
+        "description": "One consilium in full, including per-voter state (Owner only).",
+        "operationId": "banking.v1.ConsiliumService.GetConsilium",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetConsiliumRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Consilium"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.ConsiliumService/ListConsilia": {
+      "post": {
+        "tags": [
+          "banking.v1.ConsiliumService"
+        ],
+        "summary": "ListConsilia",
+        "description": "Consilia newest first — the governance history (Owner only).",
+        "operationId": "banking.v1.ConsiliumService.ListConsilia",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListConsiliaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.ConsiliumList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.ConsiliumService/OpenRevenuePayout": {
+      "post": {
+        "tags": [
+          "banking.v1.ConsiliumService"
+        ],
+        "summary": "OpenRevenuePayout",
+        "description": "Open an invoice to pay fund revenue out on-chain (Owner only). Refused when a\n consilium is already open — one at a time removes the concurrent-approval\n overdraw race instead of trying to win it — or when the roster is too small.",
+        "operationId": "banking.v1.ConsiliumService.OpenRevenuePayout",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.OpenRevenuePayoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Consilium"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.FeesService/GetAccruedFees": {
       "post": {
         "tags": [
@@ -4012,6 +4366,888 @@
         }
       }
     },
+    "/concierge.v1.GovernanceService/CancelOwnerAdmission": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "CancelOwnerAdmission",
+        "description": "Withdraw an admission the caller opened, while it is still OPEN.",
+        "operationId": "concierge.v1.GovernanceService.CancelOwnerAdmission",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.CancelOwnerAdmissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerAdmission"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/CancelOwnerRemoval": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "CancelOwnerRemoval",
+        "description": "Withdraw a proposal the caller opened, while it is still OPEN.",
+        "operationId": "concierge.v1.GovernanceService.CancelOwnerRemoval",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.CancelOwnerRemovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerRemoval"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/GetOwnerAdmission": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "GetOwnerAdmission",
+        "operationId": "concierge.v1.GovernanceService.GetOwnerAdmission",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.GetOwnerAdmissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerAdmission"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/GetOwnerRemoval": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "GetOwnerRemoval",
+        "operationId": "concierge.v1.GovernanceService.GetOwnerRemoval",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.GetOwnerRemovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerRemoval"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/ListOwnerAdmissions": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "ListOwnerAdmissions",
+        "operationId": "concierge.v1.GovernanceService.ListOwnerAdmissions",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ListOwnerAdmissionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerAdmissionList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/ListOwnerRemovals": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "ListOwnerRemovals",
+        "operationId": "concierge.v1.GovernanceService.ListOwnerRemovals",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ListOwnerRemovalsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerRemovalList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/ListOwners": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "ListOwners",
+        "description": "The current owner roster (Owner only).",
+        "operationId": "concierge.v1.GovernanceService.ListOwners",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ListOwnersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/OpenOwnerAdmission": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "Propose GRANTING a seat (Owner only). The candidate does not vote — they are not\n yet an owner — and neither does the initiator, so the voters are every OTHER\n current owner and all of them must agree. A lone owner cannot open one at all.",
+        "description": "This is the only way `Role::Owner` is granted: UserDirectory.SetRole refuses it\n outside an executed admission.",
+        "operationId": "concierge.v1.GovernanceService.OpenOwnerAdmission",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.OpenOwnerAdmissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerAdmission"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/OpenOwnerRemoval": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "OpenOwnerRemoval",
+        "description": "Propose removing an owner (Owner only). The initiator casts no vote — proposing is\n not agreeing, and counting it would let two owners remove a third.",
+        "operationId": "concierge.v1.GovernanceService.OpenOwnerRemoval",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.OpenOwnerRemovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerRemoval"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/ResignOwnership": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "ResignOwnership",
+        "description": "Resign your own seat. No consilium — but the same floor applies, so the last two\n owners cannot leave the fund without governance.",
+        "operationId": "concierge.v1.GovernanceService.ResignOwnership",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ResignOwnershipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/SubmitAdmissionVote": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "SubmitAdmissionVote",
+        "description": "A peer owner's vote on an admission, cast in the cabinet while signed in. One\n REJECT ends it: admission passes only on unanimity.",
+        "operationId": "concierge.v1.GovernanceService.SubmitAdmissionVote",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.SubmitAdmissionVoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerAdmission"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/SubmitPeerVote": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "SubmitPeerVote",
+        "description": "A peer owner's vote, cast in the cabinet while signed in — this is the live\n consilium, not an emailed link. The target and the initiator are both refused.",
+        "operationId": "concierge.v1.GovernanceService.SubmitPeerVote",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.SubmitPeerVoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerRemoval"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/WatchGovernance": {},
+    "/concierge.v1.MailRelayService/SendGovernanceMail": {
+      "post": {
+        "tags": [
+          "concierge.v1.MailRelayService"
+        ],
+        "summary": "SendGovernanceMail",
+        "description": "Enqueue one governance mail. Idempotent by `dedupe_key`, so an at-least-once\n caller may retry without sending twice.",
+        "operationId": "concierge.v1.MailRelayService.SendGovernanceMail",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.SendGovernanceMailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.SendGovernanceMailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.OwnerRemovalApprovalService/GetInvitation": {
+      "post": {
+        "tags": [
+          "concierge.v1.OwnerRemovalApprovalService"
+        ],
+        "summary": "GetInvitation",
+        "description": "The redacted invitation behind an emailed token. Unknown, expired, spent and\n wrong-state tokens all return the same NOT_FOUND.",
+        "operationId": "concierge.v1.OwnerRemovalApprovalService.GetInvitation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.GetRemovalInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.OwnerRemovalInvitation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.OwnerRemovalApprovalService/SubmitSelfDecision": {
+      "post": {
+        "tags": [
+          "concierge.v1.OwnerRemovalApprovalService"
+        ],
+        "summary": "SubmitSelfDecision",
+        "description": "The target accepting — or refusing — their own removal. Five failed code attempts\n burn the token permanently.",
+        "operationId": "concierge.v1.OwnerRemovalApprovalService.SubmitSelfDecision",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.SubmitSelfDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.SubmitSelfDecisionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.UserDirectory/DisableUser": {
       "post": {
         "tags": [
@@ -4692,6 +5928,17 @@
         "additionalProperties": false,
         "description": "The user's single, network-agnostic balance, segmented by lifecycle. Every figure is\n a TigerBeetle-authoritative decimal USDT string; total = available + invested +\n pending_withdrawal."
       },
+      "banking.v1.CancelConsiliumRequest": {
+        "type": "object",
+        "properties": {
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id"
+          }
+        },
+        "title": "CancelConsiliumRequest",
+        "additionalProperties": false
+      },
       "banking.v1.CancelRedemptionRequest": {
         "type": "object",
         "properties": {
@@ -4740,6 +5987,241 @@
         },
         "title": "CheckResponse",
         "additionalProperties": false
+      },
+      "banking.v1.Consilium": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/banking.v1.ConsiliumState"
+          },
+          "revenue_payout": {
+            "title": "revenue_payout",
+            "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
+          },
+          "payload_hash": {
+            "type": "string",
+            "title": "payload_hash",
+            "description": "Hex SHA-256 over the canonical terms. Shown (short prefix) in the mail so an owner\n can tell that what they approved is what will execute."
+          },
+          "initiator_user_id": {
+            "type": "string",
+            "title": "initiator_user_id"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email"
+          },
+          "owner_count": {
+            "type": "integer",
+            "title": "owner_count",
+            "description": "N — owners at open. The threshold is frozen from this, never recomputed later."
+          },
+          "threshold": {
+            "type": "integer",
+            "title": "threshold"
+          },
+          "approvals": {
+            "type": "integer",
+            "title": "approvals",
+            "description": "Votes that are still valid: an approver who has since lost ownership does not count."
+          },
+          "rejections": {
+            "type": "integer",
+            "title": "rejections"
+          },
+          "voters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.ConsiliumVoter"
+            },
+            "title": "voters"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "decided_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "decided_at",
+            "format": "int64"
+          },
+          "executed_withdrawal_id": {
+            "type": "string",
+            "title": "executed_withdrawal_id",
+            "description": "Set exactly once, on EXECUTED."
+          },
+          "failure_reason": {
+            "type": "string",
+            "title": "failure_reason"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64",
+            "description": "Monotonic per consilium. The live page watches this and refetches when it moves —\n the socket carries a version, never a tally."
+          }
+        },
+        "title": "Consilium",
+        "additionalProperties": false
+      },
+      "banking.v1.ConsiliumInvitation": {
+        "type": "object",
+        "properties": {
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/banking.v1.ConsiliumState"
+          },
+          "revenue_payout": {
+            "title": "revenue_payout",
+            "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
+          },
+          "payload_hash": {
+            "type": "string",
+            "title": "payload_hash"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email",
+            "description": "Who opened it, masked."
+          },
+          "voter_email": {
+            "type": "string",
+            "title": "voter_email",
+            "description": "The recipient's own masked address, so they can confirm the mail reached the right\n seat before typing the code."
+          },
+          "threshold": {
+            "type": "integer",
+            "title": "threshold"
+          },
+          "approvals": {
+            "type": "integer",
+            "title": "approvals"
+          },
+          "owner_count": {
+            "type": "integer",
+            "title": "owner_count"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "decision": {
+            "title": "decision",
+            "description": "This seat's own answer, so a reopened link shows what was already said.",
+            "$ref": "#/components/schemas/banking.v1.VoteDecision"
+          },
+          "attempts_remaining": {
+            "type": "integer",
+            "title": "attempts_remaining",
+            "description": "Code attempts left before the token burns."
+          }
+        },
+        "title": "ConsiliumInvitation",
+        "additionalProperties": false,
+        "description": "What the emailed owner is shown BEFORE they vote. Deliberately narrower than\n `Consilium`: no other owner's identity, no vote-by-vote breakdown."
+      },
+      "banking.v1.ConsiliumList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Consilium"
+            },
+            "title": "items"
+          }
+        },
+        "title": "ConsiliumList",
+        "additionalProperties": false
+      },
+      "banking.v1.ConsiliumState": {
+        "type": "string",
+        "title": "ConsiliumState",
+        "enum": [
+          "CONSILIUM_STATE_UNSPECIFIED",
+          "CONSILIUM_STATE_OPEN",
+          "CONSILIUM_STATE_APPROVED",
+          "CONSILIUM_STATE_REJECTED",
+          "CONSILIUM_STATE_EXPIRED",
+          "CONSILIUM_STATE_CANCELLED",
+          "CONSILIUM_STATE_EXECUTED",
+          "CONSILIUM_STATE_EXECUTION_FAILED"
+        ],
+        "description": "Where a consilium stands. Terminal everywhere except OPEN."
+      },
+      "banking.v1.ConsiliumVoter": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email",
+            "description": "Masked (`a***@example.com`) on every surface a non-owner can reach."
+          },
+          "decision": {
+            "title": "decision",
+            "$ref": "#/components/schemas/banking.v1.VoteDecision"
+          },
+          "decided_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "decided_at",
+            "format": "int64",
+            "description": "Unix seconds; 0 while pending."
+          },
+          "notified": {
+            "type": "boolean",
+            "title": "notified",
+            "description": "True once the mail has actually been handed to the delivery queue."
+          }
+        },
+        "title": "ConsiliumVoter",
+        "additionalProperties": false,
+        "description": "One owner's seat in a consilium."
       },
       "banking.v1.Deposit": {
         "type": "object",
@@ -5184,6 +6666,17 @@
         "title": "GetAllocationRequest",
         "additionalProperties": false
       },
+      "banking.v1.GetConsiliumRequest": {
+        "type": "object",
+        "properties": {
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id"
+          }
+        },
+        "title": "GetConsiliumRequest",
+        "additionalProperties": false
+      },
       "banking.v1.GetDepositAddressRequest": {
         "type": "object",
         "properties": {
@@ -5232,6 +6725,18 @@
       "banking.v1.GetFundRevenueRequest": {
         "type": "object",
         "title": "GetFundRevenueRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetInvitationRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "token",
+            "description": "The opaque single-use token from the mail. Never the code."
+          }
+        },
+        "title": "GetInvitationRequest",
         "additionalProperties": false
       },
       "banking.v1.GetMeRequest": {
@@ -5352,6 +6857,18 @@
           }
         },
         "title": "ListAllocationsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListConsiliaRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "0 means the server default."
+          }
+        },
+        "title": "ListConsiliaRequest",
         "additionalProperties": false
       },
       "banking.v1.ListDepositsRequest": {
@@ -5506,6 +7023,17 @@
         "title": "NetworkWithdrawable",
         "additionalProperties": false,
         "description": "Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole\n available balance (a request beyond `instant` is accepted and queued); `instant` is\n the portion that ships without queueing = min(available, rail liquidity)."
+      },
+      "banking.v1.OpenRevenuePayoutRequest": {
+        "type": "object",
+        "properties": {
+          "terms": {
+            "title": "terms",
+            "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
+          }
+        },
+        "title": "OpenRevenuePayoutRequest",
+        "additionalProperties": false
       },
       "banking.v1.Operation": {
         "type": "object",
@@ -6120,6 +7648,34 @@
         "title": "RequestWithdrawalRequest",
         "additionalProperties": false
       },
+      "banking.v1.RevenuePayoutTerms": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "Rail the payout ships on (BEP20 / POLYGON / TRC20 / TON)."
+          },
+          "address": {
+            "type": "string",
+            "title": "address",
+            "description": "Destination address, rendered in FULL wherever a human approves it — a truncated\n address in an approval mail is an invitation to approve the wrong one."
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "Gross USDT to pay out, capped by FundRevenue.available at execution."
+          },
+          "memo": {
+            "type": "string",
+            "title": "memo",
+            "description": "Free-text note from the initiator, shown in the mail. Never interpreted."
+          }
+        },
+        "title": "RevenuePayoutTerms",
+        "additionalProperties": false,
+        "description": "The immutable subject of a revenue payout. Amounts are decimal USDT STRINGS, as\n everywhere else on this wire."
+      },
       "banking.v1.RevenueRail": {
         "type": "object",
         "properties": {
@@ -6408,6 +7964,53 @@
       "banking.v1.SettleWithdrawalResponse": {
         "type": "object",
         "title": "SettleWithdrawalResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.SubmitDecisionRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "token"
+          },
+          "code": {
+            "type": "string",
+            "title": "code",
+            "description": "The secret code from the same mail. Compared in constant time, as a hash."
+          },
+          "decision": {
+            "title": "decision",
+            "description": "APPROVE or REJECT. PENDING is rejected as an invalid argument.",
+            "$ref": "#/components/schemas/banking.v1.VoteDecision"
+          },
+          "client_ip": {
+            "type": "string",
+            "title": "client_ip",
+            "description": "Audit only — the edge supplies these; they are never trusted for authorization."
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "user_agent"
+          }
+        },
+        "title": "SubmitDecisionRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SubmitDecisionResponse": {
+        "type": "object",
+        "properties": {
+          "invitation": {
+            "title": "invitation",
+            "description": "The invitation as it stands after the vote.",
+            "$ref": "#/components/schemas/banking.v1.ConsiliumInvitation"
+          },
+          "decided": {
+            "type": "boolean",
+            "title": "decided",
+            "description": "True when this vote carried the consilium to its verdict."
+          }
+        },
+        "title": "SubmitDecisionResponse",
         "additionalProperties": false
       },
       "banking.v1.SubscribeRequest": {
@@ -6767,6 +8370,17 @@
         "additionalProperties": false,
         "description": "Minimal principal snapshot returned with a freshly issued token pair, so the BFF\n can populate a session without a second round trip."
       },
+      "banking.v1.VoteDecision": {
+        "type": "string",
+        "title": "VoteDecision",
+        "enum": [
+          "VOTE_DECISION_UNSPECIFIED",
+          "VOTE_DECISION_PENDING",
+          "VOTE_DECISION_APPROVE",
+          "VOTE_DECISION_REJECT"
+        ],
+        "description": "How one voter answered."
+      },
       "banking.v1.Wallet": {
         "type": "object",
         "properties": {
@@ -6972,6 +8586,66 @@
         "additionalProperties": false,
         "description": "A lightweight user row for the operator console's user list (not the full profile).\n Named distinctly from auth.proto's login `UserSummary` (same package)."
       },
+      "concierge.v1.AdmissionPeer": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "vote": {
+            "title": "vote",
+            "$ref": "#/components/schemas/concierge.v1.AdmissionVote"
+          },
+          "voted_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "voted_at",
+            "format": "int64"
+          }
+        },
+        "title": "AdmissionPeer",
+        "additionalProperties": false
+      },
+      "concierge.v1.AdmissionVote": {
+        "type": "string",
+        "title": "AdmissionVote",
+        "enum": [
+          "ADMISSION_VOTE_UNSPECIFIED",
+          "ADMISSION_VOTE_PENDING",
+          "ADMISSION_VOTE_ADMIT",
+          "ADMISSION_VOTE_REJECT"
+        ],
+        "description": "Deliberately its own enum rather than a reuse of RemovalVote: \"remove/keep\" and\n \"admit/reject\" are different questions, and a surface that renders the wrong verb on\n a governance vote is a surface that gets a vote cast by mistake."
+      },
+      "concierge.v1.CancelOwnerAdmissionRequest": {
+        "type": "object",
+        "properties": {
+          "admission_id": {
+            "type": "string",
+            "title": "admission_id"
+          }
+        },
+        "title": "CancelOwnerAdmissionRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.CancelOwnerRemovalRequest": {
+        "type": "object",
+        "properties": {
+          "removal_id": {
+            "type": "string",
+            "title": "removal_id"
+          }
+        },
+        "title": "CancelOwnerRemovalRequest",
+        "additionalProperties": false
+      },
       "concierge.v1.DisableUserRequest": {
         "type": "object",
         "properties": {
@@ -7029,6 +8703,39 @@
         "title": "GetMeRequest",
         "additionalProperties": false
       },
+      "concierge.v1.GetOwnerAdmissionRequest": {
+        "type": "object",
+        "properties": {
+          "admission_id": {
+            "type": "string",
+            "title": "admission_id"
+          }
+        },
+        "title": "GetOwnerAdmissionRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.GetOwnerRemovalRequest": {
+        "type": "object",
+        "properties": {
+          "removal_id": {
+            "type": "string",
+            "title": "removal_id"
+          }
+        },
+        "title": "GetOwnerRemovalRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.GetRemovalInvitationRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "token"
+          }
+        },
+        "title": "GetRemovalInvitationRequest",
+        "additionalProperties": false
+      },
       "concierge.v1.GetUserRequest": {
         "type": "object",
         "properties": {
@@ -7038,6 +8745,47 @@
           }
         },
         "title": "GetUserRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.GovernanceMailKind": {
+        "type": "string",
+        "title": "GovernanceMailKind",
+        "enum": [
+          "GOVERNANCE_MAIL_KIND_UNSPECIFIED",
+          "GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL",
+          "GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME",
+          "GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED"
+        ],
+        "description": "The typed governance mails this plane knows how to render."
+      },
+      "concierge.v1.GovernanceTick": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "revision",
+            "format": "int64",
+            "description": "Monotonic across the whole governance surface. Refetch when it moves."
+          },
+          "at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "at",
+            "format": "int64",
+            "description": "Unix seconds the tick was produced, so a client can tell a live stream from a\n wedged one."
+          },
+          "heartbeat": {
+            "type": "boolean",
+            "title": "heartbeat",
+            "description": "True for the periodic keepalive, which carries the current revision unchanged."
+          }
+        },
+        "title": "GovernanceTick",
         "additionalProperties": false
       },
       "concierge.v1.Jwk": {
@@ -7089,6 +8837,35 @@
           }
         },
         "title": "JwksResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListOwnerAdmissionsRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "0 means the server default. Includes closed proposals — nothing is deleted."
+          }
+        },
+        "title": "ListOwnerAdmissionsRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListOwnerRemovalsRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "0 means the server default. Includes closed proposals — nothing is deleted."
+          }
+        },
+        "title": "ListOwnerRemovalsRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.ListOwnersRequest": {
+        "type": "object",
+        "title": "ListOwnersRequest",
         "additionalProperties": false
       },
       "concierge.v1.ListSessionsRequest": {
@@ -7191,6 +8968,471 @@
         "title": "LogoutResponse",
         "additionalProperties": false
       },
+      "concierge.v1.OpenOwnerAdmissionRequest": {
+        "type": "object",
+        "properties": {
+          "candidate_user_id": {
+            "type": "string",
+            "title": "candidate_user_id",
+            "description": "The user to seat. Must not already be an owner."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          }
+        },
+        "title": "OpenOwnerAdmissionRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.OpenOwnerRemovalRequest": {
+        "type": "object",
+        "properties": {
+          "target_user_id": {
+            "type": "string",
+            "title": "target_user_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          }
+        },
+        "title": "OpenOwnerRemovalRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.Owner": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email",
+            "description": "Masked on every surface a non-owner can reach."
+          },
+          "display_name": {
+            "type": "string",
+            "title": "display_name"
+          },
+          "owner_since": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "owner_since",
+            "format": "int64"
+          }
+        },
+        "title": "Owner",
+        "additionalProperties": false
+      },
+      "concierge.v1.OwnerAdmission": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/concierge.v1.OwnerAdmissionState"
+          },
+          "candidate_user_id": {
+            "type": "string",
+            "title": "candidate_user_id"
+          },
+          "candidate_email": {
+            "type": "string",
+            "title": "candidate_email"
+          },
+          "initiator_user_id": {
+            "type": "string",
+            "title": "initiator_user_id"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the initiator's words. Shown to every voter."
+          },
+          "peers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.AdmissionPeer"
+            },
+            "title": "peers",
+            "description": "Every owner except the initiator, with their answers. Never empty: an admission\n with nobody to agree is refused at open rather than left open and unpassable."
+          },
+          "owner_count": {
+            "type": "integer",
+            "title": "owner_count",
+            "description": "Owners at open. The initiator is counted but does not vote."
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "decided_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "decided_at",
+            "format": "int64"
+          },
+          "void_reason": {
+            "type": "string",
+            "title": "void_reason"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64"
+          }
+        },
+        "title": "OwnerAdmission",
+        "additionalProperties": false
+      },
+      "concierge.v1.OwnerAdmissionList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.OwnerAdmission"
+            },
+            "title": "items"
+          }
+        },
+        "title": "OwnerAdmissionList",
+        "additionalProperties": false
+      },
+      "concierge.v1.OwnerAdmissionState": {
+        "type": "string",
+        "title": "OwnerAdmissionState",
+        "enum": [
+          "OWNER_ADMISSION_STATE_UNSPECIFIED",
+          "OWNER_ADMISSION_STATE_OPEN",
+          "OWNER_ADMISSION_STATE_EXECUTED",
+          "OWNER_ADMISSION_STATE_REJECTED",
+          "OWNER_ADMISSION_STATE_EXPIRED",
+          "OWNER_ADMISSION_STATE_CANCELLED",
+          "OWNER_ADMISSION_STATE_VOID"
+        ],
+        "description": "The six states a proposal of either kind can be in. A separate enum from\n OwnerRemovalState only because proto enum VALUES share one namespace per package;\n the states themselves are identical, and the domain models them with one type."
+      },
+      "concierge.v1.OwnerList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.Owner"
+            },
+            "title": "items"
+          },
+          "below_payout_floor": {
+            "type": "boolean",
+            "title": "below_payout_floor",
+            "description": "Below three, the money plane can no longer reach its payout threshold."
+          }
+        },
+        "title": "OwnerList",
+        "additionalProperties": false
+      },
+      "concierge.v1.OwnerRemoval": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/concierge.v1.OwnerRemovalState"
+          },
+          "target_user_id": {
+            "type": "string",
+            "title": "target_user_id"
+          },
+          "target_email": {
+            "type": "string",
+            "title": "target_email"
+          },
+          "initiator_user_id": {
+            "type": "string",
+            "title": "initiator_user_id"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the initiator's words. Shown to the target and to every peer."
+          },
+          "peers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.RemovalPeer"
+            },
+            "title": "peers",
+            "description": "Every owner except the target and the initiator, with their answers. Empty means\n path (b) is unavailable and only the target's own acceptance can carry this."
+          },
+          "target_decision": {
+            "title": "target_decision",
+            "description": "How the target answered from their mailbox.",
+            "$ref": "#/components/schemas/concierge.v1.RemovalVote"
+          },
+          "target_decided_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "target_decided_at",
+            "format": "int64"
+          },
+          "target_notified": {
+            "type": "boolean",
+            "title": "target_notified"
+          },
+          "owner_count": {
+            "type": "integer",
+            "title": "owner_count",
+            "description": "Owners at open, and the count that would remain. The floor is checked at open AND\n at execution, because the roster can move underneath an open proposal."
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "decided_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "decided_at",
+            "format": "int64"
+          },
+          "void_reason": {
+            "type": "string",
+            "title": "void_reason"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64"
+          }
+        },
+        "title": "OwnerRemoval",
+        "additionalProperties": false
+      },
+      "concierge.v1.OwnerRemovalInvitation": {
+        "type": "object",
+        "properties": {
+          "removal_id": {
+            "type": "string",
+            "title": "removal_id"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/concierge.v1.OwnerRemovalState"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email"
+          },
+          "target_email": {
+            "type": "string",
+            "title": "target_email"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "decision": {
+            "title": "decision",
+            "$ref": "#/components/schemas/concierge.v1.RemovalVote"
+          },
+          "attempts_remaining": {
+            "type": "integer",
+            "title": "attempts_remaining"
+          }
+        },
+        "title": "OwnerRemovalInvitation",
+        "additionalProperties": false,
+        "description": "What the TARGET is shown before answering. No peer identities, no vote breakdown —\n knowing exactly who voted to remove you, before you answer, is not information this\n flow needs to hand over."
+      },
+      "concierge.v1.OwnerRemovalList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.OwnerRemoval"
+            },
+            "title": "items"
+          }
+        },
+        "title": "OwnerRemovalList",
+        "additionalProperties": false
+      },
+      "concierge.v1.OwnerRemovalState": {
+        "type": "string",
+        "title": "OwnerRemovalState",
+        "enum": [
+          "OWNER_REMOVAL_STATE_UNSPECIFIED",
+          "OWNER_REMOVAL_STATE_OPEN",
+          "OWNER_REMOVAL_STATE_EXECUTED",
+          "OWNER_REMOVAL_STATE_REJECTED",
+          "OWNER_REMOVAL_STATE_EXPIRED",
+          "OWNER_REMOVAL_STATE_CANCELLED",
+          "OWNER_REMOVAL_STATE_VOID"
+        ]
+      },
+      "concierge.v1.PayoutApprovalMail": {
+        "type": "object",
+        "properties": {
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email"
+          },
+          "network": {
+            "type": "string",
+            "title": "network"
+          },
+          "address": {
+            "type": "string",
+            "title": "address"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount"
+          },
+          "memo": {
+            "type": "string",
+            "title": "memo"
+          },
+          "payload_hash": {
+            "type": "string",
+            "title": "payload_hash"
+          },
+          "threshold": {
+            "type": "integer",
+            "title": "threshold"
+          },
+          "owner_count": {
+            "type": "integer",
+            "title": "owner_count"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "approval_url": {
+            "type": "string",
+            "title": "approval_url",
+            "description": "Absolute URL of the approval page, carrying the opaque token."
+          },
+          "code": {
+            "type": "string",
+            "title": "code",
+            "description": "The secret code the owner types on that page. Held only until the mail is sent,\n then cleared from the delivery row."
+          }
+        },
+        "title": "PayoutApprovalMail",
+        "additionalProperties": false
+      },
+      "concierge.v1.PayoutOutcomeMail": {
+        "type": "object",
+        "properties": {
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "outcome",
+            "description": "APPROVED / REJECTED / EXPIRED / CANCELLED / EXECUTED / EXECUTION_FAILED."
+          },
+          "network": {
+            "type": "string",
+            "title": "network"
+          },
+          "address": {
+            "type": "string",
+            "title": "address"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount"
+          },
+          "detail": {
+            "type": "string",
+            "title": "detail"
+          }
+        },
+        "title": "PayoutOutcomeMail",
+        "additionalProperties": false
+      },
       "concierge.v1.RefreshRequest": {
         "type": "object",
         "properties": {
@@ -7216,6 +9458,55 @@
       "concierge.v1.ReinstateUserResponse": {
         "type": "object",
         "title": "ReinstateUserResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.RemovalPeer": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "vote": {
+            "title": "vote",
+            "$ref": "#/components/schemas/concierge.v1.RemovalVote"
+          },
+          "voted_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "voted_at",
+            "format": "int64"
+          }
+        },
+        "title": "RemovalPeer",
+        "additionalProperties": false
+      },
+      "concierge.v1.RemovalVote": {
+        "type": "string",
+        "title": "RemovalVote",
+        "enum": [
+          "REMOVAL_VOTE_UNSPECIFIED",
+          "REMOVAL_VOTE_PENDING",
+          "REMOVAL_VOTE_REMOVE",
+          "REMOVAL_VOTE_KEEP"
+        ]
+      },
+      "concierge.v1.ResignOwnershipRequest": {
+        "type": "object",
+        "properties": {
+          "confirm_email": {
+            "type": "string",
+            "title": "confirm_email",
+            "description": "Typed confirmation, so a resignation cannot be a stray click. The server checks it\n equals the caller's own email."
+          }
+        },
+        "title": "ResignOwnershipRequest",
         "additionalProperties": false
       },
       "concierge.v1.RevokeSessionRequest": {
@@ -7264,6 +9555,48 @@
           }
         },
         "title": "RevokeTokensResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.SendGovernanceMailRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/concierge.v1.GovernanceMailKind"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "Concierge canonical user id of the recipient. The address is resolved HERE, from\n the identity record, so the money plane cannot redirect a governance mail."
+          },
+          "dedupe_key": {
+            "type": "string",
+            "title": "dedupe_key",
+            "description": "Idempotency key. The same key never sends twice."
+          },
+          "payout_approval": {
+            "title": "payout_approval",
+            "description": "Typed fields the template consumes. Escaped at render; never interpreted as markup.",
+            "$ref": "#/components/schemas/concierge.v1.PayoutApprovalMail"
+          },
+          "payout_outcome": {
+            "title": "payout_outcome",
+            "$ref": "#/components/schemas/concierge.v1.PayoutOutcomeMail"
+          }
+        },
+        "title": "SendGovernanceMailRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.SendGovernanceMailResponse": {
+        "type": "object",
+        "properties": {
+          "enqueued": {
+            "type": "boolean",
+            "title": "enqueued",
+            "description": "False when `dedupe_key` had already been accepted."
+          }
+        },
+        "title": "SendGovernanceMailResponse",
         "additionalProperties": false
       },
       "concierge.v1.Session": {
@@ -7360,6 +9693,79 @@
           }
         },
         "title": "SetRoleResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.SubmitAdmissionVoteRequest": {
+        "type": "object",
+        "properties": {
+          "admission_id": {
+            "type": "string",
+            "title": "admission_id"
+          },
+          "vote": {
+            "title": "vote",
+            "$ref": "#/components/schemas/concierge.v1.AdmissionVote"
+          }
+        },
+        "title": "SubmitAdmissionVoteRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.SubmitPeerVoteRequest": {
+        "type": "object",
+        "properties": {
+          "removal_id": {
+            "type": "string",
+            "title": "removal_id"
+          },
+          "vote": {
+            "title": "vote",
+            "$ref": "#/components/schemas/concierge.v1.RemovalVote"
+          }
+        },
+        "title": "SubmitPeerVoteRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.SubmitSelfDecisionRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "token"
+          },
+          "code": {
+            "type": "string",
+            "title": "code"
+          },
+          "vote": {
+            "title": "vote",
+            "description": "REMOVE accepts the expulsion; KEEP refuses it.",
+            "$ref": "#/components/schemas/concierge.v1.RemovalVote"
+          },
+          "client_ip": {
+            "type": "string",
+            "title": "client_ip"
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "user_agent"
+          }
+        },
+        "title": "SubmitSelfDecisionRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.SubmitSelfDecisionResponse": {
+        "type": "object",
+        "properties": {
+          "invitation": {
+            "title": "invitation",
+            "$ref": "#/components/schemas/concierge.v1.OwnerRemovalInvitation"
+          },
+          "decided": {
+            "type": "boolean",
+            "title": "decided"
+          }
+        },
+        "title": "SubmitSelfDecisionResponse",
         "additionalProperties": false
       },
       "concierge.v1.TokenResponse": {
@@ -7562,6 +9968,11 @@
         "additionalProperties": false,
         "description": "Minimal principal snapshot returned with a freshly issued token pair, so the BFF\n can populate a session without a second round trip."
       },
+      "concierge.v1.WatchGovernanceRequest": {
+        "type": "object",
+        "title": "WatchGovernanceRequest",
+        "additionalProperties": false
+      },
       "connect-protocol-version": {
         "type": "number",
         "title": "Connect-Protocol-Version",
@@ -7676,6 +10087,14 @@
       "description": "BalanceService — the bank's treasury and company capital (operator surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md."
     },
     {
+      "name": "banking.v1.ConsiliumService",
+      "description": "ConsiliumService — multi-owner authorization for the fund paying its OWN earned\n revenue out. One owner opens an invoice; strictly more than half of ALL owners must\n each confirm it from their mailbox before a single cent moves.\n\n WHY THE MONEY PLANE OWNS THIS. docs/ARCHITECTURE.md rejects letting a\n concierge-signed artifact authorize money movement, and a consilium verdict is\n exactly such an artifact. So the tally is computed, stored and verified here, against\n the owner roster this plane already mirrors (`0016_user_role.sql`). Concierge is used\n only to DELIVER the mail, over a typed payload it renders itself.\n\n QUORUM. `threshold = floor(N / 2) + 1` where N is the owner count at open. The\n initiator is in the denominator but gets NO vote and is never minted a token — so\n opening a request can never lower the bar the initiator has to clear. N \u003c 3 makes\n the threshold unreachable and is refused at open rather than parked forever.\n\n IMMUTABILITY. There is no edit RPC. `payload_hash` binds every approval to the exact\n terms shown in the mail; changing anything means cancel and reopen, and votes are not\n carried over. See docs/CONSILIUM.md for the full policy and threat model."
+    },
+    {
+      "name": "banking.v1.ConsiliumApprovalService",
+      "description": "ConsiliumApprovalService — the surface an emailed owner reaches. Mounted OUTSIDE the\n user-auth layer, exactly as AuthService is: the emailed token IS the credential, and\n the owner clicking it may not be signed in.\n\n The GET is strictly read-only because mail scanners (Gmail, Outlook SafeLinks,\n corporate gateways) issue automatic requests for every URL in a message. The vote is\n a separate call carrying the secret code from the same mail — that is what turns a\n scanned link into a deliberate human act."
+    },
+    {
       "name": "banking.v1.FeesService",
       "description": "FeesService — a fund's management and performance fee (\"2 and 20\").\n\n Two charges, answering different questions. **Management** (2% p.a. by default) is\n rent on parked capital: it accrues continuously with elapsed time and is charged\n whether the fund made money or not. **Performance** (20% by default) is a share of\n profit above the investor's OWN high-water mark, crystallized at the end of a\n period. A product with no policy charges nothing — the fee is opt-in per product.\n\n The mark is PER INVESTOR, not per fund. That is what stops one investor from paying\n for another's timing: somebody who subscribed at the top pays only on gains above\n the price they actually paid, and somebody who subscribed after a drawdown does not\n ride the recovery fee-free. (A fund-level mark, which a tokenized vault is forced\n into, mutualizes both.)\n\n A fee is collected by clawing back UNITS — the holder's fund units move to the\n manager's fee-unit account on the share ledger — never by moving cash. So: no chain\n fee is ever paid to collect a fee, an investor's cash balance is untouched and\n cannot be driven negative, and because total units outstanding do not change, NAV\n per unit does not move and no other investor pays for the charge. What cannot be\n collected (units locked by a queued redemption, or a residue below one base unit)\n is carried as debt and taken next time; it is never written off.\n\n SettleFeeShares is the one operation that crosses into cash, converting a whole\n fund's accumulated fee units in one go rather than once per investor. Amounts and\n prices are exact decimal strings. See piggybank/core/PATTERNS.md and docs/FEES.md."
     },
@@ -7698,6 +10117,18 @@
     {
       "name": "concierge.v1.AuthService",
       "description": "AuthService — the concierge plane's token issuance and authorization surface.\n\n Issues first-party asymmetric JWTs (EdDSA/Ed25519) after Google OAuth2 sign-in,\n rotates refresh tokens, and publishes verification keys. Services do NOT call\n this per request to authorize: they verify access tokens locally against the\n cached JWKS via the shared `evconcierge_auth` flow (no round trip, no\n per-service token storage). They DO call `Jwks` periodically to refresh that\n cache, since concierge speaks only gRPC (no HTTP `.well-known` endpoint).\n\n The cabinet BFF is the OAuth confidential client. It runs the browser-facing\n authorize redirect (PKCE + state + nonce) and then calls `Exchange`\n server-to-server with the Google authorization code; the auth module performs\n the confidential code→token exchange with Google, validates Google's id_token,\n and discards it — Google's token is never forwarded inward."
+    },
+    {
+      "name": "concierge.v1.GovernanceService",
+      "description": "GovernanceService — the fund's OWNERSHIP plane: who holds `Role::Owner`, and the\n consilium that must agree before a seat is taken away.\n\n WHY OWNERSHIP LIVES HERE. A seat is `users.role`, a concierge-owned fact, and the\n bridge to the money plane is one-way. Only this plane may mutate it, so only this\n plane can authorize the mutation. The money plane runs its own, separate consilium\n over its own mirrored roster — neither plane trusts the other's verdict.\n\n THE RULE. A removal passes when EITHER\n   (a) the target accepts it from their own mailbox, OR\n   (b) every owner except the target and the initiator votes to remove.\n\n Path (b) is unanimity over `owners \\ {target, initiator}`. With exactly two owners\n that set is EMPTY and unanimity over it is vacuously true — which would let either\n owner expel the other unilaterally. Path (b) therefore requires at least ONE eligible\n peer voter; with two owners only path (a) exists.\n\n FLOOR. A removal may not leave fewer than TWO owners. Two suspends payouts — the\n money plane's `floor(N/2)+1` threshold is unreachable below three — but that is\n recoverable, because two owners can still admit a third. A floor of three was the\n earlier draft and it was wrong: at exactly three owners it made a bad actor\n unremovable forever, and a permanent deadlock is worse than a recoverable pause.\n\n ADMISSION IS GOVERNED TOO, and it is the reason the rest of this holds. Granting a\n seat is its own consilium: unanimity of `owners \\ {initiator}`, with at least one such\n peer. Without it a bad actor mints sock puppets BEFORE opening an invoice and then\n reaches quorum legitimately — 2 honest owners plus 4 puppets is N=7, threshold 4,\n voters 6 — and snapshotting the roster cannot help, because the stuffing already\n happened. Unanimity rather than a majority, because a minority must never be able to\n grow itself into a majority.\n\n See banking's docs/CONSILIUM.md for the whole policy."
+    },
+    {
+      "name": "concierge.v1.OwnerRemovalApprovalService",
+      "description": "OwnerRemovalApprovalService — the surface the TARGET of a removal reaches from their\n mailbox. Mounted outside the user-auth layer, like AuthService: the emailed token is\n the credential, and the person clicking may not be signed in.\n\n The read is side-effect free because mail scanners issue automatic requests for every\n URL in a message; accepting requires the secret code from the same mail."
+    },
+    {
+      "name": "concierge.v1.MailRelayService",
+      "description": "MailRelayService — the one seam over which the MONEY plane asks this plane to send a\n governance mail, because this plane owns the only mailer (lettre + the delivery queue\n + backoff + the daily budget) and standing up a second one would duplicate all of it.\n\n Authenticated by the shared banking↔concierge service secret, compared in constant\n time, and mounted outside the user-auth layer exactly as the lifecycle bridge is.\n\n The payload is TYPED, never rendered HTML: this plane renders it. A compromised money\n plane must not be able to put arbitrary markup into an owner's mailbox.\n\n This path deliberately bypasses notification preferences. `NotificationService.Emit`\n is opt-out on both channels, and a security mail that a subscriber can silently\n switch off is not a security mail."
     }
   ]
 }

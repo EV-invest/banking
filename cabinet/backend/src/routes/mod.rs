@@ -1,4 +1,7 @@
 pub mod admin;
+pub mod approval;
+pub mod consilium;
+pub mod governance_ws;
 pub mod identity;
 pub mod money;
 pub mod notifications;
@@ -33,7 +36,21 @@ const REQUEST_DEADLINE: Duration = Duration::from_secs(15);
 
 /// Mount every BFF endpoint. Paths and methods mirror the old Next.js route handlers
 /// 1:1 so the frontend's same-origin `/api/*` calls are unchanged.
+///
+/// The governance websocket is merged in AFTER [`REQUEST_DEADLINE`] is applied, so the
+/// layer wraps every request-shaped route and none of the long-lived one. A deadline is
+/// exactly right for a request that must finish and exactly wrong for a socket that must
+/// not: inside it, the live consilium page would be dropped every 15 seconds. (The
+/// upstream gRPC channel's own per-RPC timeout does not bound a server-stream either — it
+/// covers the response future, which resolves when the headers arrive, not the body.)
 pub fn router(state: AppState) -> Router {
+	let websocket = Router::new().route("/api/owners/consilium/ws", get(governance_ws::upgrade)).with_state(state.clone());
+
+	requests(state).merge(websocket).layer(TraceLayer::new_for_http())
+}
+
+/// Every request-shaped endpoint: served under the outer deadline.
+fn requests(state: AppState) -> Router {
 	Router::new()
 		.route("/api/health", get(system::health))
 		.route("/api/mfe-registry", get(system::mfe_registry))
@@ -106,9 +123,28 @@ pub fn router(state: AppState) -> Router {
 		.route("/api/admin/cabinet/read-only", post(admin::set_read_only))
 		.route("/api/admin/cabinet/announcement", post(admin::set_announcement))
 		.route("/api/admin/cabinet/flag", post(admin::set_flag))
+		// Consilium — the fund's own money leaving, gated on a quorum of owners. Money
+		// plane: the tally is computed and verified where the money is.
+		.route("/api/consilium", get(consilium::list))
+		.route("/api/consilium/revenue-payout", post(consilium::open_revenue_payout))
+		.route("/api/consilium/{id}", get(consilium::get))
+		.route("/api/consilium/{id}/cancel", post(consilium::cancel))
+		// Ownership — seats, and the two consilia that move them. Concierge plane:
+		// `Role::Owner` is its fact. Admission is the only way a seat is GRANTED.
+		.route("/api/owners", get(consilium::owners))
+		.route("/api/owners/resign", post(consilium::resign))
+		.route("/api/owners/removals", get(consilium::list_removals).post(consilium::open_removal))
+		.route("/api/owners/removals/{id}/vote", post(consilium::vote_removal))
+		.route("/api/owners/removals/{id}/cancel", post(consilium::cancel_removal))
+		.route("/api/owners/admissions", get(consilium::list_admissions).post(consilium::open_admission))
+		.route("/api/owners/admissions/{id}/vote", post(consilium::vote_admission))
+		.route("/api/owners/admissions/{id}/cancel", post(consilium::cancel_admission))
+		// The public approval surface. NO session, NO CSRF, and no session cookie is even
+		// read: the emailed token in the path is the whole credential. See `approval`.
+		.route("/api/approval/payout/{token}", get(approval::payout_invitation).post(approval::payout_decision))
+		.route("/api/approval/removal/{token}", get(approval::removal_invitation).post(approval::removal_decision))
 		.with_state(state)
 		.layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_DEADLINE))
-		.layer(TraceLayer::new_for_http())
 }
 
 /// The verified concierge identity for a request: the shared `ev_access` JWT cookie
