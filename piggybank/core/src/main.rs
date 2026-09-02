@@ -635,10 +635,10 @@ fn governance_mail_adapter(config: &config::AppConfig) -> Option<Arc<dyn piggyba
 			.ok()?
 			.connect_timeout(Duration::from_secs(3))
 			.timeout(Duration::from_secs(10));
-		return Some(Arc::new(governance_mail::wired::ConciergeGovernanceMailer::new(
+		Some(Arc::new(governance_mail::wired::ConciergeGovernanceMailer::new(
 			endpoint.connect_lazy(),
 			config.bridge_service_token.clone(),
-		)));
+		)))
 	}
 	#[cfg(not(feature = "concierge_governance_mail"))]
 	None
