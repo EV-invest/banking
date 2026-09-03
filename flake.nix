@@ -388,6 +388,13 @@
               AUTH_ISSUER = "https://auth.concierge.ev";
               AUTH_CLIENT_AUDIENCE = "concierge";
               MFE_REGISTRY_PATH = "/mfe-registry.json";
+              # The PUBLIC origin the browser sends as `Origin` on the consilium websocket
+              # handshake — not an internal service name. A ws handshake is exempt from CORS
+              # and still carries cookies, so this is what stops a cross-site page opening the
+              # live feed as the signed-in owner. It is `required_in("production")`, so a pod
+              # without it refuses to boot rather than failing open: public topology, no
+              # secret, which is why it belongs here and not in the cluster Secret.
+              CABINET_WS_ORIGIN = "https://evinvest.ltd";
               APP_ENV = "production";
             };
           };
