@@ -36,11 +36,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
   Field,
   FieldDescription,
   FieldGroup,
@@ -63,7 +58,6 @@ import { expiresIn, formatMoment } from "@/shared/lib/datetime";
 import { Settled } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import {
-  EMPTY_BOX,
   admissionTally,
   admissionVoteLabel,
   admissionVoteTone,
@@ -72,11 +66,18 @@ import {
   stateLabel,
   stateTone,
 } from "@/views/consilium/lib/format";
-import { knownValue, ownerCount, type Read } from "@/views/consilium/lib/reads";
+import { ownerCount, type Read } from "@/views/consilium/lib/reads";
 import { AdmissionsSkeleton, ProposeSkeleton } from "@/views/consilium/ui/loading";
+import { ProposalList } from "@/views/consilium/ui/proposal-list";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
 
-/** The admissions section: its heading, and either the proposals or why there are none. */
+/**
+ * The admissions section.
+ *
+ * The card and its four read states are `ProposalList`'s; the unanimity rule and the
+ * admit/reject ballot are `AdmissionCard`'s, and stay there. The shell is handed a render
+ * function precisely so that no vote type crosses into shared code.
+ */
 export function AdmissionList({
   read,
   userId,
@@ -89,48 +90,23 @@ export function AdmissionList({
   retrying: boolean;
 }) {
   const t = useT();
-  const admissions = knownValue(read) ?? [];
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("consilium.admissions.title")}</CardTitle>
-        <CardDescription>{t("consilium.admissions.sub")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Settled loading={read.status === "loading"} skeleton={<AdmissionsSkeleton />}>
-          {read.status === "loading" ? null : read.status === "failed" ? (
-            // In place of the empty state, never beside it. "Nobody is being let in" is a
-            // claim about who controls the fund, and a read that failed cannot make it.
-            <ReadFailure
-              title={t("consilium.admissions.failedTitle")}
-              body={t("consilium.admissions.failedBody")}
-              onRetry={onRetry}
-              retrying={retrying}
-            />
-          ) : admissions.length === 0 ? (
-            <Empty className={EMPTY_BOX}>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <UserPlus />
-                </EmptyMedia>
-                <EmptyTitle>{t("consilium.admissions.emptyTitle")}</EmptyTitle>
-                <EmptyDescription>{t("consilium.admissions.emptyBody")}</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {admissions.map((admission, i) => (
-                <Fragment key={admission.id}>
-                  {i > 0 && <Separator />}
-                  <AdmissionCard admission={admission} userId={userId} />
-                </Fragment>
-              ))}
-            </div>
-          )}
-        </Settled>
-      </CardContent>
-    </Card>
+    <ProposalList
+      read={read}
+      title={t("consilium.admissions.title")}
+      description={t("consilium.admissions.sub")}
+      skeleton={<AdmissionsSkeleton />}
+      failedTitle={t("consilium.admissions.failedTitle")}
+      failedBody={t("consilium.admissions.failedBody")}
+      emptyIcon={<UserPlus />}
+      emptyTitle={t("consilium.admissions.emptyTitle")}
+      emptyBody={t("consilium.admissions.emptyBody")}
+      onRetry={onRetry}
+      retrying={retrying}
+      itemKey={(admission) => admission.id}
+    >
+      {(admission) => <AdmissionCard admission={admission} userId={userId} />}
+    </ProposalList>
   );
 }
 
