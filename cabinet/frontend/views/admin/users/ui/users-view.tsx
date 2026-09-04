@@ -1,13 +1,14 @@
 "use client";
 
-import { Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { KeyRound, Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
+import { ownersResource } from "@/entities/governance/model/governance-resource";
 import type { AdminUserSummary } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
@@ -18,6 +19,10 @@ import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { ROLES, ago, formatUsd, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
+// The owners' room owns the question "does this account hold a seat?", and it is answered
+// in one place so the two screens cannot drift apart again. See the note on
+// `elevatedWithoutSeat` for the contradiction this closes.
+import { elevatedWithoutSeat, readOf, seatedOwnerIds } from "@/views/consilium/lib/reads";
 
 export function UsersView() {
   const t = useT();
@@ -32,6 +37,23 @@ export function UsersView() {
   const users = list.data ? (list.data.users ?? []) : null;
   const total = list.data?.total ?? "0";
   const error = users || !list.error ? null : errorMessage(list.error, t);
+
+  // Why this screen reads the owner roster at all.
+  //
+  // The role in this table is concierge's `effective_role`: every subject named in
+  // `ADMIN_SUBJECTS` is promoted to Owner for the duration of the request and never
+  // persisted. The consilium roster reads the persisted role instead — deliberately, because
+  // a seat an environment variable can grant is not a seat (docs/CONSILIUM.md, the residual
+  // under § Admission). Both screens were right and they contradicted each other in prod:
+  // three accounts here labelled Владелец, and "0 owners" over there.
+  //
+  // So the row says which kind it is. `/api/owners` is owner-only, so an operator reading
+  // this table gets a 403 — `seatedOwnerIds` answers null for that and for every read still
+  // in flight, `elevatedWithoutSeat` marks nothing on null, and the screen quietly becomes
+  // the one it was before. No backend change is involved: this is two existing reads put
+  // beside each other.
+  const owners = useResource(ownersResource);
+  const seated = seatedOwnerIds(readOf(owners));
 
   return (
     <AdminScreen className="space-y-6">
@@ -125,7 +147,15 @@ export function UsersView() {
                             <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
                           </button>
                         </td>
-                        <td className="px-5 py-3">{roleLabel(u.role, t)}</td>
+                        <td className="px-5 py-3">
+                          {/* Stacked, not inline: `table-fixed` sizes this column from an
+                              8-character header, so a chip beside the role would push the
+                              label out of its own cell in every locale. */}
+                          <div className="flex flex-col items-start gap-1">
+                            <span>{roleLabel(u.role, t)}</span>
+                            {elevatedWithoutSeat(u, seated) && <NoSeatMark />}
+                          </div>
+                        </td>
                         <td className="px-5 py-3 text-muted-foreground">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
                         <td className="px-5 py-3">
                           <StatusDot status={u.status} label={statusLabel(u.status, t)} />
@@ -166,7 +196,7 @@ export function UsersView() {
                 {/* `key` remounts the drawer per user, so its uncontrolled inputs (KYC
                     level) reset — otherwise a stale value could be committed against
                     the wrong user. */}
-                <UserDrawer key={selected.user_id} summary={selected} onClose={() => setSelected(null)} />
+                <UserDrawer key={selected.user_id} summary={selected} seated={seated} onClose={() => setSelected(null)} />
               </PanelSwap>
             </Panel>
           )}
@@ -224,7 +254,16 @@ function Avatar({ email }: { email: string }) {
   return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initials || "?"}</span>;
 }
 
-function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {
+function UserDrawer({
+  summary,
+  seated,
+  onClose,
+}: {
+  summary: AdminUserSummary;
+  /** Seat-holders, or null when the roster is unknown — see the note in `UsersView`. */
+  seated: ReadonlySet<string> | null;
+  onClose: () => void;
+}) {
   const t = useT();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -283,10 +322,20 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
 
         {/* i18n-max: 12 per badge — three chips wrap inside a 340px drawer. */}
         <div className="flex flex-wrap gap-1.5 text-xs">
-          <Badge>{roleLabel(role, t)}</Badge>
-          <Badge>{t("admin.users.kycBadge", { n: profile?.kyc_level ?? summary.kyc_level })}</Badge>
+          <Chip>{roleLabel(role, t)}</Chip>
+          <Chip>{t("admin.users.kycBadge", { n: profile?.kyc_level ?? summary.kyc_level })}</Chip>
           <span className={cn("rounded-full px-2 py-0.5 font-medium", statusTone(status))}>{statusLabel(status, t)}</span>
         </div>
+
+        {/* Spelled out here rather than in the row, where there is only room for a mark.
+            The point a reader needs is that this is not a mistake to correct: the seat is
+            withheld on purpose, and granting one to close the gap is the move the mechanism
+            exists to stop. */}
+        {elevatedWithoutSeat({ user_id: summary.user_id, role }, seated) && (
+          <p className="rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/10 px-3 py-2.5 text-xs leading-relaxed text-foreground">
+            {t("admin.users.noSeatExplainer")}
+          </p>
+        )}
 
         {error && (
           <p className="flex items-center gap-2 text-xs text-destructive">
@@ -398,6 +447,29 @@ function Row({ label, value, tip }: { label: string; value: string; tip?: TipKey
   );
 }
 
-function Badge({ children }: { children: ReactNode }) {
+function Chip({ children }: { children: ReactNode }) {
   return <span className="rounded-full bg-foreground/5 px-2 py-0.5 font-medium text-foreground">{children}</span>;
+}
+
+/**
+ * "Owner here, no seat there."
+ *
+ * The row carries the Owner role because concierge promoted it from `ADMIN_SUBJECTS` at
+ * request time; the consilium roster, which reads the persisted role, does not list it. The
+ * mark says which of the two this is, and it is a mark rather than a correction: the access
+ * is real, the seat is not, and neither screen was lying.
+ *
+ * Warning-toned, not destructive. Break-glass elevation is a deliberate arrangement, not a
+ * fault, and colouring it as an error would push someone to "fix" it by seating them — the
+ * one move the whole mechanism exists to prevent.
+ */
+function NoSeatMark() {
+  const t = useT();
+  return (
+    <Badge variant="outline" className="gap-1 whitespace-nowrap border-main-accent-t3/40 text-main-accent-t3">
+      <KeyRound className="size-3" aria-hidden />
+      {/* i18n-max: 14 — this sits in a table column sized from an 8-character header. */}
+      {t("admin.users.noSeat")}
+    </Badge>
+  );
 }

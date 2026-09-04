@@ -45,6 +45,7 @@ import {
 
 import { useConsiliumStream, type StreamStatus } from "@/entities/governance/model/consilium-socket";
 import {
+  admissionsResource,
   cancelConsilium,
   consiliumResource,
   ownersResource,
@@ -72,8 +73,10 @@ import {
   mapRead,
   ownerCount,
   readOf,
+  rosterState,
   type Read,
 } from "@/views/consilium/lib/reads";
+import { AdmissionList, ProposeAdmission } from "@/views/consilium/ui/admissions";
 import { PayoutSkeleton, RosterSkeleton } from "@/views/consilium/ui/loading";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
 import { ProposeRemoval, RemovalList } from "@/views/consilium/ui/removals";
@@ -85,13 +88,14 @@ export function ConsiliumView() {
 
   const owners = useResource(ownersResource);
   const removals = useResource(removalsResource);
+  const admissions = useResource(admissionsResource);
   const consilia = useResource(consiliumResource);
   const profile = useResource(profileResource);
 
   // Decided before the stream is acquired, not after: a non-owner who opens this URL would
-  // otherwise hold a websocket and a 20-second poll against three endpoints that answer 403
+  // otherwise hold a websocket and a 20-second poll against four endpoints that answer 403
   // forever, for a page they are about to be told they cannot see.
-  const forbidden = [owners.error, removals.error, consilia.error].some(isForbidden);
+  const forbidden = [owners.error, removals.error, admissions.error, consilia.error].some(isForbidden);
   const stream = useConsiliumStream(!forbidden);
 
   if (forbidden) {
@@ -128,17 +132,18 @@ export function ConsiliumView() {
   // `items ?? []` on a read that ARRIVED: proto3 JSON omits an empty repeated field, so an
   // absent list here means there are none, not that nothing came back.
   const removalsRead = mapRead(readOf(removals), (list) => (list.items ?? []).filter((r) => !isSettled(r.state, r.decided_at)));
+  const admissionsRead = mapRead(readOf(admissions), (list) => (list.items ?? []).filter((a) => !isSettled(a.state, a.decided_at)));
 
   const roster = knownValue(rosterRead);
 
-  // All three reads are the same session against the same BFF, so they fail together far
-  // more often than they fail alone. When every one of them is down, three identical boxes
-  // stacked down the page report one event three times and imply three independent faults;
+  // All four reads are the same session against the same BFF, so they fail together far
+  // more often than they fail alone. When every one of them is down, four identical boxes
+  // stacked down the page report one event four times and imply four independent faults;
   // one failure with one retry is the truth. A PARTIAL failure is never folded in here —
   // "the roster loaded but the payouts did not" says which half of the room can be trusted,
   // and that is worth a card of its own.
-  const outage = everyReadFailed([rosterRead, payoutsRead, removalsRead]);
-  const refreshingAll = owners.isValidating || removals.isValidating || consilia.isValidating;
+  const outage = everyReadFailed([rosterRead, payoutsRead, removalsRead, admissionsRead]);
+  const refreshingAll = owners.isValidating || removals.isValidating || admissions.isValidating || consilia.isValidating;
 
   return (
     <Stagger
@@ -185,7 +190,18 @@ export function ConsiliumView() {
         <>
           <StaggerItem className="flex flex-col gap-4 lg:gap-6 xl:col-start-1 xl:row-start-3">
             <PayoutSection read={payoutsRead} onRetry={() => void consilia.refresh()} retrying={consilia.isValidating} />
+            {/* Admission before removal, and both before the forms that open them. A fund
+                whose roster is empty — which is a reachable state, not a fault — can do
+                exactly one thing from this page, and it is admit someone; putting the way
+                out below the way to shrink further would be an odd thing to read. */}
+            <AdmissionList
+              read={admissionsRead}
+              userId={userId}
+              onRetry={() => void admissions.refresh()}
+              retrying={admissions.isValidating}
+            />
             <RemovalList read={removalsRead} userId={userId} onRetry={() => void removals.refresh()} retrying={removals.isValidating} />
+            <ProposeAdmission roster={rosterRead} onRetry={() => void owners.refresh()} retrying={owners.isValidating} />
             {/* Always rendered, and it is the roster's own `Read` that decides what it
                 shows: gated on `!isLoading` it vanished from the layout while the owners
                 were in flight, and gated on nothing at all it announced "There is nobody to
@@ -264,7 +280,20 @@ function Roster({
               onRetry={onRetry}
               retrying={retrying}
             />
-          ) : owners.length === 0 ? (
+          ) : rosterState(read) === "unseated" ? (
+            // An empty roster used to be treated as impossible: the copy said it "should
+            // not be possible" and told the reader to report it. That was right only while
+            // every account labelled Owner was a seated owner, and it stopped being right
+            // the moment break-glass existed. A subject in `ADMIN_SUBJECTS` is promoted to
+            // Owner by the directory at request time and never persisted; this roster reads
+            // the PERSISTED role, precisely so a seat cannot be granted by whoever can edit
+            // an environment variable. A fund whose only elevated accounts are break-glass
+            // ones therefore has an empty roster and no fault to report — and telling an
+            // owner to file a bug against a correct answer is worse than saying nothing.
+            //
+            // Dashed frame, muted, no destructive tint: this is an operational state. The
+            // failed read above keeps the solid red box, because the two are different
+            // sentences and the reader should tell them apart before reading a word.
             <Empty className={EMPTY_BOX}>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -273,6 +302,9 @@ function Roster({
                 <EmptyTitle>{t("consilium.roster.emptyTitle")}</EmptyTitle>
                 <EmptyDescription>{t("consilium.roster.emptyBody")}</EmptyDescription>
               </EmptyHeader>
+              <EmptyContent>
+                <p className="text-sm leading-relaxed text-muted-foreground">{t("consilium.roster.emptyNext")}</p>
+              </EmptyContent>
             </Empty>
           ) : (
             <ItemGroup>

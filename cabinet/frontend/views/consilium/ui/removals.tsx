@@ -61,17 +61,18 @@ import {
   voteLabel,
   voteTone,
 } from "@/views/consilium/lib/format";
-import { knownValue, removalCandidates, type Read } from "@/views/consilium/lib/reads";
+import { removalCandidates, type Read } from "@/views/consilium/lib/reads";
 import { ProposeSkeleton, RemovalsSkeleton } from "@/views/consilium/ui/loading";
+import { ProposalList } from "@/views/consilium/ui/proposal-list";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
 
 /**
- * The removals section: its heading, and either the proposals or an honest account of why
- * there are none.
+ * The removals section.
  *
- * The heading is outside the branch on purpose. It used to render only in the empty case,
- * so the moment a proposal existed the cards floated between "Fund payout" and "Propose a
- * removal" with nothing saying what they were.
+ * The card, its four read states and the separators between proposals are
+ * `ProposalList`'s; what belongs to removals is the copy and `RemovalCard` — which is where
+ * the two-path rule and the remove/keep ballot stay, well away from anything admissions
+ * share.
  */
 export function RemovalList({
   read,
@@ -85,48 +86,23 @@ export function RemovalList({
   retrying: boolean;
 }) {
   const t = useT();
-  const removals = knownValue(read) ?? [];
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("consilium.removals.title")}</CardTitle>
-        <CardDescription>{t("consilium.removals.sub")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Settled loading={read.status === "loading"} skeleton={<RemovalsSkeleton />}>
-          {read.status === "loading" ? null : read.status === "failed" ? (
-            // In place of the empty state: "Nothing is being decided" is a claim about the
-            // fund, and a read that failed has not earned the right to make it.
-            <ReadFailure
-              title={t("consilium.removals.failedTitle")}
-              body={t("consilium.removals.failedBody")}
-              onRetry={onRetry}
-              retrying={retrying}
-            />
-          ) : removals.length === 0 ? (
-            <Empty className={EMPTY_BOX}>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <ScrollText />
-                </EmptyMedia>
-                <EmptyTitle>{t("consilium.removals.emptyTitle")}</EmptyTitle>
-                <EmptyDescription>{t("consilium.removals.emptyBody")}</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {removals.map((removal, i) => (
-                <Fragment key={removal.id}>
-                  {i > 0 && <Separator />}
-                  <RemovalCard removal={removal} userId={userId} />
-                </Fragment>
-              ))}
-            </div>
-          )}
-        </Settled>
-      </CardContent>
-    </Card>
+    <ProposalList
+      read={read}
+      title={t("consilium.removals.title")}
+      description={t("consilium.removals.sub")}
+      skeleton={<RemovalsSkeleton />}
+      failedTitle={t("consilium.removals.failedTitle")}
+      failedBody={t("consilium.removals.failedBody")}
+      emptyIcon={<ScrollText />}
+      emptyTitle={t("consilium.removals.emptyTitle")}
+      emptyBody={t("consilium.removals.emptyBody")}
+      onRetry={onRetry}
+      retrying={retrying}
+      itemKey={(removal) => removal.id}
+    >
+      {(removal) => <RemovalCard removal={removal} userId={userId} />}
+    </ProposalList>
   );
 }
 

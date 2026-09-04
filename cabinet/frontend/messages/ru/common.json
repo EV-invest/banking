@@ -1043,6 +1043,14 @@
     "en": "No users match these filters.",
     "t": "Нет пользователей, подходящих под эти фильтры."
   },
+  "admin.users.noSeat": {
+    "en": "No seat",
+    "t": "Без места"
+  },
+  "admin.users.noSeatExplainer": {
+    "en": "Elevated access, no seat in the consilium. This account is an owner because it is listed in ADMIN_SUBJECTS, which the directory applies per request without storing it. The consilium counts only stored seats, so it does not count this one — on purpose, because a seat an environment variable can grant is not a seat. Granting the role to close the gap is the one thing that would defeat it.",
+    "t": "Расширенный доступ, места в консилиуме нет. Этот аккаунт — владелец, потому что он указан в ADMIN_SUBJECTS: каталог применяет это на каждый запрос, не сохраняя. Консилиум считает только сохранённые места и это место не учитывает — намеренно, ведь место, которое можно выдать переменной окружения, — не место. Выдать роль, чтобы устранить расхождение, — единственное, что сломало бы эту защиту."
+  },
   "admin.users.reinstate": {
     "en": "Reinstate",
     "t": "Включить"
@@ -1571,6 +1579,158 @@
     "en": "Welcome back",
     "t": "С возвращением"
   },
+  "consilium.admission.cancel": {
+    "en": "Withdraw this proposal",
+    "t": "Отозвать предложение"
+  },
+  "consilium.admission.expires": {
+    "en": "Expires {at} · {left}",
+    "t": "Истекает {at} · {left}"
+  },
+  "consilium.admission.heading": {
+    "en": "Admit {candidate}",
+    "t": "Принять {candidate}"
+  },
+  "consilium.admission.noPeers": {
+    "en": "There is no owner left to agree, so this admission can no longer pass. Unlike a removal, it has no second route.",
+    "t": "Не осталось владельцев, которые могли бы согласиться, поэтому приём уже не пройдёт. В отличие от исключения, второго пути у него нет."
+  },
+  "consilium.admission.noReason": {
+    "en": "No reason was given.",
+    "t": "Причина не указана."
+  },
+  "consilium.admission.notAVoter": {
+    "en": "The owners who may vote were fixed when this was proposed, and you were not among them. An owner seated since cannot be added to that set — otherwise new owners could be created to carry a vote.",
+    "t": "Список голосующих владельцев зафиксирован в момент предложения, и вас в нём не было. Владельца, получившего место позже, в этот список не добавляют — иначе новых владельцев можно было бы создавать ради нужного голоса."
+  },
+  "consilium.admission.oneRejectEnds": {
+    "en": "One refusal ends an admission — this one can no longer pass.",
+    "t": "Один отказ прекращает приём — это предложение больше не может пройти."
+  },
+  "consilium.admission.openedBy": {
+    "en": "Proposed by {initiator} · {at}",
+    "t": "Предложил {initiator} · {at}"
+  },
+  "consilium.admission.peerTally": {
+    "en": "{admitted} of {total} owners have agreed",
+    "t": "Согласились {admitted} из {total} владельцев"
+  },
+  "consilium.admission.reason": {
+    "en": "Reason",
+    "t": "Причина"
+  },
+  "consilium.admission.unanimityNote": {
+    "en": "All of them must agree",
+    "t": "Согласиться должны все"
+  },
+  "consilium.admission.voteAdmit": {
+    "en": "Admit as an owner",
+    "t": "Принять владельцем"
+  },
+  "consilium.admission.voteReject": {
+    "en": "Refuse",
+    "t": "Отказать"
+  },
+  "consilium.admission.youAreCandidate": {
+    "en": "This admission is about your own seat, so you take no part in deciding it.",
+    "t": "Этот приём — о вашем собственном месте, поэтому в его решении вы не участвуете."
+  },
+  "consilium.admission.youOpened": {
+    "en": "You proposed admitting {candidate}, so you have no vote on it — the bar you have to clear is every other owner agreeing, and opening a proposal must not be a way to lower it.",
+    "t": "Вы предложили принять {candidate}, поэтому голоса у вас нет: планка, которую нужно взять, — согласие всех остальных владельцев, и открытие предложения не должно быть способом её опустить."
+  },
+  "consilium.admission.youVoted": {
+    "en": "You answered: {vote}.",
+    "t": "Ваш ответ: {vote}."
+  },
+  "consilium.admissionVote.admit": {
+    "en": "Admit",
+    "t": "Принять"
+  },
+  "consilium.admissionVote.reject": {
+    "en": "Refuse",
+    "t": "Отказать"
+  },
+  "consilium.admissions.emptyBody": {
+    "en": "No admission is open. Proposing one is what starts it, and every other owner then has to agree.",
+    "t": "Ни одного открытого предложения. Всё начинается с предложения, и затем согласиться должны все остальные владельцы."
+  },
+  "consilium.admissions.emptyTitle": {
+    "en": "Nobody is being admitted",
+    "t": "Никого сейчас не принимают"
+  },
+  "consilium.admissions.failedBody": {
+    "en": "Until it loads, the page cannot say whether anyone is being let into the fund, so it says nothing rather than guessing at it. The rest of the page is unaffected.",
+    "t": "Пока он не загрузится, страница не может сказать, принимают ли кого-то в фонд, поэтому молчит, а не гадает. На остальную часть страницы это не влияет."
+  },
+  "consilium.admissions.failedTitle": {
+    "en": "Admissions did not load",
+    "t": "Список приёмов не загрузился"
+  },
+  "consilium.admissions.sub": {
+    "en": "Granting a seat is the only way to become an owner, and it is decided here.",
+    "t": "Выдача места — единственный способ стать владельцем, и решается это здесь."
+  },
+  "consilium.admissions.title": {
+    "en": "Admissions",
+    "t": "Приём владельцев"
+  },
+  "consilium.admit.candidateHint": {
+    "en": "A candidate is not an owner yet, so the roster cannot list them. Their user ID is on their row in Users.",
+    "t": "Кандидат ещё не владелец, поэтому в списке владельцев его нет. Его ID пользователя — в его строке в разделе «Пользователи»."
+  },
+  "consilium.admit.candidateLabel": {
+    "en": "Account",
+    "t": "Аккаунт"
+  },
+  "consilium.admit.candidatePlaceholder": {
+    "en": "User ID",
+    "t": "ID пользователя"
+  },
+  "consilium.admit.genesis": {
+    "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so the first two seats are granted directly through the user's role instead. From two owners onward that is refused and this is the only route.",
+    "t": "В фонде {n, plural, =0 {нет владельцев с местом} one {# владелец с местом} few {# владельца с местом} many {# владельцев с местом} other {# владельца с местом}}. Для приёма нужен хотя бы один владелец помимо предлагающего, поэтому первые два места выдают напрямую через роль пользователя. Начиная с двух владельцев это запрещено, и остаётся только этот путь."
+  },
+  "consilium.admit.opened": {
+    "en": "Proposed. Every other owner has been asked to answer.",
+    "t": "Предложение открыто. Всем остальным владельцам отправлен запрос."
+  },
+  "consilium.admit.reasonHint": {
+    "en": "Every owner reads this before answering, in these words.",
+    "t": "Каждый владелец прочитает это перед ответом — именно в этих словах."
+  },
+  "consilium.admit.reasonLabel": {
+    "en": "Reason",
+    "t": "Причина"
+  },
+  "consilium.admit.reasonPlaceholder": {
+    "en": "Why this person should hold a seat",
+    "t": "Почему этот человек должен занять место"
+  },
+  "consilium.admit.sub": {
+    "en": "The only way a seat is granted. Every other owner has to agree.",
+    "t": "Единственный способ выдать место. Согласиться должны все остальные владельцы."
+  },
+  "consilium.admit.submit": {
+    "en": "Propose admission",
+    "t": "Предложить приём"
+  },
+  "consilium.admit.title": {
+    "en": "Admit an owner",
+    "t": "Принять владельца"
+  },
+  "consilium.admit.unanimityWarning": {
+    "en": "An admission passes only if every owner except you agrees, and there has to be at least one of them. This is stricter than a removal: a majority is not enough, and a single refusal ends it. A minority must never be able to grow itself into a majority.",
+    "t": "Приём проходит, только если согласны все владельцы, кроме вас, и таких должен быть хотя бы один. Это строже, чем исключение: большинства недостаточно, и один отказ всё прекращает. Меньшинство никогда не должно иметь возможности вырастить себя в большинство."
+  },
+  "consilium.admit.unknownBody": {
+    "en": "Without it the page cannot say how many owners would have to agree, so it is not offering the form rather than offering one it cannot explain.",
+    "t": "Без него страница не может сказать, сколько владельцев должны согласиться, поэтому форма не показана — лучше так, чем показать её без объяснения."
+  },
+  "consilium.admit.unknownTitle": {
+    "en": "The owner list did not load",
+    "t": "Список владельцев не загрузился"
+  },
   "consilium.floor.body": {
     "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can no longer be cleared. Adding owners restores it.",
     "t": "Для выплаты нужно согласие больше половины владельцев, а при {n, plural, one {# владельце} few {# владельцах} many {# владельцах} other {# владельцах}} этот порог уже недостижим. Добавление владельцев вернёт эту возможность."
@@ -1856,12 +2016,16 @@
     "t": "{n, plural, one {# владелец} few {# владельца} many {# владельцев} other {# владельца}}"
   },
   "consilium.roster.emptyBody": {
-    "en": "The roster came back empty, which should not be possible while you are reading this page. Reload it; if it stays empty, the page is not showing you the truth and it is worth raising.",
-    "t": "Список вернулся пустым, чего не должно быть, пока вы читаете эту страницу. Перезагрузите её; если он останется пустым, страница показывает неверные данные и об этом стоит сообщить."
+    "en": "A platform administrator elevated through ADMIN_SUBJECTS deliberately holds no seat: a seat an environment variable can grant is not a seat.",
+    "t": "Администратор платформы, поднятый через ADMIN_SUBJECTS, места намеренно не занимает: место, которое можно выдать переменной окружения, — не место."
+  },
+  "consilium.roster.emptyNext": {
+    "en": "The first two owners are seated by granting the role directly. Every owner after that is admitted by a consilium of the existing ones.",
+    "t": "Первых двух владельцев назначают, выдав роль напрямую. Каждого следующего принимает консилиум действующих владельцев."
   },
   "consilium.roster.emptyTitle": {
-    "en": "No owners listed",
-    "t": "Владельцы не найдены"
+    "en": "No owner holds a seat yet",
+    "t": "Пока никто не занимает место"
   },
   "consilium.roster.failedBody": {
     "en": "Until it loads, the page cannot say who owns this fund or how many owners it has, so it says nothing rather than guessing at it. The rest of the page is unaffected.",

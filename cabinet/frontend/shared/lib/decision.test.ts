@@ -8,13 +8,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { peerVote, settledPayout, settledRemoval } from "./decision.ts";
+import { admissionVote, peerVote, settledAdmission, settledPayout, settledRemoval } from "./decision.ts";
 
 test("an unanswered seat is not a settled answer, however the wire spells it", () => {
   for (const raw of ["pending", "PENDING", "", "   ", null, undefined, "unknown_future_state"]) {
     assert.equal(settledPayout(raw), null, `payout: ${String(raw)}`);
     assert.equal(settledRemoval(raw), null, `removal: ${String(raw)}`);
     assert.equal(peerVote(raw), null, `vote: ${String(raw)}`);
+    assert.equal(settledAdmission(raw), null, `admission: ${String(raw)}`);
+    assert.equal(admissionVote(raw), null, `admission vote: ${String(raw)}`);
   }
 });
 
@@ -45,9 +47,33 @@ test("a peer who has not voted keeps their vote", () => {
   assert.equal(peerVote("keep"), "keep");
 });
 
+test("an admission answer is read in its own vocabulary", () => {
+  assert.equal(settledAdmission("admit"), "admit");
+  assert.equal(settledAdmission("ADMIT"), "admit");
+  assert.equal(settledAdmission("admitted"), "admit");
+  assert.equal(settledAdmission("reject"), "reject");
+  assert.equal(settledAdmission("rejected"), "reject");
+  assert.equal(admissionVote("admit"), "admit");
+});
+
+test("the two governance vocabularies do not leak into one another", () => {
+  // The trap this pins is not a rename. `reject` means KEEP THIS OWNER on a removal and
+  // REFUSE THIS CANDIDATE on an admission, so the same word read by the wrong reader is a
+  // vote inverted, not a label mistranslated. Neither reader may answer for the other's
+  // words at all.
+  assert.equal(settledRemoval("admit"), null);
+  assert.equal(settledAdmission("remove"), null);
+  assert.equal(settledAdmission("keep"), null);
+  assert.equal(settledAdmission("approve"), null);
+  // And the one word they share means opposite things, so it must not round-trip.
+  assert.equal(settledRemoval("reject"), "keep");
+  assert.equal(settledAdmission("reject"), "reject");
+});
+
 test("a non-string is never mistaken for an answer", () => {
   for (const raw of [0, 1, {}, [], true]) {
     assert.equal(settledPayout(raw), null, String(raw));
     assert.equal(settledRemoval(raw), null, String(raw));
+    assert.equal(settledAdmission(raw), null, String(raw));
   }
 });
