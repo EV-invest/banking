@@ -1,6 +1,6 @@
 "use client";
 
-// The three governance reads, and the mutations that move them.
+// The four governance reads, and the mutations that move them.
 //
 // Every mutation here invalidates rather than publishing its own response, which is the
 // opposite of what `saveProfile` does — and the difference is the point. A profile PATCH
@@ -16,17 +16,21 @@
 // are the floor under a socket that is down, not the mechanism.
 
 import {
+  cancelAdmission as cancelAdmissionRequest,
   cancelConsilium as cancelConsiliumRequest,
   cancelRemoval as cancelRemovalRequest,
+  fetchAdmissions,
   fetchConsilium,
   fetchOwners,
   fetchRemovals,
   openRevenuePayout as openRevenuePayoutRequest,
+  proposeAdmission as proposeAdmissionRequest,
   proposeRemoval as proposeRemovalRequest,
   resignOwnership as resignOwnershipRequest,
+  voteOnAdmission as voteOnAdmissionRequest,
   voteOnRemoval as voteOnRemovalRequest,
 } from "@/entities/governance/api/governance-client";
-import type { Consilium, OwnerRemoval, RemovalVote } from "@/shared/contracts/governance";
+import type { AdmissionVote, Consilium, OwnerAdmission, OwnerRemoval, RemovalVote } from "@/shared/contracts/governance";
 import { TAG } from "@/shared/lib/cache-tags";
 import { defineResource, revalidateTag } from "@/shared/lib/resource";
 
@@ -44,6 +48,13 @@ export const removalsResource = defineResource({
   tags: [TAG.removals],
 });
 
+export const admissionsResource = defineResource({
+  name: "governance.admissions",
+  fetch: fetchAdmissions,
+  revalidate: 15,
+  tags: [TAG.admissions],
+});
+
 export const consiliumResource = defineResource({
   name: "governance.consilium",
   fetch: fetchConsilium,
@@ -55,11 +66,12 @@ export const consiliumResource = defineResource({
  * Every tag this feature owns.
  *
  * The socket carries a revision, not a subject — a frame says "something in the owners'
- * room moved", never what — so the only honest response is to re-read all three. They are
- * three small reads against one plane, and guessing which one changed would be a way to
- * miss the one that did.
+ * room moved", never what — so the only honest response is to re-read all four. They are
+ * four small reads against one plane, and guessing which one changed would be a way to
+ * miss the one that did. Admissions joined this list rather than getting a channel of
+ * their own for exactly that reason.
  */
-export const GOVERNANCE_TAGS = [TAG.owners, TAG.removals, TAG.consilium] as const;
+export const GOVERNANCE_TAGS = [TAG.owners, TAG.removals, TAG.admissions, TAG.consilium] as const;
 
 /** Re-read the authoritative snapshot of the whole room. */
 export function refreshGovernance(): void {
@@ -90,6 +102,34 @@ export async function cancelRemoval(removalId: string): Promise<OwnerRemoval> {
   const removal = await cancelRemovalRequest(removalId);
   revalidateTag(TAG.removals);
   return removal;
+}
+
+/** Open an admission. Changes the admission list; no seat moves until it carries. */
+export async function proposeAdmission(candidateUserId: string, reason: string): Promise<OwnerAdmission> {
+  const admission = await proposeAdmissionRequest(candidateUserId, reason);
+  revalidateTag(TAG.admissions);
+  return admission;
+}
+
+/**
+ * Vote on an admission.
+ *
+ * Names every governance tag for the mirror image of the reason a removal vote does: an
+ * `admit` can be the one that carries, and an admission that carries seats a new owner —
+ * which grows the roster, can lift the fund back over the payout floor, and changes the
+ * denominator every open removal is counted against. As everywhere else here, the response
+ * is not written into the cache: the tally is the server's, computed under a row lock.
+ */
+export async function voteOnAdmission(admissionId: string, vote: AdmissionVote): Promise<OwnerAdmission> {
+  const admission = await voteOnAdmissionRequest(admissionId, vote);
+  revalidateTag(...GOVERNANCE_TAGS);
+  return admission;
+}
+
+export async function cancelAdmission(admissionId: string): Promise<OwnerAdmission> {
+  const admission = await cancelAdmissionRequest(admissionId);
+  revalidateTag(TAG.admissions);
+  return admission;
 }
 
 /** Give up your own seat — the roster shrinks, and with it what a payout can clear. */

@@ -10,9 +10,16 @@
 //
 // So nothing here reads `.data` and falls back. It reads a `Read<T>`, which cannot be
 // turned into a value without the call site saying, in the same expression, what it does
-// when there is no value — and the two helpers that DO narrow it (`ownerCount`,
-// `removalCandidates`) answer `null` rather than a zero or an empty list, so a caller that
-// forgets the case renders nothing instead of a claim.
+// when there is no value — and every helper that DOES narrow it (`ownerCount`,
+// `removalCandidates`, `seatedOwnerIds`) answers `null` rather than a zero or an empty
+// list, so a caller that forgets the case renders nothing instead of a claim.
+//
+// The rule extends to everything this page grew afterwards. Admissions are read through
+// the same `Read` — "no admission is open" is a claim about who is being let into the fund
+// and a read that failed is not entitled to make it — and `elevatedWithoutSeat` carries it
+// off this page entirely: the admin users table marks a row as seatless only against a
+// roster that actually arrived, and marks nothing at all when the roster is forbidden or
+// down.
 //
 // Pure, structurally typed and import-free on purpose: this is the rule the page is judged
 // on, so it is the part that has to be testable outside a browser (`./reads.test.ts`).
@@ -84,6 +91,66 @@ export function removalCandidates<T extends { user_id: string }>(
 ): T[] | null {
   if (roster.status !== "ready") return null;
   return (roster.value.items ?? []).filter((owner) => owner.user_id !== userId);
+}
+
+/**
+ * What the roster actually says, as four answers the page renders differently.
+ *
+ * `unseated` is the one this exists for. An empty roster used to be treated as impossible
+ * — the copy told the reader to report it as a fault — and that was true only while every
+ * account with the `Owner` label was a seated owner. It no longer is: a subject listed in
+ * `ADMIN_SUBJECTS` is promoted to `Owner` in the directory at request time and never
+ * persisted, and the roster is read from the PERSISTED role precisely so that a seat
+ * cannot be granted by whoever can edit an environment variable (docs/CONSILIUM.md, the
+ * residual under § Admission). A fund whose only elevated accounts are break-glass ones
+ * therefore has a legitimately empty roster, and telling that reader to file a bug is
+ * worse than telling them nothing.
+ *
+ * It stays a separate answer from `failed`, which is the distinction the rest of this file
+ * is about: "nobody holds a seat" and "we could not find out" are different sentences, and
+ * only one of them is a fault.
+ */
+export type RosterState = "loading" | "failed" | "unseated" | "seated";
+
+export function rosterState(roster: Read<{ items?: readonly unknown[] }>): RosterState {
+  if (roster.status === "loading") return "loading";
+  if (roster.status === "failed") return "failed";
+  return (roster.value.items ?? []).length === 0 ? "unseated" : "seated";
+}
+
+/**
+ * The ids that actually hold a seat, or `null` when the roster is not known.
+ *
+ * `null` is load-bearing at the call site: it means "no cross-reference is possible", and
+ * a caller that marks nothing on `null` degrades into the screen it had before. Answering
+ * an empty set instead would claim every elevated account is unseated on the strength of a
+ * read that never landed — which is the same class of lie as "0 owners", pointed at a
+ * different screen.
+ */
+export function seatedOwnerIds<T extends { user_id: string }>(roster: Read<{ items?: readonly T[] }>): ReadonlySet<string> | null {
+  if (roster.status !== "ready") return null;
+  return new Set((roster.value.items ?? []).map((owner) => owner.user_id));
+}
+
+/**
+ * Whether an account carrying the owner role holds no seat in the consilium.
+ *
+ * This is the contradiction the two screens were publishing at once, and both halves were
+ * correct. The directory applies `effective_role`, promoting every `ADMIN_SUBJECTS`
+ * subject to `Owner` without persisting it, and reports the promoted role from `ListUsers`
+ * — so the admin table shows "Owner". The consilium roster reads the persisted role, so it
+ * shows nobody. Rather than reconciling them by counting break-glass admins as owners —
+ * which would reopen the exact hole the mechanism exists to close — the row is marked for
+ * what it is: elevated access, no seat.
+ *
+ * `seated === null` answers `false`, deliberately and in the quiet direction: with no
+ * roster to compare against, an unmarked row is a row that says nothing, whereas a marked
+ * one would accuse a real owner of holding no seat.
+ */
+export function elevatedWithoutSeat(user: { user_id: string; role?: string | null }, seated: ReadonlySet<string> | null): boolean {
+  if (seated === null) return false;
+  if ((user.role ?? "").trim().toLowerCase() !== "owner") return false;
+  return !seated.has(user.user_id);
 }
 
 /**

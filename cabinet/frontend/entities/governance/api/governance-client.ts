@@ -5,8 +5,11 @@
 // deliberately session-free `entities/approval` client.
 
 import type {
+  AdmissionVote,
   Consilium,
   ConsiliumList,
+  OwnerAdmission,
+  OwnerAdmissionList,
   OwnerList,
   OwnerRemoval,
   OwnerRemovalList,
@@ -36,6 +39,31 @@ export function voteOnRemoval(removalId: string, vote: RemovalVote): Promise<Own
 
 export function cancelRemoval(removalId: string): Promise<OwnerRemoval> {
   return postJson<OwnerRemoval>(`/api/owners/removals/${encodeURIComponent(removalId)}/cancel`, {});
+}
+
+export function fetchAdmissions(): Promise<OwnerAdmissionList> {
+  return getJson<OwnerAdmissionList>("/api/owners/admissions");
+}
+
+export function proposeAdmission(candidateUserId: string, reason: string): Promise<OwnerAdmission> {
+  return postJson<OwnerAdmission>("/api/owners/admissions", { candidate_user_id: candidateUserId, reason });
+}
+
+/**
+ * Vote on an admission.
+ *
+ * The body word is `admit` or `reject` — the ownership plane's admission vocabulary, which
+ * the BFF parses with its own `AdmissionVote::parse` and which rejects `remove`/`keep`
+ * outright. The narrow parameter type is the point: this endpoint and
+ * {@link voteOnRemoval} take structurally identical arguments, so nothing but the types
+ * stops a call site sending one plane's verb to the other's route.
+ */
+export function voteOnAdmission(admissionId: string, vote: AdmissionVote): Promise<OwnerAdmission> {
+  return postJson<OwnerAdmission>(`/api/owners/admissions/${encodeURIComponent(admissionId)}/vote`, { vote });
+}
+
+export function cancelAdmission(admissionId: string): Promise<OwnerAdmission> {
+  return postJson<OwnerAdmission>(`/api/owners/admissions/${encodeURIComponent(admissionId)}/cancel`, {});
 }
 
 /**

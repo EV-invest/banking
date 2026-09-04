@@ -61,7 +61,22 @@ export function RemovalsSkeleton() {
   );
 }
 
-/** The form: owner picker, reason, submit. */
+/** One admission: who it is about, the reason block, where the peers stand. */
+export function AdmissionsSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      <Skeleton className="h-4 w-64 max-w-full" />
+      <Skeleton className="h-16 w-full rounded-lg" />
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-3 w-48 max-w-full" />
+        <Skeleton className="h-3 w-36 max-w-full" />
+      </div>
+    </div>
+  );
+}
+
+/** The form: owner picker, reason, submit. Also stands in for the admission form, whose
+ *  shape is the same three rows — a single-line field, a reason box and a button. */
 export function ProposeSkeleton() {
   return (
     <div className="flex flex-col gap-4">

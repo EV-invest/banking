@@ -14,12 +14,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  elevatedWithoutSeat,
   everyReadFailed,
   knownValue,
   mapRead,
   ownerCount,
   readOf,
   removalCandidates,
+  rosterState,
+  seatedOwnerIds,
   type Read,
 } from "./reads.ts";
 
@@ -103,6 +106,68 @@ test("a derivation over a read that never arrived is not run at all", () => {
 
 test("one page-level failure only when every read failed", () => {
   assert.equal(everyReadFailed([failed(), failed(), failed()]), true);
+});
+
+// ── an empty roster is a real state, not a fault ──────────────────────────────
+//
+// These pin the second half of the same rule. The first half was "do not turn a failed
+// read into a fact"; this one is "do not turn a fact into a fault". An empty roster used to
+// be treated as impossible, and the page told the reader to report it — which is exactly
+// wrong on a fund whose only elevated accounts are break-glass ones promoted from
+// `ADMIN_SUBJECTS`, where nobody holds a seat and the roster is telling the truth.
+
+test("an empty roster that arrived is unseated, not failed", () => {
+  assert.equal(rosterState(ready<Roster>({ items: [], below_payout_floor: true })), "unseated");
+  assert.equal(rosterState(ready<Roster>({ below_payout_floor: true } as Roster)), "unseated");
+});
+
+test("a roster that did not arrive is never reported as unseated", () => {
+  // The whole point of keeping these apart: "nobody holds a seat" and "we could not find
+  // out" get different copy, and only one of them is worth reporting as a fault.
+  assert.equal(rosterState(failed<Roster>()), "failed");
+  assert.equal(rosterState(loading<Roster>()), "loading");
+});
+
+test("a roster with owners in it is seated", () => {
+  assert.equal(rosterState(ready<Roster>({ items: [{ user_id: "a" }], below_payout_floor: true })), "seated");
+});
+
+// ── the two screens must not contradict each other ────────────────────────────
+
+test("seated ids are known only from a roster that arrived", () => {
+  assert.equal(seatedOwnerIds(failed<Roster>()), null);
+  assert.equal(seatedOwnerIds(loading<Roster>()), null);
+  assert.deepEqual([...seatedOwnerIds(ready<Roster>({ items: [{ user_id: "a" }], below_payout_floor: true }))!], ["a"]);
+  // An omitted list on a read that arrived is the fund saying "none", so the answer is an
+  // empty set — which is a real answer, unlike `null`.
+  assert.deepEqual([...seatedOwnerIds(ready<Roster>({ below_payout_floor: true } as Roster))!], []);
+});
+
+test("an owner-labelled account absent from the roster is marked as holding no seat", () => {
+  // The prod contradiction, exactly: three accounts render as Owner because concierge
+  // promotes every ADMIN_SUBJECTS subject with a non-persisted `effective_role`, while the
+  // roster — read from the persisted role on purpose — holds none of them.
+  const seated = new Set(["seated-owner"]);
+  assert.equal(elevatedWithoutSeat({ user_id: "break-glass", role: "owner" }, seated), true);
+  assert.equal(elevatedWithoutSeat({ user_id: "seated-owner", role: "owner" }, seated), false);
+});
+
+test("only the owner role is marked — an admin with no seat is not a contradiction", () => {
+  const seated = new Set<string>();
+  for (const role of ["investor", "operator", "admin", "", null, undefined]) {
+    assert.equal(elevatedWithoutSeat({ user_id: "u", role }, seated), false, `role: ${String(role)}`);
+  }
+  // The wire's casing is not the screen's, and a capitalised role must not slip the check.
+  assert.equal(elevatedWithoutSeat({ user_id: "u", role: "OWNER" }, seated), true);
+  assert.equal(elevatedWithoutSeat({ user_id: "u", role: " owner " }, seated), true);
+});
+
+test("with no roster to compare against, nothing is marked at all", () => {
+  // `/api/owners` is owner-only, so an operator on the users screen gets a 403 there. The
+  // degradation has to be silence: marking on an unknown roster would accuse a real owner
+  // of holding no seat, which is the same lie as "0 owners" aimed at a different screen.
+  assert.equal(elevatedWithoutSeat({ user_id: "anyone", role: "owner" }, null), false);
+  assert.equal(elevatedWithoutSeat({ user_id: "anyone", role: "owner" }, seatedOwnerIds(failed<Roster>())), false);
 });
 
 test("a partial failure stays partial — it is information, not one outage", () => {

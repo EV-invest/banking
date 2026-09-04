@@ -45,6 +45,10 @@ export const TAG = {
   owners: "owners",
   /** Open and settled owner-removal proposals, with their per-peer votes. */
   removals: "owners.removals",
+  /** Open and settled owner-admission proposals, with their per-peer votes. An admission
+   *  that carries GRANTS a seat, so it moves `owners` too — and a roster that grows past
+   *  the payout floor changes what the payout card may offer. */
+  admissions: "owners.admissions",
   /** Payout consilia and their tallies. */
   consilium: "consilium",
 

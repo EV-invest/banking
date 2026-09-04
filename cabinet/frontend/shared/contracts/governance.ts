@@ -193,6 +193,66 @@ export interface OwnerRemovalList {
 }
 
 /**
+ * An answer to an admission. Its own union, not a reuse of {@link RemovalVote}, mirroring
+ * the plane's own split — `reject` here refuses a candidate, while `reject` on a removal
+ * keeps an owner. A single shared type would make posting the wrong verb a type-correct
+ * mistake, and this is the one surface where that mistake seats or unseats someone.
+ */
+export type AdmissionVote = "admit" | "reject";
+
+/**
+ * One eligible peer voter on an admission and their answer.
+ *
+ * Same wire caveat as {@link RemovalPeer}: an unanswered peer arrives as `""` or
+ * `"pending"`, so `vote` goes through `admissionVote` (`shared/lib/decision.ts`), never a
+ * `?? null`.
+ */
+export interface AdmissionPeer {
+  user_id: string;
+  email: string;
+  vote?: string | null;
+  voted_at?: Timestamp | null;
+}
+
+/**
+ * A proposal to grant someone a seat — the ONLY way `Role::Owner` is granted once the fund
+ * holds two owners (`SetRole` refuses it outside an executed admission).
+ *
+ * Two differences from {@link OwnerRemoval}, and neither is cosmetic:
+ *
+ *   · There is no target-decision trio. The candidate is not an owner yet, so they have no
+ *     say in their own admission and there is no mailbox path that could carry it.
+ *   · `peers` is every owner except the initiator, and admission passes only on UNANIMITY
+ *     of that set with at least one member in it. Removal has a second path (the target's
+ *     own acceptance); admission has none, so an absent peer is a proposal that cannot
+ *     pass rather than one that passes another way.
+ *
+ * As with removals, membership of `peers` IS the eligibility test — it is the voter set
+ * frozen at open, and an owner seated since is not in it (docs/CONSILIUM.md, policy 3).
+ */
+export interface OwnerAdmission {
+  id: string;
+  state: string;
+  candidate_user_id: string;
+  candidate_email: string;
+  initiator_user_id: string;
+  initiator_email: string;
+  reason: string;
+  peers: AdmissionPeer[];
+  owner_count: number;
+  created_at: Timestamp;
+  expires_at: Timestamp;
+  decided_at?: Timestamp | null;
+  void_reason?: string | null;
+  /** Serialised as a string by the BFF's integer encoding; never do arithmetic on it here. */
+  version: number | string;
+}
+
+export interface OwnerAdmissionList {
+  items: OwnerAdmission[];
+}
+
+/**
  * A consilium as the owners' room sees it. Only the payout kind exists today, so
  * `revenue_payout` is what distinguishes it; a second kind would arrive as a sibling field
  * rather than by widening this one.

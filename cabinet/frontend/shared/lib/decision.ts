@@ -58,3 +58,34 @@ export function settledRemoval(raw: unknown): SettledRemoval | null {
 export function peerVote(raw: unknown): SettledRemoval | null {
   return settledRemoval(raw);
 }
+
+/**
+ * An answer to an admission: `admit` grants the seat, `reject` refuses it.
+ *
+ * Its own vocabulary, and deliberately NOT {@link SettledRemoval}. The ownership plane
+ * splits the two enums on purpose, and the words do not line up the way a reader would
+ * assume: `reject` on a removal means *keep this owner*, `reject` on an admission means
+ * *refuse this candidate*. Put an admission through `settledRemoval` and a rejection comes
+ * back as `keep` — which renders "keep" over a candidate who has just been turned down,
+ * and, worse, would let a shared vote control post the wrong verb to the wrong plane.
+ */
+export type SettledAdmission = "admit" | "reject";
+
+/** The admission answer, or null while this seat has not answered. */
+export function settledAdmission(raw: unknown): SettledAdmission | null {
+  const value = normalise(raw);
+  if (value === "admit" || value === "admitted") return "admit";
+  if (value === "reject" || value === "rejected") return "reject";
+  return null;
+}
+
+/**
+ * One peer's vote on an admission, or null if they have not voted.
+ *
+ * The same trap as {@link peerVote}: an unanswered peer arrives as `""` or as the plane's
+ * own `"pending"`, both truthy, and reading either as a cast vote takes the buttons away
+ * from someone who still has a vote to give.
+ */
+export function admissionVote(raw: unknown): SettledAdmission | null {
+  return settledAdmission(raw);
+}
