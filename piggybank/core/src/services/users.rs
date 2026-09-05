@@ -2,8 +2,8 @@
 //!
 //! Every RPC is authorized from the verified [`Claims`](evbanking_auth::Claims)
 //! injected by core's inbound auth layer. Self-service RPCs act on the caller's own
-//! `sub` (`caller_id`); admin RPCs are gated by the hub's allowlist
-//! (`require_admin`).
+//! `sub` (`caller_id`); admin RPCs are gated by the RBAC matrix over the caller's
+//! bridge-mirrored `users.role` (`require_permission`).
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
 //! type we don't control, so the large-err lint does not apply in this module.

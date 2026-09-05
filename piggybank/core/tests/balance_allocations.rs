@@ -5,7 +5,7 @@
 //! ids (user/service), so runs are isolated on shared infrastructure. The relay is
 //! driven explicitly via `Relay::drain` to apply committed events deterministically.
 //!
-//! Boundary authz (`require_admin`/`caller_id`) is the same path the live `UsersSvc`
+//! Boundary authz (`require_permission`/`caller_id`) is the same path the live `UsersSvc`
 //! already uses; the load-bearing money invariant — the revoke rule — is exercised
 //! here at the aggregate/repository layer.
 
