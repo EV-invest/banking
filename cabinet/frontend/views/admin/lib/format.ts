@@ -29,8 +29,27 @@ export function ago(unixSecs: string | undefined, t: Translate): string {
   return t("admin.ago.days", { n: Math.floor(secs / 86_400) });
 }
 
-/** The role vocabulary, least→most privileged (matches the domain `Role`). */
-export const ROLES = ["investor", "operator", "admin", "owner"] as const;
+/**
+ * The roles this console can actually grant, least→most privileged.
+ *
+ * `owner` is absent, and its absence is the rule rather than an omission. A seat is now a
+ * persisted column, and `SetRole` refuses to grant or withdraw it unconditionally — the
+ * only routes in are the consilium's admission and the genesis seed the service applies at
+ * start-up, and the only routes out are a removal or a resignation. Offering the option
+ * anyway is what produced the complaint this list answers: the console proposed a role
+ * change and the plane answered `FAILED_PRECONDITION`, so the reader was refused an action
+ * the interface had just held out to them.
+ */
+export const ASSIGNABLE_ROLES = ["investor", "operator", "admin"] as const;
+
+/**
+ * The whole role vocabulary (matches the domain `Role`).
+ *
+ * Derived from {@link ASSIGNABLE_ROLES} so the two cannot drift: this is what a role
+ * *filter* offers and what {@link roleLabel} recognises — reading an owner is fine
+ * everywhere, it is only writing one that the plane reserves for the consilium.
+ */
+export const ROLES = [...ASSIGNABLE_ROLES, "owner"] as const;
 
 // Wire vocabularies that also reach the screen as labels. The wire value is what goes
 // back to the API and never changes; these maps only decide what a reader sees.

@@ -1,28 +1,24 @@
 "use client";
 
-import { KeyRound, Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
-import { ownersResource } from "@/entities/governance/model/governance-resource";
 import type { AdminUserSummary } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
+import { Link } from "@/shared/ui/cabinet-link";
 import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { ROLES, ago, formatUsd, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
+import { ASSIGNABLE_ROLES, ROLES, ago, formatUsd, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
-// The owners' room owns the question "does this account hold a seat?", and it is answered
-// in one place so the two screens cannot drift apart again. See the note on
-// `elevatedWithoutSeat` for the contradiction this closes.
-import { elevatedWithoutSeat, readOf, seatedOwnerIds } from "@/views/consilium/lib/reads";
 
 export function UsersView() {
   const t = useT();
@@ -38,23 +34,14 @@ export function UsersView() {
   const total = list.data?.total ?? "0";
   const error = users || !list.error ? null : errorMessage(list.error, t);
 
-  // Why this screen reads the owner roster at all.
-  //
-  // The role in this table is concierge's `effective_role`: every subject named in
-  // `ADMIN_SUBJECTS` is promoted to Owner for the duration of the request and never
-  // persisted. The consilium roster reads the persisted role instead — deliberately, because
-  // a seat an environment variable can grant is not a seat (docs/CONSILIUM.md, the residual
-  // under § Admission). Both screens were right and they contradicted each other in prod:
-  // three accounts here labelled Владелец, and "0 owners" over there.
-  //
-  // So the row says which kind it is. `/api/owners` is owner-only, so an operator reading
-  // this table gets a 403 — `seatedOwnerIds` answers null for that and for every read still
-  // in flight, `elevatedWithoutSeat` marks nothing on null, and the screen quietly becomes
-  // the one it was before. No backend change is involved: this is two existing reads put
-  // beside each other.
-  const owners = useResource(ownersResource);
-  const seated = seatedOwnerIds(readOf(owners));
-
+  // This screen no longer cross-references the owner roster, and that is a deletion rather
+  // than a regression. The mark it used to draw was inferred: the row's role was compared
+  // against `/api/owners` and a mismatch was rendered as "elevated access, no seat". The
+  // role reaching this table is now the persisted one, so the two reads can no longer
+  // disagree by construction, and a cross-reference that can only fire on a stale or
+  // partial roster is a cross-reference that can only lie. Break-glass elevation is
+  // reported by the plane as its own flag on the caller — never assembled here out of two
+  // lists that happen to differ.
   return (
     <AdminScreen className="space-y-6">
       <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.users")} subtitle={t("admin.users.subtitle")} />
@@ -147,15 +134,7 @@ export function UsersView() {
                             <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
                           </button>
                         </td>
-                        <td className="px-5 py-3">
-                          {/* Stacked, not inline: `table-fixed` sizes this column from an
-                              8-character header, so a chip beside the role would push the
-                              label out of its own cell in every locale. */}
-                          <div className="flex flex-col items-start gap-1">
-                            <span>{roleLabel(u.role, t)}</span>
-                            {elevatedWithoutSeat(u, seated) && <NoSeatMark />}
-                          </div>
-                        </td>
+                        <td className="px-5 py-3">{roleLabel(u.role, t)}</td>
                         <td className="px-5 py-3 text-muted-foreground">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
                         <td className="px-5 py-3">
                           <StatusDot status={u.status} label={statusLabel(u.status, t)} />
@@ -196,7 +175,7 @@ export function UsersView() {
                 {/* `key` remounts the drawer per user, so its uncontrolled inputs (KYC
                     level) reset — otherwise a stale value could be committed against
                     the wrong user. */}
-                <UserDrawer key={selected.user_id} summary={selected} seated={seated} onClose={() => setSelected(null)} />
+                <UserDrawer key={selected.user_id} summary={selected} onClose={() => setSelected(null)} />
               </PanelSwap>
             </Panel>
           )}
@@ -254,16 +233,7 @@ function Avatar({ email }: { email: string }) {
   return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initials || "?"}</span>;
 }
 
-function UserDrawer({
-  summary,
-  seated,
-  onClose,
-}: {
-  summary: AdminUserSummary;
-  /** Seat-holders, or null when the roster is unknown — see the note in `UsersView`. */
-  seated: ReadonlySet<string> | null;
-  onClose: () => void;
-}) {
+function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {
   const t = useT();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -327,16 +297,6 @@ function UserDrawer({
           <span className={cn("rounded-full px-2 py-0.5 font-medium", statusTone(status))}>{statusLabel(status, t)}</span>
         </div>
 
-        {/* Spelled out here rather than in the row, where there is only room for a mark.
-            The point a reader needs is that this is not a mistake to correct: the seat is
-            withheld on purpose, and granting one to close the gap is the move the mechanism
-            exists to stop. */}
-        {elevatedWithoutSeat({ user_id: summary.user_id, role }, seated) && (
-          <p className="rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/10 px-3 py-2.5 text-xs leading-relaxed text-foreground">
-            {t("admin.users.noSeatExplainer")}
-          </p>
-        )}
-
         {error && (
           <p className="flex items-center gap-2 text-xs text-destructive">
             <TriangleAlert className="size-3.5" /> {error}
@@ -354,24 +314,7 @@ function UserDrawer({
         </Section>
 
         <Section title={t("admin.users.accessSecurity")}>
-          <div className="flex items-center justify-between gap-2 py-1 text-sm">
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              {t("admin.users.role")}
-              <TipAnchor anchor="admin.users.access.role" />
-            </span>
-            <Select value={role} onValueChange={(next) => run("role", () => setUserRole(summary.user_id, next))}>
-              <SelectTrigger size="sm" className="border-border bg-main-surface" disabled={busy === "role"}>
-                <span>{roleLabel(role, t)}</span>
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {roleLabel(r, t)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <RoleField role={role} busy={busy === "role"} onPick={(next) => run("role", () => setUserRole(summary.user_id, next))} />
           <label className="flex items-center justify-between gap-2 py-1 text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
               {t("ui.kycLevel")}
@@ -426,6 +369,59 @@ function UserDrawer({
   );
 }
 
+/**
+ * The role control, and the one sentence that says where the missing option went.
+ *
+ * Owner is not in the list and the plane is the reason: a seat is a persisted column that
+ * `SetRole` refuses to grant OR withdraw, so both directions across that line are the
+ * consilium's — an admission on the way in, a removal or a resignation on the way out (the
+ * very first seats come from the genesis seed the service applies at start-up, before
+ * there is a consilium to ask). Leaving the option in place is what the reader complained
+ * about: the console offered a role change and the plane answered `FAILED_PRECONDITION`,
+ * which reads as a broken console rather than a rule.
+ *
+ * So an owner's row disables the control outright instead of offering three choices that
+ * would all be refused, and the note beside it links to the room that can actually do it.
+ * Muted and one line, not an alert: nothing here has gone wrong.
+ */
+function RoleField({ role, busy, onPick }: { role: string; busy: boolean; onPick: (role: string) => void }) {
+  const t = useT();
+  const seated = role === "owner";
+  return (
+    <div className="flex flex-col gap-1.5 py-1">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          {t("admin.users.role")}
+          <TipAnchor anchor="admin.users.access.role" />
+        </span>
+        {/* Disabled on the trigger, which is the button: the uikit's `Select` root takes no
+            `disabled` of its own, and a trigger that cannot be pressed is the only door in. */}
+        <Select value={role} onValueChange={onPick}>
+          <SelectTrigger size="sm" className="border-border bg-main-surface" disabled={busy || seated}>
+            <span>{roleLabel(role, t)}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {ASSIGNABLE_ROLES.map((r) => (
+              <SelectItem key={r} value={r}>
+                {roleLabel(r, t)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {seated ? t("admin.users.ownerSeatHeld") : t("admin.users.ownerSeatVia")}{" "}
+        {/* The destination is the link text, so the sentence stops outside it — a trailing
+            full stop inside the anchor would be underlined and clickable. */}
+        <Link href="/consilium" className="rounded-xs underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+          {t("nav.consilium")}
+        </Link>
+        .
+      </p>
+    </div>
+  );
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-1 border-t border-border pt-4">
@@ -449,27 +445,4 @@ function Row({ label, value, tip }: { label: string; value: string; tip?: TipKey
 
 function Chip({ children }: { children: ReactNode }) {
   return <span className="rounded-full bg-foreground/5 px-2 py-0.5 font-medium text-foreground">{children}</span>;
-}
-
-/**
- * "Owner here, no seat there."
- *
- * The row carries the Owner role because concierge promoted it from `ADMIN_SUBJECTS` at
- * request time; the consilium roster, which reads the persisted role, does not list it. The
- * mark says which of the two this is, and it is a mark rather than a correction: the access
- * is real, the seat is not, and neither screen was lying.
- *
- * Warning-toned, not destructive. Break-glass elevation is a deliberate arrangement, not a
- * fault, and colouring it as an error would push someone to "fix" it by seating them — the
- * one move the whole mechanism exists to prevent.
- */
-function NoSeatMark() {
-  const t = useT();
-  return (
-    <Badge variant="outline" className="gap-1 whitespace-nowrap border-main-accent-t3/40 text-main-accent-t3">
-      <KeyRound className="size-3" aria-hidden />
-      {/* i18n-max: 14 — this sits in a table column sized from an 8-character header. */}
-      {t("admin.users.noSeat")}
-    </Badge>
-  );
 }

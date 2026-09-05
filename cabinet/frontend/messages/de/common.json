@@ -935,6 +935,14 @@
     "en": "No users match these filters.",
     "t": "Keine Nutzer passen zu diesen Filtern."
   },
+  "admin.users.ownerSeatHeld": {
+    "en": "This account holds an owner's seat, so its role cannot be changed here. A seat is given up by resigning, or taken by a removal the other owners vote through, in",
+    "t": "Dieses Konto hält einen Eigentümersitz, seine Rolle lässt sich hier nicht ändern. Ein Sitz wird durch Rücktritt frei oder durch einen Ausschluss, über den die übrigen Eigentümer abstimmen — im Bereich"
+  },
+  "admin.users.ownerSeatVia": {
+    "en": "Owner is not on this list. A seat is written by the founding seed at start-up, or granted by an admission the current owners vote through — never from here. Open one in",
+    "t": "Eigentümer steht nicht in dieser Liste. Einen Sitz schreibt die Gründungssaat beim Start oder eine Aufnahme, über die die amtierenden Eigentümer abstimmen — niemals dieses Formular. Einen Antrag stellen Sie im Bereich"
+  },
   "admin.users.reinstate": {
     "en": "Reinstate",
     "t": "Reaktivieren"
@@ -1214,6 +1222,18 @@
   "auth.welcomeBack": {
     "en": "Welcome back",
     "t": "Willkommen zurück"
+  },
+  "consilium.admit.genesis": {
+    "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
+    "t": "Dieser Fonds hat {n, plural, =0 {keine Eigentümer mit Sitz} one {# Eigentümer mit Sitz} other {# Eigentümer mit Sitz}}. Eine Aufnahme braucht mindestens einen Eigentümer außer dem Antragsteller und kann die Gründer daher nicht einsetzen: die schreibt der Dienst beim Start selbst, aus der Genesis-Liste und nur solange das Register leer ist. Dieser Start schließt das Fenster endgültig, und danach ist dieses Formular der einzige Weg hinein."
+  },
+  "consilium.roster.emptyBody": {
+    "en": "Genesis has not run yet. At start-up the service seats everyone on the OWNER_SUBJECTS list who already has an account — but only if at least two of them resolve. A sole owner could never admit the second, so seating one is refused outright rather than left as a dead end.",
+    "t": "Die Genesis hat noch nicht stattgefunden. Beim Start setzt der Dienst alle aus der Liste OWNER_SUBJECTS ein, die bereits ein Konto haben — aber nur, wenn mindestens zwei davon auflösbar sind. Ein einzelner Eigentümer könnte den zweiten nie aufnehmen, deshalb wird das Einsetzen eines Einzelnen rundweg verweigert, statt eine Sackgasse zu hinterlassen."
+  },
+  "consilium.roster.emptyNext": {
+    "en": "Add the missing people to OWNER_SUBJECTS, have each of them sign in once so the account exists, and restart the service. Until the first seat is written, the operators on that list are working under emergency access — temporary by construction: the first successful seeding closes it permanently, and from then on a seat is only ever granted by a consilium of the existing owners.",
+    "t": "Tragen Sie die fehlenden Personen in OWNER_SUBJECTS nach, lassen Sie jede sich einmal anmelden, damit das Konto existiert, und starten Sie den Dienst neu. Bis der erste Sitz geschrieben ist, arbeiten die gelisteten Operatoren mit Notfallzugang — konstruktionsbedingt vorübergehend: Die erste erfolgreiche Saat schließt ihn endgültig, und danach vergibt einen Sitz nur noch ein Consilium der amtierenden Eigentümer."
   },
   "dash.activeStrategies": {
     "en": "Active strategies",
@@ -2856,8 +2876,8 @@
     "t": "Alle Sitzungen widerrufen"
   },
   "tips.admin.users.access.role.body": {
-    "en": "The access level for this user: investor, operator, admin, or owner. Raising it grants operator/admin console access immediately on change.",
-    "t": "Die Zugriffsstufe dieses Nutzers: Investor, Operator, Admin oder Eigentümer. Eine Anhebung gewährt den Zugang zur Operator- bzw. Admin-Konsole unmittelbar mit der Änderung."
+    "en": "The access level for this user: investor, operator or admin. Raising it grants operator/admin console access immediately on change. Owner is not here — a seat is the consilium's to give and to take away.",
+    "t": "Die Zugriffsstufe dieses Benutzers: Investor, Operator oder Admin. Eine Erhöhung gewährt den Zugang zur Operator-/Admin-Konsole sofort. Eigentümer fehlt hier — einen Sitz vergibt und entzieht allein das Consilium."
   },
   "tips.admin.users.access.role.title": {
     "en": "Role",

@@ -1043,13 +1043,13 @@
     "en": "No users match these filters.",
     "t": "Нет пользователей, подходящих под эти фильтры."
   },
-  "admin.users.noSeat": {
-    "en": "No seat",
-    "t": "Без места"
+  "admin.users.ownerSeatHeld": {
+    "en": "This account holds an owner's seat, so its role cannot be changed here. A seat is given up by resigning, or taken by a removal the other owners vote through, in",
+    "t": "Аккаунт занимает место владельца, поэтому роль отсюда не меняется. Место освобождается сложением полномочий или исключением, за которое голосуют остальные владельцы, — в разделе"
   },
-  "admin.users.noSeatExplainer": {
-    "en": "Elevated access, no seat in the consilium. This account is an owner because it is listed in ADMIN_SUBJECTS, which the directory applies per request without storing it. The consilium counts only stored seats, so it does not count this one — on purpose, because a seat an environment variable can grant is not a seat. Granting the role to close the gap is the one thing that would defeat it.",
-    "t": "Расширенный доступ, места в консилиуме нет. Этот аккаунт — владелец, потому что он указан в ADMIN_SUBJECTS: каталог применяет это на каждый запрос, не сохраняя. Консилиум считает только сохранённые места и это место не учитывает — намеренно, ведь место, которое можно выдать переменной окружения, — не место. Выдать роль, чтобы устранить расхождение, — единственное, что сломало бы эту защиту."
+  "admin.users.ownerSeatVia": {
+    "en": "Owner is not on this list. A seat is written by the founding seed at start-up, or granted by an admission the current owners vote through — never from here. Open one in",
+    "t": "Роли «Владелец» в списке нет. Место записывает посев при старте сервиса либо приём, за который голосуют действующие владельцы, — но никогда не эта форма. Открыть предложение можно в разделе"
   },
   "admin.users.reinstate": {
     "en": "Reinstate",
@@ -1688,8 +1688,8 @@
     "t": "ID пользователя"
   },
   "consilium.admit.genesis": {
-    "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so the first two seats are granted directly through the user's role instead. From two owners onward that is refused and this is the only route.",
-    "t": "В фонде {n, plural, =0 {нет владельцев с местом} one {# владелец с местом} few {# владельца с местом} many {# владельцев с местом} other {# владельца с местом}}. Для приёма нужен хотя бы один владелец помимо предлагающего, поэтому первые два места выдают напрямую через роль пользователя. Начиная с двух владельцев это запрещено, и остаётся только этот путь."
+    "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
+    "t": "В этом фонде {n, plural, =0 {нет владельцев с местом} one {# владелец с местом} few {# владельца с местом} many {# владельцев с местом} other {# владельца с местом}}. Приёму нужен хотя бы один владелец кроме того, кто его предлагает, поэтому основателей он посадить не может: их записывает сам сервис при старте, по списку генезиса, и только пока реестр пуст. Этот старт закрывает окно навсегда, и дальше попасть в состав можно только через эту форму."
   },
   "consilium.admit.opened": {
     "en": "Proposed. Every other owner has been asked to answer.",
@@ -2016,12 +2016,12 @@
     "t": "{n, plural, one {# владелец} few {# владельца} many {# владельцев} other {# владельца}}"
   },
   "consilium.roster.emptyBody": {
-    "en": "A platform administrator elevated through ADMIN_SUBJECTS deliberately holds no seat: a seat an environment variable can grant is not a seat.",
-    "t": "Администратор платформы, поднятый через ADMIN_SUBJECTS, места намеренно не занимает: место, которое можно выдать переменной окружения, — не место."
+    "en": "Genesis has not run yet. At start-up the service seats everyone on the OWNER_SUBJECTS list who already has an account — but only if at least two of them resolve. A sole owner could never admit the second, so seating one is refused outright rather than left as a dead end.",
+    "t": "Генезис ещё не состоялся. При старте сервис сажает всех из списка OWNER_SUBJECTS, у кого уже есть аккаунт, — но только если их наберётся хотя бы двое. Единственный владелец никогда не смог бы принять второго, поэтому посадить одного сервис отказывается, а не оставляет фонд в тупике."
   },
   "consilium.roster.emptyNext": {
-    "en": "The first two owners are seated by granting the role directly. Every owner after that is admitted by a consilium of the existing ones.",
-    "t": "Первых двух владельцев назначают, выдав роль напрямую. Каждого следующего принимает консилиум действующих владельцев."
+    "en": "Add the missing people to OWNER_SUBJECTS, have each of them sign in once so the account exists, and restart the service. Until the first seat is written, the operators on that list are working under emergency access — temporary by construction: the first successful seeding closes it permanently, and from then on a seat is only ever granted by a consilium of the existing owners.",
+    "t": "Допишите недостающих в OWNER_SUBJECTS, попросите каждого хотя бы раз войти, чтобы аккаунт появился, и перезапустите сервис. Пока не записано первое место, перечисленные операторы работают по аварийному доступу — он временный по устройству: первый удавшийся посев закрывает его навсегда, и дальше место даёт только консилиум действующих владельцев."
   },
   "consilium.roster.emptyTitle": {
     "en": "No owner holds a seat yet",
@@ -3780,8 +3780,8 @@
     "t": "Отозвать все сеансы"
   },
   "tips.admin.users.access.role.body": {
-    "en": "The access level for this user: investor, operator, admin, or owner. Raising it grants operator/admin console access immediately on change.",
-    "t": "Уровень доступа пользователя: инвестор, оператор, админ или владелец. Повышение сразу же открывает доступ к консоли оператора или администратора."
+    "en": "The access level for this user: investor, operator or admin. Raising it grants operator/admin console access immediately on change. Owner is not here — a seat is the consilium's to give and to take away.",
+    "t": "Уровень доступа пользователя: инвестор, оператор или админ. Повышение сразу даёт доступ к консоли оператора/админа. «Владельца» здесь нет — место даёт и забирает только консилиум."
   },
   "tips.admin.users.access.role.title": {
     "en": "Role",

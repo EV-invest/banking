@@ -282,14 +282,24 @@ function Roster({
             />
           ) : rosterState(read) === "unseated" ? (
             // An empty roster used to be treated as impossible: the copy said it "should
-            // not be possible" and told the reader to report it. That was right only while
-            // every account labelled Owner was a seated owner, and it stopped being right
-            // the moment break-glass existed. A subject in `ADMIN_SUBJECTS` is promoted to
-            // Owner by the directory at request time and never persisted; this roster reads
-            // the PERSISTED role, precisely so a seat cannot be granted by whoever can edit
-            // an environment variable. A fund whose only elevated accounts are break-glass
-            // ones therefore has an empty roster and no fault to report — and telling an
-            // owner to file a bug against a correct answer is worse than saying nothing.
+            // not be possible" and told the reader to report it. It is in fact the one
+            // state a brand-new deployment starts in — genesis has not run — and the copy
+            // now says which of its two causes this is and what closes it.
+            //
+            // Genesis seats the founders once, at start-up, from `OWNER_SUBJECTS`, and only
+            // while the persisted roster is empty. It refuses to run unless at least TWO
+            // listed ids resolve to existing accounts, because admission needs a peer
+            // besides the initiator: a fund seeded with one owner could never admit the
+            // second and no API path can empty the roster to let the seed retry, so a lone
+            // seat is an unrecoverable dead end and seating nobody is the better failure
+            // (docs/CONSILIUM.md, § Genesis). So an empty roster means the list was unset,
+            // or too few of its ids had accounts yet — a configuration to finish, not a bug
+            // to file, and the operator reading this is the person who can finish it.
+            //
+            // The reader is also inside the emergency-access window while this shows, which
+            // is why the copy names it: it is the only period in the fund's life when an
+            // environment variable confers anything, and the first successful seeding ends
+            // it permanently.
             //
             // Dashed frame, muted, no destructive tint: this is an operational state. The
             // failed read above keeps the solid red box, because the two are different
