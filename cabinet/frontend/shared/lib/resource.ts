@@ -115,6 +115,13 @@ interface Entry<T> {
   readonly persistKey: string | null;
   data: T | undefined;
   error: Error | null;
+  /**
+   * The last attempt was refused outright — see {@link isRefusal}.
+   *
+   * Suppresses the *automatic* triggers only. `refresh()` and a tag invalidation clear it,
+   * because both carry information a clock does not.
+   */
+  denied: boolean;
   /** 0 until the first successful read — the "never loaded" marker `isStale` reads. */
   fetchedAt: number;
   inflight: Promise<void> | null;
@@ -161,6 +168,31 @@ function isStale(entry: Entry<unknown>): boolean {
   return entry.fetchedAt === 0 || Date.now() - entry.fetchedAt >= entry.freshMs;
 }
 
+/**
+ * A verdict rather than a blip: this caller may not read this, and asking again changes
+ * nothing.
+ *
+ * 403 alone. A 401 is already healed and replayed a layer down (`./api-client.ts`), a 404
+ * can become a 200 the moment the thing is created, a 429 is explicitly an invitation to
+ * come back, and 5xx and a dead network are the transient cases the retry loop exists for.
+ * Only "you do not have access to this" is settled by information the client cannot change
+ * on its own.
+ *
+ * Read off the `status` field rather than `instanceof RequestError`, and both halves of
+ * that are deliberate. This module has no imports but React — it is the cache, so anything
+ * it pulls in is pulled into every screen — and importing the transport would drag
+ * `fetch`, the CSRF header and the session into it. It would also break `./resource.
+ * test.ts`: the Node runner strips types but resolves no `@/` alias, so a value import
+ * from `@/shared/lib/api-client` is `ERR_MODULE_NOT_FOUND` (`session.ts` gets away with
+ * the same alias only because its import is type-only). The shape checked here is the one
+ * `RequestError` and `SessionExpiredError` both publish, and it is narrowed rather than
+ * asserted.
+ */
+function isRefusal(error: Error): boolean {
+  const status: unknown = (error as { status?: unknown }).status;
+  return status === 403;
+}
+
 function revalidate<T>(entry: Entry<T>): Promise<void> {
   if (entry.inflight) return entry.inflight;
   entry.inflight = entry
@@ -168,6 +200,7 @@ function revalidate<T>(entry: Entry<T>): Promise<void> {
     .then((value) => {
       entry.data = value;
       entry.error = null;
+      entry.denied = false;
       entry.fetchedAt = Date.now();
       writePersisted(entry);
     })
@@ -175,6 +208,7 @@ function revalidate<T>(entry: Entry<T>): Promise<void> {
       // Deliberately non-destructive: the stale value stays, so a timed-out poll never
       // blanks a figure the user is reading.
       entry.error = toError(cause);
+      entry.denied = isRefusal(entry.error);
     })
     .finally(() => {
       entry.inflight = null;
@@ -182,6 +216,21 @@ function revalidate<T>(entry: Entry<T>): Promise<void> {
     });
   publishSnapshot(entry);
   return entry.inflight;
+}
+
+/**
+ * The clock's way in — a mount, a tab regaining focus, a route being warmed.
+ *
+ * None of these know anything the last attempt did not, so a refused entry is left alone:
+ * an operator on the users screen was re-issuing `/api/owners` on every one of them and
+ * collecting an identical 403 in the console each time. The refusal is still reported —
+ * `snapshot.error` holds it and the screens branch on it — it is only the *repeat* that is
+ * dropped. `refresh()` and `revalidateTag()` go through `revalidate` directly, because a
+ * retry the reader asked for and a mutation saying "this changed" are both new information.
+ */
+function autoRevalidate(entry: Entry<unknown>): void {
+  if (entry.denied || !isStale(entry)) return;
+  void revalidate(entry);
 }
 
 function writePersisted<T>(entry: Entry<T>): void {
@@ -218,6 +267,10 @@ function dropPersisted(entry: Entry<unknown>): void {
 
 function markStale(entry: Entry<unknown>): void {
   entry.fetchedAt = 0;
+  // A named tag is a mutation or the server's own stream saying this changed, which is
+  // exactly the kind of event that turns a 403 into a 200 — a seat granted, a role moved.
+  // So it lifts the refusal, unlike the clock (see `autoRevalidate`).
+  entry.denied = false;
   dropPersisted(entry);
   // On screen right now: refresh in place, so a mutation's effect lands without the user
   // navigating. Not mounted: the next screen that reads it will find it stale and refresh.
@@ -247,6 +300,9 @@ export function clearResources(): void {
     dropPersisted(entry);
     entry.data = undefined;
     entry.error = null;
+    // The next account in this tab is a different caller, so the previous one's refusal
+    // says nothing about them.
+    entry.denied = false;
     entry.fetchedAt = 0;
     publishSnapshot(entry);
   }
@@ -265,7 +321,7 @@ function watchFocus(): void {
   const sweep = () => {
     if (document.visibilityState !== "visible") return;
     for (const entry of REGISTRY.values()) {
-      if (entry.listeners.size > 0 && isStale(entry)) void revalidate(entry);
+      if (entry.listeners.size > 0) autoRevalidate(entry);
     }
   };
   document.addEventListener("visibilitychange", sweep);
@@ -289,14 +345,18 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
       persistKey: config.persist ? `${PERSIST_PREFIX}${key}` : null,
       data: undefined,
       error: null,
+      denied: false,
       fetchedAt: 0,
       inflight: null,
       listeners: new Set(),
       snapshot: emptySnapshot<T>(),
       refresh: NOOP_REFRESH,
     };
+    // The reader asked, so it goes through regardless of the last verdict: a retry button
+    // that silently does nothing is worse than a second 403.
     entry.refresh = () => {
       entry.fetchedAt = 0;
+      entry.denied = false;
       return revalidate(entry);
     };
     REGISTRY.set(key, entry as Entry<unknown>);
@@ -315,6 +375,9 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
     read(...args: A): Promise<T> {
       const entry = ensure(keyOf(...args), args);
       if (!isStale(entry) && entry.data !== undefined) return Promise.resolve(entry.data);
+      // Refused, and nothing has happened since that could change the answer — hand back
+      // the verdict already held rather than spending a request on the same one.
+      if (entry.denied && entry.error !== null) return Promise.reject(entry.error);
       return revalidate(entry).then(() => {
         if (entry.data !== undefined) return entry.data;
         throw entry.error ?? new Error(`${config.name} unavailable`);
@@ -325,13 +388,13 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
     },
     prefetch(...args: A): void {
       if (typeof window === "undefined" || !enabled(...args)) return;
-      const entry = ensure(keyOf(...args), args);
-      if (isStale(entry)) void revalidate(entry);
+      autoRevalidate(ensure(keyOf(...args), args));
     },
     publish(value: T, ...args: A): void {
       const entry = ensure(keyOf(...args), args);
       entry.data = value;
       entry.error = null;
+      entry.denied = false;
       entry.fetchedAt = Date.now();
       writePersisted(entry);
       publishSnapshot(entry);
@@ -371,7 +434,7 @@ export function useResource<T, A extends unknown[]>(resource: Resource<T, A>, ..
     (onChange: () => void) => {
       if (!entry) return () => undefined;
       entry.listeners.add(onChange);
-      if (isStale(entry)) void revalidate(entry);
+      autoRevalidate(entry);
       return () => {
         entry.listeners.delete(onChange);
       };

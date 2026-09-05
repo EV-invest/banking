@@ -195,6 +195,8 @@ fn token_response(access_token: String, access_exp: u64, refresh: IssuedRefresh,
 			// Empty on the money plane — the cabinet reads the role from concierge's login
 			// summary; this field exists only for cross-plane wire parity.
 			role: String::new(),
+			// Same reason: the money plane has no emergency allowlist to report on.
+			role_is_break_glass: false,
 		}),
 	}
 }

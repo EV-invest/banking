@@ -467,7 +467,6 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		custody,
 		Arc::from(rails.configured_networks()),
 		relay_notify,
-		config.admin_subjects.clone(),
 		config.consilium_approval_url_base.clone(),
 		rails.ton.as_ref().is_some_and(|ton| ton.is_testnet),
 	);

@@ -135,9 +135,11 @@ impl BridgeConsumer {
 		// pre-role row) carries an empty value that degrades to Investor.
 		let role = Role::parse_or_default(&event.role);
 		if event.kind() == Kind::Created {
-			sqlx::query(
+			// `RETURNING id` yields a row ONLY when this statement actually inserted;
+			// `ON CONFLICT DO NOTHING` returns nothing when the row already existed.
+			let seated: Option<uuid::Uuid> = sqlx::query_scalar(
 				"INSERT INTO users (id, auth_subject, concierge_user_id, email, email_verified, kyc_level, role, last_lifecycle_sequence) \
-				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (auth_subject) DO NOTHING",
+				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (auth_subject) DO NOTHING RETURNING id",
 			)
 			.bind(subject)
 			.bind(concierge_user_id)
@@ -146,8 +148,21 @@ impl BridgeConsumer {
 			.bind(event.kyc_level as i32)
 			.bind(role.as_str())
 			.bind(sequence)
-			.execute(&mut *tx)
+			.fetch_optional(&mut *tx)
 			.await?;
+
+			// THE JOURNAL WRITE BELONGS HERE, NOT ONLY IN THE `Kind::Created` MATCH ARM.
+			//
+			// This INSERT stamps `last_lifecycle_sequence` itself, so the sequence guard below
+			// sees `sequence == current` and returns early — the match arm never runs for a row
+			// this event just created. Putting the journal write only there would have left the
+			// latch permanently dead for exactly the case it exists to catch.
+			//
+			// A row that did not exist held nothing, so the role it replaced is the default,
+			// which is also what keeps the table's `from_role <> to_role` CHECK satisfied.
+			if let Some(user_id) = seated {
+				record_roster_change(&mut tx, user_id, Role::default().as_str(), role.as_str()).await?;
+			}
 		}
 
 		let current: Option<i64> = sqlx::query_scalar("SELECT last_lifecycle_sequence FROM users WHERE auth_subject = $1 FOR UPDATE")
@@ -169,17 +184,39 @@ impl BridgeConsumer {
 		match event.kind() {
 			// CREATED already upserted above; stamp the sequence, refresh KYC, and backfill
 			// concierge_user_id if a pre-existing row didn't have it (COALESCE never overwrites).
+			//
+			// THIS ARM ALSO WRITES THE ROSTER JOURNAL, AND MUST KEEP DOING SO EVEN THOUGH NO
+			// CREATED CARRIES `owner` TODAY. Concierge stamps the role snapshot at drain time,
+			// and CREATED drains immediately after `User::provision`, when the role is still
+			// `investor`. That is an ordering coincidence in ANOTHER repository, not an
+			// invariant of this one. Were it to change, CREATED would be the only path by
+			// which the money plane could gain an owner without a `governance_roster_change`
+			// row, and therefore without the 48h cooling-off window the whole roster-capture
+			// defence rests on (`application::consilium::ROSTER_COOLING_OFF_SECS`). Do not
+			// delete this as dead code: it is a latch, and it costs one statement on a path
+			// that runs once per user.
+			//
+			// Reached only when the row ALREADY existed (materialized by first sign-in) and a
+			// later CREATED advances the sequence — a row this event inserted is handled
+			// above, before the sequence guard returns early.
 			Kind::Created => {
-				sqlx::query(
-					"UPDATE users SET kyc_level = $2, role = $3, last_lifecycle_sequence = $4, concierge_user_id = COALESCE(concierge_user_id, $5), updated_at = now() WHERE auth_subject = $1",
+				// `FROM users old` reads the PRE-update snapshot, exactly as the RoleChanged
+				// arm does, so both arms report the role they replaced the same way.
+				let previous: Option<(uuid::Uuid, String)> = sqlx::query_as(
+					"UPDATE users u SET kyc_level = $2, role = $3, last_lifecycle_sequence = $4, concierge_user_id = COALESCE(u.concierge_user_id, $5), updated_at = now() \
+					 FROM users old WHERE u.auth_subject = $1 AND old.id = u.id RETURNING u.id, old.role",
 				)
 				.bind(subject)
 				.bind(event.kyc_level as i32)
 				.bind(role.as_str())
 				.bind(sequence)
 				.bind(concierge_user_id)
-				.execute(&mut *tx)
+				.fetch_optional(&mut *tx)
 				.await?;
+
+				if let Some((user_id, from_role)) = previous {
+					record_roster_change(&mut tx, user_id, &from_role, role.as_str()).await?;
+				}
 			}
 			Kind::Suspended => {
 				sqlx::query("UPDATE users SET frozen = TRUE, last_lifecycle_sequence = $2, updated_at = now() WHERE auth_subject = $1")
@@ -216,24 +253,8 @@ impl BridgeConsumer {
 				.fetch_optional(&mut *tx)
 				.await?;
 
-				// A CHANGE TO THE VOTING ROSTER STARTS A COOLING-OFF PERIOD.
-				//
-				// Only owner-affecting transitions are recorded: an investor promoted to
-				// admin, or a KYC level moving, does not change who can authorize a payout
-				// and must not delay a legitimate one. Written in the SAME transaction as
-				// the role itself, so the roster and the clock measuring it can never
-				// disagree — see `application::consilium::ROSTER_COOLING_OFF_SECS`.
-				if let Some((user_id, from_role)) = previous
-					&& from_role != role.as_str()
-					&& (from_role == "owner" || role.as_str() == "owner")
-				{
-					sqlx::query("INSERT INTO governance_roster_change (user_id, from_role, to_role) VALUES ($1, $2, $3)")
-						.bind(user_id)
-						.bind(&from_role)
-						.bind(role.as_str())
-						.execute(&mut *tx)
-						.await?;
-					tracing::warn!(%user_id, %from_role, to_role = role.as_str(), "governance: the owner roster changed — payout proposals are frozen for the cooling-off period");
+				if let Some((user_id, from_role)) = previous {
+					record_roster_change(&mut tx, user_id, &from_role, role.as_str()).await?;
 				}
 			}
 			Kind::SessionsRevoked => {
@@ -259,6 +280,32 @@ impl BridgeConsumer {
 		tx.commit().await?;
 		Ok(())
 	}
+}
+
+/// A CHANGE TO THE VOTING ROSTER STARTS A COOLING-OFF PERIOD.
+///
+/// Only owner-affecting transitions are recorded: an investor promoted to admin, or a KYC
+/// level moving, does not change who can authorize a payout and must not delay a
+/// legitimate one. A no-op transition is likewise not a change. Both the table's CHECK
+/// constraints encode exactly this, so a caller that gets the predicate wrong fails the
+/// insert rather than silently widening the window.
+///
+/// Called from EVERY lifecycle arm that can write `users.role`, so the money plane has no
+/// route to gaining or losing an owner that skips the journal — see
+/// `application::consilium::ROSTER_COOLING_OFF_SECS`. It takes the caller's transaction so
+/// the roster and the clock measuring it commit together and can never disagree.
+async fn record_roster_change(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, user_id: uuid::Uuid, from_role: &str, to_role: &str) -> Result<(), sqlx::Error> {
+	if from_role == to_role || (from_role != Role::Owner.as_str() && to_role != Role::Owner.as_str()) {
+		return Ok(());
+	}
+	sqlx::query("INSERT INTO governance_roster_change (user_id, from_role, to_role) VALUES ($1, $2, $3)")
+		.bind(user_id)
+		.bind(from_role)
+		.bind(to_role)
+		.execute(&mut **tx)
+		.await?;
+	warn!(%user_id, %from_role, %to_role, "governance: the owner roster changed — payout proposals are frozen for the cooling-off period");
+	Ok(())
 }
 
 /// Whether the caller's banking row is blocked from moving money — the money-op gate.

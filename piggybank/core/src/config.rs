@@ -43,11 +43,6 @@ ev::settings! {
 		/// TigerBeetle cluster id (a u128, so it rides as a string — the wire has no
 		/// u128 lane).
 		tigerbeetle_cluster_id: String,
-		/// Break-glass role override: subjects treated as `Owner` by the RBAC gate even
-		/// with no mirrored role — the bootstrap path before the identity plane grants
-		/// roles. Comma-separated (empty ⇒ no override). Boot-time: a change applies via
-		/// redeploy (the gitops env edit is the audit trail).
-		admin_subjects: Vec<String> = "",
 		/// Endpoint of the separate-process signer (the key vault), for deposit-address
 		/// provisioning over the `signer.v1` gRPC seam. The hub connects lazily, so this
 		/// only needs to resolve by the time the first address is provisioned.
@@ -590,7 +585,6 @@ mod tests {
 				"APP_ENV",
 				"TIGERBEETLE_ADDRESS",
 				"TIGERBEETLE_CLUSTER_ID",
-				"ADMIN_SUBJECTS",
 				"SIGNER_GRPC_ADDR",
 				"DB_MAX_CONNECTIONS",
 				"RELAY_DB_MAX_CONNECTIONS",

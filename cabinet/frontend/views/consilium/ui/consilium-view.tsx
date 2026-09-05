@@ -63,6 +63,7 @@ import { initialsOf } from "@/shared/lib/identity";
 import { formatExactUsdt } from "@/shared/lib/money";
 import { networkLabel } from "@/shared/lib/rail";
 import { useResource } from "@/shared/lib/resource";
+import { BreakGlassNotice } from "@/shared/ui/break-glass-notice";
 import { Link } from "@/shared/ui/cabinet-link";
 import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
@@ -100,7 +101,14 @@ export function ConsiliumView() {
 
   if (forbidden) {
     return (
-      <div className="px-4 py-10 lg:px-8">
+      <div className="flex flex-col gap-6 px-4 py-10 lg:px-8">
+        {/* Here, and not only on the page below, because this is the branch a break-glass
+            operator actually lands on: their role is `operator`/`admin`, every read here is
+            owner-only, so all four answer 403 and the room shuts before they see a word of
+            it. Without the notice the page would say "you cannot see this" and leave the
+            reason — the register is empty and they hold no seat — entirely unstated, which
+            is the same silence this whole change is about. */}
+        <BreakGlassNotice className="mx-auto w-full max-w-160" />
         <Empty className="mx-auto max-w-160 rounded-xl border border-border bg-card p-6 md:p-8">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -158,6 +166,8 @@ export function ConsiliumView() {
         </div>
         <StreamChip status={stream.status} />
       </StaggerItem>
+
+      <BreakGlassNotice className="xl:col-span-2" />
 
       {roster?.below_payout_floor && (
         // Not styled as an error: nothing has failed. It is a standing fact about the fund
@@ -282,14 +292,24 @@ function Roster({
             />
           ) : rosterState(read) === "unseated" ? (
             // An empty roster used to be treated as impossible: the copy said it "should
-            // not be possible" and told the reader to report it. That was right only while
-            // every account labelled Owner was a seated owner, and it stopped being right
-            // the moment break-glass existed. A subject in `ADMIN_SUBJECTS` is promoted to
-            // Owner by the directory at request time and never persisted; this roster reads
-            // the PERSISTED role, precisely so a seat cannot be granted by whoever can edit
-            // an environment variable. A fund whose only elevated accounts are break-glass
-            // ones therefore has an empty roster and no fault to report — and telling an
-            // owner to file a bug against a correct answer is worse than saying nothing.
+            // not be possible" and told the reader to report it. It is in fact the one
+            // state a brand-new deployment starts in — genesis has not run — and the copy
+            // now says which of its two causes this is and what closes it.
+            //
+            // Genesis seats the founders once, at start-up, from `OWNER_SUBJECTS`, and only
+            // while the persisted roster is empty. It refuses to run unless at least TWO
+            // listed ids resolve to existing accounts, because admission needs a peer
+            // besides the initiator: a fund seeded with one owner could never admit the
+            // second and no API path can empty the roster to let the seed retry, so a lone
+            // seat is an unrecoverable dead end and seating nobody is the better failure
+            // (docs/CONSILIUM.md, § Genesis). So an empty roster means the list was unset,
+            // or too few of its ids had accounts yet — a configuration to finish, not a bug
+            // to file, and the operator reading this is the person who can finish it.
+            //
+            // The reader is also inside the emergency-access window while this shows, which
+            // is why the copy names it: it is the only period in the fund's life when an
+            // environment variable confers anything, and the first successful seeding ends
+            // it permanently.
             //
             // Dashed frame, muted, no destructive tint: this is an operational state. The
             // failed read above keeps the solid red box, because the two are different
