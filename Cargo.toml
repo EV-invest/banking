@@ -96,6 +96,11 @@ tower = "0.5.3"
 tower-http = "0.6.11"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
+# The remote key custodian the signer's `turnkey` backend signs through (see
+# docs/MIGRATION-turnkey.md). The two crates ship as one lockstep-versioned pair — bump
+# them together, never one alone.
+turnkey_api_key_stamper = "0.15"
+turnkey_client = "0.15"
 uuid = "1.23.2"
 zeroize = "1"
 

@@ -5,15 +5,19 @@
 //! surface. A separate binary on purpose: the KEK and every plaintext key stay in
 //! this address space, so a hub compromise can't move money.
 
+use std::sync::Arc;
+
 use color_eyre::eyre::Context;
 use evbanking_auth::{Verifier, grpc_auth_layer};
 use evbanking_contracts::signer::v1::signer_service_server::SignerServiceServer;
 use piggybank_signer::{
-	config::{SignerConfig, TlsConfig, load_vault},
+	backend::{KeyBackend, LocalVault},
+	config::{KeyBackendKind, SignerConfig, TlsConfig, load_vault},
 	kek_guard,
 	policy::SignerPolicy,
 	secrets::WalletSecrets,
 	service::Signer,
+	turnkey::TurnkeyBackend,
 };
 use sqlx::postgres::PgPoolOptions;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
@@ -59,7 +63,19 @@ async fn run() -> color_eyre::Result<()> {
 		tracing::warn!("signer spend policy inactive — no per-transfer cap or destination allowlist (set SIGNER_MAX_TRANSFER_USDT before scaling liquidity)");
 	}
 
-	let signer = Signer::new(vault, secrets, policy);
+	// Where NEW keys are minted and existing ones signed. `local` is the default and the
+	// rollback: flipping KEY_BACKEND back restores the previous behaviour with no data change,
+	// which is what makes each migration phase reversible. The KEK stays loaded either way —
+	// every `backend='local'` row still needs it (phase 5 is what removes it).
+	let vault = Arc::new(vault);
+	let backend: Arc<dyn KeyBackend> = match config.key_backend {
+		KeyBackendKind::Local => Arc::new(LocalVault::new(Arc::clone(&vault), secrets.clone())),
+		// Fail-fast: an operator who asked for the custodian must not get a silent local boot.
+		KeyBackendKind::Turnkey => Arc::new(TurnkeyBackend::from_env(secrets.clone()).context("failed to build the Turnkey key backend")?),
+	};
+	tracing::info!(key_backend = ?config.key_backend, "signer key backend selected");
+
+	let signer = Signer::with_backend(backend, vault, secrets, policy);
 
 	// Authenticate the seam: a stateless verifier accepts only the hub's service token
 	// (verified against the auth service's JWKS). Mounted as the choke point in front of
