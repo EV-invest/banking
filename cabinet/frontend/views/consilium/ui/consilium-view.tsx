@@ -63,6 +63,7 @@ import { initialsOf } from "@/shared/lib/identity";
 import { formatExactUsdt } from "@/shared/lib/money";
 import { networkLabel } from "@/shared/lib/rail";
 import { useResource } from "@/shared/lib/resource";
+import { BreakGlassNotice } from "@/shared/ui/break-glass-notice";
 import { Link } from "@/shared/ui/cabinet-link";
 import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
@@ -100,7 +101,14 @@ export function ConsiliumView() {
 
   if (forbidden) {
     return (
-      <div className="px-4 py-10 lg:px-8">
+      <div className="flex flex-col gap-6 px-4 py-10 lg:px-8">
+        {/* Here, and not only on the page below, because this is the branch a break-glass
+            operator actually lands on: their role is `operator`/`admin`, every read here is
+            owner-only, so all four answer 403 and the room shuts before they see a word of
+            it. Without the notice the page would say "you cannot see this" and leave the
+            reason — the register is empty and they hold no seat — entirely unstated, which
+            is the same silence this whole change is about. */}
+        <BreakGlassNotice className="mx-auto w-full max-w-160" />
         <Empty className="mx-auto max-w-160 rounded-xl border border-border bg-card p-6 md:p-8">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -158,6 +166,8 @@ export function ConsiliumView() {
         </div>
         <StreamChip status={stream.status} />
       </StaggerItem>
+
+      <BreakGlassNotice className="xl:col-span-2" />
 
       {roster?.below_payout_floor && (
         // Not styled as an error: nothing has failed. It is a standing fact about the fund

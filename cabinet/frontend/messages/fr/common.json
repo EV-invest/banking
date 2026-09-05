@@ -907,6 +907,14 @@
     "en": "Balance",
     "t": "Solde"
   },
+  "admin.users.breakGlassExplainer": {
+    "en": "This role came from the OWNER_SUBJECTS allowlist, not from the register. It is real access and it seats nobody — the consilium does not count it, and it lapses as soon as the fund has its first owner.",
+    "t": "Ce rôle provient de la liste OWNER_SUBJECTS, pas du registre. L'accès est réel mais n'accorde aucun siège — le consilium ne le compte pas, et il expire dès que le fonds a son premier propriétaire."
+  },
+  "admin.users.breakGlassRole": {
+    "en": "Emergency access",
+    "t": "Accès d'urgence"
+  },
   "admin.users.count": {
     "en": "{n, plural, one {# user} other {# users}}",
     "t": "{n, plural, one {# utilisateur} many {# utilisateurs} other {# utilisateurs}}"
@@ -2410,6 +2418,14 @@
   "profile.unverified": {
     "en": "Unverified",
     "t": "Non vérifié"
+  },
+  "session.breakGlass.body": {
+    "en": "This fund has no owner in the register yet, so your role comes from the OWNER_SUBJECTS emergency allowlist and not from the register itself. It is real authority over this console, but it seats nobody: you hold no vote in the consilium. A seat is written once by the genesis seed when the service starts, or granted afterwards by a consilium of the existing owners — and this notice goes away for good the moment the first owner is seated.",
+    "t": "Ce fonds n'a encore aucun propriétaire au registre : votre rôle provient donc de la liste d'accès d'urgence OWNER_SUBJECTS et non du registre lui-même. Ce sont de véritables pouvoirs sur cette console, mais ils n'accordent aucun siège : vous n'avez pas de voix au consilium. Un siège n'est inscrit que par l'amorçage de genèse au démarrage du service, ou accordé ensuite par un consilium des propriétaires en exercice — et cet avis disparaîtra définitivement dès que le premier propriétaire sera installé."
+  },
+  "session.breakGlass.title": {
+    "en": "You are working under emergency access",
+    "t": "Vous agissez en accès d'urgence"
   },
   "settings.a11y.sections": {
     "en": "Settings sections",

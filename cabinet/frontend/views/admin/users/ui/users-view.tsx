@@ -1,10 +1,10 @@
 "use client";
 
-import { Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { KeyRound, Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
@@ -13,6 +13,7 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
+import { BreakGlassNotice } from "@/shared/ui/break-glass-notice";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
@@ -45,6 +46,11 @@ export function UsersView() {
   return (
     <AdminScreen className="space-y-6">
       <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.users")} subtitle={t("admin.users.subtitle")} />
+
+      {/* Above the table, because it changes how every role in it should be read — and
+          mounted unconditionally: the component owns the condition (`shared/ui/
+          break-glass-notice`) so this screen cannot get it subtly wrong. */}
+      <BreakGlassNotice />
 
       {error && <ResourceError message={error} />}
 
@@ -134,7 +140,15 @@ export function UsersView() {
                             <span className="min-w-0 truncate">{u.email || u.user_id.slice(0, 8)}</span>
                           </button>
                         </td>
-                        <td className="px-5 py-3">{roleLabel(u.role, t)}</td>
+                        <td className="px-5 py-3">
+                          {/* Stacked, not inline: `table-fixed` sizes this column from an
+                              8-character header, so a chip beside the role would push the
+                              label out of its own cell in every locale. */}
+                          <div className="flex flex-col items-start gap-1">
+                            <span>{roleLabel(u.role, t)}</span>
+                            {u.role_is_break_glass && <BreakGlassMark />}
+                          </div>
+                        </td>
                         <td className="px-5 py-3 text-muted-foreground">{t("admin.users.kycLevelShort", { n: u.kyc_level })}</td>
                         <td className="px-5 py-3">
                           <StatusDot status={u.status} label={statusLabel(u.status, t)} />
@@ -263,6 +277,9 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
 
   const status = profile?.status ?? summary.status;
   const role = profile?.role ?? summary.role;
+  // Falls back to the row that opened this drawer, like `status` and `role` above, so the
+  // provenance never contradicts the label it qualifies while the detail read is in flight.
+  const breakGlass = profile?.role_is_break_glass ?? summary.role_is_break_glass;
 
   return (
     // Fixed width, NOT `w-full`, and this is the whole difference between the
@@ -295,7 +312,14 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           <Chip>{roleLabel(role, t)}</Chip>
           <Chip>{t("admin.users.kycBadge", { n: profile?.kyc_level ?? summary.kyc_level })}</Chip>
           <span className={cn("rounded-full px-2 py-0.5 font-medium", statusTone(status))}>{statusLabel(status, t)}</span>
+          {breakGlass && <BreakGlassMark />}
         </div>
+
+        {/* Spelled out here, where there is room for a sentence — the row only has space
+            for the mark. The page-level notice above the table says the same thing about
+            the READER; this says it about the account they are looking at, which is a
+            different fact and can be true when the other is not. */}
+        {breakGlass && <p className="text-xs leading-relaxed text-muted-foreground">{t("admin.users.breakGlassExplainer")}</p>}
 
         {error && (
           <p className="flex items-center gap-2 text-xs text-destructive">
@@ -445,4 +469,29 @@ function Row({ label, value, tip }: { label: string; value: string; tip?: TipKey
 
 function Chip({ children }: { children: ReactNode }) {
   return <span className="rounded-full bg-foreground/5 px-2 py-0.5 font-medium text-foreground">{children}</span>;
+}
+
+/**
+ * "This role came from the allowlist, not the register."
+ *
+ * Drawn strictly from `role_is_break_glass` on the row the API sent. Its deleted
+ * predecessor, `NoSeatMark`, computed the same idea by subtracting the owner roster from
+ * the user list — which could only be as right as the older of two reads, and marked
+ * nothing at all whenever the roster was forbidden, which was most of the time. One field
+ * from one response cannot disagree with itself.
+ *
+ * Warning-toned, never destructive, for the same reason the page-level notice is: this is
+ * a deliberate arrangement on a fund that has no owners yet. Colouring it as a fault would
+ * push someone to "fix" it by granting the role — the one move the mechanism exists to
+ * stop, and the one `SetRole` now refuses outright.
+ */
+function BreakGlassMark() {
+  const t = useT();
+  return (
+    <Badge variant="outline" className="gap-1 whitespace-nowrap border-main-accent-t3/40 text-main-accent-t3">
+      <KeyRound className="size-3" aria-hidden />
+      {/* i18n-max: 14 — this sits in a table column sized from an 8-character header. */}
+      {t("admin.users.breakGlassRole")}
+    </Badge>
+  );
 }

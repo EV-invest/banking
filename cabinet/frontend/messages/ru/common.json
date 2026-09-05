@@ -1015,6 +1015,14 @@
     "en": "Balance",
     "t": "Баланс"
   },
+  "admin.users.breakGlassExplainer": {
+    "en": "This role came from the OWNER_SUBJECTS allowlist, not from the register. It is real access and it seats nobody — the consilium does not count it, and it lapses as soon as the fund has its first owner.",
+    "t": "Эта роль взята из списка OWNER_SUBJECTS, а не из реестра. Доступ настоящий, но места он не даёт — консилиум его не учитывает, и он пропадёт, как только у фонда появится первый владелец."
+  },
+  "admin.users.breakGlassRole": {
+    "en": "Emergency access",
+    "t": "Аварийный доступ"
+  },
   "admin.users.count": {
     "en": "{n, plural, one {# user} other {# users}}",
     "t": "{n, plural, one {# пользователь} few {# пользователя} many {# пользователей} other {# пользователя}}"
@@ -3314,6 +3322,14 @@
   "profile.unverified": {
     "en": "Unverified",
     "t": "Не проверен"
+  },
+  "session.breakGlass.body": {
+    "en": "This fund has no owner in the register yet, so your role comes from the OWNER_SUBJECTS emergency allowlist and not from the register itself. It is real authority over this console, but it seats nobody: you hold no vote in the consilium. A seat is written once by the genesis seed when the service starts, or granted afterwards by a consilium of the existing owners — and this notice goes away for good the moment the first owner is seated.",
+    "t": "В реестре этого фонда пока нет ни одного владельца, поэтому ваша роль взята из списка аварийного доступа OWNER_SUBJECTS, а не из реестра. Это настоящие права в консоли, но места они не дают: голоса в консилиуме у вас нет. Место записывает либо посев генезиса при старте сервиса, либо консилиум действующих владельцев — и это сообщение исчезнет навсегда, как только появится первый владелец."
+  },
+  "session.breakGlass.title": {
+    "en": "You are working under emergency access",
+    "t": "Вы действуете по аварийному доступу"
   },
   "settings.a11y.sections": {
     "en": "Settings sections",
