@@ -154,5 +154,8 @@ fn user_to_proto(user: &User) -> pb::UserProfile {
 		// cabinet reads identity from concierge). Default here — present for wire parity.
 		kyc_level: 0,
 		role: String::new(),
+		// Likewise: the emergency allowlist lives in concierge, so there is nothing here to
+		// report. The field exists to keep the two planes wire-identical.
+		role_is_break_glass: false,
 	}
 }

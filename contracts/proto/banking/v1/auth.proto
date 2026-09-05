@@ -131,6 +131,9 @@ message UserSummary {
   // concierge shape). The money plane doesn't serve the role here — the cabinet reads it
   // from concierge's login summary — so this stays empty; the field exists for parity.
   string role = 5;
+  // Parity with concierge.v1.UserSummary.role_is_break_glass — the money plane does not
+  // serve it, but the field number must not be reused.
+  bool role_is_break_glass = 6;
 }
 
 message JwksRequest {}

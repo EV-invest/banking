@@ -2647,6 +2647,14 @@ export type BankingV1UserProfile = {
      * role
      */
     role?: string;
+    /**
+     * role_is_break_glass
+     *
+     * True when `role` above came from concierge's OWNER_SUBJECTS emergency allowlist
+     * rather than from `users.role`. Carried here only for wire parity — the money plane
+     * has no allowlist of its own and never sets it.
+     */
+    role_is_break_glass?: boolean;
 };
 
 /**
@@ -2682,6 +2690,13 @@ export type BankingV1UserSummary = {
      * from concierge's login summary — so this stays empty; the field exists for parity.
      */
     role?: string;
+    /**
+     * role_is_break_glass
+     *
+     * Parity with concierge.v1.UserSummary.role_is_break_glass — the money plane does not
+     * serve it, but the field number must not be reused.
+     */
+    role_is_break_glass?: boolean;
 };
 
 /**
