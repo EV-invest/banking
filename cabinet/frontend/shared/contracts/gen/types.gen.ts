@@ -2891,6 +2891,14 @@ export type ConciergeV1AdminUserSummary = {
      * Unix SECONDS the user was provisioned (joined).
      */
     created_at?: number | string;
+    /**
+     * role_is_break_glass
+     *
+     * True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than
+     * from `users.role` — see UserProfile.role_is_break_glass. This is the field that
+     * stops the console listing an "owner" the consilium has never heard of.
+     */
+    role_is_break_glass?: boolean;
 };
 
 /**
@@ -4124,6 +4132,15 @@ export type ConciergeV1UserProfile = {
      * Admin-managed via SetRole; read-only here.
      */
     role?: string;
+    /**
+     * role_is_break_glass
+     *
+     * True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than
+     * from `users.role`. See UserSummary.role_is_break_glass in auth.proto — same flag,
+     * same meaning: real authority, granted by the environment while the fund has no
+     * persisted owner, seating nobody. Render it as a warning, never as ownership.
+     */
+    role_is_break_glass?: boolean;
 };
 
 /**
@@ -4158,6 +4175,15 @@ export type ConciergeV1UserSummary = {
      * BFF can gate the admin console at sign-in without a second round trip. Read-only.
      */
     role?: string;
+    /**
+     * role_is_break_glass
+     *
+     * True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than
+     * from `users.role`. It is real authority, but it is the environment's and not the
+     * register's: it disappears the moment the fund has its first persisted owner, and it
+     * seats nobody. A client MUST render it as a warning, never as ownership.
+     */
+    role_is_break_glass?: boolean;
 };
 
 /**
