@@ -1,5 +1,5 @@
 //! Cross-cutting helpers shared by every context service: the auth gates
-//! (`caller_id`/`require_admin`), the domain→status error mapper, id parsers, and
+//! (`caller_id`/`require_permission`), the domain→status error mapper, id parsers, and
 //! the small wire-shape utilities. Each context module ([`super::users`],
 //! [`super::balance`], [`super::funds`], [`super::wallet`]) owns its own proto
 //! mappers; only this genuinely shared surface lives here.
@@ -62,14 +62,16 @@ pub(super) async fn unfrozen_caller<T>(state: &AppState, request: &Request<T>) -
 
 /// Gate an RPC on a required money-plane [`Permission`], resolved from the caller's
 /// mirrored [`Role`] (the RBAC matrix). Only a human access token qualifies — a service
-/// token never carries a user role. The `ADMIN_SUBJECTS` allowlist is purely a **role
-/// override** (break-glass bootstrap): when a local user row exists, the disable and
-/// revoke gates apply even to an allowlisted subject, so `DisableUser`/`RevokeTokens`
-/// bite on the most privileged principals too (mirrors the identity plane's gate). The
-/// role is the one the identity plane granted, mirrored onto the local user projection
-/// by the bridge; a missing/unknown user is `Investor` (holds nothing), so the gate
-/// fails closed. A control-plane read failure fails CLOSED (UNAVAILABLE) — an admin op
-/// never proceeds when the gate can't be read.
+/// token never carries a user role.
+///
+/// The role has exactly one source: the persisted `users.role` column the concierge →
+/// banking bridge mirrors from the identity plane (`ROLE_CHANGED`). There is no
+/// environment-driven override here — the money plane holds no roster of its own, so
+/// ownership is whatever concierge persisted and nothing else. Every path fails closed:
+/// no local row is [`Role::default`] (holds nothing), a non-UUID subject is
+/// `UNAUTHENTICATED`, and a control-plane read failure is `UNAVAILABLE` — an admin op
+/// never proceeds when the gate can't be read. The disable and revoke gates run first,
+/// so `DisableUser`/`RevokeTokens` bite on the most privileged principals too.
 pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>, permission: Permission) -> Result<(), Status> {
 	let (is_access, sub, token_version) = {
 		let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
@@ -78,33 +80,20 @@ pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>
 	if !is_access {
 		return Err(Status::permission_denied("access token required"));
 	}
-	let allowlisted = state.is_admin(&sub);
-	let role = match Uuid::parse_str(&sub) {
-		Ok(id) => {
-			let id = UserId::from_raw(id);
-			let target = state.users.resolve_issuance_by_banking_id(id).await.map_err(|_| Status::unavailable("internal error"))?;
-			match target {
-				Some(target) => {
-					if target.disabled {
-						return Err(Status::permission_denied("account is disabled"));
-					}
-					if token_version < target.token_version {
-						return Err(Status::unauthenticated("tokens revoked"));
-					}
-					if allowlisted {
-						Role::Owner
-					} else {
-						crate::infrastructure::bridge::role_of(&state.pool, id).await.map_err(|_| Status::unavailable("internal error"))?
-					}
-				}
-				// No local row: nothing to gate on — only the break-glass override grants.
-				None if allowlisted => Role::Owner,
-				None => Role::default(),
+	let id = parse_user_id(&sub)?;
+	let target = state.users.resolve_issuance_by_banking_id(id).await.map_err(|_| Status::unavailable("internal error"))?;
+	let role = match target {
+		Some(target) => {
+			if target.disabled {
+				return Err(Status::permission_denied("account is disabled"));
 			}
+			if token_version < target.token_version {
+				return Err(Status::unauthenticated("tokens revoked"));
+			}
+			crate::infrastructure::bridge::role_of(&state.pool, id).await.map_err(|_| Status::unavailable("internal error"))?
 		}
-		// A non-UUID subject has no user row; only the break-glass override grants.
-		Err(_) if allowlisted => Role::Owner,
-		Err(_) => return Err(Status::unauthenticated("subject is not a user id")),
+		// No local row: nothing the mirror can grant, so the caller holds nothing.
+		None => Role::default(),
 	};
 	if grants(role, permission) {
 		Ok(())

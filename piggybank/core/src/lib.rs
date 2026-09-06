@@ -94,10 +94,6 @@ pub struct AppState {
 	pub configured_networks: Arc<[Network]>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
-	/// The break-glass admin allowlist, snapshotted from the environment at boot
-	/// (`ADMIN_SUBJECTS`). A change applies via redeploy — the gitops env edit is
-	/// the audit trail.
-	pub admin_subjects: Vec<String>,
 	/// Base URL the emailed consilium approval link is built on (`<base>/<token>`). The
 	/// page it points at is served by the cabinet, not here; the hub only has to mint a
 	/// link an owner's mail client will render.
@@ -130,7 +126,6 @@ impl AppState {
 		custody: Arc<dyn Custody>,
 		configured_networks: Arc<[Network]>,
 		relay_notify: Arc<Notify>,
-		admin_subjects: Vec<String>,
 		consilium_approval_url_base: String,
 		ton_is_testnet: bool,
 	) -> Self {
@@ -154,16 +149,8 @@ impl AppState {
 			custody,
 			configured_networks,
 			relay_notify,
-			admin_subjects,
 			consilium_approval_url_base,
 			ton_is_testnet,
 		}
-	}
-
-	/// Whether `subject` (a token `sub`) is on the admin allowlist (`ADMIN_SUBJECTS`,
-	/// snapshotted at boot). Empty ⇒ no override — the caller's mirrored role still
-	/// applies. A list change applies via redeploy, which is the audit trail.
-	pub fn is_admin(&self, subject: &str) -> bool {
-		self.admin_subjects.iter().any(|s| s == subject)
 	}
 }

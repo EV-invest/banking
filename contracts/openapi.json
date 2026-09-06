@@ -8331,6 +8331,11 @@
           "role": {
             "type": "string",
             "title": "role"
+          },
+          "role_is_break_glass": {
+            "type": "boolean",
+            "title": "role_is_break_glass",
+            "description": "True when `role` above came from concierge's OWNER_SUBJECTS emergency allowlist\n rather than from `users.role`. Carried here only for wire parity — the money plane\n has no allowlist of its own and never sets it."
           }
         },
         "title": "UserProfile",
@@ -8364,6 +8369,11 @@
             "type": "string",
             "title": "role",
             "description": "Kept wire-identical with concierge.v1.UserSummary (the cabinet TS is aliased to the\n concierge shape). The money plane doesn't serve the role here — the cabinet reads it\n from concierge's login summary — so this stays empty; the field exists for parity."
+          },
+          "role_is_break_glass": {
+            "type": "boolean",
+            "title": "role_is_break_glass",
+            "description": "Parity with concierge.v1.UserSummary.role_is_break_glass — the money plane does not\n serve it, but the field number must not be reused."
           }
         },
         "title": "UserSummary",
@@ -8580,6 +8590,11 @@
             "title": "created_at",
             "format": "int64",
             "description": "Unix SECONDS the user was provisioned (joined)."
+          },
+          "role_is_break_glass": {
+            "type": "boolean",
+            "title": "role_is_break_glass",
+            "description": "True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than\n from `users.role` — see UserProfile.role_is_break_glass. This is the field that\n stops the console listing an \"owner\" the consilium has never heard of."
           }
         },
         "title": "AdminUserSummary",
@@ -9929,6 +9944,11 @@
             "type": "string",
             "title": "role",
             "description": "The user's platform access role (snake_case: investor/operator/admin/owner).\n Admin-managed via SetRole; read-only here."
+          },
+          "role_is_break_glass": {
+            "type": "boolean",
+            "title": "role_is_break_glass",
+            "description": "True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than\n from `users.role`. See UserSummary.role_is_break_glass in auth.proto — same flag,\n same meaning: real authority, granted by the environment while the fund has no\n persisted owner, seating nobody. Render it as a warning, never as ownership."
           }
         },
         "title": "UserProfile",
@@ -9962,6 +9982,11 @@
             "type": "string",
             "title": "role",
             "description": "The user's platform access role (snake_case: investor/operator/admin/owner), so the\n BFF can gate the admin console at sign-in without a second round trip. Read-only."
+          },
+          "role_is_break_glass": {
+            "type": "boolean",
+            "title": "role_is_break_glass",
+            "description": "True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than\n from `users.role`. It is real authority, but it is the environment's and not the\n register's: it disappears the moment the fund has its first persisted owner, and it\n seats nobody. A client MUST render it as a warning, never as ownership."
           }
         },
         "title": "UserSummary",

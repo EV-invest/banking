@@ -70,6 +70,10 @@ pub struct UserProfile {
 	pub timezone: String,
 	pub kyc_level: u32,
 	pub role: String,
+	/// True when `role` came from the OWNER_SUBJECTS emergency allowlist rather than
+	/// the persisted `users.role`. The console must say so: an "owner" the consilium
+	/// has never heard of is exactly the divergence this whole change removes.
+	pub role_is_break_glass: bool,
 }
 
 impl From<cc::UserProfile> for UserProfile {
@@ -92,6 +96,7 @@ impl From<cc::UserProfile> for UserProfile {
 			timezone: p.timezone,
 			kyc_level: p.kyc_level,
 			role: p.role,
+			role_is_break_glass: p.role_is_break_glass,
 		}
 	}
 }
@@ -606,6 +611,7 @@ pub struct AdminUserSummary {
 	pub status: String,
 	pub kyc_level: u32,
 	pub role: String,
+	pub role_is_break_glass: bool,
 	pub token_version: String,
 	pub created_at: String,
 }
@@ -618,6 +624,7 @@ impl From<cc::AdminUserSummary> for AdminUserSummary {
 			status: u.status,
 			kyc_level: u.kyc_level,
 			role: u.role,
+			role_is_break_glass: u.role_is_break_glass,
 			token_version: u.token_version.to_string(),
 			created_at: u.created_at.to_string(),
 		}

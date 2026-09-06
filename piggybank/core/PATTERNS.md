@@ -575,8 +575,9 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 `require_permission` (`services::support`) is `is_access` + the pure RBAC matrix
 (`domain::authz::grants` — the single place the matrix is defined) over the caller's
 bridge-mirrored role, **after** the account gates: a `disabled` (or frozen) operator is
-refused, a stale `token_version` is refused, and the `ADMIN_SUBJECTS` allowlist is only a
-break-glass **role override** — it never bypasses those gates when a local row exists.
+refused and a stale `token_version` is refused. The mirrored `users.role` column is the
+**only** source of the role — there is no environment-driven override, so a caller with
+no local row holds nothing and a non-UUID subject is refused outright.
 
 **Cross-plane freeze gate** (`services::support::unfrozen_caller`): the value-leaving RPCs
 above (`Subscribe`/`Redeem`/`RequestWithdrawal`) reject with `failed_precondition` when the

@@ -907,6 +907,14 @@
     "en": "Balance",
     "t": "Số dư"
   },
+  "admin.users.breakGlassExplainer": {
+    "en": "This role came from the OWNER_SUBJECTS allowlist, not from the register. It is real access and it seats nobody — the consilium does not count it, and it lapses as soon as the fund has its first owner.",
+    "t": "Vai trò này lấy từ danh sách OWNER_SUBJECTS chứ không phải từ sổ đăng ký. Quyền truy cập là thật nhưng không trao ghế — hội đồng không tính nó, và nó sẽ mất hiệu lực ngay khi quỹ có chủ sở hữu đầu tiên."
+  },
+  "admin.users.breakGlassRole": {
+    "en": "Emergency access",
+    "t": "Truy cập khẩn cấp"
+  },
   "admin.users.count": {
     "en": "{n, plural, one {# user} other {# users}}",
     "t": "{n, plural, other {# người dùng}}"
@@ -934,6 +942,14 @@
   "admin.users.noMatch": {
     "en": "No users match these filters.",
     "t": "Không có người dùng nào khớp bộ lọc này."
+  },
+  "admin.users.ownerSeatHeld": {
+    "en": "This account holds an owner's seat, so its role cannot be changed here. A seat is given up by resigning, or taken by a removal the other owners vote through, in",
+    "t": "Tài khoản này đang giữ một ghế chủ sở hữu nên không đổi được vai trò ở đây. Ghế chỉ trống khi người đó từ nhiệm, hoặc bị bãi nhiệm qua bỏ phiếu của các chủ sở hữu còn lại, trong"
+  },
+  "admin.users.ownerSeatVia": {
+    "en": "Owner is not on this list. A seat is written by the founding seed at start-up, or granted by an admission the current owners vote through — never from here. Open one in",
+    "t": "Chủ sở hữu không có trong danh sách này. Một ghế do đợt gieo mầm sáng lập ghi lại lúc khởi động, hoặc do một đề nghị kết nạp được các chủ sở hữu đương nhiệm bỏ phiếu thông qua — không bao giờ từ đây. Hãy mở đề nghị trong"
   },
   "admin.users.reinstate": {
     "en": "Reinstate",
@@ -1214,6 +1230,18 @@
   "auth.welcomeBack": {
     "en": "Welcome back",
     "t": "Chào mừng trở lại"
+  },
+  "consilium.admit.genesis": {
+    "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
+    "t": "Quỹ này có {n, plural, other {# chủ sở hữu có ghế}}. Một đề nghị kết nạp cần ít nhất một chủ sở hữu ngoài người đề xuất, nên nó không thể đưa những người sáng lập vào ghế: những ghế đó do chính dịch vụ ghi lại lúc khởi động, từ danh sách khởi thủy, và chỉ khi sổ đăng ký còn trống. Lần khởi động đó đóng cửa sổ này vĩnh viễn, và từ đó biểu mẫu này là lối vào duy nhất."
+  },
+  "consilium.roster.emptyBody": {
+    "en": "Genesis has not run yet. At start-up the service seats everyone on the OWNER_SUBJECTS list who already has an account — but only if at least two of them resolve. A sole owner could never admit the second, so seating one is refused outright rather than left as a dead end.",
+    "t": "Khởi thủy chưa diễn ra. Khi khởi động, dịch vụ trao ghế cho mọi người trong danh sách OWNER_SUBJECTS đã có tài khoản — nhưng chỉ khi có ít nhất hai người được phân giải. Một chủ sở hữu duy nhất sẽ không bao giờ kết nạp được người thứ hai, nên việc trao ghế cho một người bị từ chối thẳng thay vì để lại một ngõ cụt."
+  },
+  "consilium.roster.emptyNext": {
+    "en": "Add the missing people to OWNER_SUBJECTS, have each of them sign in once so the account exists, and restart the service. Until the first seat is written, the operators on that list are working under emergency access — temporary by construction: the first successful seeding closes it permanently, and from then on a seat is only ever granted by a consilium of the existing owners.",
+    "t": "Hãy bổ sung những người còn thiếu vào OWNER_SUBJECTS, để mỗi người đăng nhập một lần cho tài khoản tồn tại, rồi khởi động lại dịch vụ. Cho đến khi ghế đầu tiên được ghi, các vận hành viên trong danh sách đó làm việc bằng truy cập khẩn cấp — tạm thời theo thiết kế: lần gieo mầm thành công đầu tiên đóng nó lại vĩnh viễn, và từ đó một ghế chỉ được trao bởi hội đồng các chủ sở hữu đương nhiệm."
   },
   "dash.activeStrategies": {
     "en": "Active strategies",
@@ -2391,6 +2419,14 @@
     "en": "Unverified",
     "t": "Chưa xác minh"
   },
+  "session.breakGlass.body": {
+    "en": "This fund has no owner in the register yet, so your role comes from the OWNER_SUBJECTS emergency allowlist and not from the register itself. It is real authority over this console, but it seats nobody: you hold no vote in the consilium. A seat is written once by the genesis seed when the service starts, or granted afterwards by a consilium of the existing owners — and this notice goes away for good the moment the first owner is seated.",
+    "t": "Quỹ này chưa có chủ sở hữu nào trong sổ đăng ký, nên vai trò của bạn lấy từ danh sách truy cập khẩn cấp OWNER_SUBJECTS chứ không phải từ sổ đăng ký. Đó là quyền thật trong bảng điều khiển này, nhưng nó không trao ghế: bạn không có phiếu bầu trong hội đồng. Một ghế chỉ được ghi bởi đợt gieo mầm khởi thủy khi dịch vụ khởi động, hoặc do hội đồng các chủ sở hữu đương nhiệm trao sau đó — và thông báo này sẽ biến mất vĩnh viễn ngay khi có chủ sở hữu đầu tiên."
+  },
+  "session.breakGlass.title": {
+    "en": "You are working under emergency access",
+    "t": "Bạn đang làm việc bằng truy cập khẩn cấp"
+  },
   "settings.a11y.sections": {
     "en": "Settings sections",
     "t": "Các mục cài đặt"
@@ -2856,8 +2892,8 @@
     "t": "Thu hồi mọi phiên"
   },
   "tips.admin.users.access.role.body": {
-    "en": "The access level for this user: investor, operator, admin, or owner. Raising it grants operator/admin console access immediately on change.",
-    "t": "Mức truy cập của người dùng này: nhà đầu tư, vận hành, quản trị hoặc chủ sở hữu. Nâng vai trò sẽ cấp quyền vào console vận hành/quản trị ngay khi thay đổi."
+    "en": "The access level for this user: investor, operator or admin. Raising it grants operator/admin console access immediately on change. Owner is not here — a seat is the consilium's to give and to take away.",
+    "t": "Mức truy cập của người dùng này: nhà đầu tư, vận hành viên hoặc quản trị viên. Nâng lên là mở ngay bảng điều khiển vận hành/quản trị. Không có Chủ sở hữu ở đây — ghế chỉ do hội đồng trao và thu hồi."
   },
   "tips.admin.users.access.role.title": {
     "en": "Role",

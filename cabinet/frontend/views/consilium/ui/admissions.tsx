@@ -278,11 +278,17 @@ function WhyNoVote({ standing, admission }: { standing: ReturnType<typeof standi
  *     that re-computes those is a client that can disagree, in the direction of blocking a
  *     legitimate action. The rules are stated; the button stays live; the server's own
  *     refusal is what appears.
- *   · It does not offer a picker. A candidate is by definition not an owner, so the roster
- *     cannot list them, and the only directory read that could is the operator console's —
- *     which an owner who is not also an operator would be refused. So the field takes the
- *     id, and the description says where to find it, rather than a dropdown that is empty
- *     for half the people entitled to use this form.
+ *   · It does not offer a picker, and the raw id field is the considered answer rather
+ *     than an unfinished one. A candidate is by definition not an owner, so the roster
+ *     cannot list them; the only read that enumerates non-owners is the operator console's
+ *     `/api/admin/users`, which is gated on operator/admin. An owner who is not also an
+ *     operator — the ordinary case, and exactly the person this form exists for — is
+ *     refused it. A searchable dropdown would therefore be empty or forbidden for half the
+ *     people entitled to use this form, and swapping a field that always works for a
+ *     control that sometimes does is not an improvement. Closing this properly needs an
+ *     owner-readable candidate lookup on the plane, which is a contract change, not a
+ *     component change. Until then the field takes the id and the description says where
+ *     to find it.
  */
 export function ProposeAdmission({
   roster,
@@ -339,11 +345,12 @@ export function ProposeAdmission({
             />
           ) : (
             <FieldGroup className="gap-4">
-              {/* The bootstrap carve-out, stated only when the roster says it applies. An
-                  admission needs at least one owner besides whoever opens it, so it cannot
-                  seat the first or the second — a fund of one could never grow and a fund
-                  of zero could never start. Below two seats a direct role grant is the
-                  route; from two onward it is refused and this form is the only one. */}
+              {/* The bootstrap, stated only when the roster says it applies. An admission
+                  needs at least one owner besides whoever opens it, so it cannot seat the
+                  founders — that is the genesis seed's job, written by the service at
+                  start-up and only while the register is empty. There is no longer a
+                  direct-grant route beside it at any roster size: `SetRole` refuses
+                  `owner` unconditionally (docs/CONSILIUM.md, § Genesis, policy 21). */}
               {seated !== null && seated < 2 && (
                 <p className="rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/10 px-3.5 py-3 text-sm leading-relaxed text-foreground">
                   {t("consilium.admit.genesis", { n: seated })}

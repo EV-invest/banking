@@ -61,6 +61,29 @@ consequence of the chosen rule, not an oversight, and it is why owner removal
 enforces a floor (below). The open RPC refuses with an explicit error rather than
 creating a request that can never reach quorum.
 
+### The initiator is always an owner — and it takes two checks to say so
+
+The table reads `N` as the owner count and `voters` as `N − 1`, which is only correct
+because **the initiator is necessarily one of the `N`**. That fact is enforced in a place
+the RBAC matrix does not suggest, so it is worth stating plainly:
+
+- The **RPC boundary** gates `OpenRevenuePayout` on `Permission::RevenuePayout`, and the
+  matrix (`domain::authz::grants`) grants that to **`Admin` *and* `Owner`** — role-granting
+  is the identity plane's concern, so the money plane treats the two as equivalent
+  capability-wise. An admin with no seat therefore clears the boundary.
+- The **domain** then refuses them: `Consilium::open` rejects an initiator absent from the
+  snapshotted roster with `Forbidden("only a fund owner may open a consilium")`, covered by
+  the `only_an_owner_may_open` unit test.
+
+So the permission is necessary but not sufficient, and there is **no case in which a
+non-owner opens a payout and all `N` owners vote**. `voters = N − 1` always.
+
+This asymmetry is deliberate and load-bearing, and it looks like an inconsistency to anyone
+reading only the matrix — which is exactly the risk. Do not "reconcile" it by letting the
+domain accept a non-owner initiator: that would make `voters = N`, silently change the
+arithmetic the table describes, and let a principal with no seat spend the fund's revenue
+by proposing it. If the two ever need to agree, tighten the matrix, not the domain.
+
 ### Owner removal is a different rule
 
 A removal passes when **either**:
@@ -102,20 +125,12 @@ majority, because a minority must never be able to grow itself into a majority.
 
 That closes the loop: no minority can add owners, and no minority can remove them.
 
-**One carve-out, because the rule cannot bootstrap itself.** Admission needs a non-empty
-peer set, so it can never seat the *second* owner: a fund of one could never grow, and a
-fund of zero could never start. A direct grant is therefore allowed only while the
-persisted roster holds **fewer than two** owners, and is refused from two onward — which
-is exactly the point at which sock-puppeting would have to begin. `SetRole` refuses both
-granting and stripping ownership outside that window; the consilium performs the write
-itself, so there is no "an admission exists, therefore grant" check to replay.
-
-**Residual, stated plainly:** whoever controls `ADMIN_SUBJECTS` can use that genesis
-window on a fund with fewer than two owners, and can still suspend or disable an owner
-at any time. Suspension is a lesser power than seating one — it cannot manufacture a
-quorum, only withhold one — but it is not nothing, and it is the reason break-glass
-subjects hold no seat in any consilium: the roster is read from the persisted role, never
-from the environment-promoted one.
+`SetRole` therefore has **no carve-out at all**: it refuses to grant or strip `owner`
+under every roster size, including an empty one — the bootstrap emergency access described
+under [Genesis](#genesis--how-the-first-owners-are-seated) does not lift this. There are
+exactly **two writers of `Role::Owner`** in the platform: the genesis seeding, and the
+consilium, which performs its own write so there is no "an admission exists, therefore
+grant" check to replay. Any third writer would be the whole mechanism's back door.
 
 | Fund state | What is possible |
 | --- | --- |
@@ -160,6 +175,103 @@ thing a mechanism can buy here.
 
 The cost is real and accepted: a legitimate roster change also delays a legitimate
 payout by two days.
+
+---
+
+## Genesis — how the first owners are seated
+
+The admission rule cannot bootstrap itself. It needs a non-empty peer set, so it can
+never seat the *second* owner: a fund of one could never grow, and a fund of zero could
+never start. Something outside the rule has to seat the founders exactly once, and a
+brand-new deployment has to be operable in the minutes before that happens.
+
+**The persisted `users.role` column in concierge is the single source of truth about
+ownership.** Ownership is a stored fact and nothing else computes it. Both mechanisms
+below are keyed off one predicate — *is the persisted owner roster empty?* — and both
+switch off permanently the first time the answer becomes no.
+
+### The genesis list
+
+**`OWNER_SUBJECTS` (concierge) seats the founders, once.** At startup, *if the persisted
+owner roster is empty*, every id on the list that has a user row is written to
+`role='owner'` through the ordinary write path, emitting a `ROLE_CHANGED` into the outbox
+like any other grant. Nothing is special about the resulting rows: they are seats, indexed
+and counted like any other. Ids with no user row are skipped — the list seats people who
+already exist, it does not conjure them.
+
+**Seeding refuses to run if fewer than two ids resolve.** A one-owner fund is not a
+smaller version of a working fund; it is a dead end. Admission requires a non-empty "all
+owners except the initiator", so a sole owner can never admit the second, and no API path
+can lower a roster of one back to zero to let genesis retry. A fund seeded with one owner
+is unrecoverable. Seating nobody and saying why in the boot log is strictly better, and is
+what happens.
+
+**After genesis the list is inert forever.** The condition is "the roster is empty", and
+the roster can never become empty again: `MIN_OWNERS = 2` is a floor that both expulsion
+and resignation refuse to cross. "Empty the roster so the seed fires again" is unreachable
+through any API, and editing `OWNER_SUBJECTS` on a live deployment does nothing at all.
+It is a bootstrap, not a standing privilege.
+
+### Emergency access, and why it is a one-way door
+
+Concierge keeps an environment-driven emergency elevation for the same window — an
+operator has to be able to reach the console of a system that has no owners yet — but it
+is **self-extinguishing**: it applies only while the persisted owner roster is empty. The
+instant the first owner exists, the list means nothing, and no API call can put the roster
+back to zero, because both routes out of ownership stop at the `MIN_OWNERS = 2` floor. The
+first successful genesis closes the door permanently. This is what makes an environment
+variable an acceptable bootstrap: it is not a privilege that can be re-armed, it is a
+privilege that expires on first use and cannot be restored from outside the machine.
+
+On a deployment whose genesis list resolves, the window is closed by the same boot that
+opens it. It stays open only in the case it exists for: `OWNER_SUBJECTS` unset, or too few
+of its ids resolving to seat a viable roster — the state where someone has to log in and
+fix the configuration, and there is by definition no owner to authorise them.
+
+**It cannot be used to stuff a quorum, by construction.** Quorum stuffing needs a roster
+to add seats to; the moment a roster exists, elevation is already off. And even inside the
+window `SetRole` refuses to grant `owner` **unconditionally** — including on an empty
+roster. Emergency access confers `operator`/`admin` capabilities. It does not seat owners;
+only genesis seeding and the consilium do.
+
+**While it is active, it says so out loud.** The API marks a role that came from emergency
+access as such, and the console renders it as emergency access rather than as ownership.
+This is the part worth carrying forward as a lesson rather than an implementation note:
+**the original bug was never that the elevation existed — it was that it was invisible.**
+The admin console drew "Owner" for a subject the consilium counted as nobody, because one
+surface read a per-request effective role and the other read the stored roster. Two
+surfaces disagreeing about who owns the fund, with neither admitting it, is how an
+operator ends up trusting a seat that does not exist. A temporary power that names itself
+is auditable; the same power wearing the same label as a real seat is a trap.
+
+### The money plane has no emergency access at all
+
+Banking's `ADMIN_SUBJECTS` is gone and nothing replaced it. The money plane learns who
+owns the fund only from the bridge — a `ROLE_CHANGED` event mirrored onto `users.role` —
+and its RBAC gate reads that column and nothing else: no local row means no privilege, and
+no environment variable can add one. That also removes the second UUID list an operator
+previously had to keep synchronised by hand, across two id spaces that hold different
+values for the same person (concierge ids and banking ids).
+
+**The consequence is that on a fresh installation banking's owner surfaces are dead** —
+no payout can be opened, no governance RPC answers — until concierge has seated the owners
+and the bridge has carried `ROLE_CHANGED` across. That is the design, not a defect: the
+identity plane seats, the money plane follows. There is deliberately no way to make the
+money plane believe in an owner the identity plane has not persisted.
+
+**So deploy order is load-bearing: concierge first, banking second.** Ship banking first
+and you get a window in which the money plane has no owner and no fallback. Ship concierge
+first and the window is empty: the roster is already persisted and mirrored by the time
+the money plane starts asking.
+
+**Residual, stated plainly:** whoever controls the environment at the moment of the very
+first boot chooses the founders and holds emergency access until they are seated. That is
+unavoidable — someone has to start the system — and it is bounded three ways: the window
+closes on first genesis and cannot reopen, the elevation inside it cannot grant ownership,
+and everything it does is labelled as emergency access while it happens. From the second
+boot onward that operator has no path to ownership that does not go through a consilium of
+the owners they seated. They can still suspend or disable an owner, which is a lesser
+power: it can withhold a quorum, never manufacture one.
 
 ---
 
@@ -264,39 +376,52 @@ once, here, and each plane's tests assert against this table:
 
 18. **Vacuous unanimity** with two owners — closed by the "at least one peer voter"
     rule above.
-19. **The last owners.** The floor of 2 keeps a fund from being emptied of governance
-    entirely, while staying recoverable.
+19. **The last owners.** The `MIN_OWNERS = 2` floor keeps a fund from being emptied of
+    governance entirely, while staying recoverable. Both expulsion and resignation
+    refuse to cross it, which is also what makes the genesis list inert after the first
+    boot: the roster can never return to empty, so the seed can never fire twice.
 20. **Mutual expulsion race.** At most one open removal per target; at execution the
     initiator's own ownership is re-checked, so a removal opened by someone who has
     since lost their seat is void.
 21. **Sock-puppet quorum.** Ownership cannot be granted by one owner: `SetRole` refuses
-    `owner` outside an admission consilium, which needs unanimity of the other owners.
-    Without this every other control here is decorative — a bad actor simply mints the
-    majority they need before opening an invoice.
+    `owner` under every roster size, with no bootstrap window to slip through — the
+    admission consilium performs its own write, and unanimity of the other owners is the
+    only route. Exactly two writers of `owner` exist (genesis seeding, the consilium);
+    a third would make every other control here decorative, because a bad actor could
+    simply mint the majority they need before opening an invoice.
+22. **A privileged role that hides where it came from.** The money plane computes no
+    effective role at all: its RBAC gate reads only the bridge-mirrored `users.role`, so a
+    caller with no local row holds nothing and no environment variable can add one. Its
+    `ADMIN_SUBJECTS` allowlist was removed for exactly that reason — it minted owners the
+    consilium could not count, and a second UUID list an operator had to keep synchronised
+    across two id spaces by hand. Concierge does still elevate from configuration, but only
+    while the owner roster is empty, never to `owner`, and never silently: the API and the
+    console both label such a role as emergency access. An unlabelled temporary power is
+    the failure this whole item exists to prevent.
 
 ### The live consilium page
 
-22. **The socket is not the source of truth.** It carries a version number, never a
+23. **The socket is not the source of truth.** It carries a version number, never a
     tally. The client re-fetches the authoritative snapshot when the version moves, so
     a stale or spoofed frame can never render a wrong count.
-23. **Authorization at handshake.** The websocket verifies `ev_access` exactly as the
+24. **Authorization at handshake.** The websocket verifies `ev_access` exactly as the
     REST routes do, and closes when the token expires.
-24. **No secrets on the wire.** No tokens, no codes, no email addresses.
-25. **Multiple replicas.** Correctness never depends on the in-process broadcast: the
+25. **No secrets on the wire.** No tokens, no codes, no email addresses.
+26. **Multiple replicas.** Correctness never depends on the in-process broadcast: the
     stream also re-reads on an interval, so a second replica cannot go blind.
-26. **CSP and deadlines.** The websocket origin is added to `connect-src`, and the
+27. **CSP and deadlines.** The websocket origin is added to `connect-src`, and the
     route is mounted outside the BFF's request-timeout layer.
 
 ### There is no way around it
 
-27. **The direct payout RPC.** `BalanceService.RequestRevenuePayout` used to move the
+28. **The direct payout RPC.** `BalanceService.RequestRevenuePayout` used to move the
     fund's revenue on ONE Admin/Owner's say-so, gated on `Permission::RevenuePayout` —
     the same permission that merely lets someone *open* a consilium. Any principal who
     could propose a payout could equally well skip the proposal and take the money, so
     the whole mechanism was decorative. The RPC now refuses with `FAILED_PRECONDITION`
     and names `ConsiliumService.OpenRevenuePayout` as the only route.
     `CancelRevenuePayout` is untouched: cancelling refunds, and is not the hazard.
-28. **A mechanism that silently does nothing.** Every approval token reaches its owner
+29. **A mechanism that silently does nothing.** Every approval token reaches its owner
     through exactly one route — the `consilium_mail` queue drained into concierge. On a
     build where that seam is not compiled in, a consilium would open, mail nobody, and
     expire 72h later having been unvotable from the first instant, while every screen

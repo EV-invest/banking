@@ -171,3 +171,74 @@ test("a read that has never succeeded rejects rather than resolving empty", asyn
   await assert.rejects(() => balance.read(), /gateway timeout/);
   assert.equal(balance.peek(), undefined);
 });
+
+// ── a refusal is a verdict, not a blip ────────────────────────────────────────
+
+/** The shape the transport throws for a 403 (`./api-client.ts` — `RequestError`). */
+class Forbidden extends Error {
+  readonly status = 403;
+  constructor() {
+    super("You don't have access to this.");
+  }
+}
+
+test("a refused read is not repeated by the clock", async () => {
+  const { state, fetch } = counted(() => "roster");
+  state.fail = new Forbidden();
+  // 0s, so every automatic trigger would otherwise find it stale and fire again.
+  const owners = defineResource({ name: "t.owners", fetch, revalidate: 0 });
+
+  await assert.rejects(() => owners.read(), /access/);
+  await assert.rejects(() => owners.read(), /access/);
+  owners.prefetch();
+  assert.equal(state.calls, 1, "an operator's 403 must not be collected once per poll");
+});
+
+test("a refusal suppresses the repeat, never the error", async () => {
+  const { state, fetch } = counted(() => "roster");
+  state.fail = new Forbidden();
+  const owners = defineResource({ name: "t.owners", fetch, revalidate: 0 });
+
+  // The screens branch on this — the consilium renders its "you cannot see this room"
+  // state off exactly this error. Swallowing it would trade a noisy console for a blank
+  // page that never explains itself.
+  await assert.rejects(() => owners.read(), /access/);
+  assert.equal(state.calls, 1);
+});
+
+test("only a refusal latches — a timeout is still retried", async () => {
+  const { state, fetch } = counted(() => "roster");
+  state.fail = new Error("gateway timeout");
+  const owners = defineResource({ name: "t.owners", fetch, revalidate: 0 });
+
+  await assert.rejects(() => owners.read(), /timeout/);
+  await assert.rejects(() => owners.read(), /timeout/);
+  assert.equal(state.calls, 2, "a transient failure is exactly what the retry loop is for");
+});
+
+test("a tag invalidation lifts a refusal — a seat may have just been granted", async () => {
+  const { state, fetch } = counted(() => "roster");
+  state.fail = new Forbidden();
+  const owners = defineResource({ name: "t.owners", fetch, revalidate: 0, tags: ["owners"] });
+
+  await assert.rejects(() => owners.read(), /access/);
+  assert.equal(state.calls, 1);
+
+  // A mutation naming the tag is new information, unlike a timer firing again.
+  revalidateTag("owners");
+  state.fail = null;
+  assert.equal(await owners.read(), "roster");
+  assert.equal(state.calls, 2);
+});
+
+test("sign-out lifts a refusal — the next account is a different caller", async () => {
+  const { state, fetch } = counted(() => "roster");
+  state.fail = new Forbidden();
+  const owners = defineResource({ name: "t.owners", fetch, revalidate: 0 });
+
+  await assert.rejects(() => owners.read(), /access/);
+  clearResources();
+  state.fail = null;
+  assert.equal(await owners.read(), "roster");
+  assert.equal(state.calls, 2);
+});

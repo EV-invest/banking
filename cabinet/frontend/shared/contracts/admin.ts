@@ -10,6 +10,21 @@ export interface SessionUser {
   status: string;
   role: string;
   isAdmin: boolean;
+  /**
+   * `role` above came from the `OWNER_SUBJECTS` emergency allowlist, not from the
+   * persisted `users.role`.
+   *
+   * camelCase, unlike its snake_case twin on {@link AdminUserSummary} below, and the
+   * difference is not a typo. This shape is NOT one of the BFF's: `/api/auth/session` is
+   * the site-root auth surface, and ingress sends `/api/auth/*` straight to concierge,
+   * whose `SessionUser` carries `#[serde(rename_all = "camelCase")]`. The admin DTOs come
+   * from the cabinet's own BFF (`cabinet/backend/src/dto.rs`), which renames nothing.
+   *
+   * True only while the fund has no persisted owner — the window closes on the first
+   * genesis seeding and cannot reopen. Render it as a warning, never as ownership: it is
+   * real authority over the console and it seats nobody.
+   */
+  roleIsBreakGlass: boolean;
 }
 
 export interface SessionInfo {
@@ -41,6 +56,8 @@ export interface AdminUserSummary {
   status: string;
   kyc_level: number;
   role: string;
+  /** @see SessionUser.roleIsBreakGlass — same flag, the BFF's snake_case spelling. */
+  role_is_break_glass: boolean;
   token_version: string;
   created_at: string;
 }
@@ -68,6 +85,8 @@ export interface AdminUserProfile {
   timezone: string;
   kyc_level: number;
   role: string;
+  /** @see SessionUser.roleIsBreakGlass — same flag, the BFF's snake_case spelling. */
+  role_is_break_glass: boolean;
 }
 
 export interface UserBalance {
