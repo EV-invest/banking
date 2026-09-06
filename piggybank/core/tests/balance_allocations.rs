@@ -47,6 +47,8 @@ use sqlx::PgPool;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
+mod common;
+
 struct Harness {
 	pool: PgPool,
 	deposits: PgDeposits,
@@ -129,12 +131,16 @@ fn now_unix() -> i64 {
 	SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
-/// Provision a fresh active user — the withdrawal path's Read-First requires one, and a real
-/// row keeps the cross-flow tests faithful to production.
-async fn active_user(users: &PgUsers) -> UserId {
+/// Provision a fresh active, KYC-verified user — the withdrawal path's Read-First requires
+/// one, and a real row keeps the cross-flow tests faithful to production. `provision` leaves
+/// the row at tier 0 (the schema default), which the withdrawal gate refuses, so the mirrored
+/// tier is set the way the lifecycle bridge sets it.
+async fn active_user(pool: &PgPool, users: &PgUsers) -> UserId {
 	let subject = AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
 	let email = Email::parse(&format!("u{}@example.com", Uuid::new_v4().simple())).unwrap();
-	users.provision(subject, email, true).await.unwrap().id()
+	let user = users.provision(subject, email, true).await.unwrap().id();
+	common::set_kyc_level(pool, user, 1).await;
+	user
 }
 
 /// The user's cost-basis projection for a fund (None when no `fund_positions` row exists).
@@ -654,7 +660,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 	let users_dyn: Arc<dyn UserRepository> = Arc::new(PgUsers::new(h.pool.clone()));
 	let nav_repo = PgNav::new(h.pool.clone());
 	let positions = PgFundPositions::new(h.pool.clone());
-	let user = active_user(&users).await;
+	let user = active_user(&h.pool, &users).await;
 	let service = registered_service(&h).await;
 	let now = now_unix();
 	let user_claim = LedgerAccountKey::UserClaim(user);

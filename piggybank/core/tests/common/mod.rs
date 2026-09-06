@@ -8,6 +8,7 @@
 
 use std::sync::Arc;
 
+use domain::users::UserId;
 use piggybank_core::{
 	infrastructure::{
 		db,
@@ -46,4 +47,22 @@ pub async fn seeded_ledger(pool: &PgPool, skipping: &str) -> Option<Arc<dyn Ledg
 		return None;
 	}
 	Some(ledger)
+}
+
+/// Mirror a concierge KYC tier onto a local user row.
+///
+/// Banking deliberately has no aggregate transition for `kyc_level` — the identity plane
+/// owns the value and the lifecycle bridge is its only writer — so a test that needs a
+/// verified investor sets the column exactly the way the bridge does. `provision` leaves
+/// a fresh user at the schema default (tier 0, unverified), which is what the money gates
+/// refuse.
+pub async fn set_kyc_level(pool: &PgPool, user: UserId, level: i32) {
+	let affected = sqlx::query("UPDATE users SET kyc_level = $2 WHERE id = $1")
+		.bind(user.raw())
+		.bind(level)
+		.execute(pool)
+		.await
+		.expect("mirror the KYC tier")
+		.rows_affected();
+	assert_eq!(affected, 1, "no user row to mirror the KYC tier onto");
 }

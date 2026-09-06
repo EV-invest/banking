@@ -2,7 +2,7 @@
 //! list (user).
 //!
 //! `request_withdrawal` is a command with a **two-part Read-First**: it gates on the
-//! user being active (the KYC/freeze seam), confirms the **available** unified claim
+//! user being active and KYC-verified (the freeze/verification seam), confirms the **available** unified claim
 //! (posted − already-reserved) covers the gross (user solvency; the TB non-negative
 //! flag is the backstop), then checks the **chosen rail's liquidity** — the min of the
 //! TB rail accounting balance and the custody adapter's real on-chain treasury view —
@@ -19,7 +19,7 @@ use domain::{
 	balance::LedgerAccountKey,
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
-	users::UserId,
+	users::{KYC_LEVEL_VERIFIED, UserId},
 	withdrawals::{Withdrawal, WithdrawalId, WithdrawalPolicy, WithdrawalSource},
 };
 use tokio::sync::Notify;
@@ -72,6 +72,14 @@ pub async fn request_withdrawal(
 	})?;
 	if !account.is_active() {
 		return Err(DomainError::Forbidden("account is not permitted to withdraw".into()));
+	}
+	// Verification gate — an unverified account (tier 0 is a registration and a confirmed
+	// email, nothing more) may not move money off the platform. The tier is the identity
+	// plane's, mirrored onto the local row by the lifecycle bridge; this is the money
+	// plane enforcing it. Deliberately absent from `request_revenue_payout`: that pays the
+	// fund's own earned revenue out and has no user behind it to verify.
+	if account.kyc_level() < KYC_LEVEL_VERIFIED {
+		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
 	}
 	let source = WithdrawalSource::User(user);
 	open_withdrawal(ports, source, network, address, amount).await

@@ -49,6 +49,8 @@ use tokio::sync::Notify;
 use tonic::transport::{Endpoint, Server};
 use uuid::Uuid;
 
+mod common;
+
 /// A deterministic, structurally-valid derived-grade address per network.
 const BEP20: &str = "0x52908400098527886E0F7030069857D2E4169EE7";
 const TRC20: &str = "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8";
@@ -127,10 +129,26 @@ fn ephemeral_addr() -> std::net::SocketAddr {
 	probe.local_addr().expect("local addr")
 }
 
-async fn active_user(users: &dyn UserRepository) -> UserId {
+/// A fresh user who is active AND KYC-verified. Both the deposit-address and the
+/// withdrawal path now gate on the mirrored tier, and `provision` leaves the row at the
+/// schema default (tier 0), so the tier is set the way the lifecycle bridge sets it —
+/// otherwise every rail assertion below would be answered by the verification gate
+/// instead of the rail gate under test.
+async fn active_user(pool: &PgPool, users: &dyn UserRepository) -> UserId {
 	let subject = AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
 	let email = Email::parse(&format!("u{}@example.com", Uuid::new_v4().simple())).unwrap();
-	users.provision(subject, email, true).await.unwrap().id()
+	let user = users.provision(subject, email, true).await.unwrap().id();
+	common::set_kyc_level(pool, user, 1).await;
+	user
+}
+
+/// The borrowed driven ports the single-rail address read takes. A helper because both
+/// assertions below need the same pair and the struct is the use case's whole wiring.
+fn address_ports<'a>(addresses: &'a SignerDepositAddresses, users: &'a PgUsers) -> wallet_app::DepositAddressPorts<'a> {
+	wallet_app::DepositAddressPorts {
+		deposit_addresses: addresses,
+		users,
+	}
 }
 
 #[tokio::test]
@@ -156,14 +174,17 @@ async fn an_unconfigured_rail_is_never_provisioned() {
 
 async fn assert_unconfigured_rail_gate(pool: &PgPool, addresses: &SignerDepositAddresses, provisions: &AtomicUsize) {
 	let configured = [Network::Bep20];
-	let user = UserId::new();
+	let users = PgUsers::new(pool.clone());
+	let user = active_user(pool, &users).await;
 
 	// The unconfigured rails: no address, ZERO signer provision calls, no cached row —
 	// the gate sits above the port, so no key is minted for a rail no watcher scans. Checked for
 	// both a non-EVM rail (Trc20) and the second EVM rail (Polygon), which is gated identically
 	// even though it shares BEP20's address shape.
 	for dead_rail in [Network::Trc20, Network::Polygon] {
-		let unavailable = wallet_app::get_deposit_address(addresses, &configured, user, dead_rail).await.expect("gated read");
+		let unavailable = wallet_app::get_deposit_address(&address_ports(addresses, &users), &configured, user, dead_rail)
+			.await
+			.expect("gated read");
 		assert!(unavailable.is_none(), "an unconfigured rail ({dead_rail}) must serve no address");
 	}
 	assert_eq!(provisions.load(Ordering::SeqCst), 0, "the signer must never be asked to provision a dead rail");
@@ -175,7 +196,7 @@ async fn assert_unconfigured_rail_gate(pool: &PgPool, addresses: &SignerDepositA
 	assert_eq!(rows, 0, "no key/address row may exist for a dead rail");
 
 	// The configured rail still provisions exactly as before.
-	let fundable = wallet_app::get_deposit_address(addresses, &configured, user, Network::Bep20)
+	let fundable = wallet_app::get_deposit_address(&address_ports(addresses, &users), &configured, user, Network::Bep20)
 		.await
 		.expect("provision")
 		.expect("a configured rail serves the derived address");
@@ -198,7 +219,7 @@ async fn an_unconfigured_rail_withdrawal_is_rejected() {
 	let withdrawals = PgWithdrawals::new(pool.clone());
 	let users = PgUsers::new(pool.clone());
 	let notify = Notify::new();
-	let user = active_user(&users).await;
+	let user = active_user(&pool, &users).await;
 
 	let destination = WalletAddress::parse(Network::Ton, TON).unwrap();
 	let err = withdrawal_app::request_withdrawal(
@@ -245,14 +266,24 @@ async fn get_wallet_presents_only_configured_rails() {
 	let positions = PgFundPositions::new(pool.clone());
 	let nav = PgNav::new(pool.clone());
 	let users = PgUsers::new(pool.clone());
-	let user = active_user(&users).await;
+	let user = active_user(&pool, &users).await;
 
 	tokio::select! {
 		result = server => result.expect("serve fake signer"),
 		() = async {
-			let wallet = wallet_app::get_wallet(ledger.as_ref(), &positions, &nav, &addresses, &[Network::Bep20], user)
-				.await
-				.expect("wallet");
+			let wallet = wallet_app::get_wallet(
+				&wallet_app::WalletPorts {
+					ledger: ledger.as_ref(),
+					positions: &positions,
+					nav: &nav,
+					deposit_addresses: &addresses,
+					users: &users,
+				},
+				&[Network::Bep20],
+				user,
+			)
+			.await
+			.expect("wallet");
 			assert_eq!(wallet.deposit_addresses.len(), 1, "exactly the configured rail is offered for deposit");
 			assert_eq!(wallet.deposit_addresses[0].network, Network::Bep20);
 			assert_eq!(
