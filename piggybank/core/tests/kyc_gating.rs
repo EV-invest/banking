@@ -34,6 +34,7 @@ use domain::{
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
+	withdrawals::WithdrawalId,
 };
 use piggybank_core::{
 	application::{balance as balance_app, wallet as wallet_app, withdrawals as withdrawal_app},
@@ -296,7 +297,7 @@ async fn a_revenue_payout_is_not_gated_on_kyc() {
 
 	// No user id crosses this call at all — the proof that the verification gate cannot
 	// apply to it.
-	let payout = withdrawal_app::request_revenue_payout(&withdrawal_ports(&h), &Network::ALL, network, destination(network), usdt("2"))
+	let payout = withdrawal_app::request_revenue_payout(&withdrawal_ports(&h), &Network::ALL, WithdrawalId::new(), network, destination(network), usdt("2"))
 		.await
 		.expect("a revenue payout is never gated on a user's KYC tier");
 	assert_eq!(payout.net_amount(), usdt("2"), "a payout charges no fee");

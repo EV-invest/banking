@@ -3,18 +3,21 @@
 import { Activity, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
+import { useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { unparkEvent } from "@/entities/admin/api/admin-client";
 import { overviewResource, parkedEventsResource } from "@/entities/admin/model/admin-resource";
+import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { ago } from "@/views/admin/lib/format";
+import { ago, statusLabel } from "@/views/admin/lib/format";
 import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
 
 export function OverviewView() {
+  const t = useT();
   const [refreshing, setRefreshing] = useState(false);
   const [unparkError, setUnparkError] = useState<string | null>(null);
   const [unparking, setUnparking] = useState<string | null>(null);
@@ -30,10 +33,10 @@ export function OverviewView() {
   const parkedRead = useResource(parkedEventsResource);
   const overview = overviewRead.data ?? null;
   const parked = parkedRead.data ? (parkedRead.data.events ?? []) : null;
-  const error = overview ? null : (overviewRead.error?.message ?? null);
+  const error = overview || !overviewRead.error ? null : errorMessage(overviewRead.error, t);
   // Best-effort: a money plane that isn't connected renders as a muted hint, not an error
   // banner — the fleet grid above must stay useful without it.
-  const parkedHint = parked ? null : (parkedRead.error?.message ?? null);
+  const parkedHint = parked || !parkedRead.error ? null : errorMessage(parkedRead.error, t);
 
   // Manual "Run health check". Both, so the KPI and the table agree.
   const load = () => {
@@ -51,9 +54,11 @@ export function OverviewView() {
     setRefetchError(null);
     try {
       const { ok } = await unparkEvent(seq);
-      if (!ok) throw new Error("the hub declined the unpark");
+      // A `RequestError` rather than a bare `Error`: the transport call succeeded, so the
+      // refusal has to carry its own catalogue key to reach the reader in their language.
+      if (!ok) throw new RequestError("the hub declined the unpark", 200, "err.unparkDeclined");
     } catch (e) {
-      setUnparkError((e as Error).message);
+      setUnparkError(errorMessage(e, t));
       setUnparking(null);
       return;
     }
@@ -65,7 +70,7 @@ export function OverviewView() {
       await Promise.all([parkedRead.refresh(), overviewRead.refresh()]);
       setUnparked(new Set());
     } catch (e) {
-      setRefetchError((e as Error).message);
+      setRefetchError(errorMessage(e, t));
     } finally {
       setUnparking(null);
     }
@@ -77,12 +82,12 @@ export function OverviewView() {
   return (
     <AdminScreen className="space-y-8">
       <AdminHeader
-        eyebrow="Administer"
-        title="Overview"
-        subtitle="Central service and microservices — health and throughput"
+        eyebrow={t("admin.eyebrow.administer")}
+        title={t("nav.overview")}
+        subtitle={t("admin.overview.subtitle")}
         action={
           <Button type="button" variant="outline" size="sm" disabled={refreshing} onClick={load}>
-            <RefreshCw className={refreshing ? "size-4 animate-spin" : "size-4"} /> Run health check
+            <RefreshCw className={refreshing ? "size-4 animate-spin" : "size-4"} /> {t("admin.overview.runHealthCheck")}
           </Button>
         }
       />
@@ -90,14 +95,25 @@ export function OverviewView() {
       {error && <ResourceError message={error} />}
 
       <StaggerItem className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Kpi label="Services healthy" value={overview ? `${healthy}/${totalServices}` : undefined} tone="text-main-accent-t2" />
-        <Kpi label="Parked rows" value={overview?.parked_rows} hint="Money the relay couldn't apply" tone={overview && overview.parked_rows !== "0" ? "text-destructive" : undefined} tip="admin.overview.kpi.parked-rows" />
-        <Kpi label="Dispatch backlog" value={overview?.backlog} hint="Undispatched outbox rows" tip="admin.overview.kpi.dispatch-backlog" />
-        <Kpi label="Oldest backlog" value={overview ? `${overview.oldest_backlog_age_secs}s` : undefined} hint="Age of the oldest undispatched row" tip="admin.overview.kpi.oldest-backlog" />
+        <Kpi label={t("admin.overview.kpi.servicesHealthy")} value={overview ? `${healthy}/${totalServices}` : undefined} tone="text-main-accent-t2" />
         <Kpi
-          label="Dead-key signings"
+          label={t("admin.overview.kpi.parkedRows")}
+          value={overview?.parked_rows}
+          hint={t("admin.overview.kpi.parkedRowsHint")}
+          tone={overview && overview.parked_rows !== "0" ? "text-destructive" : undefined}
+          tip="admin.overview.kpi.parked-rows"
+        />
+        <Kpi label={t("admin.overview.kpi.dispatchBacklog")} value={overview?.backlog} hint={t("admin.overview.kpi.dispatchBacklogHint")} tip="admin.overview.kpi.dispatch-backlog" />
+        <Kpi
+          label={t("admin.overview.kpi.oldestBacklog")}
+          value={overview ? t("admin.overview.kpi.oldestBacklogValue", { n: overview.oldest_backlog_age_secs }) : undefined}
+          hint={t("admin.overview.kpi.oldestBacklogHint")}
+          tip="admin.overview.kpi.oldest-backlog"
+        />
+        <Kpi
+          label={t("admin.overview.kpi.deadKeySignings")}
           value={overview?.unseal_failures}
-          hint="Signer couldn't unseal a key — funds stranded"
+          hint={t("admin.overview.kpi.deadKeySigningsHint")}
           tone={overview && overview.unseal_failures !== "0" ? "text-destructive" : undefined}
           tip="admin.overview.kpi.dead-key-signings"
         />
@@ -107,18 +123,20 @@ export function OverviewView() {
         <Card className="lg:col-span-2">
           <CardContent className="space-y-4 py-5">
             <div>
-              <h2 className="text-base font-semibold">Fleet health</h2>
-              <p className="text-xs text-muted-foreground">Central hub · datastores · microservices</p>
+              <h2 className="text-base font-semibold">{t("admin.overview.fleetHealth")}</h2>
+              <p className="text-xs text-muted-foreground">{t("admin.overview.fleetHealthSub")}</p>
             </div>
             {!overview ? (
               <Skeleton className="h-48 w-full" />
             ) : (
               <table className="w-full text-sm">
                 <thead>
+                  {/* i18n-max: 14 per header — an auto-layout table; a long header widens
+                      its column at the expense of the two beside it. */}
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 font-medium">Service</th>
-                    <th className="py-2 font-medium">Kind</th>
-                    <th className="py-2 font-medium">Status</th>
+                    <th className="py-2 font-medium">{t("admin.overview.col.service")}</th>
+                    <th className="py-2 font-medium">{t("admin.overview.col.kind")}</th>
+                    <th className="py-2 font-medium">{t("admin.col.status")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -127,7 +145,7 @@ export function OverviewView() {
                       <td className="py-2.5 font-medium">{s.name}</td>
                       <td className="py-2.5 capitalize text-muted-foreground">{s.kind}</td>
                       <td className="py-2.5">
-                        <StatusDot status={s.status} />
+                        <StatusDot status={s.status} label={statusLabel(s.status, t)} />
                       </td>
                     </tr>
                   ))}
@@ -141,11 +159,12 @@ export function OverviewView() {
           <CardContent className="space-y-3 py-5">
             <div className="flex items-center gap-2">
               <Activity className="size-4 text-main-accent-t1" />
-              <h2 className="text-base font-semibold">Errors & analytics</h2>
+              <h2 className="text-base font-semibold">{t("admin.overview.errorsAnalytics")}</h2>
             </div>
-            <ObsPanel label="Sentry" hint="Unresolved issues across the fleet surface here once SENTRY_DSN is configured." />
-            <ObsPanel label="PostHog" hint="Active investors, sessions and top events surface here once POSTHOG_KEY is configured." />
-            <ObsPanel label="Event stream" hint="A live outbox/event feed renders here when streaming is enabled." />
+            {/* `Sentry` and `PostHog` are product names and stay English by policy. */}
+            <ObsPanel label="Sentry" hint={t("admin.overview.obs.sentry")} />
+            <ObsPanel label="PostHog" hint={t("admin.overview.obs.posthog")} />
+            <ObsPanel label={t("admin.overview.obs.eventStreamLabel")} hint={t("admin.overview.obs.eventStream")} />
           </CardContent>
         </Card>
       </StaggerItem>
@@ -153,8 +172,8 @@ export function OverviewView() {
       <StaggerItem as={Card}>
         <CardContent className="space-y-4 py-5">
           <div>
-            <h2 className="text-base font-semibold">Parked events</h2>
-            <p className="text-xs text-muted-foreground">Outbox rows the relay couldn&apos;t apply — fix the cause, then unpark to re-drive</p>
+            <h2 className="text-base font-semibold">{t("admin.overview.parkedEvents")}</h2>
+            <p className="text-xs text-muted-foreground">{t("admin.overview.parkedEventsSub")}</p>
           </div>
           {unparkError && (
             <p className="flex items-center gap-2 text-xs text-destructive">
@@ -163,7 +182,7 @@ export function OverviewView() {
           )}
           {refetchError && (
             <p className="flex items-center gap-2 text-xs text-main-accent-t3">
-              <TriangleAlert className="size-3.5" /> Unparked, but refreshing the list failed: {refetchError} — run a health check to resync.
+              <TriangleAlert className="size-3.5" /> {t("admin.overview.unparkRefetchFailed", { error: refetchError })}
             </p>
           )}
           {!parked ? (
@@ -171,20 +190,22 @@ export function OverviewView() {
           ) : parkedHint ? (
             <p className="text-sm text-muted-foreground">{parkedHint}</p>
           ) : parked.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No parked events — the relay is clean.</p>
+            <p className="text-sm text-muted-foreground">{t("admin.overview.noParkedEvents")}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
+                {/* i18n-max: 14 per header — auto-layout table; the Reason cell is the one
+                    that gives width back, and it is already `truncate`d. */}
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 font-medium">Seq</th>
-                  <th className="py-2 font-medium">Event</th>
+                  <th className="py-2 font-medium">{t("admin.overview.col.seq")}</th>
+                  <th className="py-2 font-medium">{t("admin.overview.col.event")}</th>
                   <th className="py-2 font-medium">
                     <span className="flex items-center gap-1.5">
-                      Reason
+                      {t("admin.overview.col.reason")}
                       <TipAnchor anchor="admin.overview.parked.reason" />
                     </span>
                   </th>
-                  <th className="py-2 font-medium">Parked</th>
+                  <th className="py-2 font-medium">{t("admin.overview.col.parked")}</th>
                   <th className="py-2 font-medium" />
                 </tr>
               </thead>
@@ -203,16 +224,19 @@ export function OverviewView() {
                         {e.reason || "—"}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap py-2.5 text-muted-foreground">{ago(e.parked_at)}</td>
+                    <td className="whitespace-nowrap py-2.5 text-muted-foreground">{ago(e.parked_at, t)}</td>
                     <td className="py-2.5 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {/* i18n-max: 12 per badge — three chips and a button share this cell. */}
                         {e.compensated && (
-                          <span className="flex items-center gap-1.5 rounded-full bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground">
-                            compensated
+                          <span className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-foreground/5 px-2 py-0.5 text-xs font-medium text-foreground">
+                            {t("admin.overview.compensated")}
                             <TipAnchor anchor="admin.overview.parked.compensated" />
                           </span>
                         )}
-                        {unparked.has(e.seq) && <span className="rounded-full bg-main-accent-t2/15 px-2 py-0.5 text-xs font-medium text-main-accent-t2">unparked</span>}
+                        {unparked.has(e.seq) && (
+                          <span className="whitespace-nowrap rounded-full bg-main-accent-t2/15 px-2 py-0.5 text-xs font-medium text-main-accent-t2">{t("admin.overview.unparked")}</span>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
@@ -221,7 +245,7 @@ export function OverviewView() {
                           onClick={() => void unpark(e.seq)}
                         >
                           {unparking === e.seq ? <Loader2 className="size-3.5 animate-spin" /> : null}
-                          Unpark
+                          {t("admin.overview.unpark")}
                         </Button>
                         <TipAnchor anchor="admin.overview.parked.unpark" />
                       </div>

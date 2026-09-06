@@ -1,5 +1,6 @@
 "use client";
 
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 
 import { BadgeCheck, Loader2 } from "lucide-react";
@@ -13,6 +14,7 @@ import { positionsResource } from "@/entities/fund/model/fund-resource";
 import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { formatUsd, num } from "@/shared/lib/money";
 import { useResource } from "@/shared/lib/resource";
@@ -39,14 +41,16 @@ import { displayName, initialsOfName, truncateName } from "@/views/profile/lib/f
 const EDITABLE = ["legal_name", "preferred_name", "phone", "date_of_birth", "nationality", "tax_residence", "residential_address", "language", "base_currency", "timezone"] as const;
 type Form = Record<(typeof EDITABLE)[number], string>;
 
-const SHOWN: { key: (typeof EDITABLE)[number]; label: string; tip?: TipKey }[] = [
-  { key: "legal_name", label: "Legal name", tip: "profile.field.legal-name" },
-  { key: "preferred_name", label: "Preferred name" },
-  { key: "phone", label: "Phone number" },
-  { key: "date_of_birth", label: "Date of birth" },
-  { key: "nationality", label: "Nationality", tip: "profile.field.nationality" },
-  { key: "tax_residence", label: "Tax residence", tip: "profile.field.tax-residence" },
-  { key: "residential_address", label: "Residential address" },
+// Module scope, so the labels are catalogue keys rather than finished English; both
+// breakpoints resolve them at render. `tip` is a TipKey (a compile-time id), not a label.
+const SHOWN: { key: (typeof EDITABLE)[number]; labelKey: string; tip?: TipKey }[] = [
+  { key: "legal_name", labelKey: "profile.legalName", tip: "profile.field.legal-name" },
+  { key: "preferred_name", labelKey: "profile.preferredName" },
+  { key: "phone", labelKey: "profile.phoneNumber" },
+  { key: "date_of_birth", labelKey: "profile.dateOfBirth" },
+  { key: "nationality", labelKey: "profile.nationality", tip: "profile.field.nationality" },
+  { key: "tax_residence", labelKey: "profile.taxResidence", tip: "profile.field.tax-residence" },
+  { key: "residential_address", labelKey: "profile.residentialAddress" },
 ];
 
 function formFrom(p: UserProfile): Form {
@@ -65,7 +69,7 @@ export function ProfileView() {
   // with Home and Invest. Arriving from any of them fills this page on the first frame.
   const { data: profile, error: readError, isLoading: loading } = useResource(profileResource);
   const positions = useResource(positionsResource).data?.positions ?? [];
-  const error = saveError ?? (profile ? null : (readError?.message ?? null));
+  const error = saveError ?? (profile || !readError ? null : errorMessage(readError, t));
 
   // Seed the form during render, not in an effect, so a cached profile fills the fields on
   // the frame it is read rather than one frame later. Never while the user is editing: a
@@ -78,7 +82,7 @@ export function ProfileView() {
 
   const email = profile?.email ?? "";
   const legalName = (profile?.legal_name ?? "").trim();
-  const name = truncateName(legalName) || (loading ? "…" : displayName(email));
+  const name = truncateName(legalName) || (loading ? "…" : displayName(email, t));
   const invested = positions.reduce((s, p) => s + num(p.value), 0);
 
   function set(key: keyof Form, value: string) {
@@ -92,10 +96,10 @@ export function ProfileView() {
   }
   async function save() {
     if (!form) return;
-    const errors = validateProfileForm(form);
+    const errors = validateProfileForm(form, t);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
-      setSaveError("Please fix the highlighted fields");
+      setSaveError(t("settings.fixHighlighted"));
       return;
     }
     setFieldErrors({});
@@ -108,7 +112,7 @@ export function ProfileView() {
       setForm(formFrom(updated));
       setEditing(false);
     } catch (e) {
-      setSaveError((e as Error).message);
+      setSaveError(errorMessage(e, t));
     } finally {
       setSaving(false);
     }
@@ -125,22 +129,25 @@ export function ProfileView() {
         {/* Desktop page heading — the mobile app bar owns this below `lg`. */}
         <StaggerItem className="hidden items-center justify-between gap-4 lg:flex">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold text-foreground">Profile</h1>
-            <p className="text-sm text-muted-foreground">Your personal details and verification status</p>
+            <h1 className="text-2xl font-semibold text-foreground">{t("ui.profile")}</h1>
+            <p className="text-sm text-muted-foreground">{t("profile.subtitle")}</p>
           </div>
+          {/* `shrink-0` Buttons beside a `min-w-0` heading column — their width is taken
+              out of the page title, so the labels stay short. */}
+          {/* i18n-max: 11 for the two verbs, 20 for the edit CTA. */}
           <div className="flex shrink-0 gap-2">
             {editing ? (
               <>
                 <Button variant="outline" size="sm" className="border-border" onClick={cancel} disabled={saving}>
-                  Cancel
+                  {t("ui.cancel")}
                 </Button>
                 <Button type="button" onClick={save} disabled={saving} className="rounded-lg font-semibold">
-                  {saving && <Loader2 className="size-4 animate-spin" />} Save
+                  {saving && <Loader2 className="size-4 animate-spin" />} {t("ui.save")}
                 </Button>
               </>
             ) : (
               <Button type="button" onClick={() => setEditing(true)} disabled={loading || profile === null} className="rounded-lg font-semibold">
-                Edit profile
+                {t("profile.editProfile")}
               </Button>
             )}
           </div>
@@ -157,14 +164,15 @@ export function ProfileView() {
           <InitialsAvatar initials={initialsOfName(name, email)} className="size-16 text-2xl lg:text-xl" />
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center lg:items-start lg:text-left">
             <div className="flex min-w-0 flex-col items-center gap-1 lg:flex-row lg:items-baseline lg:gap-3">
-              {loading ? <Skeleton className="h-6 w-40" /> : <p className="truncate text-lg font-semibold text-foreground lg:text-xl">{name || "Account"}</p>}
-              {loading ? <Skeleton className="h-4 w-48" /> : <p className="truncate text-sm text-muted-foreground">{email || "Not signed in"}</p>}
+              {loading ? <Skeleton className="h-6 w-40" /> : <p className="truncate text-lg font-semibold text-foreground lg:text-xl">{name || t("ui.account")}</p>}
+              {loading ? <Skeleton className="h-4 w-48" /> : <p className="truncate text-sm text-muted-foreground">{email || t("auth.notSignedIn")}</p>}
             </div>
             {!loading && (
+              // i18n-max: 12 per Pill — they sit beside the truncated display name.
               <div className="mt-1 flex flex-wrap items-center justify-center gap-2 lg:justify-start">
-                {profile?.email_verified && <Pill icon={BadgeCheck}>Verified</Pill>}
-                {profile?.status && <Pill tone={statusTone(profile.status)}>{titleCase(profile.status)}</Pill>}
-                {profile?.kyc_level !== undefined && <Pill tone="neutral">KYC level {profile.kyc_level}</Pill>}
+                {profile?.email_verified && <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill>}
+                {profile?.status && <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill>}
+                {profile?.kyc_level !== undefined && <Pill tone="neutral">{t("profile.kycLevelPill", { n: profile.kyc_level })}</Pill>}
               </div>
             )}
           </div>
@@ -173,15 +181,15 @@ export function ProfileView() {
             {editing ? (
               <>
                 <Button variant="outline" className="h-9 flex-1 border-input" onClick={cancel} disabled={saving}>
-                  Cancel
+                  {t("ui.cancel")}
                 </Button>
                 <Button type="button" onClick={save} disabled={saving} className="h-9 flex-1 gap-1.5 font-semibold">
-                  {saving && <Loader2 className="size-4 animate-spin" />} Save
+                  {saving && <Loader2 className="size-4 animate-spin" />} {t("ui.save")}
                 </Button>
               </>
             ) : (
               <Button variant="outline" className="h-9 w-full border-input" onClick={() => setEditing(true)} disabled={loading || profile === null}>
-                Edit profile
+                {t("profile.editProfile")}
               </Button>
             )}
           </div>
@@ -193,11 +201,15 @@ export function ProfileView() {
             place in the sequence would have them animating twice over. */}
         <StaggerItem className="flex flex-col gap-4 lg:hidden">
           <ListCard>
-            <ListCardTitle sub={profile?.role ? <span className="text-main-accent-t1/85">{titleCase(profile.role)} account</span> : undefined}>Personal information</ListCardTitle>
-            {SHOWN.map(({ key, label }, i) => (
+            <ListCardTitle
+              sub={profile?.role ? <span className="text-main-accent-t1/85">{t("profile.roleAccount", { role: enumLabel("admin.role", profile.role, t) })}</span> : undefined}
+            >
+              {t("profile.personalInformation")}
+            </ListCardTitle>
+            {SHOWN.map(({ key, labelKey }, i) => (
               <div key={key}>
                 {i > 0 && <Hairline />}
-                <StackRow label={label}>
+                <StackRow label={t(labelKey)}>
                   {loading || !form ? (
                     <Skeleton className="h-5 w-40" />
                   ) : editing ? (
@@ -222,7 +234,7 @@ export function ProfileView() {
               </div>
             ))}
             <Hairline />
-            <StackRow label="Email address">
+            <StackRow label={t("ui.emailAddress")}>
               {loading ? <Skeleton className="h-5 w-48" /> : <span className="break-words text-sm font-medium text-muted-foreground">{email || "—"}</span>}
             </StackRow>
           </ListCard>
@@ -235,12 +247,12 @@ export function ProfileView() {
         <StaggerItem className="hidden items-start gap-5 lg:flex">
           <section className={cn(CARD, "w-full flex-1 space-y-4.5 px-6 py-5.5")}>
             <header>
-              <h2 className="text-sm font-semibold tracking-normal text-foreground">Personal information</h2>
-              <p className="text-xs text-muted-foreground">Used for compliance and statements</p>
+              <h2 className="text-sm font-semibold tracking-normal text-foreground">{t("profile.personalInformation")}</h2>
+              <p className="text-xs text-muted-foreground">{t("profile.personalInformationSub")}</p>
             </header>
             <div className="flex flex-wrap gap-x-4.5 gap-y-4">
-              {SHOWN.map(({ key, label, tip }) => (
-                <FieldBox key={key} label={label} tip={tip}>
+              {SHOWN.map(({ key, labelKey, tip }) => (
+                <FieldBox key={key} label={t(labelKey)} tip={tip}>
                   {loading || !form ? (
                     <Skeleton className="h-10.5 w-full rounded-lg" />
                   ) : editing ? (
@@ -261,7 +273,7 @@ export function ProfileView() {
                   )}
                 </FieldBox>
               ))}
-              <FieldBox label="Email address" trailing={profile?.email_verified ? <VerifiedTag /> : undefined}>
+              <FieldBox label={t("ui.emailAddress")} trailing={profile?.email_verified ? <VerifiedTag /> : undefined}>
                 {loading ? <Skeleton className="h-10.5 w-full rounded-lg" /> : <ReadValue value={email} muted />}
               </FieldBox>
             </div>
@@ -282,38 +294,40 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
   const t = useT();
   return (
     <ListCard className="lg:px-5.5">
-      <ListCardTitle sub="Managed by compliance">Identity verification</ListCardTitle>
+      <ListCardTitle sub={t("profile.managedByCompliance")}>{t("profile.identityVerification")}</ListCardTitle>
       <Hairline />
       <Row>
         <RowLabel title={t("ui.emailAddress")} sub={loading ? "…" : email || "—"} />
-        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill icon={BadgeCheck}>Verified</Pill> : <Pill tone="pending">Unverified</Pill>}
+        {/* i18n-max: 12 — `shrink-0` Pills beside the `min-w-0` row label. */}
+        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.email_verified ? <Pill icon={BadgeCheck}>{t("ui.verified")}</Pill> : <Pill tone="pending">{t("profile.unverified")}</Pill>}
       </Row>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.kycLevel")} sub="Raised by compliance review" />
+        <RowLabel title={t("ui.kycLevel")} sub={t("profile.kycRaisedBy")} />
         {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold tabular-nums text-foreground">{profile?.kyc_level ?? "—"}</RowValue>}
       </Row>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.accountStatus")} sub="Platform access" />
-        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.status ? <Pill tone={statusTone(profile.status)}>{titleCase(profile.status)}</Pill> : <RowValue>—</RowValue>}
+        <RowLabel title={t("ui.accountStatus")} sub={t("profile.platformAccess")} />
+        {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.status ? <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill> : <RowValue>—</RowValue>}
       </Row>
     </ListCard>
   );
 }
 
 function SnapshotCard({ invested, strategies }: { invested: number; strategies: number }) {
+  const t = useT();
   return (
     <ListCard className="lg:px-5.5">
-      <ListCardTitle>Account snapshot</ListCardTitle>
+      <ListCardTitle>{t("profile.accountSnapshot")}</ListCardTitle>
       <Hairline />
       <Row>
-        <span className="text-sm font-medium text-muted-foreground">Total invested</span>
+        <span className="text-sm font-medium text-muted-foreground">{t("profile.totalInvested")}</span>
         <span className="text-sm font-semibold tabular-nums text-foreground">{formatUsd(invested)}</span>
       </Row>
       <Hairline />
       <Row>
-        <span className="text-sm font-medium text-muted-foreground">Active strategies</span>
+        <span className="text-sm font-medium text-muted-foreground">{t("dash.activeStrategies")}</span>
         <span className="text-sm font-semibold tabular-nums text-foreground">{strategies}</span>
       </Row>
     </ListCard>
@@ -354,9 +368,11 @@ function ReadValue({ value, muted }: { value?: string; muted?: boolean }) {
 }
 
 function VerifiedTag() {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1 text-xs font-semibold text-main-accent-t1">
-      <BadgeCheck className="size-3" /> Verified
+      {/* i18n-max: 12 — beside a field label in a `justify-between` header row. */}
+      <BadgeCheck className="size-3" /> {t("ui.verified")}
       <TipAnchor anchor="profile.email.verified" />
     </span>
   );
@@ -366,6 +382,19 @@ function VerifiedTag() {
 function titleCase(value: string): string {
   const s = value.replace(/_/g, " ");
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * A wire enum as words. `titleCase` alone is English capitalisation applied to an
+ * English wire value, so it stayed English under every locale; these resolve through the
+ * shared `admin.status.*` / `admin.role.*` entries instead. The translator hands back the
+ * key itself for a value no entry names — a hub enum we have not catalogued yet — so that
+ * case falls back to the old capitalisation rather than printing a key on screen.
+ */
+function enumLabel(namespace: "admin.status" | "admin.role", value: string, t: Translate): string {
+  const key = `${namespace}.${value}`;
+  const label = t(key);
+  return label === key ? titleCase(value) : label;
 }
 
 function statusTone(status: string): PillTone {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
 import { ChevronLeft } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import type { ReactNode } from "react";
@@ -18,13 +19,14 @@ import { Reveal, SECTION_STAGGER, Stagger } from "@/shared/ui/motion";
 // screen supplies its own sections as `StaggerItem`s; anything passed as a bare element
 // still renders, it just arrives with the column rather than in sequence.
 export function WalletScreen({ title, subtitle, back, actions, children }: { title: string; subtitle?: string; back?: `/${string}`; actions?: ReactNode; children: ReactNode }) {
+  const t = useT();
   return (
     <div className="flex flex-col">
       <Reveal className="flex items-center gap-3 border-b border-border bg-main-surface px-5 pb-3.5 pt-4 lg:hidden">
         {back && (
           <Link
             href={back}
-            aria-label="Back"
+            aria-label={t("ui.back")}
             className="-m-1 shrink-0 rounded-md p-1 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ChevronLeft className="size-6" />

@@ -188,12 +188,11 @@ impl Relay {
 							let _ = lock.close().await;
 							continue 'acquire;
 						}
-						DrainStep::More => {
+						DrainStep::More =>
 							if shutdown.is_cancelled() {
 								info!("relay: shutdown requested — batch complete, stopping");
 								return;
-							}
-						}
+							},
 					}
 				};
 				if shutdown.is_cancelled() {

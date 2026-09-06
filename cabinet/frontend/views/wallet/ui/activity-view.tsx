@@ -8,11 +8,14 @@ import { Skeleton } from "@evinvest/uikit";
 
 import { cancelWithdrawal, depositsResource, withdrawalsResource } from "@/entities/wallet/model/wallet-resource";
 import type { Deposit, Withdrawal } from "@/shared/contracts";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { StaggerItem } from "@/shared/ui/motion";
+import { stateLabel } from "@/views/operations/lib/format";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
 import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 
 // The desktop table track — network, destination, amount, status. Fixed px columns with no
@@ -39,13 +42,16 @@ interface Entry {
   title: string;
   sub: string;
   amount: string;
+  /** The wire state — keys the tint, never rendered. */
   state: string;
+  /** The same state as the reader sees it, from the operations vocabulary. */
+  stateText: string;
   cancellable: boolean;
 }
 
 export function ActivityView() {
   const t = useT();
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const withdrawals = useResource(withdrawalsResource);
@@ -58,7 +64,8 @@ export function ActivityView() {
       // refreshes itself — and so does the balance on any other open surface.
       await cancelWithdrawal(id);
     } catch (e) {
-      setCancelError((e as Error).message);
+      // The error object, not its English text — `errorMessage` localises it below.
+      setCancelError(e);
     } finally {
       setBusy(null);
     }
@@ -69,11 +76,12 @@ export function ActivityView() {
   const credits = deposits.data?.deposits ?? [];
   // A failed refresh keeps the list it last showed; only a read that never succeeded is
   // worth reporting in its place.
-  const error = cancelError ?? (withdrawals.data ? null : (withdrawals.error?.message ?? null)) ?? (deposits.data ? null : (deposits.error?.message ?? null));
-  const entries: Entry[] = loading ? [] : buildEntries(rows, credits);
+  const failure = cancelError ?? (withdrawals.data ? null : withdrawals.error) ?? (deposits.data ? null : deposits.error) ?? null;
+  const error = failure ? errorMessage(failure, t) : null;
+  const entries: Entry[] = loading ? [] : buildEntries(rows, credits, t);
 
   return (
-    <WalletScreen title={t("ui.activity")} subtitle="Deposits and withdrawals — queued, processing, completed" back="/wallet">
+    <WalletScreen title={t("ui.activity")} subtitle={t("wallet.activitySub")} back="/wallet">
       {error && (
         <StaggerItem as="p" className="text-sm text-destructive">
           {error}
@@ -91,10 +99,11 @@ export function ActivityView() {
               style={COLUMNS}
               className="hidden grid-cols-(--activity-columns) items-center gap-3 border-b border-border px-5 py-3.5 text-xs font-medium text-muted-foreground lg:grid"
             >
+              {/* Hard pixel columns (110 / 1fr / 150 / 130). i18n-max: 12 on all four. */}
               <span>{t("wallet.networkCaps")}</span>
               <span>{t("wallet.destinationCaps")}</span>
-              <span className="text-right">AMOUNT</span>
-              <span className="text-right">STATUS</span>
+              <span className="text-right">{t("wallet.amountCaps")}</span>
+              <span className="text-right">{t("wallet.statusCaps")}</span>
             </div>
             {entries.map((entry, i) => (
               <Row key={entry.key} entry={entry} first={i === 0} busy={busy === entry.id} onCancel={() => cancel(entry.id)} />
@@ -129,7 +138,9 @@ function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; b
       <span className="flex shrink-0 flex-col items-end gap-1 lg:contents">
         <span className="text-sm font-medium tabular-nums text-foreground lg:text-right">{entry.amount}</span>
         <span className="flex items-center justify-end gap-2">
-          <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium capitalize", STATUS_STYLES[entry.state] ?? "bg-muted text-muted-foreground")}>{entry.state}</span>
+          {/* No `capitalize`: the label is a translated word now, not the lowercase wire
+              identifier the class existed to dress up. i18n-max: 12 (130px column). */}
+          <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_STYLES[entry.state] ?? "bg-muted text-muted-foreground")}>{entry.stateText}</span>
           {entry.cancellable && (
             <button
               type="button"
@@ -163,15 +174,16 @@ function EmptyState() {
   );
 }
 
-function buildEntries(withdrawals: Withdrawal[], deposits: Deposit[]): Entry[] {
+function buildEntries(withdrawals: Withdrawal[], deposits: Deposit[], t: Translate): Entry[] {
   const out: Entry[] = withdrawals.map((w, i) => ({
     key: `w-${w.id ?? i}`,
     id: w.id ?? "",
     network: w.network ?? "",
     title: shortAddress(w.address),
-    sub: w.tx_ref ? `tx ${shortAddress(w.tx_ref)}` : `${networkLabel(w.network)} · USDT`,
+    sub: w.tx_ref ? t("wallet.txRef", { ref: shortAddress(w.tx_ref) }) : t("wallet.railUsdt", { network: networkLabel(w.network) }),
     amount: `−${formatUsdt(w.amount)} USDT`,
     state: w.state ?? "queued",
+    stateText: stateLabel(w.state ?? "queued", t),
     cancellable: w.state === "queued",
   }));
 
@@ -183,10 +195,12 @@ function buildEntries(withdrawals: Withdrawal[], deposits: Deposit[]): Entry[] {
       key: `d-${d.tx_ref ?? ""}-${d.created_at ?? ""}-${i}`,
       id: d.tx_ref ?? "",
       network: d.network ?? "",
-      title: d.tx_ref ? shortAddress(d.tx_ref) : "Deposit",
-      sub: `${networkLabel(d.network)} · USDT`,
+      // A row title is a noun ("a deposit"), not the wallet button's verb.
+      title: d.tx_ref ? shortAddress(d.tx_ref) : t("ops.kind.deposit"),
+      sub: t("wallet.railUsdt", { network: networkLabel(d.network) }),
       amount: `+${formatUsdt(d.amount)} USDT`,
       state: "credited",
+      stateText: stateLabel("credited", t),
       cancellable: false,
     });
   }

@@ -20,7 +20,11 @@ export function NetworkSegments({ networks, value, onChange, label }: { networks
             aria-checked={selected}
             onClick={() => onChange(network)}
             className={cn(
-              "min-w-0 flex-1 rounded-md py-2 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:py-2.5 lg:text-sm",
+              // `truncate` alongside the `min-w-0`: the segments are equal fractions of the
+              // row, so without it an over-long rail name spills out of its segment rather
+              // than ellipsing. The rail names on offer today are network codes and never
+              // do, but nothing here guarantees the next one won't.
+              "min-w-0 flex-1 truncate rounded-md py-2 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:py-2.5 lg:text-sm",
               selected ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >

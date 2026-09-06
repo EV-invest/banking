@@ -10,7 +10,7 @@ import { Input } from "@evinvest/uikit";
 import { cn } from "@/shared/lib/cn";
 import { CARD } from "@/shared/ui/list-card";
 import { formatEmail } from "@/views/settings/lib/contact";
-import { CURRENCIES, type Form, LANGUAGES, TIMEZONES } from "@/views/settings/lib/form";
+import { CURRENCIES, type Form, LANGUAGES, optionsOf, TIMEZONES } from "@/views/settings/lib/form";
 import { Field, FieldSkeleton, PhoneField, SectionHeader, ThemedSelect, VerifiedTag } from "@/views/settings/ui/fields";
 
 export function GeneralSection({
@@ -32,9 +32,9 @@ export function GeneralSection({
   const ready = !loading && !!form;
   return (
     <section className={cn(CARD, "px-6 py-5.5")}>
-      <SectionHeader title={t("ui.account")} sub="Your contact details and preferences" />
+      <SectionHeader title={t("ui.account")} sub={t("settings.accountSub")} />
       <div className="flex flex-wrap gap-x-4.5 gap-y-4">
-        <Field label="Legal name">
+        <Field label={t("profile.legalName")}>
           {ready ? (
             <div className="min-w-0 flex-1">
               <Input value={form.legal_name} onChange={(e) => onChange("legal_name", e.target.value)} className={fieldErrors.legal_name ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
@@ -42,7 +42,7 @@ export function GeneralSection({
             </div>
           ) : <FieldSkeleton />}
         </Field>
-        <Field label="Preferred name">
+        <Field label={t("profile.preferredName")}>
           {ready ? (
             <div className="min-w-0 flex-1">
               <Input value={form.preferred_name} onChange={(e) => onChange("preferred_name", e.target.value)} className={fieldErrors.preferred_name ? "border-destructive bg-destructive/5" : "border-border bg-main-surface"} />
@@ -50,20 +50,20 @@ export function GeneralSection({
             </div>
           ) : <FieldSkeleton />}
         </Field>
-        <Field label="Email address" trailing={verified ? <VerifiedTag /> : undefined}>
+        <Field label={t("ui.emailAddress")} trailing={verified ? <VerifiedTag /> : undefined}>
           {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-main-surface text-muted-foreground" />}
         </Field>
-        <Field label="Phone number">
+        <Field label={t("profile.phoneNumber")}>
           {ready ? <PhoneField initial={form.phone} onChange={(v) => onChange("phone", v)} error={fieldErrors.phone} /> : <FieldSkeleton />}
         </Field>
-        <Field label="Language">
-          {ready ? <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder="Select language" error={fieldErrors.language} /> : <FieldSkeleton />}
+        <Field label={t("lang.switch")}>
+          {ready ? <ThemedSelect value={form.language} onChange={(v) => onChange("language", v)} options={LANGUAGES} placeholder={t("settings.selectLanguage")} error={fieldErrors.language} /> : <FieldSkeleton />}
         </Field>
-        <Field label="Base currency">
-          {ready ? <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={CURRENCIES} placeholder="Select currency" error={fieldErrors.base_currency} /> : <FieldSkeleton />}
+        <Field label={t("settings.baseCurrency")}>
+          {ready ? <ThemedSelect value={form.base_currency} onChange={(v) => onChange("base_currency", v)} options={optionsOf(CURRENCIES, t)} placeholder={t("settings.selectCurrency")} error={fieldErrors.base_currency} /> : <FieldSkeleton />}
         </Field>
-        <Field label="Time zone">
-          {ready ? <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={TIMEZONES} placeholder="Select time zone" error={fieldErrors.timezone} /> : <FieldSkeleton />}
+        <Field label={t("settings.timeZone")}>
+          {ready ? <ThemedSelect value={form.timezone} onChange={(v) => onChange("timezone", v)} options={optionsOf(TIMEZONES, t)} placeholder={t("settings.selectTimeZone")} error={fieldErrors.timezone} /> : <FieldSkeleton />}
         </Field>
       </div>
     </section>

@@ -120,13 +120,12 @@ impl DepositAddresses for SignerDepositAddresses {
 	/// a real deposit. Only `derived` rows count — a placeholder is not an on-chain image of
 	/// any key, so nothing can have been sent to it.
 	async fn owner_of(&self, network: Network, address: &str) -> Result<Option<UserId>, DomainError> {
-		let owner: Option<uuid::Uuid> =
-			sqlx::query_scalar("SELECT user_id FROM user_deposit_addresses WHERE network = $1 AND lower(address) = lower($2) AND address_kind = 'derived'")
-				.bind(network.as_str())
-				.bind(address)
-				.fetch_optional(&self.pool)
-				.await
-				.map_err(repo_err)?;
+		let owner: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM user_deposit_addresses WHERE network = $1 AND lower(address) = lower($2) AND address_kind = 'derived'")
+			.bind(network.as_str())
+			.bind(address)
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?;
 		Ok(owner.map(UserId::from_raw))
 	}
 

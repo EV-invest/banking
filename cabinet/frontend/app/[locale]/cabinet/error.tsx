@@ -1,9 +1,67 @@
 "use client";
 
-import { ServerError } from "@evinvest/uikit";
+import { useEffect } from "react";
 
-// Route-segment error boundary (500). The shared surface from @evinvest/uikit;
-// "Try again" runs Next's `reset`, and "back to home" returns to the dashboard.
-export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  return <ServerError reset={reset} homeHref="/cabinet" />;
+import * as Sentry from "@sentry/nextjs";
+import { createSentrySink } from "@evinvest/error-monitoring";
+import { useLocale, useT } from "@evinvest/i18n/react";
+import { StatusScreen, statusButtonClass } from "@evinvest/uikit";
+
+import { cabinetPath } from "@/shared/config/base-path";
+
+// Route-segment error boundary (500) for the whole `/{locale}/cabinet` tree.
+//
+// Next requires this file to be a Client Component, so it cannot read the locale
+// the way the 404/403/401 do (`next/root-params`). It does not need to: the root
+// layout mounts `I18nProvider` above this boundary — a segment's `error.tsx`
+// renders *inside* its parent layouts — so the catalogue is already here. (The
+// conductor threads the copy down through a context instead, because there the
+// catalogues are not otherwise in the client graph; here they are, by design.)
+// An error in the root layout itself is `global-error.tsx`'s problem, where there
+// is no provider and no locale to read anyway.
+//
+// The boundary swallows the error, so nothing else reports it: `onRequestError`
+// in instrumentation.ts covers the server side only, and a client-side render
+// crash would otherwise be invisible. No-ops without a DSN.
+const { reportError } = createSentrySink(Sentry);
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  const t = useT();
+  const locale = useLocale();
+
+  useEffect(() => {
+    // `digest` is the only handle on a server-thrown error here — the message is
+    // redacted in production — so attach it when there is one, and nothing when
+    // there is not (the sink asks for an omitted context, not an empty object).
+    reportError(error, error.digest ? { digest: error.digest } : undefined);
+  }, [error]);
+
+  return (
+    <StatusScreen
+      accent="red"
+      code="500"
+      eyebrow={t("status.serverError.eyebrow")}
+      headlineLead={t("status.serverError.headlineLead")}
+      headlineAccent={t("status.serverError.headlineAccent")}
+      subtext={t("status.serverError.subtext")}
+      links={[
+        {
+          label: t("status.backHome"),
+          href: cabinetPath(locale, "/"),
+          variant: "outline",
+          leadingArrow: true,
+        },
+      ]}
+    >
+      <button type="button" className={statusButtonClass("red", "filled")} onClick={reset}>
+        {t("status.tryAgain")}
+      </button>
+    </StatusScreen>
+  );
 }

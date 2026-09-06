@@ -33,6 +33,9 @@ fn user_profile_is_wire_identical_across_planes() {
 		timezone: "Europe/London".into(),
 		kyc_level: 2,
 		role: "admin".into(),
+		// Deliberately TRUE: `false` is the decode default, so a dropped field would still
+		// compare equal and the parity assertion below would pass vacuously.
+		role_is_break_glass: true,
 	};
 
 	let bk_profile = bk::UserProfile::decode(cc_profile.encode_to_vec().as_slice()).expect("concierge UserProfile decodes as banking UserProfile");
@@ -54,6 +57,7 @@ fn user_profile_is_wire_identical_across_planes() {
 	assert_eq!(bk_profile.timezone, cc_profile.timezone);
 	assert_eq!(bk_profile.kyc_level, cc_profile.kyc_level);
 	assert_eq!(bk_profile.role, cc_profile.role);
+	assert_eq!(bk_profile.role_is_break_glass, cc_profile.role_is_break_glass);
 
 	// Re-encoding from banking must reproduce concierge's exact bytes — no field added on
 	// one side that the other silently drops.
@@ -90,6 +94,8 @@ fn user_summary_is_wire_identical_across_planes() {
 		status: "active".into(),
 		token_version: 3,
 		role: "operator".into(),
+		// TRUE for the same reason as above — `false` would hide a dropped field.
+		role_is_break_glass: true,
 	};
 
 	let bk_summary = bk::UserSummary::decode(cc_summary.encode_to_vec().as_slice()).expect("concierge UserSummary decodes as banking UserSummary");
@@ -99,5 +105,6 @@ fn user_summary_is_wire_identical_across_planes() {
 	assert_eq!(bk_summary.status, cc_summary.status);
 	assert_eq!(bk_summary.token_version, cc_summary.token_version);
 	assert_eq!(bk_summary.role, cc_summary.role);
+	assert_eq!(bk_summary.role_is_break_glass, cc_summary.role_is_break_glass);
 	assert_eq!(bk_summary.encode_to_vec(), cc_summary.encode_to_vec());
 }

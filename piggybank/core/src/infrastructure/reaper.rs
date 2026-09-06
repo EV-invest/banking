@@ -99,9 +99,12 @@ impl Reaper {
 		let cutoff_secs = self.max_age.as_secs() as i64;
 
 		// (1) `processing` withdrawals past the cutoff — ALERT ONLY (may be broadcast).
-		// `user_id` is NULL for a revenue payout (the fund is not a user), so it decodes as
-		// `Option`: a non-nullable decode here failed the WHOLE sweep on the first stuck
-		// payout, taking the alerts for stuck *user* withdrawals down with it.
+		// `user_id` is NULL for a FUND REVENUE PAYOUT, and the schema says so out loud:
+		// `CHECK ((source = 'user') = (user_id IS NOT NULL))`. Decoding it as a non-null
+		// `String` made one stuck revenue payout abort this whole sweep with a column-decode
+		// error — taking step (2) with it, so abandoned queued withdrawals stopped being
+		// auto-cancelled for as long as that row sat there. The alert must be able to
+		// describe the fund's own money, not just a user's.
 		let stuck: Vec<(Uuid, Option<String>)> = sqlx::query_as("SELECT id, user_id::text FROM withdrawals WHERE state = 'processing' AND updated_at < now() - make_interval(secs => $1)")
 			.bind(cutoff_secs)
 			.fetch_all(&self.pool)
@@ -110,7 +113,7 @@ impl Reaper {
 		for (id, user) in &stuck {
 			error!(
 				withdrawal_id = %id,
-				user_id = user.as_deref().unwrap_or("revenue"),
+				user_id = user.as_deref().unwrap_or("<fund revenue payout>"),
 				"reaper: STUCK processing withdrawal past max age — needs a confirmed not-broadcast signal before fail/void (never auto-voided)"
 			);
 		}

@@ -19,6 +19,7 @@ mod config;
 mod cookies;
 mod dto;
 mod error;
+mod governance;
 mod routes;
 mod session;
 mod state;
@@ -26,6 +27,7 @@ mod util;
 
 use config::AppConfig;
 use cookies::CookieNames;
+use routes::approval::AttemptLimiter;
 use session::BankingTokens;
 use state::{AppState, Grpc};
 
@@ -108,13 +110,19 @@ async fn run(config: AppConfig) -> color_eyre::Result<()> {
 	let state = AppState {
 		cookies: Arc::new(CookieNames::new(config.cookie_secure())),
 		banking: Arc::new(BankingTokens::new()),
+		approvals: Arc::new(AttemptLimiter::default()),
 		verifier,
 		grpc,
 		config: Arc::new(config),
 	};
 
 	let listener = tokio::net::TcpListener::bind(bind_addr).await.context("failed to bind HTTP listener")?;
-	axum::serve(listener, routes::router(state)).await.context("cabinet BFF HTTP server error")
+	// `with_connect_info` so the public approval routes have a peer address to fall back
+	// on when no proxy header is present — an audit field and a rate-limit key, never an
+	// authorization input.
+	axum::serve(listener, routes::router(state).into_make_service_with_connect_info::<std::net::SocketAddr>())
+		.await
+		.context("cabinet BFF HTTP server error")
 }
 
 // Returns the OTel guard (flushes/shuts down on drop); bind it in `main`. `None`

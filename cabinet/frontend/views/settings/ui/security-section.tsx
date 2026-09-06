@@ -26,29 +26,31 @@ export function SecuritySection({
 }) {
   const t = useT();
   const count = sessions?.length;
-  const summary = count === undefined ? "Loading active sessions…" : count === 1 ? "1 device currently signed in" : `${count} devices currently signed in`;
+  // One plural message rather than the two hand-written branches this replaced: a locale
+  // with more than two plural forms cannot be spelled with an `=== 1` ternary.
+  const summary = count === undefined ? t("settings.sessionsLoading") : t("settings.devicesSignedIn", { n: count });
   return (
     <section className={cn(CARD, "px-6 py-5.5")}>
-      <SectionHeader title={t("ui.security")} sub="How you sign in and where your account is active" />
+      <SectionHeader title={t("ui.security")} sub={t("settings.securitySub")} />
       <div className="flex items-center gap-3 rounded-xl border border-border bg-main-surface px-4 py-3.5">
         {/* Google's mark is only licensed on a white plate, so this one square stays off-theme. */}
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white">
           <GoogleMark />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">Signed in with Google</p>
+          <p className="text-sm font-medium text-foreground">{t("ui.signedInGoogle")}</p>
           {loading ? <Skeleton className="mt-1 h-3.5 w-44" /> : <p className="truncate text-xs text-muted-foreground">{formatEmail(email) || "—"}</p>}
         </div>
-        <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">Connected</Badge>
+        {/* i18n-max: 12 — a `shrink-0` badge beside the truncated account email. */}
+        <Badge className="border-transparent bg-main-accent-t1/15 text-main-accent-t1">{t("settings.connected")}</Badge>
       </div>
-      <p className="mb-1 mt-3 text-sm leading-relaxed text-muted-foreground">
-        Your sign-in and password are managed by Google. Two-factor authentication and recovery are configured in your Google Account.
-      </p>
+      <p className="mb-1 mt-3 text-sm leading-relaxed text-muted-foreground">{t("settings.googleManaged")}</p>
       <Hairline />
       <Row>
         <RowLabel title={t("ui.sessionsDevices")} sub={summary} />
+        {/* i18n-max: 11 — a `shrink-0` Button beside the `min-w-0 flex-1` row label. */}
         <Button variant="outline" size="sm" className="border-border" onClick={onManageSessions}>
-          Manage
+          {t("ui.manage")}
         </Button>
       </Row>
     </section>

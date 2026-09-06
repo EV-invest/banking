@@ -21,9 +21,9 @@ use domain::{
 	architecture::Gateway,
 	money::{Network, TxRef, Usdt},
 };
-use serde_json::Value;
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, SignErc20TransferRequest, signer_service_client::SignerServiceClient};
+use serde_json::Value;
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
 use tonic::{Request, transport::Channel};

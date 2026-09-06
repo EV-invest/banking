@@ -5,36 +5,30 @@ import { isLocale, negotiate, type Locale } from "@evinvest/i18n";
 
 import { experiments } from "@/application/experiments";
 import { config as appConfig } from "@/config";
-import { BASE_PATH, isNonPagePath } from "@/shared/config/base-path";
+import { BASE_PATH, isNonPagePath, localeRepairedPath } from "@/shared/config/base-path";
 import { COOKIES } from "@/shared/config/cookies";
-import { contentSecurityPolicy } from "@/shared/config/security";
+import { isPublicPath, isTokenApprovalPath, zoneGatePath } from "@/shared/config/public-routes";
+import { contentSecurityPolicy, websocketOrigin } from "@/shared/config/security";
 
 const CSP_HEADER = "content-security-policy";
+const REFERRER_HEADER = "referrer-policy";
 
 // A/B assignment boundary (Next 16 "proxy", formerly middleware; Node runtime).
 // Assigns a sticky `ab_<key>` cookie per experiment in the registry on first
 // visit. A no-op while `experiments` is empty.
 const ab = createAbMiddleware(experiments);
 
-// Pages reachable without a session. Everything else under the matcher requires the
-// opaque session cookie: unauthenticated requests bounce to /login (carrying returnTo),
-// and signed-in requests are kept off the auth pages. The cookie is only a cheap gate —
-// the BFF still verifies the session server-side on every API call and page data fetch.
-const PUBLIC = ["/login", "/loggedout"];
-
-// Every page path is now `/{locale}/cabinet/…`, so the gate has to compare against
-// what is left after that prefix. Getting this wrong fails open in the worse
-// direction: an unrecognised path is treated as private, which bounces a signed-out
-// reader to /login — annoying — rather than exposing a private page.
-function withoutPrefix(pathname: string): string {
-  const rest = pathname.replace(/^\/[a-z]{2}\/cabinet/, "");
-  return rest === "" ? "/" : rest;
-}
-
-function isPublic(pathname: string): boolean {
-  const path = withoutPrefix(pathname);
-  return PUBLIC.some((p) => path === p || path.startsWith(`${p}/`));
-}
+// Which pages are reachable without a session — and the prefix-matching that lets a
+// token-addressed approval page (`/approve/<token>`, a different path per visitor) be one
+// of them — now live in `shared/config/public-routes.ts`, where the test runner can reach
+// them. This module imports `next/server` and so cannot be unit-tested at all; the gate is
+// the last thing in it that should have been untestable.
+//
+// Everything not named there requires the opaque session cookie: unauthenticated requests
+// bounce to /login (carrying returnTo), and signed-in requests are kept off the auth pages.
+// The cookie is only a cheap gate — the BFF still verifies the session server-side on every
+// API call and page data fetch, including on the public approval routes, where the token
+// and the secret code are the credential instead.
 
 /** The locale segment of `/{locale}/cabinet/…`, or null when there is none. */
 function localeOf(pathname: string): Locale | null {
@@ -61,23 +55,78 @@ export function proxy(req: NextRequest) {
   // it to its own inline bootstrap scripts (keeping script-src free of
   // 'unsafe-inline'), and echoed on the response so the browser enforces the CSP.
   const nonce = crypto.randomUUID().replaceAll("-", "");
-  const csp = contentSecurityPolicy(nonce);
+  // The consilium's revision socket is same-origin, but `'self'` has not always covered a
+  // websocket handshake and a blocked one fails silently — so the origin is named
+  // explicitly, derived from the request because only it knows the public host.
+  const csp = contentSecurityPolicy(
+    nonce,
+    websocketOrigin(
+      req.headers.get("x-forwarded-host") ?? req.headers.get("host"),
+      req.headers.get("x-forwarded-proto"),
+    ),
+  );
   req.headers.set(CSP_HEADER, csp);
 
-  // No locale in the path: an old link, a bookmark, or the conductor's unprefixed
-  // /cabinet mount. Send them to a real URL rather than 404ing — the cookie is the
+  // No usable locale in the path: an old link, a bookmark, the conductor's
+  // unprefixed /cabinet mount, or a first segment that looks like a locale and is
+  // not one (`/zz/cabinet/wallet`, `/pt/cabinet` — a typo, or a language we do not
+  // serve). Send them all to a real URL rather than 404ing — the cookie is the
   // reader's last choice, Accept-Language the first guess, English the floor.
-  if (!locale && pathname.startsWith(BASE_PATH)) {
-    const chosen =
-      (isLocale(req.cookies.get(COOKIES.locale)?.value)
-        ? (req.cookies.get(COOKIES.locale)!.value as Locale)
-        : null) ?? negotiate(req.headers.get("accept-language"));
-    const url = req.nextUrl.clone();
-    url.pathname = `/${chosen}${pathname}`;
-    return withCsp(NextResponse.redirect(url), csp);
+  //
+  // The cookie is now written by the public site too (site_conductor
+  // `scripts/locale-cookie.ts`), mirroring the locale of whatever page the reader
+  // was on, so "their last choice" finally includes the language they were reading
+  // on the landing a moment ago rather than only a previous cabinet visit.
+  //
+  // The `/<not-a-locale>/cabinet/…` half is why this is not a plain prefix test.
+  // Those requests used to reach `app/[locale]/layout.tsx` and its `notFound()`,
+  // which the ROOT layout throws and so has no `not-found.tsx` above it to render
+  // — the reader got Next's built-in black 404 rather than ours. `localeRepairedPath`
+  // covers both shapes, so repairing the URL fixes the page they land on as well as
+  // the page they would otherwise be shown.
+  if (!locale) {
+    const remembered = req.cookies.get(COOKIES.locale)?.value;
+    const chosen = isLocale(remembered)
+      ? remembered
+      : negotiate(req.headers.get("accept-language"));
+    const repaired = localeRepairedPath(pathname, chosen);
+    if (repaired) {
+      const url = req.nextUrl.clone();
+      url.pathname = repaired;
+      const res = withCsp(NextResponse.redirect(url), csp);
+      // Accept-Language is a header the reader never set, so a locale derived from it
+      // is a guess, not a preference — and the account holder may well have stored a
+      // real one from another device. The app cannot tell the two apart on its own:
+      // this redirect carries no cookie, but the request it redirects TO does get one
+      // written from the (guessed) URL by `withLocale` below, so by the time any page
+      // renders the evidence is gone. Mark it here, while it is still known;
+      // `LocaleSync` reads the mark, prefers the stored profile language over the
+      // guess, and clears it. Session-scoped: a guess is only about this visit.
+      //
+      // A bogus locale segment is as much a guess as a missing one — `/pt/cabinet`
+      // tells us which language the reader wanted and precisely that we do not serve
+      // it — so it is marked on the same terms.
+      //
+      // The mark carries the guessed locale rather than a bare flag, so it can only
+      // ever describe the page it was minted for. A flag would outlive its redirect
+      // whenever the reader never reaches a page that clears it (the profile fetch
+      // fails, or they land on /login, which mounts no LocaleSync) and would then
+      // read as "this URL was guessed" on the next deliberate /de/cabinet link they
+      // follow — bouncing them off the page they chose. Matching on the value makes
+      // a stale mark inert instead.
+      if (!isLocale(remembered)) {
+        res.cookies.set(COOKIES.localeGuessed, chosen, {
+          path: "/",
+          sameSite: "lax",
+          secure: appConfig.authCookieSecure,
+          httpOnly: false,
+        });
+      }
+      return res;
+    }
   }
 
-  if (!isPublic(pathname) && !signedIn) {
+  if (!isPublicPath(pathname) && !signedIn) {
     const url = req.nextUrl.clone();
     url.pathname = `/${locale ?? "en"}${BASE_PATH}/login`;
     url.search = "";
@@ -86,14 +135,25 @@ export function proxy(req: NextRequest) {
     return withCsp(NextResponse.redirect(url), csp);
   }
 
-  if (signedIn && withoutPrefix(pathname) === "/login") {
+  if (signedIn && zoneGatePath(pathname) === "/login") {
     const url = req.nextUrl.clone();
     url.pathname = `/${locale ?? "en"}${BASE_PATH}`;
     url.search = "";
     return withCsp(NextResponse.redirect(url), csp);
   }
 
-  return withCsp(withLocale(req, ab(req)), csp);
+  return withReferrerPolicy(withCsp(withLocale(req, ab(req)), csp), pathname);
+}
+
+// On the two approval pages the URL *is* the credential, so the cabinet's default
+// `strict-origin-when-cross-origin` is not enough: it still sends the full URL along with
+// same-origin requests, and the origin alone to everywhere else. `no-referrer` closes that
+// channel for exactly the pages that have something to leak (docs/CONSILIUM.md, policy 6).
+// Scoped rather than global — the rest of the cabinet gains nothing from it and loses the
+// same-origin referrer that analytics and error reports read.
+function withReferrerPolicy(res: NextResponse, pathname: string): NextResponse {
+  if (isTokenApprovalPath(pathname)) res.headers.set(REFERRER_HEADER, "no-referrer");
+  return res;
 }
 
 // Assigns a sticky locale on first visit — the same shape as the A/B cookie.

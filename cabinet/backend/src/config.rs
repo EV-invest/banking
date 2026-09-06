@@ -42,6 +42,14 @@ ev::settings! {
 		/// validated against it before being served, so a poisoned entry never reaches the
 		/// browser. Same-origin (relative) `scriptUrl`s need no entry.
 		mfe_allowed_origins: Vec<String> = "",
+		/// The browser origin allowed to open the governance websocket (scheme://host[:port]).
+		/// A websocket handshake is exempt from CORS and carries cookies, so without this a
+		/// cross-site page could open the live consilium feed as the signed-in user; the
+		/// handshake rejects any other `Origin`. Unset ⇒ not enforced, which is right for
+		/// local dev (the frontend runs on some `http://localhost:PORT`) and never right in
+		/// production — where a missing value fails the boot rather than failing open.
+		#[required_in("production")]
+		cabinet_ws_origin: Option<String>,
 		app_env: String,
 		/// Unset ⇒ error monitoring is a silent no-op. Right locally; in
 		/// production it means the BFF's errors reach nobody, so there the boot
@@ -129,6 +137,7 @@ mod tests {
 				"AUTH_COOKIE_SECURE",
 				"MFE_REGISTRY_PATH",
 				"MFE_ALLOWED_ORIGINS",
+				"CABINET_WS_ORIGIN",
 				"APP_ENV",
 				"SENTRY_DSN",
 				"POSTHOG_KEY",
@@ -148,7 +157,7 @@ mod tests {
 			.collect();
 		// POSTHOG_KEY is read (it is in the env surface above) but never required:
 		// analytics is a metric, not a safety net. See the field's comment.
-		assert_eq!(extra, vec!["SENTRY_DSN"]);
+		assert_eq!(extra, vec!["CABINET_WS_ORIGIN", "SENTRY_DSN"]);
 	}
 
 	#[test]
@@ -158,6 +167,20 @@ mod tests {
 		let error = AppConfig::from_source(|var| env.get(var).cloned()).expect_err("production without monitoring must not boot");
 
 		let vars: Vec<&str> = error.errors.iter().map(|e| e.var.as_str()).collect();
-		assert_eq!(vars, vec!["SENTRY_DSN"]);
+		assert_eq!(vars, vec!["CABINET_WS_ORIGIN", "SENTRY_DSN"]);
+	}
+
+	/// The governance socket's cross-site guard must never be able to fail OPEN in
+	/// production: a websocket handshake is exempt from CORS but still carries the
+	/// `ev_access` cookie, so an unset origin there would let any page read the live
+	/// consilium feed as the signed-in owner. Unset is a boot failure, not a default.
+	#[test]
+	fn the_websocket_origin_guard_is_mandatory_in_production() {
+		let mut env = minimal_env();
+		env.insert("APP_ENV".to_string(), "production".to_string());
+		env.insert("SENTRY_DSN".to_string(), "https://k@sentry.invalid/1".to_string());
+		let error = AppConfig::from_source(|var| env.get(var).cloned()).expect_err("production without a ws origin must not boot");
+		let vars: Vec<&str> = error.errors.iter().map(|e| e.var.as_str()).collect();
+		assert_eq!(vars, vec!["CABINET_WS_ORIGIN"]);
 	}
 }

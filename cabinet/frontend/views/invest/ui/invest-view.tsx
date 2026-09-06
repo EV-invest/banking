@@ -10,6 +10,7 @@
 // is now a single dense band plus a grid — nothing is sized by anything other than what
 // is in it.
 
+import { useT } from "@evinvest/i18n/react";
 import { ArrowRight, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useMemo } from "react";
@@ -18,6 +19,7 @@ import { Badge, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { allocationsResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
@@ -28,6 +30,7 @@ import { buildProducts, type Product } from "@/views/invest/lib/product";
 import { SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
 
 export function InvestView() {
+  const t = useT();
   const positionList = useResource(positionsResource);
   const catalogList = useResource(allocationsResource);
   const redemptionList = useResource(redemptionsResource);
@@ -41,7 +44,7 @@ export function InvestView() {
   const available = wallet.data?.balance?.available ?? null;
   // Only a positions read that has never succeeded is worth an alert; a failed refresh over
   // holdings already on screen is not something to interrupt the page for.
-  const error = positionList.data ? null : (positionList.error?.message ?? null);
+  const error = positionList.data ? null : positionList.error ? errorMessage(positionList.error, t) : null;
 
   const products = useMemo<Product[] | null>(() => (catalog && positions ? buildProducts(catalog, positions) : null), [catalog, positions]);
 
@@ -55,7 +58,7 @@ export function InvestView() {
   return (
     <Stagger step={SECTION_STAGGER} className="container max-w-5xl space-y-6 py-10">
       <StaggerItem as="header" className="space-y-3">
-        <h1 className="text-3xl font-semibold leading-tight">Your fund shares</h1>
+        <h1 className="text-3xl font-semibold leading-tight">{t("invest.title")}</h1>
         {/* `invest.overview` is a SECTION tip — a descriptor block, not an inline ⓘ — so
             it cannot live inside the heading row: it laid a full-width bordered box across
             the title. It belongs under the header, which is also the one place this
@@ -64,7 +67,7 @@ export function InvestView() {
         <TipAnchor anchor="invest.overview" />
       </StaggerItem>
 
-      {error && <ResourceError variant="alert" title="Couldn't load your positions" message={error} />}
+      {error && <ResourceError variant="alert" title={t("err.positionsLoad")} message={error} />}
 
       {!products ? (
         <StaggerItem className="space-y-4">
@@ -80,15 +83,15 @@ export function InvestView() {
 
           <StaggerItem as="section" className="space-y-3">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Products
-              {products.length > 0 && <span className="rounded-full bg-main-accent-t1/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t1">{products.length}</span>}
+              {t("invest.products")}
+              {products.length > 0 &&<span className="rounded-full bg-main-accent-t1/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t1">{products.length}</span>}
             </p>
             {products.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
                   <Sparkles className="size-6" />
-                  <p className="text-sm">No funds are open for subscription right now.</p>
-                  <p className="max-w-sm text-xs">A fund appears here once an operator registers and opens it. Nothing you hold is affected.</p>
+                  <p className="text-sm">{t("invest.noFunds")}</p>
+                  <p className="max-w-sm text-xs">{t("invest.noFundsHint")}</p>
                 </CardContent>
               </Card>
             ) : (
@@ -114,6 +117,7 @@ export function InvestView() {
  * rules between them carry the grouping.
  */
 function PortfolioBand({ invested, cost, funds, available, queued }: { invested: bigint; cost: bigint; funds: number; available: string | null; queued: number }) {
+  const t = useT();
   const pnl = invested - cost;
   const loss = pnl < 0n;
   const flat = pnl === 0n;
@@ -130,7 +134,7 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
           this way the desktop state is the unclassed default and nothing competes. */}
       <CardContent className="flex py-5 max-md:flex-col max-md:gap-6 md:items-center">
         <div className="space-y-1.5 md:flex-1">
-          <p className="text-xs font-semibold uppercase tracking-widest text-main-accent-t1">Invested value</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-main-accent-t1">{t("invest.investedValue")}</p>
           <div className="flex flex-wrap items-baseline gap-2.5">
             <span className="text-3xl font-semibold leading-none tabular-nums">{formatUsdt(fromBaseUnits(invested))}</span>
             <span className="text-sm text-muted-foreground">USDT</span>
@@ -141,22 +145,26 @@ function PortfolioBand({ invested, cost, funds, available, queued }: { invested:
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">{funds === 0 ? "You hold no fund units yet." : `Across ${funds} fund${funds === 1 ? "" : "s"}`}</p>
+          <p className="text-xs text-muted-foreground">{funds === 0 ? t("invest.noUnitsHeld") : t("invest.acrossFunds", { n: funds })}</p>
         </div>
 
         <div className="flex flex-wrap gap-8 md:border-l md:border-border md:px-7">
-          <BandStat label="Cost basis" value={`${formatUsdt(fromBaseUnits(cost))} USDT`} />
-          <BandStat label="Funds held" value={String(funds)} />
-          <BandStat label="Awaiting settlement" value={queued === 0 ? "None" : `${queued} queued`} tone={queued > 0 ? "text-main-accent-t3" : undefined} />
+          <BandStat label={t("invest.costBasis")} value={`${formatUsdt(fromBaseUnits(cost))} USDT`} />
+          <BandStat label={t("invest.fundsHeld")} value={String(funds)} />
+          <BandStat
+            label={t("invest.awaitingSettlement")}
+            value={queued === 0 ? t("ui.none") : t("admin.valuation.queuedCount", { n: queued })}
+            tone={queued > 0 ? "text-main-accent-t3" : undefined}
+          />
         </div>
 
         <div className="space-y-2 md:border-l md:border-border md:pl-7">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Wallet className="size-3.5" /> Available to invest
+            <Wallet className="size-3.5" /> {t("invest.availableToInvest")}
           </p>
           <p className="text-xl font-semibold tabular-nums">{available === null ? "—" : `${formatUsdt(available)} USDT`}</p>
           <Button asChild type="button" variant="outline" size="sm">
-            <Link href="/wallet">Top up</Link>
+            <Link href="/wallet">{t("invest.topUp")}</Link>
           </Button>
         </div>
       </CardContent>
@@ -186,6 +194,7 @@ function BandStat({ label, value, tone }: { label: string; value: string; tone?:
  * page, so opening a product from this list opens on the price the card was already showing.
  */
 function ProductCard({ product }: { product: Product }) {
+  const t = useT();
   const nav = useResource(fundNavResource, product.service).data ?? null;
 
   const held = product.position && !isZero(product.position.units) ? product.position : null;
@@ -204,19 +213,21 @@ function ProductCard({ product }: { product: Product }) {
             <p className="truncate text-base font-semibold">{product.title}</p>
             <p className="truncate font-mono-tech text-xs text-muted-foreground">{product.service}</p>
           </div>
+          {/* A non-shrinking sibling of the `min-w-0 flex-1` title column, so a long badge
+              is taken straight out of the fund's name. i18n-max: 12. */}
           <Badge variant="outline" className={cn(closed ? "border-main-accent-t3/40 text-main-accent-t3" : "border-main-accent-t2/40 text-main-accent-t2")}>
-            {closed ? "Redeem only" : "Open"}
+            {closed ? t("invest.badge.redeemOnly") : t("invest.badge.open")}
           </Badge>
         </div>
 
         <div className="flex flex-wrap gap-x-6 gap-y-3 border-y border-border py-3.5">
-          <CardStat label="NAV / unit" value={nav ? formatUsdt(nav.nav) : "—"} large />
+          <CardStat label={t("invest.navPerUnit")} value={nav ? formatUsdt(nav.nav) : "—"} large />
           {held ? (
             <>
-              <CardStat label="Your units" value={formatUnits(held.units)} />
-              <CardStat label="Value" value={formatUsdt(held.value)} />
+              <CardStat label={t("invest.yourUnits")} value={formatUnits(held.units)} />
+              <CardStat label={t("invest.value")} value={formatUsdt(held.value)} />
               <CardStat
-                label="P&L"
+                label={t("invest.pnl")}
                 value={flat ? "0.00" : formatSignedUsdt(held.pnl)}
                 tone={flat ? undefined : loss ? "text-main-accent-t4" : "text-main-accent-t2"}
                 icon={flat ? undefined : <TrendingUp className={cn("size-3.5", loss && "rotate-180")} />}
@@ -224,8 +235,8 @@ function ProductCard({ product }: { product: Product }) {
             </>
           ) : (
             <div className="ml-auto space-y-1 text-right">
-              <p className="text-xs text-muted-foreground">Your position</p>
-              <p className="text-sm text-muted-foreground">Not invested yet</p>
+              <p className="text-xs text-muted-foreground">{t("invest.yourPosition")}</p>
+              <p className="text-sm text-muted-foreground">{t("invest.notInvestedYet")}</p>
             </div>
           )}
         </div>
@@ -236,7 +247,7 @@ function ProductCard({ product }: { product: Product }) {
             with a bare text link, which read as two different kinds of thing. */}
         <Button asChild className={cn("mt-auto w-full", held ? "" : TEAL_CTA)} variant={held ? "outline" : "default"}>
           <Link href={`/invest/${encodeURIComponent(product.service)}`}>
-            {held ? "Manage" : "Invest"}
+            {held ? t("ui.manage") : t("nav.invest")}
             <ArrowRight className="size-4" />
           </Link>
         </Button>

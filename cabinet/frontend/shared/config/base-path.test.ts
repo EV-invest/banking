@@ -10,7 +10,13 @@ import test from "node:test";
 
 import { LOCALES } from "@evinvest/i18n";
 
-import { cabinetPath, isNonPagePath, zonePathname } from "./base-path.ts";
+import {
+  cabinetPath,
+  isNonPagePath,
+  localeRepairedPath,
+  relocalise,
+  zonePathname,
+} from "./base-path.ts";
 
 test("every locale round-trips back to the path the app reasons in", () => {
   for (const locale of LOCALES) {
@@ -100,5 +106,63 @@ test("a page that merely mentions an excluded name is still a page", () => {
     "/en/cabinet/_next/static/x.css",
   ]) {
     assert.equal(isNonPagePath(path), false, path);
+  }
+});
+
+test("relocalising a page keeps its query and hash", () => {
+  // Two callers relocalise the current page — the settings language switcher and
+  // LocaleSync — and a version that drops the query string is a bug that only shows up
+  // the first time a cabinet page takes a parameter. Pinned so they cannot diverge.
+  const url = { pathname: "/ru/cabinet/wallet", search: "?filter=deposits", hash: "#top" };
+  assert.equal(relocalise("de", url), "/de/cabinet/wallet?filter=deposits#top");
+});
+
+test("relocalising to English keeps the locale segment the cabinet actually serves", () => {
+  // Unlike the public site, the zone has no unprefixed form: /cabinet/* is the entry
+  // the proxy redirects AWAY from, so English pages really do live under /en.
+  assert.equal(
+    relocalise("en", { pathname: "/de/cabinet/settings", search: "", hash: "" }),
+    "/en/cabinet/settings",
+  );
+});
+
+test("relocalising the cabinet root does not grow a trailing slash", () => {
+  assert.equal(relocalise("vi", { pathname: "/en/cabinet", search: "", hash: "" }), "/vi/cabinet");
+});
+
+test("a cabinet path with no locale is repaired into one", () => {
+  // The conductor's unprefixed mount, and every link written before the locale
+  // moved into the URL.
+  assert.equal(localeRepairedPath("/cabinet", "ru"), "/ru/cabinet");
+  assert.equal(localeRepairedPath("/cabinet/wallet", "ru"), "/ru/cabinet/wallet");
+  assert.equal(localeRepairedPath("/cabinet/admin/revenue", "de"), "/de/cabinet/admin/revenue");
+});
+
+test("a first segment that is not a locale is replaced, not kept", () => {
+  // The case that used to reach the root layout's `notFound()` — thrown by the ROOT
+  // layout, so no `not-found.tsx` boundary exists above it and Next served its own
+  // black 404 instead of ours. Prefixing rather than replacing would produce
+  // /ru/zz/cabinet/wallet, which routes nowhere.
+  assert.equal(localeRepairedPath("/zz/cabinet/wallet", "ru"), "/ru/cabinet/wallet");
+  assert.equal(localeRepairedPath("/pt/cabinet", "en"), "/en/cabinet");
+  assert.equal(localeRepairedPath("/zz/cabinet/", "vi"), "/vi/cabinet");
+});
+
+test("a path that is not a cabinet page is left for someone else", () => {
+  // Null, not a guess: the conductor owns these routes on the same origin, and
+  // redirecting them into the zone would break the site around it.
+  assert.equal(localeRepairedPath("/zz/anything", "ru"), null);
+  assert.equal(localeRepairedPath("/", "ru"), null);
+  assert.equal(localeRepairedPath("/cabinets/list", "ru"), null);
+  assert.equal(localeRepairedPath("/zz/cabinets/list", "ru"), null);
+});
+
+test("repairing agrees with cabinetPath for every locale", () => {
+  // One rule, two directions — the same property the round-trip test above pins.
+  for (const locale of LOCALES) {
+    for (const path of ["/", "/wallet", "/admin/revenue"] as const) {
+      const bogus = `/zz${cabinetPath("en", path).slice("/en".length)}`;
+      assert.equal(localeRepairedPath(bogus, locale), cabinetPath(locale, path), `${locale} ${path}`);
+    }
   }
 });

@@ -235,7 +235,10 @@ impl DepositWatcher {
 	/// or repeated backfill costs RPC calls and changes nothing else.
 	pub async fn scan_range(&self, from: u64, to: u64, cursor: CursorPolicy) -> Result<ScanSummary, WatcherError> {
 		let network = self.config.network;
-		let mut summary = ScanSummary { scanned_to: from.saturating_sub(1), credited: 0 };
+		let mut summary = ScanSummary {
+			scanned_to: from.saturating_sub(1),
+			credited: 0,
+		};
 		if from > to {
 			return Ok(summary);
 		}
@@ -520,9 +523,14 @@ fn decode_transfer(log: &Value) -> Option<Transfer> {
 	let value = word_to_u128(log.get("data")?.as_str()?)?;
 	let tx_hash = log.get("transactionHash")?.as_str()?.to_lowercase();
 	let log_index = hex_to_u64(log.get("logIndex")?.as_str()?)?;
-	Some(Transfer { from, to, value, tx_hash, log_index })
+	Some(Transfer {
+		from,
+		to,
+		value,
+		tx_hash,
+		log_index,
+	})
 }
-
 
 /// A 32-byte big-endian uint256 word → `u128`. `None` if it exceeds `u128` (the high 16
 /// bytes are non-zero) — refused rather than silently truncated.

@@ -49,6 +49,38 @@ export function formatNav(value: string | number | undefined): string {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }
 
+/**
+ * A wire decimal shown EXACTLY as it arrived, grouped for reading: "1,234.50",
+ * "1,000.0000005", "0.000000000000000001".
+ *
+ * The other formatters here parse to a `number` first, which is right for a balance — a
+ * float is plenty for a figure the reader is only comparing against other figures, and
+ * capping the fraction is what keeps a column aligned. It is wrong for an amount the reader
+ * is *authorizing*: `formatUsdt` caps at 6 dp, so an 18-decimal value is silently rounded on
+ * screen, and `Number()` itself loses digits past ~15 significant figures.
+ *
+ * That matters on exactly one surface and it matters absolutely. `payload_hash` is computed
+ * over the exact decimal string and re-verified before the money moves, so what an owner
+ * approves must be what the hash covers, character for character (docs/CONSILIUM.md,
+ * policy 12). An approval screen that rounds is an approval of something else.
+ *
+ * No float anywhere: the integer part is grouped through `BigInt`, which has no precision
+ * ceiling, and the fraction is passed through untouched apart from being padded to the two
+ * decimals every money figure in this cabinet shows. Grouping is `en-US` for the same
+ * reason the rest of this module pins it.
+ */
+export function formatExactUsdt(value: string | undefined): string {
+  const raw = (value ?? "").trim();
+  // Anything that is not a plain decimal is returned as-is rather than coerced: a caller
+  // showing an unrecognised value verbatim is honest, one showing "0.00" for it is not.
+  if (!/^-?\d*\.?\d*$/.test(raw) || raw === "" || raw === "." || raw === "-" || raw === "-.") return raw || "—";
+  const negative = raw.startsWith("-");
+  const [intRaw = "", fracRaw = ""] = raw.replace(/^-/, "").split(".");
+  const grouped = BigInt(intRaw || "0").toLocaleString("en-US");
+  const frac = fracRaw.length < 2 ? fracRaw.padEnd(2, "0") : fracRaw;
+  return `${negative ? "\u2212" : ""}${grouped}.${frac}`;
+}
+
 /** Ledger USDT: "1,234.50", "0.000001". No currency symbol — the unit is spelled out. */
 export function formatUsdt(value: string | undefined): string {
   const n = Number(value ?? "0");
