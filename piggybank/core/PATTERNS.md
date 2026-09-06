@@ -316,8 +316,9 @@ per-rail deposit address and a per-rail **withdrawable** view (`instant = min(av
 rail liquidity)`, the accept-and-queue hint — it discloses a rail's liquidity only up to
 the user's own balance; bucket/round it if that must stay private).
 
-**Deposit (chain → claim).** `GetDepositAddress` hands the user a stable per-(user,
-network) address from the [`DepositAddresses`] port — a stub HD-derivation cached into
+**Deposit (chain → claim).** `GetDepositAddress` hands a **verified** user (`kyc_level ≥ 1`
+— see [Authorization](#authorization-defense-in-depth)) a stable per-(user, network)
+address from the [`DepositAddresses`] port — a stub HD-derivation cached into
 `user_deposit_addresses`; the real xpub service is a follow-up. Crediting flows through the
 admin `RecordDeposit` gate (idempotent by `tx_ref`), the stand-in for a chain watcher;
 `Dr wallet:<net> / Cr user:<uuid>` credits the **unified** claim regardless of rail.
@@ -561,8 +562,9 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `Redeem` | the user | `sub == user`, `is_access`, **not frozen** | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
 | `CancelRedemption` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `GetPosition` / `ListPositions` / `ListRedemptions` / `GetFundNav` | the user | `sub == user` | — |
-| `GetWallet` / `GetDepositAddress` / `ListWithdrawals` | the user | `sub == user` | — |
-| `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | active account ∧ available claim ≥ gross (TB flag backstop) |
+| `GetWallet` / `ListWithdrawals` | the user | `sub == user` | — (`GetWallet` serves an address only at `kyc_level ≥ 1`) |
+| `GetDepositAddress` | the user | `sub == user` | `kyc_level ≥ 1` (else `permission_denied`) |
+| `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | active account ∧ `kyc_level ≥ 1` ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
@@ -588,6 +590,26 @@ SUSPENDED→frozen / REINSTATED→unfrozen, KYC, and the revoke floor onto `user
 banking only mirrors the gating slice. The gate fails CLOSED (UNAVAILABLE) if the flag can't
 be read. Cancel/read RPCs are intentionally NOT gated, so a frozen user can still unwind
 queued positions.
+
+**Verification gate (`kyc_level`).** The mirrored tier is not just stored, it *gates*:
+`domain::users::KYC_LEVEL_VERIFIED` (= 1) is the floor for money crossing the platform
+boundary in either direction — `GetDepositAddress` and `RequestWithdrawal`. The ladder is
+written down on `banking.v1.UserProfile.kyc_level`: **0** registered (confirmed email,
+nothing verified), **1** verified (document + liveness + face match + a passed
+sanctions/PEP screen), **2** enhanced (proof of address + source of funds, raised limits),
+**3** elevated (EDD, human-set only). Concierge owns the value and an admin sets it there;
+banking has no transition that writes it, and the `users` UPDATE deliberately omits the
+column so a profile save can never race a `KYC_CHANGED` back to an older tier.
+
+Both gates sit **above** the [`DepositAddresses`] port for the same reason the rail gate
+does: the first `address` call provisions a signer keypair, and a key minted for an
+unverified user is an address the fund must watch, sweep and account for forever. The two
+refusals stay distinguishable at the wire — an unconfigured rail is `Ok(None)` ("this rail
+cannot fund you"), an unverified caller is `Forbidden`/`permission_denied` ("finish
+verification") — because the cabinet has to pick a different screen for each. `GetWallet`
+stays fully readable at tier 0 (a user's own balance is never hidden from them) but serves
+no address on any rail. A **revenue payout is not gated**: it pays the fund's own earned
+revenue out of the `fee` claim and has no user behind it to verify.
 
 ## Reconciliation + reaper + dispatcher (recovery jobs)
 
@@ -676,7 +698,14 @@ settlement (the only moment a fee becomes cash), its refusal when the fund's cla
 short, the sweeper end to end, and a fund with no policy never being charged. Note that
 the accrual clocks are DB-stamped while `now` is caller-supplied, so those tests overshoot
 a period boundary by an hour and compare amounts with a tolerance rather than for equality;
-the sub-second jitter is 3e-8 of a year's fee and never accumulates. `piggybank/core/tests/relay_recovery.rs`
+the sub-second jitter is 3e-8 of a year's fee and never accumulates. `piggybank/core/tests/kyc_gating.rs` covers the verification floor against real Postgres +
+TigerBeetle: tier 0 is refused a deposit address **without the address gateway being reached
+at all** (a call counter, since a gate placed after the port would look identical from the
+return value while having already minted the key), tier 0 cannot withdraw *with a funded
+claim* (so the refusal is the gate, not insolvency), tier 1 does both, the unconfigured-rail
+`None` stays distinguishable from the unverified `Forbidden`, and a revenue payout — funded
+end to end by two settled user withdrawals' retained fees — is never gated.
+`piggybank/core/tests/relay_recovery.rs`
 proves a parked event lands in the distinct `parked_at` state (never marked dispatched),
 stays queryable, and is surfaced by `Reconciliation::scan`; that `Reaper::sweep` alerts on
 a stuck `processing` withdrawal (never auto-voids it) while auto-cancelling an abandoned
