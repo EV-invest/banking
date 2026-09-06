@@ -99,7 +99,10 @@ impl Reaper {
 		let cutoff_secs = self.max_age.as_secs() as i64;
 
 		// (1) `processing` withdrawals past the cutoff — ALERT ONLY (may be broadcast).
-		let stuck: Vec<(Uuid, String)> = sqlx::query_as("SELECT id, user_id::text FROM withdrawals WHERE state = 'processing' AND updated_at < now() - make_interval(secs => $1)")
+		// `user_id` is NULL for a revenue payout (the fund is not a user), so it decodes as
+		// `Option`: a non-nullable decode here failed the WHOLE sweep on the first stuck
+		// payout, taking the alerts for stuck *user* withdrawals down with it.
+		let stuck: Vec<(Uuid, Option<String>)> = sqlx::query_as("SELECT id, user_id::text FROM withdrawals WHERE state = 'processing' AND updated_at < now() - make_interval(secs => $1)")
 			.bind(cutoff_secs)
 			.fetch_all(&self.pool)
 			.await?;
@@ -107,7 +110,7 @@ impl Reaper {
 		for (id, user) in &stuck {
 			error!(
 				withdrawal_id = %id,
-				user_id = %user,
+				user_id = user.as_deref().unwrap_or("revenue"),
 				"reaper: STUCK processing withdrawal past max age — needs a confirmed not-broadcast signal before fail/void (never auto-voided)"
 			);
 		}
