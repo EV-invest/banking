@@ -113,9 +113,11 @@ pub struct ProfileFields {
 pub const KYC_LEVEL_VERIFIED: u32 = 1;
 
 /// The stored shape of a [`User`], as the persistence adapter reads it back — the input
-/// to [`User::rehydrate`]. A struct rather than a positional argument list because most
-/// of these fields are same-typed primitives, so a transposed pair would compile and
-/// silently mis-seat a gate.
+/// to [`User::rehydrate`]. A struct rather than eight positional arguments because the
+/// call site is a row-to-aggregate mapping: named fields let it be read against the
+/// `SELECT` beside it, where a positional list has to be counted out. (Type safety is not
+/// the reason — every field here is a distinct type, so the compiler already rejects any
+/// transposition.)
 pub struct UserSnapshot {
 	pub id: UserId,
 	pub auth_subject: AuthSubject,
