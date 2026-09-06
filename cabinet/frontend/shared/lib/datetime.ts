@@ -5,6 +5,18 @@
 // helper each would be three chances for them to disagree about what "expires in 2 days"
 // means. Same argument `shared/lib/intl-locale.ts` makes for its one line.
 //
+// WHAT A STAMP IS HERE: unix SECONDS, as a decimal string, with "0" meaning "no stamp
+// yet". That is what the wire actually carries — every timestamp in the contract is an
+// `int64` (see `banking/v1/consilium.proto`, "Unix seconds; 0 while pending") and the BFF
+// hands it over via `.to_string()`. This module used to parse RFC 3339 instead, which no
+// caller was ever given: `new Date("1757000000")` is an Invalid Date, so every date in the
+// owners' room, both approval pages and the removal/admission cards rendered "—". Nothing
+// caught it because both shapes are `string`.
+//
+// The parsing itself lives in `shared/lib/unix-stamp.ts` — import-free, and therefore the
+// one part of this that `node --test` can actually exercise. This module is the wording
+// around it: locales, plurals, dashes.
+//
 // Plain TypeScript: no translator of its own, so anything that produces words takes the
 // caller's `t`. Locale-aware formatting goes through `intlLocale`, which is where the
 // cabinet decides what `en` means to `Intl`.
@@ -12,10 +24,11 @@
 import type { Locale, Translate } from "@evinvest/i18n";
 
 import { intlLocale } from "@/shared/lib/intl-locale";
+import { hasUnixStamp, unixStampToDate } from "@/shared/lib/unix-stamp";
 
-/** An RFC 3339 stamp as an absolute local moment: "12 Mar 2026, 14:03". */
-export function formatMoment(iso: string | undefined, locale: Locale): string {
-  const at = toDate(iso);
+/** A unix-seconds stamp as an absolute local moment: "12 Mar 2026, 14:03". */
+export function formatMoment(stamp: string | null | undefined, locale: Locale): string {
+  const at = toDate(stamp);
   if (!at) return "—";
   return at.toLocaleString(intlLocale(locale), {
     day: "numeric",
@@ -26,16 +39,19 @@ export function formatMoment(iso: string | undefined, locale: Locale): string {
   });
 }
 
-/** An RFC 3339 stamp as a date alone: "12 Mar 2026". */
-export function formatDay(iso: string | undefined, locale: Locale): string {
-  const at = toDate(iso);
+/** A unix-seconds stamp as a date alone: "12 Mar 2026". */
+export function formatDay(stamp: string | null | undefined, locale: Locale): string {
+  const at = toDate(stamp);
   if (!at) return "—";
   return at.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** Re-exported so a view needing "this stamp, else that one" has a single import. */
+export const hasStamp = hasUnixStamp;
+
 /** Whether a deadline has passed. An unparseable or absent stamp is not a passed deadline. */
-export function hasExpired(iso: string | undefined): boolean {
-  const at = toDate(iso);
+export function hasExpired(stamp: string | null | undefined): boolean {
+  const at = toDate(stamp);
   return at !== null && at.getTime() <= Date.now();
 }
 
@@ -47,8 +63,8 @@ export function hasExpired(iso: string | undefined): boolean {
  * a live countdown on a page about losing your seat would be theatre, and the deadline is
  * 72 hours, not 72 seconds.
  */
-export function expiresIn(iso: string | undefined, t: Translate): string {
-  const at = toDate(iso);
+export function expiresIn(stamp: string | null | undefined, t: Translate): string {
+  const at = toDate(stamp);
   if (!at) return "—";
   const ms = at.getTime() - Date.now();
   if (ms <= 0) return t("approval.expiry.passed");
@@ -59,8 +75,4 @@ export function expiresIn(iso: string | undefined, t: Translate): string {
   return t("approval.expiry.days", { n: Math.floor(hours / 24) });
 }
 
-function toDate(iso: string | undefined): Date | null {
-  if (!iso) return null;
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? null : at;
-}
+const toDate = unixStampToDate;

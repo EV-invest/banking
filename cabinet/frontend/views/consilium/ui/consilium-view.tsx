@@ -57,7 +57,7 @@ import { profileResource } from "@/entities/user/model/profile-resource";
 import type { Consilium, ConsiliumList, OwnerList } from "@/shared/contracts/governance";
 import { RequestError, errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
-import { expiresIn, formatDay, formatMoment } from "@/shared/lib/datetime";
+import { expiresIn, formatDay, formatMoment, hasStamp } from "@/shared/lib/datetime";
 import { hashPrefix } from "@/shared/lib/hash";
 import { initialsOf } from "@/shared/lib/identity";
 import { formatExactUsdt } from "@/shared/lib/money";
@@ -432,7 +432,8 @@ function PayoutSection({
                           {formatExactUsdt(consilium.revenue_payout?.amount)} USDT · {networkLabel(consilium.revenue_payout?.network)}
                         </ItemTitle>
                         <ItemDescription className="truncate text-xs tabular-nums">
-                          {formatMoment(consilium.decided_at ?? consilium.created_at, locale)}
+                          {/* `??` cannot do this: an undecided consilium carries the STRING "0", which is truthy. */}
+                          {formatMoment(hasStamp(consilium.decided_at) ? consilium.decided_at : consilium.created_at, locale)}
                         </ItemDescription>
                       </ItemContent>
                       <Badge variant="outline" className={cn("shrink-0", stateTone(consilium.state))}>

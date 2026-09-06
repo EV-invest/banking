@@ -6,6 +6,8 @@
 // way to match the wire shape the generated types expect. Multiply before handing one
 // to `Date`.
 
+import { unixStampToDate } from "@/shared/lib/unix-stamp";
+
 export type NotificationTopic =
 	| "fund:quy-nhon"
 	| "account:money-movement"
@@ -68,8 +70,11 @@ export function isUnread(n: Notification): boolean {
 	return !n.read_at || n.read_at === "0";
 }
 
-/** Unix seconds (as a string) → `Date`. Returns null for the unread sentinel. */
-export function toDate(unixSeconds: string): Date | null {
-	const n = Number(unixSeconds);
-	return Number.isFinite(n) && n > 0 ? new Date(n * 1000) : null;
-}
+/**
+ * Unix seconds (as a string) → `Date`. Returns null for the unread sentinel.
+ *
+ * Delegates rather than repeating the rule: this file and `shared/lib/datetime.ts` used to
+ * hold separate copies, and they had already drifted — the other one parsed RFC 3339, a
+ * shape nothing on this wire ever sends, so every date it touched rendered as a dash.
+ */
+export const toDate = unixStampToDate;
