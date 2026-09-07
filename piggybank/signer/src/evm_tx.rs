@@ -12,8 +12,11 @@
 //! and the `v = recovery_id + chain_id*2 + 35` calculation are all proven exactly. The
 //! ERC-20 path is the same envelope with `to = token`, `value = 0`, `data = transfer(…)`.
 
-use k256::ecdsa::{RecoveryId, Signature, SigningKey};
+#[cfg(test)]
+use k256::ecdsa::SigningKey;
 use sha3::{Digest, Keccak256};
+
+use crate::backend::ChainSignature;
 
 /// The ERC-20 `transfer(address,uint256)` selector (`keccak256(sig)[..4]`).
 const ERC20_TRANSFER_SELECTOR: [u8; 4] = [0xa9, 0x05, 0x9c, 0xbb];
@@ -28,10 +31,8 @@ pub struct SignedTx {
 
 #[derive(Debug, thiserror::Error)]
 pub enum EvmTxError {
-	#[error("invalid secp256k1 signing key")]
-	BadKey,
-	#[error("signing failed")]
-	Signing,
+	#[error("an EVM transaction needs an ECDSA signature")]
+	WrongSignatureKind,
 }
 
 /// The calldata for an ERC-20 `transfer(to, amount)`: 4-byte selector + 32-byte left-padded
@@ -58,42 +59,50 @@ pub struct LegacyTx<'a> {
 	pub data: &'a [u8],
 }
 
-/// Build and sign a legacy EIP-155 transaction, returning the raw signed bytes + its hash.
-pub fn sign_legacy_tx(secret: &[u8; 32], tx: &LegacyTx) -> Result<SignedTx, EvmTxError> {
-	let signing_key = SigningKey::from_slice(secret).map_err(|_| EvmTxError::BadKey)?;
+/// A built-but-unsigned legacy transaction, waiting for its signature: the six leading RLP
+/// items (identical in the signing payload and the signed transaction) plus the chain id the
+/// EIP-155 `v` needs. Opaque on purpose — nothing between [`build_unsigned`] and
+/// [`assemble`] has any business reshaping it.
+pub struct UnsignedLegacyTx {
+	fields: Vec<Vec<u8>>,
+	chain_id: u64,
+}
 
-	// EIP-155 signing payload: rlp([nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0]).
-	let unsigned = rlp_list(&[
+/// Build the transaction and return it alongside the 32-byte digest to sign —
+/// `keccak256(rlp([nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0]))`, the EIP-155
+/// signing payload. Pure and synchronous; the signature is somebody else's problem.
+pub fn build_unsigned(tx: &LegacyTx) -> (UnsignedLegacyTx, [u8; 32]) {
+	let fields = vec![
 		rlp_uint(tx.nonce as u128),
 		rlp_uint(tx.gas_price),
 		rlp_uint(tx.gas_limit as u128),
 		rlp_str(&tx.to),
 		rlp_uint(tx.value),
 		rlp_str(tx.data),
-		rlp_uint(tx.chain_id as u128),
-		rlp_uint(0),
-		rlp_uint(0),
-	]);
-	let sighash = keccak256(&unsigned);
+	];
+	let mut signing_payload = fields.clone();
+	signing_payload.push(rlp_uint(tx.chain_id as u128));
+	signing_payload.push(rlp_uint(0));
+	signing_payload.push(rlp_uint(0));
+	let sighash = keccak256(&rlp_list(&signing_payload));
+	(UnsignedLegacyTx { fields, chain_id: tx.chain_id }, sighash)
+}
 
-	let (signature, recovery_id): (Signature, RecoveryId) = signing_key.sign_prehash_recoverable(&sighash).map_err(|_| EvmTxError::Signing)?;
-	let bytes = signature.to_bytes(); // 64 bytes, r || s (already low-S normalized by k256)
-	let (r, s) = bytes.split_at(32);
-	let v = recovery_id.to_byte() as u128 + tx.chain_id as u128 * 2 + 35;
+/// Finish the transaction with a signature over the digest [`build_unsigned`] handed out:
+/// `rlp([nonce, gasPrice, gasLimit, to, value, data, v, r, s])` where
+/// `v = recovery_id + chain_id*2 + 35`. r/s are big integers → minimal big-endian (leading
+/// zeros trimmed), exactly as the chain re-encodes them.
+pub fn assemble(parts: UnsignedLegacyTx, signature: &ChainSignature) -> Result<SignedTx, EvmTxError> {
+	let ChainSignature::Ecdsa { r, s, recovery_id } = signature else {
+		return Err(EvmTxError::WrongSignatureKind);
+	};
+	let v = *recovery_id as u128 + parts.chain_id as u128 * 2 + 35;
+	let mut items = parts.fields;
+	items.push(rlp_uint(v));
+	items.push(rlp_str(trim_left(r)));
+	items.push(rlp_str(trim_left(s)));
 
-	// Signed: rlp([nonce, gasPrice, gasLimit, to, value, data, v, r, s]). r/s are big integers
-	// → minimal big-endian (leading zeros trimmed), exactly as the chain re-encodes them.
-	let raw = rlp_list(&[
-		rlp_uint(tx.nonce as u128),
-		rlp_uint(tx.gas_price),
-		rlp_uint(tx.gas_limit as u128),
-		rlp_str(&tx.to),
-		rlp_uint(tx.value),
-		rlp_str(tx.data),
-		rlp_uint(v),
-		rlp_str(trim_left(r)),
-		rlp_str(trim_left(s)),
-	]);
+	let raw = rlp_list(&items);
 	let hash = keccak256(&raw);
 	Ok(SignedTx { raw, hash })
 }
@@ -146,6 +155,22 @@ fn keccak256(data: &[u8]) -> [u8; 32] {
 	let mut hash = [0u8; 32];
 	hash.copy_from_slice(&Keccak256::digest(data));
 	hash
+}
+
+/// The pre-seam one-shot path, kept for the tests below ONLY.
+///
+/// Production never signs with a plaintext key here — it goes through
+/// [`crate::backend::KeyBackend`], which is the whole point of the split. This wrapper runs
+/// the exact production pieces (`build_unsigned` → the backend's own signing core →
+/// `assemble`) so the canonical EIP-155 vector keeps proving, unchanged, that the split is
+/// byte-identical to the transaction it pinned before.
+#[cfg(test)]
+fn sign_legacy_tx(secret: &[u8; 32], tx: &LegacyTx) -> Result<SignedTx, EvmTxError> {
+	use crate::backend::{Curve, sign_with_secret};
+
+	let (parts, sighash) = build_unsigned(tx);
+	let signature = sign_with_secret(Curve::Secp256k1, secret, &sighash).expect("the test key signs");
+	assemble(parts, &signature)
 }
 
 #[cfg(test)]

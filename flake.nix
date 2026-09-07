@@ -367,6 +367,20 @@
               AUTH_JWKS_GRPC_ENDPOINT = "http://127.0.0.1:50052";
               APP_ENV = "production";
               RUST_LOG = "info";
+              # The signer's OWN cap on a single treasury transfer, in whole USDT. This is the
+              # second gate: it holds even if the hub is compromised, because the signer is a
+              # separate trust domain and applies it to every treasury-sourced payout itself.
+              # Until this was set the signer logged `signer spend policy inactive` on every
+              # boot and one forged request could drain the whole hot wallet.
+              #
+              # Size it to the HOT FLOAT, not to ambition: the cap only protects what it is
+              # smaller than. Raise it deliberately as liquidity grows — it is one number, and
+              # a payout above it fails closed with a clear permission_denied, never silently.
+              SIGNER_MAX_TRANSFER_USDT = "100";
+              # SIGNER_DESTINATION_ALLOWLIST is deliberately NOT set. It restricts treasury
+              # transfers to pre-registered addresses, and user withdrawals go to arbitrary
+              # addresses — enabling it would reject every legitimate withdrawal. It belongs to
+              # a staged/hardened posture (treasury → known addresses only), not to this one.
             };
           };
           containers.cabinet-backend = {

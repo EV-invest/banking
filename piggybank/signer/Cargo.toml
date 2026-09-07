@@ -20,6 +20,8 @@ k256 = { workspace = true, features = ["ecdsa"] }
 num-bigint = { workspace = true }
 sha3 = { workspace = true }
 tonlib-core = { workspace = true }
+turnkey_api_key_stamper = { workspace = true }
+turnkey_client = { workspace = true }
 zeroize = { workspace = true }
 
 color-eyre.workspace = true
@@ -46,7 +48,7 @@ prost-build = { workspace = true }
 [dev-dependencies]
 jsonwebtoken.workspace = true
 serde.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
 
 [lints]
 workspace = true

@@ -13,11 +13,12 @@
 //! `expiration` + the unique txID, so the caller persists the signed bytes before broadcasting and
 //! only ever re-signs once the prior tx has provably expired without landing.
 
-use k256::ecdsa::{RecoveryId, Signature, SigningKey};
+#[cfg(test)]
+use k256::ecdsa::{RecoveryId, Signature};
 use prost::Message;
 use sha2::{Digest, Sha256};
 
-use crate::{evm_tx::erc20_transfer_calldata, key_vault};
+use crate::{backend::ChainSignature, evm_tx::erc20_transfer_calldata, key_vault};
 
 mod proto {
 	#![allow(clippy::all, clippy::pedantic, missing_docs)]
@@ -42,8 +43,8 @@ pub struct SignedTronTx {
 pub enum TronTxError {
 	#[error("invalid secp256k1 signing key")]
 	BadKey,
-	#[error("signing failed")]
-	Signing,
+	#[error("a Tron transaction needs an ECDSA signature")]
+	WrongSignatureKind,
 	#[error("amount exceeds the protocol's int64 range")]
 	Amount,
 }
@@ -61,10 +62,19 @@ pub struct TxRef {
 	pub timestamp: i64,
 }
 
-/// Sign a TRC20 `transfer(recipient, amount)` from the key's own address. `token` and `recipient`
-/// are 21-byte raw Tron addresses (`0x41 || account`); `amount` is 6-dp USDT base units.
-pub fn sign_trc20_transfer(secret: &[u8; 32], token: &[u8; 21], recipient: &[u8; 21], amount: u128, fee_limit: i64, tx_ref: &TxRef) -> Result<SignedTronTx, TronTxError> {
-	let owner = owner_address(secret)?;
+/// A built-but-unsigned Tron transaction: the protobuf `Transaction.raw` whose serialization
+/// the txID (and therefore the signature) covers. Opaque — mutating it after the digest was
+/// taken would silently invalidate the signature.
+pub struct UnsignedTronTx {
+	raw: proto::transaction::Raw,
+}
+
+/// Build a TRC20 `transfer(recipient, amount)` and return the txID to sign. `owner` is the
+/// 21-byte raw Tron address of the SIGNING key — the node rejects any transaction whose
+/// `owner_address` does not match the signature, so it must be the signer's own. `token` and
+/// `recipient` are 21-byte raw Tron addresses (`0x41 || account`); `amount` is 6-dp USDT base
+/// units.
+pub fn build_unsigned_trc20(owner: &[u8; 21], token: &[u8; 21], recipient: &[u8; 21], amount: u128, fee_limit: i64, tx_ref: &TxRef) -> Result<(UnsignedTronTx, [u8; 32]), TronTxError> {
 	let mut to = [0u8; 20];
 	to.copy_from_slice(&recipient[1..]); // the ABI address arg is the 20-byte body, no 0x41
 	let data = erc20_transfer_calldata(&to, amount);
@@ -77,12 +87,12 @@ pub fn sign_trc20_transfer(secret: &[u8; 32], token: &[u8; 21], recipient: &[u8;
 		token_id: 0,
 	};
 	let contract = contract(ContractType::TriggerSmartContract, TRIGGER_SMART_CONTRACT_TYPE_URL, trigger.encode_to_vec());
-	sign(secret, raw(tx_ref, contract, fee_limit))
+	Ok(digest(raw(tx_ref, contract, fee_limit)))
 }
 
-/// Sign a native TRX transfer (a gas-station top-up). `to` is a 21-byte raw address, `amount` SUN.
-pub fn sign_trx_transfer(secret: &[u8; 32], to: &[u8; 21], amount: u128, tx_ref: &TxRef) -> Result<SignedTronTx, TronTxError> {
-	let owner = owner_address(secret)?;
+/// Build a native TRX transfer (a gas-station top-up) and return the txID to sign. `owner` is
+/// the signing key's own 21-byte raw address, `to` a 21-byte raw address, `amount` SUN.
+pub fn build_unsigned_trx(owner: &[u8; 21], to: &[u8; 21], amount: u128, tx_ref: &TxRef) -> Result<(UnsignedTronTx, [u8; 32]), TronTxError> {
 	let transfer = proto::TransferContract {
 		owner_address: owner.to_vec(),
 		to_address: to.to_vec(),
@@ -90,14 +100,7 @@ pub fn sign_trx_transfer(secret: &[u8; 32], to: &[u8; 21], amount: u128, tx_ref:
 	};
 	let contract = contract(ContractType::TransferContract, TRANSFER_CONTRACT_TYPE_URL, transfer.encode_to_vec());
 	// A native transfer is bandwidth-only — no fee_limit (0 ⇒ omitted on the wire).
-	sign(secret, raw(tx_ref, contract, 0))
-}
-
-/// The 21-byte raw Tron address that must own the transaction — derived from the signing key
-/// itself, so `owner_address` always matches the signature (the node rejects any mismatch).
-fn owner_address(secret: &[u8; 32]) -> Result<[u8; 21], TronTxError> {
-	let pubkey = key_vault::secp256k1_pubkey(secret);
-	key_vault::tron_raw_address(&pubkey).ok_or(TronTxError::BadKey)
+	Ok(digest(raw(tx_ref, contract, 0)))
 }
 
 fn contract(kind: ContractType, type_url: &str, value: Vec<u8>) -> proto::transaction::Contract {
@@ -126,25 +129,63 @@ fn raw(tx_ref: &TxRef, contract: proto::transaction::Contract, fee_limit: i64) -
 	}
 }
 
-/// txID = `sha256(serialize(raw))`; sign it; pack `r || s || recovery_id`; wrap into the full
-/// `Transaction`. The owner is already baked into `raw` and re-derived from this same key.
-fn sign(secret: &[u8; 32], raw: proto::transaction::Raw) -> Result<SignedTronTx, TronTxError> {
-	let signing_key = SigningKey::from_slice(secret).map_err(|_| TronTxError::BadKey)?;
-	let raw_bytes = raw.encode_to_vec();
-	let txid = Sha256::digest(&raw_bytes);
+/// txID = `sha256(serialize(raw))` — the digest a Tron signature covers, and the on-chain id.
+fn digest(raw: proto::transaction::Raw) -> (UnsignedTronTx, [u8; 32]) {
+	let txid: [u8; 32] = Sha256::digest(raw.encode_to_vec()).into();
+	(UnsignedTronTx { raw }, txid)
+}
 
-	let (signature, recovery_id): (Signature, RecoveryId) = signing_key.sign_prehash_recoverable(&txid).map_err(|_| TronTxError::Signing)?;
-	let mut sig = signature.to_bytes().to_vec(); // 64 bytes r || s (low-S normalized by k256)
-	sig.push(recovery_id.to_byte()); // raw recovery id 0/1 — no EIP-155 offset
+/// Finish the transaction with a signature over the txID: pack `r || s || recovery_id` (the
+/// RAW 0/1 — Tron has no EIP-155 offset) and wrap into the full `Transaction`. The owner is
+/// already baked into `raw`, so this must be the signature of that owner's key.
+pub fn assemble(parts: UnsignedTronTx, signature: &ChainSignature) -> Result<SignedTronTx, TronTxError> {
+	let ChainSignature::Ecdsa { r, s, recovery_id } = signature else {
+		return Err(TronTxError::WrongSignatureKind);
+	};
+	let mut sig = Vec::with_capacity(65);
+	sig.extend_from_slice(r);
+	sig.extend_from_slice(s);
+	sig.push(*recovery_id);
 
+	let txid = Sha256::digest(parts.raw.encode_to_vec());
 	let tx = proto::Transaction {
-		raw_data: Some(raw),
+		raw_data: Some(parts.raw),
 		signature: vec![sig],
 	};
 	Ok(SignedTronTx {
 		raw_tx: hex::encode(tx.encode_to_vec()),
 		txid: hex::encode(txid),
 	})
+}
+
+/// The 21-byte raw Tron address that must own the transaction, from the signing key's own
+/// compressed secp256k1 public key. `owner_address` has to match the signature or the node
+/// rejects the transaction, so the caller derives it from the very key it will sign with.
+pub fn owner_address(public_key: &[u8]) -> Result<[u8; 21], TronTxError> {
+	key_vault::tron_raw_address(public_key).ok_or(TronTxError::BadKey)
+}
+
+/// The pre-seam one-shot paths, kept for the tests below ONLY — production signs through
+/// [`crate::backend::KeyBackend`]. They run the exact production pieces
+/// (`build_unsigned_*` → the backend's signing core → `assemble`) so the existing
+/// recover-to-the-owner vectors keep proving the split unchanged.
+#[cfg(test)]
+fn sign_trc20_transfer(secret: &[u8; 32], token: &[u8; 21], recipient: &[u8; 21], amount: u128, fee_limit: i64, tx_ref: &TxRef) -> Result<SignedTronTx, TronTxError> {
+	let owner = owner_address(&key_vault::secp256k1_pubkey(secret))?;
+	let (parts, txid) = build_unsigned_trc20(&owner, token, recipient, amount, fee_limit, tx_ref)?;
+	assemble(parts, &test_sign(secret, &txid))
+}
+
+#[cfg(test)]
+fn sign_trx_transfer(secret: &[u8; 32], to: &[u8; 21], amount: u128, tx_ref: &TxRef) -> Result<SignedTronTx, TronTxError> {
+	let owner = owner_address(&key_vault::secp256k1_pubkey(secret))?;
+	let (parts, txid) = build_unsigned_trx(&owner, to, amount, tx_ref)?;
+	assemble(parts, &test_sign(secret, &txid))
+}
+
+#[cfg(test)]
+fn test_sign(secret: &[u8; 32], digest: &[u8; 32]) -> ChainSignature {
+	crate::backend::sign_with_secret(crate::backend::Curve::Secp256k1, secret, digest).expect("the test key signs")
 }
 
 #[cfg(test)]

@@ -11,11 +11,14 @@
 //!
 //! Layout mirrors the hub's hexagonal split, kept lean:
 //!   service     — gRPC driving adapter
+//!   backend     — the key-backend port (where a key lives, how a digest is signed)
 //!   provision   — the provisioning use case (keygen → seal → store)
 //!   key_vault   — the crypto core (XChaCha20-Poly1305 envelope + per-curve keygen)
 //!   kek_guard   — boot-time KEK-epoch enforcement (sentinel + per-row fingerprints)
+//!   turnkey     — the remote key-backend implementation (custody; off by default)
 //!   secrets     — the `wallet_secrets` driven store (signer's own database)
 
+pub mod backend;
 pub mod config;
 pub mod error;
 pub mod evm_tx;
@@ -27,3 +30,4 @@ pub mod secrets;
 pub mod service;
 pub mod ton_tx;
 pub mod tron_tx;
+pub mod turnkey;
