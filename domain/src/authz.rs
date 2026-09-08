@@ -105,6 +105,12 @@ pub enum Permission {
 	/// the signer can no longer unseal it) with a freshly minted keypair. Recovery
 	/// only: the signer refuses to rotate a healthy key.
 	DepositAddressRotate,
+	/// Retire a user's HEALTHY, KEK-sealed deposit-address key in favour of one minted
+	/// inside the key custodian's enclave. Separate from [`DepositAddressRotate`]
+	/// because it is a separate act: rotation is emergency recovery for a key that is
+	/// already dead, this is a planned custody move that only runs once the address has
+	/// been drained. Holding one must not grant the other.
+	DepositAddressMigrate,
 }
 
 /// The role→permission policy (pure). The money-plane RBAC matrix, read as separation
@@ -170,6 +176,12 @@ mod tests {
 		assert!(!grants(Role::Operator, Permission::RevenuePayout));
 		assert!(grants(Role::Admin, Permission::RevenuePayout));
 		assert!(grants(Role::Owner, Permission::RevenuePayout));
+		// Retiring a live deposit key is a money-plane act, not a read: an Operator may not,
+		// however much of the treasury they can see.
+		assert!(!grants(Role::Operator, Permission::DepositAddressMigrate));
+		assert!(!grants(Role::Investor, Permission::DepositAddressMigrate));
+		assert!(grants(Role::Admin, Permission::DepositAddressMigrate));
+		assert!(grants(Role::Owner, Permission::DepositAddressMigrate));
 		// Investor holds nothing.
 		assert!(!grants(Role::Investor, Permission::TreasuryRead));
 		assert!(!grants(Role::Investor, Permission::RevenuePayout));

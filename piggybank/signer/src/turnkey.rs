@@ -54,8 +54,8 @@ use turnkey_client::{
 use uuid::Uuid;
 
 use crate::{
-	backend::{BackendError, ChainSignature, Curve, KeyBackend, KeyHandle, recover_id},
-	provision::{self, ProvisionedAddress},
+	backend::{BackendError, ChainSignature, Curve, CustodyMinter, KeyBackend, KeyHandle, MintedCustodyKey, recover_id},
+	provision::{self, ProvisionedAddress, addresses_agree},
 	secrets::{NewTurnkeySecret, WalletSecrets},
 };
 
@@ -320,6 +320,62 @@ impl TurnkeyBackend {
 }
 
 #[tonic::async_trait]
+impl CustodyMinter for TurnkeyBackend {
+	/// Mint one fresh account in `network`'s shared wallet and return it unpersisted.
+	///
+	/// The address cross-check is the load-bearing part and is kept here, ahead of any caller:
+	/// nothing leaves this function as a fundable address until we have reproduced Turnkey's
+	/// derivation ourselves. It is the exact counterpart of the local vault's unseal-probe —
+	/// a silent derivation drift would otherwise hand a user an address the indexer never
+	/// watches.
+	///
+	/// An abandoned mint (the caller's transaction rolls back, or it never writes at all)
+	/// leaves one unused Turnkey account and burns one derivation index. Both are the same
+	/// bounded, harmless waste this module already tolerates for a lost provisioning race:
+	/// an account nothing references costs nothing, and the sequence's job is uniqueness,
+	/// not density.
+	async fn mint(&self, user_id: Uuid, network: Network) -> Result<MintedCustodyKey, BackendError> {
+		let spec = account_spec(network);
+		let index = self.secrets.next_derivation_index().await?;
+		let path = derivation_path(network, index);
+		let wallet_id = self
+			.ensure_account(
+				network,
+				WalletAccountParams {
+					curve: spec.curve,
+					path_format: PathFormat::Bip32,
+					path: path.clone(),
+					address_format: spec.address_format,
+					name: None,
+				},
+			)
+			.await?;
+		let account = self.wallet_account_at_path(&wallet_id, &path).await?;
+		let public_key = decode_hex(
+			account
+				.public_key
+				.as_deref()
+				.ok_or_else(|| BackendError::Protocol("Turnkey returned an account with no public key".to_owned()))?,
+		)
+		.ok_or_else(|| BackendError::Protocol("Turnkey's account public key is not hex".to_owned()))?;
+		let (address, _) = provision::render_address(network, &public_key)?;
+
+		if !addresses_agree(network, &address, &account.address) {
+			tracing::error!(%user_id, %network, ours = %address, theirs = %account.address, "Turnkey's address does not match our derivation — refusing to mint");
+			return Err(BackendError::Protocol("Turnkey's address does not match our own derivation".to_owned()));
+		}
+
+		Ok(MintedCustodyKey {
+			public_key,
+			address,
+			sign_with: account.address,
+			key_alg: spec.key_alg,
+			derivation_index: index,
+		})
+	}
+}
+
+#[tonic::async_trait]
 impl KeyBackend for TurnkeyBackend {
 	/// Mint (or return the existing) custody-held deposit address for `(user, network)`.
 	///
@@ -338,51 +394,23 @@ impl KeyBackend for TurnkeyBackend {
 			return Ok(ProvisionedAddress { address, kind });
 		}
 
-		let spec = account_spec(network);
-		// The index (and the path it feeds) is pulled ONLY on this not-yet-provisioned path —
-		// the idempotency check above already returned for a repeat call, so a re-provision of
-		// the same (user, network) never touches the sequence, never mints a second account,
-		// and never risks a different address for the same row.
-		let index = self.secrets.next_derivation_index().await?;
-		let path = derivation_path(network, index);
-		let account_params = WalletAccountParams {
-			curve: spec.curve,
-			path_format: PathFormat::Bip32,
-			path: path.clone(),
-			address_format: spec.address_format,
-			name: None,
-		};
-
-		let wallet_id = self.ensure_account(network, account_params).await?;
-		let account = self.wallet_account_at_path(&wallet_id, &path).await?;
-		let public_key = decode_hex(
-			account
-				.public_key
-				.as_deref()
-				.ok_or_else(|| BackendError::Protocol("Turnkey returned an account with no public key".to_owned()))?,
-		)
-		.ok_or_else(|| BackendError::Protocol("Turnkey's account public key is not hex".to_owned()))?;
-		let (address, _) = provision::render_address(network, &public_key)?;
-
-		// The probe's cross-check, kept on forever. It is the same guarantee the local vault's
-		// unseal-probe gives: nothing leaves this function as a fundable address until we have
-		// proven we can reproduce it ourselves. A silent derivation drift would otherwise hand
-		// users an address the indexer never watches.
-		if !addresses_agree(network, &address, &account.address) {
-			tracing::error!(%user_id, %network, ours = %address, theirs = %account.address, "Turnkey's address does not match our derivation — refusing to provision");
-			return Err(BackendError::Protocol("Turnkey's address does not match our own derivation".to_owned()));
-		}
+		// Minting is shared verbatim with the phase-4 migration path ([`CustodyMinter`]), so
+		// the two can never drift into deriving addresses differently. Reached ONLY on this
+		// not-yet-provisioned branch: the idempotency check above already returned for a repeat
+		// call, so a re-provision never touches the sequence, never mints a second account, and
+		// never risks a different address for the same row.
+		let minted = self.mint(user_id, network).await?;
 
 		self.secrets
 			.insert_turnkey(&NewTurnkeySecret {
 				id: Uuid::new_v4(),
 				user_id,
 				network,
-				public_key: &public_key,
-				address: &address,
-				sign_with: &account.address,
-				key_alg: spec.key_alg,
-				derivation_index: index,
+				public_key: &minted.public_key,
+				address: &minted.address,
+				sign_with: &minted.sign_with,
+				key_alg: minted.key_alg,
+				derivation_index: minted.derivation_index,
 			})
 			.await?;
 
@@ -483,27 +511,6 @@ fn to_chain_signature(curve: Curve, signature: &SignRawPayloadResult, public_key
 				.verify_strict(digest, &Ed25519Signature::from_bytes(&bytes))
 				.map_err(|_| BackendError::Rejected("Turnkey's Ed25519 signature does not verify against the account's stored public key".to_owned()))?;
 			Ok(ChainSignature::Ed25519(bytes))
-		}
-	}
-}
-
-/// Does Turnkey's rendering of an address mean the same thing as ours?
-///
-/// Each format needs its own rule, and the probe settled all three: EIP-55 casing is a display
-/// checksum over a case-insensitive address; Tron's Base58Check IS case-sensitive; a TON
-/// address has two equally valid renderings (our raw `0:<64hex>` and Turnkey's user-friendly
-/// base64) that parse to the same (workchain, StateInit hash).
-fn addresses_agree(network: Network, ours: &str, theirs: &str) -> bool {
-	match network {
-		Network::Bep20 | Network::Polygon => ours.eq_ignore_ascii_case(theirs),
-		Network::Trc20 => ours == theirs,
-		Network::Ton => {
-			use std::str::FromStr as _;
-			match (tonlib_core::TonAddress::from_str(ours), tonlib_core::TonAddress::from_str(theirs)) {
-				(Ok(ours), Ok(theirs)) => ours == theirs,
-				// An unparseable address is itself a disagreement, not a crash.
-				_ => false,
-			}
 		}
 	}
 }

@@ -112,6 +112,31 @@ pub(crate) fn render_address(network: Network, public_key: &[u8]) -> Result<(Str
 	}
 }
 
+/// Do two renderings of an address mean the same address on `network`?
+///
+/// Each format needs its own rule, and the Turnkey probe settled all three: EIP-55 casing is a display
+/// checksum over a case-insensitive address; Tron's Base58Check IS case-sensitive; a TON
+/// address has two equally valid renderings (our raw `0:<64hex>` and the user-friendly base64)
+/// that parse to the same (workchain, StateInit hash).
+///
+/// It lives beside [`render_address`] because it is that function's inverse question, and both
+/// callers need it: the custody backend cross-checks its minted address against ours, and the
+/// migration path checks that the address a caller says it drained is the one being retired.
+pub(crate) fn addresses_agree(network: Network, ours: &str, theirs: &str) -> bool {
+	match network {
+		Network::Bep20 | Network::Polygon => ours.eq_ignore_ascii_case(theirs),
+		Network::Trc20 => ours == theirs,
+		Network::Ton => {
+			use std::str::FromStr as _;
+			match (tonlib_core::TonAddress::from_str(ours), tonlib_core::TonAddress::from_str(theirs)) {
+				(Ok(ours), Ok(theirs)) => ours == theirs,
+				// An unparseable address is itself a disagreement, not a crash.
+				_ => false,
+			}
+		}
+	}
+}
+
 struct Generated {
 	alg: &'static str,
 	/// 32-byte private scalar/seed, zeroized on drop.

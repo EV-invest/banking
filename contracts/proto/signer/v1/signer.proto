@@ -69,6 +69,24 @@ service SignerService {
   // Funds on the OLD address remain unrecoverable; this only restores the user's
   // ability to receive future deposits.
   rpc RotateAddress(RotateAddressRequest) returns (ProvisionAddressResponse);
+
+  // === Custody migration (phase 4) ===========================================
+  // Move a HEALTHY `backend='local'` key onto the custodian: mint a fresh key inside
+  // the enclave, archive the KEK-sealed row, and make the new one active — in ONE
+  // transaction, so a failure anywhere leaves the old address serving.
+  //
+  // The exact INVERSE of RotateAddress's precondition, and deliberately a separate RPC
+  // rather than a flag on it. Rotation is recovery for a PROVABLY DEAD key and leaves
+  // the old address unspendable forever; this retires a LIVE one whose funds have
+  // already been moved off it. Sharing a path would mean one of the two guards had to
+  // be weakened, and that guard is what stops an operator retiring an address users are
+  // still depositing to.
+  //
+  // Refuses unless ALL of: the row exists, its `backend` is 'local' (a custody-held row
+  // is already migrated), its key still unseals under the current KEK (a dead one is
+  // RotateAddress's case), and `drained_address` names the very address about to be
+  // retired. The funds check itself is the HUB's — see MigrateAddressToCustodianRequest.
+  rpc MigrateAddressToCustodian(MigrateAddressToCustodianRequest) returns (MigrateAddressToCustodianResponse);
 }
 
 message ProvisionAddressRequest {
@@ -214,4 +232,39 @@ message GetKeyHealthResponse {
 message RotateAddressRequest {
   string user_id = 1; // UUID
   string network = 2; // "bep20" | "polygon" | "trc20" | "ton"
+}
+
+// === Custody migration (phase 4) ===========================================
+
+message MigrateAddressToCustodianRequest {
+  string user_id = 1; // UUID
+  string network = 2; // "bep20" | "polygon" | "trc20" | "ton"
+
+  // The address the CALLER proved drained, echoed back as evidence.
+  //
+  // Balances live on the chain and the signer has no chain view — it holds keys and
+  // produces signatures, and giving it RPC endpoints would widen the one process that
+  // must stay narrow. So the funds gate is the hub's: it owns the deposit scanner and
+  // the `deposits` table the sweep itself trusts to decide an address is drained.
+  //
+  // What the signer can still check locally is that the caller and it are talking about
+  // the SAME address — the mistake that actually happens is computing the gate for one
+  // (user, network) and calling migrate for another, or acting on a stale cache. The
+  // signer refuses unless this equals the address it is about to retire, in that
+  // chain's own equality rule.
+  //
+  // The seam is already authenticated (service token + mTLS) and the hub is its only
+  // caller, so this is not a trust boundary being widened. And a mistaken attestation
+  // is NOT the rotation failure mode: the archived row keeps its sealed blob and the
+  // KEK stays loaded until phase 5, so funds left behind are recoverable by an
+  // operator, not stranded.
+  string drained_address = 3;
+}
+
+message MigrateAddressToCustodianResponse {
+  string old_address = 1; // the archived, KEK-sealed address — kept for the audit trail
+  string new_address = 2; // the custody-held replacement, now active
+  // "derived", as ProvisionAddressResponse.address_kind. The hub refuses to cache
+  // anything else as a fundable deposit destination.
+  string address_kind = 3;
 }

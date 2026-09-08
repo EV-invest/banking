@@ -17,7 +17,7 @@ use tonic::{Request, Response, Status};
 
 use crate::{
 	AppState,
-	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
+	application::{balance as balance_app, funds as funds_app, wallet as wallet_app, withdrawals as withdrawal_app},
 	services::{
 		funds::redemption_to_proto,
 		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
@@ -353,6 +353,44 @@ impl BalanceService for BalanceSvc {
 		tracing::warn!(user_id = %req.user_id, network = %req.network, new_address = %address.as_str(), "rotated a dead deposit address");
 		Ok(Response::new(pb::RotateDepositAddressResponse {
 			address: address.as_str().to_owned(),
+		}))
+	}
+
+	/// Phase 4 of the Turnkey migration, one `(user, network)` at a time.
+	///
+	/// Its own permission, not `DepositAddressRotate`: rotation is emergency recovery for a key
+	/// that already cannot sign, this deliberately retires one that can. They share a shape and
+	/// nothing else, and whoever may do the first should not thereby be able to do the second.
+	async fn migrate_deposit_address_to_custodian(
+		&self,
+		request: Request<pb::MigrateDepositAddressToCustodianRequest>,
+	) -> Result<Response<pb::MigrateDepositAddressToCustodianResponse>, Status> {
+		require_permission(&self.state, &request, Permission::DepositAddressMigrate).await?;
+		let req = request.get_ref();
+		let user = parse_user_id(&req.user_id)?;
+		let network = Network::parse(&req.network).map_err(map_err)?;
+		let migrated = wallet_app::migrate_deposit_address_to_custodian(
+			self.state.deposits.as_ref(),
+			self.state.deposit_addresses.as_ref(),
+			&self.state.configured_networks,
+			user,
+			network,
+		)
+		.await
+		.map_err(map_err)?;
+		// WARN on success, like a rotation: an address changing hands is an audit event. Both
+		// addresses go in the line — the old one is still worth watching, because its key is
+		// archived rather than destroyed and a late arrival on it stays recoverable.
+		tracing::warn!(
+			user_id = %req.user_id,
+			network = %req.network,
+			old_address = %migrated.old_address,
+			new_address = %migrated.new_address.as_str(),
+			"migrated a deposit address onto the key custodian — the old address is no longer served"
+		);
+		Ok(Response::new(pb::MigrateDepositAddressToCustodianResponse {
+			old_address: migrated.old_address,
+			new_address: migrated.new_address.as_str().to_owned(),
 		}))
 	}
 }

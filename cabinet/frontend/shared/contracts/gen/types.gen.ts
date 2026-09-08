@@ -1238,6 +1238,42 @@ export type BankingV1LogoutResponse = {
 };
 
 /**
+ * MigrateDepositAddressToCustodianRequest
+ */
+export type BankingV1MigrateDepositAddressToCustodianRequest = {
+    /**
+     * user_id
+     *
+     * the affected user (UUID)
+     */
+    user_id?: string;
+    /**
+     * network
+     *
+     * bep20 | polygon | trc20 | ton
+     */
+    network?: string;
+};
+
+/**
+ * MigrateDepositAddressToCustodianResponse
+ */
+export type BankingV1MigrateDepositAddressToCustodianResponse = {
+    /**
+     * old_address
+     *
+     * the retired address — kept so the operator can watch it
+     */
+    old_address?: string;
+    /**
+     * new_address
+     *
+     * the NEW fundable, custody-held deposit address
+     */
+    new_address?: string;
+};
+
+/**
  * NetworkWithdrawable
  *
  * Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole
@@ -4932,6 +4968,35 @@ export type BankingV1BalanceServiceListWithdrawalQueueResponses = {
 };
 
 export type BankingV1BalanceServiceListWithdrawalQueueResponse = BankingV1BalanceServiceListWithdrawalQueueResponses[keyof BankingV1BalanceServiceListWithdrawalQueueResponses];
+
+export type BankingV1BalanceServiceMigrateDepositAddressToCustodianData = {
+    body: BankingV1MigrateDepositAddressToCustodianRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BalanceService/MigrateDepositAddressToCustodian';
+};
+
+export type BankingV1BalanceServiceMigrateDepositAddressToCustodianErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BalanceServiceMigrateDepositAddressToCustodianError = BankingV1BalanceServiceMigrateDepositAddressToCustodianErrors[keyof BankingV1BalanceServiceMigrateDepositAddressToCustodianErrors];
+
+export type BankingV1BalanceServiceMigrateDepositAddressToCustodianResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1MigrateDepositAddressToCustodianResponse;
+};
+
+export type BankingV1BalanceServiceMigrateDepositAddressToCustodianResponse = BankingV1BalanceServiceMigrateDepositAddressToCustodianResponses[keyof BankingV1BalanceServiceMigrateDepositAddressToCustodianResponses];
 
 export type BankingV1BalanceServicePostFundValuationData = {
     body: BankingV1PostFundValuationRequest;

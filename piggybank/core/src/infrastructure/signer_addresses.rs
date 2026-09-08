@@ -25,11 +25,11 @@ use domain::{
 	users::UserId,
 };
 use evbanking_auth::ServiceTokenSource;
-use evbanking_contracts::signer::v1::{ProvisionAddressRequest, RotateAddressRequest, signer_service_client::SignerServiceClient};
+use evbanking_contracts::signer::v1::{MigrateAddressToCustodianRequest, ProvisionAddressRequest, RotateAddressRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
 use tonic::{Request, transport::Channel};
 
-use crate::ports::deposit_addresses::DepositAddresses;
+use crate::ports::deposit_addresses::{DepositAddresses, MigratedAddress};
 
 const KIND_DERIVED: &str = "derived";
 
@@ -158,6 +158,46 @@ impl DepositAddresses for SignerDepositAddresses {
 			return Err(DomainError::Repository("rotated address is not derived (signer reported a placeholder)".into()));
 		}
 		Ok(address)
+	}
+
+	async fn migrate_to_custodian(&self, user: UserId, network: Network, drained_address: &str) -> Result<MigratedAddress, DomainError> {
+		let mut request = Request::new(MigrateAddressToCustodianRequest {
+			user_id: user.raw().to_string(),
+			network: network.as_str().to_owned(),
+			drained_address: drained_address.to_owned(),
+		});
+		if let Some(token) = &self.service_token {
+			request = token.authorize(request);
+		}
+		let response = self
+			.client
+			.clone()
+			.migrate_address_to_custodian(request)
+			.await
+			.map_err(|status| match status.code() {
+				// The signer's own gates (already custody-held, dead key, a different address
+				// than the one cleared) are operator input errors, not infrastructure faults —
+				// same split `rotate` makes. `Aborted` is a lost race: the row moved under us,
+				// and the honest answer is "re-read and try again", not "the signer is broken".
+				tonic::Code::FailedPrecondition | tonic::Code::InvalidArgument | tonic::Code::Aborted => {
+					DomainError::Validation(format!("signer refused the custody migration: {}", status.message()))
+				}
+				_ => DomainError::Repository(format!("signer custody migration failed: {}", status.message())),
+			})?
+			.into_inner();
+		let new_address = WalletAddress::parse(network, &response.new_address)?;
+		let derived = response.address_kind == KIND_DERIVED;
+		// Refresh the cache IMMEDIATELY, exactly as `rotate` does and for the same reason: the
+		// fast path in `address` short-circuits on a cached derived row, so until this lands
+		// the hub keeps serving — and the watchers keep watching — the retired address.
+		self.cache(user, network, &new_address, derived).await?;
+		if !derived {
+			return Err(DomainError::Repository("migrated address is not derived (signer reported a placeholder)".into()));
+		}
+		Ok(MigratedAddress {
+			old_address: response.old_address,
+			new_address,
+		})
 	}
 }
 

@@ -93,4 +93,19 @@ impl Deposits for PgDeposits {
 			})
 			.collect()
 	}
+
+	/// Character-for-character the sweeper's own predicate (see
+	/// [`rails::deposit_addresses`](crate::infrastructure::rails)), narrowed from "every
+	/// address on the rail" to this one user. Keeping the two identical is the point: the
+	/// address a migration may retire is exactly the address the sweeper has stopped
+	/// scanning.
+	async fn has_unswept(&self, user: UserId, network: Network) -> Result<bool, DomainError> {
+		let unswept: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM deposits WHERE party_kind = 'user' AND party_id = $1 AND network = $2 AND swept_at IS NULL)")
+			.bind(user.to_string())
+			.bind(network.as_str())
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		Ok(unswept)
+	}
 }

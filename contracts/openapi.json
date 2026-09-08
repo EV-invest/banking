@@ -1359,6 +1359,65 @@
         }
       }
     },
+    "/banking.v1.BalanceService/MigrateDepositAddressToCustodian": {
+      "post": {
+        "tags": [
+          "banking.v1.BalanceService"
+        ],
+        "summary": "Admin (DepositAddressMigrate): retire a user's HEALTHY, KEK-sealed deposit address\n in favour of one minted inside the key custodian's enclave (phase 4 of\n docs/MIGRATION-turnkey.md), and refresh the hub's address cache.",
+        "description": "NOT the rotation path. Rotation recovers a key that is already dead; this retires a\n live one, so the hub must first prove the address has nothing left on it — refused\n while the user has any credited deposit on this rail that no sweep has observed\n drained. The signer independently refuses a dead key, an already-migrated row, and\n an address other than the one this hub cleared.",
+        "operationId": "banking.v1.BalanceService.MigrateDepositAddressToCustodian",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.MigrateDepositAddressToCustodianRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.MigrateDepositAddressToCustodianResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.BalanceService/PostFundValuation": {
       "post": {
         "tags": [
@@ -6989,6 +7048,40 @@
       "banking.v1.LogoutResponse": {
         "type": "object",
         "title": "LogoutResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.MigrateDepositAddressToCustodianRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "the affected user (UUID)"
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "bep20 | polygon | trc20 | ton"
+          }
+        },
+        "title": "MigrateDepositAddressToCustodianRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.MigrateDepositAddressToCustodianResponse": {
+        "type": "object",
+        "properties": {
+          "old_address": {
+            "type": "string",
+            "title": "old_address",
+            "description": "the retired address — kept so the operator can watch it"
+          },
+          "new_address": {
+            "type": "string",
+            "title": "new_address",
+            "description": "the NEW fundable, custody-held deposit address"
+          }
+        },
+        "title": "MigrateDepositAddressToCustodianResponse",
         "additionalProperties": false
       },
       "banking.v1.NetworkWithdrawable": {
