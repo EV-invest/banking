@@ -6,22 +6,28 @@ import { useState } from "react";
 import { Button } from "@evinvest/uikit";
 
 import { startVerification, type KycStart } from "@/features/kyc/api/kyc-client";
-import { Hairline, RowLabel } from "@/shared/ui/list-card";
+import { isVerificationPending, markVerificationPending } from "@/features/kyc/lib/pending-case";
+import { Hairline, Pill, RowLabel } from "@/shared/ui/list-card";
 
 // The one place in the cabinet a user can begin identity verification themselves. It sits
 // inside `card-Verification`, below the rows that state what the hub currently holds, so
 // the card reads as status-then-action rather than as a form.
 
-type State = { kind: "idle" | "starting" } | Exclude<KycStart, { kind: "started" }>;
+type State = { kind: "idle" | "starting" | "pending" } | Exclude<KycStart, { kind: "started" }>;
 
-export function StartVerificationRow() {
-  const [state, setState] = useState<State>({ kind: "idle" });
+// `email` identifies whose pending flag this is (see `pending-case.ts`) — the caller only
+// ever renders this row for the signed-in user's own profile.
+export function StartVerificationRow({ email }: { email: string }) {
+  const [state, setState] = useState<State>(() => (isVerificationPending(email) ? { kind: "pending" } : { kind: "idle" }));
   const starting = state.kind === "starting";
 
   async function begin() {
     setState({ kind: "starting" });
     const result = await startVerification();
     if (result.kind === "started") {
+      // Set before the redirect, not after: a vendor session costs money, so the flag has
+      // to be in place before the user can possibly land back here and press Start again.
+      markVerificationPending(email);
       // Deliberately NOT back to idle first: the provider's page is already loading over
       // this one, and re-enabling the button would flash a second chance at someone who
       // is leaving — and buy a duplicate case if they took it.
@@ -29,6 +35,18 @@ export function StartVerificationRow() {
       return;
     }
     setState(result);
+  }
+
+  if (state.kind === "pending") {
+    return (
+      <>
+        <Hairline />
+        <div className="flex min-w-0 items-center justify-between gap-3 py-3.5">
+          <RowLabel title="Verify your identity" sub="Submitted — we're waiting on the provider's review" />
+          <Pill tone="pending">Pending</Pill>
+        </div>
+      </>
+    );
   }
 
   return (

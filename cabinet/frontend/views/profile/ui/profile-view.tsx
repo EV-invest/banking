@@ -312,7 +312,7 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
         <RowLabel title={t("ui.accountStatus")} sub={t("profile.platformAccess")} />
         {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.status ? <Pill tone={statusTone(profile.status)}>{enumLabel("admin.status", profile.status, t)}</Pill> : <RowValue>—</RowValue>}
       </Row>
-      {canStartVerification(profile) && <StartVerificationRow />}
+      {canStartVerification(profile) && <StartVerificationRow email={email} />}
     </ListCard>
   );
 }
