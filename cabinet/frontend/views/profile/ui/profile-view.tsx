@@ -10,6 +10,7 @@ import { usePhoneNumber } from "@evinvest/types/react";
 import { Button, Input, Skeleton } from "@evinvest/uikit";
 
 import { positionsResource } from "@/entities/fund/model/fund-resource";
+import { StartVerificationRow } from "@/features/kyc";
 import { profileResource, saveProfile } from "@/entities/user/model/profile-resource";
 import { validateProfileForm } from "@/entities/user/model/profile-schema";
 import type { UpdateProfileRequest, UserProfile } from "@/shared/contracts";
@@ -282,7 +283,7 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
   const t = useT();
   return (
     <ListCard className="lg:px-5.5">
-      <ListCardTitle sub="Managed by compliance">Identity verification</ListCardTitle>
+      <ListCardTitle sub="Identity and account standing">Identity verification</ListCardTitle>
       <Hairline />
       <Row>
         <RowLabel title={t("ui.emailAddress")} sub={loading ? "…" : email || "—"} />
@@ -290,7 +291,7 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
       </Row>
       <Hairline />
       <Row>
-        <RowLabel title={t("ui.kycLevel")} sub="Raised by compliance review" />
+        <RowLabel title={t("ui.kycLevel")} sub="Raised by verification and review" />
         {loading ? <Skeleton className="h-4 w-10" /> : <RowValue className="font-semibold tabular-nums text-foreground">{profile?.kyc_level ?? "—"}</RowValue>}
       </Row>
       <Hairline />
@@ -298,8 +299,22 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
         <RowLabel title={t("ui.accountStatus")} sub="Platform access" />
         {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : profile?.status ? <Pill tone={statusTone(profile.status)}>{titleCase(profile.status)}</Pill> : <RowValue>—</RowValue>}
       </Row>
+      {canStartVerification(profile) && <StartVerificationRow />}
     </ListCard>
   );
+}
+
+/**
+ * Only the entry tier is self-serve: `/kyc/start` opens a case for tier 1 and nothing
+ * above it, so offering this to someone already past 1 would spend a paid vendor session
+ * on a verdict that, by the plane's own rule, cannot raise them. Higher tiers stay a
+ * compliance action.
+ *
+ * An absent `kyc_level` counts as 0 rather than unknown — proto3 omits zero-valued
+ * scalars from JSON, so "no field" is exactly how an unverified user arrives.
+ */
+function canStartVerification(profile: UserProfile | null): boolean {
+  return profile !== null && (profile.kyc_level ?? 0) === 0;
 }
 
 function SnapshotCard({ invested, strategies }: { invested: number; strategies: number }) {
