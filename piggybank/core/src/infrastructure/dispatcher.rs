@@ -7,10 +7,10 @@
 //! dispatches the ones both cover, so a rail top-up self-heals the queue within one
 //! interval. Before any dispatch it also honors the outflow policy gates the sync RPC
 //! boundary enforces — the global read-only kill-switch (skips the whole sweep) and the
-//! per-owner cross-plane freeze — failing closed, so the async path can't bypass an
-//! operator pause or an AML freeze on the accept-and-queue backlog. The reaper's 24h
-//! auto-cancel of `queued` withdrawals remains the final backstop (the de-facto rail
-//! top-up SLA).
+//! per-owner cross-plane freeze/disable/KYC-tier checks — failing closed, so the async
+//! path can't bypass an operator pause, an AML freeze, or a KYC revocation on the
+//! accept-and-queue backlog. The reaper's 24h auto-cancel of `queued` withdrawals remains
+//! the final backstop (the de-facto rail top-up SLA).
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -113,18 +113,20 @@ impl Dispatcher {
 					continue;
 				}
 			};
-			// Cross-plane freeze / disable: a queued withdrawal whose owner was SUSPENDED (or
-			// disabled) must not be dispatched, even though it slipped past the sync gate at
-			// request time. Mirror `unfrozen_caller` — skip a frozen owner, and fail closed
-			// (skip this cycle) when the control-plane flag can't be read. A revenue payout
-			// has no owner in the identity plane (the fund is not a user), so there is no
-			// flag to read and nothing to fail closed on — the gate simply doesn't apply.
+			// Cross-plane freeze / disable / KYC: a queued withdrawal whose owner was
+			// SUSPENDED, disabled, or had their verification tier revoked below
+			// `KYC_LEVEL_VERIFIED` must not be dispatched, even though it slipped past the
+			// sync gates at request time (`unfrozen_caller`'s freeze check and
+			// `request_withdrawal`'s KYC check). Fail closed (skip this cycle) when the
+			// control-plane flags can't be read. A revenue payout has no owner in the
+			// identity plane (the fund is not a user), so there is nothing to read and the
+			// gate simply doesn't apply.
 			if let Some(owner) = withdrawal.user() {
-				match bridge::is_frozen(&self.pool, owner).await {
+				match bridge::dispatch_blocked(&self.pool, owner).await {
 					Ok(false) => {}
 					Ok(true) => continue,
 					Err(err) => {
-						warn!(withdrawal_id = %id, "dispatcher: freeze check failed — skipping this cycle (fail-closed): {err}");
+						warn!(withdrawal_id = %id, "dispatcher: freeze/KYC check failed — skipping this cycle (fail-closed): {err}");
 						continue;
 					}
 				}

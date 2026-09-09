@@ -391,7 +391,7 @@ consequences worth stating plainly, because both are load-bearing:
   would credit the money straight back to the account it was just debited from.
 
 A payout has no owner in the identity plane — the fund is not a user — so the gates that
-read a user's control-plane flags simply do not apply (the dispatcher's freeze check is
+read a user's control-plane flags simply do not apply (the dispatcher's freeze/KYC check is
 `if let Some(owner)`, not a fail-closed read against a missing row). Everything else is
 identical, **including the cardinal rule**: once a payout's broadcast may have reached the
 chain, failing it double-pays.
@@ -663,10 +663,16 @@ safe). Max age is 24h (config seam: `Reaper::with_max_age`).
 treasury worker: it re-checks every `queued` withdrawal against **both** liquidity gates —
 the TB rail balance and `Custody::treasury_liquidity` — and dispatches the covered ones
 (idempotently, via the same row-locked command as the admin RPC), so a rail top-up
-self-heals the queue within one interval. A treasury read `Err` skips that cycle (the
-automatic path stays conservative; the operator RPC may still exercise judgment). Together
-with the reaper this brackets accept-and-queue: dispatched within ~30s of a top-up, or
-auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
+self-heals the queue within one interval. Before either liquidity gate it also re-checks the
+owner's cross-plane freeze/disable AND `kyc_level >= KYC_LEVEL_VERIFIED`
+(`bridge::dispatch_blocked`) — an admission-time-only check would let a withdrawal accepted
+while verified still ship after a SUSPENDED or a KYC tier revocation lands on the mirror
+while it sits queued; a missing owner row fails closed here (unlike `bridge::is_frozen`'s
+sync-boundary semantics), since a queued withdrawal's owner row must already exist. A
+treasury read `Err` skips that cycle (the automatic path stays conservative; the operator RPC
+may still exercise judgment). Together with the reaper this brackets accept-and-queue:
+dispatched within ~30s of a top-up, or auto-cancelled (refunded) at 24h — the de-facto rail
+top-up SLA.
 
 ## Tests
 
@@ -690,8 +696,10 @@ subscribe minting at seed + fractional NAV pricing + staleness/Read-First; redee
 withdrawal reserve→settle with fee, fail→refund, short-rail queue→dispatch→settle, queued
 cancel→refund; the on-chain dispatch gate's three arms — short treasury queues despite a
 liquid TB rail, liquid treasury dispatches, read failure degrades to queued — plus the
-refused admin dispatch and the `Dispatcher::sweep` both-gates flow, driven by a test
-`Custody` adapter with a configurable treasury view). `piggybank/core/tests/fee_policy.rs` hits real Postgres + TigerBeetle for the fee plane's
+refused admin dispatch and the `Dispatcher::sweep` both-gates flow (including a frozen
+owner's and a KYC-revoked owner's queued withdrawal each held back and dispatched once the
+gate clears), driven by a test `Custody` adapter with a configurable treasury view).
+`piggybank/core/tests/fee_policy.rs` hits real Postgres + TigerBeetle for the fee plane's
 three load-bearing properties — a charge moves **units** and leaves every cash account
 untouched, `SharesOutstanding` is unchanged so no other holder pays, and two investors at
 the same NAV owe different fees when they entered at different prices — plus the bulk

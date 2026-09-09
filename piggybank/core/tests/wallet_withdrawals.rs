@@ -623,6 +623,63 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 	h.relay.drain().await;
 }
 
+/// A queued withdrawal whose owner's KYC tier is revoked (mirrored down to 0 by a concierge
+/// `KYC_CHANGED`) after acceptance must NOT be dispatched by the async sweep, even with both
+/// liquidity gates satisfied. The verification gate is enforced at accept time
+/// (`request_withdrawal`'s `kyc_level >= KYC_LEVEL_VERIFIED` check); the sweep re-checks it so
+/// an already-queued withdrawal can't ship for a user no longer verified. Restoring the tier
+/// lets the very next sweep dispatch it — proving the revoked tier was the only thing holding
+/// an otherwise-dispatchable withdrawal.
+#[tokio::test]
+async fn the_dispatcher_skips_a_kyc_revoked_owners_queued_withdrawal() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	// Polygon keeps this test's row off the TON/TRC20 rails the other dispatcher-sweep
+	// tests queue and top up.
+	let network = Network::Polygon;
+	deposit(&h, user, Network::Bep20, "100").await;
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("60")).await.unwrap();
+	h.relay.drain().await;
+
+	let custody = Arc::new(TestCustody::short_everywhere());
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, custody.as_ref()),
+		h.users.as_ref(),
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues the request");
+	h.relay.drain().await;
+
+	// Both liquidity gates now pass on-chain — only the revoked tier may hold it.
+	custody.set(network, TreasuryView::OnChain(usdt("1000000000")));
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+
+	// Revoke verification (mirrors a concierge KYC_CHANGED lowering the tier to 0).
+	common::set_kyc_level(&h.pool, user, 0).await;
+	dispatcher.sweep().await.unwrap();
+	let held = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(held.state(), WithdrawalState::Queued, "a KYC-revoked owner's queued withdrawal is not dispatched by the sweep");
+
+	// Restore the tier — the next sweep dispatches it, proving the revoked tier was the only hold.
+	common::set_kyc_level(&h.pool, user, 1).await;
+	assert!(dispatcher.sweep().await.unwrap() >= 1, "once re-verified, the topped-up rail dispatches it");
+	let processing = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(processing.state(), WithdrawalState::Processing, "the dispatcher dispatched it once verification was restored");
+	h.relay.drain().await;
+
+	// Settle so the shared rails aren't left with a dangling in-flight reservation.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+}
+
 /// One sweep must account the liquidity it already dispatched: three queued
 /// withdrawals summing past the rail's on-chain treasury each pass a *static* gate
 /// (the balances only move when the relay settles), so an unaccounted sweep would

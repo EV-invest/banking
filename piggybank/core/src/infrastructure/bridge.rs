@@ -20,7 +20,10 @@
 
 use std::time::Duration;
 
-use domain::{authz::Role, users::UserId};
+use domain::{
+	authz::Role,
+	users::{KYC_LEVEL_VERIFIED, UserId},
+};
 use evconcierge_contracts::concierge::v1::{PullUserLifecycleRequest, UserLifecycleEvent, user_events_client::UserEventsClient, user_lifecycle_event::Kind};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
@@ -322,6 +325,29 @@ pub async fn is_frozen(pool: &PgPool, user_id: UserId) -> Result<bool, sqlx::Err
 		.fetch_optional(pool)
 		.await?;
 	Ok(blocked.unwrap_or(false))
+}
+
+/// Whether a queued withdrawal's owner may have it dispatched right now — the async-path
+/// re-check of the two admission gates the sync RPC boundary applies once at accept time
+/// (`unfrozen_caller`'s freeze/disable check and `request_withdrawal`'s
+/// `kyc_level >= KYC_LEVEL_VERIFIED` check). Both can change while a withdrawal sits
+/// `Queued` awaiting rail liquidity — a SUSPENDED or a tier revocation must stop money that
+/// has not yet left, not just refuse new requests.
+///
+/// Unlike [`is_frozen`], a missing owner row fails CLOSED (blocked) here rather than open:
+/// at the RPC boundary a missing row legitimately means "nothing to move yet", but a
+/// `Queued` withdrawal's owner row was required to exist for the withdrawal to have been
+/// accepted in the first place, so a missing row on this path is anomalous and must not be
+/// read as "cleared to dispatch".
+pub async fn dispatch_blocked(pool: &PgPool, user_id: UserId) -> Result<bool, sqlx::Error> {
+	let row: Option<(bool, i32)> = sqlx::query_as("SELECT (frozen OR status = 'disabled'), kyc_level FROM users WHERE id = $1")
+		.bind(user_id.raw())
+		.fetch_optional(pool)
+		.await?;
+	match row {
+		Some((blocked, kyc_level)) => Ok(blocked || (kyc_level as u32) < KYC_LEVEL_VERIFIED),
+		None => Ok(true),
+	}
 }
 
 /// The mirrored access role for a banking user id (the money-op RBAC gate reads this).
