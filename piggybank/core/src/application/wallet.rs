@@ -14,17 +14,21 @@
 //! Only **configured** rails (those with a running on-chain watcher) are presented or
 //! provisioned at all: an unconfigured rail is omitted entirely — never provisioned,
 //! not merely "address pending" — because a deposit sent to an address no watcher
-//! scans is stranded, not credited.
+//! scans is stranded, not credited. The **verification** gate sits in exactly the same
+//! place and for the same reason: the first [`DepositAddresses::address`] call provisions
+//! a signer keypair, so a key minted for an unverified user is an address the fund must
+//! then watch, sweep and account for forever — money the platform is not allowed to take
+//! yet. Both gates therefore run ABOVE the port, never after it.
 
 use domain::{
 	balance::LedgerAccountKey,
 	error::DomainError,
 	money::{Nav, Network, Shares, Usdt, WalletAddress},
-	users::UserId,
+	users::{KYC_LEVEL_VERIFIED, UserId},
 	withdrawals::WithdrawalPolicy,
 };
 
-use crate::ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, deposit_addresses::MigratedAddress, deposits::DepositRecord, ledger::Ledger};
+use crate::ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, UserRepository, deposit_addresses::MigratedAddress, deposits::DepositRecord, ledger::Ledger};
 
 /// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
 /// non-negative; `total = available + invested + pending_withdrawal`. `available` and
@@ -48,6 +52,12 @@ pub struct WalletBalance {
 /// balance. Only configured rails appear; an unconfigured one is omitted entirely.
 pub struct DepositRail {
 	pub network: Network,
+	/// `None` when the rail carries no fundable address for this caller: the derived
+	/// address is still a placeholder, or the caller is not KYC-verified and so has no
+	/// address provisioned at all. This listing deliberately does not distinguish the
+	/// two — a wallet screen shows the rail as "not yet fundable" either way, and the
+	/// caller learns *why* from [`get_deposit_address`], which refuses an unverified
+	/// request outright rather than answering `None`.
 	pub address: Option<WalletAddress>,
 }
 
@@ -72,16 +82,49 @@ pub struct Wallet {
 	pub withdrawable: Vec<NetworkWithdrawable>,
 }
 
+/// The driven ports the wallet overview borrows: the ledger every figure is read from,
+/// the position projection and marks that value the invested slice, the address gateway
+/// each rail is presented from, and the user projection whose mirrored KYC tier decides
+/// whether an address may be provisioned at all. Bundled so the use-case's own parameters
+/// stay its *request* — whose wallet, on which rails. A plain borrow-holder: it owns
+/// nothing and does nothing.
+pub struct WalletPorts<'a> {
+	/// The money gateway (TigerBeetle): the authoritative claim and rail balances.
+	pub ledger: &'a dyn Ledger,
+	/// The cost-basis/units projection behind the `invested` figure.
+	pub positions: &'a dyn FundPositionReader,
+	/// The valuation marks `invested` is priced at.
+	pub nav: &'a dyn NavMarks,
+	/// The signer/key-management seam a rail's address is derived from.
+	pub deposit_addresses: &'a dyn DepositAddresses,
+	/// The control-plane user row carrying the bridge-mirrored KYC tier.
+	pub users: &'a dyn UserRepository,
+}
+
+/// The driven ports the single-rail deposit-address read borrows. Kept separate from
+/// [`WalletPorts`] rather than reusing it: this use case can reach neither the ledger nor
+/// the marks, and a field it could never use would only invite one.
+pub struct DepositAddressPorts<'a> {
+	/// The signer/key-management seam — asked only once the gates below have passed.
+	pub deposit_addresses: &'a dyn DepositAddresses,
+	/// The control-plane user row carrying the bridge-mirrored KYC tier.
+	pub users: &'a dyn UserRepository,
+}
+
+/// Whether `user` has cleared the verification tier that money movement requires. A
+/// missing row fails CLOSED — an id with no local mirror is not a verified investor.
+async fn is_verified(users: &dyn UserRepository, user: UserId) -> Result<bool, DomainError> {
+	Ok(users.find_by_id(user).await?.is_some_and(|account| account.kyc_level() >= KYC_LEVEL_VERIFIED))
+}
+
 /// The caller's wallet: the unified lifecycle balance, a deposit address per
 /// configured rail, and the per-rail withdrawable view.
-pub async fn get_wallet(
-	ledger: &dyn Ledger,
-	positions: &dyn FundPositionReader,
-	nav: &dyn NavMarks,
-	deposit_addresses: &dyn DepositAddresses,
-	configured: &[Network],
-	user: UserId,
-) -> Result<Wallet, DomainError> {
+///
+/// An unverified caller still gets their whole balance — nothing here is hidden from
+/// them — but every rail comes back with no address, because provisioning one would mint
+/// the signer keypair the verification gate exists to withhold.
+pub async fn get_wallet(ports: &WalletPorts<'_>, configured: &[Network], user: UserId) -> Result<Wallet, DomainError> {
+	let (ledger, positions, nav, deposit_addresses) = (ports.ledger, ports.positions, ports.nav, ports.deposit_addresses);
 	// Layer 1 — the single unified claim. The ledger speaks raw base units; wrap into
 	// the typed `Usdt` at this boundary. `available` and `pending_withdrawal` are the two
 	// sides of this one balance (`posted − reserved` and `reserved`), so they can never
@@ -122,14 +165,18 @@ pub async fn get_wallet(
 	};
 
 	// Layer 2 — per-rail deposit addresses and withdrawable view, configured rails only.
+	// Resolved once, outside the loop: an unverified caller must not reach the address
+	// gateway on ANY rail, and one user read is enough to decide that for all of them.
+	let verified = is_verified(ports.users, user).await?;
 	let mut deposit_addresses_out = Vec::with_capacity(configured.len());
 	let mut withdrawable = Vec::with_capacity(configured.len());
 	for network in configured.iter().copied() {
-		// `None` ⇒ no fundable address yet (still a placeholder): the rail is presented as
-		// unavailable, never with an address that cannot actually receive funds.
+		// `None` ⇒ no fundable address yet — the derived address is still a placeholder,
+		// or the caller is unverified so none was ever provisioned. Either way the rail is
+		// presented as unavailable, never with an address that cannot receive funds.
 		deposit_addresses_out.push(DepositRail {
 			network,
-			address: deposit_addresses.address(user, network).await?,
+			address: if verified { deposit_addresses.address(user, network).await? } else { None },
 		});
 		// `instant` = min(available, rail liquidity) — "this much ships without queueing".
 		// It reveals the rail's liquidity only up to the user's own balance (see the
@@ -151,17 +198,28 @@ pub async fn get_wallet(
 	})
 }
 
-/// The caller's deposit address on `network` (stable; derived once and reused). `None`
-/// while the address is still a placeholder — the rail is not yet fundable — or when
-/// the rail is not configured at all.
-pub async fn get_deposit_address(deposit_addresses: &dyn DepositAddresses, configured: &[Network], user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
-	// The gate must sit ABOVE the port: the first `DepositAddresses::address` call
-	// provisions a signer keypair, and a key minted for a rail no watcher scans strands
-	// whatever is deposited to it.
+/// The caller's deposit address on `network` (stable; derived once and reused).
+///
+/// Two refusals, deliberately told apart. `Ok(None)` means **the rail cannot fund this
+/// account**: it is unconfigured, or the derived address is still a placeholder — nothing
+/// the caller can act on, so the screen offers another rail. [`DomainError::Forbidden`]
+/// means **the caller is not verified yet** — a state they can leave, and the one screen
+/// worth showing them is "finish verification". Folding the second into the first would
+/// leave the cabinet unable to tell "try another chain" from "verify your identity", so
+/// the verification failure is an error rather than an absent value.
+///
+/// Both gates sit ABOVE the port, in that order: the rail check is free and answers
+/// without touching the control plane, and the first `DepositAddresses::address` call
+/// provisions a signer keypair — a key minted here for an unverified user is an address
+/// the fund must watch and sweep forever.
+pub async fn get_deposit_address(ports: &DepositAddressPorts<'_>, configured: &[Network], user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
 	if !configured.contains(&network) {
 		return Ok(None);
 	}
-	deposit_addresses.address(user, network).await
+	if !is_verified(ports.users, user).await? {
+		return Err(DomainError::Forbidden("identity verification required before a deposit address is issued".into()));
+	}
+	ports.deposit_addresses.address(user, network).await
 }
 
 /// The caller's credited on-chain deposits (projection), newest first.

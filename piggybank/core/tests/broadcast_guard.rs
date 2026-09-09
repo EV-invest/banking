@@ -46,6 +46,8 @@ use sqlx::PgPool;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
+mod common;
+
 /// Records every broadcast custody is asked to perform, so the test can assert the
 /// guarded relay sent exactly one. A port stub (not a DB mock — Postgres and
 /// TigerBeetle stay real), like the `StubCustody` the other withdrawal tests wire.
@@ -117,10 +119,16 @@ fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()
 }
 
+/// A fresh user who is active AND verified — what every money-moving path here needs.
+/// `provision` leaves the row at KYC tier 0 (the schema default), which the deposit and
+/// withdrawal gates refuse, so the mirrored tier is set the way the lifecycle bridge sets
+/// it. Tier 0 itself is exercised in `kyc_gating.rs`.
 async fn active_user(h: &Harness) -> UserId {
 	let subject = AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
 	let email = Email::parse(&format!("u{}@example.com", Uuid::new_v4().simple())).unwrap();
-	h.users.provision(subject, email, true).await.unwrap().id()
+	let user = h.users.provision(subject, email, true).await.unwrap().id();
+	common::set_kyc_level(&h.pool, user, 1).await;
+	user
 }
 
 /// The double-submit exploit, end to end. Two full-balance withdrawals are accepted

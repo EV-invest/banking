@@ -35,10 +35,13 @@ impl WalletService for WalletSvc {
 	async fn get_wallet(&self, request: Request<pb::GetWalletRequest>) -> Result<Response<pb::Wallet>, Status> {
 		let user = caller_id(&request)?;
 		let wallet = wallet_app::get_wallet(
-			self.state.ledger.as_ref(),
-			self.state.positions.as_ref(),
-			self.state.nav.as_ref(),
-			self.state.deposit_addresses.as_ref(),
+			&wallet_app::WalletPorts {
+				ledger: self.state.ledger.as_ref(),
+				positions: self.state.positions.as_ref(),
+				nav: self.state.nav.as_ref(),
+				deposit_addresses: self.state.deposit_addresses.as_ref(),
+				users: self.state.users.as_ref(),
+			},
 			&self.state.configured_networks,
 			user,
 		)
@@ -63,12 +66,22 @@ impl WalletService for WalletSvc {
 	async fn get_deposit_address(&self, request: Request<pb::GetDepositAddressRequest>) -> Result<Response<pb::DepositAddress>, Status> {
 		let user = caller_id(&request)?;
 		let network = Network::parse(&request.get_ref().network).map_err(map_err)?;
-		let address = wallet_app::get_deposit_address(self.state.deposit_addresses.as_ref(), &self.state.configured_networks, user, network)
-			.await
-			.map_err(map_err)?;
+		let address = wallet_app::get_deposit_address(
+			&wallet_app::DepositAddressPorts {
+				deposit_addresses: self.state.deposit_addresses.as_ref(),
+				users: self.state.users.as_ref(),
+			},
+			&self.state.configured_networks,
+			user,
+			network,
+		)
+		.await
+		.map_err(map_err)?;
 		// An empty `address` marks the rail unavailable: there is no fundable address yet
 		// (the underlying address is still a placeholder — or the rail is unconfigured,
-		// in which case no address is ever provisioned).
+		// in which case no address is ever provisioned). An unverified caller does NOT
+		// land here — that refusal is `permission_denied`, so the cabinet can tell
+		// "this rail can't fund you" from "finish verification".
 		Ok(Response::new(pb::DepositAddress {
 			network: network.as_str().to_owned(),
 			address: address.map(|a| a.as_str().to_owned()).unwrap_or_default(),

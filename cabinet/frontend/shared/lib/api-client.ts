@@ -54,6 +54,13 @@ export class RequestError extends Error {
     message: string,
     readonly status: number,
     readonly code: string | null = null,
+    /**
+     * The parsed error body, as it arrived. `message` and `code` are derived from `error`
+     * alone, so a plane that deliberately sends a machine-readable code ALONGSIDE data the
+     * screen needs — `/kyc/start`'s `{ error, contact }` — used to have that data dropped
+     * here and could not be rendered at all. `{}` when the body was absent or not JSON.
+     */
+    readonly body: unknown = {},
   ) {
     super(message);
     this.name = "RequestError";
@@ -86,12 +93,20 @@ interface JsonRequest {
 // The BFF's fixed error strings, mapped to catalogue keys and their English text.
 // Everything else the BFF sends is already client-safe prose (see backend/src/error.rs)
 // and passes through untouched — with a null key, since we did not author it.
+/**
+ * Exported because it is also the right answer for a plane that rejects a stale token in
+ * plain text rather than as `{ error: "csrf" }` — the identity plane answers `csrf check
+ * failed`, which no lookup below can match. Such a caller maps its own 403 to THIS string
+ * instead of restating it, so the wording stays decided here.
+ */
+export const STALE_PAGE_MESSAGE = "This page went stale. Reload it and try again.";
+
 const FRIENDLY: Record<string, { code: string; en: string }> = {
   unauthenticated: {
     code: "err.unauthenticated",
     en: "We couldn't confirm your session. Reload the page or sign in again.",
   },
-  csrf: { code: "err.csrf", en: "This page went stale. Reload it and try again." },
+  csrf: { code: "err.csrf", en: STALE_PAGE_MESSAGE },
   "auth not configured": {
     code: "err.authNotConfigured",
     en: "Sign-in is unavailable right now. Please try again shortly.",
@@ -159,7 +174,7 @@ export async function requestJson<T>(path: `/${string}`, req: JsonRequest = {}):
           : undefined
         : statusMessage(res.status);
     const detail = known ?? { code: null, en: data.error as string };
-    throw new RequestError(detail.en, res.status, detail.code);
+    throw new RequestError(detail.en, res.status, detail.code, data);
   }
   return data;
 }

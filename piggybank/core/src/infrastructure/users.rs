@@ -10,7 +10,7 @@ use domain::{
 	architecture::{AggregateRoot, Reader, Repository},
 	auth::AuthSubject,
 	error::DomainError,
-	users::{ConciergeUserId, Email, ProfileFields, User, UserId, UserStatus},
+	users::{ConciergeUserId, Email, ProfileFields, User, UserId, UserSnapshot, UserStatus},
 };
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
@@ -34,7 +34,7 @@ impl PgUsers {
 /// than a runtime `format!` — keep this list in sync with [`UserRow`].
 macro_rules! user_columns {
 	() => {
-		"id, auth_subject, email, email_verified, status, token_version, \
+		"id, auth_subject, email, email_verified, status, token_version, kyc_level, \
 		legal_name, preferred_name, phone, date_of_birth, nationality, tax_residence, \
 		residential_address, language, base_currency, timezone"
 	};
@@ -64,6 +64,7 @@ struct UserRow {
 	email_verified: bool,
 	status: String,
 	token_version: i64,
+	kyc_level: i32,
 	legal_name: Option<String>,
 	preferred_name: Option<String>,
 	phone: Option<String>,
@@ -78,14 +79,18 @@ struct UserRow {
 
 impl UserRow {
 	fn into_domain(self) -> Result<User, DomainError> {
-		Ok(User::rehydrate(
-			UserId::from_raw(self.id),
-			AuthSubject::parse(&self.auth_subject)?,
-			Email::parse(&self.email)?,
-			self.email_verified,
-			UserStatus::parse(&self.status)?,
-			self.token_version as u64,
-			ProfileFields {
+		Ok(User::rehydrate(UserSnapshot {
+			id: UserId::from_raw(self.id),
+			auth_subject: AuthSubject::parse(&self.auth_subject)?,
+			email: Email::parse(&self.email)?,
+			email_verified: self.email_verified,
+			status: UserStatus::parse(&self.status)?,
+			token_version: self.token_version as u64,
+			// The column is a signed INTEGER the bridge writes from a `u32`, so a negative
+			// value could only be corruption — and the safe reading of a corrupt KYC tier
+			// is "unverified", which is what a failed conversion falls back to here.
+			kyc_level: self.kyc_level.try_into().unwrap_or(0),
+			profile: ProfileFields {
 				legal_name: self.legal_name,
 				preferred_name: self.preferred_name,
 				phone: self.phone,
@@ -97,7 +102,7 @@ impl UserRow {
 				base_currency: self.base_currency,
 				timezone: self.timezone,
 			},
-		))
+		}))
 	}
 }
 
@@ -265,6 +270,9 @@ where
 		})?;
 	let mut user = row.into_domain()?;
 	transition(&mut user);
+	// `kyc_level` is absent from this UPDATE on purpose: the concierge plane owns it and
+	// the lifecycle bridge is its only writer. Writing the aggregate's copy back would
+	// let a profile save race a KYC_CHANGED and silently restore the older tier.
 	let affected = sqlx::query(
 		"UPDATE users SET email = $2, email_verified = $3, status = $4, token_version = $5, \
 		legal_name = $6, preferred_name = $7, phone = $8, date_of_birth = $9, nationality = $10, \
