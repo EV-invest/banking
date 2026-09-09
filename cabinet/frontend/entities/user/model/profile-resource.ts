@@ -19,6 +19,12 @@ export const profileResource = defineResource({
   fetch: fetchProfile,
   revalidate: 60,
   tags: [TAG.profile],
+  // A tier-0 caller may have a verification case open at the provider right now, and the
+  // hub's own verdict can land while this tab sits open and focused — none of `resource.
+  // ts`'s other triggers (mount, focus regained, route warmed) fire for that. `kyc_level`
+  // moving off 0 is the closing signal, standing in for a case status the profile doesn't
+  // carry yet.
+  poll: { while: (p) => (p?.kyc_level ?? 0) === 0, startMs: 5_000, maxMs: 60_000 },
 });
 
 export async function saveProfile(fields: UpdateProfileRequest): Promise<UserProfile> {
