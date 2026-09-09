@@ -33,6 +33,41 @@ pub struct SignerConfig {
 	///
 	/// [`grpc_addr`]: SignerConfig::grpc_addr
 	pub tls: Option<TlsConfig>,
+	/// Where a chain private key lives. Defaults to [`KeyBackendKind::Local`] — the migration
+	/// to a custodian is a deliberate flip, never something a missing variable turns on.
+	pub key_backend: KeyBackendKind,
+}
+
+/// Which [`KeyBackend`](crate::backend::KeyBackend) the signer composes at boot.
+///
+/// Safe to keep in a `Debug` struct: it is a choice, not a credential. The Turnkey API key is
+/// read by [`TurnkeyBackend::from_env`](crate::turnkey::TurnkeyBackend::from_env) and consumed
+/// straight into the request stamper, the same way `WALLET_KEK` never enters [`SignerConfig`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KeyBackendKind {
+	/// Keys sealed under the KEK in this signer's own `wallet_secrets`.
+	Local,
+	/// Keys held by Turnkey; this process signs by asking, and never holds one.
+	Turnkey,
+}
+
+impl KeyBackendKind {
+	/// `KEY_BACKEND=local|turnkey`, default `local`. An unrecognized value is fatal rather
+	/// than a silent fallback: booting `local` when an operator asked for `turnkey` would mint
+	/// KEK-sealed keys nobody meant to create.
+	fn from_env() -> color_eyre::Result<Self> {
+		Self::parse(&env::var("KEY_BACKEND").unwrap_or_default())
+	}
+
+	/// Split out from [`from_env`](Self::from_env) so the default and the fail-closed behaviour
+	/// are testable without mutating process-global environment state.
+	fn parse(raw: &str) -> color_eyre::Result<Self> {
+		match raw.trim().to_ascii_lowercase().as_str() {
+			"" | "local" => Ok(Self::Local),
+			"turnkey" => Ok(Self::Turnkey),
+			other => bail!("KEY_BACKEND must be `local` or `turnkey`, got {other:?}"),
+		}
+	}
 }
 impl SignerConfig {
 	pub fn from_env() -> color_eyre::Result<Self> {
@@ -64,6 +99,7 @@ impl SignerConfig {
 			grpc_addr,
 			verifier,
 			tls,
+			key_backend: KeyBackendKind::from_env()?,
 		})
 	}
 }
@@ -116,5 +152,18 @@ mod tests {
 	fn default_bind_is_loopback() {
 		let addr: SocketAddr = DEFAULT_GRPC_ADDR.parse().expect("default addr parses");
 		assert!(addr.ip().is_loopback(), "{DEFAULT_GRPC_ADDR} must default to loopback, not all interfaces");
+	}
+
+	/// The migration's whole safety story is "switching is a deliberate flip, and the flip back
+	/// is the rollback". An unset or unreadable value must therefore land on `local`, never on
+	/// the custodian, and never silently.
+	#[test]
+	fn key_backend_defaults_to_local_and_refuses_anything_it_does_not_know() {
+		assert_eq!(KeyBackendKind::parse("").unwrap(), KeyBackendKind::Local);
+		assert_eq!(KeyBackendKind::parse("  ").unwrap(), KeyBackendKind::Local);
+		assert_eq!(KeyBackendKind::parse("local").unwrap(), KeyBackendKind::Local);
+		assert_eq!(KeyBackendKind::parse(" Turnkey ").unwrap(), KeyBackendKind::Turnkey);
+		assert!(KeyBackendKind::parse("turnkeyy").is_err());
+		assert!(KeyBackendKind::parse("remote").is_err());
 	}
 }

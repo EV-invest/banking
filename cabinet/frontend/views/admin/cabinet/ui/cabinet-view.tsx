@@ -3,23 +3,26 @@
 import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import { useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
 
 import { setAnnouncement, setFeatureFlag, setMaintenance, setReadOnly } from "@/entities/admin/api/admin-client";
 import { cabinetConfigResource, mfeRegistryResource } from "@/entities/admin/model/admin-resource";
 import type { CabinetConfig, FeatureFlag } from "@/shared/contracts/admin";
+import { errorMessage } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { StaggerItem } from "@/shared/ui/motion";
 import { AdminHeader, AdminScreen, StatusDot, Toggle } from "@/views/admin/ui/shell";
 
 export function CabinetView() {
+  const t = useT();
   const [writeError, setWriteError] = useState<string | null>(null);
 
   const read = useResource(cabinetConfigResource);
   const config = read.data ?? null;
   const mfes = useResource(mfeRegistryResource).data ?? null;
-  const error = writeError ?? (config || !read.error ? null : read.error.message);
+  const error = writeError ?? (config || !read.error ? null : errorMessage(read.error, t));
 
   const platform = config?.platform;
 
@@ -34,7 +37,7 @@ export function CabinetView() {
     try {
       publish({ platform: await setFeatureFlag({ key: flag.key, description: flag.description, enabled: !flag.enabled, rollout: flag.rollout }) });
     } catch (e) {
-      setWriteError((e as Error).message);
+      setWriteError(errorMessage(e, t));
     }
   };
 
@@ -42,7 +45,7 @@ export function CabinetView() {
     try {
       publish({ platform: await setMaintenance(enabled) });
     } catch (e) {
-      setWriteError((e as Error).message);
+      setWriteError(errorMessage(e, t));
     }
   };
 
@@ -50,13 +53,13 @@ export function CabinetView() {
     try {
       publish({ read_only: (await setReadOnly(enabled)).read_only });
     } catch (e) {
-      setWriteError((e as Error).message);
+      setWriteError(errorMessage(e, t));
     }
   };
 
   return (
     <AdminScreen className="space-y-8">
-      <AdminHeader eyebrow="Administer" title="Cabinet" subtitle="Host shell — microfrontend registry, feature flags and content" />
+      <AdminHeader eyebrow={t("admin.eyebrow.administer")} title={t("nav.cabinet")} subtitle={t("admin.cabinet.subtitle")} />
 
       {error && (
         <StaggerItem as="p" className="flex items-center gap-2 text-sm text-destructive">
@@ -65,11 +68,11 @@ export function CabinetView() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Panel title="Microfrontend registry" subtitle="Resolved by clients/core · /api/mfe-registry">
+        <Panel title={t("admin.cabinet.mfeRegistry")} subtitle={t("admin.cabinet.mfeRegistrySub")}>
           {!mfes ? (
             <Skeleton className="h-32 w-full" />
           ) : mfes.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No microfrontends registered.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">{t("admin.cabinet.noMfes")}</p>
           ) : (
             <div className="divide-y divide-border">
               {mfes.map((m) => (
@@ -80,7 +83,7 @@ export function CabinetView() {
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <span className="rounded-md bg-foreground/5 px-2 py-0.5 text-xs capitalize text-muted-foreground">{m.kind}</span>
-                    <StatusDot status="healthy" label="Registered" />
+                    <StatusDot status="healthy" label={t("admin.cabinet.registered")} />
                   </div>
                 </div>
               ))}
@@ -88,11 +91,11 @@ export function CabinetView() {
           )}
         </Panel>
 
-        <Panel title="Feature flags" subtitle="Gating cabinet features & MFE mounts">
+        <Panel title={t("admin.cabinet.featureFlags")} subtitle={t("admin.cabinet.featureFlagsSub")}>
           {!platform ? (
             <Skeleton className="h-32 w-full" />
           ) : platform.flags.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No flags yet. PostHog experiments render here when configured.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">{t("admin.cabinet.noFlags")}</p>
           ) : (
             <div className="divide-y divide-border">
               {platform.flags.map((f) => (
@@ -100,7 +103,7 @@ export function CabinetView() {
                   <div className="min-w-0">
                     <p className="truncate font-mono-tech text-sm">{f.key}</p>
                     <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-                      {f.rollout}% {f.description ? `· ${f.description}` : ""}
+                      {t("admin.cabinet.flagRollout", { pct: f.rollout })} {f.description ? `· ${f.description}` : ""}
                       <TipAnchor anchor="admin.cabinet.flags.rollout" />
                     </p>
                   </div>
@@ -111,23 +114,29 @@ export function CabinetView() {
           )}
         </Panel>
 
-        <Panel title="Announcement" subtitle="The live banner across the cabinet">
+        <Panel title={t("admin.cabinet.announcement")} subtitle={t("admin.cabinet.announcementSub")}>
           {!config ? <Skeleton className="h-28 w-full" /> : <AnnouncementForm config={config} onSaved={(next) => publish({ platform: next })} onError={setWriteError} />}
         </Panel>
 
-        <Panel title="Maintenance & operations" subtitle="Cabinet holding page + money-plane kill-switch">
+        <Panel title={t("admin.cabinet.maintenanceOps")} subtitle={t("admin.cabinet.maintenanceOpsSub")}>
           {!config ? (
             <Skeleton className="h-28 w-full" />
           ) : (
             <div className="space-y-4">
               <ToggleRow
-                label="Maintenance mode"
-                hint="Holding page on the cabinet (identity plane)"
+                label={t("admin.cabinet.maintenanceMode")}
+                hint={t("admin.cabinet.maintenanceModeHint")}
                 on={config.platform.maintenance_mode}
                 onChange={toggleMaintenance}
                 tip="admin.cabinet.maintenance"
               />
-              <ToggleRow label="Read-only mode" hint="Pause deposits & withdrawals (money plane)" on={config.read_only} onChange={toggleReadOnly} tip="admin.cabinet.readonly" />
+              <ToggleRow
+                label={t("admin.cabinet.readOnlyMode")}
+                hint={t("admin.cabinet.readOnlyModeHint")}
+                on={config.read_only}
+                onChange={toggleReadOnly}
+                tip="admin.cabinet.readonly"
+              />
             </div>
           )}
         </Panel>
@@ -169,6 +178,7 @@ function ToggleRow({ label, hint, on, onChange, tip }: { label: string; hint: st
 }
 
 function AnnouncementForm({ config, onSaved, onError }: { config: CabinetConfig; onSaved: (next: CabinetConfig["platform"]) => void; onError: (e: string) => void }) {
+  const t = useT();
   const [title, setTitle] = useState(config.platform.announcement_title);
   const [body, setBody] = useState(config.platform.announcement_body);
   const [active, setActive] = useState(config.platform.announcement_active);
@@ -180,7 +190,7 @@ function AnnouncementForm({ config, onSaved, onError }: { config: CabinetConfig;
       const next = await setAnnouncement({ title, body, active });
       onSaved(next);
     } catch (e) {
-      onError((e as Error).message);
+      onError(errorMessage(e, t));
     } finally {
       setSaving(false);
     }
@@ -188,13 +198,13 @@ function AnnouncementForm({ config, onSaved, onError }: { config: CabinetConfig;
 
   return (
     <div className="space-y-3">
-      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Announcement title" />
-      <Input value={body} onChange={(e) => setBody(e.target.value)} placeholder="Body" />
+      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("admin.cabinet.placeholder.announcementTitle")} />
+      <Input value={body} onChange={(e) => setBody(e.target.value)} placeholder={t("admin.cabinet.placeholder.announcementBody")} />
       <div className="flex items-center justify-between">
-        <ToggleRow label="Live" hint="Show the banner now" on={active} onChange={setActive} tip="admin.cabinet.announcement.live" />
+        <ToggleRow label={t("admin.cabinet.live")} hint={t("admin.cabinet.liveHint")} on={active} onChange={setActive} tip="admin.cabinet.announcement.live" />
       </div>
       <Button type="button" variant="outline" size="sm" disabled={saving} onClick={save}>
-        Save announcement
+        {t("admin.cabinet.saveAnnouncement")}
       </Button>
     </div>
   );

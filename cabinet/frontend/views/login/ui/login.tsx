@@ -1,19 +1,30 @@
+import { translator } from "@evinvest/i18n";
+
 import { Logo } from "@/application/layout/logo";
 import { safeReturnTo } from "@/features/auth/lib/return-to";
 import { withBasePath } from "@/shared/config/base-path";
+import { messagesFor } from "@/shared/config/i18n";
+import { currentLocale } from "@/shared/config/locale";
 
-const ERRORS: Record<string, string> = {
-  denied: "Sign-in was cancelled.",
-  invalid: "That sign-in attempt expired. Please try again.",
-  exchange: "We couldn't complete sign-in. Please try again.",
+// The `?error=` values the shell's auth callback redirects with, mapped to catalogue keys.
+const ERROR_KEYS: Record<string, string> = {
+  denied: "auth.err.denied",
+  invalid: "auth.err.invalid",
+  exchange: "auth.err.exchange",
 };
 
 // The cabinet sign-in (Figma `cabinet/login`): a branded left panel + the sign-in panel.
 // Auth is Google-only for now — one action both signs in and (on a first login) provisions
 // the account at the hub, so there is no separate email/password or sign-up flow yet.
+//
+// A true server component, so there is no `I18nProvider` above it and `useT()` is not
+// available: the locale comes from the URL via `currentLocale()` and the catalogue is
+// bound here, the same shape `views/status/ui/localised-status.tsx` uses.
 export async function LoginView({ searchParams }: { searchParams: Promise<{ error?: string; returnTo?: string }> }) {
   const { error, returnTo } = await searchParams;
-  const message = error ? (ERRORS[error] ?? "Sign-in failed. Please try again.") : null;
+  const locale = await currentLocale();
+  const t = translator(messagesFor(locale), locale);
+  const message = error ? t(ERROR_KEYS[error] ?? "auth.err.generic") : null;
   const dest = safeReturnTo(returnTo ?? null);
   // Full navigation to the SHELL-owned login (site-root /api/auth, not the zone's
   // BFF — the cabinet runs no OAuth); returnTo is site-root-relative, so it carries
@@ -44,14 +55,15 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
         </div>
 
         <div className="relative flex max-w-md flex-col gap-5">
+          {/* The brand mark itself, not a phrase — it reads "EV INVEST" in every locale. */}
           <p className="text-xs font-semibold tracking-widest text-main-accent-t1">EV INVEST</p>
-          <h2 className="text-5xl font-semibold leading-tight text-white">Private capital for Vietnam&apos;s coastal economy.</h2>
-          <p className="text-base leading-6 text-muted-foreground">Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.</p>
+          <h2 className="text-5xl font-semibold leading-tight text-white">{t("auth.brandHeadline")}</h2>
+          <p className="text-base leading-6 text-muted-foreground">{t("auth.brandBlurb")}</p>
         </div>
 
         <div className="relative flex gap-8">
-          <BrandStat value="18.4%" label="Avg. target IRR" />
-          <BrandStat value="$120M+" label="Assets under mgmt" />
+          <BrandStat value="18.4%" label={t("auth.stat.targetIrr")} />
+          <BrandStat value="$120M+" label={t("auth.stat.aum")} />
         </div>
       </aside>
 
@@ -59,8 +71,8 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
       <div className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="flex w-full max-w-100 flex-col gap-6">
           <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-semibold text-foreground">Welcome back</h1>
-            <p className="text-sm text-muted-foreground">Sign in to manage your investments.</p>
+            <h1 className="text-3xl font-semibold text-foreground">{t("auth.welcomeBack")}</h1>
+            <p className="text-sm text-muted-foreground">{t("auth.signInSub")}</p>
           </div>
 
           {message && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{message}</p>}
@@ -69,10 +81,10 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
             href={href}
             className="flex h-10 w-full items-center justify-center gap-3 rounded-md bg-main-brand px-6 text-sm font-medium text-foreground outline-none ring-1 ring-inset ring-white/10 transition-colors hover:bg-main-brand/80 focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <GoogleMark /> Continue with Google
+            <GoogleMark /> {t("auth.continueWithGoogle")}
           </a>
 
-          <p className="text-center text-sm text-muted-foreground">New to EV Invest? Continuing with Google sets up your cabinet.</p>
+          <p className="text-center text-sm text-muted-foreground">{t("auth.newToEv")}</p>
         </div>
       </div>
     </div>

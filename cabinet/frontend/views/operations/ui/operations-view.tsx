@@ -1,6 +1,7 @@
 "use client";
 
-import { useT } from "@evinvest/i18n/react";
+import type { Locale, Translate } from "@evinvest/i18n";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { ArrowLeftRight, ChevronRight, ListChecks } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Fragment, useMemo, useState } from "react";
@@ -42,6 +43,7 @@ import { operationsResource } from "@/entities/operation/model/operation-resourc
 import { useIsCompact } from "@/views/operations/lib/use-is-compact";
 import { OperationDetail } from "@/views/operations/ui/operation-detail";
 import type { Operation } from "@/shared/contracts";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
@@ -53,6 +55,8 @@ import {
   formatUsdt,
   isPending,
   KIND_FILTERS,
+  kindBadge,
+  kindLabel,
   kindMeta,
   networkLabel,
   seconds,
@@ -68,13 +72,31 @@ const EMPTY_BOX = "border md:p-6";
 
 type Filter = "all" | (typeof KIND_FILTERS)[number];
 
-// The bar's options, built once rather than in render: `kindMeta` is a lookup and
-// the labels never change, so there is no reason to redo it on every keystroke of
-// the list above.
-const FILTERS: readonly { value: Filter; label: string }[] = [
-  { value: "all", label: "All" },
-  ...KIND_FILTERS.map((kind) => ({ value: kind as Filter, label: `${kindMeta(kind).label}s` })),
-];
+const FILTERS: readonly Filter[] = ["all", ...KIND_FILTERS];
+
+// The bar's labels are the *plural* of each kind, and used to be built as `${label}s` —
+// which is English pluralisation hard-coded into the layout. Every locale gets its own
+// entry instead; the singular forms in `ops.kind.*` are a different word in most of them.
+const FILTER_LABEL_KEYS: Readonly<Record<Filter, string>> = {
+  all: "ui.all",
+  deposit: "ops.filter.deposits",
+  withdrawal: "ops.filter.withdrawals",
+  subscription: "ops.filter.subscriptions",
+  redemption: "ops.filter.redemptions",
+  fee: "ops.filter.fees",
+};
+
+// "No deposits yet" — again a whole sentence per kind rather than `No ${label.toLowerCase()}s`.
+// Lower-casing a translated noun is wrong in German, and the genitive a Russian sentence
+// needs here is not the nominative the filter button shows.
+const FILTER_EMPTY_KEYS: Readonly<Record<Filter, string>> = {
+  all: "ui.noOperations",
+  deposit: "ops.empty.deposits",
+  withdrawal: "ops.empty.withdrawals",
+  subscription: "ops.empty.subscriptions",
+  redemption: "ops.empty.redemptions",
+  fee: "ops.empty.fees",
+};
 
 // The activity timeline (Figma `ios/operations` · `android/operations`, and the desktop
 // "Recent operations" card's `View all`). Every money movement the user made, in one
@@ -88,6 +110,7 @@ const FILTERS: readonly { value: Filter; label: string }[] = [
 // those aggregates, so the panel links to them rather than growing a third copy.
 export function OperationsView() {
   const t = useT();
+  const locale = useLocale();
   const [filter, setFilter] = useState<Filter>("all");
 
   // Both reads are cached and both are shared with Home's activity card, so arriving from
@@ -99,12 +122,12 @@ export function OperationsView() {
 
   const titleOf = useMemo(() => {
     const byService = new Map((catalog ?? []).map((a) => [a.service, a.title]));
-    return (service: string | undefined) => (service ? (byService.get(service) ?? service) : "Fund");
-  }, [catalog]);
+    return (service: string | undefined) => (service ? (byService.get(service) ?? service) : t("dash.fundFallback"));
+  }, [catalog, t]);
 
   const loading = timeline.isLoading;
   const truncated = timeline.data?.truncated ?? false;
-  const error = timeline.data ? null : (timeline.error?.message ?? null);
+  const error = timeline.data ? null : timeline.error ? errorMessage(timeline.error, t) : null;
   const all = timeline.data?.operations ?? [];
   // The filter applies to both bands. Lifting a pending row into "In progress" while the
   // filter still let it through below would leave a "Deposits" view showing a withdrawal.
@@ -115,17 +138,17 @@ export function OperationsView() {
   // the timeline loses no chronology by starting below them.
   const pending = visible.filter(isPending);
   const settled = visible.filter((o) => !isPending(o));
-  const groups = useMemo(() => groupByDay(settled), [settled]);
+  const groups = useMemo(() => groupByDay(settled, t, locale), [settled, t, locale]);
 
   return (
     <Stagger step={SECTION_STAGGER} className="px-4 pb-8 pt-6 lg:px-8">
       <StaggerItem as="header" className="mb-6 space-y-1">
         <p className="font-mono-tech text-xs uppercase tracking-widest text-main-accent-t1">{t("ui.operations")}</p>
         <h1 className="text-2xl font-semibold text-foreground">{t("ui.operations")}</h1>
-        <p className="text-sm text-muted-foreground">Every deposit, withdrawal, subscription and redemption you have made, and every fee a fund has charged — one timeline.</p>
+        <p className="text-sm text-muted-foreground">{t("ops.subtitle")}</p>
       </StaggerItem>
 
-      {error && <ResourceError variant="alert" title="Couldn't load your operations" message={error} className="mb-6" />}
+      {error && <ResourceError variant="alert" title={t("err.opsLoad")} message={error} className="mb-6" />}
 
       {/* The timeline is one section — the filter bar and the table it filters arrive
           together, because a bar that lands before the rows invites a click that has
@@ -149,7 +172,7 @@ export function OperationsView() {
                     <ListChecks />
                   </EmptyMedia>
                   <EmptyTitle>{t("ui.noOperations")}</EmptyTitle>
-                  <EmptyDescription>Add funds to your wallet, then subscribe into a fund — every movement appears here from the moment you make it, not once it settles.</EmptyDescription>
+                  <EmptyDescription>{t("ops.emptyHint")}</EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
                   <Button asChild>
@@ -182,7 +205,7 @@ export function OperationsView() {
               aria-label={t("ops.filterByKind")}
               className="max-w-full overflow-x-auto"
             >
-              {FILTERS.map(({ value, label }) => {
+              {FILTERS.map((value) => {
                 const on = filter === value;
                 return (
                   <Button
@@ -203,7 +226,7 @@ export function OperationsView() {
                       on && "bg-main-accent-t1/10 text-main-accent-t1 hover:bg-main-accent-t1/15 hover:text-main-accent-t1",
                     )}
                   >
-                    {label}
+                    {t(FILTER_LABEL_KEYS[value])}
                   </Button>
                 );
               })}
@@ -217,8 +240,8 @@ export function OperationsView() {
                       <EmptyMedia variant="icon">
                         <ArrowLeftRight />
                       </EmptyMedia>
-                      <EmptyTitle>No {kindMeta(filter).label.toLowerCase()}s yet</EmptyTitle>
-                      <EmptyDescription>You have other activity — switch back to All to see it.</EmptyDescription>
+                      <EmptyTitle>{t(FILTER_EMPTY_KEYS[filter])}</EmptyTitle>
+                      <EmptyDescription>{t("ops.filterEmptyHint")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </CardContent>
@@ -250,7 +273,7 @@ export function OperationsView() {
 
             {/* Says only what is true: the page is capped. There is no statements export to
                 point at yet, and promising one here would be inventing a feature. */}
-            {truncated && <p className="text-xs text-muted-foreground">Showing your most recent operations — older activity isn&apos;t listed here yet.</p>}
+            {truncated && <p className="text-xs text-muted-foreground">{t("ops.truncatedNote")}</p>}
           </div>
         )}
         </Settled>
@@ -286,32 +309,38 @@ function InProgress({ operations, titleOf }: { operations: Operation[]; titleOf:
 }
 
 function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: string | undefined) => string }) {
+  const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const compact = useIsCompact();
   const meta = kindMeta(operation.kind);
   const at = seconds(operation.created_at);
-  const title = rowTitle(operation, titleOf);
+  const title = rowTitle(operation, titleOf, t);
 
   const trigger = (
     <Item asChild size="sm" className="rounded-none px-6 py-3 lg:py-4">
       <button
         type="button"
-        aria-label={`${title} — details`}
+        aria-label={t("ops.a11y.rowDetails", { title })}
         className="w-full cursor-pointer text-left outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ItemMedia>
-          <Badge className={cn("font-semibold", meta.tone)}>{meta.badge}</Badge>
+          {/* i18n-max: 4 — a `shrink-0` badge; anything longer is taken from the title. */}
+          <Badge className={cn("font-semibold", meta.tone)}>{kindBadge(operation.kind, t)}</Badge>
         </ItemMedia>
         <ItemContent className="min-w-0 gap-0.5">
           <ItemTitle className="block w-auto truncate font-semibold">{title}</ItemTitle>
           <ItemDescription className="line-clamp-1 text-xs">
-            {rowSub(operation)}
-            {at > 0 && ` · ${timeLabel(at)}`}
+            {rowSub(operation, t)}
+            {at > 0 && ` · ${timeLabel(at, locale)}`}
           </ItemDescription>
         </ItemContent>
         <ItemActions className="shrink-0 flex-col items-end gap-1">
           <span className={cn("text-sm font-semibold tabular-nums", amountTone(meta.direction))}>{rowAmount(operation)}</span>
-          <Badge className={cn("capitalize", stateTone(operation.state))}>{stateLabel(operation.state)}</Badge>
+          {/* No `capitalize`: the label is now a translated word, not a lowercase wire
+              identifier — and `capitalize` title-cases every word ("Partly Deferred").
+              i18n-max: 12. */}
+          <Badge className={stateTone(operation.state)}>{stateLabel(operation.state, t)}</Badge>
         </ItemActions>
         {/* Every row opens a panel now, so every row carries the same disclosure — not
             only the in-flight ones that used to link out to their managing surface. */}
@@ -369,20 +398,22 @@ function manageHref(kind: string | undefined, state: string | undefined): `/${st
   return null;
 }
 
-function rowTitle(operation: Operation, titleOf: (service: string | undefined) => string): string {
+function rowTitle(operation: Operation, titleOf: (service: string | undefined) => string, t: Translate): string {
   switch (operation.kind) {
     case "deposit":
-      return "Deposit";
+      // The noun, not the button verb — this titles a timeline row. See the note on
+      // `KINDS.deposit` in `views/operations/lib/format.ts`.
+      return t("ops.kind.deposit");
     case "withdrawal":
-      return "Withdrawal";
+      return t("ops.kind.withdrawal");
     case "subscription":
-      return `${titleOf(operation.service)} — subscribed`;
+      return t("dash.op.subscribed", { fund: titleOf(operation.service) });
     case "redemption":
-      return `${titleOf(operation.service)} — redeemed`;
+      return t("dash.op.redeemed", { fund: titleOf(operation.service) });
     case "fee":
-      return `${titleOf(operation.service)} — fee charged`;
+      return t("ops.op.feeCharged", { fund: titleOf(operation.service) });
     default:
-      return kindMeta(operation.kind).label;
+      return kindLabel(operation.kind, t);
   }
 }
 
@@ -392,31 +423,34 @@ function nonZero(amount: string | undefined): boolean {
   return !!amount && Number(amount) > 0;
 }
 
-function rowSub(operation: Operation): string {
+function rowSub(operation: Operation, t: Translate): string {
   switch (operation.kind) {
     case "deposit":
-      return `${networkLabel(operation.network)} · ${operation.tx_ref ? shortAddress(operation.tx_ref) : "USDT"}`;
+      // `USDT` is the ticker, not a word — it is the same mark in every locale.
+      return t("ops.sub.deposit", { network: networkLabel(operation.network), ref: operation.tx_ref ? shortAddress(operation.tx_ref) : "USDT" });
     case "withdrawal": {
       // `shortAddress` already renders an absent address as an em dash — falling back to
       // the network label instead would print the rail twice on the same line.
       const destination = shortAddress(operation.address);
+      const network = networkLabel(operation.network);
       // What actually ships is the net; the row's figure is the gross debited, so the
       // fee is stated rather than left as an unexplained gap between the two.
-      const net = operation.net_amount ? ` · ${formatUsdt(operation.net_amount)} USDT net` : "";
-      return `${networkLabel(operation.network)} · ${destination}${net}`;
+      return operation.net_amount
+        ? t("ops.sub.withdrawalNet", { network, destination, amount: formatUsdt(operation.net_amount) })
+        : t("ops.sub.withdrawal", { network, destination });
     }
     case "subscription":
     case "redemption":
-      return `${formatUnits(operation.units)} units`;
+      return t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: formatUnits(operation.units) });
     case "fee": {
       // The two legs answer the question the amount alone cannot: whether this was rent
       // on the capital or a share of the gain. A zero leg is omitted rather than printed,
       // because "0 performance" reads as a fee that was somehow waived.
       const legs = [
-        nonZero(operation.management) ? `${formatUsdt(operation.management)} management` : null,
-        nonZero(operation.performance) ? `${formatUsdt(operation.performance)} performance` : null,
+        nonZero(operation.management) ? t("ops.sub.managementLeg", { amount: formatUsdt(operation.management) }) : null,
+        nonZero(operation.performance) ? t("ops.sub.performanceLeg", { amount: formatUsdt(operation.performance) }) : null,
       ].filter(Boolean);
-      const taken = `${formatUnits(operation.units)} units`;
+      const taken = t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: formatUnits(operation.units) });
       return legs.length ? `${taken} · ${legs.join(" + ")}` : taken;
     }
     default:
@@ -447,11 +481,11 @@ interface DayGroup {
 
 // The feed arrives newest-first from the hub; this only inserts the day headings, so the
 // runs stay in the order the hub sorted them.
-function groupByDay(operations: Operation[]): DayGroup[] {
+function groupByDay(operations: Operation[], t: Translate, locale: Locale): DayGroup[] {
   const now = new Date();
   const groups: DayGroup[] = [];
   for (const operation of operations) {
-    const label = dayLabel(seconds(operation.created_at), now);
+    const label = dayLabel(seconds(operation.created_at), t, locale, now);
     const last = groups.at(-1);
     if (last?.label === label) last.operations.push(operation);
     else groups.push({ label, operations: [operation] });

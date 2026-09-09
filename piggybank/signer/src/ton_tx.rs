@@ -20,6 +20,7 @@
 //! (`seqno == 0`) the StateInit is attached so it self-deploys.
 
 use base64::{Engine, engine::general_purpose::STANDARD};
+#[cfg(test)]
 use ed25519_dalek::{Signer, SigningKey};
 use num_bigint::BigUint;
 use tonlib_core::{
@@ -29,6 +30,8 @@ use tonlib_core::{
 	wallet::{mnemonic::KeyPair, ton_wallet::TonWallet, version_helper::VersionHelper, wallet_version::WalletVersion},
 };
 
+use crate::backend::ChainSignature;
+#[cfg(test)]
 use crate::key_vault::ed25519_pubkey;
 
 /// A signed TON external message, ready to POST to toncenter `/message`.
@@ -82,10 +85,24 @@ pub enum TonTxError {
 	Amount,
 	#[error("cell build/serialize failed: {0}")]
 	Cell(String),
+	#[error("a TON external message needs an Ed25519 signature")]
+	WrongSignatureKind,
 }
 
-/// Build + sign a TEP-74 jetton transfer external message.
-pub fn build_jetton_transfer(seed: &[u8; 32], t: &JettonTransfer) -> Result<SignedTonTx, TonTxError> {
+/// A built-but-unsigned TON external message: the v4R2 wallet the message is sent FROM (its
+/// StateInit is what a first send attaches) and the signing-body cell whose representation
+/// hash the signature covers.
+pub struct UnsignedTonTx {
+	wallet: TonWallet,
+	body: Cell,
+	seqno: u64,
+	valid_until: u32,
+}
+
+/// Build a TEP-74 jetton transfer external message and return the 32-byte cell hash to sign.
+/// `public_key` is the sending wallet's Ed25519 key: the v4R2 address (and therefore the
+/// StateInit a first send attaches) is derived from it, so it must be the key that signs.
+pub fn build_unsigned_jetton(public_key: &[u8; 32], t: &JettonTransfer) -> Result<(UnsignedTonTx, [u8; 32]), TonTxError> {
 	let our_jetton_wallet = parse_address(t.our_jetton_wallet, "our_jetton_wallet")?;
 	let to_owner = parse_address(t.to_owner, "to_address")?;
 	let response_destination = parse_address(t.response_destination, "response_destination")?;
@@ -102,44 +119,78 @@ pub fn build_jetton_transfer(seed: &[u8; 32], t: &JettonTransfer) -> Result<Sign
 	// The internal message to OUR jetton wallet (bounceable: a failed transfer should
 	// bounce the value back to us, not vanish).
 	let internal = internal_message(&our_jetton_wallet, t.msg_value as u128, true, body)?;
-	sign_external(seed, internal, t.seqno, t.valid_until)
+	build_external(public_key, internal, t.seqno, t.valid_until)
 }
 
-/// Build + sign a plain Toncoin value transfer external message (gas top-up).
-pub fn build_native_transfer(seed: &[u8; 32], t: &NativeTransfer) -> Result<SignedTonTx, TonTxError> {
+/// Build a plain Toncoin value transfer external message (gas top-up) and return the 32-byte
+/// cell hash to sign.
+pub fn build_unsigned_native(public_key: &[u8; 32], t: &NativeTransfer) -> Result<(UnsignedTonTx, [u8; 32]), TonTxError> {
 	let to = parse_address(t.to_address, "to_address")?;
 	// Non-bounceable: the recipient wallet may not be deployed yet (it self-deploys on its
 	// own first send), so a bounceable top-up would bounce the gas straight back.
 	let internal = internal_message(&to, t.amount, false, EMPTY_ARC_CELL.as_ref().clone())?;
-	sign_external(seed, internal, t.seqno, t.valid_until)
+	build_external(public_key, internal, t.seqno, t.valid_until)
 }
 
-/// Wrap an internal message in a v4R2 external message, Ed25519-sign the signing-body
-/// cell hash with the vault seed, and serialize to a base64 BoC. `seqno == 0` attaches
-/// the StateInit so the sending wallet self-deploys on its first send.
-fn sign_external(seed: &[u8; 32], internal: Cell, seqno: u64, valid_until: u32) -> Result<SignedTonTx, TonTxError> {
-	let pubkey = ed25519_pubkey(seed);
-	// The secret half is held back from tonlib-core — we sign the cell hash ourselves with
-	// ed25519-dalek below; only the public key is needed (for address/StateInit derivation).
+/// Wrap an internal message in a v4R2 external message and return the representation hash of
+/// its signing body — the digest the wallet contract itself checks the Ed25519 signature over.
+fn build_external(public_key: &[u8; 32], internal: Cell, seqno: u64, valid_until: u32) -> Result<(UnsignedTonTx, [u8; 32]), TonTxError> {
+	// tonlib-core only ever sees the public half — the signature comes from the key backend,
+	// which for a remote custodian never releases a secret key at all. Only the public key
+	// participates in address/StateInit derivation.
 	let key_pair = KeyPair {
-		public_key: pubkey.to_vec(),
+		public_key: public_key.to_vec(),
 		secret_key: Vec::new(),
 	};
 	let wallet = TonWallet::new(WalletVersion::V4R2, key_pair).map_err(cell_err)?;
 
 	let body = wallet.create_external_body(valid_until, seqno as u32, [internal.to_arc()]).map_err(cell_err)?;
-	let hash = body.cell_hash();
-	let signature = SigningKey::from_bytes(seed).sign(hash.as_slice()).to_bytes();
-	let signed_body = VersionHelper::sign_msg(WalletVersion::V4R2, &body, &signature).map_err(cell_err)?;
-	let external = wallet.wrap_signed_body(signed_body, seqno == 0).map_err(|e| TonTxError::Cell(e.to_string()))?;
+	let digest: [u8; 32] = body
+		.cell_hash()
+		.as_slice()
+		.try_into()
+		.map_err(|_| TonTxError::Cell("signing-body cell hash is not 32 bytes".to_owned()))?;
+	Ok((UnsignedTonTx { wallet, body, seqno, valid_until }, digest))
+}
+
+/// Finish the external message with an Ed25519 signature over the signing body's cell hash,
+/// and serialize to a base64 BoC. `seqno == 0` attaches the StateInit so the sending wallet
+/// self-deploys on its first send.
+pub fn assemble(parts: UnsignedTonTx, signature: &ChainSignature) -> Result<SignedTonTx, TonTxError> {
+	let ChainSignature::Ed25519(signature) = signature else {
+		return Err(TonTxError::WrongSignatureKind);
+	};
+	let signed_body = VersionHelper::sign_msg(WalletVersion::V4R2, &parts.body, signature).map_err(cell_err)?;
+	let external = parts.wallet.wrap_signed_body(signed_body, parts.seqno == 0).map_err(|e| TonTxError::Cell(e.to_string()))?;
 
 	let boc = BagOfCells::from_root(external.clone()).serialize(true).map_err(cell_err)?;
 	Ok(SignedTonTx {
 		signed_boc: STANDARD.encode(boc),
 		msg_hash: external.cell_hash().to_hex(),
-		seqno,
-		valid_until,
+		seqno: parts.seqno,
+		valid_until: parts.valid_until,
 	})
+}
+
+/// The pre-seam one-shot paths, kept for the tests below ONLY — production signs through
+/// [`crate::backend::KeyBackend`]. They run the exact production pieces
+/// (`build_unsigned_*` → the backend's signing core → `assemble`), so the determinism and
+/// signature-verifies vectors keep proving the split unchanged.
+#[cfg(test)]
+fn build_jetton_transfer(seed: &[u8; 32], t: &JettonTransfer) -> Result<SignedTonTx, TonTxError> {
+	let (parts, digest) = build_unsigned_jetton(&ed25519_pubkey(seed), t)?;
+	assemble(parts, &test_sign(seed, &digest))
+}
+
+#[cfg(test)]
+fn build_native_transfer(seed: &[u8; 32], t: &NativeTransfer) -> Result<SignedTonTx, TonTxError> {
+	let (parts, digest) = build_unsigned_native(&ed25519_pubkey(seed), t)?;
+	assemble(parts, &test_sign(seed, &digest))
+}
+
+#[cfg(test)]
+fn test_sign(seed: &[u8; 32], digest: &[u8; 32]) -> ChainSignature {
+	crate::backend::sign_with_secret(crate::backend::Curve::Ed25519, seed, digest).expect("the test seed signs")
 }
 
 /// A bounce-configurable internal message carrying `body`, addressed to `dest` with

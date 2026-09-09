@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeftRight, LineChart, PieChart, TrendingDown, TrendingUp } from "lucide-react";
+import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type CSSProperties, Fragment, useState } from "react";
@@ -16,14 +17,23 @@ import { useResource } from "@/shared/lib/resource";
 import { AnimatedNumber, SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
 import { DASH_ADDRESS, formatPct, formatSignedUsd, formatUsd, num, shortAddress } from "@/views/dashboard/lib/format";
-import { amountTone, kindMeta, networkLabel } from "@/views/operations/lib/format";
+import { amountTone, kindBadge, kindLabel, kindMeta, networkLabel, stateLabel } from "@/views/operations/lib/format";
 
 // The card is a preview, not the record — `/operations` holds the full timeline. Asked
 // of the hub rather than sliced client-side, so the six shown are the six most recent
 // across all four kinds, not the newest six of whatever happened to be fetched. The count
 // lives with the resource because the shell's warm-up has to ask for the same one.
 
-const RANGES = ["1M", "6M", "1Y", "All"] as const;
+// The four ranges. `1M`/`6M`/`1Y` are near-universal abbreviations but still travel as
+// keys — a locale that spells its months differently should be able to say so.
+// i18n-max: 4 — four equal columns of a grid segmented control on mobile.
+const RANGES = ["1m", "6m", "1y", "all"] as const;
+const RANGE_LABEL_KEYS: Readonly<Record<(typeof RANGES)[number], string>> = {
+  "1m": "dash.range.1m",
+  "6m": "dash.range.6m",
+  "1y": "dash.range.1y",
+  all: "dash.range.all",
+};
 
 // Allocation slices cycle the brand accent tiers. The bar names its tier twice because
 // Progress paints track and indicator from `--primary`, and the child selector is the only
@@ -74,12 +84,12 @@ export function DashboardView() {
   const walletLoading = wallet.isLoading;
   const posLoading = positions.isLoading;
 
-  const allocations = pos.map((p, i) => ({ name: p.service ?? "Fund", value: num(p.value), accent: ACCENTS[i % ACCENTS.length]! }));
+  const allocations = pos.map((p, i) => ({ name: p.service ?? t("dash.fundFallback"), value: num(p.value), accent: ACCENTS[i % ACCENTS.length]! }));
   const allocTotal = allocations.reduce((s, a) => s + a.value, 0) || 1;
 
-  const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : "Fund");
+  const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : t("dash.fundFallback"));
   // The hub honours `limit`, so the slice is only a shape guarantee for the card.
-  const ops = (operations.data?.operations ?? []).slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf));
+  const ops = (operations.data?.operations ?? []).slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf, t));
 
   return (
     // One DOM order, two layouts. Mobile stacks in reading order (hero → figures →
@@ -194,7 +204,7 @@ export function DashboardView() {
 // plot is boxed — with its legend above. From `lg` the whole block is the desktop card again.
 function PerfCard({ value, loading, allTimePct, className }: { value: string | undefined; loading: boolean; allTimePct: number | null; className?: string }) {
   const t = useT();
-  const [range, setRange] = useState<(typeof RANGES)[number]>("All");
+  const [range, setRange] = useState<(typeof RANGES)[number]>("all");
   const down = (allTimePct ?? 0) < 0;
   return (
     // From `xl` the hero spans both rows of the side column, so it has to fill that
@@ -216,7 +226,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
             {allTimePct !== null && (
               <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-destructive/40 text-destructive" : "border-main-accent-t3/40 text-main-accent-t3")}>
                 {down ? <TrendingDown /> : <TrendingUp />}
-                {formatPct(allTimePct)} all-time
+                {t("dash.allTimeSuffix", { pct: formatPct(allTimePct) })}
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
               </Badge>
             )}
@@ -235,7 +245,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
                 r === range ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "font-medium text-muted-foreground hover:text-foreground",
               )}
             >
-              {r}
+              {t(RANGE_LABEL_KEYS[r])}
             </button>
           ))}
         </div>
@@ -310,12 +320,10 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
     <StaggerItem as={Card} className={cn("gap-3.5 py-4 lg:gap-4 lg:py-5", className)}>
       <CardHeader className={CARD_PAD}>
         <CardTitle className="flex items-center gap-1.5">
-          Invested · what I own
+          {t("dash.investedWhatIOwn")}
           <TipAnchor anchor="dashboard.invested.allocation" />
         </CardTitle>
-        <CardAction className="text-xs font-medium tabular-nums text-muted-foreground">
-          {allocations.length} {allocations.length === 1 ? "strategy" : "strategies"}
-        </CardAction>
+        <CardAction className="text-xs font-medium tabular-nums text-muted-foreground">{t("dash.strategyCount", { n: allocations.length })}</CardAction>
       </CardHeader>
       <CardContent className={CARD_PAD}>
         <Settled loading={loading} skeleton={<Skeleton className="h-24 w-full" />}>
@@ -393,33 +401,35 @@ interface Op {
 // cent with a currency symbol) rather than the ledger policy the Operations page uses —
 // same data, different unit of measure for the surface it sits on. The badge, tone and
 // sign vocabulary is shared with `/operations` so a row reads identically in both places.
-function toOp(operation: Operation, index: number, titleOf: (service: string | undefined) => string): Op {
+function toOp(operation: Operation, index: number, titleOf: (service: string | undefined) => string, t: Translate): Op {
   const meta = kindMeta(operation.kind);
   const sign = meta.direction === "in" ? "+" : meta.direction === "out" ? "\u2212" : "";
   return {
     id: `${operation.kind ?? ""}-${operation.id ?? ""}-${index}`,
-    tag: meta.badge,
+    tag: kindBadge(operation.kind, t),
     tagClass: meta.tone,
-    title: opTitle(operation, meta.label, titleOf),
-    sub: opSub(operation),
+    title: opTitle(operation, titleOf, t),
+    sub: opSub(operation, t),
     // A queued redemption is not yet priced, so it shows the units it reserved — a
     // formatted zero would claim the user was paid nothing.
-    amount: operation.amount ? `${sign}${formatUsd(operation.amount)}` : `${operation.units ?? "0"} units`,
+    amount: operation.amount ? `${sign}${formatUsd(operation.amount)}` : t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: operation.units ?? "0" }),
     amountClass: operation.amount ? amountTone(meta.direction) : "text-muted-foreground",
   };
 }
 
-function opTitle(operation: Operation, fallback: string, titleOf: (service: string | undefined) => string): string {
-  if (operation.kind === "subscription") return `${titleOf(operation.service)} \u2014 subscribed`;
-  if (operation.kind === "redemption") return `${titleOf(operation.service)} \u2014 redeemed`;
-  if (operation.kind === "withdrawal") return `Withdrawal \u00b7 ${networkLabel(operation.network)}`;
-  if (operation.kind === "deposit") return `Deposit \u00b7 ${networkLabel(operation.network)}`;
-  return fallback;
+function opTitle(operation: Operation, titleOf: (service: string | undefined) => string, t: Translate): string {
+  if (operation.kind === "subscription") return t("dash.op.subscribed", { fund: titleOf(operation.service) });
+  if (operation.kind === "redemption") return t("dash.op.redeemed", { fund: titleOf(operation.service) });
+  if (operation.kind === "withdrawal") return t("dash.op.withdrawal", { network: networkLabel(operation.network) });
+  if (operation.kind === "deposit") return t("dash.op.deposit", { network: networkLabel(operation.network) });
+  return kindLabel(operation.kind, t);
 }
 
-function opSub(operation: Operation): string {
-  const state = operation.state ?? "";
-  if (operation.kind === "withdrawal") return `${shortAddress(operation.address, DASH_ADDRESS)} \u00b7 ${state}`;
-  if (operation.kind === "deposit") return `${shortAddress(operation.tx_ref, DASH_ADDRESS)} \u00b7 ${state}`;
+function opSub(operation: Operation, t: Translate): string {
+  // The lifecycle state reaches the reader through the same vocabulary the operations
+  // timeline uses \u2014 it used to be the bare wire identifier, English by construction.
+  const state = stateLabel(operation.state, t);
+  if (operation.kind === "withdrawal") return t("dash.op.sub", { ref: shortAddress(operation.address, DASH_ADDRESS), state });
+  if (operation.kind === "deposit") return t("dash.op.sub", { ref: shortAddress(operation.tx_ref, DASH_ADDRESS), state });
   return state;
 }

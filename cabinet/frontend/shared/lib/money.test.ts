@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compactUnits, fractionOfCap } from "./money.ts";
+import { compactUnits, formatExactUsdt, formatUsdt, fractionOfCap } from "./money.ts";
 
 // The sizes this feature actually runs at: a hundred-million-unit cap is 1e26 base units,
 // past the 2^53 integer precision of a double. `Number(issued) / Number(cap)` is the
@@ -44,4 +44,28 @@ test("unit counts compact only once they stop being readable", () => {
   assert.equal(compactUnits("940000"), "940K");
   assert.equal(compactUnits("100000000"), "100M");
   assert.equal(compactUnits("21000000"), "21M");
+});
+
+test("an exact wire decimal is shown to the digit, never through a float", () => {
+  // The approval screens bind `payload_hash` to this exact string, so a rounded render is
+  // an approval of something the hash does not cover (docs/CONSILIUM.md, policy 12).
+  // `formatUsdt` caps at 6 dp and parses through `Number`; both lose these.
+  assert.equal(formatExactUsdt("1000.0000005"), "1,000.0000005");
+  assert.equal(formatExactUsdt("0.000000000000000001"), "0.000000000000000001");
+  assert.equal(formatExactUsdt("123456789012345678901234567890.5"), "123,456,789,012,345,678,901,234,567,890.50");
+  assert.notEqual(formatUsdt("1000.0000005"), formatExactUsdt("1000.0000005"));
+});
+
+test("exact formatting still shows the cents every money figure here shows", () => {
+  assert.equal(formatExactUsdt("1234"), "1,234.00");
+  assert.equal(formatExactUsdt("1234.5"), "1,234.50");
+  assert.equal(formatExactUsdt("-5.25"), "\u22125.25");
+});
+
+test("a value that is not a plain decimal is passed through, not coerced to zero", () => {
+  // Showing an unrecognised value verbatim is honest; showing "0.00" for it is not — and
+  // on an approval screen a fabricated zero is the worst possible failure.
+  assert.equal(formatExactUsdt("abc"), "abc");
+  assert.equal(formatExactUsdt(""), "\u2014");
+  assert.equal(formatExactUsdt(undefined), "\u2014");
 });

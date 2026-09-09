@@ -41,11 +41,24 @@ const nextConfig: NextConfig = {
   // it for `assetPrefix` keeps `/_next/*` isolated under /cabinet (so the
   // conductor's beforeFiles rewrite is untouched) while letting the route tree
   // own the whole public path. Measured both ways in docs/i18n-cabinet-routing-spike.md.
-  // Lets a Server Component read the root layout's `[locale]` segment. Load-bearing:
-  // `currentLocale()` is called from components Next hands no props, and threading
-  // `params` through nineteen routes to reach them is the cost the old locale cookie
-  // existed to avoid.
-  experimental: { rootParams: true },
+  experimental: {
+    // Lets a Server Component read the root layout's `[locale]` segment. Load-bearing:
+    // `currentLocale()` is called from components Next hands no props, and threading
+    // `params` through nineteen routes to reach them is the cost the old locale cookie
+    // existed to avoid.
+    rootParams: true,
+    // The `forbidden.tsx` / `unauthorized.tsx` file conventions. Required, not
+    // cosmetic: without it next-app-loader never resolves either file, so
+    // `forbidden.tsx` sat in the tree doing nothing and a `forbidden()` /
+    // `unauthorized()` call fell through to the 500 boundary.
+    authInterrupts: true,
+    // Enables `app/global-not-found.tsx` — the 404 for URLs that matched no route
+    // at all. Required for the same reason: the root layout is
+    // `app/[locale]/layout.tsx`, so a URL that resolved no `[locale]` (a bad locale
+    // segment, a path outside the zone) has no layout to render a nested
+    // `not-found.tsx` inside, and Next serves its built-in black 404 instead.
+    globalNotFound: true,
+  },
   assetPrefix: BASE_PATH,
   async rewrites() {
     // Explicit /cabinet now that basePath no longer prefixes this for us. Getting
@@ -79,7 +92,24 @@ const nextConfig: NextConfig = {
         value: "max-age=63072000; includeSubDomains; preload",
       });
     }
-    return [{ source: "/:path*", headers }];
+    // The two token approval pages need `no-referrer`, not the site-wide
+    // `strict-origin-when-cross-origin`: their URL contains a single-use approval
+    // credential, and the default still sends the whole URL to same-origin destinations
+    // (docs/CONSILIUM.md, policy 6). `proxy.ts` sets the same header per-request; stating
+    // it here as well makes the outcome deterministic rather than depending on which of
+    // the two writers Next lets win. A more specific `source` is listed first so it is not
+    // shadowed by the catch-all below.
+    //
+    // `:locale` matches the one segment, so this covers `/en/cabinet/approve/<token>` and
+    // its four siblings without matching anything deeper.
+    const tokenPageHeaders = headers
+      .filter((h) => h.key !== "Referrer-Policy")
+      .concat({ key: "Referrer-Policy", value: "no-referrer" });
+    return [
+      { source: "/:locale/cabinet/approve/:token", headers: tokenPageHeaders },
+      { source: "/:locale/cabinet/owner-removal/:token", headers: tokenPageHeaders },
+      { source: "/:path*", headers },
+    ];
   },
 };
 

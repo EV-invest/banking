@@ -1,23 +1,31 @@
+import { translator } from "@evinvest/i18n";
+
 import { Link } from "@/shared/ui/cabinet-link";
 
 import { Logo } from "@/application/layout/logo";
+import { messagesFor } from "@/shared/config/i18n";
+import { currentLocale } from "@/shared/config/locale";
 
-export function LoggedOutView() {
+// A true server component, so `useT()` is unavailable: the locale comes from the URL via
+// `currentLocale()` and the catalogue is bound here, as in `views/status`.
+export async function LoggedOutView() {
+  const locale = await currentLocale();
+  const t = translator(messagesFor(locale), locale);
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-6 rounded-xl border border-border bg-card p-8 text-center">
         <Logo className="mx-auto h-8 w-auto text-main-mist" />
 
         <div className="space-y-1">
-          <h1 className="text-2xl">Signed out</h1>
-          <p className="text-sm text-muted-foreground">You&apos;ve been signed out of your cabinet.</p>
+          <h1 className="text-2xl">{t("auth.signedOut")}</h1>
+          <p className="text-sm text-muted-foreground">{t("auth.signedOutSub")}</p>
         </div>
 
         <Link
           href="/login"
           className="flex w-full items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
         >
-          Sign in again
+          {t("auth.signInAgain")}
         </Link>
       </div>
     </div>

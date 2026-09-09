@@ -473,11 +473,7 @@ impl Custody for TonCustody {
 		let Some(utime) = self.rpc.transaction_utime(tx_hash).await.map_err(read_err)? else {
 			return Ok(None);
 		};
-		let page = self
-			.rpc
-			.incoming_jetton_transfers(&owner, &self.usdt_master, utime, VERIFY_PAGE_LIMIT)
-			.await
-			.map_err(read_err)?;
+		let page = self.rpc.incoming_jetton_transfers(&owner, &self.usdt_master, utime, VERIFY_PAGE_LIMIT).await.map_err(read_err)?;
 		let Some(transfer) = page.transfers.iter().find(|t| t.tx_hash == tx_hash) else {
 			return Ok(None);
 		};

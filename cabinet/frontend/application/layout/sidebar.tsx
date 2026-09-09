@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowUpFromLine, Bell, Boxes, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowUpFromLine, Bell, Boxes, Gavel, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type ReactNode, useState } from "react";
@@ -62,6 +62,11 @@ const ADMIN: NavItem[] = [
   // Sits next to Treasury, not to Withdrawals: the question it answers is "what did the
   // fund earn", which belongs with the chart of accounts rather than with the user queue.
   { href: "/admin/revenue", label: "Fund revenue", key: "nav.revenue", icon: PiggyBank, active: (p) => p.startsWith("/admin/revenue") },
+  // Directly under Fund revenue, because the consilium is what authorizes money leaving it
+  // — the page and the balance it governs read as one thought. Shown to every operator
+  // session like its neighbours; only owners have a room to be in, and the BFF answers 403
+  // to anyone else (the page renders that as its own state, not as an error).
+  { href: "/consilium", label: "Consilium", key: "nav.consilium", icon: Gavel, active: (p) => p.startsWith("/consilium") },
   { href: "/admin/allocations", label: "Allocations", key: "nav.allocations", icon: Boxes, active: (p) => p.startsWith("/admin/allocations") },
   { href: "/admin/valuation", label: "Valuation & redemptions", key: "nav.valuation", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
   // After Allocations, because a fee is a property OF a product: you register the fund
@@ -86,6 +91,7 @@ const NAV_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring foc
 export function Sidebar() {
   // Zone-relative, so the `active` predicates below can stay written in the paths
   // the app reasons in rather than the ones the browser shows.
+  const t = useT();
   const pathname = useCabinetPathname();
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
@@ -116,14 +122,14 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-4.5 pb-5 pt-6">
-      <nav aria-label="Primary" className="flex flex-col gap-4.5">
-        <Group label="Fund">
+      <nav aria-label={t("nav.a11y.primary")} className="flex flex-col gap-4.5">
+        <Group label={t("nav.group.fund")}>
           {FUND.map((item) => (
             <NavLink key={item.label} item={item} active={item.active(pathname)} section="fund" appear={crossed} />
           ))}
         </Group>
         {products.length > 0 && (
-          <Group label="Products">
+          <Group label={t("invest.products")}>
             {products.map((p, i) => {
               // Every row pointed at `/invest`, so naming a product in the rail took you to
               // the list of all of them. The product's own page is keyed by its service id.
@@ -155,7 +161,7 @@ export function Sidebar() {
           </Group>
         )}
         {isAdmin && (
-          <Group label="Administer">
+          <Group label={t("admin.eyebrow.administer")}>
             {ADMIN.map((item) => (
               <NavLink key={item.label} item={item} active={item.active(pathname)} section="administer" appear={crossed} />
             ))}
@@ -165,7 +171,7 @@ export function Sidebar() {
 
       <div className="flex-1" />
 
-      <nav aria-label="Secondary" className="flex flex-col gap-1">
+      <nav aria-label={t("nav.a11y.secondary")} className="flex flex-col gap-1">
         <NavLink
           item={{ href: "/notifications", label: "Notifications", key: "nav.notifications", icon: Bell, active: (p) => p.startsWith("/notifications") }}
           active={pathname.startsWith("/notifications")}
@@ -273,18 +279,32 @@ function NavLink({ item, active, section, appear, trailing }: { item: NavItem; a
       )}
     >
       {active && <ActivePill section={section} appear={appear} />}
-      <Icon className="size-4.5" />
-      <span className="flex-1">{t(item.key)}</span>
+      <Icon className="size-4.5 shrink-0" />
+      {/* `min-w-0` for the same reason as the mobile tab bar: without it the
+          label refuses to shrink below its own text, and the rail widens to fit
+          the longest translation instead of the label truncating inside it —
+          German "Benachrichtigungen" and "Bewertung & Rücknahmen" are both wider
+          than the rail. `title` keeps the full label reachable. */}
+      <span className="min-w-0 flex-1 truncate" title={t(item.key)}>
+        {t(item.key)}
+      </span>
       {trailing}
     </Link>
   );
 }
 
 // Capped at 99+ so a long-neglected inbox cannot widen the rail.
+//
+// The label and the text deliberately disagree past 99: the pill shows "99+" because the
+// rail has no room for more, while the accessible name carries the real number, which is
+// the one piece of information the cap throws away. The label was `${count} unread` — an
+// English plural assembled by concatenation, hidden where nothing renders it, so every
+// locale announced it in English.
 function UnreadPill({ count, active }: { count: number; active: boolean }) {
+  const t = useT();
   return (
     <span
-      aria-label={`${count} unread`}
+      aria-label={t("notif.unreadCount", { n: count })}
       className={cn(
         "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
         active ? "bg-main-black text-foreground" : "bg-main-accent-t1/15 text-main-accent-t1",

@@ -70,6 +70,10 @@ message UserProfile {
   // here — the fields exist for cross-plane wire parity.
   uint32 kyc_level = 16;
   string role = 17;
+  // True when `role` above came from concierge's OWNER_SUBJECTS emergency allowlist
+  // rather than from `users.role`. Carried here only for wire parity — the money plane
+  // has no allowlist of its own and never sets it.
+  bool role_is_break_glass = 18;
 }
 
 // The caller's editable profile, full-replace. Same 10 fields as the editable part of

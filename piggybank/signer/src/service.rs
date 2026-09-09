@@ -1,10 +1,13 @@
 //! The gRPC driving adapter — the thin hub↔signer seam.
 //!
-//! It validates the wire request, unseals the relevant key transiently, and delegates the
-//! key handling to the modules below it ([`provision`], [`evm_tx`], [`key_vault`]). A
-//! plaintext key never leaves a handler. `Result<_, Status>` is tonic's mandated handler
-//! signature and `Status` is a large type we don't control.
+//! It validates the wire request, builds the unsigned transaction, asks the key backend for
+//! a signature over that transaction's digest, and assembles the result. A key — plaintext
+//! or otherwise — never reaches a handler: [`backend`] is the only module that knows where
+//! one lives. `Result<_, Status>` is tonic's mandated handler signature and `Status` is a
+//! large type we don't control.
 #![allow(clippy::result_large_err)]
+
+use std::sync::Arc;
 
 use domain::money::Network;
 use evbanking_contracts::signer::v1::{
@@ -15,24 +18,48 @@ use evbanking_contracts::signer::v1::{
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{evm_tx, kek_guard::short_fp, key_vault::Vault, policy::SignerPolicy, provision, secrets::WalletSecrets, ton_tx, tron_tx};
+use crate::{
+	backend::{Curve, KeyBackend, KeyHandle, LocalVault},
+	evm_tx,
+	kek_guard::short_fp,
+	key_vault::Vault,
+	policy::SignerPolicy,
+	provision,
+	secrets::WalletSecrets,
+	ton_tx, tron_tx,
+};
 
 /// The reserved wallet id for the treasury hot wallet. Real user ids are random v4 UUIDs
 /// (never nil), so the treasury shares the `(user_id, network)` store without a schema
 /// change. A withdrawal sends from here; a sweep sends INTO here from user addresses.
 const TREASURY_WALLET: Uuid = Uuid::nil();
 
-/// The signer service: the loaded [`Vault`] (holding the KEK), the `wallet_secrets` store,
+/// The signer service: the key [`backend`](crate::backend) every signature goes through, the
+/// loaded [`Vault`] and `wallet_secrets` store the KEK-epoch diagnostics still read directly,
 /// and the independent spend [`SignerPolicy`] (the second gate — cap/allowlist).
 pub struct Signer {
-	vault: Vault,
+	backend: Arc<dyn KeyBackend>,
+	vault: Arc<Vault>,
 	secrets: WalletSecrets,
 	policy: SignerPolicy,
 }
 
 impl Signer {
+	/// The local-vault signer: keys sealed under the KEK in this process. What the signer has
+	/// always been, and what `KEY_BACKEND=local` composes.
 	pub fn new(vault: Vault, secrets: WalletSecrets, policy: SignerPolicy) -> Self {
-		Self { vault, secrets, policy }
+		let vault = Arc::new(vault);
+		let backend = Arc::new(LocalVault::new(Arc::clone(&vault), secrets.clone()));
+		Self { backend, vault, secrets, policy }
+	}
+
+	/// The same signer over an explicitly chosen key backend — the composition root's seam.
+	///
+	/// The [`Vault`] is still required and still real: the KEK-epoch diagnostics
+	/// (`GetKeyHealth`, `RotateAddress`) read it directly for the `backend='local'` rows that
+	/// exist regardless of which backend mints NEW keys. Phase 5 is what removes it.
+	pub fn with_backend(backend: Arc<dyn KeyBackend>, vault: Arc<Vault>, secrets: WalletSecrets, policy: SignerPolicy) -> Self {
+		Self { backend, vault, secrets, policy }
 	}
 
 	/// Apply the spend policy to a USDT transfer signed FROM the treasury (the drain vector).
@@ -65,26 +92,14 @@ impl Signer {
 		}
 	}
 
-	/// Transiently unseal a sending wallet's 32-byte signing secret — a secp256k1 key
-	/// (EVM/Tron) or a TON ed25519 seed — into a `Zeroizing` buffer (wiped on drop). The
-	/// plaintext exists only for the duration of one signing call and never leaves this process.
-	async fn unseal(&self, wallet_id: Uuid, network: Network) -> Result<zeroize::Zeroizing<[u8; 32]>, Status> {
-		let sealed = self
-			.secrets
-			.find_sealed(wallet_id, network)
-			.await?
-			.ok_or_else(|| Status::failed_precondition("sending wallet is not provisioned"))?;
-		let opened = self.vault.open(provision::chain_of(network), &sealed.id.to_string(), &sealed.sealed_key).map_err(|err| {
-			// ERROR, not WARN: an unopenable key at sign time means funds are already
-			// stranded on its address (the KEK-epoch bug class). GetKeyHealth lists it;
-			// RotateAddress restores the user's ability to receive future deposits.
-			tracing::error!(error = %err, %wallet_id, %network, "could not unseal the signing key — PROVABLY DEAD KEY, funds on its address cannot move");
-			Status::internal("could not unseal the signing key")
-		})?;
-		Ok(zeroize::Zeroizing::new(<[u8; 32]>::try_from(opened.as_slice()).map_err(|_| {
-			tracing::warn!(len = opened.len(), %wallet_id, %network, "stored key is not 32 bytes");
-			Status::internal("stored key is not 32 bytes")
-		})?))
+	/// The sending wallet's Ed25519 public key — the TON builders derive the v4R2 wallet
+	/// (and its StateInit) from it, so it must be the key that will sign.
+	async fn ton_public_key(&self, handle: KeyHandle) -> Result<[u8; 32], Status> {
+		let stored = self.backend.public_key(handle).await?;
+		<[u8; 32]>::try_from(stored.as_slice()).map_err(|_| {
+			tracing::warn!(len = stored.len(), wallet_id = %handle.wallet_id, "stored TON public key is not 32 bytes");
+			Status::internal("signing failed")
+		})
 	}
 }
 
@@ -96,7 +111,7 @@ impl SignerService for Signer {
 		let network = Network::parse(&req.network).map_err(|_| Status::invalid_argument(format!("unknown network: {}", req.network)))?;
 		// The kind tag makes the signer fail closed: it never claims a placeholder is a
 		// fundable address — it labels it, and the hub refuses to serve it as one.
-		let provisioned = provision::provision(&self.vault, &self.secrets, user_id, network).await?;
+		let provisioned = self.backend.provision(user_id, network).await?;
 		Ok(Response::new(ProvisionAddressResponse {
 			address: provisioned.address,
 			address_kind: provisioned.kind.to_owned(),
@@ -113,21 +128,18 @@ impl SignerService for Signer {
 		let gas_price: u128 = req.gas_price.parse().map_err(|_| Status::invalid_argument("gas_price must be a u128 decimal"))?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
-		let secret = self.unseal(wallet_id, network).await?;
 		let data = evm_tx::erc20_transfer_calldata(&to, amount);
-		let signed = evm_tx::sign_legacy_tx(
-			&secret,
-			&evm_tx::LegacyTx {
-				chain_id: req.chain_id,
-				nonce: req.nonce,
-				gas_price,
-				gas_limit: req.gas_limit,
-				to: token,
-				value: 0,
-				data: &data,
-			},
-		)
-		.map_err(sign_status("erc20 transfer"))?;
+		let (parts, digest) = evm_tx::build_unsigned(&evm_tx::LegacyTx {
+			chain_id: req.chain_id,
+			nonce: req.nonce,
+			gas_price,
+			gas_limit: req.gas_limit,
+			to: token,
+			value: 0,
+			data: &data,
+		});
+		let signature = self.backend.sign_digest(KeyHandle { wallet_id, network }, Curve::Secp256k1, &digest).await?;
+		let signed = evm_tx::assemble(parts, &signature).map_err(sign_status("erc20 transfer"))?;
 
 		Ok(Response::new(SignErc20TransferResponse {
 			raw_tx: format!("0x{}", hex::encode(&signed.raw)),
@@ -144,21 +156,18 @@ impl SignerService for Signer {
 		let gas_price: u128 = req.gas_price.parse().map_err(|_| Status::invalid_argument("gas_price must be a u128 decimal"))?;
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
-		let secret = self.unseal(wallet_id, network).await?;
 		// A native transfer carries the value directly and no calldata.
-		let signed = evm_tx::sign_legacy_tx(
-			&secret,
-			&evm_tx::LegacyTx {
-				chain_id: req.chain_id,
-				nonce: req.nonce,
-				gas_price,
-				gas_limit: req.gas_limit,
-				to,
-				value: amount,
-				data: &[],
-			},
-		)
-		.map_err(sign_status("native transfer"))?;
+		let (parts, digest) = evm_tx::build_unsigned(&evm_tx::LegacyTx {
+			chain_id: req.chain_id,
+			nonce: req.nonce,
+			gas_price,
+			gas_limit: req.gas_limit,
+			to,
+			value: amount,
+			data: &[],
+		});
+		let signature = self.backend.sign_digest(KeyHandle { wallet_id, network }, Curve::Secp256k1, &digest).await?;
+		let signed = evm_tx::assemble(parts, &signature).map_err(sign_status("native transfer"))?;
 
 		Ok(Response::new(SignNativeTransferResponse {
 			raw_tx: format!("0x{}", hex::encode(&signed.raw)),
@@ -176,8 +185,11 @@ impl SignerService for Signer {
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
-		let secret = self.unseal(wallet_id, network).await?;
-		let signed = tron_tx::sign_trc20_transfer(&secret, &token, &to, amount, req.fee_limit, &tx_ref).map_err(sign_status("trc20 transfer"))?;
+		let handle = KeyHandle { wallet_id, network };
+		let owner = tron_tx::owner_address(&self.backend.public_key(handle).await?).map_err(sign_status("trc20 transfer"))?;
+		let (parts, digest) = tron_tx::build_unsigned_trc20(&owner, &token, &to, amount, req.fee_limit, &tx_ref).map_err(sign_status("trc20 transfer"))?;
+		let signature = self.backend.sign_digest(handle, Curve::Secp256k1, &digest).await?;
+		let signed = tron_tx::assemble(parts, &signature).map_err(sign_status("trc20 transfer"))?;
 		Ok(Response::new(SignedTronTxResponse {
 			signed_tx: signed.raw_tx,
 			txid: signed.txid,
@@ -194,8 +206,11 @@ impl SignerService for Signer {
 		let tx_ref = parse_tron_ref(&req.ref_block_bytes, &req.ref_block_hash, req.expiration, req.timestamp)?;
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
-		let secret = self.unseal(wallet_id, network).await?;
-		let signed = tron_tx::sign_trx_transfer(&secret, &to, amount, &tx_ref).map_err(sign_status("trx transfer"))?;
+		let handle = KeyHandle { wallet_id, network };
+		let owner = tron_tx::owner_address(&self.backend.public_key(handle).await?).map_err(sign_status("trx transfer"))?;
+		let (parts, digest) = tron_tx::build_unsigned_trx(&owner, &to, amount, &tx_ref).map_err(sign_status("trx transfer"))?;
+		let signature = self.backend.sign_digest(handle, Curve::Secp256k1, &digest).await?;
+		let signed = tron_tx::assemble(parts, &signature).map_err(sign_status("trx transfer"))?;
 		Ok(Response::new(SignedTronTxResponse {
 			signed_tx: signed.raw_tx,
 			txid: signed.txid,
@@ -211,9 +226,10 @@ impl SignerService for Signer {
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal"))?;
 		self.guard_treasury_transfer(wallet_id, network, &req.to_address, amount)?;
 
-		let seed = self.unseal(wallet_id, network).await?;
-		let signed = ton_tx::build_jetton_transfer(
-			&seed,
+		let handle = KeyHandle { wallet_id, network };
+		let public_key = self.ton_public_key(handle).await?;
+		let (parts, digest) = ton_tx::build_unsigned_jetton(
+			&public_key,
 			&ton_tx::JettonTransfer {
 				our_jetton_wallet: &req.our_jetton_wallet,
 				to_owner: &req.to_address,
@@ -226,6 +242,8 @@ impl SignerService for Signer {
 			},
 		)
 		.map_err(ton_sign_status)?;
+		let signature = self.backend.sign_digest(handle, Curve::Ed25519, &digest).await?;
+		let signed = ton_tx::assemble(parts, &signature).map_err(ton_sign_status)?;
 		Ok(Response::new(signed_ton_response(signed)))
 	}
 
@@ -236,9 +254,10 @@ impl SignerService for Signer {
 		let amount: u128 = req.amount.parse().map_err(|_| Status::invalid_argument("amount must be a u128 decimal (nanotons)"))?;
 		self.guard_treasury_native_transfer(wallet_id, &req.to_address)?;
 
-		let seed = self.unseal(wallet_id, network).await?;
-		let signed = ton_tx::build_native_transfer(
-			&seed,
+		let handle = KeyHandle { wallet_id, network };
+		let public_key = self.ton_public_key(handle).await?;
+		let (parts, digest) = ton_tx::build_unsigned_native(
+			&public_key,
 			&ton_tx::NativeTransfer {
 				to_address: &req.to_address,
 				amount,
@@ -247,6 +266,8 @@ impl SignerService for Signer {
 			},
 		)
 		.map_err(ton_sign_status)?;
+		let signature = self.backend.sign_digest(handle, Curve::Ed25519, &digest).await?;
+		let signed = ton_tx::assemble(parts, &signature).map_err(ton_sign_status)?;
 		Ok(Response::new(signed_ton_response(signed)))
 	}
 
@@ -309,7 +330,7 @@ impl SignerService for Signer {
 			// returns whatever active key now exists.
 			tracing::warn!(%user_id, %network, "rotate: row already superseded by a concurrent rotation");
 		}
-		let provisioned = provision::provision(&self.vault, &self.secrets, user_id, network).await?;
+		let provisioned = self.backend.provision(user_id, network).await?;
 		tracing::warn!(
 			%user_id,
 			%network,
@@ -390,6 +411,11 @@ fn ton_sign_status(err: ton_tx::TonTxError) -> Status {
 	match err {
 		ton_tx::TonTxError::Address { .. } | ton_tx::TonTxError::Amount => Status::invalid_argument(err.to_string()),
 		ton_tx::TonTxError::Cell(_) => Status::internal(err.to_string()),
+		// A curve mismatch here is our bug, not the caller's — the wire message says nothing.
+		ton_tx::TonTxError::WrongSignatureKind => {
+			tracing::warn!(error = %err, "signing failed");
+			Status::internal("signing failed")
+		}
 	}
 }
 

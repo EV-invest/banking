@@ -1,0 +1,247 @@
+"use client";
+
+// "Someone has proposed that you stop being an owner." Reached from an email, by the person
+// it is about.
+//
+// This page has the same machinery as the payout approval and a different job. Nobody
+// arrives here pleased, and the writing is the design: plain sentences, no exclamation, no
+// reassurance nobody asked for, and no urgency the deadline does not actually create. It
+// says who proposed it, what reason they gave, how long there is, and what each answer
+// does. It does not editorialise about the proposal, because this page is not the fund's
+// argument — it is the notice.
+//
+// The asymmetry between the two answers is structural rather than decorative. Accepting
+// ends an ownership stake and cannot be undone from here or anywhere else, so it is the
+// smaller, colder control AND it goes through a second, explicit confirmation. Refusing is
+// the reversible answer and takes one press. Neither is preselected, and refusing is not
+// dressed up as the "safe" choice — the copy says plainly that refusing does not end the
+// matter, because the peers can still decide it without them (docs/CONSILIUM.md, path (b)).
+
+import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+
+import { useLocale, useT } from "@evinvest/i18n/react";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Separator } from "@evinvest/uikit";
+
+import { ApprovalUnavailableError } from "@/entities/approval/api/approval-client";
+import { decideRemoval, removalApprovalResource } from "@/entities/approval/model/approval-resource";
+import type { RemovalDecision } from "@/shared/contracts/governance";
+import { errorMessage } from "@/shared/lib/api-client";
+import { expiresIn, formatMoment, hasExpired } from "@/shared/lib/datetime";
+import { settledRemoval } from "@/shared/lib/decision";
+import { useResource } from "@/shared/lib/resource";
+import { ResourceError } from "@/shared/ui/resource-error";
+import {
+  ApprovalBurned,
+  ApprovalExpired,
+  ApprovalOutcome,
+  ApprovalPage,
+  ApprovalSkeleton,
+  ApprovalUnavailable,
+  ApprovalUnreachable,
+  CodeField,
+  DetailRow,
+  FieldCaption,
+} from "@/views/approval/ui/approval-chrome";
+
+export function RemovalApprovalView({ token }: { token: string }) {
+  const t = useT();
+  const locale = useLocale();
+
+  const summary = useResource(removalApprovalResource, token);
+  const invitation = summary.data ?? null;
+
+  const [code, setCode] = useState("");
+  const [pending, setPending] = useState<RemovalDecision | null>(null);
+  const [actionError, setActionError] = useState<unknown>(null);
+  const [rejectedAttempts, setRejectedAttempts] = useState<number | null>(null);
+  const [justDecided, setJustDecided] = useState(false);
+  const [spent, setSpent] = useState(false);
+  /** The second, deliberate step in front of the irreversible answer. */
+  const [confirming, setConfirming] = useState(false);
+
+  // See the payout view: the wire says "pending", not null, for an unanswered notice.
+  const settled = settledRemoval(invitation?.decision);
+  // See the payout view: an answered notice keeps its outcome, whatever a later read says.
+  const gone = spent || (!settled && summary.error instanceof ApprovalUnavailableError);
+
+  const decide = async (decision: RemovalDecision) => {
+    const secret = code.trim().toUpperCase();
+    if (!secret || pending) return;
+    const attemptsBefore = invitation?.attempts_remaining ?? null;
+    setPending(decision);
+    setActionError(null);
+    // Cleared per attempt, not per success. Left standing it would keep showing a count
+    // from the previous try AND suppress the error banner for this one, so a network
+    // failure after a wrong code would report nothing at all.
+    setRejectedAttempts(null);
+    try {
+      const result = await decideRemoval(token, secret, decision);
+      setCode("");
+      setConfirming(false);
+      if (result.decided) {
+        setJustDecided(true);
+        setRejectedAttempts(null);
+      } else {
+        setRejectedAttempts(result.invitation.attempts_remaining);
+      }
+    } catch (cause) {
+      if (cause instanceof ApprovalUnavailableError) {
+        setSpent(true);
+        return;
+      }
+      setActionError(cause);
+      setCode("");
+      setConfirming(false);
+      // The server owns the attempt count; a failure here may or may not have spent one.
+      await summary.refresh();
+      const fresh = removalApprovalResource.peek(token);
+      if (fresh && attemptsBefore !== null && fresh.attempts_remaining < attemptsBefore && !fresh.decision) {
+        setRejectedAttempts(fresh.attempts_remaining);
+      }
+    } finally {
+      setPending(null);
+    }
+  };
+
+  if (gone) {
+    return (
+      <ApprovalPage>
+        <ApprovalUnavailable />
+      </ApprovalPage>
+    );
+  }
+
+  if (!invitation) {
+    return (
+      <ApprovalPage>
+        {summary.isLoading ? (
+          <ApprovalSkeleton />
+        ) : (
+          <ApprovalUnreachable onRetry={() => void summary.refresh()} retrying={summary.isValidating} />
+        )}
+      </ApprovalPage>
+    );
+  }
+
+  // An omitted `attempts_remaining` is a zero on this wire, and a zero is a burned token.
+  const burned = !settled && (invitation.attempts_remaining ?? 0) <= 0;
+  const expired = !settled && hasExpired(invitation.expires_at);
+
+  return (
+    <ApprovalPage>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl">{t("approval.removal.title")}</CardTitle>
+          <CardDescription className="text-balance">
+            {t("approval.removal.lead", { initiator: invitation.initiator_email })}
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-5">
+          <div className="flex flex-col gap-1.5">
+            <FieldCaption>{t("approval.removal.reasonLabel")}</FieldCaption>
+            {/* The reason is someone else's words about the reader. It is shown whole, in
+                their own phrasing, with no summarising and no quotation marks that would
+                let the fund distance itself from it. */}
+            <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-foreground">
+              {invitation.reason?.trim() || t("approval.removal.noReason")}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <DetailRow label={t("approval.removal.proposedBy")} value={invitation.initiator_email} />
+            <DetailRow label={t("approval.removal.about")} value={invitation.target_email} />
+            <DetailRow label={t("approval.openedAt")} value={formatMoment(invitation.created_at, locale)} />
+            <DetailRow
+              label={t("approval.expires")}
+              value={t("approval.expiresValue", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
+              tone={expired ? "text-destructive" : undefined}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {burned ? (
+        <ApprovalBurned />
+      ) : expired ? (
+        <ApprovalExpired />
+      ) : settled ? (
+        <ApprovalOutcome
+          icon={settled === "remove" ? <CheckCircle2 /> : <ShieldCheck />}
+          title={t(settled === "remove" ? "approval.removal.accepted.title" : "approval.removal.refused.title")}
+          description={t(
+            settled === "remove"
+              ? justDecided
+                ? "approval.removal.accepted.freshBody"
+                : "approval.removal.accepted.body"
+              : "approval.removal.refused.body",
+          )}
+        />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("approval.removal.decisionTitle")}</CardTitle>
+            <CardDescription className="text-balance">{t("approval.removal.decisionLead")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <CodeField value={code} onChange={setCode} disabled={pending !== null} attemptsRemaining={rejectedAttempts} />
+
+            {actionError !== null && rejectedAttempts === null && <ResourceError message={errorMessage(actionError, t)} />}
+
+            {confirming ? (
+              // The second step. It restates the consequence in full rather than asking
+              // "are you sure?" — a reader who has already decided is not helped by being
+              // asked again, only by being told exactly what is about to happen.
+              <div className="flex flex-col gap-3.5 rounded-lg border border-destructive/40 bg-destructive/10 p-4">
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-sm font-semibold text-foreground">{t("approval.removal.confirmTitle")}</p>
+                  <p className="text-sm leading-relaxed text-foreground">{t("approval.removal.confirmBody")}</p>
+                </div>
+                <div className="flex flex-col gap-2.5 sm:flex-row">
+                  <Button variant="destructive" className="sm:flex-1" disabled={pending !== null} onClick={() => void decide("remove")}>
+                    {pending === "remove" && <Loader2 className="size-4 animate-spin" />}
+                    {t("approval.removal.confirmAction")}
+                  </Button>
+                  <Button variant="ghost" disabled={pending !== null} onClick={() => setConfirming(false)}>
+                    {t("ui.cancel")}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Separator />
+                {/* Refuse first and larger: it is the reversible answer, and the reversible
+                    answer is the one a mis-click should land on. Accepting is a distinct,
+                    smaller, destructive control that opens the confirmation above rather
+                    than submitting. */}
+                <div className="flex flex-col gap-2.5 sm:flex-row">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="font-semibold sm:flex-1"
+                    disabled={code.trim().length === 0 || pending !== null}
+                    onClick={() => void decide("keep")}
+                  >
+                    {pending === "keep" && <Loader2 className="size-4 animate-spin" />}
+                    {t("approval.removal.refuse")}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={code.trim().length === 0 || pending !== null}
+                    onClick={() => setConfirming(true)}
+                  >
+                    {t("approval.removal.accept")}
+                  </Button>
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">{t("approval.removal.irreversible")}</p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <p className="text-center text-xs text-muted-foreground">{t("approval.footnote")}</p>
+    </ApprovalPage>
+  );
+}

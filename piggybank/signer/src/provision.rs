@@ -93,7 +93,9 @@ pub async fn provision(vault: &Vault, secrets: &WalletSecrets, user_id: Uuid, ne
 /// The on-chain address for a stored/fresh public key, plus its kind. **BEP20** and **Polygon**
 /// (both EVM) derive the real EVM address (EIP-55), **TRC20** the real Base58Check `T…` address,
 /// and **TON** the real v4R2 wallet (StateInit hash) — all [`KIND_DERIVED`] (fundable).
-fn render_address(network: Network, public_key: &[u8]) -> Result<(String, &'static str), SignerError> {
+/// Shared with [`crate::turnkey`]: a custody-held key is derived by the SAME functions, so a
+/// Turnkey account's address is cross-checked against ours before it is ever handed out.
+pub(crate) fn render_address(network: Network, public_key: &[u8]) -> Result<(String, &'static str), SignerError> {
 	match network {
 		Network::Bep20 | Network::Polygon => {
 			let address = evm_address(public_key).ok_or_else(|| SignerError::Repository("EVM address derivation failed for a stored secp256k1 key".into()))?;

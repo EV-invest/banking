@@ -5,6 +5,8 @@
 // that the mobile row editors and the desktop form share, so a preference is edited the
 // same way at both breakpoints.
 
+import { useT } from "@evinvest/i18n/react";
+
 import { BadgeCheck } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
 
@@ -42,9 +44,11 @@ export function FieldSkeleton() {
 }
 
 export function VerifiedTag() {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1 text-xs font-semibold text-main-accent-t1">
-      <BadgeCheck className="size-3" /> Verified
+      {/* i18n-max: 12 — sits beside a field label in a `justify-between` header row. */}
+      <BadgeCheck className="size-3" /> {t("ui.verified")}
     </span>
   );
 }

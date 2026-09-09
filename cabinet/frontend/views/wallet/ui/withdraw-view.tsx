@@ -9,6 +9,7 @@ import { Skeleton } from "@evinvest/uikit";
 
 import { submitWithdrawal, walletResource } from "@/entities/wallet/model/wallet-resource";
 import type { NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
+import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
@@ -45,13 +46,13 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   const [amount, setAmount] = useState("");
   const [confirming, setConfirming] = useState<ReviewedWithdrawal | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<unknown>(null);
   const [done, setDone] = useState<Withdrawal | null>(null);
 
   const { data: wallet, error: walletError, isLoading: walletLoading } = useResource(walletResource);
   // A failed submit is the interesting error here; a failed wallet read only matters while
   // there is no wallet to show, since a stale balance still beats a blank screen.
-  const error = submitError ?? (wallet ? null : (walletError?.message ?? null));
+  const error = submitError ? errorMessage(submitError, t) : wallet || !walletError ? null : errorMessage(walletError, t);
 
   const networks = (wallet?.withdrawable ?? []).map((w) => w.network ?? "").filter(Boolean);
   const network = (selected && networks.includes(selected) ? selected : null) ?? networks[0] ?? "";
@@ -81,7 +82,9 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
       setAddress("");
       setAmount("");
     } catch (e) {
-      setSubmitError((e as Error).message);
+      // The error itself, not its English text — `errorMessage` resolves its `code`
+      // against the reader's catalogue at the render site.
+      setSubmitError(e);
     } finally {
       setSubmitting(false);
       setConfirming(null);
@@ -92,14 +95,14 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   const label = networkLabel(network);
 
   return (
-    <WalletScreen title={t("ui.withdrawUsdt")} subtitle="Send funds to an external address — one balance, any rail" back="/wallet">
+    <WalletScreen title={t("ui.withdrawUsdt")} subtitle={t("wallet.withdrawSub")} back="/wallet">
       <StaggerItem>
         <Settled
           loading={walletLoading}
           skeleton={<Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />}
         >
         {walletLoading ? null : networks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{error ?? "No withdrawal rails are available right now — check back soon."}</p>
+        <p className="text-sm text-muted-foreground">{error ?? t("wallet.noWithdrawRails")}</p>
       ) : (
         // Form 560 + review 400 side by side is the Figma at 1440; below that the content
         // column can't hold both, so the review wraps under the form rather than overflowing.
@@ -130,7 +133,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   setAddress(e.target.value);
                   setConfirming(null);
                 }}
-                placeholder={`${label} address`}
+                placeholder={t("wallet.placeholder.railAddress", { network: label })}
                 spellCheck={false}
                 className={FIELD}
               />
@@ -138,9 +141,9 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
 
             <label className="flex flex-col gap-2">
               <span className="flex items-center justify-between gap-2">
-                <FieldLabel>AMOUNT</FieldLabel>
+                <FieldLabel>{t("wallet.amountCaps")}</FieldLabel>
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  Avail: {formatUsdt(opts?.withdrawable)}
+                  {t("wallet.availPrefix", { amount: formatUsdt(opts?.withdrawable) })}
                   <TipAnchor anchor="wallet.withdraw.available" />
                 </span>
               </span>
@@ -165,7 +168,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   }}
                   className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-main-accent-t1 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  Max
+                  {t("ui.max")}
                 </button>
               </span>
             </label>
@@ -179,12 +182,10 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             {/* `wallet.withdraw.queueing` / `.review` are section-type tips (descriptor blocks,
                 not inline ⓘ), so that copy is stated inline here rather than anchored. */}
             {queuedUnits > 0n && amountUnits > 0n && (
-              <p className="text-xs text-main-accent-t3">
-                ~{formatUsdt(fromBaseUnits(queuedUnits))} USDT exceeds instant {label} liquidity and will be queued until the rail is topped up.
-              </p>
+              <p className="text-xs text-main-accent-t3">{t("wallet.exceedsInstant", { amount: formatUsdt(fromBaseUnits(queuedUnits)), network: label })}</p>
             )}
             <p className="text-xs text-muted-foreground">
-              Min {formatUsdt(opts?.min_withdrawal)} USDT · instant {label} {formatUsdt(opts?.instant)} · rest queued
+              {t("wallet.minInstantQueued", { min: formatUsdt(opts?.min_withdrawal), network: label, instant: formatUsdt(opts?.instant) })}
             </p>
 
             <button
@@ -207,11 +208,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 <Panel key="receipt" from="bottom" className={cn(WALLET_CARD, "flex gap-3 p-4.5 lg:p-5")}>
                   <Clock className="mt-0.5 size-4 shrink-0 text-main-accent-t3" />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">{done.state === "queued" ? "Withdrawal queued" : "Withdrawal submitted"}</p>
+                    <p className="text-sm font-semibold text-foreground">{t(done.state === "queued" ? "wallet.withdrawalQueued" : "wallet.withdrawalSubmitted")}</p>
                     <p className="text-xs text-muted-foreground">
                       {done.state === "queued"
-                        ? `${formatUsdt(done.net_amount)} USDT to ${shortAddress(done.address)} is queued — it ships once the ${networkLabel(done.network)} rail is topped up.`
-                        : `${formatUsdt(done.net_amount)} USDT is on its way to ${shortAddress(done.address)} — pending on-chain confirmation.`}
+                        ? t("wallet.receiptQueued", { amount: formatUsdt(done.net_amount), address: shortAddress(done.address), network: networkLabel(done.network) })
+                        : t("wallet.receiptSubmitted", { amount: formatUsdt(done.net_amount), address: shortAddress(done.address) })}
                     </p>
                   </div>
                 </Panel>
@@ -233,31 +234,32 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                   <div className="flex flex-col gap-2.5">
                     <Row label={t("ui.network")} value={networkLabel(confirming.network)} />
                     <Row label={t("ui.destination")} value={shortAddress(confirming.address)} />
-                    <Row label="Amount" value={`${formatUsdt(confirming.amount)} USDT`} />
+                    <Row label={t("ui.amount")} value={`${formatUsdt(confirming.amount)} USDT`} />
                     <Row label={t("wallet.networkFee")} value={`${formatUsdt(confirming.fee)} USDT`} />
                     <div className="h-px w-full bg-border" />
                     <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-main-accent-t2" />
                   </div>
-                  <p className="break-all font-mono-tech text-xs text-muted-foreground">To {confirming.address}</p>
+                  <p className="break-all font-mono-tech text-xs text-muted-foreground">{t("wallet.toAddressLine", { address: confirming.address })}</p>
                   {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
                     <p className="text-xs text-main-accent-t3">
-                      ~{formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant)))} USDT exceeds instant {networkLabel(confirming.network)}{" "}
-                      liquidity and will be queued until the rail is topped up.
+                      {t("wallet.exceedsInstant", {
+                        amount: formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant))),
+                        network: networkLabel(confirming.network),
+                      })}
                     </p>
                   )}
+                  {/* A `flex-1` Confirm beside a fixed-width Back in a ≤400px column.
+                      i18n-max: 20 on the confirm label, 11 on the back one. */}
                   <div className="flex gap-2">
-                    <button type="button" disabled={submitting} onClick={submit} className={cn(WALLET_CTA, "flex-1 gap-2 py-3 text-sm font-semibold")}>
+                    <button type="button" disabled={submitting} onClick={submit} className={cn(WALLET_CTA, "min-w-0 flex-1 gap-2 py-3 text-sm font-semibold")}>
                       {submitting && <Loader2 className="size-4 animate-spin" />}
-                      Confirm withdrawal
+                      <span className="truncate">{t("wallet.confirmWithdrawal")}</span>
                     </button>
-                    <button type="button" disabled={submitting} onClick={() => setConfirming(null)} className={cn(WALLET_CTA_GHOST, "px-4 py-3 text-sm")}>
-                      Back
+                    <button type="button" disabled={submitting} onClick={() => setConfirming(null)} className={cn(WALLET_CTA_GHOST, "shrink-0 px-4 py-3 text-sm")}>
+                      {t("ui.back")}
                     </button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Accepted instantly; if the {networkLabel(confirming.network)}{" "}
-                    rail is short it queues until funded — you&apos;ll be notified.
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("wallet.acceptedInstantly", { network: networkLabel(confirming.network) })}</p>
                 </Panel>
               )}
             </PanelPresence>

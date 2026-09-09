@@ -28,8 +28,8 @@ use domain::money::Network;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use ports::{
-	AllocationRegistry, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository, UserRepository,
-	WithdrawalRepository, ledger::Ledger,
+	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository,
+	UserRepository, WithdrawalRepository, ledger::Ledger,
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -59,6 +59,10 @@ pub struct AppState {
 	pub users: Arc<dyn UserRepository>,
 	/// The `withdrawals` aggregate's driven port (Postgres control plane).
 	pub withdrawals: Arc<dyn WithdrawalRepository>,
+	/// The `consilium` aggregate's driven port — multi-owner authorization for revenue
+	/// payouts. Control plane only; it moves no money itself, and reaches the money plane
+	/// exactly once, through the ordinary payout path, when a request is approved.
+	pub consilia: Arc<dyn ConsiliumRepository>,
 	/// The registry of investable products — the gate every subscribe resolves its
 	/// service through. Control plane only; moves no money.
 	pub allocations: Arc<dyn AllocationRegistry>,
@@ -90,10 +94,10 @@ pub struct AppState {
 	pub configured_networks: Arc<[Network]>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
-	/// The break-glass admin allowlist, snapshotted from the environment at boot
-	/// (`ADMIN_SUBJECTS`). A change applies via redeploy — the gitops env edit is
-	/// the audit trail.
-	pub admin_subjects: Vec<String>,
+	/// Base URL the emailed consilium approval link is built on (`<base>/<token>`). The
+	/// page it points at is served by the cabinet, not here; the hub only has to mint a
+	/// link an owner's mail client will render.
+	pub consilium_approval_url_base: String,
 	/// Whether the TON rail is on testnet — surfaced on its deposit addresses so the client
 	/// renders the correct (testnet-tagged) user-friendly TON address. `false` when TON is
 	/// unconfigured or on mainnet. The other rails have no testnet-specific address form.
@@ -109,6 +113,7 @@ impl AppState {
 		analytics: Analytics,
 		users: Arc<dyn UserRepository>,
 		withdrawals: Arc<dyn WithdrawalRepository>,
+		consilia: Arc<dyn ConsiliumRepository>,
 		allocations: Arc<dyn AllocationRegistry>,
 		subscriptions: Arc<dyn SubscriptionRepository>,
 		redemptions: Arc<dyn RedemptionRepository>,
@@ -121,7 +126,7 @@ impl AppState {
 		custody: Arc<dyn Custody>,
 		configured_networks: Arc<[Network]>,
 		relay_notify: Arc<Notify>,
-		admin_subjects: Vec<String>,
+		consilium_approval_url_base: String,
 		ton_is_testnet: bool,
 	) -> Self {
 		Self {
@@ -131,6 +136,7 @@ impl AppState {
 			analytics,
 			users,
 			withdrawals,
+			consilia,
 			allocations,
 			subscriptions,
 			redemptions,
@@ -143,15 +149,8 @@ impl AppState {
 			custody,
 			configured_networks,
 			relay_notify,
-			admin_subjects,
+			consilium_approval_url_base,
 			ton_is_testnet,
 		}
-	}
-
-	/// Whether `subject` (a token `sub`) is on the admin allowlist (`ADMIN_SUBJECTS`,
-	/// snapshotted at boot). Empty ⇒ no override — the caller's mirrored role still
-	/// applies. A list change applies via redeploy, which is the audit trail.
-	pub fn is_admin(&self, subject: &str) -> bool {
-		self.admin_subjects.iter().any(|s| s == subject)
 	}
 }
