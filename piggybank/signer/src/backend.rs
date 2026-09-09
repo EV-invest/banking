@@ -169,6 +169,41 @@ pub trait KeyBackend: Send + Sync {
 	async fn sign_digest(&self, handle: KeyHandle, curve: Curve, digest: &[u8; 32]) -> Result<ChainSignature, BackendError>;
 }
 
+/// Fresh custody-held key material for one `(user, network)`: minted inside the enclave,
+/// cross-checked against our own derivation, and **not yet persisted**.
+///
+/// Everything here is public: the address, the point, and the custodian's own handle for the
+/// account. There is no secret half to carry — that is the whole point of the migration.
+pub struct MintedCustodyKey {
+	/// Compressed SEC1 (secp256k1) or the raw 32-byte point (Ed25519).
+	pub public_key: Vec<u8>,
+	/// Our derivation of the on-chain address, already agreed with the custodian's.
+	pub address: String,
+	/// The custodian's account address — what `sign_with` takes at signing time.
+	pub sign_with: String,
+	pub key_alg: &'static str,
+	/// The account's path component within the network's shared wallet.
+	pub derivation_index: i64,
+}
+
+/// The narrow port the address MIGRATION needs: mint a custody-held key and hand it back
+/// **without writing a row**.
+///
+/// Separate from [`KeyBackend`] rather than a method on it, because it is not something every
+/// backend can honestly do — [`LocalVault`] mints under the KEK, which is precisely what a
+/// migration is moving away from. A signer composed without a custodian therefore has no
+/// migration path at all, and says so, instead of silently minting another local key.
+///
+/// It has to exist as its own step because [`KeyBackend::provision`] mints AND inserts, and
+/// the schema allows exactly one active row per `(user, network)`: the replacement can only be
+/// written in the same transaction that archives the row it replaces.
+#[tonic::async_trait]
+pub trait CustodyMinter: Send + Sync {
+	/// Mint a brand-new custody-held key for `(user_id, network)`. Never idempotent — every
+	/// call mints a new account, so the caller must have decided it wants one.
+	async fn mint(&self, user_id: Uuid, network: Network) -> Result<MintedCustodyKey, BackendError>;
+}
+
 /// The in-process backend: keys sealed under the KEK in the signer's own `wallet_secrets`,
 /// unsealed transiently for one signature.
 pub struct LocalVault {

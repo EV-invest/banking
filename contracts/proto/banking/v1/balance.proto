@@ -83,6 +83,17 @@ service BalanceService {
   // unrecoverable; this restores the user's ability to receive FUTURE deposits.
   rpc RotateDepositAddress(RotateDepositAddressRequest) returns (RotateDepositAddressResponse);
 
+  // Admin (DepositAddressMigrate): retire a user's HEALTHY, KEK-sealed deposit address
+  // in favour of one minted inside the key custodian's enclave (phase 4 of
+  // docs/MIGRATION-turnkey.md), and refresh the hub's address cache.
+  //
+  // NOT the rotation path. Rotation recovers a key that is already dead; this retires a
+  // live one, so the hub must first prove the address has nothing left on it — refused
+  // while the user has any credited deposit on this rail that no sweep has observed
+  // drained. The signer independently refuses a dead key, an already-migrated row, and
+  // an address other than the one this hub cleared.
+  rpc MigrateDepositAddressToCustodian(MigrateDepositAddressToCustodianRequest) returns (MigrateDepositAddressToCustodianResponse);
+
   // What the fund has EARNED and may pay itself — the `fee` claim, segmented into
   // earned / available / pending, plus the rails a payout can ship on. Admin/Owner.
   rpc GetFundRevenue(GetFundRevenueRequest) returns (FundRevenue);
@@ -282,6 +293,16 @@ message RotateDepositAddressRequest {
 
 message RotateDepositAddressResponse {
   string address = 1;  // the NEW fundable deposit address
+}
+
+message MigrateDepositAddressToCustodianRequest {
+  string user_id = 1;  // the affected user (UUID)
+  string network = 2;  // bep20 | polygon | trc20 | ton
+}
+
+message MigrateDepositAddressToCustodianResponse {
+  string old_address = 1;  // the retired address — kept so the operator can watch it
+  string new_address = 2;  // the NEW fundable, custody-held deposit address
 }
 
 message GetFundRevenueRequest {}

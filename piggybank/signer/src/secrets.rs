@@ -13,7 +13,9 @@
 //!
 //! Least privilege: the provisioning path only ever writes a row and reads the
 //! address back. The sealed blob is loaded ONLY by [`find_sealed`](WalletSecrets::find_sealed)
-//! (the signing path) and the health/backfill probes — never by an ordinary read.
+//! (the signing path), the health/backfill probes, and
+//! [`find_migration_candidate`](WalletSecrets::find_migration_candidate) — whose whole gate is
+//! proving the blob still opens — never by an ordinary read.
 
 use domain::money::Network;
 use sqlx::PgPool;
@@ -87,6 +89,20 @@ pub struct KeyEpochRow {
 	pub kek_fp: Option<Vec<u8>>,
 	/// Rendered by Postgres (`::text`) — carried for operator display only.
 	pub created_at: String,
+}
+
+/// The active row a custody migration would retire, with everything its gates need.
+///
+/// `sealed_key` is `Option` because the column is nullable for a custody-held row (migration
+/// 0003) — and reading it back as `None` is itself the "already migrated" signal, not a
+/// decode error. `backend` is carried verbatim rather than parsed into an enum: the gate is
+/// "is this the ONE value we know how to migrate FROM", and an unknown value must fail closed
+/// and be named in the refusal, not silently fall into a catch-all arm.
+pub struct MigrationCandidate {
+	pub id: Uuid,
+	pub address: String,
+	pub backend: String,
+	pub sealed_key: Option<Vec<u8>>,
 }
 
 /// The persisted KEK sentinel: the epoch fingerprint + the sealed probe blob.
@@ -333,6 +349,72 @@ impl WalletSecrets {
 			.execute(&self.pool)
 			.await?;
 		Ok(result.rows_affected() > 0)
+	}
+
+	/// The active `(user, network)` row a custody migration would retire, or `None` if there
+	/// is none. Loads the sealed blob because the migration's health gate has to open it —
+	/// the one read besides [`find_sealed`](Self::find_sealed) and the epoch walk that does.
+	pub async fn find_migration_candidate(&self, user_id: Uuid, network: Network) -> Result<Option<MigrationCandidate>, SignerError> {
+		let row = sqlx::query_as::<_, (Uuid, String, String, Option<Vec<u8>>)>(
+			"SELECT id, address, backend, sealed_key FROM wallet_secrets WHERE user_id = $1 AND network = $2 AND superseded_at IS NULL",
+		)
+		.bind(user_id)
+		.bind(network.as_str())
+		.fetch_optional(&self.pool)
+		.await?;
+		Ok(row.map(|(id, address, backend, sealed_key)| MigrationCandidate { id, address, backend, sealed_key }))
+	}
+
+	/// Archive `old_id` and install the custody-held replacement **in one transaction**.
+	///
+	/// The whole point is that these two writes cannot come apart. The partial unique index
+	/// `wallet_secrets_active_user_network` permits exactly one active row per
+	/// `(user, network)`, so there is no "new row alongside the old" state to land in: either
+	/// both statements commit or the old key keeps serving its address, untouched.
+	///
+	/// Two deliberate choices inside:
+	///
+	/// * The UPDATE is keyed on `id` **and** `superseded_at IS NULL`, so a racer that already
+	///   archived this row sees 0 rows and gets `Ok(false)` — the caller aborts instead of
+	///   inserting a second active key behind the first one's back. Under Read Committed the
+	///   loser blocks on the row lock and then re-evaluates the predicate, so this holds
+	///   against real concurrency, not just against interleavings we imagined.
+	/// * The INSERT carries **no** `ON CONFLICT DO NOTHING`, unlike every other insert here.
+	///   Swallowing a conflict would commit the supersede and leave the user with no active
+	///   row at all — an address that receives deposits nothing serves. A conflict must abort
+	///   the transaction and put the old row back.
+	///
+	/// Returns `false` when the row was no longer the active one to archive.
+	pub async fn migrate_to_custodian(&self, old_id: Uuid, secret: &NewTurnkeySecret<'_>) -> Result<bool, SignerError> {
+		let mut tx = self.pool.begin().await?;
+		let archived = sqlx::query("UPDATE wallet_secrets SET superseded_at = now() WHERE id = $1 AND superseded_at IS NULL")
+			.bind(old_id)
+			.execute(&mut *tx)
+			.await?
+			.rows_affected();
+		if archived == 0 {
+			// Dropping `tx` rolls back; nothing was written either way.
+			return Ok(false);
+		}
+
+		sqlx::query(
+			"INSERT INTO wallet_secrets (id, user_id, network, public_key, address, key_alg, key_version, backend, turnkey_sign_with, derivation_index) \
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, 'turnkey', $8, $9)",
+		)
+		.bind(secret.id)
+		.bind(secret.user_id)
+		.bind(secret.network.as_str())
+		.bind(secret.public_key)
+		.bind(secret.address)
+		.bind(secret.key_alg)
+		.bind(TURNKEY_KEY_VERSION)
+		.bind(secret.sign_with)
+		.bind(secret.derivation_index)
+		.execute(&mut *tx)
+		.await?;
+
+		tx.commit().await?;
+		Ok(true)
 	}
 
 	/// The KEK sentinel row, if this database's epoch has been pinned.

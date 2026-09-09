@@ -11,7 +11,7 @@ use color_eyre::eyre::Context;
 use evbanking_auth::{Verifier, grpc_auth_layer};
 use evbanking_contracts::signer::v1::signer_service_server::SignerServiceServer;
 use piggybank_signer::{
-	backend::{KeyBackend, LocalVault},
+	backend::{CustodyMinter, KeyBackend, LocalVault},
 	config::{KeyBackendKind, SignerConfig, TlsConfig, load_vault},
 	kek_guard,
 	policy::SignerPolicy,
@@ -68,14 +68,21 @@ async fn run() -> color_eyre::Result<()> {
 	// which is what makes each migration phase reversible. The KEK stays loaded either way —
 	// every `backend='local'` row still needs it (phase 5 is what removes it).
 	let vault = Arc::new(vault);
-	let backend: Arc<dyn KeyBackend> = match config.key_backend {
-		KeyBackendKind::Local => Arc::new(LocalVault::new(Arc::clone(&vault), secrets.clone())),
+	// The custodian half is `Some` only under `KEY_BACKEND=turnkey`, and it is what the
+	// phase-4 `MigrateAddressToCustodian` path mints through. One `Arc<TurnkeyBackend>` serves
+	// both roles, so the migration can never mint through a different client (or a different
+	// derivation) than ordinary provisioning does.
+	let (backend, custodian): (Arc<dyn KeyBackend>, Option<Arc<dyn CustodyMinter>>) = match config.key_backend {
+		KeyBackendKind::Local => (Arc::new(LocalVault::new(Arc::clone(&vault), secrets.clone())), None),
 		// Fail-fast: an operator who asked for the custodian must not get a silent local boot.
-		KeyBackendKind::Turnkey => Arc::new(TurnkeyBackend::from_env(secrets.clone()).context("failed to build the Turnkey key backend")?),
+		KeyBackendKind::Turnkey => {
+			let turnkey = Arc::new(TurnkeyBackend::from_env(secrets.clone()).context("failed to build the Turnkey key backend")?);
+			(Arc::clone(&turnkey) as Arc<dyn KeyBackend>, Some(turnkey as Arc<dyn CustodyMinter>))
+		}
 	};
 	tracing::info!(key_backend = ?config.key_backend, "signer key backend selected");
 
-	let signer = Signer::with_backend(backend, vault, secrets, policy);
+	let signer = Signer::with_backend(backend, custodian, vault, secrets, policy);
 
 	// Authenticate the seam: a stateless verifier accepts only the hub's service token
 	// (verified against the auth service's JWKS). Mounted as the choke point in front of

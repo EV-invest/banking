@@ -23,9 +23,9 @@ use domain::{
 	users::{Email, UserId},
 };
 use evbanking_contracts::signer::v1::{
-	GetKeyHealthRequest, GetKeyHealthResponse, ProvisionAddressRequest, ProvisionAddressResponse, RotateAddressRequest, SignErc20TransferRequest, SignErc20TransferResponse,
-	SignJettonTransferRequest, SignNativeTransferRequest, SignNativeTransferResponse, SignTonTransferRequest, SignTrc20TransferRequest, SignTrxTransferRequest, SignedTonTxResponse,
-	SignedTronTxResponse,
+	GetKeyHealthRequest, GetKeyHealthResponse, MigrateAddressToCustodianRequest, MigrateAddressToCustodianResponse, ProvisionAddressRequest, ProvisionAddressResponse, RotateAddressRequest,
+	SignErc20TransferRequest, SignErc20TransferResponse, SignJettonTransferRequest, SignNativeTransferRequest, SignNativeTransferResponse, SignTonTransferRequest, SignTrc20TransferRequest,
+	SignTrxTransferRequest, SignedTonTxResponse, SignedTronTxResponse,
 	signer_service_client::SignerServiceClient,
 	signer_service_server::{SignerService, SignerServiceServer},
 };
@@ -111,6 +111,10 @@ impl SignerService for CountingSigner {
 
 	async fn rotate_address(&self, _request: tonic::Request<RotateAddressRequest>) -> Result<tonic::Response<ProvisionAddressResponse>, tonic::Status> {
 		Err(tonic::Status::unimplemented("rotate_address is not exercised by the rail-gating test"))
+	}
+
+	async fn migrate_address_to_custodian(&self, _request: tonic::Request<MigrateAddressToCustodianRequest>) -> Result<tonic::Response<MigrateAddressToCustodianResponse>, tonic::Status> {
+		Err(tonic::Status::unimplemented("migrate_address_to_custodian is not exercised by the rail-gating test"))
 	}
 }
 

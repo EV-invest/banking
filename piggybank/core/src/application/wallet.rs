@@ -28,7 +28,7 @@ use domain::{
 	withdrawals::WithdrawalPolicy,
 };
 
-use crate::ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, UserRepository, deposits::DepositRecord, ledger::Ledger};
+use crate::ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, UserRepository, deposit_addresses::MigratedAddress, deposits::DepositRecord, ledger::Ledger};
 
 /// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
 /// non-negative; `total = available + invested + pending_withdrawal`. `available` and
@@ -225,4 +225,45 @@ pub async fn get_deposit_address(ports: &DepositAddressPorts<'_>, configured: &[
 /// The caller's credited on-chain deposits (projection), newest first.
 pub async fn list_deposits(deposits: &dyn Deposits, user: UserId) -> Result<Vec<DepositRecord>, DomainError> {
 	deposits.list_by_user(user).await
+}
+
+/// Retire `user`'s healthy KEK-sealed deposit address on `network` in favour of a
+/// custody-held one (phase 4 of `docs/MIGRATION-turnkey.md`).
+///
+/// **The funds gate lives here**, above the port, for the same reason
+/// [`get_deposit_address`]'s does: only the hub can answer it. The signer holds keys and
+/// produces signatures and has no chain view at all, so the question "is anything still on
+/// that address" is not one it can be asked. This hub owns the deposit scanner and the
+/// `deposits` table, so it asks the one question that has an authoritative local answer —
+/// does the sweeper still consider this address capable of holding funds — and refuses while
+/// the answer is yes.
+///
+/// Order matters and is not interchangeable. The gate runs BEFORE the address is read, and the
+/// address that was cleared is the one handed to the port, so nothing can be cleared for one
+/// address and retired for another. That value travels all the way to the signer, which
+/// refuses unless it names the row it is about to archive.
+pub async fn migrate_deposit_address_to_custodian(
+	deposits: &dyn Deposits,
+	deposit_addresses: &dyn DepositAddresses,
+	configured: &[Network],
+	user: UserId,
+	network: Network,
+) -> Result<MigratedAddress, DomainError> {
+	if !configured.contains(&network) {
+		return Err(DomainError::Validation(format!("{network} is not a configured rail")));
+	}
+	// THE gate. `has_unswept` is the sweeper's own predicate, so "safe to retire" here means
+	// exactly "the sweeper has stopped scanning this address" — never a second, weaker opinion.
+	if deposits.has_unswept(user, network).await? {
+		return Err(DomainError::Validation(format!(
+			"{user} still has an unswept credited deposit on {network} — sweep the address to the treasury before retiring it"
+		)));
+	}
+	// Read the address only after the gate passes, and pass THAT value on: the address proved
+	// drained and the address about to be retired must be one and the same.
+	let drained = deposit_addresses
+		.address(user, network)
+		.await?
+		.ok_or_else(|| DomainError::Validation(format!("{user} has no fundable {network} address to migrate")))?;
+	deposit_addresses.migrate_to_custodian(user, network, drained.as_str()).await
 }
