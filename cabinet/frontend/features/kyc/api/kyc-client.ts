@@ -56,11 +56,16 @@ function classify(error: unknown): KycStart {
     if (error.status === 503 && readString(error.body, "error") === UNAVAILABLE) {
       return { kind: "unavailable", contact: readString(error.body, "contact") };
     }
-    // Keyed on the status, not the body: this plane refuses a stale token with plain text
-    // (`csrf check failed`), so there is no `{ error: "csrf" }` for the transport's table
-    // to match and its generic 403 wording — "You don't have access to this" — would send
-    // the user hunting for a permission problem instead of reloading the page.
-    if (error.status === 403) return { kind: "failed", message: STALE_PAGE_MESSAGE };
+    // Keyed on the body, not the status: a 403 here is a stale token ONLY when the body
+    // says so. Every other 403 this route can answer — a suspended account, an unserved
+    // country, a policy refusal — is a substantive verdict and must carry its own message
+    // instead of being told to reload. If this plane ever starts sending `{ error: "csrf" }`
+    // like the rest of the transport's table expects, this still matches it; until then a
+    // plain-text CSRF refusal falls through to `error.message` below along with every other
+    // 403, which is the transport's honest (if generic) "You don't have access to this."
+    if (error.status === 403 && readString(error.body, "error") === "csrf") {
+      return { kind: "failed", message: STALE_PAGE_MESSAGE };
+    }
     return { kind: "failed", message: error.message };
   }
   // Includes SessionExpiredError, whose own message already says to sign in again.
