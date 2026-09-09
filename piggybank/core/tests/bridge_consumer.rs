@@ -393,6 +393,40 @@ async fn created_carrying_owner_still_journals_the_roster_change() {
 	.await;
 }
 
+/// AN UNKNOWN EVENT KIND MUST NEVER BE MARKED APPLIED.
+///
+/// `last_lifecycle_sequence` is both the per-user replay guard and the applied-journal, so
+/// silently stamping it for a kind this build can't interpret (older banking behind a newer
+/// concierge) would permanently swallow the event — it could never be replayed after an
+/// upgrade, even though nothing about it was actually applied. The consumer must instead fail
+/// the whole batch, leaving `bridge_cursor` where it was so the poll loop keeps retrying —
+/// including the already-applied CREATED ahead of it, whose own no-op redelivery is safe.
+#[tokio::test]
+async fn unknown_kind_is_not_marked_applied_and_holds_the_cursor() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	let events = vec![event(&subject, Kind::Created, 1), event(&subject, Kind::Unspecified, 2)];
+
+	drive(&pool, events, move |pool| {
+		let subject = subject.clone();
+		async move {
+			let user_id = user_id_for(&pool, &subject).await.expect("CREATED still provisions the user");
+			let seq: i64 = sqlx::query_scalar("SELECT last_lifecycle_sequence FROM users WHERE id = $1")
+				.bind(user_id)
+				.fetch_one(&pool)
+				.await
+				.unwrap();
+			assert_eq!(seq, 1, "the unknown-kind event must not advance the per-user guard past CREATED");
+
+			let cursor: i64 = sqlx::query_scalar("SELECT position FROM bridge_cursor WHERE id = TRUE").fetch_one(&pool).await.unwrap();
+			assert_eq!(cursor, 0, "a batch containing an unknown kind must never advance the global cursor past it");
+		}
+	})
+	.await;
+}
+
 /// The common case must NOT be journalled: almost every CREATED carries `investor`, and
 /// charging the cooling-off window for each new signup would freeze payouts permanently.
 #[tokio::test]

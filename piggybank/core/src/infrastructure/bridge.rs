@@ -12,7 +12,10 @@
 //!     stale REINSTATED can't un-freeze a user a later SUSPENDED already froze;
 //!   - the global `bridge_cursor.position` advances to the batch's `next_position` ONLY
 //!     after every event in the batch is applied, so a crash mid-batch re-pulls and the
-//!     per-user guard absorbs the re-apply.
+//!     per-user guard absorbs the re-apply. An event kind this build doesn't recognize
+//!     (an older banking behind a newer concierge) fails the batch the same way, so it is
+//!     retried every poll instead of being marked applied — it can be replayed once banking
+//!     is upgraded to interpret it.
 //!
 //! Correlation is by `auth_subject` (the provider `sub` both planes provision against),
 //! never concierge's own `user_id` — a CREATED event provisions a minimal local row for an
@@ -122,7 +125,8 @@ impl BridgeConsumer {
 	/// Apply one event idempotently, in a transaction: take the per-user row lock, skip if its
 	/// `sequence` doesn't advance `last_lifecycle_sequence`, else mutate by `kind` and stamp the
 	/// new sequence. CREATED provisions a minimal row for an unseen subject. An unknown/
-	/// unspecified `kind` is a benign no-op (forward-compat with a newer concierge enum).
+	/// unspecified `kind` errors instead of being marked applied, so it can be replayed once
+	/// this build is upgraded to understand it (see the `Kind::Unspecified` arm below).
 	async fn apply(&self, event: &UserLifecycleEvent) -> Result<(), sqlx::Error> {
 		let subject = &event.auth_subject;
 		let sequence = event.sequence as i64;
@@ -268,13 +272,24 @@ impl BridgeConsumer {
 					.await?;
 			}
 			Kind::Unspecified => {
-				// Forward-compat: a newer concierge kind this build doesn't know. Advance the
-				// per-user guard so it isn't re-fetched forever, but mutate nothing.
-				sqlx::query("UPDATE users SET last_lifecycle_sequence = $2, updated_at = now() WHERE auth_subject = $1")
-					.bind(subject)
-					.bind(sequence)
-					.execute(&mut *tx)
-					.await?;
+				// A kind this build's pinned contracts don't recognize (concierge shipped a
+				// newer kind before banking picked up the matching `evconcierge_contracts`
+				// — the standard rollout order in this workspace). `last_lifecycle_sequence`
+				// is BOTH the per-user replay guard AND the applied-journal, so stamping it
+				// here — even without mutating anything else — would mark this event applied
+				// forever: once banking is upgraded to understand the kind, `sequence <=
+				// current` would skip it and it could never be replayed. If the swallowed
+				// kind meant a freeze or a tier downgrade, the money plane would keep
+				// operating under rules the identity plane already revoked.
+				//
+				// Fail the whole batch instead. `drain` only advances `bridge_cursor` after
+				// every event in the batch applies without error, so an `Err` here leaves the
+				// cursor exactly where it was — this event (and anything after it this cycle)
+				// is retried every poll until banking is upgraded to interpret the kind.
+				return Err(sqlx::Error::Protocol(format!(
+					"bridge: unknown lifecycle event kind ({}) for subject {subject} at sequence {sequence} — refusing to mark it applied; upgrade evconcierge_contracts to interpret it",
+					event.kind
+				)));
 			}
 		}
 		tx.commit().await?;
