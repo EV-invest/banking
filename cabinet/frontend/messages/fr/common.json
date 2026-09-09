@@ -1459,6 +1459,10 @@
     "en": "Select a fund to continue.",
     "t": "Sélectionnez un fonds pour continuer."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Impossible de démarrer la vérification. Veuillez réessayer."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "La langue doit être un code BCP 47 tel que « en » ou « en-US »"
@@ -2355,21 +2359,41 @@
     "en": "Identity verification",
     "t": "Vérification d’identité"
   },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Démarrer"
+  },
+  "profile.kyc.subtitle": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Une photo de votre pièce d’identité et un selfie — quelques minutes"
+  },
+  "profile.kyc.title": {
+    "en": "Verify your identity",
+    "t": "Vérifiez votre identité"
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later",
+    "t": "La vérification n’est pas disponible pour le moment. Veuillez réessayer plus tard"
+  },
+  "profile.kyc.unavailableContact": {
+    "en": "or contact",
+    "t": "ou contactez"
+  },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC niv. {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Relevé après examen de conformité"
+    "en": "Raised by verification and review",
+    "t": "Relevé après vérification et examen"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Nom légal"
   },
   "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Géré par la conformité"
+    "en": "Identity and account standing",
+    "t": "État de l’identité et du compte"
   },
   "profile.nationality": {
     "en": "Nationality",

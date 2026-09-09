@@ -2359,6 +2359,10 @@
     "en": "Select a fund to continue.",
     "t": "Выберите фонд, чтобы продолжить."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Не удалось начать верификацию. Попробуйте ещё раз."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "Язык должен быть кодом BCP 47, например «en» или «en-US»"
@@ -3259,21 +3263,41 @@
     "en": "Identity verification",
     "t": "Верификация личности"
   },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Начать"
+  },
+  "profile.kyc.subtitle": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Фото документа и селфи — займёт пару минут"
+  },
+  "profile.kyc.title": {
+    "en": "Verify your identity",
+    "t": "Подтвердите личность"
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later",
+    "t": "Верификация сейчас недоступна. Попробуйте позже"
+  },
+  "profile.kyc.unavailableContact": {
+    "en": "or contact",
+    "t": "или обратитесь к"
+  },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC ур. {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Повышается по итогам проверки комплаенса"
+    "en": "Raised by verification and review",
+    "t": "Повышается по итогам верификации и проверки"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Имя по документам"
   },
   "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Управляется комплаенсом"
+    "en": "Identity and account standing",
+    "t": "Статус личности и аккаунта"
   },
   "profile.nationality": {
     "en": "Nationality",

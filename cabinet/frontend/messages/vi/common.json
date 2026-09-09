@@ -1459,6 +1459,10 @@
     "en": "Select a fund to continue.",
     "t": "Hãy chọn một quỹ để tiếp tục."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Không thể bắt đầu xác minh. Vui lòng thử lại."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "Ngôn ngữ phải là mã BCP 47, ví dụ 'en' hoặc 'en-US'"
@@ -2355,21 +2359,41 @@
     "en": "Identity verification",
     "t": "Xác minh danh tính"
   },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Bắt đầu"
+  },
+  "profile.kyc.subtitle": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Một ảnh giấy tờ tùy thân và một ảnh selfie — chỉ mất vài phút"
+  },
+  "profile.kyc.title": {
+    "en": "Verify your identity",
+    "t": "Xác minh danh tính của bạn"
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later",
+    "t": "Xác minh hiện không khả dụng. Vui lòng thử lại sau"
+  },
+  "profile.kyc.unavailableContact": {
+    "en": "or contact",
+    "t": "hoặc liên hệ"
+  },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC cấp {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Do bộ phận tuân thủ nâng cấp"
+    "en": "Raised by verification and review",
+    "t": "Được nâng cấp qua xác minh và rà soát"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Tên pháp lý"
   },
   "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Do bộ phận tuân thủ quản lý"
+    "en": "Identity and account standing",
+    "t": "Tình trạng danh tính và tài khoản"
   },
   "profile.nationality": {
     "en": "Nationality",

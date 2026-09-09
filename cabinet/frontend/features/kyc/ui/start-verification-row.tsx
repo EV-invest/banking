@@ -1,11 +1,14 @@
 "use client";
 
+import { useT } from "@evinvest/i18n/react";
+
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@evinvest/uikit";
 
 import { startVerification, type KycStart } from "@/features/kyc/api/kyc-client";
+import { errorMessage } from "@/shared/lib/api-client";
 import { Hairline, RowLabel } from "@/shared/ui/list-card";
 
 // The one place in the cabinet a user can begin identity verification themselves. It sits
@@ -15,6 +18,7 @@ import { Hairline, RowLabel } from "@/shared/ui/list-card";
 type State = { kind: "idle" | "starting" } | Exclude<KycStart, { kind: "started" }>;
 
 export function StartVerificationRow() {
+  const t = useT();
   const [state, setState] = useState<State>({ kind: "idle" });
   const starting = state.kind === "starting";
 
@@ -36,10 +40,10 @@ export function StartVerificationRow() {
       <Hairline />
       <div className="flex flex-col py-3.5">
         <div className="flex min-w-0 items-center justify-between gap-3">
-          <RowLabel title="Verify your identity" sub="A photo of your ID and a selfie — a few minutes" />
+          <RowLabel title={t("profile.kyc.title")} sub={t("profile.kyc.subtitle")} />
           <Button type="button" size="sm" onClick={begin} disabled={starting} aria-busy={starting} className="rounded-lg font-semibold">
             {starting && <Loader2 className="size-4 animate-spin" aria-hidden />}
-            Start
+            {t("profile.kyc.start")}
           </Button>
         </div>
         {/* The live region is mounted empty and stays mounted: a `role="status"` inserted
@@ -54,16 +58,18 @@ export function StartVerificationRow() {
 }
 
 function Outcome({ state }: { state: State }) {
+  const t = useT();
   // The vendor's actual trouble — no balance, no configuration, an outage — is ours to fix
   // and never reaches the browser, so this says only that it cannot run and offers the one
   // address that can help.
   if (state.kind === "unavailable") {
     return (
       <p className="mt-2 text-xs leading-snug text-muted-foreground">
-        Verification isn&apos;t available right now. Please try again later
+        {t("profile.kyc.unavailable")}
         {state.contact ? (
           <>
-            {" or contact "}
+            {" "}
+            {t("profile.kyc.unavailableContact")}{" "}
             <a
               href={`mailto:${state.contact}`}
               className="font-medium text-main-accent-t1 underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -79,7 +85,7 @@ function Outcome({ state }: { state: State }) {
   if (state.kind === "failed") {
     return (
       <p className="mt-2 text-xs leading-snug text-destructive">
-        {state.message}
+        {errorMessage(state.error, t)}
       </p>
     );
   }
