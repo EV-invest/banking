@@ -40,6 +40,13 @@ export class RequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /**
+     * The parsed error body, as it arrived. `message` is built from `error` alone, so a
+     * plane that deliberately sends a machine-readable code ALONGSIDE data the screen
+     * needs — `/kyc/start`'s `{ error, contact }` — used to have that data dropped here
+     * and could not be rendered at all. `{}` when the body was absent or not JSON.
+     */
+    readonly body: unknown = {},
   ) {
     super(message);
     this.name = "RequestError";
@@ -57,9 +64,17 @@ interface JsonRequest {
 
 // The BFF's fixed error strings, in the user's words. Everything else the BFF sends is
 // already client-safe prose (see backend/src/error.rs) and passes through untouched.
+/**
+ * Named because it is also the right answer for a plane that rejects a stale token in
+ * plain text rather than as `{ error: "csrf" }` — the identity plane answers `csrf check
+ * failed`, which no lookup below can match. Such a caller maps its own 403 to THIS
+ * string; the wording stays decided in one place.
+ */
+export const STALE_PAGE_MESSAGE = "This page went stale. Reload it and try again.";
+
 const FRIENDLY: Record<string, string> = {
   unauthenticated: "We couldn't confirm your session. Reload the page or sign in again.",
-  csrf: "This page went stale. Reload it and try again.",
+  csrf: STALE_PAGE_MESSAGE,
   "auth not configured": "Sign-in is unavailable right now. Please try again shortly.",
   "request failed": "Something went wrong on our side. Please try again.",
 };
@@ -102,7 +117,7 @@ export async function requestJson<T>(path: `/${string}`, req: JsonRequest = {}):
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) {
     const detail = data.error ? (FRIENDLY[data.error] ?? data.error) : statusMessage(res.status);
-    throw new RequestError(detail, res.status);
+    throw new RequestError(detail, res.status, data);
   }
   return data;
 }
