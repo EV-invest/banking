@@ -104,6 +104,31 @@ pub struct ProfileFields {
 	pub timezone: Option<String>,
 }
 
+/// The KYC tier at which a user may move money on or off the platform: below this a
+/// deposit address is not provisioned and a withdrawal is refused. Level 0 is a bare
+/// registration (a confirmed email and nothing else verified); level 1 adds an identity
+/// document, liveness, a face match and a clean sanctions/PEP screen. The full ladder is
+/// documented on `banking.v1.UserProfile.kyc_level` — the money plane is what enforces
+/// it, so that is where it is written down.
+pub const KYC_LEVEL_VERIFIED: u32 = 1;
+
+/// The stored shape of a [`User`], as the persistence adapter reads it back — the input
+/// to [`User::rehydrate`]. A struct rather than eight positional arguments because the
+/// call site is a row-to-aggregate mapping: named fields let it be read against the
+/// `SELECT` beside it, where a positional list has to be counted out. (Type safety is not
+/// the reason — every field here is a distinct type, so the compiler already rejects any
+/// transposition.)
+pub struct UserSnapshot {
+	pub id: UserId,
+	pub auth_subject: AuthSubject,
+	pub email: Email,
+	pub email_verified: bool,
+	pub status: UserStatus,
+	pub token_version: u64,
+	pub kyc_level: u32,
+	pub profile: ProfileFields,
+}
+
 /// The investor identity aggregate. Construct it with [`User::provision`] (first
 /// sign-in, raises [`UserEvent::Provisioned`]) or [`User::rehydrate`] (load from
 /// the store, no events). Mutating transitions accumulate [`UserEvent`]s drained
@@ -116,6 +141,11 @@ pub struct User {
 	email_verified: bool,
 	status: UserStatus,
 	token_version: u64,
+	/// The concierge KYC tier, MIRRORED here — the identity plane owns it and the
+	/// lifecycle bridge writes the column. There is deliberately no transition that
+	/// sets it: banking reads the level to gate money movement and never authors it,
+	/// so the only way in is [`User::rehydrate`] from the store.
+	kyc_level: u32,
 	profile: ProfileFields,
 	pending: Vec<UserEvent>,
 }
@@ -131,6 +161,7 @@ impl User {
 			email_verified,
 			status: UserStatus::Active,
 			token_version: 0,
+			kyc_level: 0,
 			profile: ProfileFields::default(),
 			pending: Vec::new(),
 		};
@@ -143,17 +174,18 @@ impl User {
 		user
 	}
 
-	/// Reconstitute an existing user from the store, including the editable profile.
-	/// Raises no events.
-	pub fn rehydrate(id: UserId, auth_subject: AuthSubject, email: Email, email_verified: bool, status: UserStatus, token_version: u64, profile: ProfileFields) -> Self {
+	/// Reconstitute an existing user from the store, including the editable profile and
+	/// the mirrored KYC tier. Raises no events.
+	pub fn rehydrate(snapshot: UserSnapshot) -> Self {
 		Self {
-			id,
-			auth_subject,
-			email,
-			email_verified,
-			status,
-			token_version,
-			profile,
+			id: snapshot.id,
+			auth_subject: snapshot.auth_subject,
+			email: snapshot.email,
+			email_verified: snapshot.email_verified,
+			status: snapshot.status,
+			token_version: snapshot.token_version,
+			kyc_level: snapshot.kyc_level,
+			profile: snapshot.profile,
 			pending: Vec::new(),
 		}
 	}
@@ -232,6 +264,12 @@ impl User {
 
 	pub fn token_version(&self) -> u64 {
 		self.token_version
+	}
+
+	/// The mirrored concierge KYC tier. Compare against [`KYC_LEVEL_VERIFIED`] rather
+	/// than a literal — the ladder is a contract, not a magic number.
+	pub fn kyc_level(&self) -> u32 {
+		self.kyc_level
 	}
 
 	pub fn legal_name(&self) -> Option<&str> {

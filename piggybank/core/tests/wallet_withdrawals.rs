@@ -98,10 +98,16 @@ fn destination(network: Network) -> WalletAddress {
 	WalletAddress::parse(network, raw).unwrap()
 }
 
+/// A fresh user who is active AND verified — what every money-moving path here needs.
+/// `provision` leaves the row at KYC tier 0 (the schema default), which the deposit and
+/// withdrawal gates refuse, so the mirrored tier is set the way the lifecycle bridge sets
+/// it. Tier 0 itself is exercised in `kyc_gating.rs`.
 async fn active_user(h: &Harness) -> UserId {
 	let subject = AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
 	let email = Email::parse(&format!("u{}@example.com", Uuid::new_v4().simple())).unwrap();
-	h.users.provision(subject, email, true).await.unwrap().id()
+	let user = h.users.provision(subject, email, true).await.unwrap().id();
+	common::set_kyc_level(&h.pool, user, 1).await;
+	user
 }
 
 /// A `Usdt`-typed view of a ledger balance for assertions (the ledger port speaks raw
