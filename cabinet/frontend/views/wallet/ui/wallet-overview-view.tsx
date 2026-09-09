@@ -12,6 +12,7 @@ import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { StaggerItem } from "@/shared/ui/motion";
 import { TipAnchor, type TipKey } from "@/shared/tips";
+import { NetworkMark } from "@/shared/ui/icons/networks";
 import { formatUsdt, railMeta } from "@/views/wallet/lib/format";
 import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 
@@ -161,7 +162,9 @@ function RailCard({ network, canDeposit, canWithdraw }: { network: string; canDe
   return (
     <div className={cn(WALLET_CARD, "flex flex-col gap-3.5 p-4.5 lg:gap-4 lg:p-5")}>
       <div className="flex items-center gap-2.5">
-        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold lg:size-8.5 lg:rounded-lg lg:text-sm", rail.tone)}>{rail.badge}</span>
+        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold lg:size-8.5 lg:rounded-lg lg:text-sm", rail.tone)}>
+          <NetworkMark network={network} className="size-4.5 lg:size-5" />
+        </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-foreground">{rail.label}</p>
           <p className="truncate text-xs text-muted-foreground">{t(rail.chainKey)}</p>

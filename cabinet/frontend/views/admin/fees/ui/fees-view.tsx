@@ -18,11 +18,11 @@
 // existing pipeline with its own rail liquidity and dispatch gates. Duplicating a payout
 // form here would give an operator two doors to the same money.
 
-import { Loader2 } from "lucide-react";
+import { Landmark, Loader2, Percent } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyDescription, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
 
 import { setFeePolicy, settleFeeShares } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource, feeAssessmentsResource, feePoliciesResource, feeSharesResource } from "@/entities/admin/model/admin-resource";
@@ -82,8 +82,16 @@ export function FeesView() {
         </StaggerItem>
       ) : funds.length === 0 ? (
         <StaggerItem as={Empty} className="border">
-          <EmptyTitle>{t("admin.fees.noFunds")}</EmptyTitle>
-          <EmptyDescription>{t("admin.fees.noFundsHint")}</EmptyDescription>
+          {/* `EmptyHeader` + `EmptyMedia variant="icon"` is the house form for a zero
+              state — see the operations timeline. Without the media slot this was a grey
+              sentence in a dashed box, which is exactly what the design rules call out. */}
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Landmark />
+            </EmptyMedia>
+            <EmptyTitle>{t("admin.fees.noFunds")}</EmptyTitle>
+            <EmptyDescription>{t("admin.fees.noFundsHint")}</EmptyDescription>
+          </EmptyHeader>
         </StaggerItem>
       ) : (
         <>
@@ -324,8 +332,13 @@ function AssessmentsCard({ service }: { service: string }) {
           <Skeleton className="h-24 w-full" />
         ) : rows.length === 0 ? (
           <Empty className="border">
-            <EmptyTitle>{t("admin.fees.noCharges")}</EmptyTitle>
-            <EmptyDescription>{t("admin.fees.noChargesHint")}</EmptyDescription>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Percent />
+              </EmptyMedia>
+              <EmptyTitle>{t("admin.fees.noCharges")}</EmptyTitle>
+              <EmptyDescription>{t("admin.fees.noChargesHint")}</EmptyDescription>
+            </EmptyHeader>
           </Empty>
         ) : (
           <div className="overflow-x-auto">

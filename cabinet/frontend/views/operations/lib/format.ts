@@ -7,6 +7,8 @@
 // or takes the translator as an argument. Tone, direction and the settled/failed sets stay
 // literal — they are logic, not copy, and no locale changes what a withdrawal is.
 
+import { ArrowDownLeft, ArrowUpRight, Ban, Check, Clock, type LucideIcon, Minus, Percent, Plus, RefreshCw, TriangleAlert, X } from "lucide-react";
+
 import type { Locale, Translate } from "@evinvest/i18n";
 
 import type { Operation } from "@/shared/contracts";
@@ -32,10 +34,11 @@ export const KIND_FILTERS = ["deposit", "withdrawal", "subscription", "redemptio
 export type Direction = "in" | "out" | "move";
 
 export interface KindMeta {
-  /** Catalogue key for the badge glyph — `IN` / `OUT` / `BUY` / `SELL` in the Figma.
-   *  `null` for a kind the hub added after this build, whose badge falls back to the
-   *  wire id itself (see {@link kindBadge}). */
-  badgeKey: string | null;
+  /** The badge mark. `null` for a kind the hub added after this build, whose badge falls
+   *  back to the wire id itself (see {@link kindBadge}) — the same degrade-to-text rule
+   *  the rail marks use. The direction the arrow points is the direction of the money, so
+   *  the badge stops depending on the reader knowing what `IN` and `BUY` were shorthand for. */
+  icon: LucideIcon | null;
   /** Catalogue key for the kind's name, or `null` for an unrecognised kind. */
   labelKey: string | null;
   direction: Direction;
@@ -48,14 +51,14 @@ const KINDS: Record<string, KindMeta> = {
   // word is a noun ("a deposit"), while `ui.deposit` is the wallet button, where it is a
   // verb ("deposit funds"). English spells both "Deposit" and hid the difference; German
   // and Russian each have to pick one, and both translators raised it independently.
-  deposit: { badgeKey: "ops.badge.in", labelKey: "ops.kind.deposit", direction: "in", tone: "bg-main-accent-t2/15 text-main-accent-t2" },
-  withdrawal: { badgeKey: "ops.badge.out", labelKey: "ops.kind.withdrawal", direction: "out", tone: "bg-destructive/15 text-destructive" },
-  subscription: { badgeKey: "ops.badge.buy", labelKey: "ops.kind.subscription", direction: "move", tone: "bg-main-accent-t1/15 text-main-accent-t1" },
-  redemption: { badgeKey: "ops.badge.sell", labelKey: "ops.kind.redemption", direction: "move", tone: "bg-main-accent-t3/15 text-main-accent-t3" },
-  fee: { badgeKey: "ops.badge.fee", labelKey: "ops.kind.fee", direction: "out", tone: "bg-destructive/15 text-destructive" },
+  deposit: { icon: ArrowDownLeft, labelKey: "ops.kind.deposit", direction: "in", tone: "bg-main-accent-t2/15 text-main-accent-t2" },
+  withdrawal: { icon: ArrowUpRight, labelKey: "ops.kind.withdrawal", direction: "out", tone: "bg-destructive/15 text-destructive" },
+  subscription: { icon: Plus, labelKey: "ops.kind.subscription", direction: "move", tone: "bg-main-accent-t1/15 text-main-accent-t1" },
+  redemption: { icon: Minus, labelKey: "ops.kind.redemption", direction: "move", tone: "bg-main-accent-t3/15 text-main-accent-t3" },
+  fee: { icon: Percent, labelKey: "ops.kind.fee", direction: "out", tone: "bg-destructive/15 text-destructive" },
 };
 
-const UNKNOWN_KIND: KindMeta = { badgeKey: null, labelKey: null, direction: "move", tone: "bg-muted text-muted-foreground" };
+const UNKNOWN_KIND: KindMeta = { icon: null, labelKey: null, direction: "move", tone: "bg-muted text-muted-foreground" };
 
 /** An unrecognised kind renders neutrally rather than disappearing — a new hub kind is
  *  visible as an unstyled row instead of a silent gap in someone's history. */
@@ -63,14 +66,15 @@ export function kindMeta(kind: string | undefined): KindMeta {
   return KINDS[kind ?? ""] ?? UNKNOWN_KIND;
 }
 
-/** The badge glyph for a kind. An unrecognised kind wears its own wire id, which is an
- *  identifier rather than copy and so is never translated.
+/** The text a badge falls back to when {@link KindMeta.icon} is `null` — a kind this
+ *  build has no mark for. It wears its own wire id, which is an identifier rather than
+ *  copy and so is never translated.
  *
- *  i18n-max: 4 — the badge sits in a `shrink-0` column beside a truncating row title. */
-export function kindBadge(kind: string | undefined, t: Translate): string {
+ *  Never reached for a kind in {@link KINDS}: those all carry a mark. It exists so a kind
+ *  the hub adds later is still a legible row rather than an empty badge. */
+export function kindBadge(kind: string | undefined): string {
   const id = kind ?? "";
-  const key = KINDS[id]?.badgeKey;
-  return key ? t(key) : id.slice(0, 4).toUpperCase() || "—";
+  return id.slice(0, 4).toUpperCase() || "—";
 }
 
 /** The kind's name. Same fallback rule as {@link kindBadge}: the wire id when there is
@@ -146,6 +150,30 @@ export function stateTone(state: string | undefined): string {
       return "bg-muted text-muted-foreground";
   }
 }
+
+/** The mark that goes with a lifecycle state. Colour alone cannot carry a state — it is
+ *  invisible to a red/green-blind reader and to anyone on a monochrome display — so the
+ *  badge's tint is doubled by a shape. The word is always there too; the mark is
+ *  reinforcement, which is why every call site renders it `aria-hidden`.
+ *
+ *  A map rather than a `stateIcon()` accessor on purpose: `react-hooks/static-components`
+ *  rejects a component bound from a *call* during render (it cannot tell a lookup from a
+ *  freshly built component), while an index into a module-level table is accepted — and
+ *  the table is what this always was.
+ *
+ *  A state that is missing here has no mark, matching {@link stateLabel}'s fallback: the
+ *  badge shows the wire identifier as text rather than an arbitrary shape. */
+export const STATE_ICONS: Record<string, LucideIcon> = {
+  queued: Clock,
+  processing: RefreshCw,
+  completed: Check,
+  credited: Check,
+  charged: Check,
+  // Same reading as its tint: settled, but for less than was assessed.
+  partly_deferred: TriangleAlert,
+  failed: X,
+  cancelled: Ban,
+};
 
 /** Unix seconds on the wire arrive as a string (the BFF renders i64 as text so no
  *  client has to survive 2^53); `0`/absent means the hub never stamped one. */

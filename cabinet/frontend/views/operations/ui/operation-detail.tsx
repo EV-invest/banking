@@ -2,11 +2,14 @@
 
 import { Link } from "@/shared/ui/cabinet-link";
 
+import type { ReactNode } from "react";
+
 import { Badge, Button, Separator } from "@evinvest/uikit";
 
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
-import { amountTone, dayLabel, dayLabelInline, formatUnits, formatUsdt, kindBadge, kindMeta, networkLabel, seconds, stateLabel, stateTone, timeLabel } from "@/views/operations/lib/format";
+import { amountTone, dayLabel, dayLabelInline, formatUnits, formatUsdt, kindBadge, kindMeta, networkLabel, seconds, STATE_ICONS, stateLabel, stateTone, timeLabel } from "@/views/operations/lib/format";
+import { NetworkMark } from "@/shared/ui/icons/networks";
 import type { Locale, Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 
@@ -24,6 +27,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
   const t = useT();
   const locale = useLocale();
   const meta = kindMeta(operation.kind);
+  const StateIcon = STATE_ICONS[operation.state ?? ""];
   const at = seconds(operation.created_at);
   const steps = progressFor(operation, t, locale);
   const sub = subheadline(operation, t);
@@ -32,11 +36,16 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
     <div className="flex flex-col">
       <header className="flex flex-col gap-1 px-4 pb-3 pt-4">
         <div className="flex items-center gap-2">
-          {/* i18n-max: 4 */}
-          <Badge className={cn("font-semibold", meta.tone)}>{kindBadge(operation.kind, t)}</Badge>
+          {/* Decorative — the panel title beside it names the kind. i18n-max: 4 on the
+              text fallback, reached only for a kind with no mark. */}
+          <Badge className={cn("font-semibold", meta.tone)}>{meta.icon ? <meta.icon aria-hidden /> : kindBadge(operation.kind)}</Badge>
           <p className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{title}</p>
-          {/* No `capitalize` — see the note on the same badge in `operations-view`. */}
-          <Badge className={stateTone(operation.state)}>{stateLabel(operation.state, t)}</Badge>
+          {/* No `capitalize`, and the mark doubles the tint — see the notes on the same
+              badges in `operations-view`. */}
+          <Badge className={stateTone(operation.state)}>
+            {StateIcon && <StateIcon aria-hidden />}
+            {stateLabel(operation.state, t)}
+          </Badge>
         </div>
         <p className="text-xs text-muted-foreground">{context(operation, at, t, locale)}</p>
         <p className={cn("pt-1 text-2xl font-semibold tabular-nums", amountTone(meta.direction))}>{headline(operation, t)}</p>
@@ -170,19 +179,35 @@ function subheadline(operation: Operation, t: Translate): string | null {
   return null;
 }
 
-function detailsFor(operation: Operation, t: Translate): [string, string][] {
-  const rows: [string, string][] = [];
+// Inline and badge-free, so the row keeps the shape of every other detail row — the mark
+// sits in the value column, not in a tinted square of its own.
+//
+// Call sites pass a `key`: the element goes into the `rows` array, and `react/jsx-key`
+// reads a `push` into an array as a list. The renderer keys the row by position anyway.
+function NetworkRow({ network }: { network: string | undefined }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <NetworkMark network={network} className="size-3.5 shrink-0" />
+      {networkLabel(network)}
+    </span>
+  );
+}
+
+// A value is a node, not a string, because one of them is not text: the network row
+// carries the chain's mark beside its name, the same pairing the wallet uses.
+function detailsFor(operation: Operation, t: Translate): [string, ReactNode][] {
+  const rows: [string, ReactNode][] = [];
   switch (operation.kind) {
     case "deposit":
       rows.push([t("ops.detail.amountCredited"), `${formatUsdt(operation.amount)} USDT`]);
-      rows.push([t("ui.network"), networkLabel(operation.network)]);
+      rows.push([t("ui.network"), <NetworkRow key="network" network={operation.network} />]);
       if (operation.tx_ref) rows.push([t("ops.detail.reference"), operation.tx_ref]);
       break;
     case "withdrawal":
       rows.push([t("ops.detail.amountDebited"), `${formatUsdt(operation.amount)} USDT`]);
       if (operation.fee) rows.push([t("wallet.networkFee"), `${formatUsdt(operation.fee)} USDT`]);
       if (operation.net_amount) rows.push([t("ops.detail.netSent"), `${formatUsdt(operation.net_amount)} USDT`]);
-      rows.push([t("ui.network"), networkLabel(operation.network)]);
+      rows.push([t("ui.network"), <NetworkRow key="network" network={operation.network} />]);
       if (operation.address) rows.push([t("ops.detail.toAddress"), operation.address]);
       rows.push([t("ops.detail.reference"), operation.tx_ref || t("ops.detail.notYetBroadcast")]);
       break;

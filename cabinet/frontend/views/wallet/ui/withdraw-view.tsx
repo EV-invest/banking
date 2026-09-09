@@ -3,7 +3,7 @@
 import { useT } from "@evinvest/i18n/react";
 
 import { Clock, Loader2, TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";
 
@@ -13,6 +13,7 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor, type TipKey } from "@/shared/tips";
+import { NetworkMark } from "@/shared/ui/icons/networks";
 import { Panel, PanelPresence, Settled, StaggerItem } from "@/shared/ui/motion";
 import { formatUsdt, fromBaseUnits, networkLabel, shortAddress, subUsdt, toBaseUnits } from "@/views/wallet/lib/format";
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
@@ -232,7 +233,15 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                 <Panel key="review" from="bottom" className={cn(WALLET_CARD, "flex flex-col gap-4 p-4.5 lg:p-5")}>
                   <p className="text-sm font-semibold text-foreground">{t("wallet.reviewWithdrawal")}</p>
                   <div className="flex flex-col gap-2.5">
-                    <Row label={t("ui.network")} value={networkLabel(confirming.network)} />
+                    <Row
+                      label={t("ui.network")}
+                      value={
+                        <span className="inline-flex items-center gap-1.5">
+                          <NetworkMark network={confirming.network} className="size-3.5 shrink-0" />
+                          {networkLabel(confirming.network)}
+                        </span>
+                      }
+                    />
                     <Row label={t("ui.destination")} value={shortAddress(confirming.address)} />
                     <Row label={t("ui.amount")} value={`${formatUsdt(confirming.amount)} USDT`} />
                     <Row label={t("wallet.networkFee")} value={`${formatUsdt(confirming.fee)} USDT`} />
@@ -272,7 +281,9 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   );
 }
 
-function Row({ label, value, tone, tip }: { label: string; value: string; tone?: string; tip?: TipKey }) {
+// `value` takes a node, not a string: the network row pairs the chain's mark with its
+// name, while every other row is a figure.
+function Row({ label, value, tone, tip }: { label: string; value: ReactNode; tone?: string; tip?: TipKey }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
