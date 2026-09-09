@@ -393,6 +393,89 @@ async fn created_carrying_owner_still_journals_the_roster_change() {
 	.await;
 }
 
+/// THE BUG THIS GUARDS: A LIFECYCLE EVENT FOR A NOT-YET-PROVISIONED SUBJECT MUST NOT BE LOST.
+///
+/// No CREATED precedes this KYC_CHANGED — e.g. the subject's own CREATED already aged out of
+/// the concierge outbox. The old behavior treated "no local row" as nothing to mutate, and
+/// since `drain` advances the cursor unconditionally once the batch applies, the event was
+/// gone forever: the subject would later materialize (via a sign-in or a later CREATED) at
+/// `kyc_level = 0`, permanently missing the tier this event granted. The fix provisions a
+/// minimal row from THIS event's own identity snapshot instead of dropping it.
+#[tokio::test]
+async fn kyc_changed_for_an_unprovisioned_subject_provisions_and_applies() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+
+	drive(&pool, vec![event(&subject, Kind::KycChanged, 7)], move |pool| {
+		let subject = subject.clone();
+		async move {
+			let (kyc_level, sequence): (i32, i64) = sqlx::query_as("SELECT kyc_level, last_lifecycle_sequence FROM users WHERE auth_subject = $1")
+				.bind(&subject)
+				.fetch_one(&pool)
+				.await
+				.expect("KYC_CHANGED must provision a row for an unseen subject, not drop the event");
+			assert_eq!(kyc_level, 1, "the provisioned row carries the KYC level from this event's own snapshot");
+			assert_eq!(sequence, 7, "the per-user guard is stamped so a redelivery of this same event is a no-op");
+		}
+	})
+	.await;
+}
+
+/// SUSPENDED for an unprovisioned subject must freeze on arrival — a fail-open here would let
+/// a suspended user's later sign-in materialize an unfrozen row.
+#[tokio::test]
+async fn suspended_for_an_unprovisioned_subject_provisions_frozen() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+
+	drive(&pool, vec![event(&subject, Kind::Suspended, 3)], move |pool| {
+		let subject = subject.clone();
+		async move {
+			let user_id = user_id_for(&pool, &subject).await.expect("SUSPENDED must provision a row for an unseen subject");
+			assert!(
+				bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
+				"a subject provisioned by a SUSPENDED event must come into existence already frozen"
+			);
+		}
+	})
+	.await;
+}
+
+/// The same owner-latch as `created_carrying_owner_still_journals_the_roster_change`, but
+/// reached through the fallback provisioning path: a ROLE_CHANGED is the first event this
+/// subject's row is ever built from, so the roster journal must still see default → owner.
+#[tokio::test]
+async fn role_changed_for_an_unprovisioned_subject_provisions_and_journals() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	let mut born_an_owner = event(&subject, Kind::RoleChanged, 1);
+	born_an_owner.role = "owner".to_string();
+
+	drive(&pool, vec![born_an_owner], move |pool| {
+		let subject = subject.clone();
+		async move {
+			let user_id = user_id_for(&pool, &subject).await.expect("ROLE_CHANGED must provision a row for an unseen subject");
+			let journalled: Option<(String, String)> = sqlx::query_as("SELECT from_role, to_role FROM governance_roster_change WHERE user_id = $1")
+				.bind(user_id)
+				.fetch_optional(&pool)
+				.await
+				.unwrap();
+			assert_eq!(
+				journalled,
+				Some(("investor".to_string(), "owner".to_string())),
+				"a fallback-provisioned row that seats an owner must start the cooling-off clock too"
+			);
+		}
+	})
+	.await;
+}
+
 /// The common case must NOT be journalled: almost every CREATED carries `investor`, and
 /// charging the cooling-off window for each new signup would freeze payouts permanently.
 #[tokio::test]

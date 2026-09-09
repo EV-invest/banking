@@ -16,7 +16,12 @@
 //!
 //! Correlation is by `auth_subject` (the provider `sub` both planes provision against),
 //! never concierge's own `user_id` — a CREATED event provisions a minimal local row for an
-//! as-yet-unseen subject (banking otherwise materializes a user on first sign-in).
+//! as-yet-unseen subject (banking otherwise materializes a user on first sign-in). Every
+//! lifecycle event, not only CREATED, carries concierge's full identity snapshot (email,
+//! kyc_level, role) at emit time, so ANY kind can provision that row when it arrives first —
+//! e.g. a KYC_CHANGED or SUSPENDED for a subject whose own CREATED already aged out of the
+//! concierge outbox. Without this, such an event would have nothing to mutate, and since the
+//! cursor still advances past it, it would be lost rather than merely delayed.
 
 use std::time::Duration;
 
@@ -165,14 +170,64 @@ impl BridgeConsumer {
 			}
 		}
 
-		let current: Option<i64> = sqlx::query_scalar("SELECT last_lifecycle_sequence FROM users WHERE auth_subject = $1 FOR UPDATE")
+		let mut current: Option<i64> = sqlx::query_scalar("SELECT last_lifecycle_sequence FROM users WHERE auth_subject = $1 FOR UPDATE")
 			.bind(subject)
 			.fetch_optional(&mut *tx)
 			.await?;
+
+		if current.is_none() && event.kind() != Kind::Created {
+			// No local row, and this isn't CREATED (handled above). Concierge stamps its full
+			// identity snapshot — email, kyc_level, role — on EVERY lifecycle event, not only
+			// CREATED (see the module doc and the CREATED arm below), so THIS event alone
+			// carries enough to provision a minimal row, exactly as CREATED does.
+			//
+			// This matters because `drain` advances the cursor unconditionally once a batch
+			// applies: treating an unprovisioned subject as "nothing to mutate" — the previous
+			// behavior — moved the cursor past the event with no second delivery ever coming to
+			// catch up on. A KYC_CHANGED or SUSPENDED for a subject whose own CREATED already
+			// aged out of the concierge outbox (or simply hasn't been pulled yet, racing this
+			// same subject's first sign-in on the banking side) was lost forever, silently
+			// diverging the tier/freeze mirror from identity truth. See issue #176.
+			//
+			// SUSPENDED is the one kind whose effect isn't carried by a snapshot field —
+			// freezing is signalled purely by `kind`, not a field — so it's the only column
+			// seeded conditionally here; every other kind's target state already lives in the
+			// columns below.
+			let frozen = event.kind() == Kind::Suspended;
+			let seated: Option<uuid::Uuid> = sqlx::query_scalar(
+				"INSERT INTO users (id, auth_subject, concierge_user_id, email, email_verified, kyc_level, role, frozen, concierge_token_version, last_lifecycle_sequence) \
+				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (auth_subject) DO NOTHING RETURNING id",
+			)
+			.bind(subject)
+			.bind(concierge_user_id)
+			.bind(&event.email)
+			.bind(event.email_verified)
+			.bind(event.kyc_level as i32)
+			.bind(role.as_str())
+			.bind(frozen)
+			.bind(event.token_version as i64)
+			.bind(sequence)
+			.fetch_optional(&mut *tx)
+			.await?;
+
+			// Same journal duty as the CREATED insert above: a row that did not exist held no
+			// role, so `record_roster_change` reports the default it replaced.
+			if let Some(user_id) = seated {
+				record_roster_change(&mut tx, user_id, Role::default().as_str(), role.as_str()).await?;
+			}
+			// Re-read regardless of whether we won or lost the race — either way the row exists
+			// now: ours seeded it at `sequence` (the guard below then skips the match arm, same
+			// as CREATED's early insert does); a concurrent winner (this same subject's CREATED
+			// applying moments later, or banking's own first-sign-in `UserRepository::provision`)
+			// seeded it at a lower sequence, so the guard falls through to the match arm below.
+			current = sqlx::query_scalar("SELECT last_lifecycle_sequence FROM users WHERE auth_subject = $1 FOR UPDATE")
+				.bind(subject)
+				.fetch_optional(&mut *tx)
+				.await?;
+		}
+
 		let Some(current) = current else {
-			// No local row and not a CREATED (or CREATED lost the insert race and the row is
-			// being built by another path) — nothing to mutate. The eventual CREATED/sign-in
-			// materializes it; redelivery then catches up. Don't advance anything.
+			// Unreachable: the branches above either found the existing row or just created it.
 			tx.commit().await?;
 			return Ok(());
 		};
