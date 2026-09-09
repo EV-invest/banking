@@ -52,6 +52,18 @@ fn u32_field(v: &Value, key: &str) -> u32 {
 	v.get(key).and_then(Value::as_u64).unwrap_or(0) as u32
 }
 
+/// A REQUIRED non-negative whole number: `None` when the field is missing, or is not a
+/// whole non-negative number that fits a `u32` (a negative, a float, a string, or an
+/// overflow all fall through to `None` rather than being coerced).
+///
+/// Deliberately not [`u32_field`], whose missing-is-zero default is right for an optional
+/// knob and wrong for anything the caller must actually choose — coercing a malformed
+/// required field to zero answers "saved" while silently substituting a value nobody
+/// asked for.
+fn required_u32(v: &Value, key: &str) -> Option<u32> {
+	v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
+}
+
 /// A REQUIRED basis-point rate: `None` when the field is missing, or is not a whole
 /// non-negative number that fits a `u32`.
 ///
@@ -62,7 +74,7 @@ fn u32_field(v: &Value, key: &str) -> u32 {
 /// screen exists to end. The hub caps the value at 10000 bps; refusing a malformed one is
 /// this layer's half.
 fn rate_field(v: &Value, key: &str) -> Option<u32> {
-	v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
+	required_u32(v, key)
 }
 
 // ── overview (fleet health; health RPCs are public — no token) ─────────────────
@@ -213,7 +225,14 @@ pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: Header
 	let Some(user_id) = required(&v, "user_id") else {
 		return Err(ApiError::BadRequest("user_id is required".into()));
 	};
-	let res = st.grpc.admin_set_kyc_level(&token, &user_id, u32_field(&v, "kyc_level")).await?;
+	// The tier ladder is 0..=3 (contracts/proto/banking/v1/users.proto). Required rather
+	// than u32_field: a missing-is-zero default here would silently strip a user to tier 0
+	// — closing both deposit issuance and withdrawals (KYC_LEVEL_VERIFIED = 1) — while
+	// answering 200 as if the requested tier had been saved.
+	let Some(kyc_level) = required_u32(&v, "kyc_level").filter(|level| *level <= 3) else {
+		return Err(ApiError::BadRequest("kyc_level is required and must be a whole number from 0 to 3".into()));
+	};
+	let res = st.grpc.admin_set_kyc_level(&token, &user_id, kyc_level).await?;
 	Ok(Json(json!({ "kyc_level": res.kyc_level })))
 }
 
