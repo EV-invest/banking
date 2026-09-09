@@ -9,7 +9,10 @@
 
 use std::{
 	collections::HashMap,
-	sync::{Arc, Mutex},
+	sync::{
+		Arc, Mutex,
+		atomic::{AtomicBool, Ordering},
+	},
 };
 
 use async_trait::async_trait;
@@ -23,8 +26,8 @@ use domain::{
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
-	infrastructure::{custody::StubCustody, deposits::PgDeposits, dispatcher::Dispatcher, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
-	ports::{BroadcastRequest, Custody, CustodyError, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
+	infrastructure::{custody::StubCustody, deposits::PgDeposits, dispatcher::Dispatcher, payout_guard::PgPayoutGuard, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
+	ports::{BroadcastRequest, Custody, CustodyError, DepositAddresses, PayoutGuard, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -42,6 +45,7 @@ struct Harness {
 	ledger: Arc<dyn Ledger>,
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	users: Arc<dyn UserRepository>,
+	payout_guard: Arc<dyn PayoutGuard>,
 	deposit_addresses: Arc<dyn DepositAddresses>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -53,6 +57,7 @@ async fn harness() -> Option<Harness> {
 
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
+	let payout_guard: Arc<dyn PayoutGuard> = Arc::new(PgPayoutGuard::new(pool.clone()));
 	let deposit_addresses: Arc<dyn DepositAddresses> = Arc::new(StubDepositAddresses::new(pool.clone()));
 	let notify = Arc::new(Notify::new());
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
@@ -62,6 +67,7 @@ async fn harness() -> Option<Harness> {
 		ledger,
 		withdrawals,
 		users,
+		payout_guard,
 		deposit_addresses,
 		relay,
 		notify,
@@ -359,7 +365,7 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	// The treasury tops up the TON rail past the net; the worker then dispatches it.
 	balance_app::seed_fund_capital(&h.deposits, &h.notify, Network::Ton, big).await.unwrap();
 	h.relay.drain().await;
-	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, withdrawal.id())
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, h.users.as_ref(), h.payout_guard.as_ref(), &h.notify, withdrawal.id())
 		.await
 		.unwrap();
 	assert_eq!(dispatched.state(), WithdrawalState::Processing, "a funded rail dispatches");
@@ -498,13 +504,121 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 
-	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, &h.notify, withdrawal.id())
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, h.users.as_ref(), h.payout_guard.as_ref(), &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(_)), "an underfunded rail refuses the dispatch, got {err:?}");
 	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
 	assert_eq!(after.state(), WithdrawalState::Queued, "a refused dispatch leaves the withdrawal queued");
 
+	withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), user).await.unwrap();
+	h.relay.drain().await;
+}
+
+/// The admin dispatch RPC must honor the SAME outflow policy gates the sync RPC boundary
+/// (`unfrozen_caller`) and the dispatcher sweep enforce — permission alone is not enough
+/// to push a payout while the read-only kill-switch is on. `read_only` is a single global
+/// row, so this test drives it through a [`ReadOnlyOverride`] rather than the real
+/// [`PgPayoutGuard`], to stay isolated from every other test sharing this Postgres instance.
+#[tokio::test]
+async fn admin_dispatch_is_refused_in_read_only_mode() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+
+	// Queue it on an on-chain-short rail, then fund the rail — only read-only may hold it.
+	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+	custody.set(network, TreasuryView::OnChain(usdt("1000000")));
+
+	let guard = ReadOnlyOverride::new(h.payout_guard.clone());
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, h.users.as_ref(), &guard, &h.notify, withdrawal.id())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "read-only mode refuses an admin dispatch, got {err:?}");
+	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(after.state(), WithdrawalState::Queued, "a refused dispatch leaves the withdrawal queued");
+
+	// Lifting read-only lets the very same call through, proving it was the only hold.
+	guard.set_read_only(false);
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, h.users.as_ref(), &guard, &h.notify, withdrawal.id())
+		.await
+		.expect("once read-only lifts, the dispatch proceeds");
+	assert_eq!(dispatched.state(), WithdrawalState::Processing);
+	h.relay.drain().await;
+
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref()).await.unwrap();
+	h.relay.drain().await;
+}
+
+/// The admin dispatch RPC must not pay a frozen owner out — a concierge SUSPENDED
+/// mirrored onto `frozen` blocks it exactly as it blocks the dispatcher sweep and the
+/// sync `RequestWithdrawal` boundary, even with permission and full liquidity.
+#[tokio::test]
+async fn admin_dispatch_is_refused_for_a_frozen_owner() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+
+	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+	custody.set(network, TreasuryView::OnChain(usdt("1000000")));
+
+	sqlx::query("UPDATE users SET frozen = TRUE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, h.users.as_ref(), h.payout_guard.as_ref(), &h.notify, withdrawal.id())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "a frozen owner refuses an admin dispatch, got {err:?}");
+	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(after.state(), WithdrawalState::Queued, "a refused dispatch leaves the withdrawal queued");
+
+	sqlx::query("UPDATE users SET frozen = FALSE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+	withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), user).await.unwrap();
+	h.relay.drain().await;
+}
+
+/// The admin dispatch RPC must not pay out a withdrawal whose owner's verification was
+/// revoked while it sat `queued` — the companion hole to the read-only/freeze gaps: a
+/// tier-1 caller who is demoted to tier 0 (or lower) after `RequestWithdrawal` accepted
+/// their request must not have it shipped anyway just because an operator (or the
+/// dispatcher) later reaches it.
+#[tokio::test]
+async fn admin_dispatch_is_refused_once_verification_is_revoked() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+
+	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.expect("tier 1 at request time");
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+	custody.set(network, TreasuryView::OnChain(usdt("1000000")));
+
+	// Verification revoked while the withdrawal sat queued (a concierge KYC downgrade).
+	common::set_kyc_level(&h.pool, user, 0).await;
+
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, h.users.as_ref(), h.payout_guard.as_ref(), &h.notify, withdrawal.id())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "a revoked tier refuses an admin dispatch, got {err:?}");
+	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(after.state(), WithdrawalState::Queued, "a refused dispatch leaves the withdrawal queued");
+
+	common::set_kyc_level(&h.pool, user, 1).await;
 	withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), user).await.unwrap();
 	h.relay.drain().await;
 }
@@ -540,7 +654,7 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues the request");
 	h.relay.drain().await;
 
-	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.users.clone(), h.payout_guard.clone(), h.notify.clone());
 
 	// On-chain still short — the sweep leaves everything queued.
 	assert_eq!(dispatcher.sweep().await.unwrap(), 0, "an on-chain-short rail dispatches nothing");
@@ -601,7 +715,7 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 
 	// Both liquidity gates now pass on-chain — only the freeze may hold it.
 	custody.set(network, TreasuryView::OnChain(usdt("1000000000")));
-	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.users.clone(), h.payout_guard.clone(), h.notify.clone());
 
 	// Freeze the owner (mirrors a concierge SUSPENDED: `frozen` set, status still active).
 	sqlx::query("UPDATE users SET frozen = TRUE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
@@ -664,7 +778,7 @@ async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 	// Top up the treasury to cover exactly one net (49) — a static gate would let all
 	// three (net 147) through.
 	custody.set(network, TreasuryView::OnChain(usdt("50")));
-	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.users.clone(), h.payout_guard.clone(), h.notify.clone());
 	dispatcher.sweep().await.unwrap();
 
 	let first = h.withdrawals.find_by_id(withdrawals[0].id()).await.unwrap().unwrap();
@@ -694,6 +808,43 @@ async fn deposit_address_is_stable_per_user_and_network() {
 		let second = h.deposit_addresses.address(user, network).await.unwrap().expect("stub yields a fundable address");
 		assert_eq!(first, second, "the cached deposit address is stable across reads");
 		assert_eq!(first.network(), network, "the address is for the requested network");
+	}
+}
+
+// ── Test-only payout guard with a controllable read-only flag ───────────────────
+// `read_only` on [`PgPayoutGuard`] is a single row shared by every test in every
+// integration binary running against this Postgres instance, so flipping it for real
+// would pause money movement out from under whatever else is running concurrently.
+// This wraps the real guard (freeze stays real, per-user, and safe to mutate) and
+// overrides only `is_read_only`, so `dispatch_withdrawal`'s read-only arm is exercised
+// without touching global state.
+
+struct ReadOnlyOverride {
+	inner: Arc<dyn PayoutGuard>,
+	read_only: AtomicBool,
+}
+
+impl ReadOnlyOverride {
+	fn new(inner: Arc<dyn PayoutGuard>) -> Self {
+		Self {
+			inner,
+			read_only: AtomicBool::new(true),
+		}
+	}
+
+	fn set_read_only(&self, value: bool) {
+		self.read_only.store(value, Ordering::SeqCst);
+	}
+}
+
+#[async_trait]
+impl PayoutGuard for ReadOnlyOverride {
+	async fn is_read_only(&self) -> Result<bool, DomainError> {
+		Ok(self.read_only.load(Ordering::SeqCst))
+	}
+
+	async fn is_frozen(&self, user: UserId) -> Result<bool, DomainError> {
+		self.inner.is_frozen(user).await
 	}
 }
 

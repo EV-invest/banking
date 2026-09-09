@@ -37,6 +37,7 @@ use piggybank_core::{
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		operation_feed::PgOperationFeed,
+		payout_guard::PgPayoutGuard,
 		positions::PgFundPositions,
 		reaper::Reaper,
 		reconciliation::Reconciliation,
@@ -60,8 +61,8 @@ use piggybank_core::{
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository,
-		UserRepository, WithdrawalRepository, ledger::Ledger,
+		AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, PayoutGuard, RedemptionRepository,
+		SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 	},
 	services,
 };
@@ -202,6 +203,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
+	let payout_guard: Arc<dyn PayoutGuard> = Arc::new(PgPayoutGuard::new(pool.clone()));
 	let consilia: Arc<dyn ConsiliumRepository> = Arc::new(PgConsilia::new(pool.clone()));
 	let allocations: Arc<dyn AllocationRegistry> = Arc::new(PgAllocations::new(pool.clone()));
 	let subscriptions: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(pool.clone()));
@@ -308,7 +310,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// the dispatcher drains the accept-and-queue backlog once a rail is topped up.
 	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
 	let reaper = Reaper::new(relay_pool.clone(), withdrawals.clone(), redemptions.clone(), relay_notify.clone());
-	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
+	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), users.clone(), payout_guard.clone(), relay_notify.clone());
 	// The fee sweeper is the only job that *charges* rather than repairs: management fees
 	// accrue with the clock, so something has to wake up and collect them. It shares the
 	// recovery jobs' cadence and their per-item warn-and-continue discipline.
@@ -465,6 +467,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		operations,
 		deposit_addresses,
 		custody,
+		payout_guard,
 		Arc::from(rails.configured_networks()),
 		relay_notify,
 		config.consilium_approval_url_base.clone(),

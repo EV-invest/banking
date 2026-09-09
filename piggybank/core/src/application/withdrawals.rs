@@ -25,7 +25,7 @@ use domain::{
 use tokio::sync::Notify;
 use tracing::warn;
 
-use crate::ports::{Custody, UserRepository, WithdrawalRepository, ledger::Ledger};
+use crate::ports::{Custody, PayoutGuard, UserRepository, WithdrawalRepository, ledger::Ledger};
 
 /// The driven ports the withdrawal write-path borrows: the aggregate's repository, the
 /// ledger both Read-First checks read, the custody gateway the rail-liquidity check asks,
@@ -194,11 +194,42 @@ async fn open_withdrawal(ports: &WithdrawalPorts<'_>, id: WithdrawalId, source: 
 /// would only park at the custody backstop). `None`/`Err` reads dispatch as before: the
 /// operator RPC is backed by human judgment, and stub rails stay operator-settled.
 /// Idempotent.
-pub async fn dispatch_withdrawal(withdrawals: &dyn WithdrawalRepository, custody: &dyn Custody, relay: &Notify, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+///
+/// The single place that enforces the outflow policy gates on the way OUT of the
+/// accept-and-queue backlog: the global read-only kill-switch, the cross-plane freeze on
+/// the withdrawal's owner, and the `kyc >= 1` floor — all fail CLOSED. `RequestWithdrawal`
+/// enforces the same three at accept time, but a caller's tier or freeze state can change
+/// while a withdrawal sits `queued`, and both the dispatcher's sweep and the admin
+/// `DispatchWithdrawal` RPC reach this function, so gating it HERE is what makes the
+/// policy hold for every path that moves money out rather than only the one that queued
+/// it. `WithdrawalSource::Revenue` has no owner to gate — see [`request_revenue_payout`].
+pub async fn dispatch_withdrawal(
+	withdrawals: &dyn WithdrawalRepository,
+	custody: &dyn Custody,
+	users: &dyn UserRepository,
+	guard: &dyn PayoutGuard,
+	relay: &Notify,
+	id: WithdrawalId,
+) -> Result<Withdrawal, DomainError> {
+	if guard.is_read_only().await? {
+		return Err(DomainError::Forbidden("money movements are temporarily paused (read-only mode)".into()));
+	}
 	let existing = withdrawals.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "withdrawal",
 		id: id.to_string(),
 	})?;
+	if let Some(owner) = existing.user() {
+		if guard.is_frozen(owner).await? {
+			return Err(DomainError::Forbidden("account is frozen".into()));
+		}
+		let account = users.find_by_id(owner).await?.ok_or_else(|| DomainError::NotFound {
+			entity: "user",
+			id: owner.to_string(),
+		})?;
+		if account.kyc_level() < KYC_LEVEL_VERIFIED {
+			return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
+		}
+	}
 	if let Ok(Some(onchain)) = custody.treasury_liquidity(existing.network()).await
 		&& onchain < existing.net_amount()
 	{

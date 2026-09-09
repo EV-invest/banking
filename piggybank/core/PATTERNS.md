@@ -566,7 +566,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `GetDepositAddress` | the user | `sub == user` | `kyc_level ≥ 1` (else `permission_denied`) |
 | `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | active account ∧ `kyc_level ≥ 1` ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
-| `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
+| `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ **not read-only** ∧ (for `WithdrawalSource::User`) owner **not frozen** ∧ `kyc_level ≥ 1` |
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
 | `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ (settle) position projection tracks ≥ the redeemed units |
@@ -591,6 +591,16 @@ SUSPENDED→frozen / REINSTATED→unfrozen, KYC, and the revoke floor onto `user
 banking only mirrors the gating slice. The gate fails CLOSED (UNAVAILABLE) if the flag can't
 be read. Cancel/read RPCs are intentionally NOT gated, so a frozen user can still unwind
 queued positions.
+
+The read-only kill-switch and the freeze gate are NOT limited to the sync RPC boundary —
+`application::withdrawals::dispatch_withdrawal` re-enforces both (plus `kyc_level ≥ 1` for
+`WithdrawalSource::User`) immediately before it ships a `queued` withdrawal, via the
+[`PayoutGuard`] port (`infrastructure::payout_guard::PgPayoutGuard`, a thin wrapper over
+`operations::is_read_only` / `bridge::is_frozen`). Both the [`dispatcher`](src/infrastructure/dispatcher.rs)
+sweep and the admin `DispatchWithdrawal` RPC call this one function, so an operator pause,
+an AML freeze, or a verification revoked while a withdrawal sat `queued` holds on EVERY
+path that can ship it, not only the one that accepted it. `WithdrawalSource::Revenue` has
+no owner, so only the read-only switch applies to a payout.
 
 **Verification gate (`kyc_level`).** The mirrored tier is not just stored, it *gates*:
 `domain::users::KYC_LEVEL_VERIFIED` (= 1) is the floor for money crossing the platform
@@ -664,9 +674,13 @@ treasury worker: it re-checks every `queued` withdrawal against **both** liquidi
 the TB rail balance and `Custody::treasury_liquidity` — and dispatches the covered ones
 (idempotently, via the same row-locked command as the admin RPC), so a rail top-up
 self-heals the queue within one interval. A treasury read `Err` skips that cycle (the
-automatic path stays conservative; the operator RPC may still exercise judgment). Together
-with the reaper this brackets accept-and-queue: dispatched within ~30s of a top-up, or
-auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
+automatic path stays conservative; the operator RPC may still exercise judgment). The
+read-only/freeze/`kyc_level` policy gates are NOT checked in the sweep loop itself — they
+live once, in `dispatch_withdrawal` (see the freeze-gate note above), which both the sweep
+and the admin RPC call; the sweep only short-circuits on read-only BEFORE reading the
+backlog, to skip the query load while paused. Together with the reaper this brackets
+accept-and-queue: dispatched within ~30s of a top-up, or auto-cancelled (refunded) at
+24h — the de-facto rail top-up SLA.
 
 ## Tests
 

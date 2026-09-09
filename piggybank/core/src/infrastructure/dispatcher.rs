@@ -5,10 +5,13 @@
 //! every `queued` withdrawal against **both** liquidity gates — the TigerBeetle rail
 //! accounting balance AND the custody adapter's real on-chain treasury view — and
 //! dispatches the ones both cover, so a rail top-up self-heals the queue within one
-//! interval. Before any dispatch it also honors the outflow policy gates the sync RPC
-//! boundary enforces — the global read-only kill-switch (skips the whole sweep) and the
-//! per-owner cross-plane freeze — failing closed, so the async path can't bypass an
-//! operator pause or an AML freeze on the accept-and-queue backlog. The reaper's 24h
+//! interval. The outflow policy gates the sync RPC boundary enforces — the global
+//! read-only kill-switch, the per-owner cross-plane freeze, and the `kyc >= 1` floor —
+//! are enforced by `dispatch_withdrawal` itself (the same call the admin RPC makes), so
+//! neither path can bypass an operator pause, an AML freeze, or a since-revoked
+//! verification on the accept-and-queue backlog. The sweep additionally checks read-only
+//! BEFORE reading the backlog, purely to skip the query load while paused — a
+//! belt-and-suspenders optimization, not the enforcement point. The reaper's 24h
 //! auto-cancel of `queued` withdrawals remains the final backstop (the de-facto rail
 //! top-up SLA).
 
@@ -27,8 +30,8 @@ use uuid::Uuid;
 
 use crate::{
 	application::withdrawals as withdrawal_app,
-	infrastructure::{bridge, operations},
-	ports::{Custody, WithdrawalRepository, ledger::Ledger},
+	infrastructure::operations,
+	ports::{Custody, PayoutGuard, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 
 /// How often the dispatcher re-checks the queued backlog. Well inside the reaper's
@@ -41,16 +44,29 @@ pub struct Dispatcher {
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	ledger: Arc<dyn Ledger>,
 	custody: Arc<dyn Custody>,
+	users: Arc<dyn UserRepository>,
+	guard: Arc<dyn PayoutGuard>,
 	notify: Arc<Notify>,
 }
 
 impl Dispatcher {
-	pub fn new(pool: PgPool, withdrawals: Arc<dyn WithdrawalRepository>, ledger: Arc<dyn Ledger>, custody: Arc<dyn Custody>, notify: Arc<Notify>) -> Self {
+	#[allow(clippy::too_many_arguments)]
+	pub fn new(
+		pool: PgPool,
+		withdrawals: Arc<dyn WithdrawalRepository>,
+		ledger: Arc<dyn Ledger>,
+		custody: Arc<dyn Custody>,
+		users: Arc<dyn UserRepository>,
+		guard: Arc<dyn PayoutGuard>,
+		notify: Arc<Notify>,
+	) -> Self {
 		Self {
 			pool,
 			withdrawals,
 			ledger,
 			custody,
+			users,
+			guard,
 			notify,
 		}
 	}
@@ -113,22 +129,10 @@ impl Dispatcher {
 					continue;
 				}
 			};
-			// Cross-plane freeze / disable: a queued withdrawal whose owner was SUSPENDED (or
-			// disabled) must not be dispatched, even though it slipped past the sync gate at
-			// request time. Mirror `unfrozen_caller` — skip a frozen owner, and fail closed
-			// (skip this cycle) when the control-plane flag can't be read. A revenue payout
-			// has no owner in the identity plane (the fund is not a user), so there is no
-			// flag to read and nothing to fail closed on — the gate simply doesn't apply.
-			if let Some(owner) = withdrawal.user() {
-				match bridge::is_frozen(&self.pool, owner).await {
-					Ok(false) => {}
-					Ok(true) => continue,
-					Err(err) => {
-						warn!(withdrawal_id = %id, "dispatcher: freeze check failed — skipping this cycle (fail-closed): {err}");
-						continue;
-					}
-				}
-			}
+			// Freeze / disable / `kyc >= 1` are NOT re-checked here — `dispatch_withdrawal`
+			// below enforces all three (and the read-only switch) as the single place both
+			// this sweep and the admin RPC go through, so duplicating them here would only
+			// be a second place to keep in sync.
 			let net = withdrawal.net_amount();
 			let network = withdrawal.network();
 			let spent = in_flight.get(&network).copied().unwrap_or(Usdt::ZERO);
@@ -155,7 +159,7 @@ impl Dispatcher {
 					continue;
 				}
 			}
-			match withdrawal_app::dispatch_withdrawal(self.withdrawals.as_ref(), self.custody.as_ref(), &self.notify, id).await {
+			match withdrawal_app::dispatch_withdrawal(self.withdrawals.as_ref(), self.custody.as_ref(), self.users.as_ref(), self.guard.as_ref(), &self.notify, id).await {
 				Ok(_) => {
 					dispatched += 1;
 					// A saturating add: an (impossible in practice) overflow keeps the rail gated.

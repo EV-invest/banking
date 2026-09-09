@@ -34,11 +34,11 @@ use domain::{
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
 	infrastructure::{
-		custody::StubCustody, deposits::PgDeposits, outbox, reaper::Reaper, reconciliation::Reconciliation, redemptions::PgRedemptions, relay::Relay, users::PgUsers,
-		withdrawals::PgWithdrawals,
+		custody::StubCustody, deposits::PgDeposits, outbox, payout_guard::PgPayoutGuard, reaper::Reaper, reconciliation::Reconciliation, redemptions::PgRedemptions, relay::Relay,
+		users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
-		BroadcastRequest, Custody, CustodyError, RedemptionRepository, UserRepository, WithdrawalRepository,
+		BroadcastRequest, Custody, CustodyError, PayoutGuard, RedemptionRepository, UserRepository, WithdrawalRepository,
 		ledger::{CashInvariant, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion},
 	},
 };
@@ -55,6 +55,7 @@ struct Harness {
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	redemptions: Arc<dyn RedemptionRepository>,
 	users: Arc<dyn UserRepository>,
+	payout_guard: Arc<dyn PayoutGuard>,
 	relay: Relay,
 	notify: Arc<Notify>,
 }
@@ -66,6 +67,7 @@ async fn harness() -> Option<Harness> {
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
 	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
+	let payout_guard: Arc<dyn PayoutGuard> = Arc::new(PgPayoutGuard::new(pool.clone()));
 	let notify = Arc::new(Notify::new());
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	Some(Harness {
@@ -75,6 +77,7 @@ async fn harness() -> Option<Harness> {
 		withdrawals,
 		redemptions,
 		users,
+		payout_guard,
 		relay,
 		notify,
 	})
@@ -252,7 +255,7 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 	h.relay.drain().await;
 
 	// Operator dispatch, then fail (a confirmed not-broadcast) — the void refunds in full.
-	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, withdrawal.id())
+	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, h.users.as_ref(), h.payout_guard.as_ref(), &h.notify, withdrawal.id())
 		.await
 		.unwrap();
 	h.relay.drain().await;

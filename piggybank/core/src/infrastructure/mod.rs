@@ -53,6 +53,7 @@ pub mod nav;
 pub mod operation_feed;
 pub mod operations;
 pub mod outbox;
+pub mod payout_guard;
 pub mod positions;
 pub mod rails;
 pub mod reaper;

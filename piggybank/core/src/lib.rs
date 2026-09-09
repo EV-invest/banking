@@ -28,8 +28,8 @@ use domain::money::Network;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use ports::{
-	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository,
-	UserRepository, WithdrawalRepository, ledger::Ledger,
+	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, PayoutGuard, RedemptionRepository,
+	SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -88,6 +88,9 @@ pub struct AppState {
 	/// The custody gateway (the same registry the relay broadcasts through) — read-only
 	/// here: the withdrawal handlers gate dispatch on its on-chain treasury liquidity.
 	pub custody: Arc<dyn Custody>,
+	/// The read-only kill-switch + cross-plane freeze gate `dispatch_withdrawal` enforces —
+	/// the same two `services::support::unfrozen_caller` enforces at the sync RPC boundary.
+	pub payout_guard: Arc<dyn PayoutGuard>,
 	/// The rails with a running on-chain watcher — the wallet surface presents
 	/// deposit/withdraw rails only for these, and the health probe reports scan-cursor
 	/// age only for these.
@@ -124,6 +127,7 @@ impl AppState {
 		operations: Arc<dyn OperationFeed>,
 		deposit_addresses: Arc<dyn DepositAddresses>,
 		custody: Arc<dyn Custody>,
+		payout_guard: Arc<dyn PayoutGuard>,
 		configured_networks: Arc<[Network]>,
 		relay_notify: Arc<Notify>,
 		consilium_approval_url_base: String,
@@ -147,6 +151,7 @@ impl AppState {
 			operations,
 			deposit_addresses,
 			custody,
+			payout_guard,
 			configured_networks,
 			relay_notify,
 			consilium_approval_url_base,

@@ -31,13 +31,14 @@ use piggybank_core::{
 		db,
 		deposits::PgDeposits,
 		ledger::{self, TbLedger},
+		payout_guard::PgPayoutGuard,
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
 		users::PgUsers,
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		UserRepository, WithdrawalRepository,
+		PayoutGuard, UserRepository, WithdrawalRepository,
 		custody::{BroadcastRequest, Custody, CustodyError},
 		ledger::Ledger,
 	},
@@ -69,6 +70,7 @@ struct Harness {
 	ledger: Arc<dyn Ledger>,
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	users: Arc<dyn UserRepository>,
+	payout_guard: Arc<dyn PayoutGuard>,
 	relay: Relay,
 	notify: Arc<Notify>,
 	custody: Arc<RecordingCustody>,
@@ -90,6 +92,7 @@ async fn harness() -> Option<Harness> {
 
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
+	let payout_guard: Arc<dyn PayoutGuard> = Arc::new(PgPayoutGuard::new(pool.clone()));
 	let notify = Arc::new(Notify::new());
 	let custody = Arc::new(RecordingCustody(Mutex::new(Vec::new())));
 	let relay = Relay::new(pool.clone(), ledger.clone(), custody.clone(), notify.clone());
@@ -99,6 +102,7 @@ async fn harness() -> Option<Harness> {
 		ledger,
 		withdrawals,
 		users,
+		payout_guard,
 		relay,
 		notify,
 		custody,
@@ -157,13 +161,17 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 		.await
 		.unwrap();
 	if first.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, first.id()).await.unwrap();
+		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, h.users.as_ref(), h.payout_guard.as_ref(), &h.notify, first.id())
+			.await
+			.unwrap();
 	}
 	let second = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination, usdt("100"))
 		.await
 		.expect("the second request passes the Read-First — TB lags the undrained outbox");
 	if second.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, second.id()).await.unwrap();
+		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, h.users.as_ref(), h.payout_guard.as_ref(), &h.notify, second.id())
+			.await
+			.unwrap();
 	}
 
 	h.relay.drain().await;
