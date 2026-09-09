@@ -1,7 +1,7 @@
 "use client";
 
 import { KeyRound, Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
 import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
@@ -339,23 +339,11 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
 
         <Section title={t("admin.users.accessSecurity")}>
           <RoleField role={role} busy={busy === "role"} onPick={(next) => run("role", () => setUserRole(summary.user_id, next))} />
-          <label className="flex items-center justify-between gap-2 py-1 text-sm">
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              {t("ui.kycLevel")}
-              <TipAnchor anchor="admin.users.access.kyc-level" />
-            </span>
-            <input
-              type="number"
-              min={0}
-              defaultValue={profile?.kyc_level ?? summary.kyc_level}
-              disabled={busy === "kyc"}
-              onBlur={(e) => {
-                const level = Number(e.target.value);
-                if (level !== (profile?.kyc_level ?? summary.kyc_level)) void run("kyc", () => setKycLevel(summary.user_id, level));
-              }}
-              className="w-16 rounded-md border border-border bg-main-surface px-2 py-1 text-sm outline-none focus:border-main-accent-t1"
-            />
-          </label>
+          <KycLevelField
+            kycLevel={profile?.kyc_level ?? summary.kyc_level}
+            busy={busy === "kyc"}
+            onApply={(next) => run("kyc", () => setKycLevel(summary.user_id, next))}
+          />
           <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-destructive/40 text-destructive hover:bg-destructive/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
             {busy === "revoke" ? <Loader2 className="size-3.5 animate-spin" /> : null}
             {t("admin.users.revokeAllSessions")}
@@ -442,6 +430,51 @@ function RoleField({ role, busy, onPick }: { role: string; busy: boolean; onPick
         </Link>
         .
       </p>
+    </div>
+  );
+}
+
+// KYC ladder tops out at 3 — this is the one control on the drawer with a real "commit"
+// step, on purpose: the field is the input side of a live number that a revalidation
+// from any other action in this same drawer (role change, suspend, revoke) can move out
+// from under it, plus a background refetch on focus/online. Making it controlled and
+// re-seeding the draft off `kycLevel` closes that window; requiring an explicit click
+// instead of `onBlur` means tabbing past the field with nothing typed can never commit a
+// value the operator never chose.
+const KYC_MAX = 3;
+
+function KycLevelField({ kycLevel, busy, onApply }: { kycLevel: number; busy: boolean; onApply: (level: number) => void }) {
+  const t = useT();
+  const [draft, setDraft] = useState(String(kycLevel));
+
+  useEffect(() => {
+    setDraft(String(kycLevel));
+  }, [kycLevel]);
+
+  const parsed = draft.trim() === "" ? null : Number(draft);
+  const valid = parsed !== null && Number.isInteger(parsed) && parsed >= 0 && parsed <= KYC_MAX;
+  const dirty = valid && parsed !== kycLevel;
+
+  return (
+    <div className="flex items-center justify-between gap-2 py-1 text-sm">
+      <span className="flex items-center gap-1.5 text-muted-foreground">
+        {t("ui.kycLevel")}
+        <TipAnchor anchor="admin.users.access.kyc-level" />
+      </span>
+      <span className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={0}
+          max={KYC_MAX}
+          value={draft}
+          disabled={busy}
+          onChange={(e) => setDraft(e.target.value)}
+          className="w-16 rounded-md border border-border bg-main-surface px-2 py-1 text-sm outline-none focus:border-main-accent-t1"
+        />
+        <Button type="button" variant="outline" size="sm" disabled={busy || !dirty} onClick={() => parsed !== null && onApply(parsed)}>
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : t("ui.save")}
+        </Button>
+      </span>
     </div>
   );
 }
