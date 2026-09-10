@@ -11,8 +11,9 @@ import type { Deposit, Withdrawal } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { NetworkMark } from "@/shared/ui/icons/networks";
 import { StaggerItem } from "@/shared/ui/motion";
-import { stateLabel } from "@/views/operations/lib/format";
+import { STATE_ICONS, stateLabel } from "@/views/operations/lib/format";
 import { formatUsdt, networkLabel, railMeta, shortAddress } from "@/views/wallet/lib/format";
 import { WALLET_CARD, WALLET_CTA, WalletScreen } from "@/views/wallet/ui/wallet-chrome";
 import type { Translate } from "@evinvest/i18n";
@@ -118,10 +119,13 @@ export function ActivityView() {
 function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; busy: boolean; onCancel: () => void }) {
   const t = useT();
   const rail = railMeta(entry.network);
+  const StateIcon = STATE_ICONS[entry.state];
   return (
     <div style={COLUMNS} className={cn("flex items-center gap-3 px-3.5 py-3 lg:grid lg:grid-cols-(--activity-columns) lg:px-5 lg:py-3.5", !first && "border-t border-border")}>
       <span className="flex items-center gap-2.5 lg:gap-2">
-        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold lg:size-6", rail.tone)}>{rail.badge}</span>
+        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold lg:size-6", rail.tone)}>
+          <NetworkMark network={entry.network} className="size-4 lg:size-3.5" />
+        </span>
         <span className="hidden text-sm text-foreground lg:inline">{rail.label}</span>
       </span>
 
@@ -139,8 +143,13 @@ function Row({ entry, first, busy, onCancel }: { entry: Entry; first: boolean; b
         <span className="text-sm font-medium tabular-nums text-foreground lg:text-right">{entry.amount}</span>
         <span className="flex items-center justify-end gap-2">
           {/* No `capitalize`: the label is a translated word now, not the lowercase wire
-              identifier the class existed to dress up. i18n-max: 12 (130px column). */}
-          <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_STYLES[entry.state] ?? "bg-muted text-muted-foreground")}>{entry.stateText}</span>
+              identifier the class existed to dress up. i18n-max: 12 (130px column).
+              The mark doubles the tint — a status must not reach the reader by colour
+              alone — and is `aria-hidden` because the word beside it already names it. */}
+          <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", STATUS_STYLES[entry.state] ?? "bg-muted text-muted-foreground")}>
+            {StateIcon && <StateIcon className="size-3 shrink-0" aria-hidden />}
+            {entry.stateText}
+          </span>
           {entry.cancellable && (
             <button
               type="button"

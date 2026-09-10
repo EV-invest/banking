@@ -16,6 +16,7 @@ import { RichMessage } from "@/shared/ui/rich-message";
 import { useResource } from "@/shared/lib/resource";
 import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor, type TipKey } from "@/shared/tips";
+import { NetworkMark } from "@/shared/ui/icons/networks";
 import { formatUsd, railLabel } from "@/views/admin/lib/format";
 import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
@@ -77,7 +78,7 @@ export function TreasuryView() {
           {treasury ? (
             <>
               {treasury.rails.map((rail) => (
-                <MoneyCard key={rail.network} label={railLabel(rail.network, t)} value={rail.custody} loading={false} footer={<RailFunding rail={rail} />} />
+                <MoneyCard key={rail.network} network={rail.network} label={railLabel(rail.network, t)} value={rail.custody} loading={false} footer={<RailFunding rail={rail} />} />
               ))}
               <MoneyCard label={t("admin.treasury.bank")} value={treasury.bank} hint={t("admin.treasury.bankHint")} loading={false} tip="admin.treasury.bank" />
             </>
@@ -152,13 +153,17 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
                 <SelectTrigger className="w-full border-border bg-main-surface" disabled={options.length === 0}>
                   {/* The placeholder is trigger text, not a selectable item — "Select a
                       rail…" is not a rail. */}
-                  <span className={cn("truncate", !network && "text-muted-foreground")}>
-                    {network ? railLabel(network, t) : options.length === 0 ? t("admin.treasury.noRailWithTreasury") : t("admin.treasury.selectRail")}
+                  <span className={cn("flex min-w-0 items-center gap-1.5", !network && "text-muted-foreground")}>
+                    {network && <NetworkMark network={network} className="size-3.5 shrink-0" />}
+                    <span className="truncate">
+                      {network ? railLabel(network, t) : options.length === 0 ? t("admin.treasury.noRailWithTreasury") : t("admin.treasury.selectRail")}
+                    </span>
                   </span>
                 </SelectTrigger>
                 <SelectContent>
                   {options.map((r) => (
                     <SelectItem key={r.network} value={r.network}>
+                      <NetworkMark network={r.network} className="size-3.5 shrink-0" />
                       {railLabel(r.network, t)}
                     </SelectItem>
                   ))}
@@ -221,11 +226,14 @@ function partyLabel({ party_kind, party_id }: RecordedArrival, t: Translate): st
 
 /** `unavailable` is the read-failed state: a muted dash, never a formatted `$0.00` —
  *  a zero the treasury never reported would be read as a real balance. */
-function MoneyCard({ label, value, hint, loading, unavailable, footer, tip }: { label: string; value: string | undefined; hint?: string; loading: boolean; unavailable?: boolean; footer?: ReactNode; tip?: TipKey }) {
+// `network` is set only on the per-rail cards; the fund-level ones (bank, reserved) name
+// no chain and get no mark.
+function MoneyCard({ label, network, value, hint, loading, unavailable, footer, tip }: { label: string; network?: string; value: string | undefined; hint?: string; loading: boolean; unavailable?: boolean; footer?: ReactNode; tip?: TipKey }) {
   return (
     <Card>
       <CardContent className="space-y-1 py-5">
         <div className="flex items-center gap-1.5">
+          {network && <NetworkMark network={network} className="size-3.5 shrink-0 text-muted-foreground" />}
           <p className="text-xs text-muted-foreground">{label || "…"}</p>
           {tip && <TipAnchor anchor={tip} />}
         </div>

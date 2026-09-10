@@ -61,6 +61,7 @@ import {
   networkLabel,
   seconds,
   shortAddress,
+  STATE_ICONS,
   stateLabel,
   stateTone,
   timeLabel,
@@ -314,6 +315,7 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
   const [open, setOpen] = useState(false);
   const compact = useIsCompact();
   const meta = kindMeta(operation.kind);
+  const StateIcon = STATE_ICONS[operation.state ?? ""];
   const at = seconds(operation.created_at);
   const title = rowTitle(operation, titleOf, t);
 
@@ -325,8 +327,11 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
         className="w-full cursor-pointer text-left outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ItemMedia>
-          {/* i18n-max: 4 — a `shrink-0` badge; anything longer is taken from the title. */}
-          <Badge className={cn("font-semibold", meta.tone)}>{kindBadge(operation.kind, t)}</Badge>
+          {/* The mark is decorative: the row title already names the kind in words, so
+              announcing it again would read "Deposit" twice. The text fallback is only
+              reached for a kind this build has no mark for — i18n-max: 4 there, since it
+              sits in a `shrink-0` badge beside a truncating title. */}
+          <Badge className={cn("font-semibold", meta.tone)}>{meta.icon ? <meta.icon aria-hidden /> : kindBadge(operation.kind)}</Badge>
         </ItemMedia>
         <ItemContent className="min-w-0 gap-0.5">
           <ItemTitle className="block w-auto truncate font-semibold">{title}</ItemTitle>
@@ -339,8 +344,12 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
           <span className={cn("text-sm font-semibold tabular-nums", amountTone(meta.direction))}>{rowAmount(operation)}</span>
           {/* No `capitalize`: the label is now a translated word, not a lowercase wire
               identifier — and `capitalize` title-cases every word ("Partly Deferred").
-              i18n-max: 12. */}
-          <Badge className={stateTone(operation.state)}>{stateLabel(operation.state, t)}</Badge>
+              i18n-max: 12. The mark doubles the tint so the state does not reach the
+              reader by colour alone; the word beside it is what actually names it. */}
+          <Badge className={stateTone(operation.state)}>
+            {StateIcon && <StateIcon aria-hidden />}
+            {stateLabel(operation.state, t)}
+          </Badge>
         </ItemActions>
         {/* Every row opens a panel now, so every row carries the same disclosure — not
             only the in-flight ones that used to link out to their managing surface. */}

@@ -15,6 +15,7 @@ import { useResource } from "@/shared/lib/resource";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { displayAddress } from "@/shared/lib/ton-address";
 import { TipAnchor } from "@/shared/tips";
+import { NetworkMark } from "@/shared/ui/icons/networks";
 import { isEvmRail, networkLabel } from "@/views/wallet/lib/format";
 import { DepositQr } from "@/views/wallet/ui/deposit-qr";
 import { NetworkSegments } from "@/views/wallet/ui/network-segments";
@@ -106,6 +107,11 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
 
               <div className={cn(WALLET_CARD, "flex flex-col items-center gap-4 p-4.5 lg:gap-4.5 lg:p-6")}>
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  {/* The mark leads the line rather than being spliced into it: the
+                      sentence is one translated string, and cutting a component into the
+                      middle of it would fix the chain's position in word order for every
+                      locale. */}
+                  <NetworkMark network={network} className="size-4 shrink-0" />
                   {t("wallet.yourDepositAddress", { network: label })}
                   <TipAnchor anchor="wallet.deposit.address" />
                 </p>

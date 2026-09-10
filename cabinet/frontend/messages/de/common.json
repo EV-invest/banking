@@ -1995,26 +1995,6 @@
     "en": "{title} — details",
     "t": "{title} — Details"
   },
-  "ops.badge.buy": {
-    "en": "BUY",
-    "t": "KAUF"
-  },
-  "ops.badge.fee": {
-    "en": "FEE",
-    "t": "GEB"
-  },
-  "ops.badge.in": {
-    "en": "IN",
-    "t": "EIN"
-  },
-  "ops.badge.out": {
-    "en": "OUT",
-    "t": "AUS"
-  },
-  "ops.badge.sell": {
-    "en": "SELL",
-    "t": "VERK"
-  },
   "ops.context.fund": {
     "en": "Fund · {when}",
     "t": "Fonds · {when}"

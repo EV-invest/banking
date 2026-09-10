@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, LineChart, PieChart, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeftRight, LineChart, type LucideIcon, PieChart, TrendingDown, TrendingUp } from "lucide-react";
 import type { Translate } from "@evinvest/i18n";
 import { useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
@@ -181,7 +181,8 @@ export function DashboardView() {
                   {i > 0 && <ItemSeparator />}
                   <Item size="sm" className="px-0 py-3 lg:py-4">
                     <ItemMedia>
-                      <Badge className={cn("font-semibold", op.tagClass)}>{op.tag}</Badge>
+                      {/* Decorative: the row title names the kind in words right beside it. */}
+                      <Badge className={cn("font-semibold", op.tagClass)}>{op.icon ? <op.icon aria-hidden /> : op.tag}</Badge>
                     </ItemMedia>
                     <ItemContent className="min-w-0 gap-0.5">
                       <ItemTitle className="block w-auto truncate font-semibold">{op.title}</ItemTitle>
@@ -389,6 +390,10 @@ function Stat({ label, value, format, tone, hint, tip }: { label: string; value:
 
 interface Op {
   id: string;
+  /** The kind's mark; `null` for a kind this build has no mark for, which falls back to
+   *  {@link tag}. Same rule as the operations timeline — the vocabulary is shared. */
+  icon: LucideIcon | null;
+  /** The text a mark-less kind wears instead. */
   tag: string;
   tagClass: string;
   title: string;
@@ -406,7 +411,8 @@ function toOp(operation: Operation, index: number, titleOf: (service: string | u
   const sign = meta.direction === "in" ? "+" : meta.direction === "out" ? "\u2212" : "";
   return {
     id: `${operation.kind ?? ""}-${operation.id ?? ""}-${index}`,
-    tag: kindBadge(operation.kind, t),
+    icon: meta.icon,
+    tag: kindBadge(operation.kind),
     tagClass: meta.tone,
     title: opTitle(operation, titleOf, t),
     sub: opSub(operation, t),

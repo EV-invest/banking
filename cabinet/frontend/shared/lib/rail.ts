@@ -12,6 +12,13 @@
 // `label` and `badge` are the rail's own marks — `BEP20`, `TON`, `◆` — and stay literal in
 // every locale. The chain's *name* is prose, so it travels as a catalogue key resolved at
 // the render site: this module is plain TypeScript and has no translator of its own.
+//
+// The chain LOGOS deliberately do not live here, and adding an `icon` field would be a
+// regression: `@/shared/ui/icons/networks` owns them, keyed by the same wire id. Two
+// surfaces (payout approval, consilium) import this module for `networkLabel` alone, and a
+// component reference on `RailMeta` would pull every logo path into their route bundles for
+// a mark they never draw — besides making this data module depend on React. `badge` stays
+// as the fallback a rail with no logo renders instead.
 
 export interface RailMeta {
   label: string;

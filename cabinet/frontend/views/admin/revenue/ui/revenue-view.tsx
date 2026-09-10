@@ -48,6 +48,8 @@ import { useResource } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
+import { networkLabel } from "@/shared/lib/rail";
+import { NetworkMark } from "@/shared/ui/icons/networks";
 import { amount as formatAmount, formatUsd, railLabel, stateLabel } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
@@ -518,7 +520,10 @@ function RailChip({ rail, selected, onSelect }: { rail: RevenueRail; selected: b
         selected ? "border-primary bg-primary/10" : "border-border hover:bg-foreground/5"
       }`}
     >
-      <span className="block text-xs font-medium">{railLabel(rail.network, t)}</span>
+      <span className="flex items-center gap-1.5 text-xs font-medium">
+        <NetworkMark network={rail.network} className="size-3.5 shrink-0" />
+        {railLabel(rail.network, t)}
+      </span>
       <span className="block text-xs tabular-nums text-muted-foreground">{t("admin.revenue.instantSuffix", { amount: formatUsd(rail.instant) })}</span>
     </button>
   );
@@ -530,7 +535,12 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
   return (
     <tr>
       <td className="px-5 py-3">
-        <p className="uppercase text-xs text-muted-foreground">{payout.network}</p>
+        {/* Same change as the withdrawals queue: the shared short mark, not the raw
+            wire id. */}
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <NetworkMark network={payout.network} className="size-3.5 shrink-0" />
+          {networkLabel(payout.network)}
+        </p>
         <p className="font-mono-tech text-xs" title={payout.address}>
           {shortAddr(payout.address)}
         </p>

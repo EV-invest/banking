@@ -14,6 +14,8 @@ import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
+import { networkLabel } from "@/shared/lib/rail";
+import { NetworkMark } from "@/shared/ui/icons/networks";
 import { ago, formatUsd, stateLabel } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
@@ -191,7 +193,15 @@ function WithdrawalRow({
           <p className="font-mono-tech text-xs text-muted-foreground">{item.withdrawal_id.slice(0, 8)}</p>
         </td>
         <td className="px-5 py-3">
-          <p className="uppercase text-xs text-muted-foreground">{item.network}</p>
+          {/* Was the bare wire id under a `uppercase` class. The rail's short mark comes
+              from `@/shared/lib/rail` — the same one the investor cabinet renders — so a
+              chain is not named two different ways in two consoles, and `Polygon` keeps
+              the casing it is actually written with. The console's long prose form
+              (`railLabel`, "BEP20 · BNB Chain") is for cards, not this dense cell. */}
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <NetworkMark network={item.network} className="size-3.5 shrink-0" />
+            {networkLabel(item.network)}
+          </p>
           <p className="font-mono-tech text-xs" title={item.address}>
             {shortAddr(item.address)}
           </p>

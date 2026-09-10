@@ -1995,26 +1995,6 @@
     "en": "{title} — details",
     "t": "{title} — chi tiết"
   },
-  "ops.badge.buy": {
-    "en": "BUY",
-    "t": "MUA"
-  },
-  "ops.badge.fee": {
-    "en": "FEE",
-    "t": "PHÍ"
-  },
-  "ops.badge.in": {
-    "en": "IN",
-    "t": "NẠP"
-  },
-  "ops.badge.out": {
-    "en": "OUT",
-    "t": "RÚT"
-  },
-  "ops.badge.sell": {
-    "en": "SELL",
-    "t": "BÁN"
-  },
   "ops.context.fund": {
     "en": "Fund · {when}",
     "t": "Quỹ · {when}"
