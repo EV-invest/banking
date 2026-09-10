@@ -51,6 +51,25 @@ export const ASSIGNABLE_ROLES = ["investor", "operator", "admin"] as const;
  */
 export const ROLES = [...ASSIGNABLE_ROLES, "owner"] as const;
 
+/**
+ * The KYC tiers this console can set, least→most verified.
+ *
+ * The ladder is closed, and it is the plane's rather than this console's: it is written
+ * down beside `kyc_level` in `contracts/proto/banking/v1/users.proto`, where the money
+ * plane enforces it — 0 registered, 1 verified, 2 enhanced, 3 elevated, with both
+ * directions of money movement gated on >= 1.
+ *
+ * Naming the four is what retires the free-typed number this control used to be. An empty
+ * field, a `NaN` and a `-1` stop being values a reader can express, so they stop needing
+ * to be rejected — the fix is the closed list, not a validator behind an open one.
+ */
+export const KYC_LEVELS = [0, 1, 2, 3] as const;
+
+/** A tier from {@link KYC_LEVELS} — narrower than the `number` the wire carries, because
+ *  what a reader may PICK is narrower than what the plane may hold (see
+ *  {@link kycLevelLabel} on tiers this console does not know). */
+export type KycLevel = (typeof KYC_LEVELS)[number];
+
 // Wire vocabularies that also reach the screen as labels. The wire value is what goes
 // back to the API and never changes; these maps only decide what a reader sees.
 //
@@ -77,6 +96,13 @@ const KNOWN_STATUSES: ReadonlySet<string> = new Set([
   "review",
 ]);
 
+const KYC_LEVEL_KEYS: Record<number, string> = {
+  0: "admin.kyc.registered",
+  1: "admin.kyc.verified",
+  2: "admin.kyc.enhanced",
+  3: "admin.kyc.elevated",
+};
+
 const KNOWN_STATES: ReadonlySet<string> = new Set([
   "draft",
   "open",
@@ -101,6 +127,18 @@ const KNOWN_STATES: ReadonlySet<string> = new Set([
  *  hub adds tomorrow shows as `reconciling` and not as `admin.status.reconciling`. */
 export function roleLabel(role: string, t: Translate): string {
   return KNOWN_ROLES.has(role) ? t(`admin.role.${role}`) : role;
+}
+
+/** A KYC tier as a reader sees it: the tier's NAME, not its ordinal.
+ *
+ *  The ladder is described in words where it is defined, so a control offering a bare "2"
+ *  makes the reader carry the mapping in their head. A tier this console does not know —
+ *  one the identity plane grows later — falls back to the `L{n}` short form the table cells
+ *  already use. That fallback is translated, unlike {@link roleLabel}'s: a role has a wire
+ *  word to fall back ON, and a level has only a number. */
+export function kycLevelLabel(level: number, t: Translate): string {
+  const key = KYC_LEVEL_KEYS[level];
+  return key ? t(key) : t("admin.users.kycLevelShort", { n: level });
 }
 
 /** A health/lifecycle status as a reader sees it (see {@link roleLabel} on casing and fallback). */

@@ -427,6 +427,22 @@
     "en": "Worth at current NAV",
     "t": "Giá trị theo NAV hiện tại"
   },
+  "admin.kyc.elevated": {
+    "en": "Elevated",
+    "t": "Chuyên sâu"
+  },
+  "admin.kyc.enhanced": {
+    "en": "Enhanced",
+    "t": "Nâng cao"
+  },
+  "admin.kyc.registered": {
+    "en": "Registered",
+    "t": "Đã đăng ký"
+  },
+  "admin.kyc.verified": {
+    "en": "Verified",
+    "t": "Đã xác minh"
+  },
   "admin.overview.col.event": {
     "en": "Event",
     "t": "Sự kiện"
