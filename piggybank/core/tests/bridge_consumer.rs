@@ -416,3 +416,203 @@ async fn created_carrying_an_ordinary_role_journals_nothing() {
 	})
 	.await;
 }
+
+/// Poll `check` until it holds or the budget runs out, then return whether it held. The
+/// consumer runs concurrently on its own poll interval, so an assertion about work it has
+/// yet to do needs to wait for a cycle rather than race one.
+async fn eventually<F, Fut>(mut check: F) -> bool
+where
+	F: FnMut() -> Fut,
+	Fut: Future<Output = bool>, {
+	for _ in 0..40 {
+		if check().await {
+			return true;
+		}
+		tokio::time::sleep(Duration::from_millis(50)).await;
+	}
+	false
+}
+
+async fn parked_count(pool: &PgPool, subject: &str) -> i64 {
+	sqlx::query_scalar("SELECT count(*) FROM bridge_deferred_event WHERE auth_subject = $1")
+		.bind(subject)
+		.fetch_one(pool)
+		.await
+		.unwrap()
+}
+
+async fn cursor_position(pool: &PgPool) -> i64 {
+	sqlx::query_scalar("SELECT position FROM bridge_cursor WHERE id = TRUE").fetch_one(pool).await.unwrap()
+}
+
+async fn sequence_of(pool: &PgPool, subject: &str) -> i64 {
+	sqlx::query_scalar("SELECT last_lifecycle_sequence FROM users WHERE auth_subject = $1")
+		.bind(subject)
+		.fetch_one(pool)
+		.await
+		.unwrap()
+}
+
+/// THE TIER MIRROR, END TO END — the path that had no test at all.
+///
+/// `users.kyc_level` is what every money gate reads (`application::wallet::is_verified`,
+/// the withdrawal admission, the payout standing). Nothing else writes it: the concierge
+/// plane owns the tier and this event is the only way it crosses. A regression here does
+/// not fail loudly — it leaves users at the schema default of 0, silently locked out of
+/// deposit addresses and withdrawals.
+#[tokio::test]
+async fn kyc_changed_mirrors_the_tier_the_money_gates_read() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	// A bare registration (level 0 — a confirmed email and nothing else), verified afterwards.
+	let mut registered = event(&subject, Kind::Created, 1);
+	registered.kyc_level = 0;
+	let mut verified = event(&subject, Kind::KycChanged, 2);
+	verified.kyc_level = domain::users::KYC_LEVEL_VERIFIED;
+	let events = vec![registered, verified];
+
+	drive(&pool, events, move |pool| {
+		let subject = subject.clone();
+		async move {
+			let user_id = user_id_for(&pool, &subject).await.expect("CREATED provisioned a banking user");
+			let level: i32 = sqlx::query_scalar("SELECT kyc_level FROM users WHERE id = $1").bind(user_id).fetch_one(&pool).await.unwrap();
+			assert_eq!(level as u32, domain::users::KYC_LEVEL_VERIFIED, "KYC_CHANGED mirrors the tier onto the banking projection");
+
+			// And the gates read it back through the repository they actually use, not the
+			// column directly — an aggregate that dropped the field on the way out would still
+			// leave the user locked out.
+			let account = PgUsers::new(pool.clone())
+				.find_by_id(domain::users::UserId::from_raw(user_id))
+				.await
+				.unwrap()
+				.expect("the mirrored user loads");
+			assert!(
+				account.kyc_level() >= domain::users::KYC_LEVEL_VERIFIED,
+				"the mirrored tier must clear the verification gate the wallet and withdrawal paths apply"
+			);
+		}
+	})
+	.await;
+}
+
+/// AN EVENT FOR A SUBJECT BANKING HAS NEVER SEEN MUST SURVIVE UNTIL IT CAN BE APPLIED.
+///
+/// The cursor is global and the concierge only ever re-delivers ahead of it, so an event
+/// the consumer walks past is gone for good. `apply` used to walk past every event whose
+/// subject had no local row — a user who has not signed in here yet, or anyone at all if
+/// banking was deployed after the concierge and their CREATED has already aged out of the
+/// outbox. The tier below would have vanished and left the user at level 0, locked out of
+/// both a deposit address and a withdrawal, until the concierge happened to move their
+/// tier again.
+#[tokio::test]
+async fn an_event_for_an_unknown_subject_is_parked_and_replayed_when_the_row_appears() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	// No CREATED — only the tier change reaches this deployment.
+	let mut verified = event(&subject, Kind::KycChanged, 2);
+	verified.kyc_level = domain::users::KYC_LEVEL_VERIFIED;
+
+	drive(&pool, vec![verified], move |pool| {
+		let subject = subject.clone();
+		async move {
+			assert!(user_id_for(&pool, &subject).await.is_none(), "nothing has provisioned this subject");
+			assert_eq!(parked_count(&pool, &subject).await, 1, "an event for an unknown subject is parked, not consumed into the void");
+			// The cursor is deliberately NOT held here: the event is durable on this side, so
+			// one orphan subject must not wedge the mirror for every other user.
+			assert_eq!(cursor_position(&pool).await, 1, "parking keeps the stream moving");
+
+			// First sign-in materializes the row — at the schema default of level 0, which is
+			// exactly the lock-out the dropped event used to leave behind.
+			PgUsers::new(pool.clone())
+				.provision(
+					domain::auth::AuthSubject::parse(&subject).unwrap(),
+					domain::users::Email::parse("bridged@example.com").unwrap(),
+					true,
+				)
+				.await
+				.expect("first sign-in provisions the row");
+
+			let mirrored = eventually(|| {
+				let (pool, subject) = (pool.clone(), subject.clone());
+				async move {
+					let level: i32 = sqlx::query_scalar("SELECT kyc_level FROM users WHERE auth_subject = $1")
+						.bind(&subject)
+						.fetch_one(&pool)
+						.await
+						.unwrap();
+					level as u32 == domain::users::KYC_LEVEL_VERIFIED
+				}
+			})
+			.await;
+			assert!(mirrored, "the parked tier must be replayed onto the row the moment it exists");
+			assert_eq!(parked_count(&pool, &subject).await, 0, "a replayed event is released from the parking lot");
+		}
+	})
+	.await;
+}
+
+/// A KIND THIS BUILD CANNOT NAME MUST NOT BE RECORDED AS APPLIED.
+///
+/// The concierge ships ahead of banking, so a kind newer than the pinned contracts is the
+/// ordinary shape of a mid-rollout event, not a corruption. Bumping `last_lifecycle_sequence`
+/// for it — the old "so it isn't re-fetched forever" behaviour — put the event behind the
+/// per-user guard, where the upgraded build could never reach it: if the new kind meant a
+/// freeze or a tier revocation, the money plane would go on trading under rules the identity
+/// plane had already withdrawn. Nothing local can interpret it, so the cursor stops instead.
+#[tokio::test]
+async fn an_unreadable_kind_holds_the_cursor_until_a_build_that_understands_it() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	// A kind number outside this build's enum, exactly as an older binary would decode one.
+	let mut from_the_future = event(&subject, Kind::Suspended, 2);
+	from_the_future.kind = 99;
+	// A third event BEHIND the unreadable one: it must not be applied either, or it would
+	// advance the per-user guard past the event the stop exists to preserve.
+	let mut later = event(&subject, Kind::KycChanged, 3);
+	later.kyc_level = domain::users::KYC_LEVEL_VERIFIED;
+	// Registered but not yet verified, so the tier the stop withholds is visibly absent.
+	let mut registered = event(&subject, Kind::Created, 1);
+	registered.kyc_level = 0;
+	let events = vec![registered, from_the_future, later];
+
+	let before = subject.clone();
+	drive(&pool, events.clone(), move |pool| {
+		let subject = before;
+		async move {
+			assert_eq!(sequence_of(&pool, &subject).await, 1, "the unreadable event must not be marked applied");
+			assert_eq!(cursor_position(&pool).await, 0, "and the batch carrying it must not be consumed");
+			assert_eq!(parked_count(&pool, &subject).await, 0, "an unreadable event is not parked — only a newer binary can read it");
+			let level: i32 = sqlx::query_scalar("SELECT kyc_level FROM users WHERE auth_subject = $1")
+				.bind(&subject)
+				.fetch_one(&pool)
+				.await
+				.unwrap();
+			assert_ne!(level as u32, domain::users::KYC_LEVEL_VERIFIED, "nothing behind the stop is applied either");
+		}
+	})
+	.await;
+
+	// The upgrade: the same outbox rows, at the same positions, decoded by a build that now
+	// names the kind. Because nothing above was consumed, they are all still on offer.
+	let mut understood = events;
+	understood[1].kind = Kind::Suspended as i32;
+	drive(&pool, understood, move |pool| {
+		let subject = subject.clone();
+		async move {
+			let user_id = user_id_for(&pool, &subject).await.expect("provisioned by the first pass");
+			assert!(
+				bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
+				"the freeze that was unreadable before must land after the upgrade"
+			);
+			assert_eq!(sequence_of(&pool, &subject).await, 3, "and the events behind it apply in order");
+			assert_eq!(cursor_position(&pool).await, 3, "the whole batch is consumed once every event in it is readable");
+		}
+	})
+	.await;
+}
