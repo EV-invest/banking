@@ -217,6 +217,14 @@ pub fn required(v: &Value, key: &str) -> Option<String> {
 pub fn editable(v: &Value, key: &str) -> String {
 	v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
 }
+/// A REQUIRED whole, non-negative number that fits a `u32`: `None` when the field is
+/// missing, or is not a whole number that fits (a string, a float, negative, or too
+/// large all miss). Right for any field where coercing the unparseable to zero would
+/// silently change what was asked for, rather than a knob whose absence really does mean
+/// zero.
+pub fn required_u32(v: &Value, key: &str) -> Option<u32> {
+	v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
+}
 /// Constant-time string equality (after a length check, which only reveals length) as
 /// defense-in-depth, matching the constant-time discipline used for secret comparisons.
 fn ct_str_eq(a: &str, b: &str) -> bool {

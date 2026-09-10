@@ -21,7 +21,7 @@ use serde_json::{Value, json};
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{editable, parse_body, require_admin, require_money_token, require_token, required, verify_csrf},
+	routes::{editable, parse_body, require_admin, require_money_token, require_token, required, required_u32, verify_csrf},
 	state::AppState,
 };
 
@@ -716,11 +716,20 @@ pub async fn set_flag(State(st): State<AppState>, jar: CookieJar, headers: Heade
 	let Some(key) = required(&v, "key") else {
 		return Err(ApiError::BadRequest("key is required".into()));
 	};
+	// A rollout that doesn't arrive as a whole number is a client that doesn't know what
+	// it's asking for — coercing it to 0 would silently disable the flag while answering
+	// "saved". Required rather than defaulted, same as the fee rates below.
+	let Some(rollout) = required_u32(&v, "rollout") else {
+		return Err(ApiError::BadRequest("rollout is required, and must be a whole number".into()));
+	};
+	if rollout > 100 {
+		return Err(ApiError::BadRequest("rollout must be between 0 and 100".into()));
+	}
 	let req = cc::SetFeatureFlagRequest {
 		key,
 		description: editable(&v, "description"),
 		enabled: bool_field(&v, "enabled"),
-		rollout: u32_field(&v, "rollout"),
+		rollout,
 	};
 	let config = st.grpc.set_feature_flag(&token, req).await?;
 	Ok(Json(config.into()))
