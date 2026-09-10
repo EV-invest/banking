@@ -26,6 +26,8 @@
 //!   against every unit-holding position that is due.
 //! - [`operation_feed`] — the read-side merge of the four money projections into one
 //!   time-ordered activity timeline (query side only; writes nothing).
+//! - [`outflow`] — the `OutflowPolicy` adapter: the read-only kill-switch plus the
+//!   owner's freeze/KYC standing, the facts every payout path clears before dispatch.
 //! - [`telemetry`] — the observability adapter: the one seam that hands errors to
 //!   the monitoring vendor, so call sites stay vendor-agnostic.
 //! - [`rails`] — what the EVM/TON/Tron rails share verbatim: the watcher and sweep error
@@ -53,6 +55,7 @@ pub mod nav;
 pub mod operation_feed;
 pub mod operations;
 pub mod outbox;
+pub mod outflow;
 pub mod positions;
 pub mod rails;
 pub mod reaper;
