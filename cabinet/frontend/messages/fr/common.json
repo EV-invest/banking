@@ -427,6 +427,22 @@
     "en": "Worth at current NAV",
     "t": "Valeur à la VL actuelle"
   },
+  "admin.kyc.elevated": {
+    "en": "Elevated",
+    "t": "Approfondi"
+  },
+  "admin.kyc.enhanced": {
+    "en": "Enhanced",
+    "t": "Renforcé"
+  },
+  "admin.kyc.registered": {
+    "en": "Registered",
+    "t": "Enregistré"
+  },
+  "admin.kyc.verified": {
+    "en": "Verified",
+    "t": "Vérifié"
+  },
   "admin.overview.col.event": {
     "en": "Event",
     "t": "Événement"

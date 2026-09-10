@@ -427,6 +427,22 @@
     "en": "Worth at current NAV",
     "t": "Стоимость по текущему NAV"
   },
+  "admin.kyc.elevated": {
+    "en": "Elevated",
+    "t": "Углублённая проверка"
+  },
+  "admin.kyc.enhanced": {
+    "en": "Enhanced",
+    "t": "Расширенная проверка"
+  },
+  "admin.kyc.registered": {
+    "en": "Registered",
+    "t": "Регистрация"
+  },
+  "admin.kyc.verified": {
+    "en": "Verified",
+    "t": "Верификация"
+  },
   "admin.overview.col.event": {
     "en": "Event",
     "t": "Событие"
