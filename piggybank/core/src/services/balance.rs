@@ -18,6 +18,7 @@ use tonic::{Request, Response, Status};
 use crate::{
 	AppState,
 	application::{balance as balance_app, funds as funds_app, wallet as wallet_app, withdrawals as withdrawal_app},
+	infrastructure::outflow::PgOutflowPolicy,
 	services::{
 		funds::redemption_to_proto,
 		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
@@ -102,12 +103,27 @@ impl BalanceService for BalanceSvc {
 		}))
 	}
 
+	/// Push a queued withdrawal onto its rail by operator command.
+	///
+	/// The permission is necessary and not sufficient: the command re-runs the outflow
+	/// policy — read-only kill-switch, owner freeze, tier-1 floor — so this handle cannot
+	/// ship a payout the user path and the sweep would both refuse. Deliberately NO
+	/// per-call `force` override: the operator override for a pause already exists and is
+	/// `SetOperationsMode`, which is itself permissioned and leaves one auditable record of
+	/// who reopened outflows and when, rather than a flag on an individual payout that
+	/// looks identical to an ordinary dispatch in the log.
 	async fn dispatch_withdrawal(&self, request: Request<pb::DispatchWithdrawalRequest>) -> Result<Response<pb::DispatchWithdrawalResponse>, Status> {
 		require_permission(&self.state, &request, Permission::WithdrawalDispatch).await?;
 		let id = parse_withdrawal_id(&request.get_ref().withdrawal_id)?;
-		withdrawal_app::dispatch_withdrawal(self.state.withdrawals.as_ref(), self.state.custody.as_ref(), &self.state.relay_notify, id)
-			.await
-			.map_err(map_err)?;
+		withdrawal_app::dispatch_withdrawal(
+			self.state.withdrawals.as_ref(),
+			self.state.custody.as_ref(),
+			&PgOutflowPolicy::new(&self.state.pool),
+			&self.state.relay_notify,
+			id,
+		)
+		.await
+		.map_err(map_err)?;
 		Ok(Response::new(pb::DispatchWithdrawalResponse {}))
 	}
 

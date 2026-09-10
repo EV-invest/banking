@@ -34,8 +34,8 @@ use domain::{
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
 	infrastructure::{
-		custody::StubCustody, deposits::PgDeposits, outbox, reaper::Reaper, reconciliation::Reconciliation, redemptions::PgRedemptions, relay::Relay, users::PgUsers,
-		withdrawals::PgWithdrawals,
+		custody::StubCustody, deposits::PgDeposits, outbox, outflow::PgOutflowPolicy, reaper::Reaper, reconciliation::Reconciliation, redemptions::PgRedemptions, relay::Relay,
+		users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
 		BroadcastRequest, Custody, CustodyError, RedemptionRepository, UserRepository, WithdrawalRepository,
@@ -252,7 +252,7 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 	h.relay.drain().await;
 
 	// Operator dispatch, then fail (a confirmed not-broadcast) — the void refunds in full.
-	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, withdrawal.id())
+	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), &h.notify, withdrawal.id())
 		.await
 		.unwrap();
 	h.relay.drain().await;

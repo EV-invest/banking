@@ -31,6 +31,7 @@ use piggybank_core::{
 		db,
 		deposits::PgDeposits,
 		ledger::{self, TbLedger},
+		outflow::PgOutflowPolicy,
 		relay::Relay,
 		tigerbeetle::TigerBeetle,
 		users::PgUsers,
@@ -157,13 +158,17 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 		.await
 		.unwrap();
 	if first.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, first.id()).await.unwrap();
+		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), &h.notify, first.id())
+			.await
+			.unwrap();
 	}
 	let second = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination, usdt("100"))
 		.await
 		.expect("the second request passes the Read-First — TB lags the undrained outbox");
 	if second.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, second.id()).await.unwrap();
+		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), &h.notify, second.id())
+			.await
+			.unwrap();
 	}
 
 	h.relay.drain().await;

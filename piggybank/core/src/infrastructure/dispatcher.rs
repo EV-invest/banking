@@ -5,10 +5,13 @@
 //! every `queued` withdrawal against **both** liquidity gates — the TigerBeetle rail
 //! accounting balance AND the custody adapter's real on-chain treasury view — and
 //! dispatches the ones both cover, so a rail top-up self-heals the queue within one
-//! interval. Before any dispatch it also honors the outflow policy gates the sync RPC
-//! boundary enforces — the global read-only kill-switch (skips the whole sweep) and the
-//! per-owner cross-plane freeze — failing closed, so the async path can't bypass an
-//! operator pause or an AML freeze on the accept-and-queue backlog. The reaper's 24h
+//! interval. The outflow policy gates — the read-only kill-switch, the per-owner
+//! cross-plane freeze and the tier-1 verification floor — are NOT re-implemented here:
+//! they live inside `withdrawal_app::dispatch_withdrawal`, the one funnel this sweep and
+//! the admin `DispatchWithdrawal` RPC share, so the async path cannot drift into a weaker
+//! rule than the synchronous one. The only thing the sweep keeps for itself is a
+//! whole-cycle short-circuit on the kill-switch, through that same gate, so a paused
+//! platform costs one read per interval instead of one per queued row. The reaper's 24h
 //! auto-cancel of `queued` withdrawals remains the final backstop (the de-facto rail
 //! top-up SLA).
 
@@ -27,7 +30,7 @@ use uuid::Uuid;
 
 use crate::{
 	application::withdrawals as withdrawal_app,
-	infrastructure::{bridge, operations},
+	infrastructure::outflow::PgOutflowPolicy,
 	ports::{Custody, WithdrawalRepository, ledger::Ledger},
 };
 
@@ -82,18 +85,14 @@ impl Dispatcher {
 	/// static check, dispatch in full, and mass-park at the custody backstop. What no
 	/// longer fits stays queued for the next top-up.
 	pub async fn sweep(&self) -> Result<usize, sqlx::Error> {
-		// The read-only kill-switch pauses ALL outflows, but its only synchronous gate is the
-		// user RPC boundary (`unfrozen_caller`). A withdrawal already `queued` when an operator
-		// flips read-only would otherwise keep dispatching here every interval — bypassing the
-		// switch on exactly the incident it exists for. Honor it on the async path too, failing
-		// closed: while paused, or if the flag can't be read, dispatch nothing this cycle.
-		match operations::is_read_only(&self.pool).await {
-			Ok(false) => {}
-			Ok(true) => return Ok(0),
-			Err(err) => {
-				warn!("dispatcher: read-only check failed — pausing this sweep (fail-closed): {err}");
-				return Ok(0);
-			}
+		let policy = PgOutflowPolicy::new(&self.pool);
+		// Whole-sweep short-circuit on the global pause. `dispatch_withdrawal` re-checks it
+		// per withdrawal anyway — this is the same gate, called once, so an operator pause
+		// (or an unreadable flag: it fails closed) does not cost a refusal and a log line
+		// for every row in the backlog every 30 seconds.
+		if let Err(err) = withdrawal_app::require_outflows_enabled(&policy).await {
+			info!("dispatcher: skipping this sweep — {err}");
+			return Ok(0);
 		}
 		let queued: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM withdrawals WHERE state = 'queued' ORDER BY created_at")
 			.fetch_all(&self.pool)
@@ -113,22 +112,6 @@ impl Dispatcher {
 					continue;
 				}
 			};
-			// Cross-plane freeze / disable: a queued withdrawal whose owner was SUSPENDED (or
-			// disabled) must not be dispatched, even though it slipped past the sync gate at
-			// request time. Mirror `unfrozen_caller` — skip a frozen owner, and fail closed
-			// (skip this cycle) when the control-plane flag can't be read. A revenue payout
-			// has no owner in the identity plane (the fund is not a user), so there is no
-			// flag to read and nothing to fail closed on — the gate simply doesn't apply.
-			if let Some(owner) = withdrawal.user() {
-				match bridge::is_frozen(&self.pool, owner).await {
-					Ok(false) => {}
-					Ok(true) => continue,
-					Err(err) => {
-						warn!(withdrawal_id = %id, "dispatcher: freeze check failed — skipping this cycle (fail-closed): {err}");
-						continue;
-					}
-				}
-			}
 			let net = withdrawal.net_amount();
 			let network = withdrawal.network();
 			let spent = in_flight.get(&network).copied().unwrap_or(Usdt::ZERO);
@@ -155,7 +138,10 @@ impl Dispatcher {
 					continue;
 				}
 			}
-			match withdrawal_app::dispatch_withdrawal(self.withdrawals.as_ref(), self.custody.as_ref(), &self.notify, id).await {
+			// The owner's freeze and verification standing are gated inside the command, so a
+			// refusal here is an ordinary per-withdrawal skip: it stays queued (and
+			// cancellable) for the next interval, or until the reaper takes it.
+			match withdrawal_app::dispatch_withdrawal(self.withdrawals.as_ref(), self.custody.as_ref(), &policy, &self.notify, id).await {
 				Ok(_) => {
 					dispatched += 1;
 					// A saturating add: an (impossible in practice) overflow keeps the rail gated.
