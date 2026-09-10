@@ -23,7 +23,7 @@ use domain::{
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
-	infrastructure::{custody::StubCustody, deposits::PgDeposits, dispatcher::Dispatcher, outflow::PgOutflowPolicy, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
+	infrastructure::{custody::StubCustody, deposits::PgDeposits, dispatcher::Dispatcher, operations, outflow::PgOutflowPolicy, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
 	ports::{BroadcastRequest, Custody, CustodyError, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
@@ -35,6 +35,18 @@ mod common;
 // Address alphabets for the test-only deposit-address stub (defined at the bottom).
 const BASE58: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const BASE64URL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/// Serialises the tests that drive a `Dispatcher` sweep or toggle the read-only
+/// kill-switch.
+///
+/// Both are **global** by construction: `Dispatcher::sweep` walks every `queued`
+/// withdrawal in the control plane rather than only this test's, and `operations_mode` is
+/// a singleton row. Two such tests in parallel therefore act on each other — a sweep whose
+/// chain view is liquid on a rail will dispatch a sibling's queued withdrawal out from
+/// under it, and a kill-switch flipped by one test pauses another's sweep. Partitioning by
+/// rail is not a fix: there are four rails and more tests than that, and the kill-switch
+/// has no rail at all.
+static GLOBAL_SWEEP: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 struct Harness {
 	pool: PgPool,
@@ -522,6 +534,7 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 /// no longer `queued`; dispatch itself is idempotent).
 #[tokio::test]
 async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
+	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	// TON keeps this test's dispatchable row off the BEP20 rail other tests queue on; the
@@ -582,6 +595,7 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 /// thing holding an otherwise-dispatchable withdrawal.
 #[tokio::test]
 async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
+	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	// TON with a small top-up keeps this test's row off the rails other tests queue on and
@@ -640,6 +654,7 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 /// up, and the ~50 on-chain cap keeps any parallel test's huge queued grosses out.
 #[tokio::test]
 async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
+	let _sweep = GLOBAL_SWEEP.lock().await;
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	let network = Network::Trc20;
@@ -702,6 +717,181 @@ async fn deposit_address_is_stable_per_user_and_network() {
 		assert_eq!(first, second, "the cached deposit address is stable across reads");
 		assert_eq!(first.network(), network, "the address is for the requested network");
 	}
+}
+
+/// A verification revoked AFTER the request was accepted must stop the payout.
+///
+/// The tier-1 floor used to be a one-shot admission check, so a withdrawal already sitting
+/// in the accept-and-queue backlog was dispatched on the next rail top-up even though its
+/// owner was no longer verified — and unlike a suspension, a `KYC_CHANGED{kyc_level: 0}`
+/// sets no freeze for the sweep to catch. Restoring the tier lets the very next sweep ship
+/// it, which is what proves the tier was the only thing holding an otherwise-dispatchable
+/// withdrawal.
+#[tokio::test]
+async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() {
+	let _sweep = GLOBAL_SWEEP.lock().await;
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	// TON with a small top-up keeps this test's row off the rails other tests queue on
+	// (mirrors the sibling dispatcher tests).
+	let network = Network::Ton;
+	deposit(&h, user, Network::Bep20, "100").await;
+	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("60")).await.unwrap();
+	h.relay.drain().await;
+
+	let custody = Arc::new(TestCustody::short_everywhere());
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, custody.as_ref()),
+		h.users.as_ref(),
+		&Network::ALL,
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues the request");
+	h.relay.drain().await;
+
+	// Both liquidity gates now pass on-chain — only the verification floor may hold it.
+	custody.set(network, TreasuryView::OnChain(usdt("1000000000")));
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+
+	// Compliance revokes the tier the way the lifecycle bridge does: the mirrored column,
+	// with no freeze alongside it.
+	common::set_kyc_level(&h.pool, user, 0).await;
+	dispatcher.sweep().await.unwrap();
+	let held = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(held.state(), WithdrawalState::Queued, "an unverified owner's queued withdrawal is not dispatched by the sweep");
+
+	// Re-verified — the next sweep dispatches it, proving the tier was the only hold.
+	common::set_kyc_level(&h.pool, user, 1).await;
+	assert!(dispatcher.sweep().await.unwrap() >= 1, "once re-verified, the topped-up rail dispatches it");
+	let processing = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(processing.state(), WithdrawalState::Processing, "the dispatcher dispatched it once the tier came back");
+	h.relay.drain().await;
+
+	// Settle so the shared rails aren't left with a dangling in-flight reservation.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+}
+
+/// The operator dispatch command carries the SAME outflow policy as the user path and the
+/// sweep: `Permission::WithdrawalDispatch` says who may ask, not that the platform is
+/// currently willing. Each of the three gates is proven to be the only hold, by clearing
+/// it and re-running the identical call.
+#[tokio::test]
+async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier() {
+	// The read-only arm flips the singleton `operations_mode` row, which every parallel
+	// sweep reads.
+	let _sweep = GLOBAL_SWEEP.lock().await;
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+
+	// Queue it on an on-chain-short treasury, then dispatch against a liquid view: the
+	// liquidity gate is covered elsewhere and must not be what refuses here.
+	let short = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &short), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+	let liquid = TestCustody::with_view(network, TreasuryView::OnChain(usdt("1000000000")));
+
+	// 1. The tier is revoked after acceptance.
+	common::set_kyc_level(&h.pool, user, 0).await;
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "an unverified owner refuses the admin dispatch, got {err:?}");
+	common::set_kyc_level(&h.pool, user, 1).await;
+
+	// 2. The owner is frozen (a concierge SUSPENDED).
+	sqlx::query("UPDATE users SET frozen = TRUE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "a frozen owner refuses the admin dispatch, got {err:?}");
+	sqlx::query("UPDATE users SET frozen = FALSE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+
+	// 3. The global read-only kill-switch. Cleared before asserting, so a failing
+	// assertion cannot leave the switch on for every other test on this database.
+	operations::set_read_only(&h.pool, true).await.unwrap();
+	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id()).await;
+	operations::set_read_only(&h.pool, false).await.unwrap();
+	assert!(
+		matches!(refused, Err(DomainError::Forbidden(_))),
+		"the kill-switch refuses the admin dispatch — permission is not an override, got {refused:?}"
+	);
+
+	let still_queued = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(still_queued.state(), WithdrawalState::Queued, "every refusal leaves the withdrawal queued and cancellable");
+
+	// With all three clear the identical call ships it — the policy was the only hold.
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id())
+		.await
+		.unwrap();
+	assert_eq!(dispatched.state(), WithdrawalState::Processing, "a clear policy dispatches");
+	h.relay.drain().await;
+
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+}
+
+/// A withdrawal whose owner has no control-plane row must NOT be dispatched.
+///
+/// `withdrawals.user_id` carries no foreign key, and the dispatch path reads the owner's
+/// freeze and tier from `users` — so "no row" is a state the gate genuinely cannot
+/// evaluate, on a withdrawal that has already reserved the gross and whose next step is a
+/// broadcast. Absence must read as refusal, not as permission.
+#[tokio::test]
+async fn dispatch_is_refused_when_the_owner_has_no_control_plane_row() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+
+	let short = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &short), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		.await
+		.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
+	h.relay.drain().await;
+
+	// Re-point the row at an id the control plane has never seen — the shape a withdrawal
+	// takes when its owner row is gone.
+	let orphan = Uuid::new_v4();
+	sqlx::query("UPDATE withdrawals SET user_id = $2 WHERE id = $1")
+		.bind(withdrawal.id().raw())
+		.bind(orphan)
+		.execute(&h.pool)
+		.await
+		.unwrap();
+
+	let liquid = TestCustody::with_view(network, TreasuryView::OnChain(usdt("1000000000")));
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "a missing owner row fails closed, got {err:?}");
+	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(after.state(), WithdrawalState::Queued, "the refused withdrawal stays queued");
+
+	// Give the row its owner back so the reserve refunds to the claim it came from.
+	sqlx::query("UPDATE withdrawals SET user_id = $2 WHERE id = $1")
+		.bind(withdrawal.id().raw())
+		.bind(user.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	withdrawal_app::cancel_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), user).await.unwrap();
+	h.relay.drain().await;
 }
 
 // ── Test-only custody with a configurable on-chain treasury view ────────────────
