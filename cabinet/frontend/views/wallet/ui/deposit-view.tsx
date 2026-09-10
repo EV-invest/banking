@@ -8,8 +8,11 @@ import { useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";
 
+import { isUnverified } from "@/entities/user/lib/kyc";
+import { profileResource } from "@/entities/user/model/profile-resource";
 import { depositAddressResource, walletResource } from "@/entities/wallet/model/wallet-resource";
-import { errorMessage } from "@/shared/lib/api-client";
+import { VerificationRequired } from "@/features/kyc";
+import { errorMessage, isVerificationRequired } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
@@ -37,6 +40,15 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
   const [copied, setCopied] = useState(false);
 
   const { data: wallet, error: walletError, isLoading: walletLoading } = useResource(walletResource);
+  // Shared with the sidebar chip and the profile page, and prefetched at boot, so the tier
+  // is normally known on the first frame of this screen.
+  const { data: profile, error: profileError, isLoading: profileLoading } = useResource(profileResource);
+
+  // The tier is unknown only while the read is in flight. A read that FAILED must not gate
+  // anything — a verified user would lose their address to an unrelated blip — so it falls
+  // through to the request, whose own refusal still names the gate.
+  const tierKnown = !profileLoading || profileError !== null;
+  const gated = tierKnown && isUnverified(profile);
 
   const networks = (wallet?.deposit_addresses ?? []).map((a) => a.network ?? "").filter(Boolean);
   // A `?network=` that no longer maps to a live rail falls back to the first one on offer.
@@ -44,7 +56,13 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
 
   // Keyed on the rail, so switching back to a network already looked at re-shows its
   // address and QR immediately instead of re-fetching an address that cannot have changed.
-  const { data: address, error: addressError, isLoading: addressLoading } = useResource(depositAddressResource, network);
+  // An empty rail disables the read (`enabled` on the resource): below tier 1 the hub has no
+  // address to give on any network, so the request is not made rather than made and refused.
+  const { data: address, error: addressError, isLoading: addressLoading } = useResource(depositAddressResource, tierKnown && !gated ? network : "");
+
+  // The gate, whether the profile named it or the hub did. The second path covers a tier
+  // that moved in another tab, or a profile too stale to have caught up.
+  const needsVerification = gated || isVerificationRequired(addressError);
 
   const error = (wallet || !walletError ? null : errorMessage(walletError, t)) ?? (address || !addressError ? null : errorMessage(addressError, t)) ?? null;
 
@@ -83,7 +101,7 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
             opacity and transform no-ops, which is the whole point here. */}
         <Settled
           className="flex flex-col gap-3.5 lg:gap-5"
-          loading={walletLoading}
+          loading={walletLoading || profileLoading}
           skeleton={
             <>
               <Skeleton className="h-26 rounded-xl" />
@@ -91,7 +109,12 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
             </>
           }
         >
-          {walletLoading ? null : networks.length === 0 ? (
+          {walletLoading || profileLoading ? null : needsVerification ? (
+            // No rail picker and no network warning beside it: there is no address on any
+            // network yet, so a selector would offer a choice that changes nothing, and a
+            // warning about sending to the wrong chain has nothing to be sent to.
+            <VerificationRequired title={t("wallet.depositVerifyTitle")} description={t("wallet.depositVerifyBody")} />
+          ) : networks.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {error ?? t("wallet.noDepositRails")}
             </p>

@@ -7,7 +7,10 @@ import { type ReactNode, useState } from "react";
 
 import { Skeleton } from "@evinvest/uikit";
 
+import { isUnverified } from "@/entities/user/lib/kyc";
+import { profileResource } from "@/entities/user/model/profile-resource";
 import { submitWithdrawal, walletResource } from "@/entities/wallet/model/wallet-resource";
+import { VerificationRequired } from "@/features/kyc";
 import type { NetworkWithdrawable, Wallet, Withdrawal } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
@@ -51,6 +54,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   const [done, setDone] = useState<Withdrawal | null>(null);
 
   const { data: wallet, error: walletError, isLoading: walletLoading } = useResource(walletResource);
+  const { data: profile, error: profileError, isLoading: profileLoading } = useResource(profileResource);
+  // Below tier 1 the hub refuses the withdrawal itself, so the form could only be filled in
+  // and then turned away at Confirm — which is what it did. A failed profile read is not a
+  // verdict and leaves the form alone; the submit's own refusal still stops it.
+  const gated = (!profileLoading || profileError !== null) && isUnverified(profile);
   // A failed submit is the interesting error here; a failed wallet read only matters while
   // there is no wallet to show, since a stale balance still beats a blank screen.
   const error = submitError ? errorMessage(submitError, t) : wallet || !walletError ? null : errorMessage(walletError, t);
@@ -99,10 +107,14 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
     <WalletScreen title={t("ui.withdrawUsdt")} subtitle={t("wallet.withdrawSub")} back="/wallet">
       <StaggerItem>
         <Settled
-          loading={walletLoading}
+          loading={walletLoading || profileLoading}
           skeleton={<Skeleton className="h-111 w-full rounded-xl lg:max-w-140" />}
         >
-        {walletLoading ? null : networks.length === 0 ? (
+        {walletLoading || profileLoading ? null : gated ? (
+        // The balance is not hidden — it is on the wallet screen this one links back to.
+        // Only the send is closed, and this says so and offers the one way to open it.
+        <VerificationRequired title={t("wallet.withdrawVerifyTitle")} description={t("wallet.withdrawVerifyBody")} className="lg:max-w-140" />
+      ) : networks.length === 0 ? (
         <p className="text-sm text-muted-foreground">{error ?? t("wallet.noWithdrawRails")}</p>
       ) : (
         // Form 560 + review 400 side by side is the Figma at 1440; below that the content
