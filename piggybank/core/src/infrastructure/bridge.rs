@@ -14,6 +14,13 @@
 //!     after every event in the batch is applied, so a crash mid-batch re-pulls and the
 //!     per-user guard absorbs the re-apply.
 //!
+//! Not everything that crosses is a state machine. `frozen`, `kyc_level`, `role` and the
+//! revoke floor each have a kind of their own and are ordered by `sequence`; the EMAIL has
+//! neither. Concierge's `change_email` deliberately emits no event, on the contract that the
+//! profile snapshot riding on the NEXT lifecycle row carries the change — so the snapshot is
+//! applied here on every pulled event, whatever its kind, and never in a per-kind arm that a
+//! new kind could forget to copy. A REPLAYED event is the exception: see [`Freshness`].
+//!
 //! Correlation is by `auth_subject` (the provider `sub` both planes provision against),
 //! never concierge's own `user_id` — a CREATED event provisions a minimal local row for an
 //! as-yet-unseen subject (banking otherwise materializes a user on first sign-in).
@@ -38,7 +45,10 @@
 
 use std::time::Duration;
 
-use domain::{authz::Role, users::UserId};
+use domain::{
+	authz::Role,
+	users::{Email, UserId},
+};
 use evconcierge_contracts::concierge::v1::{PullUserLifecycleRequest, UserLifecycleEvent, user_events_client::UserEventsClient, user_lifecycle_event::Kind};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
@@ -64,6 +74,24 @@ enum Outcome {
 	/// A kind this build's pinned contracts cannot name. The cursor must NOT pass: only a
 	/// re-pull by an upgraded binary can ever apply it.
 	Unreadable,
+}
+
+/// Whether an event's PROFILE SNAPSHOT (email, verification flag) still describes the
+/// subject, as opposed to the state-machine fields (`frozen`, `kyc_level`, `role`,
+/// `concierge_token_version`), which are ordered by `sequence` and safe either way.
+///
+/// The snapshot is taken when concierge DRAINS the event, not when banking applies it, so
+/// the two are only interchangeable while the gap is small.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Freshness {
+	/// Pulled from the concierge outbox moments ago: the newest snapshot either plane holds.
+	Live,
+	/// Replayed out of `bridge_deferred_event`. It was parked because the subject had NO
+	/// local row, and the only thing that can create one afterwards is a first sign-in
+	/// (`PgUsers::provision`), which writes the IdP's live address. So by construction the
+	/// row this replay lands on already carries an address newer than the snapshot, and the
+	/// snapshot must not be written back over it.
+	Stale,
 }
 
 /// The bridge consumer task: pull → apply → advance the cursor, on a poll interval.
@@ -140,7 +168,7 @@ impl BridgeConsumer {
 			return Ok(false);
 		}
 		for event in &response.events {
-			if self.apply(event).await? == Outcome::Unreadable {
+			if self.apply(event, Freshness::Live).await? == Outcome::Unreadable {
 				// HEAD-OF-LINE STOP. RETURNING HERE IS LOAD-BEARING TWICE OVER.
 				//
 				// Leaving the cursor put is what keeps the event in concierge's outbox for an
@@ -177,7 +205,7 @@ impl BridgeConsumer {
 		info!(count = parked.len(), "bridge: replaying deferred lifecycle events whose subject now exists");
 		for row in parked {
 			let event_id = row.event_id.clone();
-			if self.apply(&row.into_event()).await? != Outcome::Mirrored {
+			if self.apply(&row.into_event(), Freshness::Stale).await? != Outcome::Mirrored {
 				// Re-parked: the row was deleted again between the join and the apply, or an
 				// earlier sibling is still waiting. Leave this one where it is.
 				continue;
@@ -211,7 +239,10 @@ impl BridgeConsumer {
 	/// new sequence. CREATED provisions a minimal row for an unseen subject. An event for a
 	/// subject with no local row is parked for replay; an unnameable `kind` is refused outright
 	/// so the caller can stop the cursor. See the module header for why those differ.
-	async fn apply(&self, event: &UserLifecycleEvent) -> Result<Outcome, sqlx::Error> {
+	///
+	/// A `Freshness::Live` event also refreshes the profile snapshot (email) regardless of its
+	/// kind — see [`refresh_profile_snapshot`].
+	async fn apply(&self, event: &UserLifecycleEvent, freshness: Freshness) -> Result<Outcome, sqlx::Error> {
 		let subject = &event.auth_subject;
 		let sequence = event.sequence as i64;
 
@@ -305,6 +336,13 @@ impl BridgeConsumer {
 		if sequence <= current {
 			tx.commit().await?;
 			return Ok(Outcome::Mirrored);
+		}
+
+		// AHEAD OF THE `match`, DELIBERATELY: the address is carried by EVERY kind, not by one.
+		// An arm added later inherits the refresh instead of quietly not carrying it, which is
+		// the exact shape of the bug this fixes (EV-invest/concierge#46).
+		if freshness == Freshness::Live {
+			refresh_profile_snapshot(&mut tx, subject, event).await?;
 		}
 
 		match event.kind() {
@@ -405,6 +443,48 @@ impl BridgeConsumer {
 		tx.commit().await?;
 		Ok(Outcome::Mirrored)
 	}
+}
+
+/// Mirror the address the event carries onto the local row.
+///
+/// THIS IS THE ONLY ROUTE AN EMAIL CHANGE HAS INTO THE MONEY PLANE. Concierge's
+/// `change_email` bumps `row_version` WITHOUT `bump_and_emit`, on the stated contract that
+/// "banking re-reads the email snapshot on the next lifecycle event" (`domain/src/users.rs`).
+/// Banking never did: `email` was written once, by the CREATED insert, under
+/// `ON CONFLICT DO NOTHING`, and no other arm touched it — so an address changed at the IdP
+/// stayed at its CREATED value on this side forever (EV-invest/concierge#46). Since the
+/// snapshot rides on every lifecycle row already, honouring it here costs no new event kind
+/// and no coordinated rollout.
+///
+/// Two guards, both fail-closed:
+///   - the value must PARSE as an `Email`. `users.email` is NOT NULL and every read
+///     (`PgUsers::find_by_id`) parses it back, so an empty or malformed snapshot from an
+///     older concierge would turn a loadable row into one whose profile and money surfaces
+///     error out. A bad snapshot is dropped with a warning instead — the mirror keeps the
+///     last address it trusted.
+///   - the write is skipped when nothing differs, so the ordinary event (a freeze, a tier
+///     move) does not churn `updated_at` for an address that never changed. `Email::parse`
+///     normalizes exactly as `PgUsers::provision` does, so the two writers of this column
+///     agree on spelling and cannot ping-pong it.
+async fn refresh_profile_snapshot(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, subject: &str, event: &UserLifecycleEvent) -> Result<(), sqlx::Error> {
+	let Ok(email) = Email::parse(&event.email) else {
+		warn!(
+			event_id = %event.event_id,
+			subject = %subject,
+			"bridge: lifecycle event carries no usable email snapshot — keeping the mirrored address"
+		);
+		return Ok(());
+	};
+	sqlx::query(
+		"UPDATE users SET email = $2, email_verified = $3, updated_at = now() \
+		 WHERE auth_subject = $1 AND (email IS DISTINCT FROM $2 OR email_verified IS DISTINCT FROM $3)",
+	)
+	.bind(subject)
+	.bind(email.as_str())
+	.bind(event.email_verified)
+	.execute(&mut **tx)
+	.await?;
+	Ok(())
 }
 
 /// Park an event this build cannot apply yet. `ON CONFLICT DO NOTHING` keeps a redelivery —
