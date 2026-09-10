@@ -21,7 +21,7 @@ use serde_json::{Value, json};
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{editable, parse_body, require_admin, require_money_token, require_token, required, verify_csrf},
+	routes::{editable, parse_body, require_admin, require_money_token, require_token, required, required_u32, verify_csrf},
 	state::AppState,
 };
 
@@ -48,9 +48,23 @@ fn bool_field(v: &Value, key: &str) -> bool {
 	v.get(key).and_then(Value::as_bool).unwrap_or(false)
 }
 
+/// An OPTIONAL unsigned knob whose absence legitimately means zero.
+///
+/// One caller left — the feature flag `rollout`. NOT a general-purpose number reader: it
+/// cannot distinguish a missing field, a negative, a fraction or a quoted number from a
+/// deliberate zero, and it truncates rather than refusing anything past `u32::MAX`. A
+/// required field goes through [`required_u32`] instead, which returns `None` for each of
+/// those so the handler can answer 400 rather than invent a value.
 fn u32_field(v: &Value, key: &str) -> u32 {
 	v.get(key).and_then(Value::as_u64).unwrap_or(0) as u32
 }
+
+/// The top of the KYC tier ladder, as written down in
+/// `contracts/proto/banking/v1/users.proto`: 0 registered · 1 verified · 2 enhanced ·
+/// 3 elevated. Checked here rather than left to the identity plane because a tier the
+/// operator mistyped is their mistake to see, and the refusal is more legible one hop
+/// from the console than five.
+const MAX_KYC_LEVEL: u32 = 3;
 
 /// A REQUIRED basis-point rate: `None` when the field is missing, or is not a whole
 /// non-negative number that fits a `u32`.
@@ -62,7 +76,7 @@ fn u32_field(v: &Value, key: &str) -> u32 {
 /// screen exists to end. The hub caps the value at 10000 bps; refusing a malformed one is
 /// this layer's half.
 fn rate_field(v: &Value, key: &str) -> Option<u32> {
-	v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
+	required_u32(v, key)
 }
 
 // ── overview (fleet health; health RPCs are public — no token) ─────────────────
@@ -203,6 +217,13 @@ pub async fn revoke_sessions(State(st): State<AppState>, jar: CookieJar, headers
 }
 
 /// `POST /api/admin/users/kyc` — set a user's KYC level.
+///
+/// The tier is REQUIRED and range-checked here, before the request costs anything
+/// upstream. Reading it through a missing-is-zero default made every unparseable body — a
+/// typo, an absent field, a form post sending `"2"` — settle on tier 0 and answer
+/// `200 {"kyc_level":0}`: banking gates deposit-address issuance and withdrawals on
+/// `>= 1`, so the operator's mistake silently locked the user out of their own money
+/// while the console reported success.
 pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
@@ -213,7 +234,13 @@ pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: Header
 	let Some(user_id) = required(&v, "user_id") else {
 		return Err(ApiError::BadRequest("user_id is required".into()));
 	};
-	let res = st.grpc.admin_set_kyc_level(&token, &user_id, u32_field(&v, "kyc_level")).await?;
+	let Some(kyc_level) = required_u32(&v, "kyc_level") else {
+		return Err(ApiError::BadRequest(format!("kyc_level is required and must be a whole number in 0..={MAX_KYC_LEVEL}")));
+	};
+	if kyc_level > MAX_KYC_LEVEL {
+		return Err(ApiError::BadRequest(format!("kyc_level {kyc_level} is outside the tier ladder 0..={MAX_KYC_LEVEL}")));
+	}
+	let res = st.grpc.admin_set_kyc_level(&token, &user_id, kyc_level).await?;
 	Ok(Json(json!({ "kyc_level": res.kyc_level })))
 }
 
@@ -726,7 +753,8 @@ pub async fn set_flag(State(st): State<AppState>, jar: CookieJar, headers: Heade
 	Ok(Json(config.into()))
 }
 
-/// The five `/api/admin/fees/*` routes, driven end to end through the real router.
+/// The five `/api/admin/fees/*` routes plus `/api/admin/users/kyc`, driven end to end
+/// through the real router.
 ///
 /// These are the calls the operator's fees screen makes, and they were the one part of
 /// the fee plane with no automated coverage: the hub's own charging is exercised against
@@ -741,8 +769,12 @@ pub async fn set_flag(State(st): State<AppState>, jar: CookieJar, headers: Heade
 /// [`router`](crate::routes::router). Nothing below the HTTP boundary is faked out, so a
 /// handler that forwards the wrong field, forgets a gate, or renames a JSON key fails
 /// here rather than on the screen.
+///
+/// The KYC route joined them because it shares the seam and the failure mode: a tier the
+/// BFF cannot parse must be refused here, and the assertion that matters is that the hub
+/// never saw a request at all.
 #[cfg(test)]
-mod fee_route_tests {
+mod admin_route_tests {
 	// `Status` is a large error type tonic mandates in handler signatures.
 	#![allow(clippy::result_large_err)]
 
@@ -801,6 +833,7 @@ mod fee_route_tests {
 	struct Seen {
 		set_policy: Option<bk::SetFeePolicyRequest>,
 		settle: Option<bk::SettleFeeSharesRequest>,
+		set_kyc: Option<cc::SetKycLevelRequest>,
 		money_tokens_issued: usize,
 	}
 
@@ -919,8 +952,15 @@ mod fee_route_tests {
 			Err(Status::unimplemented("not reached by the fees routes"))
 		}
 
-		async fn set_kyc_level(&self, _: GrpcRequest<cc::SetKycLevelRequest>) -> Result<GrpcResponse<cc::SetKycLevelResponse>, Status> {
-			Err(Status::unimplemented("not reached by the fees routes"))
+		/// Records the tier it was asked for and echoes it back, exactly as the identity
+		/// plane does. The recording is the point: a body the BFF should have refused must
+		/// leave this untouched.
+		async fn set_kyc_level(&self, request: GrpcRequest<cc::SetKycLevelRequest>) -> Result<GrpcResponse<cc::SetKycLevelResponse>, Status> {
+			self.guard()?;
+			let req = request.into_inner();
+			let kyc_level = req.kyc_level;
+			self.seen.lock().unwrap().set_kyc = Some(req);
+			Ok(GrpcResponse::new(cc::SetKycLevelResponse { kyc_level }))
 		}
 
 		async fn list_users(&self, _: GrpcRequest<cc::ListUsersRequest>) -> Result<GrpcResponse<cc::ListUsersResponse>, Status> {
@@ -1505,5 +1545,76 @@ mod fee_route_tests {
 		let (status, body) = send(&app, signed("GET", "/api/admin/fees/assessments?service=quy-nhon", None, false)).await;
 		assert_eq!(status, StatusCode::BAD_GATEWAY);
 		assert_eq!(body["error"], "fee assessments unavailable");
+	}
+
+	// ── kyc ─────────────────────────────────────────────────────────────────────
+
+	/// The tier is REQUIRED, and `as_u64` answers `None` for every shape below. Defaulting
+	/// that `None` to zero is what let a mistyped console request read as "saved" while
+	/// dropping the named user to tier 0 — which banking's `>= 1` gates turn into a
+	/// lockout on both deposit-address issuance and withdrawals.
+	#[tokio::test]
+	async fn a_kyc_tier_the_bff_cannot_read_is_refused_rather_than_taken_as_zero() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for body in [
+			// No tier at all — the shape that silently demoted whoever was named.
+			r#"{"user_id":"u1"}"#,
+			// Negative.
+			r#"{"user_id":"u1","kyc_level":-1}"#,
+			// A fraction of a tier is not a rung on the ladder.
+			r#"{"user_id":"u1","kyc_level":2.5}"#,
+			// A number as a string — what a hand-rolled client or a form post sends.
+			r#"{"user_id":"u1","kyc_level":"2"}"#,
+			// Past `u32::MAX`. These are the nastiest of the set: `as u32` truncated them
+			// to 0 and to 1, so the overflow reached the hub as a plausible tier.
+			r#"{"user_id":"u1","kyc_level":4294967296}"#,
+			r#"{"user_id":"u1","kyc_level":4294967297}"#,
+		] {
+			let (status, _) = send(&app, signed("POST", "/api/admin/users/kyc", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "a tier that is not a whole number in range must be refused: {body}");
+		}
+
+		assert!(seen.lock().unwrap().set_kyc.is_none(), "a tier the BFF could not read must never reach the hub as a zero");
+	}
+
+	/// A tier above the ladder parses perfectly well as a `u32`, so only an explicit range
+	/// check keeps a mistyped `4` from travelling. The ladder's top is written down in
+	/// `contracts/proto/banking/v1/users.proto`; the console is the layer that should say
+	/// so, rather than leaving the operator to read a refusal from two hops away.
+	#[tokio::test]
+	async fn a_kyc_tier_off_the_ladder_is_refused_locally() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for body in [r#"{"user_id":"u1","kyc_level":4}"#, r#"{"user_id":"u1","kyc_level":4294967295}"#] {
+			let (status, _) = send(&app, signed("POST", "/api/admin/users/kyc", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "a tier above the ladder must be refused: {body}");
+		}
+
+		assert!(seen.lock().unwrap().set_kyc.is_none(), "an out-of-range tier must never reach the hub");
+	}
+
+	/// Every rung the ladder actually has stays settable — including 0, which is a real
+	/// tier (a demotion after a failed review) and not merely the value the old default
+	/// used to invent. The guard above must not have made a deliberate zero unwritable.
+	#[tokio::test]
+	async fn every_tier_on_the_ladder_is_still_settable() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for level in 0..=MAX_KYC_LEVEL {
+			let body = format!(r#"{{"user_id":"u1","kyc_level":{level}}}"#);
+			let (status, response) = send(&app, signed("POST", "/api/admin/users/kyc", Some(body.as_str()), true)).await;
+			assert_eq!(status, StatusCode::OK, "tier {level} is on the ladder and must be writable");
+			assert_eq!(response["kyc_level"], level, "the response carries the tier the hub applied");
+
+			let forwarded = seen.lock().unwrap().set_kyc.clone().expect("the hub saw the write");
+			assert_eq!((forwarded.user_id.as_str(), forwarded.kyc_level), ("u1", level), "the tier must reach the hub unchanged");
+		}
 	}
 }
