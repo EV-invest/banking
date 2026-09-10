@@ -616,3 +616,140 @@ async fn an_unreadable_kind_holds_the_cursor_until_a_build_that_understands_it()
 	})
 	.await;
 }
+
+async fn email_of(pool: &PgPool, subject: &str) -> (String, bool) {
+	sqlx::query_as("SELECT email, email_verified FROM users WHERE auth_subject = $1")
+		.bind(subject)
+		.fetch_one(pool)
+		.await
+		.unwrap()
+}
+
+/// AN EMAIL CHANGE HAS NO EVENT OF ITS OWN — THE SNAPSHOT IS THE WHOLE DELIVERY MECHANISM.
+///
+/// concierge's `change_email` bumps `row_version` without `bump_and_emit`, on the stated
+/// contract that banking re-reads the address from the snapshot on the next lifecycle event.
+/// Banking never did: `email` was written once, by the CREATED insert, under
+/// `ON CONFLICT DO NOTHING`, and no other arm touched it — so a user who changed their
+/// address at the IdP kept their old one on the money plane forever, on statements, notices
+/// and every operator screen (EV-invest/concierge#46).
+#[tokio::test]
+async fn a_changed_address_arrives_on_the_next_lifecycle_event() {
+	let Some(pool) = pool().await else {
+		eprintln!("DATABASE_URL unset — skipping real-DB test");
+		return;
+	};
+	let subject = unique_subject();
+	let mut registered = event(&subject, Kind::Created, 1);
+	registered.email = "before@example.com".into();
+	// The address changed at the IdP between the two; only the KYC move is emitted, and it
+	// carries the new address as part of its snapshot.
+	let mut verified = event(&subject, Kind::KycChanged, 2);
+	verified.email = "after@example.com".into();
+	verified.kyc_level = domain::users::KYC_LEVEL_VERIFIED;
+
+	drive(&pool, vec![registered, verified], move |pool| {
+		let subject = subject.clone();
+		async move {
+			let (email, _) = email_of(&pool, &subject).await;
+			assert_eq!(email, "after@example.com", "the snapshot on a non-CREATED event must refresh the mirrored address");
+
+			// And the aggregate still loads: a mirrored address that no longer parses would
+			// take the user's whole profile and money surface down with it.
+			let user_id = user_id_for(&pool, &subject).await.expect("provisioned");
+			let account = PgUsers::new(pool.clone())
+				.find_by_id(domain::users::UserId::from_raw(user_id))
+				.await
+				.unwrap()
+				.expect("the mirrored user loads");
+			assert_eq!(account.email().as_str(), "after@example.com", "the repository reads back the refreshed address");
+		}
+	})
+	.await;
+}
+
+/// The verification flag rides the same snapshot, and on a kind that has nothing to do with
+/// either — the refresh is kind-independent by construction, not a KYC_CHANGED special case.
+#[tokio::test]
+async fn the_verification_flag_travels_with_the_address() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	let mut registered = event(&subject, Kind::Created, 1);
+	registered.email = "unconfirmed@example.com".into();
+	registered.email_verified = false;
+	// A revoke says nothing about the address — but it carries the snapshot, so it delivers it.
+	let mut revoked = event(&subject, Kind::SessionsRevoked, 2);
+	revoked.email = "confirmed@example.com".into();
+	revoked.email_verified = true;
+
+	drive(&pool, vec![registered, revoked], move |pool| {
+		let subject = subject.clone();
+		async move {
+			assert_eq!(
+				email_of(&pool, &subject).await,
+				("confirmed@example.com".to_string(), true),
+				"any lifecycle kind carrying the snapshot refreshes both the address and its verification flag"
+			);
+		}
+	})
+	.await;
+}
+
+/// A PARKED EVENT CARRIES A SNAPSHOT FROM BEFORE THE ROW EXISTED, AND MUST NOT WRITE IT BACK.
+///
+/// Parking (migration 0028) means the subject had NO local row when the event arrived. The
+/// only thing that creates one afterwards is a first sign-in, which writes the IdP's live
+/// address — so by the time the replay runs, the row is strictly newer than the snapshot the
+/// replay is holding. Mirroring it anyway would roll the address back to whatever it was at
+/// the moment concierge drained the event, which for a bootstrap backlog can be months.
+#[tokio::test]
+async fn a_replayed_parked_event_does_not_roll_the_address_back() {
+	let Some(pool) = pool().await else {
+		return;
+	};
+	let subject = unique_subject();
+	// No CREATED reaches this deployment — only a tier change, snapshotting the OLD address.
+	let mut verified = event(&subject, Kind::KycChanged, 2);
+	verified.email = "stale@example.com".into();
+	verified.kyc_level = domain::users::KYC_LEVEL_VERIFIED;
+
+	drive(&pool, vec![verified], move |pool| {
+		let subject = subject.clone();
+		async move {
+			assert_eq!(parked_count(&pool, &subject).await, 1, "an event for an unknown subject is parked");
+
+			// First sign-in materializes the row with the address the IdP holds NOW.
+			PgUsers::new(pool.clone())
+				.provision(
+					domain::auth::AuthSubject::parse(&subject).unwrap(),
+					domain::users::Email::parse("current@example.com").unwrap(),
+					true,
+				)
+				.await
+				.expect("first sign-in provisions the row");
+
+			let replayed = eventually(|| {
+				let (pool, subject) = (pool.clone(), subject.clone());
+				async move { parked_count(&pool, &subject).await == 0 }
+			})
+			.await;
+			assert!(replayed, "the parked event must be released once the row exists");
+
+			let (email, _) = email_of(&pool, &subject).await;
+			assert_eq!(email, "current@example.com", "a replayed snapshot must not overwrite the newer address the row already holds");
+			let level: i32 = sqlx::query_scalar("SELECT kyc_level FROM users WHERE auth_subject = $1")
+				.bind(&subject)
+				.fetch_one(&pool)
+				.await
+				.unwrap();
+			assert_eq!(
+				level as u32,
+				domain::users::KYC_LEVEL_VERIFIED,
+				"the state-machine fields it carries still apply — only the snapshot is withheld"
+			);
+		}
+	})
+	.await;
+}
