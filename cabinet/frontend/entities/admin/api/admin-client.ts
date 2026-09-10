@@ -7,6 +7,7 @@ import { getJson, postJson } from "@/shared/lib/api-client";
 import type {
   AdminOverview,
   Allocation,
+  AllocationIcon,
   AllocationList,
   AdminUserList,
   AdminUserProfile,
@@ -92,10 +93,22 @@ export type RecordedArrival = { recorded: boolean; amount: string; party_kind: s
 // `/api/allocations` returns the open set only.
 export const fetchAllocations = (): Promise<AllocationList> => getJson("/api/admin/allocations");
 
-export const registerAllocation = (body: { service: string; title: string; summary: string }): Promise<Allocation> =>
-  postJson("/api/admin/allocations/register", body);
+/** The register/update body. `icon` is REQUIRED here even though it is optional on the
+ *  read shape, and that asymmetry is the point: `/update` is a full replace, so a body
+ *  without `icon` is read by the hub as "no picture chosen" and resets the product to
+ *  `fund`, silently discarding whatever the operator picked earlier. Requiring it makes
+ *  an editor that forgets to send the current value a compile error rather than a bug
+ *  nobody notices until the rail changes shape. */
+export interface AllocationWrite {
+  service: string;
+  title: string;
+  summary: string;
+  icon: AllocationIcon;
+}
 
-export const updateAllocation = (body: { service: string; title: string; summary: string }): Promise<Allocation> => postJson("/api/admin/allocations/update", body);
+export const registerAllocation = (body: AllocationWrite): Promise<Allocation> => postJson("/api/admin/allocations/register", body);
+
+export const updateAllocation = (body: AllocationWrite): Promise<Allocation> => postJson("/api/admin/allocations/update", body);
 
 export const setAllocationState = (service: string, state: "open" | "closed"): Promise<Allocation> => postJson("/api/admin/allocations/state", { service, state });
 

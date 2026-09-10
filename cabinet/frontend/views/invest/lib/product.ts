@@ -5,7 +5,7 @@
 // these exist so a holder sees what they are about to get *before* submitting, in the
 // same rounding the ledger will actually apply.
 
-import type { Allocation, FundNav, Position } from "@/shared/contracts";
+import type { Allocation, AllocationIcon, FundNav, Position } from "@/shared/contracts";
 
 import { toBaseUnits } from "./format";
 
@@ -22,6 +22,13 @@ export interface Product {
   service: string;
   title: string;
   summary: string;
+  /**
+   * Carried through unresolved — `undefined` both for a catalog entry rehydrated from
+   * sessionStorage before this field existed and for a product known only by a holding.
+   * `ProductIcon` owns the fall back to `fund`, so this module stays pure data with no
+   * React in it and no glyph in its bundle.
+   */
+  icon: AllocationIcon | undefined;
   /** Absent when the product has left the open catalog but units are still held. */
   allocation: Allocation | null;
   position: Position | null;
@@ -36,14 +43,16 @@ export interface Product {
 export function buildProducts(catalog: Allocation[], positions: Position[]): Product[] {
   const byService = new Map<string, Product>();
   for (const a of catalog) {
-    byService.set(a.service, { service: a.service, title: a.title, summary: a.summary, allocation: a, position: null });
+    byService.set(a.service, { service: a.service, title: a.title, summary: a.summary, icon: a.icon, allocation: a, position: null });
   }
   for (const p of positions) {
     const service = p.service ?? "";
     if (!service) continue;
     const existing = byService.get(service);
     if (existing) existing.position = p;
-    else byService.set(service, { service, title: service, summary: "", allocation: null, position: p });
+    // A product known only by a holding has left the open catalog, so nothing here knows
+    // its icon — it draws the same default the hub would have given it.
+    else byService.set(service, { service, title: service, summary: "", icon: undefined, allocation: null, position: p });
   }
   return [...byService.values()].sort((a, b) => a.title.localeCompare(b.title));
 }

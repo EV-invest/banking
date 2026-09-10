@@ -14,6 +14,7 @@ import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { useSession } from "@/shared/lib/use-session";
+import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { DUR, EASE } from "@/shared/ui/motion";
 
 interface NavItem {
@@ -44,11 +45,9 @@ const FUND: NavItem[] = [
 // PRODUCTS is the open allocation registry, not a fixed list: a fund appears in the rail
 // because an operator registered and opened it. It used to name one product literally,
 // which went stale the moment a second one was registered.
-const PRODUCT_TONES = [
-  "bg-main-accent-t1/15 text-main-accent-t1",
-  "bg-main-accent-t2/15 text-main-accent-t2",
-  "bg-main-accent-t3/15 text-main-accent-t3",
-];
+//
+// The mark and its tint both come from `@/shared/ui/icons/products`, so the rail, the
+// invest card and the product page draw the same fund the same way.
 
 // ADMINISTER group — the operator console. Rendered only for a non-investor session
 // role (the BFF's `/api/auth/session` `isAdmin`); every screen is also authorized
@@ -130,7 +129,7 @@ export function Sidebar() {
         </Group>
         {products.length > 0 && (
           <Group label={t("invest.products")}>
-            {products.map((p, i) => {
+            {products.map((p) => {
               // Every row pointed at `/invest`, so naming a product in the rail took you to
               // the list of all of them. The product's own page is keyed by its service id.
               const href: `/${string}` = `/invest/${encodeURIComponent(p.service)}`;
@@ -151,8 +150,8 @@ export function Sidebar() {
                   )}
                 >
                   {active && <ActivePill section="products" appear={crossed} />}
-                  <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md text-xs font-semibold", PRODUCT_TONES[i % PRODUCT_TONES.length])}>
-                    {p.title.charAt(0).toUpperCase()}
+                  <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", productTone(p.service))}>
+                    <ProductIcon icon={p.icon} className="size-3.5" />
                   </span>
                   <span className="truncate">{p.title}</span>
                 </Link>
@@ -237,8 +236,8 @@ function useCrossedSection(pathname: string, section: Section | null): boolean {
   return prev.crossed;
 }
 
-// The highlight itself, shared by both row shapes in the rail — the icon rows and
-// the lettered product rows. It lives in one place because the two used to style
+// The highlight itself, shared by both row shapes in the rail — the nav rows and
+// the product rows. It lives in one place because the two used to style
 // the active state differently: NavLink drew this pill, PRODUCTS set `bg-primary`
 // on the row, and so moving into or out of a product was the one transition in the
 // rail that did not animate at all.

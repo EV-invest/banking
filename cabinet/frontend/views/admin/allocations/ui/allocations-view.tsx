@@ -4,14 +4,15 @@ import { Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
-import { registerAllocation, setAllocationState, updateAllocation } from "@/entities/admin/api/admin-client";
+import { registerAllocation, setAllocationState, updateAllocation, type AllocationWrite } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource } from "@/entities/admin/model/admin-resource";
-import type { Allocation, AllocationState } from "@/shared/contracts/admin";
+import type { Allocation, AllocationIcon, AllocationState } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
+import { ALLOCATION_ICONS, ProductIcon } from "@/shared/ui/icons/products";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
@@ -36,6 +37,47 @@ const STATE_HINT: Record<AllocationState, string> = {
   open: "admin.alloc.hint.open",
   closed: "admin.alloc.hint.closed",
 };
+
+/**
+ * The icon picker, shared by the register form and the row editor so the two cannot drift
+ * apart — they write the same field through the same full-replace endpoint.
+ *
+ * No `SelectValue`: it renders the raw stored value, and here that is the wire's
+ * `real_estate` rather than the operator's "Real estate". A `<span>` inside the trigger is
+ * the house fix for that — see the rail picker in `views/admin/treasury/ui/treasury-view.tsx`.
+ *
+ * Each option carries its glyph beside its name, because the glyph is the thing actually
+ * being chosen; a list of words alone would be picking a picture blind.
+ */
+function IconSelect({ value, onChange, className }: { value: AllocationIcon; onChange: (icon: AllocationIcon) => void; className?: string }) {
+  const t = useT();
+  return (
+    <Select
+      value={value}
+      // Narrowed by lookup rather than asserted: the uikit hands back a bare `string`, and
+      // a cast here would let a typo in an option's `value` through to the BFF as a 400.
+      onValueChange={(v) => {
+        const picked = ALLOCATION_ICONS.find((i) => i === v);
+        if (picked) onChange(picked);
+      }}
+    >
+      <SelectTrigger className={cn("w-full border-border bg-main-surface", className)}>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <ProductIcon icon={value} className="size-3.5 shrink-0" />
+          <span className="truncate">{t(`admin.alloc.icon.${value}`)}</span>
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        {ALLOCATION_ICONS.map((icon) => (
+          <SelectItem key={icon} value={icon}>
+            <ProductIcon icon={icon} className="size-3.5 shrink-0" />
+            {t(`admin.alloc.icon.${icon}`)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 export function AllocationsView() {
   const t = useT();
@@ -156,19 +198,33 @@ function AllocationRow({
   busy: boolean;
   editing: boolean;
   onEdit: () => void;
-  onSave: (body: { service: string; title: string; summary: string }) => void;
+  onSave: (body: AllocationWrite) => void;
   onToggle: () => void;
 }) {
   const t = useT();
   const [title, setTitle] = useState(row.title);
   const [summary, setSummary] = useState(row.summary);
+  // Seeded from the row, so an operator who opens the editor to fix a typo in the title
+  // still submits the icon the product already wears. `/update` is a full replace: a body
+  // without `icon` is read as "none chosen" and resets the product to `fund`, so the
+  // editor holding the current value is what stops a rename from repainting the rail.
+  // `?? "fund"` covers the row arriving from a cache written before the field existed.
+  const [icon, setIcon] = useState<AllocationIcon>(row.icon ?? "fund");
 
   return (
     <>
       <tr>
         <td className="px-5 py-3">
-          <p className="font-medium">{row.title}</p>
-          {row.summary && <p className="text-xs text-muted-foreground">{row.summary}</p>}
+          {/* The mark is shown in the row, not only inside the editor: it is what an
+              investor sees in the rail, so an operator must be able to check it without
+              opening a form that could then be saved by accident. */}
+          <div className="flex items-center gap-2.5">
+            <ProductIcon icon={row.icon} className="size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="font-medium">{row.title}</p>
+              {row.summary && <p className="text-xs text-muted-foreground">{row.summary}</p>}
+            </div>
+          </div>
         </td>
         <td className="px-5 py-3 font-mono-tech text-xs text-muted-foreground">{row.service}</td>
         <td className="px-5 py-3">
@@ -211,7 +267,13 @@ function AllocationRow({
                 <span className="text-xs text-muted-foreground">{t("admin.alloc.field.summary")}</span>
                 <Input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t("admin.alloc.placeholder.summary")} className="w-full" />
               </label>
-              <Button type="button" className={cn(TEAL_CTA)} disabled={busy || !title.trim()} onClick={() => onSave({ service: row.service, title, summary })}>
+              {/* Not a `<label>`: the trigger is a button, and wrapping it would make the
+                  caption a second click target that reopens the popup it just closed. */}
+              <div className="flex w-44 flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">{t("admin.alloc.field.icon")}</span>
+                <IconSelect value={icon} onChange={setIcon} />
+              </div>
+              <Button type="button" className={cn(TEAL_CTA)} disabled={busy || !title.trim()} onClick={() => onSave({ service: row.service, title, summary, icon })}>
                 {t("ui.save")}
               </Button>
             </div>
@@ -222,11 +284,14 @@ function AllocationRow({
   );
 }
 
-function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () => void; onSubmit: (body: { service: string; title: string; summary: string }) => void }) {
+function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () => void; onSubmit: (body: AllocationWrite) => void }) {
   const t = useT();
   const [service, setService] = useState("");
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
+  // Pre-selected rather than blank, and `fund` specifically because that is what the hub
+  // stores when none is sent — so the form shows the outcome of leaving it alone.
+  const [icon, setIcon] = useState<AllocationIcon>("fund");
 
   // Mirrors `ServiceId::parse` — the hub rejects anything else, so say so before the
   // round-trip rather than surfacing a validation error after it.
@@ -251,6 +316,12 @@ function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: (
             <span className="text-sm text-muted-foreground">{t("admin.alloc.field.title")}</span>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quy Nhon Fund" className="w-full" />
           </label>
+          {/* Not a `<label>` — see the row editor: the trigger is a button, so a wrapping
+              label would toggle the popup a second time. */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm text-muted-foreground">{t("admin.alloc.field.icon")}</span>
+            <IconSelect value={icon} onChange={setIcon} />
+          </div>
           <label className="flex flex-col gap-1.5">
             <span className="text-sm text-muted-foreground">{t("admin.alloc.field.summary")}</span>
             <Input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t("admin.alloc.placeholder.summary")} className="w-full" />
@@ -262,7 +333,7 @@ function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: (
           <Button type="button" variant="outline" className="ml-auto" onClick={onCancel}>
             {t("ui.cancel")}
           </Button>
-          <Button type="button" className={cn(TEAL_CTA)} disabled={busy || !slugOk || !title.trim()} onClick={() => onSubmit({ service, title, summary })}>
+          <Button type="button" className={cn(TEAL_CTA)} disabled={busy || !slugOk || !title.trim()} onClick={() => onSubmit({ service, title, summary, icon })}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
             {t("admin.alloc.registerSubmit")}
           </Button>

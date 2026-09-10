@@ -23,6 +23,7 @@ import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
+import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { formatSignedUsdt, formatUnits, formatUsdt, fromBaseUnits, isNegative, isZero, toBaseUnits } from "@/views/invest/lib/format";
@@ -206,8 +207,11 @@ function ProductCard({ product }: { product: Product }) {
     <Card className="transition-colors hover:border-main-accent-t1/40">
       <CardContent className="flex h-full flex-col gap-4 py-5">
         <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-main-accent-t1/15 text-sm font-semibold text-main-accent-t1">
-            {product.title.charAt(0).toUpperCase()}
+          {/* Tinted by service id, not fixed to t1: the card and the rail's row are the
+              same fund seen twice, and a single accent for every card made a catalog of
+              them read as one block. */}
+          <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", productTone(product.service))}>
+            <ProductIcon icon={product.icon} className="size-4.5" />
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold">{product.title}</p>

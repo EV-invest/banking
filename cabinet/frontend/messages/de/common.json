@@ -35,6 +35,10 @@
     "en": "No allocations registered yet — until one is, every subscription is refused.",
     "t": "Noch keine Allokationen registriert — bis das geschieht, wird jede Zeichnung abgelehnt."
   },
+  "admin.alloc.field.icon": {
+    "en": "Icon",
+    "t": "Symbol"
+  },
   "admin.alloc.field.summary": {
     "en": "Summary",
     "t": "Zusammenfassung"
@@ -58,6 +62,46 @@
   "admin.alloc.hint.open": {
     "en": "Accepting subscriptions and redemptions",
     "t": "Nimmt Zeichnungen und Rückgaben an"
+  },
+  "admin.alloc.icon.arbitrage": {
+    "en": "Arbitrage",
+    "t": "Arbitrage"
+  },
+  "admin.alloc.icon.commodity": {
+    "en": "Commodity",
+    "t": "Rohstoffe"
+  },
+  "admin.alloc.icon.credit": {
+    "en": "Credit",
+    "t": "Kredit"
+  },
+  "admin.alloc.icon.fund": {
+    "en": "Fund",
+    "t": "Fonds"
+  },
+  "admin.alloc.icon.index": {
+    "en": "Index",
+    "t": "Index"
+  },
+  "admin.alloc.icon.real_estate": {
+    "en": "Real estate",
+    "t": "Immobilien"
+  },
+  "admin.alloc.icon.trading": {
+    "en": "Trading",
+    "t": "Handel"
+  },
+  "admin.alloc.icon.treasury": {
+    "en": "Treasury",
+    "t": "Treasury"
+  },
+  "admin.alloc.icon.venture": {
+    "en": "Venture",
+    "t": "Wagniskapital"
+  },
+  "admin.alloc.icon.yield": {
+    "en": "Yield",
+    "t": "Rendite"
   },
   "admin.alloc.open": {
     "en": "Open",

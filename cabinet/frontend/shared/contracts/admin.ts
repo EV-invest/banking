@@ -142,6 +142,13 @@ export interface Treasury {
  *  redeem only, so winding a product down never traps an investor. */
 export type AllocationState = "draft" | "open" | "closed";
 
+/** The picture an operator chose for a product, in the wire's snake_case.
+ *
+ *  A closed set mirrored from `icon::ALL` in `contracts/src/allocation.rs`; the hub's CHECK
+ *  constraint and the BFF both reject anything outside it (the BFF answers 400), so this
+ *  union and that list have to be edited together. `fund` is the hub's default. */
+export type AllocationIcon = "fund" | "real_estate" | "trading" | "yield" | "venture" | "treasury" | "commodity" | "credit" | "index" | "arbitrage";
+
 // ── fees ─────────────────────────────────────────────────────────────────────
 
 /** A fund's terms. `configured` false means no policy row exists, which is a different
@@ -206,6 +213,17 @@ export interface Allocation {
   updated_at: string;
   /** Authorised unit supply, decimal. Subscribe refuses a mint that would pass it. */
   unit_cap: string;
+  /**
+   * Optional on READ, and deliberately so rather than as a hedge: `allocationsResource`
+   * carries `persist: true`, so a returning user's first frame is rehydrated from a
+   * sessionStorage object serialised before this field existed. Optionality alone is not
+   * the fix — render it through `ProductIcon` (`@/shared/ui/icons/products`), which lands
+   * both a missing value and one newer than this build on `fund`.
+   *
+   * Required on WRITE: see `registerAllocation`/`updateAllocation`, where update is a
+   * full replace and omitting it resets the product to `fund`.
+   */
+  icon?: AllocationIcon;
 }
 
 export interface AllocationList {
