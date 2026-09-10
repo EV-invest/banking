@@ -21,7 +21,7 @@ use serde_json::{Value, json};
 use crate::{
 	dto,
 	error::ApiError,
-	routes::{editable, parse_body, require_admin, require_money_token, require_token, required, verify_csrf},
+	routes::{editable, parse_body, require_admin, require_money_token, require_token, required, required_u32, verify_csrf},
 	state::AppState,
 };
 
@@ -48,9 +48,23 @@ fn bool_field(v: &Value, key: &str) -> bool {
 	v.get(key).and_then(Value::as_bool).unwrap_or(false)
 }
 
+/// An OPTIONAL unsigned knob whose absence legitimately means zero.
+///
+/// One caller left — the feature flag `rollout`. NOT a general-purpose number reader: it
+/// cannot distinguish a missing field, a negative, a fraction or a quoted number from a
+/// deliberate zero, and it truncates rather than refusing anything past `u32::MAX`. A
+/// required field goes through [`required_u32`] instead, which returns `None` for each of
+/// those so the handler can answer 400 rather than invent a value.
 fn u32_field(v: &Value, key: &str) -> u32 {
 	v.get(key).and_then(Value::as_u64).unwrap_or(0) as u32
 }
+
+/// The top of the KYC tier ladder, as written down in
+/// `contracts/proto/banking/v1/users.proto`: 0 registered · 1 verified · 2 enhanced ·
+/// 3 elevated. Checked here rather than left to the identity plane because a tier the
+/// operator mistyped is their mistake to see, and the refusal is more legible one hop
+/// from the console than five.
+const MAX_KYC_LEVEL: u32 = 3;
 
 /// A REQUIRED basis-point rate: `None` when the field is missing, or is not a whole
 /// non-negative number that fits a `u32`.
@@ -62,7 +76,7 @@ fn u32_field(v: &Value, key: &str) -> u32 {
 /// screen exists to end. The hub caps the value at 10000 bps; refusing a malformed one is
 /// this layer's half.
 fn rate_field(v: &Value, key: &str) -> Option<u32> {
-	v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
+	required_u32(v, key)
 }
 
 // ── overview (fleet health; health RPCs are public — no token) ─────────────────
@@ -203,6 +217,13 @@ pub async fn revoke_sessions(State(st): State<AppState>, jar: CookieJar, headers
 }
 
 /// `POST /api/admin/users/kyc` — set a user's KYC level.
+///
+/// The tier is REQUIRED and range-checked here, before the request costs anything
+/// upstream. Reading it through a missing-is-zero default made every unparseable body — a
+/// typo, an absent field, a form post sending `"2"` — settle on tier 0 and answer
+/// `200 {"kyc_level":0}`: banking gates deposit-address issuance and withdrawals on
+/// `>= 1`, so the operator's mistake silently locked the user out of their own money
+/// while the console reported success.
 pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
@@ -213,7 +234,13 @@ pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: Header
 	let Some(user_id) = required(&v, "user_id") else {
 		return Err(ApiError::BadRequest("user_id is required".into()));
 	};
-	let res = st.grpc.admin_set_kyc_level(&token, &user_id, u32_field(&v, "kyc_level")).await?;
+	let Some(kyc_level) = required_u32(&v, "kyc_level") else {
+		return Err(ApiError::BadRequest(format!("kyc_level is required and must be a whole number in 0..={MAX_KYC_LEVEL}")));
+	};
+	if kyc_level > MAX_KYC_LEVEL {
+		return Err(ApiError::BadRequest(format!("kyc_level {kyc_level} is outside the tier ladder 0..={MAX_KYC_LEVEL}")));
+	}
+	let res = st.grpc.admin_set_kyc_level(&token, &user_id, kyc_level).await?;
 	Ok(Json(json!({ "kyc_level": res.kyc_level })))
 }
 
