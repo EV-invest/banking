@@ -94,12 +94,12 @@ interface JsonRequest {
 // Everything else the BFF sends is already client-safe prose (see backend/src/error.rs)
 // and passes through untouched — with a null key, since we did not author it.
 /**
- * Exported because it is also the right answer for a plane that rejects a stale token in
- * plain text rather than as `{ error: "csrf" }` — the identity plane answers `csrf check
- * failed`, which no lookup below can match. Such a caller maps its own 403 to THIS string
- * instead of restating it, so the wording stays decided here.
+ * The English source for `err.csrf`. Module-local on purpose: a caller that meets a stale
+ * token outside this table — the identity plane answers `csrf check failed` in plain text,
+ * which no lookup below can match — renders the KEY, not this string, so the reader gets
+ * the sentence in their own language rather than the one that was fixed at fetch time.
  */
-export const STALE_PAGE_MESSAGE = "This page went stale. Reload it and try again.";
+const STALE_PAGE_MESSAGE = "This page went stale. Reload it and try again.";
 
 const FRIENDLY: Record<string, { code: string; en: string }> = {
   unauthenticated: {

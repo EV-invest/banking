@@ -1475,6 +1475,10 @@
     "en": "Select a fund to continue.",
     "t": "Wählen Sie einen Fonds, um fortzufahren."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Die Verifizierung konnte nicht gestartet werden. Bitte versuchen Sie es erneut."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "Die Sprache muss ein BCP-47-Code wie 'en' oder 'en-US' sein"
@@ -2347,25 +2351,49 @@
     "en": "Edit profile",
     "t": "Profil bearbeiten"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Identität und Kontostatus"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Identitätsprüfung"
+  },
+  "profile.kyc.contact": {
+    "en": "Contact {contact}",
+    "t": "{contact} kontaktieren"
+  },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Starten"
+  },
+  "profile.kyc.startSub": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Ein Foto Ihres Ausweises und ein Selfie — wenige Minuten"
+  },
+  "profile.kyc.startTitle": {
+    "en": "Verify your identity",
+    "t": "Identität bestätigen"
+  },
+  "profile.kyc.tooManyAttempts": {
+    "en": "You've already started verification several times today. Please try again tomorrow.",
+    "t": "Sie haben die Verifizierung heute bereits mehrfach gestartet. Bitte versuchen Sie es morgen erneut."
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later.",
+    "t": "Die Verifizierung ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut."
   },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC-Stufe {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Wird durch die Compliance-Prüfung angehoben"
+    "en": "Raised by verification and review",
+    "t": "Wird durch Verifizierung und Prüfung angehoben"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Vollständiger Name"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Von der Compliance verwaltet"
   },
   "profile.nationality": {
     "en": "Nationality",

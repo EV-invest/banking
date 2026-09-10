@@ -2375,6 +2375,10 @@
     "en": "Select a fund to continue.",
     "t": "Выберите фонд, чтобы продолжить."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Не удалось начать верификацию. Попробуйте ещё раз."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "Язык должен быть кодом BCP 47, например «en» или «en-US»"
@@ -3251,25 +3255,49 @@
     "en": "Edit profile",
     "t": "Редактировать"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Личность и статус аккаунта"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Верификация личности"
+  },
+  "profile.kyc.contact": {
+    "en": "Contact {contact}",
+    "t": "Написать на {contact}"
+  },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Начать"
+  },
+  "profile.kyc.startSub": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Фото документа и селфи — несколько минут"
+  },
+  "profile.kyc.startTitle": {
+    "en": "Verify your identity",
+    "t": "Подтвердите личность"
+  },
+  "profile.kyc.tooManyAttempts": {
+    "en": "You've already started verification several times today. Please try again tomorrow.",
+    "t": "Сегодня вы уже начинали верификацию несколько раз. Попробуйте завтра."
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later.",
+    "t": "Верификация сейчас недоступна. Попробуйте позже."
   },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC ур. {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Повышается по итогам проверки комплаенса"
+    "en": "Raised by verification and review",
+    "t": "Повышается по итогам верификации и проверки"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Имя по документам"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Управляется комплаенсом"
   },
   "profile.nationality": {
     "en": "Nationality",

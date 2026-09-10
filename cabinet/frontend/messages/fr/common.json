@@ -1475,6 +1475,10 @@
     "en": "Select a fund to continue.",
     "t": "Sélectionnez un fonds pour continuer."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Impossible de démarrer la vérification. Veuillez réessayer."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "La langue doit être un code BCP 47 tel que « en » ou « en-US »"
@@ -2347,25 +2351,49 @@
     "en": "Edit profile",
     "t": "Modifier le profil"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Identité et statut du compte"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Vérification d’identité"
+  },
+  "profile.kyc.contact": {
+    "en": "Contact {contact}",
+    "t": "Contacter {contact}"
+  },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Commencer"
+  },
+  "profile.kyc.startSub": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Une photo de votre pièce d'identité et un selfie — quelques minutes"
+  },
+  "profile.kyc.startTitle": {
+    "en": "Verify your identity",
+    "t": "Vérifiez votre identité"
+  },
+  "profile.kyc.tooManyAttempts": {
+    "en": "You've already started verification several times today. Please try again tomorrow.",
+    "t": "Vous avez déjà lancé la vérification plusieurs fois aujourd'hui. Veuillez réessayer demain."
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later.",
+    "t": "La vérification n'est pas disponible pour le moment. Veuillez réessayer plus tard."
   },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC niv. {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Relevé après examen de conformité"
+    "en": "Raised by verification and review",
+    "t": "Relevé après vérification et examen"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Nom légal"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Géré par la conformité"
   },
   "profile.nationality": {
     "en": "Nationality",

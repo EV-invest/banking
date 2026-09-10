@@ -295,7 +295,7 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
   const t = useT();
   return (
     <ListCard className="lg:px-5.5">
-      <ListCardTitle sub={t("profile.managedByCompliance")}>{t("profile.identityVerification")}</ListCardTitle>
+      <ListCardTitle sub={t("profile.identityAndStanding")}>{t("profile.identityVerification")}</ListCardTitle>
       <Hairline />
       <Row>
         <RowLabel title={t("ui.emailAddress")} sub={loading ? "…" : email || "—"} />
