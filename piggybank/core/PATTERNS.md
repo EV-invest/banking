@@ -604,6 +604,24 @@ banking only mirrors the gating slice. The gate fails CLOSED (UNAVAILABLE) if th
 be read. Cancel/read RPCs are intentionally NOT gated, so a frozen user can still unwind
 queued positions.
 
+**Nothing is consumed without being applied.** `bridge_cursor` is a single global position
+and the concierge only re-delivers *ahead* of it (`WHERE position > after_position`), so an
+event the consumer walks past is gone for good — there is no dead-letter to recover it from.
+Two things can stop an event from applying, and they get opposite treatments because they
+are unblocked by opposite things. **A subject with no local row** (never signed in here, or
+a CREATED that aged out of the outbox before banking was deployed) is parked in
+`bridge_deferred_event` and replayed by the consumer's own sweep the moment the row appears,
+from either direction — a later CREATED or a first sign-in. The cursor moves on, so one
+orphan subject cannot wedge the mirror for every other user; the price is a table whose
+columns must carry every field `apply` reads. **A `kind` this build cannot name** is
+different: the concierge ships ahead of banking, so an unknown kind is the ordinary shape of
+a mid-rollout event, and *nothing local can ever interpret it* — only a newer binary can.
+The cursor stops on it (head-of-line, and the rest of the batch is left unapplied so a later
+event can't advance that subject's guard past it), leaving the event in the concierge outbox
+at full fidelity until the upgrade lands. Marking it applied — which is what bumping
+`last_lifecycle_sequence` "so it isn't re-fetched forever" did — is how a freeze or a tier
+revocation gets swallowed while the money plane keeps trading under withdrawn rules.
+
 **Verification gate (`kyc_level`).** The mirrored tier is not just stored, it *gates*:
 `domain::users::KYC_LEVEL_VERIFIED` (= 1) is the floor for money crossing the platform
 boundary in either direction — `GetDepositAddress` and `RequestWithdrawal`, and again at
