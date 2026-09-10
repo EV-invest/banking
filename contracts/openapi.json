@@ -5939,6 +5939,11 @@
             "type": "string",
             "title": "unit_cap",
             "description": "authorised unit supply, decimal (default 100000000)"
+          },
+          "icon": {
+            "type": "string",
+            "title": "icon",
+            "description": "Catalog glyph the client maps onto one of its SVGs. Presentation only. One of:\n fund | real_estate | trading | yield | venture | treasury | commodity | credit |\n index | arbitrage. Always populated on a response — `fund` is the default."
           }
         },
         "title": "Allocation",
@@ -7692,6 +7697,11 @@
           "summary": {
             "type": "string",
             "title": "summary"
+          },
+          "icon": {
+            "type": "string",
+            "title": "icon",
+            "description": "See `Allocation.icon`. Empty means \"not chosen\" and lands on `fund`; a value\n outside the set is refused rather than silently defaulted."
           }
         },
         "title": "RegisterAllocationRequest",
@@ -8267,6 +8277,11 @@
           "summary": {
             "type": "string",
             "title": "summary"
+          },
+          "icon": {
+            "type": "string",
+            "title": "icon",
+            "description": "See `Allocation.icon`. Full-replace like `title` and `summary`: empty resets the\n product to `fund`, an unknown value is refused."
           }
         },
         "title": "UpdateAllocationRequest",
@@ -8419,7 +8434,7 @@
           "kyc_level": {
             "type": "integer",
             "title": "kyc_level",
-            "description": "Kept wire-identical with concierge.v1.UserProfile (the cabinet TS is aliased to the\n concierge shape). The identity plane OWNS kyc/role; the money plane mirrors them for\n gating but does not re-serve them on its self-service GetMe, so these stay default\n here — the fields exist for cross-plane wire parity."
+            "description": "Kept wire-identical with concierge.v1.UserProfile (the cabinet TS is aliased to the\n concierge shape). The identity plane OWNS kyc/role; the money plane mirrors them for\n gating but does not re-serve them on its self-service GetMe, so these stay default\n here — the fields exist for cross-plane wire parity.\n\n The tier ladder, written down here because the money plane is what ENFORCES it and\n no authoritative range was stated in either plane before this:\n   0 — registered. Sign-up plus a confirmed email address; nothing else is verified.\n       No deposit address is issued and no withdrawal is accepted.\n   1 — verified. Identity document, liveness, a face match against the document, and\n       a passed sanctions/PEP screen. Deposits and withdrawals are permitted.\n   2 — enhanced. Everything in 1 plus proof of address and source of funds. Carries\n       raised transaction limits (the limits themselves are not modelled yet).\n   3 — elevated. Enhanced due diligence; set only by a human reviewer, never\n       automatically.\n Banking gates BOTH directions of money movement on \u003e= 1. The value is set by an\n admin in the identity plane and mirrored onto the money plane by the one-way\n lifecycle bridge; banking never authors it."
           },
           "role": {
             "type": "string",
