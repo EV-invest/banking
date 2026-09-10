@@ -19,6 +19,7 @@ use domain::{
 	money::Shares,
 };
 use sqlx::{PgConnection, PgPool};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::{
@@ -95,6 +96,19 @@ impl AllocationRow {
 				.parse::<u128>()
 				.map_err(|_| DomainError::Repository("malformed base-unit amount in allocations.unit_cap".into()))?,
 		);
+		// Deliberately laxer than the gRPC boundary, which refuses an unknown icon
+		// (`AllocationsSvc::parse_icon`). The asymmetry is the point: a *client* sending
+		// a value this build cannot draw is a request that can still be rejected, while a
+		// *row* holding one is already written — and this mapper is on both `find` (the
+		// gate every subscribe and redeem passes through) and `list` (the whole catalog),
+		// so refusing here would take the money plane down over a presentation column.
+		// The way that row appears is ordinary: widen the vocabulary, deploy, an operator
+		// picks the new value, roll the release back. The shipped client already falls
+		// back the same way (`shared/ui/icons/products.tsx`); the hub matches it.
+		let icon = AllocationIcon::parse(&self.icon).unwrap_or_else(|_| {
+			warn!(service = %self.service, icon = %self.icon, "allocations: stored icon is outside this build's vocabulary — rendering the default");
+			AllocationIcon::default()
+		});
 		Ok(Allocation::rehydrate(
 			AllocationId::from_raw(self.id),
 			ServiceId::parse(&self.service)?,
@@ -102,7 +116,7 @@ impl AllocationRow {
 			self.summary,
 			AllocationState::parse(&self.state)?,
 			unit_cap,
-			AllocationIcon::parse(&self.icon)?,
+			icon,
 		))
 	}
 
@@ -180,7 +194,7 @@ impl AllocationRegistry for PgAllocations {
 		Ok(())
 	}
 
-	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str, icon: AllocationIcon) -> Result<Allocation, DomainError> {
+	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str, icon: Option<AllocationIcon>) -> Result<Allocation, DomainError> {
 		self.transition(service, |allocation| allocation.update_details(title, summary, icon)).await
 	}
 

@@ -30,7 +30,11 @@ pub trait AllocationRegistry: Repository<Aggregate = Allocation> + Reader<Aggreg
 	/// Replace the presentation fields — title, summary and icon — under the row lock:
 	/// load `FOR UPDATE`, apply [`Allocation::update_details`], persist + drain.
 	/// `NotFound` if unregistered.
-	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str, icon: AllocationIcon) -> Result<Allocation, DomainError>;
+	///
+	/// `icon` is `None` when the caller said nothing about the icon, and the stored pick
+	/// survives the edit — see [`Allocation::update_details`] for why the field alone
+	/// carries that distinction.
+	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str, icon: Option<AllocationIcon>) -> Result<Allocation, DomainError>;
 
 	/// Resize the authorised unit supply under the row lock, applying
 	/// [`Allocation::set_unit_cap`]. Its own command rather than a field on

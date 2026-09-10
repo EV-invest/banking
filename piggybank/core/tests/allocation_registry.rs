@@ -32,7 +32,10 @@ use piggybank_core::{
 	},
 	ports::{AllocationRegistry, ledger::Ledger},
 };
-use sqlx::PgPool;
+use sqlx::{
+	AssertSqlSafe, PgPool,
+	postgres::{PgConnectOptions, PgPoolOptions},
+};
 use tokio::sync::Notify;
 use uuid::Uuid;
 
@@ -216,7 +219,7 @@ async fn transitions_persist_and_are_idempotent() {
 	assert_eq!(h.allocations.close(&service).await.unwrap().state(), AllocationState::Closed, "re-closing is a no-op");
 	assert_eq!(h.allocations.open(&service).await.unwrap().state(), AllocationState::Open, "closed reopens");
 
-	let updated = h.allocations.update_details(&service, " Renamed ", " New summary ", AllocationIcon::Yield).await.unwrap();
+	let updated = h.allocations.update_details(&service, " Renamed ", " New summary ", Some(AllocationIcon::Yield)).await.unwrap();
 	assert_eq!(updated.title(), "Renamed");
 	assert_eq!(updated.summary(), "New summary");
 	assert_eq!(updated.state(), AllocationState::Open, "a details edit leaves state alone");
@@ -230,7 +233,7 @@ async fn transitions_on_an_unregistered_service_are_not_found() {
 	for result in [
 		h.allocations.open(&service).await,
 		h.allocations.close(&service).await,
-		h.allocations.update_details(&service, "x", "", AllocationIcon::default()).await,
+		h.allocations.update_details(&service, "x", "", Some(AllocationIcon::default())).await,
 	] {
 		assert!(matches!(result, Err(domain::error::DomainError::NotFound { entity: "allocation", .. })));
 	}
@@ -382,7 +385,7 @@ async fn the_icon_is_stored_survives_a_reload_and_is_editable() {
 	h.allocations.open(&service).await.unwrap();
 	let updated = h
 		.allocations
-		.update_details(&service, "EV Arbitrage", "Cross-venue basis", AllocationIcon::Arbitrage)
+		.update_details(&service, "EV Arbitrage", "Cross-venue basis", Some(AllocationIcon::Arbitrage))
 		.await
 		.unwrap();
 	assert_eq!(updated.icon(), AllocationIcon::Arbitrage);
@@ -406,20 +409,61 @@ async fn the_icon_is_stored_survives_a_reload_and_is_editable() {
 }
 
 #[tokio::test]
-async fn a_row_written_before_the_icon_column_reads_back_as_the_default() {
+async fn a_row_written_by_a_pod_that_predates_the_icon_column_reads_back_as_the_default() {
 	let Some(h) = harness().await else { return };
 	let service = unique_service();
-	register_with_icon(&h, &service, AllocationIcon::Trading).await;
 
-	// Migration 0027 backfills every pre-existing row to `fund` via the column DEFAULT.
-	// Reproduce that state exactly — the DEFAULT applied to a row nobody chose an icon
-	// for — and prove the mapper reads it rather than refusing an unexpected value.
-	sqlx::query("UPDATE allocations SET icon = DEFAULT WHERE service = $1")
+	// Byte for byte the INSERT the CURRENTLY DEPLOYED code runs: it names its columns,
+	// and `icon` is not among them. That is the claim migration 0027's header makes about
+	// rolling deploys, and until now nothing checked it — the previous test wrote
+	// `icon = DEFAULT`, which is a literal 'fund' spelled differently, so it proved
+	// `parse("fund") == Fund` (already a unit test) and could not fail for the reason it
+	// was named after.
+	sqlx::query("INSERT INTO allocations (id, service, title, summary, state, unit_cap) VALUES ($1, $2, $3, $4, $5, $6)")
+		.bind(Uuid::new_v4())
 		.bind(service.as_str())
+		.bind("Legacy Fund")
+		.bind("Registered by a pod that had never heard of icons")
+		.bind("open")
+		.bind(domain::allocations::DEFAULT_UNIT_CAP.base_units().to_string())
 		.execute(&h.pool)
 		.await
+		.expect("the old INSERT must keep working — a migration that breaks it breaks the rolling deploy");
+
+	let stored: String = sqlx::query_scalar("SELECT icon FROM allocations WHERE service = $1")
+		.bind(service.as_str())
+		.fetch_one(&h.pool)
+		.await
 		.unwrap();
+	assert_eq!(stored, "fund", "the column DEFAULT is what fills the gap the old writer leaves");
 	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().icon(), AllocationIcon::Fund);
+	// And it is in the catalog the cabinet renders, not just readable one row at a time.
+	let listed = h.allocations.list(true).await.unwrap();
+	let row = listed.iter().find(|r| r.allocation.service() == &service).expect("the legacy row is in the catalog");
+	assert_eq!(row.allocation.icon(), AllocationIcon::Fund);
+}
+
+#[tokio::test]
+async fn every_icon_the_domain_knows_is_accepted_by_the_column() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+
+	// The pair nothing covered: `domain_icons_match_the_wire_contract` compares the domain
+	// enum with the wire contract and never touches SQL, so a variant added to the enum,
+	// to `icon::ALL` and to the client but FORGOTTEN in a migration compiled, unit-tested
+	// green, and first showed up in front of an operator — as a CHECK violation rolling
+	// back the whole `update_details` transaction, taking the title edit with it and
+	// answering `internal` where a validation error belonged.
+	for icon in AllocationIcon::ALL {
+		sqlx::query("UPDATE allocations SET icon = $2 WHERE service = $1")
+			.bind(service.as_str())
+			.bind(icon.as_str())
+			.execute(&h.pool)
+			.await
+			.unwrap_or_else(|err| panic!("the column refuses {icon:?}, which the domain calls legal — migration 0027 is missing it: {err}"));
+		assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().icon(), icon, "{icon:?} did not survive the round trip");
+	}
 }
 
 #[tokio::test]
@@ -428,12 +472,107 @@ async fn the_database_refuses_an_icon_outside_the_vocabulary() {
 	let service = unique_service();
 	register(&h, &service).await;
 
-	// The CHECK in 0027 is the backstop under `AllocationIcon::parse`: even a hand-written
-	// UPDATE cannot leave a row the mapper would later fail to read.
+	// The CHECK in 0027 is the backstop under `AllocationIcon::parse`: a hand-written
+	// UPDATE cannot leave a row outside the vocabulary this build ships artwork for.
 	let err = sqlx::query("UPDATE allocations SET icon = 'rocket' WHERE service = $1")
 		.bind(service.as_str())
 		.execute(&h.pool)
 		.await
 		.unwrap_err();
-	assert!(err.to_string().contains("icon"), "expected the icon CHECK to refuse it, got {err}");
+	// Identified by SQLSTATE and constraint name rather than by
+	// `err.to_string().contains("icon")`, which any error naming the column would have
+	// satisfied — a NOT NULL violation, a type mismatch, a typo in the query text.
+	let db_err = err.as_database_error().expect("a server-side error, not a client-side one");
+	assert_eq!(db_err.code().as_deref(), Some("23514"), "23514 is check_violation; got {err}");
+	assert_eq!(db_err.constraint(), Some("allocations_icon_check"), "refused by some other constraint: {err}");
+}
+
+#[tokio::test]
+async fn an_icon_from_a_wider_vocabulary_reads_back_as_the_default_instead_of_failing() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+
+	// Widening the vocabulary is an ordinary migration: ship it, let an operator pick the
+	// new value, then roll the release back — and this build is reading a string it cannot
+	// parse. Strict parsing on the read path turned that into a failing `list()` (the
+	// whole catalog) and a failing `find()`, which is the gate every subscribe and redeem
+	// passes through. A presentation column must not be able to stop money.
+	//
+	// Producing such a row needs a table whose CHECK is wider than this build's enum, and
+	// that table is built in a throwaway schema rather than by dropping the real
+	// constraint: `allocations` is shared with every other test in this binary, and one
+	// running while the CHECK was off would assert against a schema that no longer
+	// enforces anything — a vacuous pass, which is the exact failure this whole area is
+	// about. `LIKE ... INCLUDING DEFAULTS` copies the columns, their NOT NULLs and the
+	// `icon` default, and deliberately not the CHECK.
+	let url = std::env::var("DATABASE_URL").unwrap();
+	let schema = format!("icon_probe_{}", Uuid::new_v4().simple());
+	sqlx::query(AssertSqlSafe(format!("CREATE SCHEMA {schema}"))).execute(&h.pool).await.unwrap();
+	sqlx::query(AssertSqlSafe(format!("CREATE TABLE {schema}.allocations (LIKE public.allocations INCLUDING DEFAULTS)")))
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	sqlx::query(AssertSqlSafe(format!(
+		"INSERT INTO {schema}.allocations (id, service, title, summary, state, unit_cap, icon) VALUES ($1, $2, $3, $4, 'open', $5, 'hologram')"
+	)))
+	.bind(Uuid::new_v4())
+	.bind(service.as_str())
+	.bind("EV Hologram")
+	.bind("Registered by a build that knew one more icon")
+	.bind(domain::allocations::DEFAULT_UNIT_CAP.base_units().to_string())
+	.execute(&h.pool)
+	.await
+	.unwrap();
+
+	// The adapter's SQL names `allocations` unqualified, so a pool whose `search_path`
+	// leads with the probe schema reads the wider table through the ordinary code path —
+	// the same `find`/`list` the money plane calls, not a re-implementation of them.
+	let options = url.parse::<PgConnectOptions>().unwrap().options([("search_path", format!("{schema},public"))]);
+	let probe = PgPoolOptions::new().max_connections(2).connect_with(options).await.unwrap();
+	let allocations = PgAllocations::new(probe.clone());
+
+	let found = allocations.find(&service).await;
+	let listed = allocations.list(true).await;
+	probe.close().await;
+	sqlx::query(AssertSqlSafe(format!("DROP SCHEMA {schema} CASCADE"))).execute(&h.pool).await.unwrap();
+
+	let found = found.expect("an unparseable icon must not fail the read every subscribe depends on");
+	assert_eq!(
+		found.expect("the row is there").icon(),
+		AllocationIcon::Fund,
+		"an icon this build cannot draw degrades to the default, matching what the client already does"
+	);
+	let listed = listed.expect("nor may it fail the catalog read for every other product");
+	let row = listed.iter().find(|r| r.allocation.service() == &service).expect("the row is still listed, wearing the default");
+	assert_eq!(row.allocation.icon(), AllocationIcon::Fund);
+}
+
+#[tokio::test]
+async fn an_update_that_names_no_icon_keeps_the_one_the_operator_picked() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register_with_icon(&h, &service, AllocationIcon::RealEstate).await;
+
+	// `None` is what an `UpdateAllocation` with the `optional` field unset reaches the
+	// registry as: an older consumer repo, a browser tab on a stale bundle, a pod still
+	// running the previous release. Before the field carried presence they all sent the
+	// proto3 default — an empty string, indistinguishable from a deliberate clear — and a
+	// plain title edit silently restyled a live product back to `fund`.
+	let renamed = h.allocations.update_details(&service, "EV Property", "Income-producing property", None).await.unwrap();
+	assert_eq!(renamed.title(), "EV Property");
+	assert_eq!(renamed.icon(), AllocationIcon::RealEstate, "an absent icon left the operator's pick alone");
+	assert_eq!(
+		h.allocations.find(&service).await.unwrap().unwrap().icon(),
+		AllocationIcon::RealEstate,
+		"and the column was not overwritten either"
+	);
+
+	// `Some` still sets it, so the field has not become unwritable…
+	let restyled = h.allocations.update_details(&service, "EV Property", "", Some(AllocationIcon::Venture)).await.unwrap();
+	assert_eq!(restyled.icon(), AllocationIcon::Venture);
+	// …and `Some(default)` is how a reset to the neutral glyph stays reachable, which is
+	// exactly what absence must NOT mean.
+	let reset = h.allocations.update_details(&service, "EV Property", "", Some(AllocationIcon::default())).await.unwrap();
+	assert_eq!(reset.icon(), AllocationIcon::Fund);
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().icon(), AllocationIcon::Fund);
 }

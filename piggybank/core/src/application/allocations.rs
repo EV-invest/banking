@@ -28,8 +28,9 @@ pub async fn register(allocations: &dyn AllocationRegistry, service: ServiceId, 
 }
 
 /// Replace an allocation's presentation fields — title, summary and icon. State and
-/// identity are untouched.
-pub async fn update_details(allocations: &dyn AllocationRegistry, service: &ServiceId, title: &str, summary: &str, icon: AllocationIcon) -> Result<Allocation, DomainError> {
+/// identity are untouched. `icon: None` leaves the stored pick alone (the request never
+/// mentioned it); `Some` sets it, including a `Some(default)` reset.
+pub async fn update_details(allocations: &dyn AllocationRegistry, service: &ServiceId, title: &str, summary: &str, icon: Option<AllocationIcon>) -> Result<Allocation, DomainError> {
 	allocations.update_details(service, title, summary, icon).await
 }
 

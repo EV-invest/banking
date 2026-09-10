@@ -83,8 +83,19 @@ pub mod state {
 ///
 /// Presentation only — nothing here gates money or lifecycle, and the hub never
 /// branches on it. It exists so a product's card is a decision an operator made rather
-/// than a letter avatar derived from the title. Adding one means adding it here, to
-/// [`ALL`], to the domain enum and to the client that has to draw it.
+/// than a letter avatar derived from the title.
+///
+/// Adding one means four edits, and each has a test standing behind it: here and in
+/// [`ALL`] (`domain_icons_match_the_wire_contract` compares this list with the hub's
+/// `AllocationIcon::ALL` member for member, both ways), the domain enum (its `next`
+/// chain makes the compiler insist), a migration widening the `allocations.icon` CHECK
+/// (`every_icon_the_domain_knows_is_accepted_by_the_column` writes every variant into
+/// the column), and the client that has to draw it.
+///
+/// Ship the client that knows a new value BEFORE the hub that can store it: a client
+/// reading one it does not know falls back to [`DEFAULT`], and so does the hub reading
+/// such a row back out of storage, so neither direction can be brought down by a
+/// half-rolled deployment.
 pub mod icon {
 	/// The neutral default. A registration that names no icon lands here, and so does
 	/// every row written before the field existed.

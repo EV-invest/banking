@@ -82,7 +82,7 @@ impl AllocationsService for AllocationsSvc {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let icon = parse_icon(&req.icon)?;
+		let icon = parse_icon_update(req.icon.as_deref())?;
 		let allocation = allocations_app::update_details(self.state.allocations.as_ref(), &service, &req.title, &req.summary, icon)
 			.await
 			.map_err(map_err)?;
@@ -137,16 +137,33 @@ fn allocation_to_proto(allocation: &Allocation, created_at: i64, updated_at: i64
 	}
 }
 
-/// proto3 has no field presence on a scalar `string`, so a client that names no icon and
-/// one that clears it are the same empty wire value — and both mean "the operator chose
-/// nothing", which is [`AllocationIcon::default`]. Anything else is parsed strictly: an
-/// icon this build cannot draw is an `invalid_argument` about the request, never a
-/// product silently stored as something the operator did not pick.
+/// The icon a *request* named. Empty means "the operator chose nothing", which is
+/// [`AllocationIcon::default`]. Anything else is parsed strictly: an icon this build
+/// cannot draw is an `invalid_argument` about the request, never a product silently
+/// stored as something the operator did not pick.
+///
+/// Strict here and lenient in the storage adapter is deliberate, and the direction is
+/// what decides it: client → hub rejects a value it does not know, because the request
+/// has not been acted on yet and the caller can be told. Hub ← storage does not, because
+/// the row is already written and refusing a read would fail `find`/`list` — the money
+/// plane's gate — over a presentation column. See
+/// [`crate::infrastructure::allocations`].
 fn parse_icon(raw: &str) -> Result<AllocationIcon, Status> {
 	if raw.is_empty() {
 		return Ok(AllocationIcon::default());
 	}
 	AllocationIcon::parse(raw).map_err(map_err)
+}
+
+/// The same, for `UpdateAllocationRequest`, where the field carries presence.
+///
+/// `None` (field unset) is "the caller did not talk about the icon" and leaves the
+/// stored pick alone. `Some("")` is an explicit reset to the default — a distinction a
+/// bare proto3 `string` cannot express, which is why the field is `optional`: without it
+/// a consumer built before the icon existed, a stale browser bundle, or a pod still on
+/// the previous release would erase the operator's choice on every title edit.
+fn parse_icon_update(raw: Option<&str>) -> Result<Option<AllocationIcon>, Status> {
+	raw.map(parse_icon).transpose()
 }
 
 fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
@@ -179,11 +196,20 @@ mod tests {
 	fn domain_icons_match_the_wire_contract() {
 		// Same guard as the states above, for the second vocabulary: the client picks its
 		// SVG off `wire_icon`, the hub stores the domain enum, and the DB CHECK in
-		// migration 0027 spells the same ten strings. Drift here is a product that renders
-		// as the wrong picture, or a row the CHECK refuses.
-		assert_eq!(wire_icon::ALL.len(), 10);
+		// migration 0027 spells the same strings. Drift here is a product that renders as
+		// the wrong picture, or a row the CHECK refuses.
+		//
+		// Compared BOTH ways, and in order. The previous version only walked `wire_icon`
+		// and parsed each entry, so a variant added to the domain (and to the CHECK, and
+		// to the client) but forgotten in `wire_icon` left this green — the direction that
+		// matters most, since `wire_icon` is what consumer repos match on.
+		let domain: Vec<&str> = AllocationIcon::ALL.iter().map(|icon| icon.as_str()).collect();
+		assert_eq!(domain.as_slice(), wire_icon::ALL.as_slice(), "the domain enum and the wire vocabulary have drifted");
 		for icon in wire_icon::ALL {
 			assert_eq!(AllocationIcon::parse(icon).unwrap().as_str(), icon);
+		}
+		for icon in AllocationIcon::ALL {
+			assert!(wire_icon::is_known(icon.as_str()), "{icon:?} is a domain variant the wire contract does not name");
 		}
 		assert_eq!(AllocationIcon::default().as_str(), wire_icon::DEFAULT);
 		// The empty wire value is "unset", not an icon — the boundary turns it into the
@@ -191,6 +217,22 @@ mod tests {
 		assert_eq!(parse_icon("").unwrap(), AllocationIcon::default());
 		assert_eq!(parse_icon(wire_icon::REAL_ESTATE).unwrap(), AllocationIcon::RealEstate);
 		assert_eq!(parse_icon("rocket").unwrap_err().code(), tonic::Code::InvalidArgument);
+	}
+
+	#[test]
+	fn an_update_request_without_the_icon_field_asks_for_no_icon_change() {
+		// The three states the `optional` field can arrive in. Absent must reach the
+		// aggregate as `None` — anything else and an older consumer, a stale bundle or a
+		// pod mid-rolling-deploy resets the operator's pick on every title edit.
+		assert_eq!(parse_icon_update(None).unwrap(), None);
+		assert_eq!(
+			parse_icon_update(Some("")).unwrap(),
+			Some(AllocationIcon::default()),
+			"an explicit empty string is a reset, not a no-op"
+		);
+		assert_eq!(parse_icon_update(Some(wire_icon::VENTURE)).unwrap(), Some(AllocationIcon::Venture));
+		// Strictness is unchanged for a value the caller did send.
+		assert_eq!(parse_icon_update(Some("rocket")).unwrap_err().code(), tonic::Code::InvalidArgument);
 	}
 
 	#[test]
