@@ -161,7 +161,16 @@ export function AllocationsView() {
                   <tbody className="divide-y divide-border">
                     {rows.map((row) => (
                       <AllocationRow
-                        key={row.service}
+                        // Keyed on the edit flag as well as the service, so opening the
+                        // editor remounts the row and reseeds its fields from the row as
+                        // it stands now. Keyed on the service alone, the draft state
+                        // outlived a cancel: edit, change, cancel, reopen, then save a
+                        // title, and the discarded change went with it. Harmless-looking
+                        // for a title the operator retypes, but an icon silently reverting
+                        // to what it was two edits ago is the kind of thing nobody catches.
+                        // The key is stable while the editor is open, so a background
+                        // revalidation cannot wipe what is being typed.
+                        key={`${row.service}:${editing === row.service}`}
                         row={row}
                         busy={busy === row.service}
                         editing={editing === row.service}

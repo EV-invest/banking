@@ -220,8 +220,9 @@ export interface Allocation {
    * the fix — render it through `ProductIcon` (`@/shared/ui/icons/products`), which lands
    * both a missing value and one newer than this build on `fund`.
    *
-   * Required on WRITE: see `registerAllocation`/`updateAllocation`, where update is a
-   * full replace and omitting it resets the product to `fund`.
+   * Required on WRITE by this client's own choice, not by the hub — see
+   * `AllocationWrite`. On the wire the field carries presence, so an update that omits
+   * it changes nothing.
    */
   icon?: AllocationIcon;
 }

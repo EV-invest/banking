@@ -93,12 +93,12 @@ export type RecordedArrival = { recorded: boolean; amount: string; party_kind: s
 // `/api/allocations` returns the open set only.
 export const fetchAllocations = (): Promise<AllocationList> => getJson("/api/admin/allocations");
 
-/** The register/update body. `icon` is REQUIRED here even though it is optional on the
- *  read shape, and that asymmetry is the point: `/update` is a full replace, so a body
- *  without `icon` is read by the hub as "no picture chosen" and resets the product to
- *  `fund`, silently discarding whatever the operator picked earlier. Requiring it makes
- *  an editor that forgets to send the current value a compile error rather than a bug
- *  nobody notices until the rail changes shape. */
+/** The register/update body. `icon` is required here even though it is optional on the
+ *  read shape. The hub no longer needs it to be: `icon` carries presence on the wire, so
+ *  an omitted field means "leave it alone" rather than "reset to `fund`". It stays
+ *  required because this console always knows the icon it is editing, and a request that
+ *  states every field it is writing is one you can read back later and know what it did.
+ *  Send the current value even when only the title changed. */
 export interface AllocationWrite {
   service: string;
   title: string;
