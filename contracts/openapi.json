@@ -7701,7 +7701,7 @@
           "icon": {
             "type": "string",
             "title": "icon",
-            "description": "See `Allocation.icon`. Empty means \"not chosen\" and lands on `fund`; a value\n outside the set is refused rather than silently defaulted."
+            "description": "See `Allocation.icon`. Empty means \"not chosen\" and lands on `fund`; a value\n outside the set is refused rather than silently defaulted. Deliberately NOT\n `optional`, unlike the update request: a registration creates the row, so there is\n no earlier pick that \"unset\" could destroy — absent and empty both legitimately\n mean \"the operator chose nothing yet\", which is what the default is for."
           }
         },
         "title": "RegisterAllocationRequest",
@@ -8279,9 +8279,12 @@
             "title": "summary"
           },
           "icon": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "title": "icon",
-            "description": "See `Allocation.icon`. Full-replace like `title` and `summary`: empty resets the\n product to `fund`, an unknown value is refused."
+            "description": "See `Allocation.icon`. `optional` — and it is the ONLY field here that is, because\n it is the only one where \"the caller did not mention it\" has to be distinguishable\n from \"the caller cleared it\". Unset means LEAVE THE STORED ICON ALONE; empty string\n means reset to `fund`; an unknown value is refused.\n\n Without presence a scalar `string` cannot tell those apart, and every caller built\n before this field existed — a consumer repo on an older `contracts` pin, a browser\n tab holding a stale bundle, a pod mid-rolling-deploy — would silently wipe the\n operator's pick on the next title edit. `title` and `summary` need no such escape:\n they predate every live caller, so an omitted title is a client bug the boundary\n refuses outright rather than a field it has to guess about."
           }
         },
         "title": "UpdateAllocationRequest",

@@ -1946,7 +1946,10 @@ export type BankingV1RegisterAllocationRequest = {
      * icon
      *
      * See `Allocation.icon`. Empty means "not chosen" and lands on `fund`; a value
-     * outside the set is refused rather than silently defaulted.
+     * outside the set is refused rather than silently defaulted. Deliberately NOT
+     * `optional`, unlike the update request: a registration creates the row, so there is
+     * no earlier pick that "unset" could destroy — absent and empty both legitimately
+     * mean "the operator chose nothing yet", which is what the default is for.
      */
     icon?: string;
 };
@@ -2538,10 +2541,19 @@ export type BankingV1UpdateAllocationRequest = {
     /**
      * icon
      *
-     * See `Allocation.icon`. Full-replace like `title` and `summary`: empty resets the
-     * product to `fund`, an unknown value is refused.
+     * See `Allocation.icon`. `optional` — and it is the ONLY field here that is, because
+     * it is the only one where "the caller did not mention it" has to be distinguishable
+     * from "the caller cleared it". Unset means LEAVE THE STORED ICON ALONE; empty string
+     * means reset to `fund`; an unknown value is refused.
+     *
+     * Without presence a scalar `string` cannot tell those apart, and every caller built
+     * before this field existed — a consumer repo on an older `contracts` pin, a browser
+     * tab holding a stale bundle, a pod mid-rolling-deploy — would silently wipe the
+     * operator's pick on the next title edit. `title` and `summary` need no such escape:
+     * they predate every live caller, so an omitted title is a client bug the boundary
+     * refuses outright rather than a field it has to guess about.
      */
-    icon?: string;
+    icon?: string | null;
 };
 
 /**
