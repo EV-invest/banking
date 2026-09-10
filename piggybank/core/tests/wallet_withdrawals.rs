@@ -23,7 +23,7 @@ use domain::{
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
-	infrastructure::{custody::StubCustody, deposits::PgDeposits, dispatcher::Dispatcher, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
+	infrastructure::{custody::StubCustody, deposits::PgDeposits, dispatcher::Dispatcher, outflow::PgOutflowPolicy, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
 	ports::{BroadcastRequest, Custody, CustodyError, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
@@ -96,6 +96,13 @@ fn destination(network: Network) -> WalletAddress {
 		Network::Ton => "EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N",
 	};
 	WalletAddress::parse(network, raw).unwrap()
+}
+
+/// The outflow policy over the harness's control plane — the kill-switch and the owner's
+/// freeze/KYC standing that `dispatch_withdrawal` gates on. A borrow-holder, so a test can
+/// mutate the underlying rows between calls and the next call sees the new state.
+fn policy(h: &Harness) -> PgOutflowPolicy<'_> {
+	PgOutflowPolicy::new(&h.pool)
 }
 
 /// A fresh user who is active AND verified — what every money-moving path here needs.
@@ -359,7 +366,7 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	// The treasury tops up the TON rail past the net; the worker then dispatches it.
 	balance_app::seed_fund_capital(&h.deposits, &h.notify, Network::Ton, big).await.unwrap();
 	h.relay.drain().await;
-	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &h.notify, withdrawal.id())
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy(&h), &h.notify, withdrawal.id())
 		.await
 		.unwrap();
 	assert_eq!(dispatched.state(), WithdrawalState::Processing, "a funded rail dispatches");
@@ -498,7 +505,7 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 
-	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, &h.notify, withdrawal.id())
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, &policy(&h), &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(_)), "an underfunded rail refuses the dispatch, got {err:?}");

@@ -9,6 +9,10 @@
 //! and dispatches immediately when it covers the net, otherwise the withdrawal is
 //! accepted and left `Queued` for the [`Dispatcher`](crate::infrastructure::dispatcher)
 //! worker (or the admin `dispatch_withdrawal`) to send once the rail is topped up.
+//! Admission is therefore NOT the last word on policy: `dispatch_withdrawal` re-evaluates
+//! the kill-switch, the freeze and the tier-1 floor at the moment the money leaves, so a
+//! pause, an AML hold or a revoked verification landing on an already-queued withdrawal
+//! still stops it — whichever path (sweep or admin RPC) reaches it first.
 //! `settle`/`fail` are the operator/watcher-driven
 //! completions (admin-gated at the boundary), standing in for a chain watcher + custody
 //! confirmation callback; `cancel` (user) refunds a still-queued withdrawal. The
@@ -25,7 +29,7 @@ use domain::{
 use tokio::sync::Notify;
 use tracing::warn;
 
-use crate::ports::{Custody, UserRepository, WithdrawalRepository, ledger::Ledger};
+use crate::ports::{Custody, OutflowPolicy, UserRepository, WithdrawalRepository, ledger::Ledger};
 
 /// The driven ports the withdrawal write-path borrows: the aggregate's repository, the
 /// ledger both Read-First checks read, the custody gateway the rail-liquidity check asks,
@@ -188,17 +192,72 @@ async fn open_withdrawal(ports: &WithdrawalPorts<'_>, id: WithdrawalId, source: 
 	Ok(withdrawal)
 }
 
+/// The global outflow pause — the read-only kill-switch — as a gate.
+///
+/// Public so the dispatcher can short-circuit a whole sweep on it. That is not a second
+/// copy of the rule: [`dispatch_withdrawal`] calls this same function per withdrawal and
+/// is the only thing standing between a queued row and the chain. The sweep's early exit
+/// exists so a backlog of N under an operator pause costs one read and one log line every
+/// interval instead of N of each.
+pub async fn require_outflows_enabled(policy: &dyn OutflowPolicy) -> Result<(), DomainError> {
+	if policy.outflows_paused().await? {
+		return Err(DomainError::Forbidden("money movements are temporarily paused (read-only mode)".into()));
+	}
+	Ok(())
+}
+
+/// The outflow policy gate, re-evaluated at the moment of dispatch rather than trusted
+/// from admission.
+///
+/// The three policies that guard a payout — the kill-switch, the cross-plane freeze and
+/// the tier-1 floor — were all one-shot admission checks, and a queued withdrawal can sit
+/// in the backlog for hours: an operator pause, an AML freeze or a revoked verification
+/// that lands after acceptance must still stop the money. Every arm fails **closed**,
+/// because by this point the gross is already reserved and the next step is a broadcast:
+/// a missing owner row, an unreadable flag and a corrupt tier all refuse.
+///
+/// A revenue payout is exempt from the per-owner arms, and not by omission: the fund is
+/// not a user, so there is no row to read and nothing to fail closed on. The kill-switch
+/// still applies — it pauses outflows, not users.
+async fn require_dispatchable(policy: &dyn OutflowPolicy, withdrawal: &Withdrawal) -> Result<(), DomainError> {
+	require_outflows_enabled(policy).await?;
+	let Some(owner) = withdrawal.user() else { return Ok(()) };
+	let standing = policy
+		.standing(owner)
+		.await?
+		.ok_or_else(|| DomainError::Forbidden("the withdrawal's owner has no control-plane row — dispatch refused".into()))?;
+	if standing.blocked {
+		return Err(DomainError::Forbidden("account is frozen".into()));
+	}
+	if standing.kyc_level < KYC_LEVEL_VERIFIED {
+		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
+	}
+	Ok(())
+}
+
 /// Dispatch a queued withdrawal to custody (the dispatcher worker / admin): the chosen
 /// rail now has liquidity, so the relay broadcasts. Refused — left queued, still
-/// user-cancellable — when the rail treasury provably lacks the net on-chain (a dispatch
-/// would only park at the custody backstop). `None`/`Err` reads dispatch as before: the
-/// operator RPC is backed by human judgment, and stub rails stay operator-settled.
-/// Idempotent.
-pub async fn dispatch_withdrawal(withdrawals: &dyn WithdrawalRepository, custody: &dyn Custody, relay: &Notify, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+/// user-cancellable — when the outflow policy no longer permits the payout (see
+/// [`require_dispatchable`]) or when the rail treasury provably lacks the net on-chain (a
+/// dispatch would only park at the custody backstop). `None`/`Err` from the chain view
+/// reads dispatch as before: the operator RPC is backed by human judgment, and stub rails
+/// stay operator-settled. Idempotent.
+///
+/// This is where the policy lives *because* this is the single funnel every payout passes
+/// through — the sweep and the admin RPC both call it, so neither can inherit a weaker
+/// rule than the other.
+pub async fn dispatch_withdrawal(
+	withdrawals: &dyn WithdrawalRepository,
+	custody: &dyn Custody,
+	policy: &dyn OutflowPolicy,
+	relay: &Notify,
+	id: WithdrawalId,
+) -> Result<Withdrawal, DomainError> {
 	let existing = withdrawals.find_by_id(id).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "withdrawal",
 		id: id.to_string(),
 	})?;
+	require_dispatchable(policy, &existing).await?;
 	if let Ok(Some(onchain)) = custody.treasury_liquidity(existing.network()).await
 		&& onchain < existing.net_amount()
 	{
