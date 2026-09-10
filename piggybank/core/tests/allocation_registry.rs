@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use domain::{
-	allocations::{Allocation, AllocationId, AllocationState},
+	allocations::{Allocation, AllocationIcon, AllocationId, AllocationState},
 	balance::{LedgerAccountKey, Party, ServiceId},
 	money::{Network, Shares, TxRef, Usdt},
 	users::UserId,
@@ -104,7 +104,11 @@ fn now_unix() -> i64 {
 }
 
 async fn register(h: &Harness, service: &ServiceId) -> Allocation {
-	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "EV Trading", "Systematic crypto").unwrap();
+	register_with_icon(h, service, AllocationIcon::default()).await
+}
+
+async fn register_with_icon(h: &Harness, service: &ServiceId, icon: AllocationIcon) -> Allocation {
+	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "EV Trading", "Systematic crypto", icon).unwrap();
 	h.allocations.register(&mut allocation).await.unwrap();
 	allocation
 }
@@ -189,7 +193,7 @@ async fn registering_twice_is_a_conflict_not_a_silent_reset() {
 	register(&h, &service).await;
 	h.allocations.open(&service).await.unwrap();
 
-	let mut duplicate = Allocation::register(AllocationId::new(), service.clone(), "Impostor", "").unwrap();
+	let mut duplicate = Allocation::register(AllocationId::new(), service.clone(), "Impostor", "", AllocationIcon::Venture).unwrap();
 	let err = h.allocations.register(&mut duplicate).await.unwrap_err();
 	assert!(matches!(err, domain::error::DomainError::Conflict(_)), "got {err:?}");
 
@@ -197,6 +201,7 @@ async fn registering_twice_is_a_conflict_not_a_silent_reset() {
 	let current = h.allocations.find(&service).await.unwrap().unwrap();
 	assert_eq!(current.title(), "EV Trading");
 	assert_eq!(current.state(), AllocationState::Open);
+	assert_eq!(current.icon(), AllocationIcon::default(), "the impostor's icon did not overwrite the live card");
 }
 
 #[tokio::test]
@@ -211,7 +216,7 @@ async fn transitions_persist_and_are_idempotent() {
 	assert_eq!(h.allocations.close(&service).await.unwrap().state(), AllocationState::Closed, "re-closing is a no-op");
 	assert_eq!(h.allocations.open(&service).await.unwrap().state(), AllocationState::Open, "closed reopens");
 
-	let updated = h.allocations.update_details(&service, " Renamed ", " New summary ").await.unwrap();
+	let updated = h.allocations.update_details(&service, " Renamed ", " New summary ", AllocationIcon::Yield).await.unwrap();
 	assert_eq!(updated.title(), "Renamed");
 	assert_eq!(updated.summary(), "New summary");
 	assert_eq!(updated.state(), AllocationState::Open, "a details edit leaves state alone");
@@ -225,7 +230,7 @@ async fn transitions_on_an_unregistered_service_are_not_found() {
 	for result in [
 		h.allocations.open(&service).await,
 		h.allocations.close(&service).await,
-		h.allocations.update_details(&service, "x", "").await,
+		h.allocations.update_details(&service, "x", "", AllocationIcon::default()).await,
 	] {
 		assert!(matches!(result, Err(domain::error::DomainError::NotFound { entity: "allocation", .. })));
 	}
@@ -360,4 +365,75 @@ async fn a_valuation_cannot_be_posted_for_an_unregistered_service() {
 		.await
 		.unwrap_err();
 	assert!(matches!(err, domain::error::DomainError::NotFound { entity: "allocation", .. }), "got {err:?}");
+}
+
+#[tokio::test]
+async fn the_icon_is_stored_survives_a_reload_and_is_editable() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+
+	// Registration carries the operator's pick all the way to the column — the point of
+	// the field is that the catalog card is a decision, not a letter derived from the title.
+	register_with_icon(&h, &service, AllocationIcon::RealEstate).await;
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().icon(), AllocationIcon::RealEstate);
+
+	// It is presentation, so editing it is an ordinary details edit and leaves the
+	// lifecycle alone — a live product can be restyled without touching money flow.
+	h.allocations.open(&service).await.unwrap();
+	let updated = h
+		.allocations
+		.update_details(&service, "EV Arbitrage", "Cross-venue basis", AllocationIcon::Arbitrage)
+		.await
+		.unwrap();
+	assert_eq!(updated.icon(), AllocationIcon::Arbitrage);
+	assert_eq!(updated.state(), AllocationState::Open);
+	assert_eq!(
+		h.allocations.find(&service).await.unwrap().unwrap().icon(),
+		AllocationIcon::Arbitrage,
+		"the new icon survives a reload"
+	);
+
+	// The catalog read carries it too — that projection is what the cabinet renders.
+	let listed = h.allocations.list(true).await.unwrap();
+	let row = listed.iter().find(|r| r.allocation.service() == &service).expect("the registered product is in the catalog");
+	assert_eq!(row.allocation.icon(), AllocationIcon::Arbitrage);
+
+	// A registration that names nothing lands on the default rather than on NULL, so the
+	// client always has a glyph to draw.
+	let plain = unique_service();
+	register(&h, &plain).await;
+	assert_eq!(h.allocations.find(&plain).await.unwrap().unwrap().icon(), AllocationIcon::Fund);
+}
+
+#[tokio::test]
+async fn a_row_written_before_the_icon_column_reads_back_as_the_default() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register_with_icon(&h, &service, AllocationIcon::Trading).await;
+
+	// Migration 0027 backfills every pre-existing row to `fund` via the column DEFAULT.
+	// Reproduce that state exactly — the DEFAULT applied to a row nobody chose an icon
+	// for — and prove the mapper reads it rather than refusing an unexpected value.
+	sqlx::query("UPDATE allocations SET icon = DEFAULT WHERE service = $1")
+		.bind(service.as_str())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().icon(), AllocationIcon::Fund);
+}
+
+#[tokio::test]
+async fn the_database_refuses_an_icon_outside_the_vocabulary() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+
+	// The CHECK in 0027 is the backstop under `AllocationIcon::parse`: even a hand-written
+	// UPDATE cannot leave a row the mapper would later fail to read.
+	let err = sqlx::query("UPDATE allocations SET icon = 'rocket' WHERE service = $1")
+		.bind(service.as_str())
+		.execute(&h.pool)
+		.await
+		.unwrap_err();
+	assert!(err.to_string().contains("icon"), "expected the icon CHECK to refuse it, got {err}");
 }

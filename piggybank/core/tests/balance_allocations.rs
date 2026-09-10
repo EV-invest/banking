@@ -100,7 +100,14 @@ fn unique_service() -> ServiceId {
 /// using the bare [`unique_service`].
 async fn registered_service(h: &Harness) -> ServiceId {
 	let service = unique_service();
-	let mut allocation = domain::allocations::Allocation::register(domain::allocations::AllocationId::new(), service.clone(), "itest fund", "").unwrap();
+	let mut allocation = domain::allocations::Allocation::register(
+		domain::allocations::AllocationId::new(),
+		service.clone(),
+		"itest fund",
+		"",
+		domain::allocations::AllocationIcon::default(),
+	)
+	.unwrap();
 	h.allocations.register(&mut allocation).await.unwrap();
 	h.allocations.open(&service).await.unwrap();
 	service

@@ -13,7 +13,7 @@
 
 use async_trait::async_trait;
 use domain::{
-	allocations::Allocation,
+	allocations::{Allocation, AllocationIcon},
 	architecture::{Reader, Repository},
 	balance::ServiceId,
 	error::DomainError,
@@ -27,9 +27,10 @@ pub trait AllocationRegistry: Repository<Aggregate = Allocation> + Reader<Aggreg
 	/// than a silent overwrite — re-registering a live product must never reset it.
 	async fn register(&self, allocation: &mut Allocation) -> Result<(), DomainError>;
 
-	/// Replace the presentation fields under the row lock: load `FOR UPDATE`, apply
-	/// [`Allocation::update_details`], persist + drain. `NotFound` if unregistered.
-	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str) -> Result<Allocation, DomainError>;
+	/// Replace the presentation fields — title, summary and icon — under the row lock:
+	/// load `FOR UPDATE`, apply [`Allocation::update_details`], persist + drain.
+	/// `NotFound` if unregistered.
+	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str, icon: AllocationIcon) -> Result<Allocation, DomainError>;
 
 	/// Resize the authorised unit supply under the row lock, applying
 	/// [`Allocation::set_unit_cap`]. Its own command rather than a field on

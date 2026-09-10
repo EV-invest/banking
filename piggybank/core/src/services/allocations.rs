@@ -12,7 +12,12 @@
 //! type we don't control, so the large-err lint does not apply in this module.
 #![allow(clippy::result_large_err)]
 
-use domain::{allocations::Allocation, authz::Permission, balance::ServiceId, money::Shares};
+use domain::{
+	allocations::{Allocation, AllocationIcon},
+	authz::Permission,
+	balance::ServiceId,
+	money::Shares,
+};
 use evbanking_contracts::{
 	allocation::state as wire_state,
 	banking::v1::{self as pb, allocations_service_server::AllocationsService},
@@ -66,7 +71,8 @@ impl AllocationsService for AllocationsSvc {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let allocation = allocations_app::register(self.state.allocations.as_ref(), service, &req.title, &req.summary)
+		let icon = parse_icon(&req.icon)?;
+		let allocation = allocations_app::register(self.state.allocations.as_ref(), service, &req.title, &req.summary, icon)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
@@ -76,7 +82,8 @@ impl AllocationsService for AllocationsSvc {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let allocation = allocations_app::update_details(self.state.allocations.as_ref(), &service, &req.title, &req.summary)
+		let icon = parse_icon(&req.icon)?;
+		let allocation = allocations_app::update_details(self.state.allocations.as_ref(), &service, &req.title, &req.summary, icon)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
@@ -126,7 +133,20 @@ fn allocation_to_proto(allocation: &Allocation, created_at: i64, updated_at: i64
 		created_at,
 		updated_at,
 		unit_cap: allocation.unit_cap().to_decimal_string(),
+		icon: allocation.icon().as_str().to_owned(),
 	}
+}
+
+/// proto3 has no field presence on a scalar `string`, so a client that names no icon and
+/// one that clears it are the same empty wire value — and both mean "the operator chose
+/// nothing", which is [`AllocationIcon::default`]. Anything else is parsed strictly: an
+/// icon this build cannot draw is an `invalid_argument` about the request, never a
+/// product silently stored as something the operator did not pick.
+fn parse_icon(raw: &str) -> Result<AllocationIcon, Status> {
+	if raw.is_empty() {
+		return Ok(AllocationIcon::default());
+	}
+	AllocationIcon::parse(raw).map_err(map_err)
 }
 
 fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
@@ -139,6 +159,9 @@ fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
 #[cfg(test)]
 mod tests {
 	use domain::allocations::{AllocationState, DEFAULT_UNIT_CAP};
+	// Only the guard below reads the icon vocabulary — the handlers go through
+	// `AllocationIcon`, which is the authority on what a stored icon may be.
+	use evbanking_contracts::allocation::icon as wire_icon;
 
 	use super::*;
 
@@ -150,6 +173,24 @@ mod tests {
 		for state in wire_state::ALL {
 			assert_eq!(AllocationState::parse(state).unwrap().as_str(), state);
 		}
+	}
+
+	#[test]
+	fn domain_icons_match_the_wire_contract() {
+		// Same guard as the states above, for the second vocabulary: the client picks its
+		// SVG off `wire_icon`, the hub stores the domain enum, and the DB CHECK in
+		// migration 0027 spells the same ten strings. Drift here is a product that renders
+		// as the wrong picture, or a row the CHECK refuses.
+		assert_eq!(wire_icon::ALL.len(), 10);
+		for icon in wire_icon::ALL {
+			assert_eq!(AllocationIcon::parse(icon).unwrap().as_str(), icon);
+		}
+		assert_eq!(AllocationIcon::default().as_str(), wire_icon::DEFAULT);
+		// The empty wire value is "unset", not an icon — the boundary turns it into the
+		// default, and everything else has to be a value the contract names.
+		assert_eq!(parse_icon("").unwrap(), AllocationIcon::default());
+		assert_eq!(parse_icon(wire_icon::REAL_ESTATE).unwrap(), AllocationIcon::RealEstate);
+		assert_eq!(parse_icon("rocket").unwrap_err().code(), tonic::Code::InvalidArgument);
 	}
 
 	#[test]

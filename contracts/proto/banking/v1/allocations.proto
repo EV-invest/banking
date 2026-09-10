@@ -60,6 +60,10 @@ message Allocation {
   int64 created_at = 5;   // unix seconds
   int64 updated_at = 6;   // unix seconds
   string unit_cap = 7;    // authorised unit supply, decimal (default 100000000)
+  // Catalog glyph the client maps onto one of its SVGs. Presentation only. One of:
+  // fund | real_estate | trading | yield | venture | treasury | commodity | credit |
+  // index | arbitrage. Always populated on a response — `fund` is the default.
+  string icon = 8;
 }
 
 message AllocationList {
@@ -80,12 +84,18 @@ message RegisterAllocationRequest {
   string service = 1;
   string title = 2;
   string summary = 3;
+  // See `Allocation.icon`. Empty means "not chosen" and lands on `fund`; a value
+  // outside the set is refused rather than silently defaulted.
+  string icon = 4;
 }
 
 message UpdateAllocationRequest {
   string service = 1;
   string title = 2;
   string summary = 3;
+  // See `Allocation.icon`. Full-replace like `title` and `summary`: empty resets the
+  // product to `fund`, an unknown value is refused.
+  string icon = 4;
 }
 
 message SetAllocationStateRequest {
