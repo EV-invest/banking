@@ -2347,6 +2347,10 @@
     "en": "Edit profile",
     "t": "Modifier le profil"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Identité et statut du compte"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Vérification d’identité"
@@ -2356,16 +2360,12 @@
     "t": "KYC niv. {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Relevé après examen de conformité"
+    "en": "Raised by verification and review",
+    "t": "Relevé après vérification et examen"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Nom légal"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Géré par la conformité"
   },
   "profile.nationality": {
     "en": "Nationality",

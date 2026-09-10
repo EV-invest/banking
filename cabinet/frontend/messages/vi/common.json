@@ -2347,6 +2347,10 @@
     "en": "Edit profile",
     "t": "Chỉnh sửa hồ sơ"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Danh tính và trạng thái tài khoản"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Xác minh danh tính"
@@ -2356,16 +2360,12 @@
     "t": "KYC cấp {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Do bộ phận tuân thủ nâng cấp"
+    "en": "Raised by verification and review",
+    "t": "Được nâng sau khi xác minh và xét duyệt"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Tên pháp lý"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Do bộ phận tuân thủ quản lý"
   },
   "profile.nationality": {
     "en": "Nationality",

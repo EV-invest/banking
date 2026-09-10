@@ -3251,6 +3251,10 @@
     "en": "Edit profile",
     "t": "Редактировать"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Личность и статус аккаунта"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Верификация личности"
@@ -3260,16 +3264,12 @@
     "t": "KYC ур. {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Повышается по итогам проверки комплаенса"
+    "en": "Raised by verification and review",
+    "t": "Повышается по итогам верификации и проверки"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Имя по документам"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Управляется комплаенсом"
   },
   "profile.nationality": {
     "en": "Nationality",
