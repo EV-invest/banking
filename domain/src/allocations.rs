@@ -85,6 +85,127 @@ impl AllocationState {
 	}
 }
 
+/// The catalog glyph an operator picks for a product.
+///
+/// A closed vocabulary rather than a free-form asset reference: the client owns the
+/// artwork and maps each variant onto one of its SVGs, so a registry row can never
+/// point at a picture the shipped client has no way to draw. Adding a variant means
+/// shipping the client that knows it first.
+///
+/// Presentation only — nothing here gates money or lifecycle.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationIcon {
+	/// The neutral default every product lands on until an operator picks one.
+	#[default]
+	Fund,
+	RealEstate,
+	Trading,
+	Yield,
+	Venture,
+	Treasury,
+	Commodity,
+	Credit,
+	Index,
+	Arbitrage,
+}
+
+impl AllocationIcon {
+	/// Every icon, in the order an operator's picker shows them — [`Self::Fund`] first,
+	/// because that is the one a product lands on when nobody chooses.
+	///
+	/// The set the DB CHECK in migration 0027 and `evbanking_contracts::allocation::
+	/// icon::ALL` must agree with, member for member — `domain_icons_match_the_wire_
+	/// contract` compares the two both ways, and
+	/// `every_icon_the_domain_knows_is_accepted_by_the_column` writes each of these into
+	/// the column and asserts the CHECK takes it.
+	pub const ALL: [Self; Self::COUNT] = {
+		let mut all = [Self::Fund; Self::COUNT];
+		let (mut i, mut icon) = (1usize, Self::Fund);
+		while let Some(next) = icon.next() {
+			all[i] = next;
+			icon = next;
+			i += 1;
+		}
+		all
+	};
+	/// How many icons the vocabulary holds. Walked from the chain, never counted by hand.
+	pub const COUNT: usize = {
+		let (mut count, mut icon) = (1usize, Self::Fund);
+		while let Some(next) = icon.next() {
+			count += 1;
+			icon = next;
+		}
+		count
+	};
+
+	/// The icon declared after `self`, or `None` at the end of the vocabulary.
+	///
+	/// Private, and existing only to derive [`Self::COUNT`] and [`Self::ALL`]: the match
+	/// is exhaustive with no `_` arm, so a new variant fails to compile until it is
+	/// linked into the chain — and once it is, both constants grow on their own. That is
+	/// the whole point: a hand-maintained `[Self; 10]` literal keeps compiling, and
+	/// keeps passing its test, while silently missing the eleventh icon that the DB
+	/// CHECK, the wire contract and the client all still have to be told about.
+	const fn next(self) -> Option<Self> {
+		match self {
+			Self::Fund => Some(Self::RealEstate),
+			Self::RealEstate => Some(Self::Trading),
+			Self::Trading => Some(Self::Yield),
+			Self::Yield => Some(Self::Venture),
+			Self::Venture => Some(Self::Treasury),
+			Self::Treasury => Some(Self::Commodity),
+			Self::Commodity => Some(Self::Credit),
+			Self::Credit => Some(Self::Index),
+			Self::Index => Some(Self::Arbitrage),
+			Self::Arbitrage => None,
+		}
+	}
+
+	/// The stored/wire discriminant. Keep byte-identical with
+	/// `evbanking_contracts::allocation::icon` (`allocation_icon_strings_are_canonical`
+	/// guards this side).
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Fund => "fund",
+			Self::RealEstate => "real_estate",
+			Self::Trading => "trading",
+			Self::Yield => "yield",
+			Self::Venture => "venture",
+			Self::Treasury => "treasury",
+			Self::Commodity => "commodity",
+			Self::Credit => "credit",
+			Self::Index => "index",
+			Self::Arbitrage => "arbitrage",
+		}
+	}
+
+	/// Parse the stored/wire form. An unrecognized value is an error rather than a
+	/// silent fallback to [`Self::Fund`], because the one caller that must stay strict
+	/// is the gRPC boundary: a *client* sending an icon this build cannot draw is a
+	/// contract mismatch the operator has to see, and the request is still refusable.
+	///
+	/// The storage read path deliberately does not use it that way — see
+	/// `piggybank_core::infrastructure::allocations`, which degrades an unknown stored
+	/// value to [`Self::default`]. A row is already written; refusing it would take the
+	/// catalog down over a presentation column.
+	pub fn parse(raw: &str) -> Result<Self, DomainError> {
+		match raw {
+			"fund" => Ok(Self::Fund),
+			"real_estate" => Ok(Self::RealEstate),
+			"trading" => Ok(Self::Trading),
+			"yield" => Ok(Self::Yield),
+			"venture" => Ok(Self::Venture),
+			"treasury" => Ok(Self::Treasury),
+			"commodity" => Ok(Self::Commodity),
+			"credit" => Ok(Self::Credit),
+			"index" => Ok(Self::Index),
+			"arbitrage" => Ok(Self::Arbitrage),
+			other => Err(DomainError::Validation(format!("unknown allocation icon: {other}"))),
+		}
+	}
+}
+
 /// The allocation aggregate — one investable product's registry entry. Construct via
 /// [`Allocation::register`] (raises [`AllocationEvent::Registered`]) or
 /// [`Allocation::rehydrate`] (load from the store, no events).
@@ -96,6 +217,7 @@ pub struct Allocation {
 	summary: String,
 	state: AllocationState,
 	unit_cap: Shares,
+	icon: AllocationIcon,
 	pending: Vec<AllocationEvent>,
 }
 
@@ -104,7 +226,7 @@ impl Allocation {
 	/// [`DEFAULT_UNIT_CAP`] — a registration never opens for business in the same step,
 	/// so listing, sizing and funding stay separate operator decisions. Raises
 	/// `Registered`.
-	pub fn register(id: AllocationId, service: ServiceId, title: &str, summary: &str) -> Result<Self, DomainError> {
+	pub fn register(id: AllocationId, service: ServiceId, title: &str, summary: &str, icon: AllocationIcon) -> Result<Self, DomainError> {
 		let title = validate_title(title)?;
 		let summary = validate_summary(summary)?;
 		let mut allocation = Self {
@@ -114,6 +236,7 @@ impl Allocation {
 			summary: summary.clone(),
 			state: AllocationState::Draft,
 			unit_cap: DEFAULT_UNIT_CAP,
+			icon,
 			pending: Vec::new(),
 		};
 		allocation.pending.push(AllocationEvent::Registered {
@@ -122,12 +245,13 @@ impl Allocation {
 			title,
 			summary,
 			unit_cap: DEFAULT_UNIT_CAP,
+			icon,
 		});
 		Ok(allocation)
 	}
 
 	/// Reconstitute from the store. Raises no events.
-	pub fn rehydrate(id: AllocationId, service: ServiceId, title: String, summary: String, state: AllocationState, unit_cap: Shares) -> Self {
+	pub fn rehydrate(id: AllocationId, service: ServiceId, title: String, summary: String, state: AllocationState, unit_cap: Shares, icon: AllocationIcon) -> Self {
 		Self {
 			id,
 			service,
@@ -135,21 +259,39 @@ impl Allocation {
 			summary,
 			state,
 			unit_cap,
+			icon,
 			pending: Vec::new(),
 		}
 	}
 
-	/// Replace the presentation fields. Identity and state are untouched — an operator
-	/// may fix a title on a live product without disturbing money flow. Raises
-	/// `DetailsUpdated`.
-	pub fn update_details(&mut self, title: &str, summary: &str) -> Result<(), DomainError> {
+	/// Replace the presentation fields — title, summary and icon. Identity and state are
+	/// untouched, so an operator may fix a title on a live product without disturbing
+	/// money flow. The icon rides here rather than in a command of its own because it is
+	/// presentation like the other two and gates nothing. Raises `DetailsUpdated`.
+	///
+	/// `icon` is `Option` where the other two are not: `None` means "the caller did not
+	/// talk about the icon", and the stored pick is left alone. A full replace would
+	/// make every caller that predates the field — an older gRPC consumer, a browser tab
+	/// holding a stale bundle, a pod mid-rolling-deploy — erase the operator's choice
+	/// while reporting success. `Some` is an explicit set, including `Some(default)` for
+	/// a reset back to the neutral glyph. Title and summary have no such "unchanged"
+	/// value on the wire, so they stay a replace and the boundary refuses a request that
+	/// omits the title outright.
+	pub fn update_details(&mut self, title: &str, summary: &str, icon: Option<AllocationIcon>) -> Result<(), DomainError> {
 		self.title = validate_title(title)?;
 		self.summary = validate_summary(summary)?;
+		if let Some(icon) = icon {
+			self.icon = icon;
+		}
 		self.pending.push(AllocationEvent::DetailsUpdated {
 			allocation_id: self.id,
 			service: self.service.clone(),
 			title: self.title.clone(),
 			summary: self.summary.clone(),
+			// The icon the product now carries, not the one the request named — an audit
+			// read of the log must answer "what does this card look like" without also
+			// having to replay which edits happened to mention the field.
+			icon: self.icon,
 		});
 		Ok(())
 	}
@@ -286,6 +428,10 @@ impl Allocation {
 	pub fn unit_cap(&self) -> Shares {
 		self.unit_cap
 	}
+
+	pub fn icon(&self) -> AllocationIcon {
+		self.icon
+	}
 }
 
 fn validate_title(raw: &str) -> Result<String, DomainError> {
@@ -332,6 +478,11 @@ pub enum AllocationEvent {
 		title: String,
 		summary: String,
 		unit_cap: Shares,
+		/// `default` so a row written before icons existed still deserializes — those
+		/// products were all rendered as the letter avatar this default replaces, and
+		/// the column backfills to the same value.
+		#[serde(default)]
+		icon: AllocationIcon,
 	},
 	/// Presentation fields changed; state and identity did not.
 	DetailsUpdated {
@@ -339,6 +490,10 @@ pub enum AllocationEvent {
 		service: ServiceId,
 		title: String,
 		summary: String,
+		/// `default` for the same reason as on `Registered` — it keeps pre-icon rows
+		/// readable.
+		#[serde(default)]
+		icon: AllocationIcon,
 	},
 	/// The authorised unit supply was resized. Its own fact rather than a field on
 	/// `DetailsUpdated`: this one gates money, so "who changed the cap, and when" has to
@@ -371,7 +526,7 @@ mod tests {
 	}
 
 	fn registered() -> Allocation {
-		Allocation::register(AllocationId::new(), svc(), "EV Trading", "Systematic crypto trading").unwrap()
+		Allocation::register(AllocationId::new(), svc(), "EV Trading", "Systematic crypto trading", AllocationIcon::Trading).unwrap()
 	}
 
 	#[test]
@@ -384,6 +539,86 @@ mod tests {
 			assert_eq!(AllocationState::parse(state.as_str()).unwrap(), state);
 		}
 		assert!(AllocationState::parse("delisted").is_err());
+	}
+
+	#[test]
+	fn allocation_icon_strings_are_canonical() {
+		// Wire contract: these must match `evbanking_contracts::allocation::icon`.
+		//
+		// Driven off `ALL` rather than off a literal list of pairs: the old shape was ten
+		// hand-written rows that would have gone on passing, unchanged and green, after an
+		// eleventh variant was added. Here the array on the left is `[&str; COUNT]`, so a
+		// new variant makes this line stop compiling until the expected list names it.
+		let wire: [&str; AllocationIcon::COUNT] = AllocationIcon::ALL.map(AllocationIcon::as_str);
+		assert_eq!(
+			wire,
+			["fund", "real_estate", "trading", "yield", "venture", "treasury", "commodity", "credit", "index", "arbitrage"]
+		);
+		for icon in AllocationIcon::ALL {
+			assert_eq!(AllocationIcon::parse(icon.as_str()).unwrap(), icon);
+		}
+	}
+
+	#[test]
+	fn the_icon_vocabulary_lists_every_variant_exactly_once() {
+		// `ALL` is walked from the `next` chain, so this is what proves the walk visits
+		// each variant once rather than looping or stopping short.
+		assert_eq!(AllocationIcon::ALL.len(), AllocationIcon::COUNT);
+		for (i, icon) in AllocationIcon::ALL.iter().enumerate() {
+			assert_eq!(AllocationIcon::ALL.iter().filter(|other| *other == icon).count(), 1, "{icon:?} appears more than once");
+			assert!(!AllocationIcon::ALL[..i].contains(icon));
+		}
+		assert_eq!(AllocationIcon::ALL[0], AllocationIcon::default(), "the picker opens on the default");
+	}
+
+	#[test]
+	fn an_unknown_icon_is_refused_rather_than_defaulted() {
+		// A client sending an icon this build cannot draw is a contract mismatch, not a
+		// product that quietly renders as something else.
+		assert!(AllocationIcon::parse("rocket").is_err());
+		assert!(AllocationIcon::parse("").is_err());
+		assert!(AllocationIcon::parse("Fund").is_err(), "the wire form is lowercase snake_case");
+		assert!(AllocationIcon::parse("realEstate").is_err());
+	}
+
+	#[test]
+	fn the_default_icon_is_fund() {
+		// What a product lands on when the operator picks nothing, and what the column
+		// and the pre-icon event payloads backfill to.
+		assert_eq!(AllocationIcon::default(), AllocationIcon::Fund);
+		assert_eq!(AllocationIcon::default().as_str(), "fund");
+	}
+
+	#[test]
+	fn the_icon_serializes_to_its_wire_string() {
+		// The stored event payload spells the icon exactly as `as_str` does — the guard
+		// against the serde rename and the manual table drifting apart.
+		for icon in [AllocationIcon::RealEstate, AllocationIcon::Arbitrage, AllocationIcon::Fund] {
+			let json = serde_json::to_string(&icon).unwrap();
+			assert_eq!(json, format!("\"{}\"", icon.as_str()));
+			assert_eq!(serde_json::from_str::<AllocationIcon>(&json).unwrap(), icon);
+		}
+	}
+
+	#[test]
+	fn a_pre_icon_event_payload_still_deserializes() {
+		// `event_log` rows written before this field existed carry no `icon` key. Without
+		// the serde default they would stop deserializing forever, and an audit read of
+		// the registry's history would fail on every historical row.
+		let mut allocation = registered();
+		let registered_json = serde_json::to_string(&allocation.drain_events().pop().unwrap()).unwrap();
+		allocation.update_details("Renamed", "", Some(AllocationIcon::Venture)).unwrap();
+		let updated_json = serde_json::to_string(&allocation.drain_events().pop().unwrap()).unwrap();
+		for json in [registered_json, updated_json] {
+			let legacy = json.replace(r#","icon":"trading""#, "").replace(r#","icon":"venture""#, "");
+			assert!(!legacy.contains("icon"), "the legacy payload must actually lack the key: {legacy}");
+			let back: AllocationEvent = serde_json::from_str(&legacy).unwrap();
+			let icon = match back {
+				AllocationEvent::Registered { icon, .. } | AllocationEvent::DetailsUpdated { icon, .. } => icon,
+				other => panic!("unexpected event: {other:?}"),
+			};
+			assert_eq!(icon, AllocationIcon::Fund, "a pre-icon row reads back as the default");
+		}
 	}
 
 	#[test]
@@ -492,14 +727,54 @@ mod tests {
 	#[test]
 	fn details_are_trimmed_and_bounded() {
 		let mut allocation = registered();
-		allocation.update_details("  EV Real Estate  ", "  Income-producing property  ").unwrap();
+		allocation
+			.update_details("  EV Real Estate  ", "  Income-producing property  ", Some(AllocationIcon::RealEstate))
+			.unwrap();
 		assert_eq!(allocation.title(), "EV Real Estate");
 		assert_eq!(allocation.summary(), "Income-producing property");
-		assert!(allocation.update_details("", "").is_err());
-		assert!(allocation.update_details(&"x".repeat(MAX_TITLE_LEN + 1), "").is_err());
-		assert!(allocation.update_details("ok", &"x".repeat(MAX_SUMMARY_LEN + 1)).is_err());
+		assert_eq!(allocation.icon(), AllocationIcon::RealEstate);
+		assert!(allocation.update_details("", "", Some(AllocationIcon::Fund)).is_err());
+		assert!(allocation.update_details(&"x".repeat(MAX_TITLE_LEN + 1), "", Some(AllocationIcon::Fund)).is_err());
+		assert!(allocation.update_details("ok", &"x".repeat(MAX_SUMMARY_LEN + 1), Some(AllocationIcon::Fund)).is_err());
 		// An empty summary is legitimate — not every product needs a one-liner.
-		assert!(allocation.update_details("ok", "").is_ok());
+		assert!(allocation.update_details("ok", "", Some(AllocationIcon::Fund)).is_ok());
+	}
+
+	#[test]
+	fn an_update_that_names_no_icon_keeps_the_one_the_operator_picked() {
+		// The regression this `Option` exists for. proto3 gives a scalar `string` no field
+		// presence, so before this an older consumer, a stale browser bundle or a pod still
+		// running the previous release would send a body with no icon, the boundary would
+		// read that as "chose nothing", and a title edit would quietly restyle the product
+		// back to `fund` — reporting success the whole way.
+		let mut allocation = registered();
+		assert_eq!(allocation.icon(), AllocationIcon::Trading);
+
+		allocation.update_details("Renamed", "Still trading", None).unwrap();
+		assert_eq!(allocation.icon(), AllocationIcon::Trading, "an absent icon leaves the pick alone");
+		assert_eq!(allocation.title(), "Renamed", "the fields the caller DID name still change");
+
+		// `Some` is an explicit set, and `Some(default)` is how an operator resets to the
+		// neutral glyph — which stays reachable precisely because it is not what absence means.
+		allocation.update_details("Renamed", "", Some(AllocationIcon::Venture)).unwrap();
+		assert_eq!(allocation.icon(), AllocationIcon::Venture);
+		allocation.update_details("Renamed", "", Some(AllocationIcon::default())).unwrap();
+		assert_eq!(allocation.icon(), AllocationIcon::Fund);
+	}
+
+	#[test]
+	fn the_details_event_carries_the_icon_the_product_ends_up_with() {
+		// Not the one the request named: an audit read answers "what does this card look
+		// like now" off the last `DetailsUpdated`, so an edit that said nothing about the
+		// icon must still record the standing pick rather than a default.
+		let mut allocation = registered();
+		allocation.drain_events();
+		allocation.update_details("Renamed", "", None).unwrap();
+		let event = allocation.drain_events().pop().unwrap();
+		let AllocationEvent::DetailsUpdated { icon, .. } = event else {
+			panic!("expected DetailsUpdated, got {event:?}")
+		};
+		assert_eq!(icon, AllocationIcon::Trading);
 	}
 
 	#[test]
@@ -507,7 +782,7 @@ mod tests {
 		let mut allocation = registered();
 		allocation.open();
 		allocation.drain_events();
-		allocation.update_details("Renamed", "").unwrap();
+		allocation.update_details("Renamed", "", Some(AllocationIcon::Trading)).unwrap();
 		assert_eq!(allocation.state(), AllocationState::Open);
 		let events = allocation.drain_events();
 		assert_eq!(events.len(), 1);

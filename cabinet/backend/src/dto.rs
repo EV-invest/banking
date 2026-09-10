@@ -388,6 +388,12 @@ pub struct Allocation {
 	pub updated_at: String,
 	/// Authorised unit supply, decimal. Subscribe refuses a mint that would pass it.
 	pub unit_cap: String,
+	/// Catalog glyph the client maps onto one of its SVGs — presentation only. Always
+	/// present and always one of the contract's values (`fund` when the operator picked
+	/// none), so a client never has to render a missing field. A client reading a
+	/// *cached* allocation from before this field existed still has to tolerate its
+	/// absence.
+	pub icon: String,
 }
 
 impl From<bk::Allocation> for Allocation {
@@ -398,6 +404,7 @@ impl From<bk::Allocation> for Allocation {
 			summary: a.summary,
 			state: a.state,
 			unit_cap: a.unit_cap,
+			icon: a.icon,
 			created_at: a.created_at.to_string(),
 			updated_at: a.updated_at.to_string(),
 		}

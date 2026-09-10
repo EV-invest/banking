@@ -13,7 +13,7 @@ use axum::{
 	http::HeaderMap,
 };
 use axum_extra::extract::cookie::CookieJar;
-use evbanking_contracts::banking::v1 as bk;
+use evbanking_contracts::{allocation::icon as wire_icon, banking::v1 as bk};
 use evconcierge_contracts::concierge::v1 as cc;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -416,6 +416,37 @@ pub async fn list_allocations(State(st): State<AppState>, jar: CookieJar) -> Res
 	Ok(Json(list.into()))
 }
 
+/// The `icon` field of a register/update body, validated against the wire contract.
+///
+/// Three distinct answers, and keeping them distinct is the point:
+/// - key absent (or `null`) ⇒ `None`, "the caller is not talking about the icon". On
+///   `/update` that reaches the hub as an unset `optional` field and the stored pick
+///   survives. Curl, a script, or a browser tab holding a bundle from before this field
+///   existed all land here — and none of them silently restyle a live product.
+/// - present and empty ⇒ `Some("")`, an explicit reset to `fund`.
+/// - present and outside the vocabulary ⇒ 400. An operator who mistypes an icon must be
+///   told, not handed back a product quietly wearing the wrong picture. The hub refuses
+///   it too; this just answers in the shape the admin console can render.
+///
+/// So `title` still 400s when omitted while `icon` does not, and that asymmetry is now
+/// principled rather than accidental: neither field lets a caller destroy stored state
+/// by staying silent. `title` has no wire value meaning "unchanged", so silence there is
+/// a client bug and is refused; `icon` has one, so silence is honoured.
+fn allocation_icon(v: &Value) -> Result<Option<String>, ApiError> {
+	let Some(raw) = v.get("icon").filter(|value| !value.is_null()) else {
+		return Ok(None);
+	};
+	let unknown = |icon: &str| ApiError::BadRequest(format!("unknown allocation icon '{icon}' — expected one of {}", wire_icon::ALL.join(", ")));
+	match raw.as_str() {
+		Some("") => Ok(Some(String::new())),
+		Some(icon) if wire_icon::is_known(icon) => Ok(Some(icon.to_owned())),
+		Some(icon) => Err(unknown(icon)),
+		// A non-string `icon` was previously read as absent and silently defaulted; it is
+		// as much of a client bug as a misspelled one.
+		None => Err(unknown(&raw.to_string())),
+	}
+}
+
 /// `POST /api/admin/allocations/register` — register a new investable product (`draft`).
 /// This is the only way a fund comes into existence.
 pub async fn register_allocation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
@@ -432,6 +463,10 @@ pub async fn register_allocation(State(st): State<AppState>, jar: CookieJar, hea
 		service,
 		title,
 		summary: required(&v, "summary").unwrap_or_default(),
+		// A registration creates the row, so there is no earlier pick that an absent
+		// field could destroy: "" is the wire's "chose nothing" and the hub lands it on
+		// the default. Only `/update` needs presence.
+		icon: allocation_icon(&v)?.unwrap_or_default(),
 	};
 	Ok(Json(st.grpc.register_allocation(&token, req).await?.into()))
 }
@@ -451,6 +486,10 @@ pub async fn update_allocation(State(st): State<AppState>, jar: CookieJar, heade
 		service,
 		title,
 		summary: required(&v, "summary").unwrap_or_default(),
+		// `None` travels as an unset `optional` field, which the hub reads as "leave the
+		// stored icon alone" — the whole reason this route can be called by a client that
+		// predates the field without quietly wiping an operator's choice.
+		icon: allocation_icon(&v)?,
 	};
 	Ok(Json(st.grpc.update_allocation(&token, req).await?.into()))
 }

@@ -12,13 +12,14 @@
 
 use async_trait::async_trait;
 use domain::{
-	allocations::{Allocation, AllocationId, AllocationState},
+	allocations::{Allocation, AllocationIcon, AllocationId, AllocationState},
 	architecture::{Reader, Repository},
 	balance::ServiceId,
 	error::DomainError,
 	money::Shares,
 };
 use sqlx::{PgConnection, PgPool};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::{
@@ -28,16 +29,16 @@ use crate::{
 
 /// sqlx 0.9 accepts only `&'static str` SQL (its injection guardrail), so the shared
 /// column list is spelled out per query rather than interpolated.
-const SELECT_BY_SERVICE: &str = "SELECT id, service, title, summary, state, unit_cap, \
+const SELECT_BY_SERVICE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM allocations WHERE service = $1";
-const SELECT_BY_SERVICE_FOR_UPDATE: &str = "SELECT id, service, title, summary, state, unit_cap, \
+const SELECT_BY_SERVICE_FOR_UPDATE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM allocations WHERE service = $1 FOR UPDATE";
 /// `$1` is `include_unlisted`: false narrows to the investor-facing open catalog.
-const SELECT_CATALOG: &str = "SELECT id, service, title, summary, state, unit_cap, \
+const SELECT_CATALOG: &str = "SELECT id, service, title, summary, state, unit_cap, icon, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM allocations WHERE $1 OR state = 'open' ORDER BY service";
@@ -83,6 +84,7 @@ struct AllocationRow {
 	summary: String,
 	state: String,
 	unit_cap: String,
+	icon: String,
 	created_at: i64,
 	updated_at: i64,
 }
@@ -94,6 +96,19 @@ impl AllocationRow {
 				.parse::<u128>()
 				.map_err(|_| DomainError::Repository("malformed base-unit amount in allocations.unit_cap".into()))?,
 		);
+		// Deliberately laxer than the gRPC boundary, which refuses an unknown icon
+		// (`AllocationsSvc::parse_icon`). The asymmetry is the point: a *client* sending
+		// a value this build cannot draw is a request that can still be rejected, while a
+		// *row* holding one is already written — and this mapper is on both `find` (the
+		// gate every subscribe and redeem passes through) and `list` (the whole catalog),
+		// so refusing here would take the money plane down over a presentation column.
+		// The way that row appears is ordinary: widen the vocabulary, deploy, an operator
+		// picks the new value, roll the release back. The shipped client already falls
+		// back the same way (`shared/ui/icons/products.tsx`); the hub matches it.
+		let icon = AllocationIcon::parse(&self.icon).unwrap_or_else(|_| {
+			warn!(service = %self.service, icon = %self.icon, "allocations: stored icon is outside this build's vocabulary — rendering the default");
+			AllocationIcon::default()
+		});
 		Ok(Allocation::rehydrate(
 			AllocationId::from_raw(self.id),
 			ServiceId::parse(&self.service)?,
@@ -101,6 +116,7 @@ impl AllocationRow {
 			self.summary,
 			AllocationState::parse(&self.state)?,
 			unit_cap,
+			icon,
 		))
 	}
 
@@ -138,12 +154,13 @@ async fn load_for_update(conn: &mut PgConnection, service: &ServiceId) -> Result
 /// Persist the mutable fields. We hold the row lock, so exactly one row must update.
 /// `service` and `id` are immutable and deliberately absent from the SET list.
 async fn update_row(conn: &mut PgConnection, allocation: &Allocation) -> Result<(), DomainError> {
-	let result = sqlx::query("UPDATE allocations SET title = $2, summary = $3, state = $4, unit_cap = $5, updated_at = now() WHERE id = $1")
+	let result = sqlx::query("UPDATE allocations SET title = $2, summary = $3, state = $4, unit_cap = $5, icon = $6, updated_at = now() WHERE id = $1")
 		.bind(allocation.id().raw())
 		.bind(allocation.title())
 		.bind(allocation.summary())
 		.bind(allocation.state().as_str())
 		.bind(allocation.unit_cap().base_units().to_string())
+		.bind(allocation.icon().as_str())
 		.execute(&mut *conn)
 		.await
 		.map_err(repo_err)?;
@@ -157,13 +174,14 @@ async fn update_row(conn: &mut PgConnection, allocation: &Allocation) -> Result<
 impl AllocationRegistry for PgAllocations {
 	async fn register(&self, allocation: &mut Allocation) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let inserted = sqlx::query("INSERT INTO allocations (id, service, title, summary, state, unit_cap) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (service) DO NOTHING")
+		let inserted = sqlx::query("INSERT INTO allocations (id, service, title, summary, state, unit_cap, icon) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (service) DO NOTHING")
 			.bind(allocation.id().raw())
 			.bind(allocation.service().as_str())
 			.bind(allocation.title())
 			.bind(allocation.summary())
 			.bind(allocation.state().as_str())
 			.bind(allocation.unit_cap().base_units().to_string())
+			.bind(allocation.icon().as_str())
 			.execute(&mut *tx)
 			.await
 			.map_err(repo_err)?
@@ -176,8 +194,8 @@ impl AllocationRegistry for PgAllocations {
 		Ok(())
 	}
 
-	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str) -> Result<Allocation, DomainError> {
-		self.transition(service, |allocation| allocation.update_details(title, summary)).await
+	async fn update_details(&self, service: &ServiceId, title: &str, summary: &str, icon: Option<AllocationIcon>) -> Result<Allocation, DomainError> {
+		self.transition(service, |allocation| allocation.update_details(title, summary, icon)).await
 	}
 
 	async fn set_unit_cap(&self, service: &ServiceId, unit_cap: Shares) -> Result<Allocation, DomainError> {

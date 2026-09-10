@@ -115,6 +115,14 @@ export type BankingV1Allocation = {
      * authorised unit supply, decimal (default 100000000)
      */
     unit_cap?: string;
+    /**
+     * icon
+     *
+     * Catalog glyph the client maps onto one of its SVGs. Presentation only. One of:
+     * fund | real_estate | trading | yield | venture | treasury | commodity | credit |
+     * index | arbitrage. Always populated on a response — `fund` is the default.
+     */
+    icon?: string;
 };
 
 /**
@@ -1934,6 +1942,16 @@ export type BankingV1RegisterAllocationRequest = {
      * summary
      */
     summary?: string;
+    /**
+     * icon
+     *
+     * See `Allocation.icon`. Empty means "not chosen" and lands on `fund`; a value
+     * outside the set is refused rather than silently defaulted. Deliberately NOT
+     * `optional`, unlike the update request: a registration creates the row, so there is
+     * no earlier pick that "unset" could destroy — absent and empty both legitimately
+     * mean "the operator chose nothing yet", which is what the default is for.
+     */
+    icon?: string;
 };
 
 /**
@@ -2520,6 +2538,22 @@ export type BankingV1UpdateAllocationRequest = {
      * summary
      */
     summary?: string;
+    /**
+     * icon
+     *
+     * See `Allocation.icon`. `optional` — and it is the ONLY field here that is, because
+     * it is the only one where "the caller did not mention it" has to be distinguishable
+     * from "the caller cleared it". Unset means LEAVE THE STORED ICON ALONE; empty string
+     * means reset to `fund`; an unknown value is refused.
+     *
+     * Without presence a scalar `string` cannot tell those apart, and every caller built
+     * before this field existed — a consumer repo on an older `contracts` pin, a browser
+     * tab holding a stale bundle, a pod mid-rolling-deploy — would silently wipe the
+     * operator's pick on the next title edit. `title` and `summary` need no such escape:
+     * they predate every live caller, so an omitted title is a client bug the boundary
+     * refuses outright rather than a field it has to guess about.
+     */
+    icon?: string | null;
 };
 
 /**
@@ -2677,6 +2711,20 @@ export type BankingV1UserProfile = {
      * concierge shape). The identity plane OWNS kyc/role; the money plane mirrors them for
      * gating but does not re-serve them on its self-service GetMe, so these stay default
      * here — the fields exist for cross-plane wire parity.
+     *
+     * The tier ladder, written down here because the money plane is what ENFORCES it and
+     * no authoritative range was stated in either plane before this:
+     * 0 — registered. Sign-up plus a confirmed email address; nothing else is verified.
+     * No deposit address is issued and no withdrawal is accepted.
+     * 1 — verified. Identity document, liveness, a face match against the document, and
+     * a passed sanctions/PEP screen. Deposits and withdrawals are permitted.
+     * 2 — enhanced. Everything in 1 plus proof of address and source of funds. Carries
+     * raised transaction limits (the limits themselves are not modelled yet).
+     * 3 — elevated. Enhanced due diligence; set only by a human reviewer, never
+     * automatically.
+     * Banking gates BOTH directions of money movement on >= 1. The value is set by an
+     * admin in the identity plane and mirrored onto the money plane by the one-way
+     * lifecycle bridge; banking never authors it.
      */
     kyc_level?: number;
     /**

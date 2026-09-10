@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use domain::{
-	allocations::{Allocation, AllocationId},
+	allocations::{Allocation, AllocationIcon, AllocationId},
 	balance::{LedgerAccountKey, Party, ServiceId},
 	fees::{self, CrystallizationPeriod, FeeAssessment, FeeAssessmentId, FeePolicy, ManagementBasis, Trigger},
 	money::{Nav, Network, Shares, TxRef, Usdt},
@@ -180,7 +180,7 @@ fn now_unix() -> i64 {
 
 /// A registered, open product with the house 2-and-20 terms.
 async fn open_fund(h: &Harness, service: &ServiceId) {
-	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "EV Trading", "Systematic crypto").unwrap();
+	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "EV Trading", "Systematic crypto", AllocationIcon::default()).unwrap();
 	h.allocations.register(&mut allocation).await.unwrap();
 	h.allocations.open(service).await.unwrap();
 	h.policies.set(service, FeePolicy::HOUSE, "itest").await.unwrap();
@@ -471,7 +471,7 @@ async fn a_fund_with_no_policy_is_never_charged() {
 	let user = UserId::new();
 	let service = unique_service();
 	// Registered and open, but deliberately given no fee policy.
-	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "EV Trading", "Systematic crypto").unwrap();
+	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "EV Trading", "Systematic crypto", AllocationIcon::default()).unwrap();
 	h.allocations.register(&mut allocation).await.unwrap();
 	h.allocations.open(&service).await.unwrap();
 

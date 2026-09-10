@@ -35,6 +35,10 @@
     "en": "No allocations registered yet — until one is, every subscription is refused.",
     "t": "Chưa có khoản phân bổ nào được đăng ký — khi chưa có, mọi lệnh đăng ký đều bị từ chối."
   },
+  "admin.alloc.field.icon": {
+    "en": "Icon",
+    "t": "Biểu tượng"
+  },
   "admin.alloc.field.summary": {
     "en": "Summary",
     "t": "Tóm tắt"
@@ -58,6 +62,46 @@
   "admin.alloc.hint.open": {
     "en": "Accepting subscriptions and redemptions",
     "t": "Đang nhận lệnh đăng ký và lệnh hoàn vốn"
+  },
+  "admin.alloc.icon.arbitrage": {
+    "en": "Arbitrage",
+    "t": "Kinh doanh chênh lệch giá"
+  },
+  "admin.alloc.icon.commodity": {
+    "en": "Commodity",
+    "t": "Hàng hóa"
+  },
+  "admin.alloc.icon.credit": {
+    "en": "Credit",
+    "t": "Tín dụng"
+  },
+  "admin.alloc.icon.fund": {
+    "en": "Fund",
+    "t": "Quỹ"
+  },
+  "admin.alloc.icon.index": {
+    "en": "Index",
+    "t": "Chỉ số"
+  },
+  "admin.alloc.icon.real_estate": {
+    "en": "Real estate",
+    "t": "Bất động sản"
+  },
+  "admin.alloc.icon.trading": {
+    "en": "Trading",
+    "t": "Giao dịch"
+  },
+  "admin.alloc.icon.treasury": {
+    "en": "Treasury",
+    "t": "Ngân khố"
+  },
+  "admin.alloc.icon.venture": {
+    "en": "Venture",
+    "t": "Đầu tư mạo hiểm"
+  },
+  "admin.alloc.icon.yield": {
+    "en": "Yield",
+    "t": "Lợi suất"
   },
   "admin.alloc.open": {
     "en": "Open",

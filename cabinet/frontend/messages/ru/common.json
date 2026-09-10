@@ -35,6 +35,10 @@
     "en": "No allocations registered yet — until one is, every subscription is refused.",
     "t": "Ни одного продукта пока не зарегистрировано — до этого любая подписка отклоняется."
   },
+  "admin.alloc.field.icon": {
+    "en": "Icon",
+    "t": "Иконка"
+  },
   "admin.alloc.field.summary": {
     "en": "Summary",
     "t": "Описание"
@@ -58,6 +62,46 @@
   "admin.alloc.hint.open": {
     "en": "Accepting subscriptions and redemptions",
     "t": "Принимает подписки и погашения"
+  },
+  "admin.alloc.icon.arbitrage": {
+    "en": "Arbitrage",
+    "t": "Арбитраж"
+  },
+  "admin.alloc.icon.commodity": {
+    "en": "Commodity",
+    "t": "Сырьё"
+  },
+  "admin.alloc.icon.credit": {
+    "en": "Credit",
+    "t": "Кредит"
+  },
+  "admin.alloc.icon.fund": {
+    "en": "Fund",
+    "t": "Фонд"
+  },
+  "admin.alloc.icon.index": {
+    "en": "Index",
+    "t": "Индекс"
+  },
+  "admin.alloc.icon.real_estate": {
+    "en": "Real estate",
+    "t": "Недвижимость"
+  },
+  "admin.alloc.icon.trading": {
+    "en": "Trading",
+    "t": "Трейдинг"
+  },
+  "admin.alloc.icon.treasury": {
+    "en": "Treasury",
+    "t": "Казначейство"
+  },
+  "admin.alloc.icon.venture": {
+    "en": "Venture",
+    "t": "Венчур"
+  },
+  "admin.alloc.icon.yield": {
+    "en": "Yield",
+    "t": "Доходность"
   },
   "admin.alloc.open": {
     "en": "Open",
