@@ -141,11 +141,11 @@ impl BridgeConsumer {
 		}
 		for event in &response.events {
 			if self.apply(event).await? == Outcome::Unreadable {
-				// HEAD-OF-LINE STOP, AND THE `break` IS LOAD-BEARING TWICE OVER.
+				// HEAD-OF-LINE STOP. RETURNING HERE IS LOAD-BEARING TWICE OVER.
 				//
 				// Leaving the cursor put is what keeps the event in concierge's outbox for an
-				// upgraded build to pull. Not applying the rest of the batch is what keeps a
-				// LATER event for the same subject from advancing that subject's
+				// upgraded build to pull. Abandoning the REST of the batch is what keeps a
+				// later event for the same subject from advancing that subject's
 				// `last_lifecycle_sequence` past this one — which would hide it behind the
 				// per-user guard forever, reinstating exactly the loss the stop prevents.
 				// Everything already applied from this batch re-applies as a no-op when the
