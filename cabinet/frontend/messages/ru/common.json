@@ -35,6 +35,10 @@
     "en": "No allocations registered yet — until one is, every subscription is refused.",
     "t": "Ни одного продукта пока не зарегистрировано — до этого любая подписка отклоняется."
   },
+  "admin.alloc.field.icon": {
+    "en": "Icon",
+    "t": "Иконка"
+  },
   "admin.alloc.field.summary": {
     "en": "Summary",
     "t": "Описание"
@@ -58,6 +62,46 @@
   "admin.alloc.hint.open": {
     "en": "Accepting subscriptions and redemptions",
     "t": "Принимает подписки и погашения"
+  },
+  "admin.alloc.icon.arbitrage": {
+    "en": "Arbitrage",
+    "t": "Арбитраж"
+  },
+  "admin.alloc.icon.commodity": {
+    "en": "Commodity",
+    "t": "Сырьё"
+  },
+  "admin.alloc.icon.credit": {
+    "en": "Credit",
+    "t": "Кредит"
+  },
+  "admin.alloc.icon.fund": {
+    "en": "Fund",
+    "t": "Фонд"
+  },
+  "admin.alloc.icon.index": {
+    "en": "Index",
+    "t": "Индекс"
+  },
+  "admin.alloc.icon.real_estate": {
+    "en": "Real estate",
+    "t": "Недвижимость"
+  },
+  "admin.alloc.icon.trading": {
+    "en": "Trading",
+    "t": "Трейдинг"
+  },
+  "admin.alloc.icon.treasury": {
+    "en": "Treasury",
+    "t": "Казначейство"
+  },
+  "admin.alloc.icon.venture": {
+    "en": "Venture",
+    "t": "Венчур"
+  },
+  "admin.alloc.icon.yield": {
+    "en": "Yield",
+    "t": "Доходность"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -426,6 +470,22 @@
   "admin.fees.worthAtNav": {
     "en": "Worth at current NAV",
     "t": "Стоимость по текущему NAV"
+  },
+  "admin.kyc.elevated": {
+    "en": "Elevated",
+    "t": "Углублённая проверка"
+  },
+  "admin.kyc.enhanced": {
+    "en": "Enhanced",
+    "t": "Расширенная проверка"
+  },
+  "admin.kyc.registered": {
+    "en": "Registered",
+    "t": "Регистрация"
+  },
+  "admin.kyc.verified": {
+    "en": "Verified",
+    "t": "Верификация"
   },
   "admin.overview.col.event": {
     "en": "Event",
@@ -2359,6 +2419,10 @@
     "en": "Select a fund to continue.",
     "t": "Выберите фонд, чтобы продолжить."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Не удалось начать верификацию. Попробуйте ещё раз."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "Язык должен быть кодом BCP 47, например «en» или «en-US»"
@@ -3235,25 +3299,49 @@
     "en": "Edit profile",
     "t": "Редактировать"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Личность и статус аккаунта"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Верификация личности"
+  },
+  "profile.kyc.contact": {
+    "en": "Contact {contact}",
+    "t": "Написать на {contact}"
+  },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Начать"
+  },
+  "profile.kyc.startSub": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Фото документа и селфи — несколько минут"
+  },
+  "profile.kyc.startTitle": {
+    "en": "Verify your identity",
+    "t": "Подтвердите личность"
+  },
+  "profile.kyc.tooManyAttempts": {
+    "en": "You've already started verification several times today. Please try again tomorrow.",
+    "t": "Сегодня вы уже начинали верификацию несколько раз. Попробуйте завтра."
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later.",
+    "t": "Верификация сейчас недоступна. Попробуйте позже."
   },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC ур. {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Повышается по итогам проверки комплаенса"
+    "en": "Raised by verification and review",
+    "t": "Повышается по итогам верификации и проверки"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Имя по документам"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Управляется комплаенсом"
   },
   "profile.nationality": {
     "en": "Nationality",

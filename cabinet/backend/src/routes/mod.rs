@@ -213,17 +213,22 @@ pub fn parse_body(body: &Bytes) -> Value {
 pub fn required(v: &Value, key: &str) -> Option<String> {
 	v.get(key).and_then(|x| x.as_str()).map(str::to_string).filter(|s| !s.is_empty())
 }
+/// A REQUIRED whole-number field that fits a `u32`: `None` when the field is missing, or
+/// is not a non-negative integer inside the `u32` range.
+///
+/// The numeric counterpart to [`required`], and deliberately not a defaulting read.
+/// `serde_json`'s `as_u64` answers `None` for `-1`, for `2.5` and for a quoted `"2"`
+/// alike, so a caller that unwraps it to zero cannot tell "the operator asked for zero"
+/// from "this layer could not read what the operator asked for" — and zero is a
+/// meaningful value on every ladder that crosses the BFF, so inventing one answers
+/// "saved" to a request nobody understood. `u32::try_from` closes the other half: `as u32`
+/// truncates silently, which turns 2^32 into a perfectly plausible 0.
+pub fn required_u32(v: &Value, key: &str) -> Option<u32> {
+	v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
+}
 /// An editable string field: missing ⇒ `""` (full-replace semantics; empty clears).
 pub fn editable(v: &Value, key: &str) -> String {
 	v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
-}
-/// A REQUIRED whole, non-negative number that fits a `u32`: `None` when the field is
-/// missing, or is not a whole number that fits (a string, a float, negative, or too
-/// large all miss). Right for any field where coercing the unparseable to zero would
-/// silently change what was asked for, rather than a knob whose absence really does mean
-/// zero.
-pub fn required_u32(v: &Value, key: &str) -> Option<u32> {
-	v.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok())
 }
 /// Constant-time string equality (after a length check, which only reveals length) as
 /// defense-in-depth, matching the constant-time discipline used for secret comparisons.

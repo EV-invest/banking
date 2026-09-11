@@ -35,6 +35,10 @@
     "en": "No allocations registered yet — until one is, every subscription is refused.",
     "t": "Aucune allocation inscrite pour l’instant — tant qu’il n’y en a pas, toute souscription est refusée."
   },
+  "admin.alloc.field.icon": {
+    "en": "Icon",
+    "t": "Icône"
+  },
   "admin.alloc.field.summary": {
     "en": "Summary",
     "t": "Résumé"
@@ -58,6 +62,46 @@
   "admin.alloc.hint.open": {
     "en": "Accepting subscriptions and redemptions",
     "t": "Accepte souscriptions et rachats"
+  },
+  "admin.alloc.icon.arbitrage": {
+    "en": "Arbitrage",
+    "t": "Arbitrage"
+  },
+  "admin.alloc.icon.commodity": {
+    "en": "Commodity",
+    "t": "Matières premières"
+  },
+  "admin.alloc.icon.credit": {
+    "en": "Credit",
+    "t": "Crédit"
+  },
+  "admin.alloc.icon.fund": {
+    "en": "Fund",
+    "t": "Fonds"
+  },
+  "admin.alloc.icon.index": {
+    "en": "Index",
+    "t": "Indice"
+  },
+  "admin.alloc.icon.real_estate": {
+    "en": "Real estate",
+    "t": "Immobilier"
+  },
+  "admin.alloc.icon.trading": {
+    "en": "Trading",
+    "t": "Trading"
+  },
+  "admin.alloc.icon.treasury": {
+    "en": "Treasury",
+    "t": "Trésorerie"
+  },
+  "admin.alloc.icon.venture": {
+    "en": "Venture",
+    "t": "Capital-risque"
+  },
+  "admin.alloc.icon.yield": {
+    "en": "Yield",
+    "t": "Rendement"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -426,6 +470,22 @@
   "admin.fees.worthAtNav": {
     "en": "Worth at current NAV",
     "t": "Valeur à la VL actuelle"
+  },
+  "admin.kyc.elevated": {
+    "en": "Elevated",
+    "t": "Approfondi"
+  },
+  "admin.kyc.enhanced": {
+    "en": "Enhanced",
+    "t": "Renforcé"
+  },
+  "admin.kyc.registered": {
+    "en": "Registered",
+    "t": "Enregistré"
+  },
+  "admin.kyc.verified": {
+    "en": "Verified",
+    "t": "Vérifié"
   },
   "admin.overview.col.event": {
     "en": "Event",
@@ -1459,6 +1519,10 @@
     "en": "Select a fund to continue.",
     "t": "Sélectionnez un fonds pour continuer."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Impossible de démarrer la vérification. Veuillez réessayer."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "La langue doit être un code BCP 47 tel que « en » ou « en-US »"
@@ -2331,25 +2395,49 @@
     "en": "Edit profile",
     "t": "Modifier le profil"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Identité et statut du compte"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Vérification d’identité"
+  },
+  "profile.kyc.contact": {
+    "en": "Contact {contact}",
+    "t": "Contacter {contact}"
+  },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Commencer"
+  },
+  "profile.kyc.startSub": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Une photo de votre pièce d'identité et un selfie — quelques minutes"
+  },
+  "profile.kyc.startTitle": {
+    "en": "Verify your identity",
+    "t": "Vérifiez votre identité"
+  },
+  "profile.kyc.tooManyAttempts": {
+    "en": "You've already started verification several times today. Please try again tomorrow.",
+    "t": "Vous avez déjà lancé la vérification plusieurs fois aujourd'hui. Veuillez réessayer demain."
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later.",
+    "t": "La vérification n'est pas disponible pour le moment. Veuillez réessayer plus tard."
   },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC niv. {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Relevé après examen de conformité"
+    "en": "Raised by verification and review",
+    "t": "Relevé après vérification et examen"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Nom légal"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Géré par la conformité"
   },
   "profile.nationality": {
     "en": "Nationality",

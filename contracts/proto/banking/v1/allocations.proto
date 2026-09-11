@@ -60,6 +60,10 @@ message Allocation {
   int64 created_at = 5;   // unix seconds
   int64 updated_at = 6;   // unix seconds
   string unit_cap = 7;    // authorised unit supply, decimal (default 100000000)
+  // Catalog glyph the client maps onto one of its SVGs. Presentation only. One of:
+  // fund | real_estate | trading | yield | venture | treasury | commodity | credit |
+  // index | arbitrage. Always populated on a response — `fund` is the default.
+  string icon = 8;
 }
 
 message AllocationList {
@@ -80,12 +84,30 @@ message RegisterAllocationRequest {
   string service = 1;
   string title = 2;
   string summary = 3;
+  // See `Allocation.icon`. Empty means "not chosen" and lands on `fund`; a value
+  // outside the set is refused rather than silently defaulted. Deliberately NOT
+  // `optional`, unlike the update request: a registration creates the row, so there is
+  // no earlier pick that "unset" could destroy — absent and empty both legitimately
+  // mean "the operator chose nothing yet", which is what the default is for.
+  string icon = 4;
 }
 
 message UpdateAllocationRequest {
   string service = 1;
   string title = 2;
   string summary = 3;
+  // See `Allocation.icon`. `optional` — and it is the ONLY field here that is, because
+  // it is the only one where "the caller did not mention it" has to be distinguishable
+  // from "the caller cleared it". Unset means LEAVE THE STORED ICON ALONE; empty string
+  // means reset to `fund`; an unknown value is refused.
+  //
+  // Without presence a scalar `string` cannot tell those apart, and every caller built
+  // before this field existed — a consumer repo on an older `contracts` pin, a browser
+  // tab holding a stale bundle, a pod mid-rolling-deploy — would silently wipe the
+  // operator's pick on the next title edit. `title` and `summary` need no such escape:
+  // they predate every live caller, so an omitted title is a client bug the boundary
+  // refuses outright rather than a field it has to guess about.
+  optional string icon = 4;
 }
 
 message SetAllocationStateRequest {

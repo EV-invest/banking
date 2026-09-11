@@ -348,7 +348,18 @@ acceptance and the clearing reserve must not depend on a flaky chain node.
 The treasury worker is the [`dispatcher`](src/infrastructure/dispatcher.rs) (see
 [Recovery jobs](#reconciliation--reaper--dispatcher-recovery-jobs)); `DispatchWithdrawal`
 is its manual override — it refuses (leaving the withdrawal `Queued`, still cancellable)
-when the rail treasury provably lacks the net on-chain. `SettleWithdrawal` and
+when the rail treasury provably lacks the net on-chain, or when the **outflow policy** no
+longer permits the payout. That policy — the read-only kill-switch, the owner's
+cross-plane freeze, and the tier-1 floor for a `WithdrawalSource::User` — lives inside
+`dispatch_withdrawal` itself, not in its callers: admission is not the last word, because
+a withdrawal can sit `Queued` for hours and a pause, an AML hold or a revoked
+verification landing in that window must still stop the money. Every arm fails **closed**
+(a missing owner row, an unreadable flag and a corrupt tier all refuse), and both the
+sweep and the operator RPC inherit it from the one place rather than each carrying a copy.
+The operator handle has **no `force` override**: the override for a pause is
+`SetOperationsMode`, which is itself permissioned and leaves one auditable record of who
+reopened outflows, instead of a per-payout flag indistinguishable from a routine
+dispatch. `SettleWithdrawal` and
 `FailWithdrawal` are operator/watcher-driven **admin** RPCs on `BalanceService`;
 `CancelWithdrawal` is the user's own (a queued withdrawal only). The cardinal rule —
 **never void once the broadcast may have reached the chain** (that double-pays) — is why
@@ -391,8 +402,9 @@ consequences worth stating plainly, because both are load-bearing:
   would credit the money straight back to the account it was just debited from.
 
 A payout has no owner in the identity plane — the fund is not a user — so the gates that
-read a user's control-plane flags simply do not apply (the dispatcher's freeze check is
-`if let Some(owner)`, not a fail-closed read against a missing row). Everything else is
+read a user's control-plane flags simply do not apply: the dispatch policy's per-owner
+arms are behind `if let Some(owner)`, so there is no row to read and nothing to fail
+closed on. The kill-switch still applies, because it pauses outflows, not users. Everything else is
 identical, **including the cardinal rule**: once a payout's broadcast may have reached the
 chain, failing it double-pays.
 
@@ -566,7 +578,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `GetDepositAddress` | the user | `sub == user` | `kyc_level ≥ 1` (else `permission_denied`) |
 | `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | active account ∧ `kyc_level ≥ 1` ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
-| `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) |
+| `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ **not read-only** ∧ (user source) owner not frozen ∧ `kyc_level ≥ 1` — fail-closed, no `force` |
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
 | `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ (settle) position projection tracks ≥ the redeemed units |
@@ -592,9 +604,29 @@ banking only mirrors the gating slice. The gate fails CLOSED (UNAVAILABLE) if th
 be read. Cancel/read RPCs are intentionally NOT gated, so a frozen user can still unwind
 queued positions.
 
+**Nothing is consumed without being applied.** `bridge_cursor` is a single global position
+and the concierge only re-delivers *ahead* of it (`WHERE position > after_position`), so an
+event the consumer walks past is gone for good — there is no dead-letter to recover it from.
+Two things can stop an event from applying, and they get opposite treatments because they
+are unblocked by opposite things. **A subject with no local row** (never signed in here, or
+a CREATED that aged out of the outbox before banking was deployed) is parked in
+`bridge_deferred_event` and replayed by the consumer's own sweep the moment the row appears,
+from either direction — a later CREATED or a first sign-in. The cursor moves on, so one
+orphan subject cannot wedge the mirror for every other user; the price is a table whose
+columns must carry every field `apply` reads. **A `kind` this build cannot name** is
+different: the concierge ships ahead of banking, so an unknown kind is the ordinary shape of
+a mid-rollout event, and *nothing local can ever interpret it* — only a newer binary can.
+The cursor stops on it (head-of-line, and the rest of the batch is left unapplied so a later
+event can't advance that subject's guard past it), leaving the event in the concierge outbox
+at full fidelity until the upgrade lands. Marking it applied — which is what bumping
+`last_lifecycle_sequence` "so it isn't re-fetched forever" did — is how a freeze or a tier
+revocation gets swallowed while the money plane keeps trading under withdrawn rules.
+
 **Verification gate (`kyc_level`).** The mirrored tier is not just stored, it *gates*:
 `domain::users::KYC_LEVEL_VERIFIED` (= 1) is the floor for money crossing the platform
-boundary in either direction — `GetDepositAddress` and `RequestWithdrawal`. The ladder is
+boundary in either direction — `GetDepositAddress` and `RequestWithdrawal`, and again at
+**dispatch** (`dispatch_withdrawal`), since acceptance and payout can be hours apart and a
+`KYC_CHANGED{kyc_level: 0}` sets no freeze for the freeze gate to catch. The ladder is
 written down on `banking.v1.UserProfile.kyc_level`: **0** registered (confirmed email,
 nothing verified), **1** verified (document + liveness + face match + a passed
 sanctions/PEP screen), **2** enhanced (proof of address + source of funds, raised limits),
@@ -662,8 +694,11 @@ safe). Max age is 24h (config seam: `Reaper::with_max_age`).
 [`dispatcher`](src/infrastructure/dispatcher.rs) (`Dispatcher::sweep`, every 30s) is the
 treasury worker: it re-checks every `queued` withdrawal against **both** liquidity gates —
 the TB rail balance and `Custody::treasury_liquidity` — and dispatches the covered ones
-(idempotently, via the same row-locked command as the admin RPC), so a rail top-up
-self-heals the queue within one interval. A treasury read `Err` skips that cycle (the
+(idempotently, via the same row-locked command as the admin RPC, which is also where the
+outflow policy is enforced), so a rail top-up self-heals the queue within one interval.
+The sweep keeps exactly one policy check of its own — a whole-cycle short-circuit on the
+kill-switch, through that same gate function — so a paused platform costs one read per
+interval rather than one refusal per queued row. A treasury read `Err` skips that cycle (the
 automatic path stays conservative; the operator RPC may still exercise judgment). Together
 with the reaper this brackets accept-and-queue: dispatched within ~30s of a top-up, or
 auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
@@ -691,7 +726,10 @@ withdrawal reserve→settle with fee, fail→refund, short-rail queue→dispatch
 cancel→refund; the on-chain dispatch gate's three arms — short treasury queues despite a
 liquid TB rail, liquid treasury dispatches, read failure degrades to queued — plus the
 refused admin dispatch and the `Dispatcher::sweep` both-gates flow, driven by a test
-`Custody` adapter with a configurable treasury view). `piggybank/core/tests/fee_policy.rs` hits real Postgres + TigerBeetle for the fee plane's
+`Custody` adapter with a configurable treasury view; plus the dispatch-time outflow
+policy — a tier revoked after acceptance stops the sweep, the admin dispatch is refused
+under read-only, under a freeze and at tier 0, and a withdrawal whose owner row is gone
+fails closed). `piggybank/core/tests/fee_policy.rs` hits real Postgres + TigerBeetle for the fee plane's
 three load-bearing properties — a charge moves **units** and leaves every cash account
 untouched, `SharesOutstanding` is unchanged so no other holder pays, and two investors at
 the same NAV owe different fees when they entered at different prices — plus the bulk

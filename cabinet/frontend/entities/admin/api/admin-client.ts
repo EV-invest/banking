@@ -7,6 +7,7 @@ import { getJson, postJson } from "@/shared/lib/api-client";
 import type {
   AdminOverview,
   Allocation,
+  AllocationIcon,
   AllocationList,
   AdminUserList,
   AdminUserProfile,
@@ -92,10 +93,22 @@ export type RecordedArrival = { recorded: boolean; amount: string; party_kind: s
 // `/api/allocations` returns the open set only.
 export const fetchAllocations = (): Promise<AllocationList> => getJson("/api/admin/allocations");
 
-export const registerAllocation = (body: { service: string; title: string; summary: string }): Promise<Allocation> =>
-  postJson("/api/admin/allocations/register", body);
+/** The register/update body. `icon` is required here even though it is optional on the
+ *  read shape. The hub no longer needs it to be: `icon` carries presence on the wire, so
+ *  an omitted field means "leave it alone" rather than "reset to `fund`". It stays
+ *  required because this console always knows the icon it is editing, and a request that
+ *  states every field it is writing is one you can read back later and know what it did.
+ *  Send the current value even when only the title changed. */
+export interface AllocationWrite {
+  service: string;
+  title: string;
+  summary: string;
+  icon: AllocationIcon;
+}
 
-export const updateAllocation = (body: { service: string; title: string; summary: string }): Promise<Allocation> => postJson("/api/admin/allocations/update", body);
+export const registerAllocation = (body: AllocationWrite): Promise<Allocation> => postJson("/api/admin/allocations/register", body);
+
+export const updateAllocation = (body: AllocationWrite): Promise<Allocation> => postJson("/api/admin/allocations/update", body);
 
 export const setAllocationState = (service: string, state: "open" | "closed"): Promise<Allocation> => postJson("/api/admin/allocations/state", { service, state });
 

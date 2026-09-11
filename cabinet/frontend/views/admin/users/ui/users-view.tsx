@@ -18,7 +18,7 @@ import { Link } from "@/shared/ui/cabinet-link";
 import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { ASSIGNABLE_ROLES, ROLES, ago, formatUsd, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
+import { ASSIGNABLE_ROLES, KYC_LEVELS, type KycLevel, ROLES, ago, formatUsd, kycLevelLabel, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
 
 export function UsersView() {
@@ -186,9 +186,10 @@ export function UsersView() {
               className="shrink-0 self-start overflow-hidden"
             >
               <PanelSwap swapKey={selected.user_id}>
-                {/* `key` remounts the drawer per user, so its uncontrolled inputs (KYC
-                    level) reset — otherwise a stale value could be committed against
-                    the wrong user. */}
+                {/* `key` remounts the drawer per user, so an unsaved KYC pick cannot
+                    survive into the next reader's row. The KYC control re-seats itself
+                    when the LEVEL moves under it (see `KycField`); this handles the other
+                    axis — the user under it changing. */}
                 <UserDrawer key={selected.user_id} summary={selected} onClose={() => setSelected(null)} />
               </PanelSwap>
             </Panel>
@@ -339,23 +340,11 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
 
         <Section title={t("admin.users.accessSecurity")}>
           <RoleField role={role} busy={busy === "role"} onPick={(next) => run("role", () => setUserRole(summary.user_id, next))} />
-          <label className="flex items-center justify-between gap-2 py-1 text-sm">
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              {t("ui.kycLevel")}
-              <TipAnchor anchor="admin.users.access.kyc-level" />
-            </span>
-            <input
-              type="number"
-              min={0}
-              defaultValue={profile?.kyc_level ?? summary.kyc_level}
-              disabled={busy === "kyc"}
-              onBlur={(e) => {
-                const level = Number(e.target.value);
-                if (level !== (profile?.kyc_level ?? summary.kyc_level)) void run("kyc", () => setKycLevel(summary.user_id, level));
-              }}
-              className="w-16 rounded-md border border-border bg-main-surface px-2 py-1 text-sm outline-none focus:border-main-accent-t1"
-            />
-          </label>
+          <KycField
+            level={profile?.kyc_level ?? summary.kyc_level}
+            busy={busy === "kyc"}
+            onSave={(next) => run("kyc", () => setKycLevel(summary.user_id, next))}
+          />
           <Button type="button" variant="outline" size="sm" className="mt-2 w-full border-destructive/40 text-destructive hover:bg-destructive/10" disabled={busy === "revoke"} onClick={() => run("revoke", () => revokeSessions(summary.user_id))}>
             {busy === "revoke" ? <Loader2 className="size-3.5 animate-spin" /> : null}
             {t("admin.users.revokeAllSessions")}
@@ -442,6 +431,82 @@ function RoleField({ role, busy, onPick }: { role: string; busy: boolean; onPick
         </Link>
         .
       </p>
+    </div>
+  );
+}
+
+/**
+ * The KYC tier control: four named tiers and a Save that only lights when something changed.
+ *
+ * It reads as an odd twin of {@link RoleField} directly above, which commits the moment you
+ * pick — so the asymmetry is the point. A role has ONE author: the operator sitting in this
+ * drawer. A KYC tier has two, because the identity plane raises it on its own when a
+ * verification completes, and it can do that while this drawer is open. Committing on pick
+ * puts those two writers in a race that the reader cannot see and the slower one wins.
+ *
+ * Which is also why the draft is re-seated from the incoming level rather than defended
+ * against it: a tier that moved underneath the reader displaces an unsaved pick instead of
+ * being hidden by one. Losing a pick nobody committed is the cheap failure; showing (and
+ * then re-sending) a tier the plane no longer holds is the expensive one. The re-seat runs
+ * during render on purpose — an effect would paint the stale tier for a frame first, and a
+ * ref written in render is the pattern two of this app's standing lint errors are already
+ * about.
+ */
+function KycField({ level, busy, onSave }: { level: number; busy: boolean; onSave: (level: KycLevel) => void }) {
+  const t = useT();
+  const [draft, setDraft] = useState(level);
+  const [seated, setSeated] = useState(level);
+  if (seated !== level) {
+    setSeated(level);
+    setDraft(level);
+  }
+
+  // `draft` carries the wire's `number` because the tier this user ALREADY holds may be one
+  // this console does not know — a rung the identity plane grows later. `picked` narrows it
+  // back to the closed list, so an unknown tier can be read and replaced but never re-sent,
+  // and Save stays dark until the reader has chosen one of the four.
+  const picked = KYC_LEVELS.find((l) => l === draft);
+  const dirty = picked !== undefined && picked !== level;
+
+  return (
+    <div className="flex flex-col gap-1.5 py-1">
+      {/* A `div` and not a `label`, for the reason `FilterSelect` gives: the uikit trigger
+          is a button, which a label has nothing to bind to. */}
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          {t("ui.kycLevel")}
+          <TipAnchor anchor="admin.users.access.kyc-level" />
+        </span>
+        <Select value={String(draft)} onValueChange={(v) => setDraft(Number(v))}>
+          <SelectTrigger size="sm" className="border-border bg-main-surface" disabled={busy}>
+            <span className="truncate">{kycLevelLabel(draft, t)}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {/* i18n-max: 16 per tier — a `size="sm"` trigger inside a 340px drawer. */}
+            {KYC_LEVELS.map((l) => (
+              <SelectItem key={l} value={String(l)}>
+                {kycLevelLabel(l, t)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {/* `picked` is re-checked rather than asserted: `dirty` already implies it, but the
+          two are separate facts to the type checker and an assertion would be the place
+          this drifts. */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-end"
+        disabled={busy || !dirty}
+        onClick={() => {
+          if (picked !== undefined) onSave(picked);
+        }}
+      >
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+        {t("ui.save")}
+      </Button>
     </div>
   );
 }

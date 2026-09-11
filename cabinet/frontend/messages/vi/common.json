@@ -35,6 +35,10 @@
     "en": "No allocations registered yet — until one is, every subscription is refused.",
     "t": "Chưa có khoản phân bổ nào được đăng ký — khi chưa có, mọi lệnh đăng ký đều bị từ chối."
   },
+  "admin.alloc.field.icon": {
+    "en": "Icon",
+    "t": "Biểu tượng"
+  },
   "admin.alloc.field.summary": {
     "en": "Summary",
     "t": "Tóm tắt"
@@ -58,6 +62,46 @@
   "admin.alloc.hint.open": {
     "en": "Accepting subscriptions and redemptions",
     "t": "Đang nhận lệnh đăng ký và lệnh hoàn vốn"
+  },
+  "admin.alloc.icon.arbitrage": {
+    "en": "Arbitrage",
+    "t": "Kinh doanh chênh lệch giá"
+  },
+  "admin.alloc.icon.commodity": {
+    "en": "Commodity",
+    "t": "Hàng hóa"
+  },
+  "admin.alloc.icon.credit": {
+    "en": "Credit",
+    "t": "Tín dụng"
+  },
+  "admin.alloc.icon.fund": {
+    "en": "Fund",
+    "t": "Quỹ"
+  },
+  "admin.alloc.icon.index": {
+    "en": "Index",
+    "t": "Chỉ số"
+  },
+  "admin.alloc.icon.real_estate": {
+    "en": "Real estate",
+    "t": "Bất động sản"
+  },
+  "admin.alloc.icon.trading": {
+    "en": "Trading",
+    "t": "Giao dịch"
+  },
+  "admin.alloc.icon.treasury": {
+    "en": "Treasury",
+    "t": "Ngân khố"
+  },
+  "admin.alloc.icon.venture": {
+    "en": "Venture",
+    "t": "Đầu tư mạo hiểm"
+  },
+  "admin.alloc.icon.yield": {
+    "en": "Yield",
+    "t": "Lợi suất"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -426,6 +470,22 @@
   "admin.fees.worthAtNav": {
     "en": "Worth at current NAV",
     "t": "Giá trị theo NAV hiện tại"
+  },
+  "admin.kyc.elevated": {
+    "en": "Elevated",
+    "t": "Chuyên sâu"
+  },
+  "admin.kyc.enhanced": {
+    "en": "Enhanced",
+    "t": "Nâng cao"
+  },
+  "admin.kyc.registered": {
+    "en": "Registered",
+    "t": "Đã đăng ký"
+  },
+  "admin.kyc.verified": {
+    "en": "Verified",
+    "t": "Đã xác minh"
   },
   "admin.overview.col.event": {
     "en": "Event",
@@ -1459,6 +1519,10 @@
     "en": "Select a fund to continue.",
     "t": "Hãy chọn một quỹ để tiếp tục."
   },
+  "err.kycStartFailed": {
+    "en": "We couldn't start verification. Please try again.",
+    "t": "Không thể bắt đầu xác minh. Vui lòng thử lại."
+  },
   "err.language.format": {
     "en": "Language must be a BCP 47 code such as 'en' or 'en-US'",
     "t": "Ngôn ngữ phải là mã BCP 47, ví dụ 'en' hoặc 'en-US'"
@@ -2331,25 +2395,49 @@
     "en": "Edit profile",
     "t": "Chỉnh sửa hồ sơ"
   },
+  "profile.identityAndStanding": {
+    "en": "Identity and account standing",
+    "t": "Danh tính và trạng thái tài khoản"
+  },
   "profile.identityVerification": {
     "en": "Identity verification",
     "t": "Xác minh danh tính"
+  },
+  "profile.kyc.contact": {
+    "en": "Contact {contact}",
+    "t": "Liên hệ {contact}"
+  },
+  "profile.kyc.start": {
+    "en": "Start",
+    "t": "Bắt đầu"
+  },
+  "profile.kyc.startSub": {
+    "en": "A photo of your ID and a selfie — a few minutes",
+    "t": "Ảnh giấy tờ tùy thân và ảnh selfie — chỉ vài phút"
+  },
+  "profile.kyc.startTitle": {
+    "en": "Verify your identity",
+    "t": "Xác minh danh tính của bạn"
+  },
+  "profile.kyc.tooManyAttempts": {
+    "en": "You've already started verification several times today. Please try again tomorrow.",
+    "t": "Hôm nay bạn đã bắt đầu xác minh nhiều lần. Vui lòng thử lại vào ngày mai."
+  },
+  "profile.kyc.unavailable": {
+    "en": "Verification isn't available right now. Please try again later.",
+    "t": "Hiện chưa thể xác minh. Vui lòng thử lại sau."
   },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
     "t": "KYC cấp {n}"
   },
   "profile.kycRaisedBy": {
-    "en": "Raised by compliance review",
-    "t": "Do bộ phận tuân thủ nâng cấp"
+    "en": "Raised by verification and review",
+    "t": "Được nâng sau khi xác minh và xét duyệt"
   },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Tên pháp lý"
-  },
-  "profile.managedByCompliance": {
-    "en": "Managed by compliance",
-    "t": "Do bộ phận tuân thủ quản lý"
   },
   "profile.nationality": {
     "en": "Nationality",

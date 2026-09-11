@@ -25,6 +25,7 @@ import { cn } from "@/shared/lib/cn";
 import { pct } from "@/shared/lib/rate";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
+import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { compactUnits, formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
 import { blockedReasonKey, buildProducts, type Product } from "@/views/invest/lib/product";
@@ -106,6 +107,11 @@ export function ProductView({ service }: { service: string }) {
       <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-3">
+            {/* The same mark and tint the rail and the invest card drew, so arriving here
+                from either one lands on a header that is recognisably the row just clicked. */}
+            <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", productTone(product.service))}>
+              <ProductIcon icon={product.icon} className="size-5" />
+            </span>
             <h1 className="text-3xl font-semibold">{product.title}</h1>
             <ProductBadges closed={closed} stale={stale} />
           </div>
