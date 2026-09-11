@@ -1,18 +1,33 @@
 //! Integration tests for the payments plane — real Postgres, no mocks (project rule).
 //! They run when `DATABASE_URL` is set and skip otherwise.
 //!
-//! What is asserted HERE rather than in a unit test is exactly what only the database
-//! states: the partial unique index over fund-owned sources, its deliberate exemption for an
-//! investor's own claim, and the composite foreign key that makes a consent seat belong to
-//! its payment's source user. None of these has a Rust code path to test — that is the point
-//! of putting them in the schema.
+//! Two halves. The first asserts what only the DATABASE states — the partial unique index
+//! over fund-owned sources, its deliberate exemption for an investor's own claim, and the
+//! composite foreign key that makes a consent seat belong to its payment's source user; none
+//! of these has a Rust code path, which is the point of putting them in the schema. The
+//! second drives [`PgPayments`] itself, so that every runtime `sqlx::query` in the adapter is
+//! executed by a test — the check the compile-time macros would have given, bought back.
 //!
 //! `payments` carries a database-wide invariant ("one open order per fund-owned source"), so
 //! every test here takes [`exclusive_payments`] and starts from [`reset_payments`]. The reset
 //! runs at the START of each test so a panicking one cannot wedge the rest.
 
-use domain::users::{Email, UserId};
-use piggybank_core::{infrastructure::users::PgUsers, ports::UserRepository};
+use domain::{
+	balance::Party,
+	consilium::ConsiliumId,
+	error::DomainError,
+	money::Usdt,
+	payments::{PaymentDestination, PaymentEffect, PaymentId, PaymentOrder, PaymentReason, PaymentState, PaymentTerms},
+	users::{Email, UserId},
+	withdrawals::WithdrawalId,
+};
+use piggybank_core::{
+	infrastructure::{payments::PgPayments, users::PgUsers},
+	ports::{
+		UserRepository,
+		payments::{ApprovalSeat, ConsentAudit, ConsentCredential, ConsentDecision, ExecutionOutcome, MAX_CODE_ATTEMPTS, PaymentFeed, PaymentFilter, PaymentRepository},
+	},
+};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -24,8 +39,17 @@ async fn exclusive_payments() -> tokio::sync::MutexGuard<'static, ()> {
 	PAYMENTS.lock().await
 }
 
+/// Clear everything this suite writes, including the outbox and event-log rows the orders
+/// drained. The outbox is shared with the relay suites, so leaving `payment` rows behind
+/// would hand a live relay money facts about claims this suite never funded.
 async fn reset_payments(pool: &PgPool) {
-	sqlx::query("DELETE FROM payments").execute(pool).await.expect("clear payments");
+	for statement in [
+		"DELETE FROM payments",
+		"DELETE FROM outbox WHERE aggregate = 'payment'",
+		"DELETE FROM event_log WHERE aggregate = 'payment'",
+	] {
+		sqlx::query(statement).execute(pool).await.expect("clear the payments plane");
+	}
 }
 
 /// A freshly provisioned investor. Each call mints its own auth subject, so tests never
@@ -38,9 +62,8 @@ async fn an_investor(pool: &PgPool) -> UserId {
 	users.provision(subject, email, true).await.expect("provision an investor").id()
 }
 
-/// Insert one order directly. The adapter does not exist yet, and these tests are about what
-/// the SCHEMA refuses — so the rows are written the way a future adapter (or a buggy one)
-/// would write them, with nothing in between to launder a violation.
+/// Insert one order directly. These tests are about what the SCHEMA refuses, so the rows go
+/// in the way a buggy adapter would write them, with nothing in between to launder a violation.
 async fn insert_payment(pool: &PgPool, id: Uuid, state: &str, from_kind: &str, from_id: Option<&str>, to_kind: &str, initiator: UserId) -> Result<(), sqlx::Error> {
 	sqlx::query(
 		"INSERT INTO payments (id, state, from_kind, from_id, to_kind, amount, reason, payload_hash, initiator_user_id, expires_at, decided_at) \
@@ -163,4 +186,323 @@ async fn seat(pool: &PgPool, payment: Uuid, subject: UserId) -> Result<(), sqlx:
 	.execute(pool)
 	.await
 	.map(|_| ())
+}
+
+// ---------------------------------------------------------------------------------------
+// The adapter. Everything below drives `PgPayments`, so every runtime query it holds is
+// executed at least once here — a runtime `sqlx::query` with no test that runs it is an
+// unchecked string, which is the one thing the compile-time macros would have caught.
+// ---------------------------------------------------------------------------------------
+
+/// The digest the adapter compares a submitted code against.
+fn digest(bytes: &[u8]) -> [u8; 32] {
+	use sha2::{Digest, Sha256};
+	Sha256::digest(bytes).into()
+}
+
+fn now() -> i64 {
+	std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
+}
+
+fn usdt(decimal: &str) -> Usdt {
+	Usdt::parse_decimal(decimal).unwrap()
+}
+
+fn audit() -> ConsentAudit {
+	ConsentAudit {
+		client_ip: "203.0.113.7".to_owned(),
+		user_agent: "integration-test".to_owned(),
+	}
+}
+
+/// An order and the seat credential whose plaintext code the test still holds.
+fn an_order(from: Party, to: PaymentDestination, initiator: UserId, amount: &str) -> PaymentOrder {
+	let terms = PaymentTerms::new(from, to, usdt(amount), PaymentReason::new("a documented reason").unwrap()).unwrap();
+	// The application layer takes this hash; the tests only need one that is stable per order.
+	let payload_hash = digest(&terms.canonical_bytes());
+	PaymentOrder::open(PaymentId::from_raw(Uuid::new_v4()), terms, payload_hash, initiator, now())
+}
+
+const CODE: &str = "428913";
+
+fn a_consent_seat(subject: UserId) -> ApprovalSeat {
+	ApprovalSeat::Consent(ConsentCredential {
+		subject,
+		token_hash: digest(format!("token-{subject}-{}", Uuid::new_v4()).as_bytes()),
+		code_hash: digest(CODE.as_bytes()),
+		token_version_at_open: 0,
+		email_hash_at_open: digest(b"subject@example.test"),
+	})
+}
+
+fn token_hash_of(seat: &ApprovalSeat) -> [u8; 32] {
+	match seat {
+		ApprovalSeat::Consent(credential) => credential.token_hash,
+		ApprovalSeat::Consilium(_) => unreachable!("this helper mints consent seats"),
+	}
+}
+
+/// A consilium row in a TERMINAL state, standing in for the governance record a fund-owned
+/// order links to. Terminal on purpose: `consilium_single_open_per_source_idx` covers only
+/// the OPEN rows, so this fixture cannot block the governance suite that shares the table.
+async fn a_decided_consilium(pool: &PgPool, initiator: UserId) -> ConsiliumId {
+	let id = Uuid::new_v4();
+	sqlx::query(
+		"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, decided_at) \
+		 VALUES ($1, 'revenue_payout', 'approved', $2::jsonb, 'fee', $3, $4, 3, 2, now() + interval '72 hours', now())",
+	)
+	.bind(id)
+	.bind(r#"{"network":"bep20","address":"0x52908400098527886E0F7030069857D2E4169EE7","amount":"1","memo":"fixture"}"#)
+	.bind(vec![9u8; 32])
+	.bind(initiator.raw())
+	.execute(pool)
+	.await
+	.expect("insert the consilium fixture");
+	ConsiliumId::from_raw(id)
+}
+
+/// How many of this order's events reached the outbox. `Opened`, `Approved` and `Executed`
+/// are audit trail and must not be there; only `Reserved` and `Settled` move money.
+async fn relayed_kinds(pool: &PgPool, order: PaymentId) -> Vec<String> {
+	sqlx::query_scalar("SELECT payload::jsonb ->> 'type' FROM outbox WHERE aggregate = 'payment' AND aggregate_id = $1 ORDER BY seq")
+		.bind(order.raw())
+		.fetch_all(pool)
+		.await
+		.expect("read the outbox")
+}
+
+/// Opening an order writes it, its seat and its events in one transaction — and puts NOTHING
+/// in the outbox, because an order that has not been approved has moved no money.
+#[tokio::test]
+async fn opening_an_order_materializes_its_consent_seat_and_relays_nothing() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+
+	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "12.50");
+	let id = order.id();
+	payments.open(&mut order, a_consent_seat(investor)).await.expect("open the order");
+
+	let view = payments.find(id).await.expect("find the order").expect("the order exists");
+	assert_eq!(view.order.state(), PaymentState::Pending);
+	assert_eq!(view.order.terms().amount(), usdt("12.50"));
+	assert!(view.consilium_id.is_none(), "an investor-sourced order is not decided by a quorum");
+	let consent = view.consent.expect("the seat was materialized with the order");
+	assert_eq!(consent.subject, investor);
+	assert_eq!(consent.decision, ConsentDecision::Pending);
+	assert_eq!(consent.attempts_remaining, MAX_CODE_ATTEMPTS as u32);
+	assert!(relayed_kinds(&pool, id).await.is_empty(), "a pending order has moved no money");
+
+	reset_payments(&pool).await;
+}
+
+/// The five-attempt ceiling, and what happens at it. A burned consent FAILS THE PAYMENT
+/// CLOSED — with one seat there is nobody to escalate to, so the exhausted token is a refusal
+/// rather than a detector.
+#[tokio::test]
+async fn five_wrong_codes_burn_the_consent_and_close_the_order() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let seat = a_consent_seat(investor);
+	let token = token_hash_of(&seat);
+
+	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.00");
+	let id = order.id();
+	payments.open(&mut order, seat).await.expect("open the order");
+
+	// Reading the invitation costs no attempt — mail scanners fetch every URL in a message.
+	let invitation = payments.invitation(&token, now()).await.expect("the token resolves");
+	assert_eq!(invitation.payment_id, id);
+	assert_eq!(invitation.attempts_remaining, MAX_CODE_ATTEMPTS as u32);
+
+	for remaining in (1..MAX_CODE_ATTEMPTS).rev() {
+		let err = payments
+			.submit(&token, "000000", ConsentDecision::Approve, &audit(), now())
+			.await
+			.expect_err("a wrong code is refused");
+		assert!(
+			matches!(err, DomainError::Validation(ref message) if message.contains(&format!("{remaining} attempts"))),
+			"unexpected refusal: {err:?}"
+		);
+	}
+	let burned = payments
+		.submit(&token, "000000", ConsentDecision::Approve, &audit(), now())
+		.await
+		.expect_err("the fifth wrong code burns");
+	assert!(matches!(burned, DomainError::NotFound { .. }), "a burned token answers exactly like an unknown one: {burned:?}");
+
+	let view = payments.find(id).await.unwrap().unwrap();
+	assert_eq!(view.order.state(), PaymentState::Rejected, "the burn fails the payment closed");
+	assert!(relayed_kinds(&pool, id).await.is_empty(), "a refused order reserves nothing");
+	// And the token is now indistinguishable from an unknown one on the read surface too.
+	assert!(payments.invitation(&token, now()).await.is_err());
+
+	reset_payments(&pool).await;
+}
+
+/// The happy path, and the two idempotency rules the retry contract rests on: the same answer
+/// again is a no-op, a different one is a conflict.
+#[tokio::test]
+async fn the_right_code_approves_the_order_and_reserves_its_source() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let seat = a_consent_seat(investor);
+	let token = token_hash_of(&seat);
+
+	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "3.00");
+	let id = order.id();
+	payments.open(&mut order, seat).await.expect("open the order");
+
+	let outcome = payments
+		.submit(&token, CODE, ConsentDecision::Approve, &audit(), now())
+		.await
+		.expect("the right code is accepted");
+	assert!(outcome.decided && outcome.approved);
+	assert_eq!(outcome.payment.order.state(), PaymentState::Approved);
+	assert_eq!(
+		relayed_kinds(&pool, id).await,
+		vec!["reserved".to_owned()],
+		"approval reserves the source, and relays nothing else"
+	);
+
+	let repeat = payments
+		.submit(&token, CODE, ConsentDecision::Approve, &audit(), now())
+		.await
+		.expect("a retried answer is a no-op");
+	assert!(!repeat.decided, "a repeat must not double-count");
+	let contradiction = payments.submit(&token, CODE, ConsentDecision::Reject, &audit(), now()).await;
+	assert!(matches!(contradiction, Err(DomainError::Conflict(_))), "a different answer is refused, never an overwrite");
+
+	// Executing it settles the reservation. `Settled` is the second and last event that moves
+	// money; `Executed` is audit trail and must not reach the relay.
+	payments
+		.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Transfer), now())
+		.await
+		.expect("record the ledger effect");
+	assert_eq!(relayed_kinds(&pool, id).await, vec!["reserved".to_owned(), "settled".to_owned()]);
+	let view = payments.find(id).await.unwrap().unwrap();
+	assert_eq!(view.order.state(), PaymentState::Executed);
+	assert!(payments.awaiting_execution().await.unwrap().is_empty(), "an executed order is not awaiting execution");
+
+	reset_payments(&pool).await;
+}
+
+/// The fund-owned branch: the order links the consilium that decides it, the approval is
+/// recorded by the quorum rather than by a token, and execution is idempotent for the same
+/// effect and a conflict for a different one.
+#[tokio::test]
+async fn a_fund_owned_order_is_carried_by_its_consilium() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let operator = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let consilium = a_decided_consilium(&pool, operator).await;
+
+	let mut order = an_order(Party::Revenue, PaymentDestination::Internal(Party::Piggybank), operator, "40.00");
+	let id = order.id();
+	payments.open(&mut order, ApprovalSeat::Consilium(consilium)).await.expect("open the order");
+
+	let view = payments.find(id).await.unwrap().unwrap();
+	assert_eq!(view.consilium_id, Some(consilium));
+	assert!(view.consent.is_none(), "fund-owned money is never consented to by one investor");
+
+	assert_eq!(payments.awaiting_execution().await.unwrap(), Vec::new(), "a pending order is not executable");
+	payments.record_approval(id, now()).await.expect("the quorum carried it");
+	assert_eq!(payments.awaiting_execution().await.unwrap(), vec![id]);
+	assert_eq!(relayed_kinds(&pool, id).await, vec!["reserved".to_owned()]);
+	payments.record_approval(id, now()).await.expect("recording the same approval twice is a no-op");
+
+	payments.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Transfer), now()).await.expect("execute");
+	let conflict = payments
+		.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Withdrawal(WithdrawalId::from_raw(Uuid::new_v4()))), now())
+		.await;
+	assert!(matches!(conflict, Err(DomainError::Conflict(_))), "a second, different effect is a conflict, not an overwrite");
+
+	sqlx::query("DELETE FROM consilium WHERE id = $1").bind(consilium.raw()).execute(&pool).await.ok();
+	reset_payments(&pool).await;
+}
+
+/// The admin feed's filters, the expiry sweep, and the rule that only the operator who opened
+/// an order may withdraw it.
+#[tokio::test]
+async fn the_feed_filters_and_the_sweep_close_what_nobody_answered() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let stranger = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+
+	let mut of_investor = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "5.00");
+	let investors_order = of_investor.id();
+	payments.open(&mut of_investor, a_consent_seat(investor)).await.expect("open the investor's order");
+	let mut of_fund = an_order(Party::Revenue, PaymentDestination::Internal(Party::Piggybank), investor, "9.00");
+	let fund_order = of_fund.id();
+	payments
+		.open(&mut of_fund, ApprovalSeat::Consilium(a_decided_consilium(&pool, investor).await))
+		.await
+		.expect("open the fund's order");
+
+	let all = payments.list(&PaymentFilter::default(), 50).await.expect("the whole history");
+	assert_eq!(all.len(), 2);
+	let fund_owned = payments
+		.list(
+			&PaymentFilter {
+				fund_owned_source: Some(true),
+				..PaymentFilter::default()
+			},
+			50,
+		)
+		.await
+		.unwrap();
+	assert_eq!(fund_owned.iter().map(|view| view.order.id()).collect::<Vec<_>>(), vec![fund_order]);
+	let by_party = payments
+		.list(
+			&PaymentFilter {
+				party: Some(Party::User(investor)),
+				state: Some(PaymentState::Pending),
+				..PaymentFilter::default()
+			},
+			50,
+		)
+		.await
+		.unwrap();
+	assert_eq!(by_party.iter().map(|view| view.order.id()).collect::<Vec<_>>(), vec![investors_order]);
+
+	let refused = payments.cancel(fund_order, stranger, now()).await;
+	assert!(matches!(refused, Err(DomainError::Forbidden(_))), "only the operator who opened it may withdraw it");
+	payments.cancel(fund_order, investor, now()).await.expect("the initiator may withdraw it");
+
+	// The sweep binds the caller's clock, so "past the deadline" and "expired" answer the same
+	// question. One tick past the TTL closes exactly the order still pending.
+	let closed = payments.expire_due(now() + domain::payments::TTL_SECS + 1).await.expect("sweep");
+	assert_eq!(closed, 1, "the cancelled order is already closed; only the pending one expires");
+	assert_eq!(payments.find(investors_order).await.unwrap().unwrap().order.state(), PaymentState::Expired);
+
+	sqlx::query("DELETE FROM consilium WHERE initiator_user_id = $1").bind(investor.raw()).execute(&pool).await.ok();
+	reset_payments(&pool).await;
 }
