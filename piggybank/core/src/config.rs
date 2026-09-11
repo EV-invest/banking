@@ -1,6 +1,6 @@
 use std::{env, net::SocketAddr};
 
-use domain::money::Network;
+use domain::{money::Network, users::KYC_LEVEL_VERIFIED};
 
 ev::settings! {
 	/// Application configuration, read from the environment only (`dotenvy`
@@ -68,6 +68,70 @@ ev::settings! {
 		/// link. A wrong value here sends owners somewhere that cannot take their vote, so
 		/// it is worth checking per environment.
 		consilium_approval_url_base: String = "https://evinvest.ltd/cabinet/approve",
+	}
+}
+
+/// The identity-verification gate on money movement, as a switch.
+///
+/// Enforced, it is the tier floor every money-crossing path shares: no deposit address is
+/// provisioned, no withdrawal is admitted, and no queued withdrawal is dispatched below
+/// [`KYC_LEVEL_VERIFIED`]. Lifted, it is exactly the pre-`v0.4.0` behaviour — address
+/// issued, withdrawal accepted and paid out. There is no third position, and the switch is
+/// read once at boot so a rail cannot change its mind mid-flight.
+///
+/// Deliberately NOT part of the boot-asserted [`AppConfig`], for the same reason [`Rails`]
+/// is not: production does not set `KYC_GATE_ENABLED` today and must not have to start.
+///
+/// | `KYC_GATE_ENABLED` | gate |
+/// | --- | --- |
+/// | unset / empty / `true` / `1` | enforced |
+/// | `false` / `0` | lifted |
+/// | anything else | enforced, with a WARN naming the value |
+///
+/// Every uncertain reading resolves to *enforced*: this switch decides whether unverified
+/// money may cross the platform boundary, so it opens only on an explicit, unambiguous
+/// word and never on a typo. That also rules out [`bool_env`], which reads everything it
+/// does not recognise as `false` — the safe default for an opt-in sweep, the wrong one
+/// here. An unparseable value warns rather than refusing the boot on purpose: the reading
+/// that cannot lose money is already available without stopping the hub.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KycGate {
+	enforced: bool,
+}
+
+impl KycGate {
+	/// Money movement requires a verified tier — the default, and what production runs.
+	pub const ENFORCED: Self = Self { enforced: true };
+	/// The gate is off: every tier deposits and withdraws.
+	pub const LIFTED: Self = Self { enforced: false };
+
+	pub fn from_env() -> Self {
+		Self::read(env::var("KYC_GATE_ENABLED").ok().as_deref())
+	}
+
+	/// The parse, taken apart from the env read so the table above is a test rather than
+	/// a promise.
+	fn read(raw: Option<&str>) -> Self {
+		match raw.map(str::trim) {
+			None | Some("") => Self::ENFORCED,
+			Some(value) if value.eq_ignore_ascii_case("false") || value == "0" => Self::LIFTED,
+			Some(value) if value.eq_ignore_ascii_case("true") || value == "1" => Self::ENFORCED,
+			Some(value) => {
+				tracing::warn!("KYC_GATE_ENABLED={value:?} is not a boolean — the KYC gate stays enforced (only an explicit `false`/`0` lifts it)");
+				Self::ENFORCED
+			}
+		}
+	}
+
+	/// Whether a caller has to clear the verification floor to move money.
+	pub fn is_enforced(self) -> bool {
+		self.enforced
+	}
+
+	/// Whether `kyc_level` may move money. The one place the floor is compared, so the
+	/// three gates (address, admission, dispatch) cannot drift apart.
+	pub fn admits(self, kyc_level: u32) -> bool {
+		!self.enforced || kyc_level >= KYC_LEVEL_VERIFIED
 	}
 }
 
@@ -549,6 +613,39 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	/// The money-plane switch opens only on an explicit, unambiguous word. A typo, a
+	/// half-edited value, an empty string and an unset variable all leave the gate shut —
+	/// this is what keeps the default from drifting.
+	#[test]
+	fn the_kyc_gate_is_lifted_only_by_an_explicit_false() {
+		for raw in [
+			None,
+			Some(""),
+			Some("  "),
+			Some("true"),
+			Some("TRUE"),
+			Some("1"),
+			Some("no"),
+			Some("off"),
+			Some("disabled"),
+			Some("fals"),
+		] {
+			assert_eq!(KycGate::read(raw), KycGate::ENFORCED, "{raw:?} must leave the gate enforced");
+		}
+		for raw in [Some("false"), Some("False"), Some("0"), Some(" false ")] {
+			assert_eq!(KycGate::read(raw), KycGate::LIFTED, "{raw:?} must lift the gate");
+		}
+	}
+
+	#[test]
+	fn a_lifted_gate_admits_every_tier_and_an_enforced_one_only_the_verified() {
+		assert!(!KycGate::ENFORCED.admits(0));
+		assert!(KycGate::ENFORCED.admits(KYC_LEVEL_VERIFIED));
+		assert!(KycGate::LIFTED.admits(0));
+		assert!(KycGate::ENFORCED.is_enforced());
+		assert!(!KycGate::LIFTED.is_enforced());
+	}
 
 	#[test]
 	fn default_grpc_binds_are_loopback() {

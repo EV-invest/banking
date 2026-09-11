@@ -19,16 +19,23 @@
 //! a signer keypair, so a key minted for an unverified user is an address the fund must
 //! then watch, sweep and account for forever — money the platform is not allowed to take
 //! yet. Both gates therefore run ABOVE the port, never after it.
+//!
+//! The verification gate is the one of the two that can be switched off — see
+//! [`KycGate`], enforced unless the deployment says otherwise — because it guards a rule
+//! the platform chose, while the rail gate guards a fact about the chain.
 
 use domain::{
 	balance::LedgerAccountKey,
 	error::DomainError,
 	money::{Nav, Network, Shares, Usdt, WalletAddress},
-	users::{KYC_LEVEL_VERIFIED, UserId},
+	users::UserId,
 	withdrawals::WithdrawalPolicy,
 };
 
-use crate::ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, UserRepository, deposit_addresses::MigratedAddress, deposits::DepositRecord, ledger::Ledger};
+use crate::{
+	config::KycGate,
+	ports::{DepositAddresses, Deposits, FundPositionReader, NavMarks, UserRepository, deposit_addresses::MigratedAddress, deposits::DepositRecord, ledger::Ledger},
+};
 
 /// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
 /// non-negative; `total = available + invested + pending_withdrawal`. `available` and
@@ -113,8 +120,14 @@ pub struct DepositAddressPorts<'a> {
 
 /// Whether `user` has cleared the verification tier that money movement requires. A
 /// missing row fails CLOSED — an id with no local mirror is not a verified investor.
-async fn is_verified(users: &dyn UserRepository, user: UserId) -> Result<bool, DomainError> {
-	Ok(users.find_by_id(user).await?.is_some_and(|account| account.kyc_level() >= KYC_LEVEL_VERIFIED))
+///
+/// A lifted [`KycGate`] answers without reading the control plane at all: there is no tier
+/// to compare, and the read would only be a round trip whose result is discarded.
+async fn is_verified(gate: KycGate, users: &dyn UserRepository, user: UserId) -> Result<bool, DomainError> {
+	if !gate.is_enforced() {
+		return Ok(true);
+	}
+	Ok(users.find_by_id(user).await?.is_some_and(|account| gate.admits(account.kyc_level())))
 }
 
 /// The caller's wallet: the unified lifecycle balance, a deposit address per
@@ -122,8 +135,9 @@ async fn is_verified(users: &dyn UserRepository, user: UserId) -> Result<bool, D
 ///
 /// An unverified caller still gets their whole balance — nothing here is hidden from
 /// them — but every rail comes back with no address, because provisioning one would mint
-/// the signer keypair the verification gate exists to withhold.
-pub async fn get_wallet(ports: &WalletPorts<'_>, configured: &[Network], user: UserId) -> Result<Wallet, DomainError> {
+/// the signer keypair the verification gate exists to withhold. With `gate` lifted there
+/// is nothing to withhold and every configured rail carries its address.
+pub async fn get_wallet(ports: &WalletPorts<'_>, configured: &[Network], gate: KycGate, user: UserId) -> Result<Wallet, DomainError> {
 	let (ledger, positions, nav, deposit_addresses) = (ports.ledger, ports.positions, ports.nav, ports.deposit_addresses);
 	// Layer 1 — the single unified claim. The ledger speaks raw base units; wrap into
 	// the typed `Usdt` at this boundary. `available` and `pending_withdrawal` are the two
@@ -167,7 +181,7 @@ pub async fn get_wallet(ports: &WalletPorts<'_>, configured: &[Network], user: U
 	// Layer 2 — per-rail deposit addresses and withdrawable view, configured rails only.
 	// Resolved once, outside the loop: an unverified caller must not reach the address
 	// gateway on ANY rail, and one user read is enough to decide that for all of them.
-	let verified = is_verified(ports.users, user).await?;
+	let verified = is_verified(gate, ports.users, user).await?;
 	let mut deposit_addresses_out = Vec::with_capacity(configured.len());
 	let mut withdrawable = Vec::with_capacity(configured.len());
 	for network in configured.iter().copied() {
@@ -211,12 +225,13 @@ pub async fn get_wallet(ports: &WalletPorts<'_>, configured: &[Network], user: U
 /// Both gates sit ABOVE the port, in that order: the rail check is free and answers
 /// without touching the control plane, and the first `DepositAddresses::address` call
 /// provisions a signer keypair — a key minted here for an unverified user is an address
-/// the fund must watch and sweep forever.
-pub async fn get_deposit_address(ports: &DepositAddressPorts<'_>, configured: &[Network], user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
+/// the fund must watch and sweep forever. A lifted `gate` removes the second refusal
+/// entirely (the rail one always stands): every caller is served an address.
+pub async fn get_deposit_address(ports: &DepositAddressPorts<'_>, configured: &[Network], gate: KycGate, user: UserId, network: Network) -> Result<Option<WalletAddress>, DomainError> {
 	if !configured.contains(&network) {
 		return Ok(None);
 	}
-	if !is_verified(ports.users, user).await? {
+	if !is_verified(gate, ports.users, user).await? {
 		return Err(DomainError::Forbidden("identity verification required before a deposit address is issued".into()));
 	}
 	ports.deposit_addresses.address(user, network).await

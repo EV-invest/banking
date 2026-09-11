@@ -31,6 +31,7 @@ use evbanking_contracts::signer::v1::{
 };
 use piggybank_core::{
 	application::{wallet as wallet_app, withdrawals as withdrawal_app},
+	config::KycGate,
 	infrastructure::{
 		custody::StubCustody,
 		db,
@@ -186,7 +187,7 @@ async fn assert_unconfigured_rail_gate(pool: &PgPool, addresses: &SignerDepositA
 	// both a non-EVM rail (Trc20) and the second EVM rail (Polygon), which is gated identically
 	// even though it shares BEP20's address shape.
 	for dead_rail in [Network::Trc20, Network::Polygon] {
-		let unavailable = wallet_app::get_deposit_address(&address_ports(addresses, &users), &configured, user, dead_rail)
+		let unavailable = wallet_app::get_deposit_address(&address_ports(addresses, &users), &configured, KycGate::ENFORCED, user, dead_rail)
 			.await
 			.expect("gated read");
 		assert!(unavailable.is_none(), "an unconfigured rail ({dead_rail}) must serve no address");
@@ -200,7 +201,7 @@ async fn assert_unconfigured_rail_gate(pool: &PgPool, addresses: &SignerDepositA
 	assert_eq!(rows, 0, "no key/address row may exist for a dead rail");
 
 	// The configured rail still provisions exactly as before.
-	let fundable = wallet_app::get_deposit_address(&address_ports(addresses, &users), &configured, user, Network::Bep20)
+	let fundable = wallet_app::get_deposit_address(&address_ports(addresses, &users), &configured, KycGate::ENFORCED, user, Network::Bep20)
 		.await
 		.expect("provision")
 		.expect("a configured rail serves the derived address");
@@ -233,8 +234,11 @@ async fn an_unconfigured_rail_withdrawal_is_rejected() {
 			custody: &StubCustody,
 			relay: &notify,
 		},
-		&users,
-		&[Network::Bep20],
+		&withdrawal_app::AdmissionGates {
+			users: &users,
+			configured: &[Network::Bep20],
+			kyc: KycGate::ENFORCED,
+		},
 		user,
 		Network::Ton,
 		destination,
@@ -284,6 +288,7 @@ async fn get_wallet_presents_only_configured_rails() {
 					users: &users,
 				},
 				&[Network::Bep20],
+				KycGate::ENFORCED,
 				user,
 			)
 			.await

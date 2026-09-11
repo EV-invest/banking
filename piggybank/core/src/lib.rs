@@ -92,6 +92,11 @@ pub struct AppState {
 	/// deposit/withdraw rails only for these, and the health probe reports scan-cursor
 	/// age only for these.
 	pub configured_networks: Arc<[Network]>,
+	/// Whether money movement requires a verified identity tier — read from the
+	/// environment once at boot ([`KycGate`](config::KycGate)) and enforced unless the
+	/// deployment explicitly says otherwise. Carried here rather than re-read per call so
+	/// the deposit, admission and dispatch gates cannot disagree about it mid-flight.
+	pub kyc_gate: config::KycGate,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
 	/// Base URL the emailed consilium approval link is built on (`<base>/<token>`). The
@@ -125,6 +130,7 @@ impl AppState {
 		deposit_addresses: Arc<dyn DepositAddresses>,
 		custody: Arc<dyn Custody>,
 		configured_networks: Arc<[Network]>,
+		kyc_gate: config::KycGate,
 		relay_notify: Arc<Notify>,
 		consilium_approval_url_base: String,
 		ton_is_testnet: bool,
@@ -148,6 +154,7 @@ impl AppState {
 			deposit_addresses,
 			custody,
 			configured_networks,
+			kyc_gate,
 			relay_notify,
 			consilium_approval_url_base,
 			ton_is_testnet,

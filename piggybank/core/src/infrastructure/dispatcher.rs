@@ -30,6 +30,7 @@ use uuid::Uuid;
 
 use crate::{
 	application::withdrawals as withdrawal_app,
+	config::KycGate,
 	infrastructure::outflow::PgOutflowPolicy,
 	ports::{Custody, WithdrawalRepository, ledger::Ledger},
 };
@@ -45,16 +46,21 @@ pub struct Dispatcher {
 	ledger: Arc<dyn Ledger>,
 	custody: Arc<dyn Custody>,
 	notify: Arc<Notify>,
+	/// The deployment's verification gate, handed to every `dispatch_withdrawal` this
+	/// sweep makes — the same value the admission path used, so a lifted gate cannot
+	/// leave an admitted withdrawal parked here forever.
+	kyc_gate: KycGate,
 }
 
 impl Dispatcher {
-	pub fn new(pool: PgPool, withdrawals: Arc<dyn WithdrawalRepository>, ledger: Arc<dyn Ledger>, custody: Arc<dyn Custody>, notify: Arc<Notify>) -> Self {
+	pub fn new(pool: PgPool, withdrawals: Arc<dyn WithdrawalRepository>, ledger: Arc<dyn Ledger>, custody: Arc<dyn Custody>, notify: Arc<Notify>, kyc_gate: KycGate) -> Self {
 		Self {
 			pool,
 			withdrawals,
 			ledger,
 			custody,
 			notify,
+			kyc_gate,
 		}
 	}
 
@@ -141,7 +147,7 @@ impl Dispatcher {
 			// The owner's freeze and verification standing are gated inside the command, so a
 			// refusal here is an ordinary per-withdrawal skip: it stays queued (and
 			// cancellable) for the next interval, or until the reaper takes it.
-			match withdrawal_app::dispatch_withdrawal(self.withdrawals.as_ref(), self.custody.as_ref(), &policy, &self.notify, id).await {
+			match withdrawal_app::dispatch_withdrawal(self.withdrawals.as_ref(), self.custody.as_ref(), &policy, self.kyc_gate, &self.notify, id).await {
 				Ok(_) => {
 					dispatched += 1;
 					// A saturating add: an (impossible in practice) overflow keeps the rail gated.

@@ -179,9 +179,8 @@ impl DepositAddresses for SignerDepositAddresses {
 				// than the one cleared) are operator input errors, not infrastructure faults —
 				// same split `rotate` makes. `Aborted` is a lost race: the row moved under us,
 				// and the honest answer is "re-read and try again", not "the signer is broken".
-				tonic::Code::FailedPrecondition | tonic::Code::InvalidArgument | tonic::Code::Aborted => {
-					DomainError::Validation(format!("signer refused the custody migration: {}", status.message()))
-				}
+				tonic::Code::FailedPrecondition | tonic::Code::InvalidArgument | tonic::Code::Aborted =>
+					DomainError::Validation(format!("signer refused the custody migration: {}", status.message())),
 				_ => DomainError::Repository(format!("signer custody migration failed: {}", status.message())),
 			})?
 			.into_inner();

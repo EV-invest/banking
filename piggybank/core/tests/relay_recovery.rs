@@ -33,6 +33,7 @@ use domain::{
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
+	config::KycGate,
 	infrastructure::{
 		custody::StubCustody, deposits::PgDeposits, outbox, outflow::PgOutflowPolicy, reaper::Reaper, reconciliation::Reconciliation, redemptions::PgRedemptions, relay::Relay,
 		users::PgUsers, withdrawals::PgWithdrawals,
@@ -87,6 +88,17 @@ fn withdrawal_ports(h: &Harness) -> withdrawal_app::WithdrawalPorts<'_> {
 		ledger: h.ledger.as_ref(),
 		custody: &StubCustody,
 		relay: &h.notify,
+	}
+}
+
+/// The user-facing admission gates over every rail, at the given gate position.
+/// `KycGate::ENFORCED` is the deployment default; a suite passes `LIFTED` only to prove
+/// what the switch does.
+fn admission(h: &Harness, kyc: KycGate) -> withdrawal_app::AdmissionGates<'_> {
+	withdrawal_app::AdmissionGates {
+		users: h.users.as_ref(),
+		configured: &Network::ALL,
+		kyc,
 	}
 }
 
@@ -176,9 +188,16 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	// Seed the rail so the request auto-dispatches to `processing`.
 	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
 	h.relay.drain().await;
-	let processing = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, processing_user, network, destination(network), usdt("50"))
-		.await
-		.unwrap();
+	let processing = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h),
+		&admission(&h, KycGate::ENFORCED),
+		processing_user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
 	assert_eq!(processing.state(), WithdrawalState::Processing, "a liquid rail auto-dispatches to processing");
 	h.relay.drain().await;
 	backdate_withdrawal(&h.pool, processing.id().raw()).await;
@@ -197,8 +216,7 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 	h.relay.drain().await;
 	let queued = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		queued_user,
 		short_network,
 		destination(short_network),
@@ -245,16 +263,23 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), big)
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), big)
 		.await
 		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 
 	// Operator dispatch, then fail (a confirmed not-broadcast) — the void refunds in full.
-	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), &h.notify, withdrawal.id())
-		.await
-		.unwrap();
+	withdrawal_app::dispatch_withdrawal(
+		h.withdrawals.as_ref(),
+		&StubCustody,
+		&PgOutflowPolicy::new(&h.pool),
+		KycGate::ENFORCED,
+		&h.notify,
+		withdrawal.id(),
+	)
+	.await
+	.unwrap();
 	h.relay.drain().await;
 	withdrawal_app::fail_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id()).await.unwrap();
 	h.relay.drain().await;
@@ -317,7 +342,7 @@ async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 	// from there — the shape of a real broadcast-then-operator-fail incident).
 	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
 	h.relay.drain().await;
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
 		.await
 		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Processing, "a liquid rail auto-dispatches to processing");
@@ -475,7 +500,7 @@ async fn a_redelivered_half_applied_settle_completes_instead_of_parking() {
 		.await
 		.unwrap();
 	h.relay.drain().await;
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), gross)
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), gross)
 		.await
 		.unwrap();
 	assert_eq!(

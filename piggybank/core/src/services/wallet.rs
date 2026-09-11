@@ -43,6 +43,7 @@ impl WalletService for WalletSvc {
 				users: self.state.users.as_ref(),
 			},
 			&self.state.configured_networks,
+			self.state.kyc_gate,
 			user,
 		)
 		.await
@@ -72,6 +73,7 @@ impl WalletService for WalletSvc {
 				users: self.state.users.as_ref(),
 			},
 			&self.state.configured_networks,
+			self.state.kyc_gate,
 			user,
 			network,
 		)
@@ -103,8 +105,11 @@ impl WalletService for WalletSvc {
 				custody: self.state.custody.as_ref(),
 				relay: &self.state.relay_notify,
 			},
-			self.state.users.as_ref(),
-			&self.state.configured_networks,
+			&withdrawal_app::AdmissionGates {
+				users: self.state.users.as_ref(),
+				configured: &self.state.configured_networks,
+				kyc: self.state.kyc_gate,
+			},
 			user,
 			network,
 			address,

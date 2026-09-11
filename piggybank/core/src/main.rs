@@ -126,6 +126,17 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// dangerous flip happens in staging), before any infra is dialed.
 	rails.assert_single_realm()?;
 
+	// The verification gate on money movement, read once and carried everywhere it is
+	// applied. Announced at boot for the same reason the signer's spend policy is: a gate
+	// that is off is visible in a pod's first log lines, not only in whoever's memory of
+	// the environment.
+	let kyc_gate = config::KycGate::from_env();
+	if kyc_gate.is_enforced() {
+		tracing::info!("kyc gate enforced — deposit addresses and withdrawals require a verified tier");
+	} else {
+		tracing::warn!("kyc gate LIFTED (KYC_GATE_ENABLED) — unverified users can be issued deposit addresses and can withdraw; unset the variable to restore the gate");
+	}
+
 	let auth_config = AuthConfig::from_env().context("failed to load auth configuration")?;
 	// The auth crate's optional seams (absent ⇒ inert/fail-closed) are a dev/CI
 	// affordance; production must never boot inert. Same for the refresh store's
@@ -308,7 +319,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// the dispatcher drains the accept-and-queue backlog once a rail is topped up.
 	let reconciliation = Reconciliation::new(relay_pool.clone(), ledger.clone());
 	let reaper = Reaper::new(relay_pool.clone(), withdrawals.clone(), redemptions.clone(), relay_notify.clone());
-	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone());
+	let dispatcher = Dispatcher::new(relay_pool, withdrawals.clone(), ledger.clone(), custody.clone(), relay_notify.clone(), kyc_gate);
 	// The fee sweeper is the only job that *charges* rather than repairs: management fees
 	// accrue with the clock, so something has to wake up and collect them. It shares the
 	// recovery jobs' cadence and their per-item warn-and-continue discipline.
@@ -466,6 +477,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		deposit_addresses,
 		custody,
 		Arc::from(rails.configured_networks()),
+		kyc_gate,
 		relay_notify,
 		config.consilium_approval_url_base.clone(),
 		rails.ton.as_ref().is_some_and(|ton| ton.is_testnet),

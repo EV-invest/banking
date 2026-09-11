@@ -38,7 +38,10 @@ use domain::{
 };
 use piggybank_core::{
 	application::{balance as balance_app, wallet as wallet_app, withdrawals as withdrawal_app},
-	infrastructure::{custody::StubCustody, deposits::PgDeposits, nav::PgNav, positions::PgFundPositions, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
+	config::KycGate,
+	infrastructure::{
+		custody::StubCustody, deposits::PgDeposits, nav::PgNav, outflow::PgOutflowPolicy, positions::PgFundPositions, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
+	},
 	ports::{DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
@@ -117,6 +120,17 @@ fn withdrawal_ports(h: &Harness) -> withdrawal_app::WithdrawalPorts<'_> {
 	}
 }
 
+/// The user-facing admission gates over every rail, at the given gate position.
+/// `KycGate::ENFORCED` is the deployment default; a suite passes `LIFTED` only to prove
+/// what the switch does.
+fn admission(h: &Harness, kyc: KycGate) -> withdrawal_app::AdmissionGates<'_> {
+	withdrawal_app::AdmissionGates {
+		users: h.users.as_ref(),
+		configured: &Network::ALL,
+		kyc,
+	}
+}
+
 fn address_ports(h: &Harness) -> wallet_app::DepositAddressPorts<'_> {
 	wallet_app::DepositAddressPorts {
 		deposit_addresses: &h.addresses,
@@ -161,7 +175,9 @@ async fn an_unverified_user_gets_no_deposit_address_and_never_reaches_the_signer
 	let Some(h) = harness().await else { return };
 	let user = user_at_tier(&h, 0).await;
 
-	let err = wallet_app::get_deposit_address(&address_ports(&h), &Network::ALL, user, Network::Bep20).await.unwrap_err();
+	let err = wallet_app::get_deposit_address(&address_ports(&h), &Network::ALL, KycGate::ENFORCED, user, Network::Bep20)
+		.await
+		.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(_)), "an unverified caller is forbidden an address, got {err:?}");
 	assert_eq!(h.address_calls.load(Ordering::SeqCst), 0, "no keypair may be provisioned for an unverified user");
 }
@@ -171,7 +187,7 @@ async fn a_verified_user_gets_a_deposit_address() {
 	let Some(h) = harness().await else { return };
 	let user = user_at_tier(&h, 1).await;
 
-	let address = wallet_app::get_deposit_address(&address_ports(&h), &Network::ALL, user, Network::Bep20)
+	let address = wallet_app::get_deposit_address(&address_ports(&h), &Network::ALL, KycGate::ENFORCED, user, Network::Bep20)
 		.await
 		.expect("a verified caller passes the gate")
 		.expect("the rail serves its derived address");
@@ -190,12 +206,14 @@ async fn an_unconfigured_rail_and_an_unverified_caller_answer_differently() {
 	let unverified = user_at_tier(&h, 0).await;
 	let configured = [Network::Bep20];
 
-	let rail_gate = wallet_app::get_deposit_address(&address_ports(&h), &configured, verified, Network::Ton)
+	let rail_gate = wallet_app::get_deposit_address(&address_ports(&h), &configured, KycGate::ENFORCED, verified, Network::Ton)
 		.await
 		.expect("an unconfigured rail is not an error");
 	assert!(rail_gate.is_none(), "an unconfigured rail answers with no address");
 
-	let kyc_gate = wallet_app::get_deposit_address(&address_ports(&h), &configured, unverified, Network::Bep20).await.unwrap_err();
+	let kyc_gate = wallet_app::get_deposit_address(&address_ports(&h), &configured, KycGate::ENFORCED, unverified, Network::Bep20)
+		.await
+		.unwrap_err();
 	assert!(matches!(kyc_gate, DomainError::Forbidden(_)), "an unverified caller answers with an error, got {kyc_gate:?}");
 	assert_eq!(h.address_calls.load(Ordering::SeqCst), 0, "neither refusal reached the gateway");
 }
@@ -221,6 +239,7 @@ async fn an_unverified_wallet_shows_the_balance_but_no_address() {
 			users: h.users.as_ref(),
 		},
 		&[Network::Bep20],
+		KycGate::ENFORCED,
 		user,
 	)
 	.await
@@ -241,7 +260,7 @@ async fn an_unverified_user_cannot_withdraw() {
 	// claim would fail the solvency Read-First instead and prove nothing.
 	deposit(&h, user, network, "100").await;
 
-	let err = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+	let err = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(_)), "an unverified account is forbidden from withdrawing, got {err:?}");
@@ -256,7 +275,7 @@ async fn a_verified_user_can_withdraw() {
 	let network = Network::Bep20;
 	deposit(&h, user, network, "100").await;
 
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
 		.await
 		.expect("a verified account withdraws");
 	assert_eq!(withdrawal.net_amount(), usdt("49"), "the flat 1 USDT fee is retained");
@@ -283,7 +302,7 @@ async fn a_revenue_payout_is_not_gated_on_kyc() {
 	// this test funds the whole amount it then pays out rather than leaning on whatever
 	// the shared `fee` singleton happens to hold.
 	for _ in 0..2 {
-		let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+		let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
 			.await
 			.expect("fund the fee claim");
 		h.relay.drain().await;
@@ -302,4 +321,83 @@ async fn a_revenue_payout_is_not_gated_on_kyc() {
 		.expect("a revenue payout is never gated on a user's KYC tier");
 	assert_eq!(payout.net_amount(), usdt("2"), "a payout charges no fee");
 	h.relay.drain().await;
+}
+
+/// The switch in its other position — `KYC_GATE_ENABLED=false`. It is not a third
+/// behaviour: an unverified caller is issued an address and the gateway IS reached, which
+/// is exactly what the deposit surface did before the gate landed.
+#[tokio::test]
+async fn a_lifted_gate_issues_an_unverified_user_an_address() {
+	let Some(h) = harness().await else { return };
+	let user = user_at_tier(&h, 0).await;
+
+	let address = wallet_app::get_deposit_address(&address_ports(&h), &Network::ALL, KycGate::LIFTED, user, Network::Bep20)
+		.await
+		.expect("a lifted gate refuses nobody")
+		.expect("the rail serves its derived address");
+	assert_eq!(address.as_str(), sample_address(Network::Bep20));
+	assert_eq!(h.address_calls.load(Ordering::SeqCst), 1, "the gateway is reached for an unverified user once the gate is lifted");
+}
+
+/// The wallet overview follows the same switch: with the gate lifted the unverified
+/// caller's rails carry their addresses instead of `None`.
+#[tokio::test]
+async fn a_lifted_gate_puts_an_address_on_an_unverified_wallet() {
+	let Some(h) = harness().await else { return };
+	let user = user_at_tier(&h, 0).await;
+	let positions = PgFundPositions::new(h.pool.clone());
+	let nav = PgNav::new(h.pool.clone());
+
+	let wallet = wallet_app::get_wallet(
+		&wallet_app::WalletPorts {
+			ledger: h.ledger.as_ref(),
+			positions: &positions,
+			nav: &nav,
+			deposit_addresses: &h.addresses,
+			users: h.users.as_ref(),
+		},
+		&[Network::Bep20],
+		KycGate::LIFTED,
+		user,
+	)
+	.await
+	.expect("the overview is readable at any tier");
+
+	assert_eq!(
+		wallet.deposit_addresses[0].address.as_ref().map(|a| a.as_str().to_owned()),
+		Some(sample_address(Network::Bep20).to_owned()),
+		"a lifted gate leaves the rail fundable for an unverified user"
+	);
+	assert_eq!(h.address_calls.load(Ordering::SeqCst), 1, "the gateway is reached once the gate is lifted");
+}
+
+/// The half that is easy to forget: lifting the gate at *admission* only would accept an
+/// unverified user's withdrawal and then leave it queued forever, since the payout gate
+/// re-checks the tier at dispatch. Both points are exercised here on one withdrawal —
+/// refused by an enforced gate, paid by a lifted one — so the two can never be wired
+/// apart again.
+#[tokio::test]
+async fn a_lifted_gate_both_admits_and_dispatches_an_unverified_withdrawal() {
+	let Some(h) = harness().await else { return };
+	let user = user_at_tier(&h, 0).await;
+	let network = Network::Bep20;
+	deposit(&h, user, network, "100").await;
+
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::LIFTED), user, network, destination(network), usdt("50"))
+		.await
+		.expect("a lifted gate admits an unverified withdrawal");
+	h.relay.drain().await;
+
+	let policy = PgOutflowPolicy::new(&h.pool);
+	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy, KycGate::ENFORCED, &h.notify, withdrawal.id())
+		.await
+		.unwrap_err();
+	assert!(
+		matches!(refused, DomainError::Forbidden(_)),
+		"the payout gate still refuses an unverified owner while the gate is enforced, got {refused:?}"
+	);
+
+	withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy, KycGate::LIFTED, &h.notify, withdrawal.id())
+		.await
+		.expect("a lifted gate pays the same withdrawal out");
 }

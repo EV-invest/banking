@@ -12,7 +12,10 @@
 //! Admission is therefore NOT the last word on policy: `dispatch_withdrawal` re-evaluates
 //! the kill-switch, the freeze and the tier-1 floor at the moment the money leaves, so a
 //! pause, an AML hold or a revoked verification landing on an already-queued withdrawal
-//! still stops it — whichever path (sweep or admin RPC) reaches it first.
+//! still stops it — whichever path (sweep or admin RPC) reaches it first. The tier floor
+//! specifically is the deployment's [`KycGate`] (enforced by default), and the SAME value
+//! must reach both points: a gate lifted only at admission would accept withdrawals that
+//! dispatch then parks indefinitely.
 //! `settle`/`fail` are the operator/watcher-driven
 //! completions (admin-gated at the boundary), standing in for a chain watcher + custody
 //! confirmation callback; `cancel` (user) refunds a still-queued withdrawal. The
@@ -23,13 +26,16 @@ use domain::{
 	balance::LedgerAccountKey,
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
-	users::{KYC_LEVEL_VERIFIED, UserId},
+	users::UserId,
 	withdrawals::{Withdrawal, WithdrawalId, WithdrawalPolicy, WithdrawalSource},
 };
 use tokio::sync::Notify;
 use tracing::warn;
 
-use crate::ports::{Custody, OutflowPolicy, UserRepository, WithdrawalRepository, ledger::Ledger};
+use crate::{
+	config::KycGate,
+	ports::{Custody, OutflowPolicy, UserRepository, WithdrawalRepository, ledger::Ledger},
+};
 
 /// The driven ports the withdrawal write-path borrows: the aggregate's repository, the
 /// ledger both Read-First checks read, the custody gateway the rail-liquidity check asks,
@@ -37,9 +43,9 @@ use crate::ports::{Custody, OutflowPolicy, UserRepository, WithdrawalRepository,
 /// [`open_withdrawal`] — the shared body of both request paths — needs, so each use-case's
 /// own parameters stay its *request*: which source, which rail, where, how much. The
 /// user-facing entry point's extra gates (the [`UserRepository`] KYC/freeze check, the
-/// configured-rail list) are deliberately NOT here: the revenue path has no user to gate,
-/// and a field it could never use would only invite one. A plain borrow-holder: it owns
-/// nothing and does nothing.
+/// configured-rail list, the verification switch) are deliberately NOT here but in
+/// [`AdmissionGates`]: the revenue path has no user to gate, and a field it could never
+/// use would only invite one. A plain borrow-holder: it owns nothing and does nothing.
 pub struct WithdrawalPorts<'a> {
 	/// The `withdrawals` aggregate's driven port (Postgres control plane).
 	pub withdrawals: &'a dyn WithdrawalRepository,
@@ -51,20 +57,40 @@ pub struct WithdrawalPorts<'a> {
 	pub relay: &'a Notify,
 }
 
+/// The gates the user-facing entry point runs before the shared body — exactly the set
+/// [`WithdrawalPorts`] deliberately leaves out. They travel together because they are
+/// answered together, at admission, about one caller: is this rail run at all, is the
+/// account active, and does the verification floor apply to it ([`KycGate`], enforced
+/// unless the deployment lifted it).
+///
+/// Bundled rather than passed loose for the same reason
+/// [`DepositAddressPorts`](crate::application::wallet::DepositAddressPorts) is a bundle:
+/// it keeps the use case's own parameters its *request* — whose withdrawal, which rail,
+/// where, how much.
+pub struct AdmissionGates<'a> {
+	/// The control-plane row the freeze flag and the mirrored KYC tier are read from.
+	pub users: &'a dyn UserRepository,
+	/// The rails with a running on-chain watcher; a withdrawal on any other is refused.
+	pub configured: &'a [Network],
+	/// The deployment's verification gate. The SAME value must reach
+	/// [`dispatch_withdrawal`]: a gate lifted only here admits withdrawals that the payout
+	/// gate then leaves queued indefinitely.
+	pub kyc: KycGate,
+}
+
 /// The calling user withdraws `amount` (gross) of free balance to `address`. The fee
 /// is the per-network policy fee; the net (`amount − fee`) is what leaves on-chain.
 pub async fn request_withdrawal(
 	ports: &WithdrawalPorts<'_>,
-	users: &dyn UserRepository,
-	configured: &[Network],
+	gates: &AdmissionGates<'_>,
 	user: UserId,
 	network: Network,
 	address: WalletAddress,
 	amount: Usdt,
 ) -> Result<Withdrawal, DomainError> {
-	require_configured(configured, network)?;
+	require_configured(gates.configured, network)?;
 	// KYC/freeze gate — a disabled account may not move money out.
-	let account = users.find_by_id(user).await?.ok_or_else(|| DomainError::NotFound {
+	let account = gates.users.find_by_id(user).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "user",
 		id: user.to_string(),
 	})?;
@@ -75,8 +101,10 @@ pub async fn request_withdrawal(
 	// email, nothing more) may not move money off the platform. The tier is the identity
 	// plane's, mirrored onto the local row by the lifecycle bridge; this is the money
 	// plane enforcing it. Deliberately absent from `request_revenue_payout`: that pays the
-	// fund's own earned revenue out and has no user behind it to verify.
-	if account.kyc_level() < KYC_LEVEL_VERIFIED {
+	// fund's own earned revenue out and has no user behind it to verify. The same `gate`
+	// must reach `dispatch_withdrawal` too — a lifted gate that admits a withdrawal the
+	// dispatch gate then parks forever is worse than no switch at all.
+	if !gates.kyc.admits(account.kyc_level()) {
 		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
 	}
 	let source = WithdrawalSource::User(user);
@@ -219,7 +247,7 @@ pub async fn require_outflows_enabled(policy: &dyn OutflowPolicy) -> Result<(), 
 /// A revenue payout is exempt from the per-owner arms, and not by omission: the fund is
 /// not a user, so there is no row to read and nothing to fail closed on. The kill-switch
 /// still applies — it pauses outflows, not users.
-async fn require_dispatchable(policy: &dyn OutflowPolicy, withdrawal: &Withdrawal) -> Result<(), DomainError> {
+async fn require_dispatchable(policy: &dyn OutflowPolicy, gate: KycGate, withdrawal: &Withdrawal) -> Result<(), DomainError> {
 	require_outflows_enabled(policy).await?;
 	let Some(owner) = withdrawal.user() else { return Ok(()) };
 	let standing = policy
@@ -229,7 +257,7 @@ async fn require_dispatchable(policy: &dyn OutflowPolicy, withdrawal: &Withdrawa
 	if standing.blocked {
 		return Err(DomainError::Forbidden("account is frozen".into()));
 	}
-	if standing.kyc_level < KYC_LEVEL_VERIFIED {
+	if !gate.admits(standing.kyc_level) {
 		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
 	}
 	Ok(())
@@ -250,6 +278,7 @@ pub async fn dispatch_withdrawal(
 	withdrawals: &dyn WithdrawalRepository,
 	custody: &dyn Custody,
 	policy: &dyn OutflowPolicy,
+	gate: KycGate,
 	relay: &Notify,
 	id: WithdrawalId,
 ) -> Result<Withdrawal, DomainError> {
@@ -257,7 +286,7 @@ pub async fn dispatch_withdrawal(
 		entity: "withdrawal",
 		id: id.to_string(),
 	})?;
-	require_dispatchable(policy, &existing).await?;
+	require_dispatchable(policy, gate, &existing).await?;
 	if let Ok(Some(onchain)) = custody.treasury_liquidity(existing.network()).await
 		&& onchain < existing.net_amount()
 	{
