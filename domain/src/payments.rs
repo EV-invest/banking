@@ -267,7 +267,8 @@ pub enum PaymentState {
 	Approved,
 	/// The effect exists.
 	Executed,
-	/// Approved, but the effect could not be created. Terminal — nothing retries silently.
+	/// Approved, but the effect could not be created. Terminal — nothing retries silently —
+	/// and for L2/L3 the reservation taken at approval is released on the way in.
 	ExecutionFailed,
 	/// The approver refused, or their token burned.
 	Rejected,
@@ -644,9 +645,9 @@ impl PaymentOrder {
 	/// different effect is a conflict rather than a silent overwrite.
 	///
 	/// An L2/L3 order raises its [`PaymentEvent::Settled`] here, immediately before
-	/// `Executed`. Both drain in the transaction this call commits in, and the relay is
-	/// single-worker and strictly ordered, so the reservation raised by [`Self::approve`]
-	/// always applies before the settlement that posts it.
+	/// `Executed`. The reservation raised by [`Self::approve`] committed in its own, earlier
+	/// transaction; the relay is single-worker and strictly ordered, so it always applies
+	/// before the settlement that posts it.
 	pub fn mark_executed(&mut self, effect: PaymentEffect, at: i64) -> Result<(), DomainError> {
 		if !effect.matches(self.terms.tier()) {
 			return Err(DomainError::Conflict(format!("a {} payment cannot be executed as this effect", self.terms.tier().as_str())));
@@ -679,11 +680,14 @@ impl PaymentOrder {
 	/// The approved payment could not be executed. Terminal: nothing retries silently, and
 	/// the reason is what the initiator (and, for a consilium, the owners) read.
 	///
-	/// Reachable in practice only for L1, where creating the withdrawal is a real operation
-	/// that can genuinely refuse. An L2/L3 order raises its reservation and its settlement
-	/// in the same unit of work, so there is no committed state in which one landed and the
-	/// other did not — which is what keeps a failed payment from stranding value in
-	/// `clearing` with nothing left to post it.
+	/// An L2/L3 order RELEASES ITS RESERVATION here. `Approved` is a real committed state
+	/// for those tiers — the reservation is raised by [`Self::approve`] in one transaction
+	/// and the settlement by [`Self::mark_executed`] in another, so an execution that fails
+	/// between them (a re-check refusing a stale consent, say) would otherwise leave the
+	/// amount locked in `clearing` under a terminal order that nothing will ever post or
+	/// void. [`PaymentEvent::Released`] is the void, exactly as a failed withdrawal voids
+	/// its own reservation; it is raised before the audit fact so the relay applies it in
+	/// that order. An L1 order reserved nothing and releases nothing.
 	pub fn mark_execution_failed(&mut self, reason: String, at: i64) -> Result<(), DomainError> {
 		if self.state == PaymentState::ExecutionFailed {
 			return Ok(());
@@ -693,6 +697,14 @@ impl PaymentOrder {
 		}
 		self.state = PaymentState::ExecutionFailed;
 		self.failure_reason = Some(reason.clone());
+		if self.terms.tier().settles_on_the_ledger() {
+			self.raise(PaymentEvent::Released {
+				payment_id: self.id,
+				from: self.terms.from.clone(),
+				amount: self.terms.amount,
+				at,
+			});
+		}
 		self.raise(PaymentEvent::ExecutionFailed { payment_id: self.id, reason, at });
 		Ok(())
 	}
@@ -812,9 +824,10 @@ impl PaymentOrder {
 
 /// Facts raised by the [`PaymentOrder`] aggregate.
 ///
-/// **Only [`PaymentEvent::Reserved`] and [`PaymentEvent::Settled`] reach the outbox**
-/// ([`PaymentEvent::relays`]); everything else is an audit fact drained with `relay = false`
-/// exactly as `allocations` and `consilium` are. In particular
+/// **Only [`PaymentEvent::Reserved`], [`PaymentEvent::Settled`] and
+/// [`PaymentEvent::Released`] reach the outbox** ([`PaymentEvent::relays`]); everything else
+/// is an audit fact drained with `relay = false` exactly as `allocations` and `consilium`
+/// are. In particular
 /// [`PaymentEvent::Executed`] must NOT be relayed: for an L1 order the money is already
 /// moved by the [`crate::withdrawals::WithdrawalEvent::Requested`] sitting in the outbox,
 /// and two relayed events over one payment means two reservations against one claim.
@@ -861,6 +874,14 @@ pub enum PaymentEvent {
 		effect: PaymentEffect,
 		at: i64,
 	},
+	/// L2/L3 only — the execution failed after the reservation landed: void the pending
+	/// `Dr <source> / Cr clearing`, returning the amount to the source in full (relay).
+	Released {
+		payment_id: PaymentId,
+		from: Party,
+		amount: Usdt,
+		at: i64,
+	},
 	ExecutionFailed {
 		payment_id: PaymentId,
 		reason: String,
@@ -888,7 +909,7 @@ impl PaymentEvent {
 	/// money and in the `false` direction strands it.
 	pub fn relays(&self) -> bool {
 		match self {
-			Self::Reserved { .. } | Self::Settled { .. } => true,
+			Self::Reserved { .. } | Self::Settled { .. } | Self::Released { .. } => true,
 			Self::Opened { .. }
 			| Self::ApprovalRecorded { .. }
 			| Self::Approved { .. }
@@ -1253,14 +1274,47 @@ mod tests {
 	fn execution_failure_is_terminal_and_states_why() {
 		let mut order = opened(Party::Revenue, external());
 		order.approve(NOW).unwrap();
+		order.drain_events();
 		order.mark_execution_failed("payout exceeds the fund's available revenue".into(), NOW).unwrap();
 		assert_eq!(order.state(), PaymentState::ExecutionFailed);
 		assert_eq!(order.failure_reason(), Some("payout exceeds the fund's available revenue"));
-		order.drain_events();
+		let events = order.drain_events();
+		// An L1 order reserved nothing, so it has nothing to release: the failure is audit only.
+		assert!(matches!(events.as_slice(), [PaymentEvent::ExecutionFailed { .. }]));
+		assert_eq!(events.iter().filter(|e| e.relays()).count(), 0);
 		order.mark_execution_failed("again".into(), NOW + 1).unwrap();
 		assert!(order.drain_events().is_empty());
 		// Nothing retries silently: a failure cannot become an execution.
 		assert!(order.mark_executed(PaymentEffect::Withdrawal(WithdrawalId::new()), NOW + 2).is_err());
+	}
+
+	/// `Approved` IS A COMMITTED STATE for the ledger tiers: the reservation and the
+	/// settlement land in different transactions. A failure between them must give the
+	/// locked amount back, or a terminal order strands it in `clearing` forever.
+	#[test]
+	fn an_internal_payment_that_fails_to_execute_releases_its_reservation() {
+		for to in [PaymentDestination::Internal(Party::Revenue), PaymentDestination::Internal(Party::Service(svc()))] {
+			let mut order = opened(Party::Piggybank, to);
+			order.approve(NOW).unwrap();
+			order.drain_events();
+			order.mark_execution_failed("the consent was voided".into(), NOW + 1).unwrap();
+			let events = order.drain_events();
+			// The void FIRST, then the audit fact — the relay drains in strict order and the
+			// money fact is the one it acts on.
+			assert!(matches!(events[0], PaymentEvent::Released { .. }), "at the {} tier", order.tier().as_str());
+			assert!(matches!(events[1], PaymentEvent::ExecutionFailed { .. }));
+			assert!(events[0].relays());
+			assert!(!events[1].relays());
+			assert_eq!(events.iter().filter(|e| e.relays()).count(), 1, "exactly one money fact: the release");
+			let PaymentEvent::Released { from, amount, .. } = &events[0] else { unreachable!() };
+			assert_eq!(from, &Party::Piggybank);
+			assert_eq!(*amount, usdt("100"));
+			assert_eq!(order.state(), PaymentState::ExecutionFailed);
+			assert!(!order.state().is_open(), "a failed order no longer holds its source");
+			// Idempotent: a second failure releases nothing twice.
+			order.mark_execution_failed("again".into(), NOW + 2).unwrap();
+			assert!(order.drain_events().is_empty());
+		}
 	}
 
 	#[test]

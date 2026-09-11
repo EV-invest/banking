@@ -96,12 +96,15 @@ const BURN_VOID_CANCEL: &[u8] = b"redeem:burn:void:cancel";
 /// so the same three-id shape applies. `payment:reserve` and `payment:transfer` are the two
 /// the design names; `payment:reserve:settle` is the completion's own id, distinct from both
 /// because `saga_steps.tb_transfer_id` is unique and a completion is a transfer of its own.
+/// `payment:reserve:void` is the other completion — the release a failed execution issues
+/// instead of the settle, the counterpart of a withdrawal's fail void.
 ///
 /// FROZEN, like every other salt here: they are derived from the (stable) payment id, so a
 /// redelivered event recomputes the same ids and a completion recomputes its `pending_id`.
 /// Changing one would make a retry issue a second, different transfer instead of an `Exists`.
 const PAYMENT_RESERVE: &[u8] = b"payment:reserve";
 const PAYMENT_RESERVE_SETTLE: &[u8] = b"payment:reserve:settle";
+const PAYMENT_RESERVE_VOID: &[u8] = b"payment:reserve:void";
 const PAYMENT_TRANSFER: &[u8] = b"payment:transfer";
 
 /// Salts for a fee settlement's two posted legs — burning the accumulated fee units and
@@ -864,6 +867,11 @@ fn plan_fee(event: FeeEvent, aggregate_id: Uuid, event_tid: u128, reference: u12
 /// - **Settled** → post that pending, then move the gross out of `clearing` into the
 ///   destination claim. The Vec order matters: the post must land before the second leg
 ///   debits the now-posted clearing balance.
+/// - **Released** (raised on a failed execution, L2/L3 only) → void that pending, returning
+///   the amount to the source in full — a withdrawal's fail void, by another name. The
+///   reservation and the settlement commit in different transactions, so `approved` is a
+///   real state an execution can fail out of, and without this leg the amount would stay
+///   locked in `clearing` under a terminal order.
 ///
 /// NO OTHER EVENT REACHES HERE, and the match says so without a `_` arm. `Executed` in
 /// particular must never plan an op: for an external payment the money is already moving
@@ -921,6 +929,20 @@ fn plan_payment(event: PaymentEvent, aggregate_id: Uuid, reference: u128) -> Vec
 				}),
 			},
 		],
+		PaymentEvent::Released { from, amount, .. } => vec![PlannedOp {
+			role: "payment_release",
+			transfer_id: tid(aggregate_id, PAYMENT_RESERVE_VOID),
+			action: LedgerAction::Complete(PendingCompletion {
+				id: tid(aggregate_id, PAYMENT_RESERVE_VOID),
+				pending_id: tid(aggregate_id, PAYMENT_RESERVE),
+				kind: CompletionKind::Void,
+				debit: from.claim_key(),
+				credit: LedgerAccountKey::WithdrawalClearing,
+				amount: amount.base_units(),
+				code: TransferCode::PaymentTransfer,
+				reference,
+			}),
+		}],
 		PaymentEvent::Opened { .. }
 		| PaymentEvent::ApprovalRecorded { .. }
 		| PaymentEvent::Approved { .. }
@@ -1135,6 +1157,36 @@ mod tests {
 		};
 		assert_eq!(completion.pending_id, tid(aggregate_id, PAYMENT_RESERVE));
 		assert_ne!(completion.id, completion.pending_id, "a completion is a transfer of its own");
+	}
+
+	// A failed L2/L3 execution VOIDS the reservation the approval raised — the same completion
+	// a failed withdrawal issues — and names that reservation as its pending, or the release
+	// would void a transfer that does not exist and leave the amount locked for good.
+	#[test]
+	fn a_released_payment_voids_the_reservation_its_approval_raised() {
+		let aggregate_id = Uuid::new_v4();
+		let event = PaymentEvent::Released {
+			payment_id: domain::payments::PaymentId::from_raw(aggregate_id),
+			from: domain::balance::Party::Piggybank,
+			amount: Usdt::parse_decimal("25").unwrap(),
+			at: 0,
+		};
+
+		let ops = plan_payment(event, aggregate_id, aggregate_id.as_u128());
+
+		assert_eq!(ops.len(), 1, "a release is one leg: nothing is moved, only unlocked");
+		assert_eq!(ops[0].role, "payment_release");
+		let LedgerAction::Complete(completion) = &ops[0].action else {
+			panic!("a release completes the pending reservation")
+		};
+		assert!(matches!(completion.kind, CompletionKind::Void));
+		assert_eq!(completion.pending_id, tid(aggregate_id, PAYMENT_RESERVE));
+		assert_eq!(completion.debit, LedgerAccountKey::Fund);
+		assert_eq!(completion.credit, LedgerAccountKey::WithdrawalClearing);
+		// Its own id is distinct from both the reservation's and the settle's, so a settle and
+		// a release over one payment can never alias in `saga_steps`.
+		assert_ne!(completion.id, completion.pending_id);
+		assert_ne!(completion.id, tid(aggregate_id, PAYMENT_RESERVE_SETTLE));
 	}
 
 	// `Executed` is audit trail, NOT money. For an external payment the withdrawal saga is

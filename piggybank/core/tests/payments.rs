@@ -510,6 +510,80 @@ async fn the_feed_filters_and_the_sweep_close_what_nobody_answered() {
 	reset_payments(&pool).await;
 }
 
+/// `Approved` IS A COMMITTED STATE: the reservation landed in the approval's transaction and
+/// the settlement would land in the execution's. A failure between the two must give the
+/// locked amount back, or a terminal order leaves it in `clearing` with nothing left to post
+/// or void it — a withdrawal's fail void, by another name. `fund` is a global singleton
+/// shared with every other suite, so every figure here is a DELTA.
+#[tokio::test]
+async fn a_failed_execution_releases_the_reservation_it_was_holding() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	let Some(ledger) = common::seeded_ledger(&pool, "payments release test").await else {
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let notify = Arc::new(Notify::new());
+	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
+	ledger
+		.post(&LedgerTransfer {
+			id: Uuid::new_v4().as_u128(),
+			debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
+			credit: LedgerAccountKey::Fund,
+			amount: usdt("100").base_units(),
+			code: TransferCode::Deposit,
+			reference: 0,
+		})
+		.await
+		.expect("fund the fund's own claim");
+	let before = ledger.balance(&LedgerAccountKey::Fund).await.unwrap();
+	let revenue_before = ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted;
+
+	let mut order = an_order(Party::Piggybank, PaymentDestination::Internal(Party::Revenue), investor, "30");
+	let id = order.id();
+	payments
+		.open(&mut order, ApprovalSeat::Consilium(a_decided_consilium(&pool, investor).await))
+		.await
+		.expect("open the order");
+	payments.record_approval(id, now()).await.expect("the quorum carried it");
+	relay.drain().await;
+	let reserved = ledger.balance(&LedgerAccountKey::Fund).await.unwrap();
+	assert_eq!(reserved.locked - before.locked, usdt("30").base_units(), "the approval locked the source");
+
+	payments
+		.record_execution(id, ExecutionOutcome::Failed("the ledger refused the settlement".into()), now())
+		.await
+		.expect("record the failure");
+	assert_eq!(
+		relayed_kinds(&pool, id).await,
+		vec!["reserved".to_owned(), "released".to_owned()],
+		"the failure relays exactly one money fact: the release"
+	);
+	relay.drain().await;
+
+	let released = ledger.balance(&LedgerAccountKey::Fund).await.unwrap();
+	assert_eq!(released.posted, before.posted, "nothing was debited");
+	assert_eq!(released.locked, before.locked, "the reservation was voided");
+	assert_eq!(ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted, revenue_before, "the destination saw nothing");
+	let parked: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM outbox WHERE aggregate = 'payment' AND parked_at IS NOT NULL")
+		.fetch_one(&pool)
+		.await
+		.unwrap();
+	assert_eq!(parked, 0, "a parked row would mean a void the ledger refused");
+	let view = payments.find(id).await.unwrap().unwrap();
+	assert_eq!(view.order.state(), PaymentState::ExecutionFailed);
+	assert_eq!(view.order.failure_reason(), Some("the ledger refused the settlement"));
+	assert!(payments.awaiting_execution().await.unwrap().is_empty(), "nothing retries a failure silently");
+
+	sqlx::query("DELETE FROM consilium WHERE initiator_user_id = $1").bind(investor.raw()).execute(&pool).await.ok();
+	reset_payments(&pool).await;
+}
+
 /// THE ONE TEST THAT PROVES THE MONEY MOVES. Everything above asserts Postgres rows; this
 /// drives the whole write path — order, consent, relay, TigerBeetle — and reads the claims
 /// back from the ledger that actually owns them.
