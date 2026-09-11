@@ -739,6 +739,69 @@
           '';
         };
 
+        # ── the build/test gate (CI entry points) ───────────────────────────
+        # Until these, nothing in CI ever compiled this repository. `jobs` below asks
+        # for `tokei`, `code-duplication` and `loc-badge` and nothing else, so no
+        # errors.yml was generated at all and a green tick on a PR said only that the
+        # comment ratio was acceptable.
+        #
+        # The generator's own `rust-tests` / `rust-clippy` cannot be turned on here,
+        # and not for a reason a flag fixes: they drive cargo from a
+        # dtolnay/rust-toolchain runner, while this workspace declares
+        # `tigerbeetle = { path = ".tb-client" }` — a symlink into the nix store that
+        # only the dev shell creates. Outside nix there is no such directory and cargo
+        # cannot resolve the workspace at all. Hence a nix entry point, like the drift
+        # gate above and the container release: inside the flake the toolchain, protoc
+        # and .tb-client all exist and match what developers run.
+        runCheckRust = pkgs.writeShellApplication {
+          name = "run-check-rust";
+          runtimeInputs = with pkgs; [ rust git protobuf mold ];
+          text = ''
+            cd "$(git rev-parse --show-toplevel)"
+            ${linkTbClient}
+            ${protocEnv}
+            # See runDriftCheck: .cargo/config.toml names sccache as the rustc wrapper,
+            # which is not on a runner's PATH and aborts cargo before it starts.
+            export RUSTC_WRAPPER=""
+
+            echo "▶ clippy (workspace, all targets, warnings denied)"
+            cargo clippy --workspace --all-targets -- -D warnings
+
+            echo "▶ tests (workspace)"
+            # DELIBERATELY without DATABASE_URL: every suite under piggybank/*/tests
+            # skips itself when it is unset (tests/common/mod.rs), so what runs here is
+            # the unit and in-process coverage. The Postgres + TigerBeetle suites are
+            # NOT exercised by CI and still need a real pair of services — worth knowing
+            # before reading a green tick as "the money plane is covered".
+            cargo test --workspace
+
+            echo "✓ rust ok"
+          '';
+        };
+
+        runCheckFrontend = pkgs.writeShellApplication {
+          name = "run-check-frontend";
+          runtimeInputs = with pkgs; [ nodejs git ];
+          text = ''
+            cd "$(git rev-parse --show-toplevel)"
+            # `ci`, not `install`: the lock is the point of a check run.
+            npm ci
+
+            echo "▶ tsc --noEmit"
+            npm run check --workspace @evbanking/cabinet
+
+            echo "▶ cabinet tests"
+            npm run test --workspace @evbanking/cabinet
+
+            # `npm run lint` is deliberately absent: it reports 5 errors on main today
+            # (profile-schema.ts, instrumentation.ts, next.config.ts, profile-view.tsx,
+            # settings/ui/fields.tsx). Adding it now would land red, which is the exact
+            # thing this gate exists to stop being normal. Clean those, then add it.
+
+            echo "✓ frontend ok"
+          '';
+        };
+
         # ── shared Redis (ensure-running) ───────────────────────────────────
         # ONE instance for all ev_invest repos (numeric dbs: 0=banking, 1=concierge),
         # daemonized under the user state dir so no repo's dev-stack exit can yank it
@@ -1098,6 +1161,8 @@
         # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
         # `nix run .#concierge-pin-check` → assert the concierge contract pin is an ancestor of origin/main + bytes match
         # `nix run .#drift-check` → assert Cargo.lock matches the manifests and the committed contract matches the protos (CI: .github/workflows/drift.yml)
+        # `nix run .#check-rust`     → clippy (warnings denied) + workspace tests, the way CI runs them (CI: .github/workflows/checks.yml)
+        # `nix run .#check-frontend` → cabinet tsc + tests against a clean `npm ci` (CI: .github/workflows/checks.yml)
         # Author new migrations with the sqlx CLI (in the dev shell):
         #   sqlx migrate add --source piggybank/core/migrations --sequential <name>
         apps = {
@@ -1114,6 +1179,8 @@
           gen-api = { type = "app"; program = "${runGenApi}/bin/run-gen-api"; };
           concierge-pin-check = { type = "app"; program = "${runConciergePinCheck}/bin/run-concierge-pin-check"; };
           drift-check = { type = "app"; program = "${runDriftCheck}/bin/run-drift-check"; };
+          check-rust = { type = "app"; program = "${runCheckRust}/bin/run-check-rust"; };
+          check-frontend = { type = "app"; program = "${runCheckFrontend}/bin/run-check-frontend"; };
           publish = { type = "app"; program = "${runPublish}/bin/publish"; };
         };
 
