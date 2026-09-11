@@ -25,7 +25,7 @@ import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
 
 import { holdUser, reinstateUser } from "@/entities/admin/api/admin-client";
-import { openUserReinstatement, openUserSuspension } from "@/entities/governance/api/governance-client";
+import { openUserReinstatement, openUserSuspension } from "@/entities/governance/model/governance-resource";
 import { formatMoment } from "@/shared/lib/datetime";
 import { Link } from "@/shared/ui/cabinet-link";
 import { TipAnchor } from "@/shared/tips";

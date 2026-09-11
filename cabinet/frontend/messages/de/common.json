@@ -3072,8 +3072,8 @@
     "t": "Token-Version"
   },
   "tips.admin.users.status.suspend.body": {
-    "en": "Three different things, told apart by why the account is blocked. Hold freezes it now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through; a simple majority carries it. An account suspended before the two were told apart carries no record of which it was, so it does not lapse and one admin can lift it.",
-    "t": "Drei verschiedene Dinge, unterschieden danach, warum das Konto gesperrt ist. Die Haltesperre friert es sofort ein und läuft nach 24 Stunden von selbst aus — das darf ein einzelner Betreiber. Sie dauerhaft zu machen oder eine dauerhafte aufzuheben, ist ein Antrag, über den die Eigentümer abstimmen; eine einfache Mehrheit entscheidet. Ein Konto, das gesperrt wurde, bevor beides unterschieden wurde, trägt keinen Vermerk darüber, was es war: Es läuft nicht aus, und ein Admin kann es aufheben."
+    "en": "Hold freezes the account now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through. An account blocked before the two were told apart does not lapse, and one admin can lift it.",
+    "t": "Die Haltesperre friert das Konto sofort ein und läuft nach 24 Stunden von selbst aus — das darf ein Betreiber. Sie dauerhaft zu machen oder eine dauerhafte aufzuheben, ist ein Antrag der Eigentümer. Ein vor dieser Unterscheidung gesperrtes Konto läuft nicht aus; ein Admin kann es aufheben."
   },
   "tips.admin.users.status.suspend.title": {
     "en": "Hold, suspension and reinstatement",

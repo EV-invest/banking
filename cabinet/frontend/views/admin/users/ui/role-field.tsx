@@ -22,7 +22,7 @@ import { useT } from "@evinvest/i18n/react";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@evinvest/uikit";
 
 import { setUserRole } from "@/entities/admin/api/admin-client";
-import { openAdminAdmission } from "@/entities/governance/api/governance-client";
+import { openAdminAdmission } from "@/entities/governance/model/governance-resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { TipAnchor } from "@/shared/tips";
 import { ASSIGNABLE_ROLES, roleLabel } from "@/views/admin/lib/format";

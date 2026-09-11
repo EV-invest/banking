@@ -3072,8 +3072,8 @@
     "t": "Version de jeton"
   },
   "tips.admin.users.status.suspend.body": {
-    "en": "Three different things, told apart by why the account is blocked. Hold freezes it now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through; a simple majority carries it. An account suspended before the two were told apart carries no record of which it was, so it does not lapse and one admin can lift it.",
-    "t": "Trois choses différentes, distinguées par le motif du blocage. Le blocage gèle le compte immédiatement et expire de lui-même au bout de 24 heures — un seul opérateur peut le faire. Le rendre définitif, ou défaire un blocage définitif, est une proposition que les propriétaires votent ; une majorité simple l'emporte. Un compte suspendu avant que les deux soient distingués ne garde aucune trace de ce qu'il était : il n'expire pas, et un administrateur peut le lever."
+    "en": "Hold freezes the account now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through. An account blocked before the two were told apart does not lapse, and one admin can lift it.",
+    "t": "Le blocage gèle le compte immédiatement et expire de lui-même au bout de 24 heures — un opérateur peut le faire. Le rendre définitif, ou défaire un blocage définitif, est une proposition votée par les propriétaires. Un compte bloqué avant cette distinction n'expire pas ; un administrateur peut le lever."
   },
   "tips.admin.users.status.suspend.title": {
     "en": "Hold, suspension and reinstatement",

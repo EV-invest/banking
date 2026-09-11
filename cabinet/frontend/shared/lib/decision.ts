@@ -89,3 +89,30 @@ export function settledAdmission(raw: unknown): SettledAdmission | null {
 export function admissionVote(raw: unknown): SettledAdmission | null {
   return settledAdmission(raw);
 }
+
+/**
+ * An answer to a USER proposal: neutral, because three kinds share the vote.
+ *
+ * Its own vocabulary again, and for a sharper reason than the two above. `remove`/`keep`
+ * and `admit`/`reject` at least name what they do; `for`/`against` deliberately does not,
+ * because the same word has to serve "suspend this person", "let them back in" and "make
+ * them an admin". A kind-specific verb would only mean something read against
+ * `UserProposal.kind`, and a vocabulary that is correct only when cross-referenced is one
+ * that eventually gets rendered wrong. The verb belongs on the surface, which knows the
+ * kind; this is which way the voter pushed.
+ */
+export type SettledProposal = "for" | "against";
+
+/**
+ * The proposal answer, or null while this owner has not answered.
+ *
+ * Same trap as {@link peerVote}: the plane spells an unanswered peer `"pending"` and an
+ * absent one `""`, both truthy, and reading either as a cast vote takes the buttons away
+ * from an owner who still has a vote to give.
+ */
+export function proposalVote(raw: unknown): SettledProposal | null {
+  const value = normalise(raw);
+  if (value === "for") return "for";
+  if (value === "against") return "against";
+  return null;
+}

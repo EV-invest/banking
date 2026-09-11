@@ -3072,8 +3072,8 @@
     "t": "Phiên bản token"
   },
   "tips.admin.users.status.suspend.body": {
-    "en": "Three different things, told apart by why the account is blocked. Hold freezes it now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through; a simple majority carries it. An account suspended before the two were told apart carries no record of which it was, so it does not lapse and one admin can lift it.",
-    "t": "Ba việc khác nhau, phân biệt theo lý do tài khoản bị chặn. Tạm giữ đóng băng tài khoản ngay và tự hết hiệu lực sau 24 giờ — một quản trị viên có thể làm điều đó. Biến nó thành vĩnh viễn, hoặc gỡ một lệnh vĩnh viễn, là đề xuất do các chủ sở hữu bỏ phiếu; đa số quá bán quyết định. Tài khoản bị đình chỉ trước khi hai việc này được phân biệt không lưu lại nó từng là loại nào: nó không tự hết hiệu lực, và một quản trị viên có thể gỡ."
+    "en": "Hold freezes the account now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through. An account blocked before the two were told apart does not lapse, and one admin can lift it.",
+    "t": "Tạm giữ đóng băng tài khoản ngay và tự hết hiệu lực sau 24 giờ — một quản trị viên có thể làm. Biến nó thành vĩnh viễn, hoặc gỡ một lệnh vĩnh viễn, là đề xuất do các chủ sở hữu bỏ phiếu. Tài khoản bị chặn trước khi hai việc này được phân biệt không tự hết hiệu lực; một quản trị viên có thể gỡ."
   },
   "tips.admin.users.status.suspend.title": {
     "en": "Hold, suspension and reinstatement",

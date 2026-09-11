@@ -49,6 +49,11 @@ export const TAG = {
    *  that carries GRANTS a seat, so it moves `owners` too — and a roster that grows past
    *  the payout floor changes what the payout card may offer. */
   admissions: "owners.admissions",
+  /** Open and settled USER proposals — a permanent suspension, its undo, or the admin
+   *  seat — with their per-owner votes. A suspension or reinstatement that carries changes
+   *  a user's standing, so it moves `adminUsers` too; an admin admission that carries
+   *  changes their role, which the same list shows. */
+  userProposals: "owners.proposals",
   /** Payout consilia and their tallies. */
   consilium: "consilium",
 

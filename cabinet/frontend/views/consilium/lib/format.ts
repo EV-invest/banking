@@ -8,10 +8,13 @@ import type {
   AdmissionVote,
   OwnerAdmission,
   OwnerRemoval,
+  ProposalVote,
   RemovalPeer,
   RemovalVote,
+  UserProposal,
+  UserProposalPeer,
 } from "@/shared/contracts/governance";
-import { admissionVote, peerVote, settledRemoval } from "@/shared/lib/decision";
+import { admissionVote, peerVote, proposalVote, settledRemoval } from "@/shared/lib/decision";
 
 /**
  * States in which nothing further can be voted.
@@ -250,5 +253,116 @@ export function standingInAdmission(admission: OwnerAdmission, userId: string | 
   if (admission.candidate_user_id === userId) return { role: "candidate" };
   const peer = (admission.peers ?? []).find((p) => p.user_id === userId);
   if (peer) return { role: "peer", vote: admissionVote(peer.vote) };
+  return { role: "bystander" };
+}
+
+// ── user proposals ────────────────────────────────────────────────────────────
+//
+// A third near-duplicate set, for a sharper version of the same reason. The vote here is
+// NEUTRAL — `for`/`against` — because one message carries three kinds, so the words say
+// which way someone pushed and nothing about what it does. That makes the verb a property
+// of the SURFACE, and these helpers are where the surface decides it.
+
+/** The three kinds, as a reader sees them. An unrecognised kind falls back to its wire
+ *  word, the same call `roleLabel` makes: `reconciling` beats `consilium.kind.reconciling`. */
+const KNOWN_KINDS: ReadonlySet<string> = new Set(["suspension", "reinstatement", "admin_admission"]);
+
+export function proposalKindLabel(kind: string, t: Translate): string {
+  return KNOWN_KINDS.has(kind) ? t(`consilium.proposalKind.${kind}`) : kind;
+}
+
+/**
+ * The kind's own verb for a vote, in the direction the voter is pushing.
+ *
+ * This is the whole reason the wire word is neutral: "for" on a suspension means *block
+ * this person* and on a reinstatement means *let them back in*, and a button reading "For"
+ * over either would be asking someone to agree with something unnamed. An unrecognised kind
+ * falls back to the neutral words rather than guessing — a wrong verb on a governance
+ * ballot is how a vote gets cast by mistake.
+ */
+export function proposalVoteLabel(kind: string, direction: ProposalVote, t: Translate): string {
+  if (!KNOWN_KINDS.has(kind)) return t(`consilium.proposalVote.${direction}`);
+  return t(`consilium.proposalVerb.${kind}.${direction}`);
+}
+
+export function proposalVoteTone(vote: string | null | undefined): string {
+  const cast = proposalVote(vote);
+  if (cast === "for") return "text-main-accent-t2";
+  if (cast === "against") return "text-destructive";
+  return "text-muted-foreground";
+}
+
+/** How an owner's cast vote reads in the roster. Neutral here on purpose: the roster says
+ *  which way each owner pushed, and the kind is stated once on the card above it. */
+export function proposalPeerLabel(vote: string | null | undefined, t: Translate): string {
+  const cast = proposalVote(vote);
+  if (cast === "for") return t("consilium.proposalVote.for");
+  if (cast === "against") return t("consilium.proposalVote.against");
+  return t("consilium.vote.waiting");
+}
+
+/**
+ * How a user proposal stands.
+ *
+ * A MAJORITY of the snapshotted voters, not the unanimity the two owner consilia demand —
+ * so unlike {@link admissionTally} a single AGAINST does not end it, and the page must not
+ * imply that it does. What ends it is AGAINST passing the point where FOR can still reach
+ * the threshold, which is why `stillReachable` is computed against `threshold` rather than
+ * against the head count.
+ *
+ * `threshold` is READ, never derived. It is frozen when the proposal opens, so a roster
+ * that moved underneath it does not move the bar — and a page that recomputed it from
+ * `peers.length` would show owners a target their proposal is not measured against.
+ */
+export interface ProposalTally {
+  forVotes: number;
+  againstVotes: number;
+  total: number;
+  waiting: number;
+  threshold: number;
+  /** The threshold can still be met by the owners who have not answered. */
+  stillReachable: boolean;
+}
+
+export function proposalTally(proposal: UserProposal): ProposalTally {
+  // `?? []` for the wire reason `peerTally` gives: proto3 JSON omits an empty repeated
+  // field, so an absent `peers` means none arrived, not that the shape is wrong.
+  const list: readonly UserProposalPeer[] = proposal.peers ?? [];
+  const forVotes = list.filter((p) => proposalVote(p.vote) === "for").length;
+  const againstVotes = list.filter((p) => proposalVote(p.vote) === "against").length;
+  const waiting = list.length - forVotes - againstVotes;
+  return {
+    forVotes,
+    againstVotes,
+    total: list.length,
+    waiting,
+    threshold: proposal.threshold,
+    stillReachable: forVotes + waiting >= proposal.threshold,
+  };
+}
+
+/**
+ * Where the caller stands in one user proposal.
+ *
+ * `subject` is any user, not necessarily an owner — which is the difference from
+ * {@link standingInAdmission}, and the reason an owner can be the subject of a proposal they
+ * are also not eligible to vote on. Peers come from the proposal's OWN frozen set rather
+ * than the live roster, as everywhere else here (docs/CONSILIUM.md, policy 3).
+ */
+export type ProposalStanding =
+  | { role: "peer"; vote: ProposalVote | null }
+  | { role: "subject" }
+  | { role: "initiator" }
+  | { role: "bystander" };
+
+export function standingInProposal(proposal: UserProposal, userId: string | null): ProposalStanding {
+  if (!userId) return { role: "bystander" };
+  if (proposal.initiator_user_id === userId) return { role: "initiator" };
+  const peer = (proposal.peers ?? []).find((p) => p.user_id === userId);
+  if (peer) return { role: "peer", vote: proposalVote(peer.vote) };
+  // Checked AFTER the peer lookup: the subject may also be an owner, and if they are an
+  // eligible voter on some other person's proposal that is the role that matters here.
+  // Being the subject only excludes them when they are not in the frozen voter set.
+  if (proposal.subject_user_id === userId) return { role: "subject" };
   return { role: "bystander" };
 }

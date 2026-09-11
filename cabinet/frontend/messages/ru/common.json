@@ -1975,6 +1975,122 @@
     "en": "Owners answer from the link emailed to them, not from this page — the code in that message is what makes an answer deliberate.",
     "t": "Владельцы отвечают по ссылке из письма, а не с этой страницы: именно код в письме делает ответ осознанным."
   },
+  "consilium.proposalKind.admin_admission": {
+    "en": "Admin seat",
+    "t": "Место админа"
+  },
+  "consilium.proposalKind.reinstatement": {
+    "en": "Letting back in",
+    "t": "Возвращение доступа"
+  },
+  "consilium.proposalKind.suspension": {
+    "en": "Permanent block",
+    "t": "Постоянная блокировка"
+  },
+  "consilium.proposalVerb.admin_admission.against": {
+    "en": "Refuse",
+    "t": "Отказать"
+  },
+  "consilium.proposalVerb.admin_admission.for": {
+    "en": "Grant admin",
+    "t": "Выдать админа"
+  },
+  "consilium.proposalVerb.reinstatement.against": {
+    "en": "Keep blocked",
+    "t": "Оставить блокировку"
+  },
+  "consilium.proposalVerb.reinstatement.for": {
+    "en": "Let back in",
+    "t": "Вернуть доступ"
+  },
+  "consilium.proposalVerb.suspension.against": {
+    "en": "Do not block",
+    "t": "Не блокировать"
+  },
+  "consilium.proposalVerb.suspension.for": {
+    "en": "Block permanently",
+    "t": "Заблокировать навсегда"
+  },
+  "consilium.proposalVote.against": {
+    "en": "Against",
+    "t": "Против"
+  },
+  "consilium.proposalVote.for": {
+    "en": "For",
+    "t": "За"
+  },
+  "consilium.proposals.bystander": {
+    "en": "You were not seated when this opened, so you are not among its voters.",
+    "t": "На момент открытия вы не были в составе, поэтому не входите в число голосующих."
+  },
+  "consilium.proposals.emptyBody": {
+    "en": "A hold an operator wants made permanent, a block to undo, or an admin seat to grant would appear here for you to vote on. Operators open these from the user console.",
+    "t": "Здесь появится удержание, которое оператор хочет сделать постоянным, блокировка, которую надо отменить, или место админа — и вы за это проголосуете. Оператор открывает такие предложения из консоли пользователей."
+  },
+  "consilium.proposals.emptyTitle": {
+    "en": "Nobody's standing is in question",
+    "t": "Ничьё положение не обсуждается"
+  },
+  "consilium.proposals.expires": {
+    "en": "Closes {at} · {left}",
+    "t": "Закроется {at} · {left}"
+  },
+  "consilium.proposals.failedBody": {
+    "en": "Until they do, this page cannot say whether anyone's standing is being decided — including a 24-hour hold that lapses if nobody ratifies it.",
+    "t": "Пока они не загрузятся, страница не может сказать, решается ли чьё-то положение, — в том числе 24-часовое удержание, которое спадёт, если его никто не ратифицирует."
+  },
+  "consilium.proposals.failedTitle": {
+    "en": "The people proposals did not load",
+    "t": "Предложения о людях не загрузились"
+  },
+  "consilium.proposals.majorityNote": {
+    "en": "A simple majority of the owners who were seated when this opened carries it. The bar was frozen then and does not move with the roster.",
+    "t": "Решает простое большинство владельцев, сидевших на момент открытия. Порог заморожен тогда же и не меняется вслед за составом."
+  },
+  "consilium.proposals.openedBy": {
+    "en": "Opened by {initiator} on {at}",
+    "t": "Открыл {initiator}, {at}"
+  },
+  "consilium.proposals.sub": {
+    "en": "What the owners are deciding about one person's standing — a permanent block, letting someone back in, or the admin seat.",
+    "t": "Что владельцы решают о положении одного человека — постоянная блокировка, возвращение доступа или место админа."
+  },
+  "consilium.proposals.subject": {
+    "en": "Subject",
+    "t": "О ком"
+  },
+  "consilium.proposals.tally": {
+    "en": "{n} of {threshold} needed",
+    "t": "{n} из {threshold} нужных"
+  },
+  "consilium.proposals.tallyDetail": {
+    "en": "{against} against · {waiting} yet to answer",
+    "t": "{against} против · {waiting} ещё не ответили"
+  },
+  "consilium.proposals.title": {
+    "en": "People",
+    "t": "Люди"
+  },
+  "consilium.proposals.unreachable": {
+    "en": "Enough owners have voted against that the threshold can no longer be reached.",
+    "t": "Против проголосовало столько владельцев, что порог уже недостижим."
+  },
+  "consilium.proposals.withdraw": {
+    "en": "Withdraw",
+    "t": "Отозвать"
+  },
+  "consilium.proposals.youAreSubject": {
+    "en": "This is about you. You are not among its voters.",
+    "t": "Это о вас. Вы не входите в число голосующих."
+  },
+  "consilium.proposals.youInitiated": {
+    "en": "You opened this. The initiator does not vote — proposing is not agreeing.",
+    "t": "Вы открыли это предложение. Инициатор не голосует — предложить не значит согласиться."
+  },
+  "consilium.proposals.youVoted": {
+    "en": "You voted {vote}.",
+    "t": "Вы проголосовали: {vote}."
+  },
   "consilium.propose.floorWarning": {
     "en": "A fund needs at least three owners to authorise a payout, so a removal that would leave fewer than three is refused.",
     "t": "Чтобы фонд мог авторизовать выплату, владельцев должно быть не меньше трёх, поэтому прекращение, после которого их останется меньше трёх, будет отклонено."
@@ -3976,8 +4092,8 @@
     "t": "Версия токена"
   },
   "tips.admin.users.status.suspend.body": {
-    "en": "Three different things, told apart by why the account is blocked. Hold freezes it now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through; a simple majority carries it. An account suspended before the two were told apart carries no record of which it was, so it does not lapse and one admin can lift it.",
-    "t": "Три разные вещи, различаемые по тому, почему аккаунт заблокирован. Удержание замораживает его сейчас же и спадает само через 24 часа — это может сделать один оператор. Сделать блокировку постоянной или отменить постоянную — это предложение, которое голосуют владельцы; решает простое большинство. Аккаунт, приостановленный до того, как эти две вещи стали различаться, не хранит записи о том, чем это было: он не спадает, и снять его может один админ."
+    "en": "Hold freezes the account now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through. An account blocked before the two were told apart does not lapse, and one admin can lift it.",
+    "t": "Удержание замораживает аккаунт сейчас же и спадает само через 24 часа — это может один оператор. Сделать блокировку постоянной или отменить постоянную — предложение, которое голосуют владельцы. Аккаунт, заблокированный до разделения этих двух вещей, не спадает, и снять его может один админ."
   },
   "tips.admin.users.status.suspend.title": {
     "en": "Hold, suspension and reinstatement",

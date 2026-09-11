@@ -52,6 +52,7 @@ import {
   refreshGovernance,
   removalsResource,
   resignOwnership,
+  userProposalsResource,
 } from "@/entities/governance/model/governance-resource";
 import { profileResource } from "@/entities/user/model/profile-resource";
 import type { Consilium, ConsiliumList, OwnerList } from "@/shared/contracts/governance";
@@ -81,6 +82,7 @@ import { AdmissionList, ProposeAdmission } from "@/views/consilium/ui/admissions
 import { PayoutSkeleton, RosterSkeleton } from "@/views/consilium/ui/loading";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
 import { ProposeRemoval, RemovalList } from "@/views/consilium/ui/removals";
+import { UserProposalList } from "@/views/consilium/ui/user-proposals";
 
 const isForbidden = (error: unknown): boolean => error instanceof RequestError && error.status === 403;
 
@@ -90,13 +92,14 @@ export function ConsiliumView() {
   const owners = useResource(ownersResource);
   const removals = useResource(removalsResource);
   const admissions = useResource(admissionsResource);
+  const proposals = useResource(userProposalsResource);
   const consilia = useResource(consiliumResource);
   const profile = useResource(profileResource);
 
   // Decided before the stream is acquired, not after: a non-owner who opens this URL would
   // otherwise hold a websocket and a 20-second poll against four endpoints that answer 403
   // forever, for a page they are about to be told they cannot see.
-  const forbidden = [owners.error, removals.error, admissions.error, consilia.error].some(isForbidden);
+  const forbidden = [owners.error, removals.error, admissions.error, proposals.error, consilia.error].some(isForbidden);
   const stream = useConsiliumStream(!forbidden);
 
   if (forbidden) {
@@ -141,6 +144,7 @@ export function ConsiliumView() {
   // absent list here means there are none, not that nothing came back.
   const removalsRead = mapRead(readOf(removals), (list) => (list.items ?? []).filter((r) => !isSettled(r.state, r.decided_at)));
   const admissionsRead = mapRead(readOf(admissions), (list) => (list.items ?? []).filter((a) => !isSettled(a.state, a.decided_at)));
+  const proposalsRead = mapRead(readOf(proposals), (list) => (list.items ?? []).filter((p) => !isSettled(p.state, p.decided_at)));
 
   const roster = knownValue(rosterRead);
 
@@ -150,8 +154,9 @@ export function ConsiliumView() {
   // one failure with one retry is the truth. A PARTIAL failure is never folded in here —
   // "the roster loaded but the payouts did not" says which half of the room can be trusted,
   // and that is worth a card of its own.
-  const outage = everyReadFailed([rosterRead, payoutsRead, removalsRead, admissionsRead]);
-  const refreshingAll = owners.isValidating || removals.isValidating || admissions.isValidating || consilia.isValidating;
+  const outage = everyReadFailed([rosterRead, payoutsRead, removalsRead, admissionsRead, proposalsRead]);
+  const refreshingAll =
+    owners.isValidating || removals.isValidating || admissions.isValidating || proposals.isValidating || consilia.isValidating;
 
   return (
     <Stagger
@@ -211,6 +216,12 @@ export function ConsiliumView() {
               retrying={admissions.isValidating}
             />
             <RemovalList read={removalsRead} userId={userId} onRetry={() => void removals.refresh()} retrying={removals.isValidating} />
+            {/* People last of the three lists, and that ordering is a judgement rather than
+                an accident: the two above decide who CONTROLS the fund, this one decides
+                what happens to someone in it. It is not the less urgent of the three — a
+                hold on this list lapses in 24 hours if nobody ratifies it — but an owner
+                scanning the page for "is my own seat in question" should meet that first. */}
+            <UserProposalList read={proposalsRead} userId={userId} onRetry={() => void proposals.refresh()} retrying={proposals.isValidating} />
             <ProposeAdmission roster={rosterRead} onRetry={() => void owners.refresh()} retrying={owners.isValidating} />
             {/* Always rendered, and it is the roster's own `Read` that decides what it
                 shows: gated on `!isLoading` it vanished from the layout while the owners
