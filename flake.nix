@@ -708,6 +708,13 @@
             # this. Same reason every other workspace-touching app links it first.
             ${linkTbClient}
 
+            # .cargo/config.toml sets `rustc-wrapper = "sccache"`, so cargo probes
+            # `sccache rustc -vV` before doing anything and dies with 101 wherever sccache
+            # is not on PATH — every runner. An empty RUSTC_WRAPPER overrides the config
+            # key; it is the same override the generated workflows carry in their `env`.
+            # Nothing is compiled here anyway: `metadata` resolves, it does not build.
+            export RUSTC_WRAPPER=""
+
             echo "▶ Cargo.lock agrees with the manifests"
             cargo metadata --locked --format-version 1 >/dev/null
 
