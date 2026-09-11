@@ -1587,6 +1587,10 @@
     "en": "The hub declined the unpark.",
     "t": "Der Hub hat das Entparken abgelehnt."
   },
+  "err.verificationRequired": {
+    "en": "Verify your identity to continue.",
+    "t": "Bestätigen Sie Ihre Identität, um fortzufahren."
+  },
   "err.walletLoad": {
     "en": "Couldn't load your wallet",
     "t": "Ihr Wallet konnte nicht geladen werden"
@@ -1858,6 +1862,10 @@
   "invest.yourUnits": {
     "en": "Your units",
     "t": "Ihre Anteile"
+  },
+  "kyc.verifyNow": {
+    "en": "Verify now",
+    "t": "Identität bestätigen"
   },
   "lang.switch": {
     "en": "Language",
@@ -2424,8 +2432,8 @@
     "t": "Sie haben die Verifizierung heute bereits mehrfach gestartet. Bitte versuchen Sie es morgen erneut."
   },
   "profile.kyc.unavailable": {
-    "en": "Verification isn't available right now. Please try again later.",
-    "t": "Die Verifizierung ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut."
+    "en": "Automatic verification is temporarily out of service — write to us and we'll raise your level by hand.",
+    "t": "Die automatische Prüfung ist vorübergehend außer Betrieb — schreiben Sie uns, und wir heben Ihr Level von Hand an."
   },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
@@ -3731,6 +3739,14 @@
     "en": "Deposit network",
     "t": "Einzahlungsnetzwerk"
   },
+  "wallet.depositVerifyBody": {
+    "en": "Your deposit address opens once your identity is verified. It only needs doing once.",
+    "t": "Ihre Einzahlungsadresse wird freigeschaltet, sobald Ihre Identität bestätigt ist. Das ist nur einmal nötig."
+  },
+  "wallet.depositVerifyTitle": {
+    "en": "Verify your identity to deposit",
+    "t": "Identität bestätigen, um einzuzahlen"
+  },
   "wallet.destinationAddressCaps": {
     "en": "DESTINATION ADDRESS",
     "t": "EMPFÄNGERADRESSE"
@@ -3854,6 +3870,14 @@
   "wallet.withdrawSub": {
     "en": "Send funds to an external address — one balance, any rail",
     "t": "Mittel an eine externe Adresse senden — ein Guthaben, jeder Kanal"
+  },
+  "wallet.withdrawVerifyBody": {
+    "en": "Withdrawals open once your identity is verified. Your balance is untouched in the meantime.",
+    "t": "Auszahlungen werden freigeschaltet, sobald Ihre Identität bestätigt ist. Ihr Guthaben bleibt davon unberührt."
+  },
+  "wallet.withdrawVerifyTitle": {
+    "en": "Verify your identity to withdraw",
+    "t": "Identität bestätigen, um auszuzahlen"
   },
   "wallet.withdrawalFailed": {
     "en": "Withdrawal failed",

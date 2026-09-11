@@ -26,6 +26,7 @@ use domain::{
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
+	config::KycGate,
 	infrastructure::{
 		custody::StubCustody,
 		db,
@@ -116,6 +117,17 @@ fn withdrawal_ports(h: &Harness) -> withdrawal_app::WithdrawalPorts<'_> {
 	}
 }
 
+/// The user-facing admission gates over every rail, at the given gate position.
+/// `KycGate::ENFORCED` is the deployment default; a suite passes `LIFTED` only to prove
+/// what the switch does.
+fn admission(h: &Harness, kyc: KycGate) -> withdrawal_app::AdmissionGates<'_> {
+	withdrawal_app::AdmissionGates {
+		users: h.users.as_ref(),
+		configured: &Network::ALL,
+		kyc,
+	}
+}
+
 fn usdt(decimal: &str) -> Usdt {
 	Usdt::parse_decimal(decimal).unwrap()
 }
@@ -154,19 +166,19 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 	// Double-submit the full balance WITHOUT draining in between — the exploit window.
 	// The shared rail's liquidity decides queued-vs-dispatched; dispatch explicitly so
 	// both withdrawals carry a Dispatched (broadcast) row regardless of rail state.
-	let first = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination.clone(), usdt("100"))
+	let first = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination.clone(), usdt("100"))
 		.await
 		.unwrap();
 	if first.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), &h.notify, first.id())
+		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), KycGate::ENFORCED, &h.notify, first.id())
 			.await
 			.unwrap();
 	}
-	let second = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), h.users.as_ref(), &Network::ALL, user, network, destination, usdt("100"))
+	let second = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination, usdt("100"))
 		.await
 		.expect("the second request passes the Read-First — TB lags the undrained outbox");
 	if second.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), &h.notify, second.id())
+		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), KycGate::ENFORCED, &h.notify, second.id())
 			.await
 			.unwrap();
 	}

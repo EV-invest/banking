@@ -2487,6 +2487,10 @@
     "en": "The hub declined the unpark.",
     "t": "Хаб отклонил возврат в обработку."
   },
+  "err.verificationRequired": {
+    "en": "Verify your identity to continue.",
+    "t": "Подтвердите личность, чтобы продолжить."
+  },
   "err.walletLoad": {
     "en": "Couldn't load your wallet",
     "t": "Не удалось загрузить ваш кошелёк"
@@ -2758,6 +2762,10 @@
   "invest.yourUnits": {
     "en": "Your units",
     "t": "Ваши паи"
+  },
+  "kyc.verifyNow": {
+    "en": "Verify now",
+    "t": "Подтвердить личность"
   },
   "lang.switch": {
     "en": "Language",
@@ -3328,8 +3336,8 @@
     "t": "Сегодня вы уже начинали верификацию несколько раз. Попробуйте завтра."
   },
   "profile.kyc.unavailable": {
-    "en": "Verification isn't available right now. Please try again later.",
-    "t": "Верификация сейчас недоступна. Попробуйте позже."
+    "en": "Automatic verification is temporarily out of service — write to us and we'll raise your level by hand.",
+    "t": "Автоматическая проверка временно не работает — напишите нам, и мы поднимем уровень вручную."
   },
   "profile.kycLevelPill": {
     "en": "KYC level {n}",
@@ -4635,6 +4643,14 @@
     "en": "Deposit network",
     "t": "Сеть пополнения"
   },
+  "wallet.depositVerifyBody": {
+    "en": "Your deposit address opens once your identity is verified. It only needs doing once.",
+    "t": "Адрес для пополнения откроется, как только личность будет подтверждена. Это делается один раз."
+  },
+  "wallet.depositVerifyTitle": {
+    "en": "Verify your identity to deposit",
+    "t": "Подтвердите личность, чтобы пополнять"
+  },
   "wallet.destinationAddressCaps": {
     "en": "DESTINATION ADDRESS",
     "t": "АДРЕС ПОЛУЧАТЕЛЯ"
@@ -4758,6 +4774,14 @@
   "wallet.withdrawSub": {
     "en": "Send funds to an external address — one balance, any rail",
     "t": "Отправка средств на внешний адрес — единый баланс, любой канал"
+  },
+  "wallet.withdrawVerifyBody": {
+    "en": "Withdrawals open once your identity is verified. Your balance is untouched in the meantime.",
+    "t": "Вывод откроется, как только личность будет подтверждена. Баланс при этом не затрагивается."
+  },
+  "wallet.withdrawVerifyTitle": {
+    "en": "Verify your identity to withdraw",
+    "t": "Подтвердите личность, чтобы выводить"
   },
   "wallet.withdrawalFailed": {
     "en": "Withdrawal failed",

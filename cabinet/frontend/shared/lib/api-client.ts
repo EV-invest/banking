@@ -101,6 +101,9 @@ interface JsonRequest {
  */
 const STALE_PAGE_MESSAGE = "This page went stale. Reload it and try again.";
 
+/** See {@link isVerificationRequired}. Named so the table and the predicate cannot drift. */
+const VERIFICATION_REQUIRED = "err.verificationRequired";
+
 const FRIENDLY: Record<string, { code: string; en: string }> = {
   unauthenticated: {
     code: "err.unauthenticated",
@@ -115,7 +118,25 @@ const FRIENDLY: Record<string, { code: string; en: string }> = {
     code: "err.requestFailed",
     en: "Something went wrong on our side. Please try again.",
   },
+  // The one refusal the BFF names rather than flattening into a read failure (see
+  // backend/src/routes/money.rs): below KYC tier 1 the hub hands out no deposit address.
+  // Keyed here so a screen that only renders the sentence still shows it in the reader's
+  // language — the screens that can act on it offer verification instead.
+  verification_required: {
+    code: VERIFICATION_REQUIRED,
+    en: "Verify your identity to continue.",
+  },
 };
+
+/**
+ * The verification gate specifically, as opposed to every other 403.
+ *
+ * A screen branches on this to offer the way out; `err.forbidden` — "you don't have access
+ * to this" — is the settled refusal it must NOT be confused with.
+ */
+export function isVerificationRequired(error: unknown): boolean {
+  return error instanceof RequestError && error.code === VERIFICATION_REQUIRED;
+}
 
 // Fallbacks when the response carries no `{ error }` body at all.
 function statusMessage(status: number): { code: string; en: string } {

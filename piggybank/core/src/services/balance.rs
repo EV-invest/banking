@@ -119,6 +119,7 @@ impl BalanceService for BalanceSvc {
 			self.state.withdrawals.as_ref(),
 			self.state.custody.as_ref(),
 			&PgOutflowPolicy::new(&self.state.pool),
+			self.state.kyc_gate,
 			&self.state.relay_notify,
 			id,
 		)

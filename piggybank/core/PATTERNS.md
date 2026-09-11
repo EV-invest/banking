@@ -586,6 +586,10 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `ListParkedEvents` | operator | `require_permission` (RBAC matrix) | — |
 | `UnparkEvent` | admin (`OutboxManage`) | `require_permission` (RBAC matrix) | parked ∧ not dispatched ∧ **not compensated** (the double-apply guard) |
 
+The `kyc_level ≥ 1` arms above are the **enforced** position of the deployment switch
+(`KYC_GATE_ENABLED`, enforced unless explicitly lifted — see **The switch** under the
+verification gate below); every other arm in this matrix is unconditional.
+
 `require_permission` (`services::support`) is `is_access` + the pure RBAC matrix
 (`domain::authz::grants` — the single place the matrix is defined) over the caller's
 bridge-mirrored role, **after** the account gates: a `disabled` (or frozen) operator is
@@ -643,6 +647,32 @@ verification") — because the cabinet has to pick a different screen for each. 
 stays fully readable at tier 0 (a user's own balance is never hidden from them) but serves
 no address on any rail. A **revenue payout is not gated**: it pays the fund's own earned
 revenue out of the `fee` claim and has no user behind it to verify.
+
+**The switch (`KYC_GATE_ENABLED`).** The verification floor is the one of the two deposit
+gates that can be turned off — it guards a rule the platform chose, where the rail gate
+guards a fact about the chain — so it is a deployment switch, `config::KycGate`, read from
+the environment **once at boot** and carried on `AppState` rather than re-read per call.
+
+| `KYC_GATE_ENABLED` | gate | effect |
+| --- | --- | --- |
+| unset / empty / `true` / `1` | **enforced** (the default, and what production runs) | tier 0 gets no deposit address and cannot withdraw |
+| `false` / `0` | lifted | every tier is issued an address, admitted and paid out — the pre-switch behaviour |
+| anything else | **enforced**, with a WARN naming the value | a typo never opens the gate |
+
+Every uncertain reading resolves to *enforced*: this decides whether unverified money
+crosses the platform boundary, so it opens only on an explicit, unambiguous word. That is
+also why it is not `bool_env`, which reads anything it does not recognise as `false` — the
+right default for an opt-in sweep, the wrong one here. An unparseable value warns rather
+than refusing the boot, because the reading that cannot lose money is already available
+without stopping the hub. Boot logs the position either way (`warn!` when lifted), so a gate
+that is off is visible in a pod's first lines and not only in someone's memory.
+
+The same value **must** reach all three gates — address, admission, dispatch. Lifting it at
+admission only would accept an unverified user's withdrawal and then leave it queued
+forever, since `dispatch_withdrawal` re-checks the tier when the money actually leaves;
+that is worse than having no switch at all, and
+`tests/kyc_gating.rs::a_lifted_gate_both_admits_and_dispatches_an_unverified_withdrawal`
+exercises one withdrawal across both points so the two cannot be wired apart again.
 
 ## Reconciliation + reaper + dispatcher (recovery jobs)
 

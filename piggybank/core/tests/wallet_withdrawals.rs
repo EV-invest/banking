@@ -23,6 +23,7 @@ use domain::{
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
+	config::KycGate,
 	infrastructure::{custody::StubCustody, deposits::PgDeposits, dispatcher::Dispatcher, operations, outflow::PgOutflowPolicy, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
 	ports::{BroadcastRequest, Custody, CustodyError, DepositAddresses, UserRepository, WithdrawalRepository, ledger::Ledger},
 };
@@ -89,6 +90,17 @@ fn withdrawal_ports<'a>(h: &'a Harness, custody: &'a dyn Custody) -> withdrawal_
 		ledger: h.ledger.as_ref(),
 		custody,
 		relay: &h.notify,
+	}
+}
+
+/// The user-facing admission gates over every rail, at the given gate position.
+/// `KycGate::ENFORCED` is the deployment default; a suite passes `LIFTED` only to prove
+/// what the switch does.
+fn admission(h: &Harness, kyc: KycGate) -> withdrawal_app::AdmissionGates<'_> {
+	withdrawal_app::AdmissionGates {
+		users: h.users.as_ref(),
+		configured: &Network::ALL,
+		kyc,
 	}
 }
 
@@ -174,8 +186,7 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 	// Request a 50 USDT withdrawal (fee 1, net 49) — the gross is reserved as pending.
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -222,8 +233,7 @@ async fn withdraw_on_polygon_reserves_then_settles_and_retains_fee() {
 
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -260,8 +270,7 @@ async fn withdraw_fail_voids_and_refunds_in_full() {
 
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -289,8 +298,7 @@ async fn withdraw_below_minimum_is_rejected() {
 	let network = Network::Ton;
 	let err = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -311,8 +319,7 @@ async fn withdraw_beyond_available_is_rejected_read_first() {
 	// 50 clears the minimum but exceeds the available balance — Read-First rejects it.
 	let err = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -334,8 +341,7 @@ async fn a_disabled_user_cannot_withdraw() {
 
 	let err = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -362,8 +368,7 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	// is accepted and QUEUED (accept-and-queue), not refused.
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		Network::Ton,
 		destination(Network::Ton),
@@ -378,7 +383,7 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	// The treasury tops up the TON rail past the net; the worker then dispatches it.
 	balance_app::seed_fund_capital(&h.deposits, &h.notify, Network::Ton, big).await.unwrap();
 	h.relay.drain().await;
-	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy(&h), &h.notify, withdrawal.id())
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap();
 	assert_eq!(dispatched.state(), WithdrawalState::Processing, "a funded rail dispatches");
@@ -405,8 +410,7 @@ async fn a_queued_withdrawal_can_be_cancelled_and_refunds() {
 	// Withdraw on the TRC20 rail, which cannot cover 1e9 → queued (no test seeds TRC20).
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		Network::Trc20,
 		destination(Network::Trc20),
@@ -441,9 +445,16 @@ async fn an_onchain_short_treasury_queues_despite_a_liquid_tb_rail() {
 	deposit(&h, user, network, "100").await;
 
 	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
-		.await
-		.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &custody),
+		&admission(&h, KycGate::ENFORCED),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "an on-chain-short treasury queues, never dispatches");
 	h.relay.drain().await;
 	assert_eq!(bal(&h, &claim).await.locked, usdt("50"), "the clearing reserve holds the gross while queued");
@@ -466,9 +477,16 @@ async fn an_onchain_liquid_treasury_dispatches_immediately() {
 	deposit(&h, user, network, "100").await;
 
 	let custody = TestCustody::with_view(network, TreasuryView::OnChain(usdt("1000000000")));
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
-		.await
-		.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &custody),
+		&admission(&h, KycGate::ENFORCED),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Processing, "both liquidity sources cover the net — dispatched");
 	h.relay.drain().await;
 
@@ -490,9 +508,16 @@ async fn a_treasury_read_failure_queues_and_never_rejects() {
 	deposit(&h, user, network, "100").await;
 
 	let custody = TestCustody::with_view(network, TreasuryView::Unreachable);
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
-		.await
-		.expect("a chain-view outage must not refuse the user");
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &custody),
+		&admission(&h, KycGate::ENFORCED),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.expect("a chain-view outage must not refuse the user");
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "degrade to queued on a treasury read failure");
 	h.relay.drain().await;
 	assert_eq!(bal(&h, &claim).await.locked, usdt("50"), "the reserve is untouched by the degraded gate");
@@ -511,13 +536,20 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 	deposit(&h, user, network, "100").await;
 
 	let custody = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &custody), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
-		.await
-		.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &custody),
+		&admission(&h, KycGate::ENFORCED),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 
-	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, &policy(&h), &h.notify, withdrawal.id())
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &custody, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(_)), "an underfunded rail refuses the dispatch, got {err:?}");
@@ -548,8 +580,7 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	let custody = Arc::new(TestCustody::short_everywhere());
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, custody.as_ref()),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -560,7 +591,7 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued, "the on-chain-short treasury queues the request");
 	h.relay.drain().await;
 
-	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone(), KycGate::ENFORCED);
 
 	// On-chain still short — the sweep leaves everything queued.
 	assert_eq!(dispatcher.sweep().await.unwrap(), 0, "an on-chain-short rail dispatches nothing");
@@ -608,8 +639,7 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 	let custody = Arc::new(TestCustody::short_everywhere());
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, custody.as_ref()),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -622,7 +652,7 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 
 	// Both liquidity gates now pass on-chain — only the freeze may hold it.
 	custody.set(network, TreasuryView::OnChain(usdt("1000000000")));
-	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone(), KycGate::ENFORCED);
 
 	// Freeze the owner (mirrors a concierge SUSPENDED: `frozen` set, status still active).
 	sqlx::query("UPDATE users SET frozen = TRUE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
@@ -669,8 +699,7 @@ async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 	for _ in 0..3 {
 		let withdrawal = withdrawal_app::request_withdrawal(
 			&withdrawal_ports(&h, custody.as_ref()),
-			h.users.as_ref(),
-			&Network::ALL,
+			&admission(&h, KycGate::ENFORCED),
 			user,
 			network,
 			destination(network),
@@ -686,7 +715,7 @@ async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 	// Top up the treasury to cover exactly one net (49) — a static gate would let all
 	// three (net 147) through.
 	custody.set(network, TreasuryView::OnChain(usdt("50")));
-	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone(), KycGate::ENFORCED);
 	dispatcher.sweep().await.unwrap();
 
 	let first = h.withdrawals.find_by_id(withdrawals[0].id()).await.unwrap().unwrap();
@@ -742,8 +771,7 @@ async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() 
 	let custody = Arc::new(TestCustody::short_everywhere());
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, custody.as_ref()),
-		h.users.as_ref(),
-		&Network::ALL,
+		&admission(&h, KycGate::ENFORCED),
 		user,
 		network,
 		destination(network),
@@ -756,7 +784,7 @@ async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() 
 
 	// Both liquidity gates now pass on-chain — only the verification floor may hold it.
 	custody.set(network, TreasuryView::OnChain(usdt("1000000000")));
-	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone());
+	let dispatcher = Dispatcher::new(h.pool.clone(), h.withdrawals.clone(), h.ledger.clone(), custody.clone(), h.notify.clone(), KycGate::ENFORCED);
 
 	// Compliance revokes the tier the way the lifecycle bridge does: the mirrored column,
 	// with no freeze alongside it.
@@ -796,7 +824,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	// Queue it on an on-chain-short treasury, then dispatch against a liquid view: the
 	// liquidity gate is covered elsewhere and must not be what refuses here.
 	let short = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &short), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &short), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
 		.await
 		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
@@ -805,7 +833,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 
 	// 1. The tier is revoked after acceptance.
 	common::set_kyc_level(&h.pool, user, 0).await;
-	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id())
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(_)), "an unverified owner refuses the admin dispatch, got {err:?}");
@@ -813,7 +841,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 
 	// 2. The owner is frozen (a concierge SUSPENDED).
 	sqlx::query("UPDATE users SET frozen = TRUE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
-	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id())
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(_)), "a frozen owner refuses the admin dispatch, got {err:?}");
@@ -822,7 +850,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	// 3. The global read-only kill-switch. Cleared before asserting, so a failing
 	// assertion cannot leave the switch on for every other test on this database.
 	operations::set_read_only(&h.pool, true).await.unwrap();
-	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id()).await;
+	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id()).await;
 	operations::set_read_only(&h.pool, false).await.unwrap();
 	assert!(
 		matches!(refused, Err(DomainError::Forbidden(_))),
@@ -833,7 +861,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	assert_eq!(still_queued.state(), WithdrawalState::Queued, "every refusal leaves the withdrawal queued and cancellable");
 
 	// With all three clear the identical call ships it — the policy was the only hold.
-	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id())
+	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap();
 	assert_eq!(dispatched.state(), WithdrawalState::Processing, "a clear policy dispatches");
@@ -859,7 +887,7 @@ async fn dispatch_is_refused_when_the_owner_has_no_control_plane_row() {
 	deposit(&h, user, network, "100").await;
 
 	let short = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &short), h.users.as_ref(), &Network::ALL, user, network, destination(network), usdt("50"))
+	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &short), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
 		.await
 		.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
@@ -876,7 +904,7 @@ async fn dispatch_is_refused_when_the_owner_has_no_control_plane_row() {
 		.unwrap();
 
 	let liquid = TestCustody::with_view(network, TreasuryView::OnChain(usdt("1000000000")));
-	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), &h.notify, withdrawal.id())
+	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(_)), "a missing owner row fails closed, got {err:?}");

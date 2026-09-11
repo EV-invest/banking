@@ -7,6 +7,7 @@ use axum::{
 use axum_extra::extract::cookie::CookieJar;
 use evbanking_contracts::banking::v1 as bk;
 use serde::Deserialize;
+use tonic::{Code, Status};
 
 use crate::{
 	dto,
@@ -14,6 +15,11 @@ use crate::{
 	routes::{parse_body, require_money_token, required, verify_csrf},
 	state::AppState,
 };
+
+/// The machine-readable body the cabinet keys on to offer verification instead of reporting
+/// a fault. A token rather than a sentence: it is matched in the browser and worded there,
+/// the way the identity plane's own `kyc_unavailable` is.
+pub const VERIFICATION_REQUIRED: &str = "verification_required";
 
 #[derive(Deserialize)]
 pub struct NetworkQuery {
@@ -40,14 +46,26 @@ pub async fn get_wallet(State(st): State<AppState>, jar: CookieJar) -> Result<Js
 }
 
 /// `GET /api/wallet/deposit-address?network=` — the caller's deposit address on a network.
+///
+/// The one refusal named rather than flattened. Reads answer with a fixed generic string so
+/// hub detail never leaks, but "you are not verified yet" is a state the caller can leave,
+/// and reporting it as an outage sent every unverified user hunting for a fault that was
+/// never theirs. `PermissionDenied` is unambiguous HERE and nowhere else: the hub raises it
+/// on this read for the verification gate alone — an unconfigured rail answers `Ok(None)`
+/// rather than an error, and this RPC carries no role check. The withdrawal path, where the
+/// same code also means a suspended account or someone else's withdrawal, keeps relaying the
+/// hub's own wording instead of guessing.
 pub async fn deposit_address(State(st): State<AppState>, jar: CookieJar, Query(q): Query<NetworkQuery>) -> Result<Json<dto::DepositAddress>, ApiError> {
 	let token = require_money_token(&st, &jar).await?;
-	let addr = st
-		.grpc
-		.deposit_address(&token, &q.network.unwrap_or_default())
-		.await
-		.map_err(|s| ApiError::read(s, "deposit address unavailable"))?;
+	let addr = st.grpc.deposit_address(&token, &q.network.unwrap_or_default()).await.map_err(deposit_address_error)?;
 	Ok(Json(addr.into()))
+}
+
+fn deposit_address_error(status: Status) -> ApiError {
+	match status.code() {
+		Code::PermissionDenied => ApiError::read(status, VERIFICATION_REQUIRED),
+		_ => ApiError::read(status, "deposit address unavailable"),
+	}
 }
 
 /// `GET /api/wallet/withdrawals` — the caller's withdrawals, newest first.
@@ -216,4 +234,45 @@ pub async fn cancel_redemption(State(st): State<AppState>, jar: CookieJar, heade
 		return Err(ApiError::BadRequest("redemption_id is required".into()));
 	};
 	Ok(Json(st.grpc.cancel_redemption(&token, &redemption_id).await?.into()))
+}
+
+#[cfg(test)]
+mod tests {
+	use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
+
+	use super::*;
+
+	async fn render(err: ApiError) -> (StatusCode, String) {
+		let resp = err.into_response();
+		let status = resp.status();
+		let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+		let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+		(status, body["error"].as_str().unwrap().to_string())
+	}
+
+	/// The cabinet offers verification off the back of this token. If it ever went back to
+	/// the generic string, the deposit screen would silently return to reporting the one
+	/// refusal a user can clear themselves as an outage they cannot.
+	#[tokio::test]
+	async fn verification_refusal_is_named() {
+		let hub = Status::permission_denied("identity verification required before a deposit address is issued");
+		let (status, message) = render(deposit_address_error(hub)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN);
+		assert_eq!(message, VERIFICATION_REQUIRED);
+	}
+
+	/// Everything else stays flattened — the hub's wording on a read is not the browser's
+	/// business, and a signer or ledger fault must not arrive dressed as a KYC problem.
+	#[tokio::test]
+	async fn every_other_failure_stays_generic() {
+		for hub in [
+			Status::unavailable("internal error"),
+			Status::internal("sqlx: connection refused"),
+			Status::invalid_argument("unknown network"),
+		] {
+			let code = hub.code();
+			let (_, message) = render(deposit_address_error(hub)).await;
+			assert_eq!(message, "deposit address unavailable", "{code:?}");
+		}
+	}
 }

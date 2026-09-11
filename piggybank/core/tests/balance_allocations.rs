@@ -22,6 +22,7 @@ use domain::{
 };
 use piggybank_core::{
 	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
+	config::KycGate,
 	infrastructure::{
 		allocations::PgAllocations,
 		custody::StubCustody,
@@ -695,8 +696,13 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 		custody: &StubCustody,
 		relay: &h.notify,
 	};
+	let admission = withdrawal_app::AdmissionGates {
+		users: users_dyn.as_ref(),
+		configured: &Network::ALL,
+		kyc: KycGate::ENFORCED,
+	};
 	let sub_fut = funds_app::subscribe(&fund_ports, subs.as_ref(), user, service.clone(), usdt("80"), now);
-	let wd_fut = withdrawal_app::request_withdrawal(&withdrawal_ports, users_dyn.as_ref(), &Network::ALL, user, network, destination(network), usdt("80"));
+	let wd_fut = withdrawal_app::request_withdrawal(&withdrawal_ports, &admission, user, network, destination(network), usdt("80"));
 	let (sub_res, wd_res) = tokio::join!(sub_fut, wd_fut);
 
 	// At least one must succeed (100 covers a single 80-spend); the relay then applies the
