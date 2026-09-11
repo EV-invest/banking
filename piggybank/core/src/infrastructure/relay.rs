@@ -38,6 +38,7 @@ use domain::{
 	balance::{LedgerAccountKey, LedgerEvent, TransferCode},
 	fees::FeeEvent,
 	money::Usdt,
+	payments::PaymentEvent,
 	redemptions::RedemptionEvent,
 	subscriptions::SubscriptionEvent,
 	users::UserId,
@@ -88,6 +89,20 @@ const BURN_SETTLE: &[u8] = b"redeem:burn:settle";
 const REDEEM_PAYOUT: &[u8] = b"redeem:payout";
 const BURN_VOID_FAIL: &[u8] = b"redeem:burn:void:fail";
 const BURN_VOID_CANCEL: &[u8] = b"redeem:burn:void:cancel";
+
+/// Salts for a payment's two money legs. A payment settles exactly as a withdrawal does —
+/// reserve the gross against the source claim into `clearing` on approval, then post that
+/// pending and move the gross out of `clearing` into the destination claim on settlement —
+/// so the same three-id shape applies. `payment:reserve` and `payment:transfer` are the two
+/// the design names; `payment:reserve:settle` is the completion's own id, distinct from both
+/// because `saga_steps.tb_transfer_id` is unique and a completion is a transfer of its own.
+///
+/// FROZEN, like every other salt here: they are derived from the (stable) payment id, so a
+/// redelivered event recomputes the same ids and a completion recomputes its `pending_id`.
+/// Changing one would make a retry issue a second, different transfer instead of an `Exists`.
+const PAYMENT_RESERVE: &[u8] = b"payment:reserve";
+const PAYMENT_RESERVE_SETTLE: &[u8] = b"payment:reserve:settle";
+const PAYMENT_TRANSFER: &[u8] = b"payment:transfer";
 
 /// Salts for a fee settlement's two posted legs — burning the accumulated fee units and
 /// paying their value out of the fund's claim into fee revenue. The *charge* itself needs
@@ -637,6 +652,10 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 			let event: FeeEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
 			Ok(plan_fee(event, row.aggregate_id, event_tid, reference))
 		}
+		"payments" => {
+			let event: PaymentEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
+			Ok(plan_payment(event, row.aggregate_id, reference))
+		}
 		// A non-money event reached the outbox (shouldn't happen) — a benign no-op.
 		_ => Ok(Vec::new()),
 	}
@@ -838,6 +857,81 @@ fn plan_fee(event: FeeEvent, aggregate_id: Uuid, event_tid: u128, reference: u12
 	}
 }
 
+/// A payment's money in the ledger — the SAME two-phase shape a withdrawal uses, because it
+/// spends the same claims and must be just as unable to overdraw one:
+/// - **Reserved** (raised on approval, L2/L3 only) → a pending `Dr <source> / Cr clearing`,
+///   so N concurrently approved payments physically cannot overdraw one claim;
+/// - **Settled** → post that pending, then move the gross out of `clearing` into the
+///   destination claim. The Vec order matters: the post must land before the second leg
+///   debits the now-posted clearing balance.
+///
+/// NO OTHER EVENT REACHES HERE, and the match says so without a `_` arm. `Executed` in
+/// particular must never plan an op: for an external payment the money is already moving
+/// under `WithdrawalEvent::Requested`, and a second relayed leg would reserve the amount
+/// twice against one claim. `PaymentEvent::relays` is the gate that keeps them out of the
+/// outbox; this match is the second statement of the same fact, so a new event that slips
+/// past the first breaks the build here rather than moving money by accident.
+///
+/// NO SETTLE-TIME PRE-CHECK, unlike a withdrawal's. Both legs here are claim-to-claim: the
+/// destination is credit-normal and can never be "short", so there is no liquidity that could
+/// vanish between the two legs and half-apply the settlement.
+///
+/// ONE TRANSFER CODE for both legs and every tier. The code is forensic and the tier is
+/// already derivable from the claim pair a transfer names — a credit to `service:<id>` IS the
+/// service tier — so three codes would encode one fact twice and let the two disagree.
+fn plan_payment(event: PaymentEvent, aggregate_id: Uuid, reference: u128) -> Vec<PlannedOp> {
+	match event {
+		PaymentEvent::Reserved { from, amount, .. } => vec![PlannedOp {
+			role: "payment_reserve",
+			transfer_id: tid(aggregate_id, PAYMENT_RESERVE),
+			action: LedgerAction::Reserve(LedgerTransfer {
+				id: tid(aggregate_id, PAYMENT_RESERVE),
+				debit: from.claim_key(),
+				credit: LedgerAccountKey::WithdrawalClearing,
+				amount: amount.base_units(),
+				code: TransferCode::PaymentTransfer,
+				reference,
+			}),
+		}],
+		PaymentEvent::Settled { from, to, amount, .. } => vec![
+			PlannedOp {
+				role: "payment_settle",
+				transfer_id: tid(aggregate_id, PAYMENT_RESERVE_SETTLE),
+				action: LedgerAction::Complete(PendingCompletion {
+					id: tid(aggregate_id, PAYMENT_RESERVE_SETTLE),
+					pending_id: tid(aggregate_id, PAYMENT_RESERVE),
+					kind: CompletionKind::Post,
+					debit: from.claim_key(),
+					credit: LedgerAccountKey::WithdrawalClearing,
+					amount: amount.base_units(),
+					code: TransferCode::PaymentTransfer,
+					reference,
+				}),
+			},
+			PlannedOp {
+				role: "payment_transfer",
+				transfer_id: tid(aggregate_id, PAYMENT_TRANSFER),
+				action: LedgerAction::Post(LedgerTransfer {
+					id: tid(aggregate_id, PAYMENT_TRANSFER),
+					debit: LedgerAccountKey::WithdrawalClearing,
+					credit: to.claim_key(),
+					amount: amount.base_units(),
+					code: TransferCode::PaymentTransfer,
+					reference,
+				}),
+			},
+		],
+		PaymentEvent::Opened { .. }
+		| PaymentEvent::ApprovalRecorded { .. }
+		| PaymentEvent::Approved { .. }
+		| PaymentEvent::Executed { .. }
+		| PaymentEvent::ExecutionFailed { .. }
+		| PaymentEvent::Rejected { .. }
+		| PaymentEvent::Expired { .. }
+		| PaymentEvent::Cancelled { .. } => Vec::new(),
+	}
+}
+
 /// A withdrawal's saga in the ledger:
 /// - **Requested** → reserve the gross as a pending `Dr <source> / Cr clearing` (no rail
 ///   touched, so acceptance never depends on rail liquidity).
@@ -1010,6 +1104,53 @@ mod tests {
 	};
 
 	use super::*;
+
+	// The payment settle's leg order, for the same reason the redemption's is guarded: the
+	// pending must be POSTED before the second leg debits the clearing balance it creates.
+	// A `transfer-first` regression would debit `clearing` against a balance the reservation
+	// has not yet contributed, and TigerBeetle's non-negative flag would park a settlement
+	// whose money was perfectly available.
+	#[test]
+	fn a_settled_payment_posts_its_reservation_before_it_moves_the_money() {
+		let aggregate_id = Uuid::new_v4();
+		let user = UserId::new();
+		let event = PaymentEvent::Settled {
+			payment_id: domain::payments::PaymentId::from_raw(aggregate_id),
+			from: domain::balance::Party::User(user),
+			to: domain::balance::Party::Revenue,
+			amount: Usdt::parse_decimal("25").unwrap(),
+			at: 0,
+		};
+
+		let ops = plan_payment(event, aggregate_id, aggregate_id.as_u128());
+
+		assert_eq!(ops.len(), 2);
+		assert_eq!(ops[0].role, "payment_settle");
+		assert!(matches!(ops[0].action, LedgerAction::Complete(PendingCompletion { kind: CompletionKind::Post, .. })));
+		assert_eq!(ops[1].role, "payment_transfer");
+		// The completion must name the reservation the approval raised, or a redelivery would
+		// post a pending that does not exist and park a valid settlement forever.
+		let LedgerAction::Complete(completion) = &ops[0].action else {
+			panic!("the first leg posts the pending")
+		};
+		assert_eq!(completion.pending_id, tid(aggregate_id, PAYMENT_RESERVE));
+		assert_ne!(completion.id, completion.pending_id, "a completion is a transfer of its own");
+	}
+
+	// `Executed` is audit trail, NOT money. For an external payment the withdrawal saga is
+	// already moving the funds under its own `Requested`, so planning anything here would
+	// reserve the amount a second time against one claim.
+	#[test]
+	fn an_executed_payment_plans_no_ledger_op() {
+		let aggregate_id = Uuid::new_v4();
+		let event = PaymentEvent::Executed {
+			payment_id: domain::payments::PaymentId::from_raw(aggregate_id),
+			effect: domain::payments::PaymentEffect::Withdrawal(domain::withdrawals::WithdrawalId::new()),
+			at: 0,
+		};
+
+		assert!(plan_payment(event, aggregate_id, aggregate_id.as_u128()).is_empty());
+	}
 
 	// Guards the redemption settle leg order documented on the aggregate and PATTERNS:
 	// burn-first (post the pending burn), payout-second. A `payout-first` regression
