@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 
-import { clearResources, defineResource, resetResourcesForTests, revalidateTag } from "./resource.ts";
+import { clearResources, defineResource, mountForTests, pollSweepForTests, resetResourcesForTests, revalidateTag } from "./resource.ts";
 
 beforeEach(() => {
   resetResourcesForTests();
@@ -241,4 +241,163 @@ test("sign-out lifts a refusal — the next account is a different caller", asyn
   state.fail = null;
   assert.equal(await owners.read(), "roster");
   assert.equal(state.calls, 2);
+});
+
+// ── the poll clock (a verdict that lands on a tab nobody touches) ─────────────
+
+/** The one field `poll.while` reads on the real profile resource. */
+interface Profile {
+  kyc_level: number;
+}
+
+/** The profile resource's polling shape, with a small `maxMs` so the cap is reachable. */
+const PENDING_KYC = { while: (p: Profile | undefined) => (p?.kyc_level ?? 0) === 0, startMs: 5_000, maxMs: 20_000 };
+
+/** A profile whose tier the test moves, standing in for a verdict landing at the hub. */
+function profile() {
+  const state = { calls: 0, level: 0 };
+  const resource = defineResource({
+    name: "t.profile",
+    fetch: async (): Promise<Profile> => {
+      state.calls += 1;
+      return { kyc_level: state.level };
+    },
+    revalidate: 600,
+    poll: PENDING_KYC,
+  });
+  return { state, resource };
+}
+
+/** The sweep fires and forgets; let the revalidation it started settle before asserting. */
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("a newly eligible entry is armed, not fired — the mount already read it", async () => {
+  const { state, resource } = profile();
+  await resource.read();
+  mountForTests(resource);
+  assert.equal(state.calls, 1);
+
+  pollSweepForTests(0);
+  await flush();
+  assert.equal(state.calls, 1, "the tick that finds it eligible only arms it");
+
+  pollSweepForTests(5_000);
+  await flush();
+  assert.equal(state.calls, 2, "the tick after startMs is the one that reads");
+});
+
+test("the delay doubles from startMs and stops at maxMs", async () => {
+  const { state, resource } = profile();
+  await resource.read();
+  mountForTests(resource);
+
+  // Each read is settled before the next tick — real ticks are seconds apart, and an
+  // unsettled one would be deduplicated by `inflight` rather than counted.
+  pollSweepForTests(0); // arms for 5_000
+  pollSweepForTests(5_000); // reads; next gap 10_000
+  await flush();
+  pollSweepForTests(15_000); // reads; next gap 20_000
+  await flush();
+  pollSweepForTests(35_000); // reads; gap would double to 40_000, capped at 20_000
+  await flush();
+  assert.equal(state.calls, 4);
+
+  // The cap is what keeps a case nobody closes from drifting out to minutes.
+  pollSweepForTests(54_999);
+  await flush();
+  assert.equal(state.calls, 4, "still inside the capped gap");
+  pollSweepForTests(55_000);
+  await flush();
+  assert.equal(state.calls, 5, "maxMs after the last read, not longer");
+});
+
+test("a backgrounded tab does not spend its backoff unseen", async () => {
+  const { state, resource } = profile();
+  await resource.read();
+  mountForTests(resource);
+
+  pollSweepForTests(0);
+  pollSweepForTests(5_000, false);
+  await flush();
+  assert.equal(state.calls, 1, "a hidden tab polls nothing");
+
+  // Nothing was consumed while hidden: the same due time still fires once visible.
+  pollSweepForTests(5_000, true);
+  await flush();
+  assert.equal(state.calls, 2);
+});
+
+test("an entry no screen is showing is not polled", async () => {
+  const { state, resource } = profile();
+  await resource.read();
+
+  pollSweepForTests(0);
+  pollSweepForTests(5_000);
+  await flush();
+  assert.equal(state.calls, 1, "a resource read once and navigated away from must go quiet");
+});
+
+test("unmounting stops the poll", async () => {
+  const { state, resource } = profile();
+  await resource.read();
+  const unmount = mountForTests(resource);
+
+  pollSweepForTests(0);
+  unmount();
+  pollSweepForTests(5_000);
+  await flush();
+  assert.equal(state.calls, 1);
+});
+
+test("a closed case stops the poll and hands the next one a fresh backoff", async () => {
+  const { state, resource } = profile();
+  await resource.read();
+  mountForTests(resource);
+
+  pollSweepForTests(0);
+  pollSweepForTests(5_000);
+  await flush();
+  assert.equal(state.calls, 2);
+
+  // The verdict lands: tier 1. This is the signal `poll.while` exists to read.
+  resource.publish({ kyc_level: 1 });
+  pollSweepForTests(15_000);
+  pollSweepForTests(60_000);
+  await flush();
+  assert.equal(state.calls, 2, "a settled profile is not polled");
+
+  // A second, distinct case opens later. It must wait startMs, not the 10_000 the first
+  // one had climbed to — the regression this guards is a new case inheriting old backoff.
+  resource.publish({ kyc_level: 0 });
+  pollSweepForTests(100_000); // arms for 105_000
+  pollSweepForTests(104_999);
+  await flush();
+  assert.equal(state.calls, 2);
+  pollSweepForTests(105_000);
+  await flush();
+  assert.equal(state.calls, 3, "the new case polls again at startMs");
+});
+
+test("a refused profile is not polled — a 403 is a verdict, not a pending case", async () => {
+  const state = { calls: 0 };
+  const resource = defineResource({
+    name: "t.profile",
+    fetch: async (): Promise<Profile> => {
+      state.calls += 1;
+      throw new Forbidden();
+    },
+    revalidate: 0,
+    poll: PENDING_KYC,
+  });
+  mountForTests(resource);
+
+  // Never loaded, so `while` reads it as pending — `denied` is the only thing stopping it.
+  await assert.rejects(() => resource.read(), /access/);
+  assert.equal(state.calls, 1);
+
+  pollSweepForTests(0);
+  pollSweepForTests(5_000);
+  pollSweepForTests(25_000);
+  await flush();
+  assert.equal(state.calls, 1, "a refusal must not be collected once per poll");
 });

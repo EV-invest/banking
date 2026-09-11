@@ -80,6 +80,26 @@ export interface ResourceConfig<T, A extends unknown[]> {
    * issuing a request the BFF would reject.
    */
   enabled?: (...args: A) => boolean;
+  /**
+   * Poll a mounted screen while `while(data)` holds — for a verdict that can land on the
+   * backend with nobody bringing the tab back into focus to notice it (see
+   * `entities/user/model/profile-resource.ts`). None of the clock's other triggers (mount,
+   * focus regained, route warmed — `watchFocus` below) fire while a tab just sits there
+   * open, so a resource that needs "arrives within a minute of a tab that never leaves"
+   * has to ask for it explicitly.
+   *
+   * The delay doubles from `startMs` towards `maxMs` on every tick, and resets the moment
+   * `while` turns false, so a later, distinct pending state polls promptly again rather
+   * than inheriting the previous one's backoff.
+   */
+  poll?: PollPolicy<T>;
+}
+
+/** When to keep polling a mounted entry, and how far apart. See {@link ResourceConfig.poll}. */
+export interface PollPolicy<T> {
+  while: (data: T | undefined) => boolean;
+  startMs: number;
+  maxMs: number;
 }
 
 /** `useResource`'s private door into a resource's entry map, kept off the public surface. */
@@ -124,6 +144,21 @@ interface Entry<T> {
   denied: boolean;
   /** 0 until the first successful read — the "never loaded" marker `isStale` reads. */
   fetchedAt: number;
+  /**
+   * From `ResourceConfig.poll`, or null for a resource that only refetches on the clock's
+   * other triggers.
+   *
+   * Held as `PollPolicy<unknown>` rather than `PollPolicy<T>` on purpose: a function taking
+   * `T` in a field makes `Entry<T>` invariant in `T`, and the registry — and every sweep
+   * that walks it — is typed `Entry<unknown>`. The predicate only ever runs against this
+   * entry's own `data`, so the narrowing cast at the single construction site below is
+   * where the knowledge that the two agree belongs.
+   */
+  readonly poll: PollPolicy<unknown> | null;
+  /** Backoff delay the NEXT poll tick will wait, in ms. Grows towards `poll.maxMs`; resets to `poll.startMs` once `poll.while` turns false. */
+  pollDelayMs: number;
+  /** 0 (unarmed) until a poll-eligible tick arms it to `Date.now() + pollDelayMs`; the tick after that one fires. */
+  nextPollAt: number;
   inflight: Promise<void> | null;
   readonly listeners: Set<() => void>;
   /** Referentially stable between changes: `useSyncExternalStore` compares it by identity. */
@@ -219,7 +254,9 @@ function revalidate<T>(entry: Entry<T>): Promise<void> {
 }
 
 /**
- * The clock's way in — a mount, a tab regaining focus, a route being warmed.
+ * The clock's way in — a mount, a tab regaining focus, a route being warmed. (The poll
+ * sweep in `watchPoll` below is a fourth trigger with the same shape; it checks `denied`
+ * itself rather than routing through here, since it also owns its own backoff schedule.)
  *
  * None of these know anything the last attempt did not, so a refused entry is left alone:
  * an operator on the users screen was re-issuing `/api/owners` on every one of them and
@@ -328,6 +365,56 @@ function watchFocus(): void {
   window.addEventListener("online", sweep);
 }
 
+/** Smallest gap between two checks of the same polling entry — the sweep's own clock. */
+const POLL_TICK_MS = 5_000;
+
+// One timer for every polling entry in the cabinet, not one per entry: `poll` is rare
+// (one resource, at the time of writing) and a single low-frequency sweep costs nothing
+// idle, whereas N independent `setInterval`s would each need their own drift-free
+// rescheduling. `nextPollAt` is what makes this a per-entry backoff despite the shared
+// clock: a tick that finds an entry not yet due, hidden, or unmounted just skips it.
+let watchingPoll = false;
+
+function watchPoll(): void {
+  if (watchingPoll || typeof document === "undefined") return;
+  watchingPoll = true;
+  setInterval(() => pollSweep(Date.now(), document.visibilityState === "visible"), POLL_TICK_MS);
+}
+
+/**
+ * One pass of the poll clock over every entry in the registry.
+ *
+ * Split out of the timer because `now` and `visible` are the only two things the sweep
+ * reads from the outside world: given both, the whole policy — arm before firing, double
+ * the delay, pause while hidden, rearm once `while` closes — is exercisable against an
+ * explicit clock instead of POLL_TICK_MS of real time.
+ */
+function pollSweep(now: number, visible: boolean): void {
+  for (const entry of REGISTRY.values()) {
+    const poll = entry.poll;
+    if (!poll || entry.listeners.size === 0) continue;
+    if (!poll.while(entry.data)) {
+      // Closed (or never opened): rearm from the start so the next pending state — a
+      // new case — doesn't inherit this one's backoff.
+      entry.pollDelayMs = poll.startMs;
+      entry.nextPollAt = 0;
+      continue;
+    }
+    if (entry.nextPollAt === 0) {
+      // Just became eligible. Arm rather than fire immediately: the mount that made it
+      // eligible already triggered its own read via `autoRevalidate`.
+      entry.nextPollAt = now + entry.pollDelayMs;
+      continue;
+    }
+    // A backgrounded tab pauses rather than burning its backoff budget unseen —
+    // `watchFocus` is what catches it up the moment it regains focus.
+    if (entry.denied || now < entry.nextPollAt || !visible) continue;
+    entry.pollDelayMs = Math.min(entry.pollDelayMs * 2, poll.maxMs);
+    entry.nextPollAt = now + entry.pollDelayMs;
+    void revalidate(entry);
+  }
+}
+
 export function defineResource<T, A extends unknown[] = []>(config: ResourceConfig<T, A>): Resource<T, A> {
   const freshMs = (config.revalidate ?? DEFAULT_REVALIDATE_S) * 1000;
   const tags = config.tags ?? [];
@@ -347,6 +434,10 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
       error: null,
       denied: false,
       fetchedAt: 0,
+      // Sound because the sweep only ever hands it `entry.data`, which is this `T`.
+      poll: (config.poll as PollPolicy<unknown> | undefined) ?? null,
+      pollDelayMs: config.poll?.startMs ?? 0,
+      nextPollAt: 0,
       inflight: null,
       listeners: new Set(),
       snapshot: emptySnapshot<T>(),
@@ -363,6 +454,7 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
     readPersisted(entry);
     publishSnapshot(entry);
     watchFocus();
+    if (entry.poll) watchPoll();
     return entry;
   }
 
@@ -449,4 +541,24 @@ export function useResource<T, A extends unknown[]>(resource: Resource<T, A>, ..
 /** Test seam: forget every cached value AND every entry, so each case starts cold. */
 export function resetResourcesForTests(): void {
   REGISTRY.clear();
+}
+
+/**
+ * Test seam: pretend a screen is showing this key. Returns the unmount.
+ *
+ * The poll sweep skips entries nobody is looking at, which is the point of it — so a test
+ * about polling has to be able to say "this one is on screen" without a React renderer.
+ */
+export function mountForTests<T, A extends unknown[]>(resource: Resource<T, A>, ...args: A): () => void {
+  const entry = resource[INTERNALS].ensure(resource.keyOf(...args), args);
+  const listener = () => {};
+  entry.listeners.add(listener);
+  return () => {
+    entry.listeners.delete(listener);
+  };
+}
+
+/** Test seam: run one pass of the poll clock at an explicit time, with the tab visible or not. */
+export function pollSweepForTests(now: number, visible = true): void {
+  pollSweep(now, visible);
 }
