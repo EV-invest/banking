@@ -12,23 +12,26 @@
 //! every test here takes [`exclusive_payments`] and starts from [`reset_payments`]. The reset
 //! runs at the START of each test so a panicking one cannot wedge the rest.
 
+use std::sync::Arc;
+
 use domain::{
-	balance::Party,
+	balance::{LedgerAccountKey, Party, TransferCode},
 	consilium::ConsiliumId,
 	error::DomainError,
-	money::Usdt,
+	money::{Network, Usdt},
 	payments::{PaymentDestination, PaymentEffect, PaymentId, PaymentOrder, PaymentReason, PaymentState, PaymentTerms},
 	users::{Email, UserId},
 	withdrawals::WithdrawalId,
 };
 use piggybank_core::{
-	infrastructure::{payments::PgPayments, users::PgUsers},
+	infrastructure::{custody::StubCustody, payments::PgPayments, relay::Relay, users::PgUsers},
 	ports::{
-		UserRepository,
+		LedgerTransfer, UserRepository,
 		payments::{ApprovalSeat, ConsentAudit, ConsentCredential, ConsentDecision, ExecutionOutcome, MAX_CODE_ATTEMPTS, PaymentFeed, PaymentFilter, PaymentRepository},
 	},
 };
 use sqlx::PgPool;
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 mod common;
@@ -504,5 +507,74 @@ async fn the_feed_filters_and_the_sweep_close_what_nobody_answered() {
 	assert_eq!(payments.find(investors_order).await.unwrap().unwrap().order.state(), PaymentState::Expired);
 
 	sqlx::query("DELETE FROM consilium WHERE initiator_user_id = $1").bind(investor.raw()).execute(&pool).await.ok();
+	reset_payments(&pool).await;
+}
+
+/// THE ONE TEST THAT PROVES THE MONEY MOVES. Everything above asserts Postgres rows; this
+/// drives the whole write path — order, consent, relay, TigerBeetle — and reads the claims
+/// back from the ledger that actually owns them.
+///
+/// It also pins the two-phase shape: after the approval the source is *locked*, not yet
+/// debited, so a second approved order against the same claim contends with a reservation
+/// rather than with a stale read. Only the settlement posts it.
+#[tokio::test]
+async fn an_approved_payment_reserves_its_source_and_then_settles_it() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	let Some(ledger) = common::seeded_ledger(&pool, "payments relay test").await else {
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let notify = Arc::new(Notify::new());
+	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
+
+	// Credit the investor's claim the way a deposit does: `Dr wallet:<net> / Cr user:<id>`.
+	ledger
+		.post(&LedgerTransfer {
+			id: Uuid::new_v4().as_u128(),
+			debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
+			credit: LedgerAccountKey::UserClaim(investor),
+			amount: usdt("100").base_units(),
+			code: TransferCode::Deposit,
+			reference: 0,
+		})
+		.await
+		.expect("fund the investor's claim");
+
+	let seat = a_consent_seat(investor);
+	let token = token_hash_of(&seat);
+	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "30");
+	let id = order.id();
+	payments.open(&mut order, seat).await.expect("open the order");
+	payments.submit(&token, CODE, ConsentDecision::Approve, &audit(), now()).await.expect("consent");
+
+	relay.drain().await;
+	let reserved = ledger.balance(&LedgerAccountKey::UserClaim(investor)).await.unwrap();
+	assert_eq!(reserved.posted, usdt("100").base_units(), "a reservation locks the claim, it does not debit it");
+	assert_eq!(reserved.locked, usdt("30").base_units());
+	assert_eq!(reserved.available(), usdt("70").base_units());
+
+	let revenue_before = ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted;
+	payments.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Transfer), now()).await.expect("execute");
+	relay.drain().await;
+
+	let settled = ledger.balance(&LedgerAccountKey::UserClaim(investor)).await.unwrap();
+	assert_eq!(settled.posted, usdt("70").base_units(), "the settlement posts the reservation");
+	assert_eq!(settled.locked, 0);
+	// `fee` is a global singleton shared with every other suite, so this is a DELTA.
+	let revenue_after = ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted;
+	assert_eq!(revenue_after - revenue_before, usdt("30").base_units());
+	// Nothing parked: a parked row here would mean a leg the ledger refused.
+	let parked: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM outbox WHERE aggregate = 'payment' AND parked_at IS NOT NULL")
+		.fetch_one(&pool)
+		.await
+		.unwrap();
+	assert_eq!(parked, 0);
+
 	reset_payments(&pool).await;
 }
