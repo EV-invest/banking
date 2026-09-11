@@ -48,17 +48,6 @@ fn bool_field(v: &Value, key: &str) -> bool {
 	v.get(key).and_then(Value::as_bool).unwrap_or(false)
 }
 
-/// An OPTIONAL unsigned knob whose absence legitimately means zero.
-///
-/// One caller left — the feature flag `rollout`. NOT a general-purpose number reader: it
-/// cannot distinguish a missing field, a negative, a fraction or a quoted number from a
-/// deliberate zero, and it truncates rather than refusing anything past `u32::MAX`. A
-/// required field goes through [`required_u32`] instead, which returns `None` for each of
-/// those so the handler can answer 400 rather than invent a value.
-fn u32_field(v: &Value, key: &str) -> u32 {
-	v.get(key).and_then(Value::as_u64).unwrap_or(0) as u32
-}
-
 /// The top of the KYC tier ladder, as written down in
 /// `contracts/proto/banking/v1/users.proto`: 0 registered · 1 verified · 2 enhanced ·
 /// 3 elevated. Checked here rather than left to the identity plane because a tier the
@@ -69,7 +58,7 @@ const MAX_KYC_LEVEL: u32 = 3;
 /// A REQUIRED basis-point rate: `None` when the field is missing, or is not a whole
 /// non-negative number that fits a `u32`.
 ///
-/// Deliberately not [`u32_field`], whose missing-is-zero default is right for an optional
+/// Deliberately not a defaulting missing-is-zero read, which is right for an optional
 /// knob and wrong for a price. A rate that arrives as `"200"`, as `2.5`, or not at all is
 /// a client that does not know what it is asking for, and coercing it to zero would set
 /// the fund to charge NOTHING while answering "saved" — the exact silent-zero state this
@@ -782,11 +771,20 @@ pub async fn set_flag(State(st): State<AppState>, jar: CookieJar, headers: Heade
 	let Some(key) = required(&v, "key") else {
 		return Err(ApiError::BadRequest("key is required".into()));
 	};
+	// A rollout that doesn't arrive as a whole number is a client that doesn't know what
+	// it's asking for — coercing it to 0 would silently disable the flag while answering
+	// "saved". Required rather than defaulted, same as the fee rates below.
+	let Some(rollout) = required_u32(&v, "rollout") else {
+		return Err(ApiError::BadRequest("rollout is required, and must be a whole number".into()));
+	};
+	if rollout > 100 {
+		return Err(ApiError::BadRequest("rollout must be between 0 and 100".into()));
+	}
 	let req = cc::SetFeatureFlagRequest {
 		key,
 		description: editable(&v, "description"),
 		enabled: bool_field(&v, "enabled"),
-		rollout: u32_field(&v, "rollout"),
+		rollout,
 	};
 	let config = st.grpc.set_feature_flag(&token, req).await?;
 	Ok(Json(config.into()))
