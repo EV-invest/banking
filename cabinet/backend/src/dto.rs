@@ -74,6 +74,16 @@ pub struct UserProfile {
 	/// the persisted `users.role`. The console must say so: an "owner" the consilium
 	/// has never heard of is exactly the divergence this whole change removes.
 	pub role_is_break_glass: bool,
+	/// WHY the account is disabled — and therefore which control the console may offer.
+	/// `"admin_hold"` lapses and one admin lifts it; `"governance"` never lapses and only
+	/// the owners lift it; EMPTY on an active user and also on one suspended before the
+	/// field existed, which carries the old one-act, never-lapsing semantics. Three cases,
+	/// not two: a boolean here would silently file the third under whichever of the other
+	/// two it was compared against.
+	pub suspended_by: String,
+	/// Unix seconds an `admin_hold` lapses; `"0"` when nothing lapses. A string like every
+	/// other stamp the BFF emits — see [`AdminUserSummary::created_at`].
+	pub hold_expires_at: String,
 }
 
 impl From<cc::UserProfile> for UserProfile {
@@ -97,6 +107,8 @@ impl From<cc::UserProfile> for UserProfile {
 			kyc_level: p.kyc_level,
 			role: p.role,
 			role_is_break_glass: p.role_is_break_glass,
+			suspended_by: p.suspended_by,
+			hold_expires_at: p.hold_expires_at.to_string(),
 		}
 	}
 }
@@ -621,6 +633,13 @@ pub struct AdminUserSummary {
 	pub role_is_break_glass: bool,
 	pub token_version: String,
 	pub created_at: String,
+	/// Why the account is disabled — on the LIST and not only the drawer, because a held
+	/// account and a suspended one need different action buttons and a console that cannot
+	/// tell them apart offers the wrong one. See [`UserProfile::suspended_by`] for why
+	/// this is three cases rather than two.
+	pub suspended_by: String,
+	/// Unix seconds an `admin_hold` lapses; `"0"` when nothing lapses.
+	pub hold_expires_at: String,
 }
 
 impl From<cc::AdminUserSummary> for AdminUserSummary {
@@ -634,6 +653,8 @@ impl From<cc::AdminUserSummary> for AdminUserSummary {
 			role_is_break_glass: u.role_is_break_glass,
 			token_version: u.token_version.to_string(),
 			created_at: u.created_at.to_string(),
+			suspended_by: u.suspended_by,
+			hold_expires_at: u.hold_expires_at.to_string(),
 		}
 	}
 }
@@ -1390,6 +1411,90 @@ impl From<cc::OwnerAdmission> for OwnerAdmission {
 }
 
 list_dto! { OwnerAdmissionList from cc::OwnerAdmissionList { items: Vec<OwnerAdmission> } }
+
+#[derive(Serialize)]
+pub struct UserProposalPeer {
+	pub user_id: String,
+	pub email: String,
+	pub vote: String,
+	pub voted_at: String,
+}
+
+impl From<cc::UserProposalPeer> for UserProposalPeer {
+	fn from(p: cc::UserProposalPeer) -> Self {
+		let vote = enum_label(p.vote().as_str_name(), "PROPOSAL_VOTE_");
+		Self {
+			user_id: p.user_id,
+			email: p.email,
+			vote,
+			voted_at: p.voted_at.to_string(),
+		}
+	}
+}
+
+/// The owners' verdict over one PERSON's standing — a suspension, a reinstatement or an
+/// admin admission, told apart by `kind`.
+///
+/// Three kinds share one shape because all three ask the same question, and the vote is
+/// NEUTRAL (`for`/`against`) where the owner consilia use remove/keep and admit/reject: a
+/// kind-specific verb here would only mean something read against `kind`, and a vocabulary
+/// that is correct only when cross-referenced eventually gets rendered wrong. The surface
+/// knows the kind and picks the verb; this says which way the voter pushed.
+///
+/// `threshold` is carried rather than re-derived: it is frozen at open, so a console that
+/// recomputed it from the current roster would show a bar this proposal is not measured
+/// against.
+#[derive(Serialize)]
+pub struct UserProposal {
+	pub id: String,
+	pub kind: String,
+	pub state: String,
+	/// Any user — NOT necessarily an owner. That is the difference from [`OwnerAdmission`],
+	/// and the reason none of its roster checks have an analogue here.
+	pub subject_user_id: String,
+	pub subject_email: String,
+	pub initiator_user_id: String,
+	pub initiator_email: String,
+	pub reason: String,
+	/// Every owner except the initiator. Never empty: a proposal with nobody to agree is
+	/// refused at open rather than left open and unpassable.
+	pub peers: Vec<UserProposalPeer>,
+	pub owner_count: u32,
+	/// How many of `peers` must vote FOR, frozen at open.
+	pub threshold: u32,
+	pub created_at: String,
+	pub expires_at: String,
+	pub decided_at: String,
+	pub void_reason: String,
+	pub version: String,
+}
+
+impl From<cc::UserProposal> for UserProposal {
+	fn from(p: cc::UserProposal) -> Self {
+		let kind = enum_label(p.kind().as_str_name(), "USER_PROPOSAL_KIND_");
+		let state = enum_label(p.state().as_str_name(), "USER_PROPOSAL_STATE_");
+		Self {
+			id: p.id,
+			kind,
+			state,
+			subject_user_id: p.subject_user_id,
+			subject_email: p.subject_email,
+			initiator_user_id: p.initiator_user_id,
+			initiator_email: p.initiator_email,
+			reason: p.reason,
+			peers: p.peers.into_iter().map(UserProposalPeer::from).collect(),
+			owner_count: p.owner_count,
+			threshold: p.threshold,
+			created_at: p.created_at.to_string(),
+			expires_at: p.expires_at.to_string(),
+			decided_at: p.decided_at.to_string(),
+			void_reason: p.void_reason,
+			version: p.version.to_string(),
+		}
+	}
+}
+
+list_dto! { UserProposalList from cc::UserProposalList { items: Vec<UserProposal> } }
 
 /// What the TARGET is shown before answering: no peer identities, no vote breakdown.
 /// Both addresses are masked — this surface, too, needs no session.

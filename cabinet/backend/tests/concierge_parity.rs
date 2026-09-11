@@ -36,6 +36,11 @@ fn user_profile_is_wire_identical_across_planes() {
 		// Deliberately TRUE: `false` is the decode default, so a dropped field would still
 		// compare equal and the parity assertion below would pass vacuously.
 		role_is_break_glass: true,
+		// Non-default for the same reason, and these two are why banking's duplicate had
+		// to grow fields 19/20: prost discards unknown fields, so a concierge-only field
+		// re-encodes SHORT from the banking side and the byte assertion below catches it.
+		suspended_by: "admin_hold".into(),
+		hold_expires_at: 1_700_086_400,
 	};
 
 	let bk_profile = bk::UserProfile::decode(cc_profile.encode_to_vec().as_slice()).expect("concierge UserProfile decodes as banking UserProfile");
@@ -58,6 +63,8 @@ fn user_profile_is_wire_identical_across_planes() {
 	assert_eq!(bk_profile.kyc_level, cc_profile.kyc_level);
 	assert_eq!(bk_profile.role, cc_profile.role);
 	assert_eq!(bk_profile.role_is_break_glass, cc_profile.role_is_break_glass);
+	assert_eq!(bk_profile.suspended_by, cc_profile.suspended_by);
+	assert_eq!(bk_profile.hold_expires_at, cc_profile.hold_expires_at);
 
 	// Re-encoding from banking must reproduce concierge's exact bytes — no field added on
 	// one side that the other silently drops.

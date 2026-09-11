@@ -327,35 +327,62 @@ impl Grpc {
 		Ok(self.directory().get_user(bearer(token, req)?).await?.into_inner())
 	}
 
-	pub async fn admin_set_role(&self, token: &str, user_id: &str, role: &str) -> Result<cc::SetRoleResponse, Status> {
+	// Every identity mutation below carries a `reason`, recorded verbatim on the plane's
+	// audit row. Only the hold's is REQUIRED — see [`Self::admin_hold_user`]; the rest
+	// take whatever the console sent and an empty string where it sent nothing, because
+	// an audit note nobody typed must not become a refusal the operator cannot act on.
+
+	pub async fn admin_set_role(&self, token: &str, user_id: &str, role: &str, reason: &str) -> Result<cc::SetRoleResponse, Status> {
 		let req = cc::SetRoleRequest {
 			user_id: user_id.to_string(),
 			role: role.to_string(),
+			reason: reason.to_string(),
 		};
 		Ok(self.directory().set_role(bearer(token, req)?).await?.into_inner())
 	}
 
-	pub async fn admin_disable_user(&self, token: &str, user_id: &str) -> Result<(), Status> {
-		let req = cc::DisableUserRequest { user_id: user_id.to_string() };
-		self.directory().disable_user(bearer(token, req)?).await?;
-		Ok(())
+	/// The emergency brake: freeze the account NOW, lapsing on its own after 24h unless
+	/// the owners ratify it with [`Self::open_user_suspension`].
+	///
+	/// This replaces `DisableUser`, which the plane now always refuses. The verb was
+	/// ambiguous in the one way that mattered — it was both the instant freeze the money
+	/// plane re-reads at dispatch AND a permanent judgement one person made with no record
+	/// of why — so the caller has to say which it means. The reason is required here and
+	/// not merely forwarded: it is what the owners asked to ratify are reading, and a
+	/// brake that stops someone's money with no stated cause cannot be reviewed afterwards.
+	pub async fn admin_hold_user(&self, token: &str, user_id: &str, reason: &str) -> Result<cc::HoldUserResponse, Status> {
+		let req = cc::HoldUserRequest {
+			user_id: user_id.to_string(),
+			reason: reason.to_string(),
+		};
+		Ok(self.directory().hold_user(bearer(token, req)?).await?.into_inner())
 	}
 
-	pub async fn admin_reinstate_user(&self, token: &str, user_id: &str) -> Result<(), Status> {
-		let req = cc::ReinstateUserRequest { user_id: user_id.to_string() };
+	/// Lift a hold in one act. Refuses with `FAILED_PRECONDITION` when the suspension was
+	/// the owners' verdict — that one needs [`Self::open_user_reinstatement`], or one admin
+	/// could overturn a consilium and the consilium would be advisory.
+	pub async fn admin_reinstate_user(&self, token: &str, user_id: &str, reason: &str) -> Result<(), Status> {
+		let req = cc::ReinstateUserRequest {
+			user_id: user_id.to_string(),
+			reason: reason.to_string(),
+		};
 		self.directory().reinstate_user(bearer(token, req)?).await?;
 		Ok(())
 	}
 
-	pub async fn admin_revoke_tokens(&self, token: &str, user_id: &str) -> Result<cc::RevokeTokensResponse, Status> {
-		let req = cc::RevokeTokensRequest { user_id: user_id.to_string() };
+	pub async fn admin_revoke_tokens(&self, token: &str, user_id: &str, reason: &str) -> Result<cc::RevokeTokensResponse, Status> {
+		let req = cc::RevokeTokensRequest {
+			user_id: user_id.to_string(),
+			reason: reason.to_string(),
+		};
 		Ok(self.directory().revoke_tokens(bearer(token, req)?).await?.into_inner())
 	}
 
-	pub async fn admin_set_kyc_level(&self, token: &str, user_id: &str, kyc_level: u32) -> Result<cc::SetKycLevelResponse, Status> {
+	pub async fn admin_set_kyc_level(&self, token: &str, user_id: &str, kyc_level: u32, reason: &str) -> Result<cc::SetKycLevelResponse, Status> {
 		let req = cc::SetKycLevelRequest {
 			user_id: user_id.to_string(),
 			kyc_level,
+			reason: reason.to_string(),
 		};
 		Ok(self.directory().set_kyc_level(bearer(token, req)?).await?.into_inner())
 	}
@@ -472,8 +499,66 @@ impl Grpc {
 		Ok(self.governance().cancel_owner_admission(bearer(token, req)?).await?.into_inner())
 	}
 
-	/// The live ownership feed. ONE revision covers removals and admissions together, so
-	/// a single subscription follows the whole surface.
+	// The owners' verdict over one PERSON's standing — the other half of the split
+	// blocking verb, plus the admin seat. Three kinds share one message because all three
+	// ask the same question, and they pass on a MAJORITY of the snapshotted voters rather
+	// than the unanimity the OWNER consilia demand: a hold lapses in 24h, so ratifying one
+	// races a clock, and under unanimity one unreachable owner would not delay the verdict
+	// — they would decide it by releasing a compromised account at the deadline.
+
+	pub async fn list_user_proposals(&self, token: &str, limit: u32, kind: cc::UserProposalKind) -> Result<cc::UserProposalList, Status> {
+		let req = cc::ListUserProposalsRequest { limit, kind: kind as i32 };
+		Ok(self.governance().list_user_proposals(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Make a hold permanent. The reason is required upstream and here: it is what the
+	/// other owners are voting on.
+	pub async fn open_user_suspension(&self, token: &str, user_id: &str, reason: &str) -> Result<cc::UserProposal, Status> {
+		let req = cc::OpenUserSuspensionRequest {
+			user_id: user_id.to_string(),
+			reason: reason.to_string(),
+		};
+		Ok(self.governance().open_user_suspension(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Lift a suspension THE OWNERS imposed. A hold needs nothing from here —
+	/// [`Self::admin_reinstate_user`] lifts one in a single act.
+	pub async fn open_user_reinstatement(&self, token: &str, user_id: &str, reason: &str) -> Result<cc::UserProposal, Status> {
+		let req = cc::OpenUserReinstatementRequest {
+			user_id: user_id.to_string(),
+			reason: reason.to_string(),
+		};
+		Ok(self.governance().open_user_reinstatement(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Grant `Role::Admin`. `SetRole` refuses that role in the GRANTING direction only:
+	/// an operator who can appoint operators can appoint accomplices. Taking it away stays
+	/// one act — containing a rogue operator must never be the slower path.
+	pub async fn open_admin_admission(&self, token: &str, user_id: &str, reason: &str) -> Result<cc::UserProposal, Status> {
+		let req = cc::OpenAdminAdmissionRequest {
+			user_id: user_id.to_string(),
+			reason: reason.to_string(),
+		};
+		Ok(self.governance().open_admin_admission(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn submit_user_proposal_vote(&self, token: &str, proposal_id: &str, vote: cc::ProposalVote) -> Result<cc::UserProposal, Status> {
+		let req = cc::SubmitUserProposalVoteRequest {
+			proposal_id: proposal_id.to_string(),
+			vote: vote as i32,
+		};
+		Ok(self.governance().submit_user_proposal_vote(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_user_proposal(&self, token: &str, proposal_id: &str) -> Result<cc::UserProposal, Status> {
+		let req = cc::CancelUserProposalRequest {
+			proposal_id: proposal_id.to_string(),
+		};
+		Ok(self.governance().cancel_user_proposal(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// The live ownership feed. ONE revision covers removals, admissions AND user
+	/// proposals together, so a single subscription follows the whole governance surface.
 	pub async fn watch_governance(&self, token: &str) -> Result<tonic::Streaming<cc::GovernanceTick>, Status> {
 		Ok(self.governance().watch_governance(bearer(token, cc::WatchGovernanceRequest {})?).await?.into_inner())
 	}

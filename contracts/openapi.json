@@ -4543,6 +4543,65 @@
         }
       }
     },
+    "/concierge.v1.GovernanceService/CancelUserProposal": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "CancelUserProposal",
+        "description": "Withdraw a user proposal the caller opened, while it is still OPEN.",
+        "operationId": "concierge.v1.GovernanceService.CancelUserProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.CancelUserProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProposal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.GovernanceService/GetOwnerAdmission": {
       "post": {
         "tags": [
@@ -4652,6 +4711,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.OwnerRemoval"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/GetUserProposal": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "GetUserProposal",
+        "operationId": "concierge.v1.GovernanceService.GetUserProposal",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.GetUserProposalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProposal"
                 }
               }
             }
@@ -4834,6 +4951,123 @@
         }
       }
     },
+    "/concierge.v1.GovernanceService/ListUserProposals": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "ListUserProposals",
+        "operationId": "concierge.v1.GovernanceService.ListUserProposals",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.ListUserProposalsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProposalList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/OpenAdminAdmission": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "Propose granting Role::Admin (Owner only). UserDirectory.SetRole refuses that role\n in the granting direction and names this, for the same reason it already refuses\n `owner`: an operator who can appoint operators can appoint accomplices, and the\n admin seat carries every identity mutation except role granting.",
+        "description": "Taking the role away is NOT here and stays one act on purpose — containing a rogue\n operator must never be the slower path.",
+        "operationId": "concierge.v1.GovernanceService.OpenAdminAdmission",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.OpenAdminAdmissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProposal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.GovernanceService/OpenOwnerAdmission": {
       "post": {
         "tags": [
@@ -4945,6 +5179,124 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.OwnerRemoval"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/OpenUserReinstatement": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "Propose lifting a suspension THE OWNERS imposed (Owner only). It exists because\n UserDirectory.ReinstateUser refuses those: without this RPC the consilium's verdict\n would be either permanent or reversible by any one admin, and both are wrong.",
+        "description": "A hold needs nothing from here — ReinstateUser lifts one in a single act.",
+        "operationId": "concierge.v1.GovernanceService.OpenUserReinstatement",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.OpenUserReinstatementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProposal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/OpenUserSuspension": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "Propose PERMANENTLY suspending a user (Owner only). The half of the old\n DisableUser verb that is not an emergency: UserDirectory.HoldUser freezes the\n account now and lapses in 24h, and this is what makes it stay.",
+        "description": "A reason is required. It is what the other owners are voting on, and a decision to\n freeze somebody's account with no stated cause cannot be reviewed afterwards.",
+        "operationId": "concierge.v1.GovernanceService.OpenUserSuspension",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.OpenUserSuspensionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProposal"
                 }
               }
             }
@@ -5122,6 +5474,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/concierge.v1.OwnerRemoval"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/concierge.v1.GovernanceService/SubmitUserProposalVote": {
+      "post": {
+        "tags": [
+          "concierge.v1.GovernanceService"
+        ],
+        "summary": "SubmitUserProposalVote",
+        "description": "An owner's vote on a user proposal. Unlike the OWNER consilia this passes on a\n MAJORITY of the snapshotted voters rather than unanimity — see UserProposal.",
+        "operationId": "concierge.v1.GovernanceService.SubmitUserProposalVote",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.SubmitUserProposalVoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.UserProposal"
                 }
               }
             }
@@ -5312,8 +5723,8 @@
         "tags": [
           "concierge.v1.UserDirectory"
         ],
-        "summary": "DisableUser",
-        "description": "Admin (allowlist): disable a user, freezing future sign-in/refresh without\n deleting the record. Emits SUSPENDED across the cross-plane bridge.",
+        "summary": "DEPRECATED — always refuses, naming HoldUser or\n GovernanceService.OpenUserSuspension.",
+        "description": "The verb was ambiguous in the one way that mattered: it was both the emergency\n brake (the frozen flag the money plane re-reads at dispatch, which stops a\n withdrawal already in the queue) and a permanent judgement on an account, decided\n by one person with no record of why. Those need opposite treatments — the first\n must stay instant, the second must not be one person's to make — so the caller now\n has to say which one they mean. Kept in the contract rather than deleted so an\n older console gets an explanatory refusal instead of an UNIMPLEMENTED.",
         "operationId": "concierge.v1.UserDirectory.DisableUser",
         "parameters": [
           {
@@ -5363,7 +5774,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/concierge.v1.UserDirectory/GetMe": {
@@ -5484,6 +5896,65 @@
         }
       }
     },
+    "/concierge.v1.UserDirectory/HoldUser": {
+      "post": {
+        "tags": [
+          "concierge.v1.UserDirectory"
+        ],
+        "summary": "HoldUser",
+        "description": "Admin (UserSuspend): the emergency brake. Freezes the account NOW and lapses on\n its own after 24h unless the owners ratify it with OpenUserSuspension. One actor\n may stop money temporarily; one actor may never stop it permanently. Emits\n SUSPENDED across the cross-plane bridge, and REINSTATED again when it lapses.",
+        "operationId": "concierge.v1.UserDirectory.HoldUser",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/concierge.v1.HoldUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/concierge.v1.HoldUserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/concierge.v1.UserDirectory/ListUsers": {
       "post": {
         "tags": [
@@ -5548,8 +6019,8 @@
         "tags": [
           "concierge.v1.UserDirectory"
         ],
-        "summary": "ReinstateUser",
-        "description": "Admin (allowlist): re-enable a disabled user, lifting the sign-in/refresh\n freeze. Emits REINSTATED across the cross-plane bridge.",
+        "summary": "Admin (allowlist): re-enable a disabled user, lifting the sign-in/refresh\n freeze. Emits REINSTATED across the cross-plane bridge.",
+        "description": "Refuses with FAILED_PRECONDITION when the suspension was the owners' verdict,\n naming GovernanceService.OpenUserReinstatement — otherwise one admin could\n overturn a consilium and the consilium would be advisory.",
         "operationId": "concierge.v1.UserDirectory.ReinstateUser",
         "parameters": [
           {
@@ -8447,6 +8918,20 @@
             "type": "boolean",
             "title": "role_is_break_glass",
             "description": "True when `role` above came from concierge's OWNER_SUBJECTS emergency allowlist\n rather than from `users.role`. Carried here only for wire parity — the money plane\n has no allowlist of its own and never sets it."
+          },
+          "suspended_by": {
+            "type": "string",
+            "title": "suspended_by",
+            "description": "WHY the account is disabled, and therefore who may undo it — concierge splits the\n old blocking verb into a lapsing `admin_hold` and a ratified `governance` verdict,\n and an empty string is a THIRD case: an account suspended before the field existed,\n which keeps the one-act, never-lapsing semantics it was actually suspended under.\n\n Carried here only for wire parity, like `role_is_break_glass` above: the money plane\n learns of a freeze through the one-way lifecycle bridge's SUSPENDED/REINSTATED\n events, never by reading this, and never sets it. Absent them the parity round trip\n in `cabinet/backend/tests/concierge_parity.rs` re-encodes short and fails, which is\n exactly the drift that test exists to catch."
+          },
+          "hold_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "hold_expires_at",
+            "format": "int64",
+            "description": "Unix SECONDS an \"admin_hold\" lapses; 0 when nothing lapses. Parity only, as above."
           }
         },
         "title": "UserProfile",
@@ -8706,6 +9191,20 @@
             "type": "boolean",
             "title": "role_is_break_glass",
             "description": "True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than\n from `users.role` — see UserProfile.role_is_break_glass. This is the field that\n stops the console listing an \"owner\" the consilium has never heard of."
+          },
+          "suspended_by": {
+            "type": "string",
+            "title": "suspended_by",
+            "description": "Why the account is disabled; see UserProfile.suspended_by. On the list because a\n held account and a suspended one need different action buttons, and a console that\n cannot tell them apart offers the wrong one."
+          },
+          "hold_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "hold_expires_at",
+            "format": "int64",
+            "description": "Unix SECONDS an \"admin_hold\" lapses. 0 when nothing lapses."
           }
         },
         "title": "AdminUserSummary",
@@ -8770,6 +9269,17 @@
           }
         },
         "title": "CancelOwnerRemovalRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.CancelUserProposalRequest": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "title": "proposal_id"
+          }
+        },
+        "title": "CancelUserProposalRequest",
         "additionalProperties": false
       },
       "concierge.v1.DisableUserRequest": {
@@ -8862,6 +9372,17 @@
         "title": "GetRemovalInvitationRequest",
         "additionalProperties": false
       },
+      "concierge.v1.GetUserProposalRequest": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "title": "proposal_id"
+          }
+        },
+        "title": "GetUserProposalRequest",
+        "additionalProperties": false
+      },
       "concierge.v1.GetUserRequest": {
         "type": "object",
         "properties": {
@@ -8912,6 +9433,38 @@
           }
         },
         "title": "GovernanceTick",
+        "additionalProperties": false
+      },
+      "concierge.v1.HoldUserRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "REQUIRED. A brake that stops someone's money with no stated cause cannot be\n reviewed afterwards, and the owners asked to ratify it are reading exactly this."
+          }
+        },
+        "title": "HoldUserRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.HoldUserResponse": {
+        "type": "object",
+        "properties": {
+          "hold_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "hold_expires_at",
+            "format": "int64",
+            "description": "Unix SECONDS the hold lapses unless the owners ratify it."
+          }
+        },
+        "title": "HoldUserResponse",
         "additionalProperties": false
       },
       "concierge.v1.Jwk": {
@@ -9020,6 +9573,23 @@
         "title": "ListSessionsResponse",
         "additionalProperties": false
       },
+      "concierge.v1.ListUserProposalsRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "0 means the server default. Includes closed proposals — nothing is deleted."
+          },
+          "kind": {
+            "title": "kind",
+            "description": "UNSPECIFIED lists every kind.",
+            "$ref": "#/components/schemas/concierge.v1.UserProposalKind"
+          }
+        },
+        "title": "ListUserProposalsRequest",
+        "additionalProperties": false
+      },
       "concierge.v1.ListUsersRequest": {
         "type": "object",
         "properties": {
@@ -9094,6 +9664,21 @@
         "title": "LogoutResponse",
         "additionalProperties": false
       },
+      "concierge.v1.OpenAdminAdmissionRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          }
+        },
+        "title": "OpenAdminAdmissionRequest",
+        "additionalProperties": false
+      },
       "concierge.v1.OpenOwnerAdmissionRequest": {
         "type": "object",
         "properties": {
@@ -9123,6 +9708,37 @@
           }
         },
         "title": "OpenOwnerRemovalRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.OpenUserReinstatementRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          }
+        },
+        "title": "OpenUserReinstatementRequest",
+        "additionalProperties": false
+      },
+      "concierge.v1.OpenUserSuspensionRequest": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "REQUIRED — it is what the other owners are voting on."
+          }
+        },
+        "title": "OpenUserSuspensionRequest",
         "additionalProperties": false
       },
       "concierge.v1.Owner": {
@@ -9559,6 +10175,17 @@
         "title": "PayoutOutcomeMail",
         "additionalProperties": false
       },
+      "concierge.v1.ProposalVote": {
+        "type": "string",
+        "title": "ProposalVote",
+        "enum": [
+          "PROPOSAL_VOTE_UNSPECIFIED",
+          "PROPOSAL_VOTE_PENDING",
+          "PROPOSAL_VOTE_FOR",
+          "PROPOSAL_VOTE_AGAINST"
+        ],
+        "description": "Deliberately NEUTRAL verbs, where the owner consilia use remove/keep and\n admit/reject. Three kinds share this vote, so a kind-specific verb would only mean\n something read against UserProposal.kind — and a vocabulary that is correct only when\n cross-referenced is one that eventually gets rendered wrong. The kind-specific verb\n belongs on the SURFACE, which knows the kind; this is which way the voter pushed."
+      },
       "concierge.v1.RefreshRequest": {
         "type": "object",
         "properties": {
@@ -9576,6 +10203,11 @@
           "user_id": {
             "type": "string",
             "title": "user_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Recorded verbatim on the audit row."
           }
         },
         "title": "ReinstateUserRequest",
@@ -9663,6 +10295,11 @@
           "user_id": {
             "type": "string",
             "title": "user_id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Recorded verbatim on the audit row. Optional here: revoking sessions is the\n reflex you want an operator to reach for without composing a sentence first."
           }
         },
         "title": "RevokeTokensRequest",
@@ -9776,6 +10413,11 @@
           "kyc_level": {
             "type": "integer",
             "title": "kyc_level"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Recorded verbatim on the audit row."
           }
         },
         "title": "SetKycLevelRequest",
@@ -9803,7 +10445,12 @@
           "role": {
             "type": "string",
             "title": "role",
-            "description": "The role to grant (snake_case: investor/operator/admin/owner)."
+            "description": "The role to grant (snake_case: investor/operator/admin/owner).\n\n `owner` is refused in both directions and `admin` in the GRANTING direction, each\n naming the proposal that does it instead. Taking `admin` away is still one act:\n containing a rogue operator must never be the slower path."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Recorded verbatim on the audit row."
           }
         },
         "title": "SetRoleRequest",
@@ -9892,6 +10539,21 @@
           }
         },
         "title": "SubmitSelfDecisionResponse",
+        "additionalProperties": false
+      },
+      "concierge.v1.SubmitUserProposalVoteRequest": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "title": "proposal_id"
+          },
+          "vote": {
+            "title": "vote",
+            "$ref": "#/components/schemas/concierge.v1.ProposalVote"
+          }
+        },
+        "title": "SubmitUserProposalVoteRequest",
         "additionalProperties": false
       },
       "concierge.v1.TokenResponse": {
@@ -10060,10 +10722,186 @@
             "type": "boolean",
             "title": "role_is_break_glass",
             "description": "True when `role` above came from the OWNER_SUBJECTS emergency allowlist rather than\n from `users.role`. See UserSummary.role_is_break_glass in auth.proto — same flag,\n same meaning: real authority, granted by the environment while the fund has no\n persisted owner, seating nobody. Render it as a warning, never as ownership."
+          },
+          "suspended_by": {
+            "type": "string",
+            "title": "suspended_by",
+            "description": "WHY the account is disabled — and therefore who may undo it. Empty on an active\n user, and also on one suspended before this field existed (those keep the old\n one-act, never-lapsing semantics they were actually suspended under).\n   \"admin_hold\"  — one operator's brake; lapses at hold_expires_at; ReinstateUser\n                   lifts it in one act.\n   \"governance\"  — the owners' ratified verdict; never lapses; ReinstateUser\n                   refuses and names OpenUserReinstatement."
+          },
+          "hold_expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "hold_expires_at",
+            "format": "int64",
+            "description": "Unix SECONDS an \"admin_hold\" lapses. 0 when nothing lapses."
           }
         },
         "title": "UserProfile",
         "additionalProperties": false
+      },
+      "concierge.v1.UserProposal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "kind": {
+            "title": "kind",
+            "$ref": "#/components/schemas/concierge.v1.UserProposalKind"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/concierge.v1.UserProposalState"
+          },
+          "subject_user_id": {
+            "type": "string",
+            "title": "subject_user_id",
+            "description": "Any user — NOT necessarily an owner. That is the difference from OwnerAdmission,\n and the reason none of its roster checks have an analogue here."
+          },
+          "subject_email": {
+            "type": "string",
+            "title": "subject_email"
+          },
+          "initiator_user_id": {
+            "type": "string",
+            "title": "initiator_user_id"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the initiator's words. Required, and shown to every voter."
+          },
+          "peers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.UserProposalPeer"
+            },
+            "title": "peers",
+            "description": "Every owner except the initiator, with their answers. Never empty: a proposal with\n nobody to agree is refused at open rather than left open and unpassable."
+          },
+          "owner_count": {
+            "type": "integer",
+            "title": "owner_count",
+            "description": "Owners at open. The initiator is counted but does not vote."
+          },
+          "threshold": {
+            "type": "integer",
+            "title": "threshold",
+            "description": "How many of `peers` must vote FOR, frozen at open — so a surface shows the bar this\n proposal is actually measured against, not one re-derived from a roster that moved."
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "decided_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "decided_at",
+            "format": "int64"
+          },
+          "void_reason": {
+            "type": "string",
+            "title": "void_reason"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64"
+          }
+        },
+        "title": "UserProposal",
+        "additionalProperties": false,
+        "description": "The owners' verdict over one PERSON's standing.\n\n It passes on a MAJORITY of the snapshotted voters, not the unanimity the OWNER\n consilia demand, and the difference is deliberate. Unanimity guards the owner roster\n because a minority able to add owners by majority grows itself into a majority.\n Neither thing decided here has that property: `admin` cannot vote in any consilium\n and cannot be granted `owner`, and a suspension is defensive and reversible by the\n same body. Against that, unanimity here would COST safety — a hold lapses in 24h, so\n ratifying one races a clock, and under unanimity one unreachable owner does not delay\n the verdict, they decide it by releasing a compromised account at the deadline.\n\n What is preserved is the property that matters: the initiator is excluded from the\n voter set and the threshold is at least one, so no single actor ever acts alone."
+      },
+      "concierge.v1.UserProposalKind": {
+        "type": "string",
+        "title": "UserProposalKind",
+        "enum": [
+          "USER_PROPOSAL_KIND_UNSPECIFIED",
+          "USER_PROPOSAL_KIND_SUSPENSION",
+          "USER_PROPOSAL_KIND_REINSTATEMENT",
+          "USER_PROPOSAL_KIND_ADMIN_ADMISSION"
+        ],
+        "description": "What a UserProposal decides. Three kinds share one message because all three are the\n same question — \"do the owners agree to change this person's standing?\" — differing\n only in what the verdict writes."
+      },
+      "concierge.v1.UserProposalList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/concierge.v1.UserProposal"
+            },
+            "title": "items"
+          }
+        },
+        "title": "UserProposalList",
+        "additionalProperties": false
+      },
+      "concierge.v1.UserProposalPeer": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "email": {
+            "type": "string",
+            "title": "email"
+          },
+          "vote": {
+            "title": "vote",
+            "$ref": "#/components/schemas/concierge.v1.ProposalVote"
+          },
+          "voted_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "voted_at",
+            "format": "int64"
+          }
+        },
+        "title": "UserProposalPeer",
+        "additionalProperties": false
+      },
+      "concierge.v1.UserProposalState": {
+        "type": "string",
+        "title": "UserProposalState",
+        "enum": [
+          "USER_PROPOSAL_STATE_UNSPECIFIED",
+          "USER_PROPOSAL_STATE_OPEN",
+          "USER_PROPOSAL_STATE_EXECUTED",
+          "USER_PROPOSAL_STATE_REJECTED",
+          "USER_PROPOSAL_STATE_EXPIRED",
+          "USER_PROPOSAL_STATE_CANCELLED",
+          "USER_PROPOSAL_STATE_VOID"
+        ],
+        "description": "The six states, again as their own enum: proto enum VALUES share one namespace per\n package, so the identical states have to be spelled three times even though the\n domain models them with one type."
       },
       "concierge.v1.UserSummary": {
         "type": "object",

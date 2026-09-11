@@ -2739,6 +2739,27 @@ export type BankingV1UserProfile = {
      * has no allowlist of its own and never sets it.
      */
     role_is_break_glass?: boolean;
+    /**
+     * suspended_by
+     *
+     * WHY the account is disabled, and therefore who may undo it — concierge splits the
+     * old blocking verb into a lapsing `admin_hold` and a ratified `governance` verdict,
+     * and an empty string is a THIRD case: an account suspended before the field existed,
+     * which keeps the one-act, never-lapsing semantics it was actually suspended under.
+     *
+     * Carried here only for wire parity, like `role_is_break_glass` above: the money plane
+     * learns of a freeze through the one-way lifecycle bridge's SUSPENDED/REINSTATED
+     * events, never by reading this, and never sets it. Absent them the parity round trip
+     * in `cabinet/backend/tests/concierge_parity.rs` re-encodes short and fails, which is
+     * exactly the drift that test exists to catch.
+     */
+    suspended_by?: string;
+    /**
+     * hold_expires_at
+     *
+     * Unix SECONDS an "admin_hold" lapses; 0 when nothing lapses. Parity only, as above.
+     */
+    hold_expires_at?: number | string;
 };
 
 /**
@@ -2998,6 +3019,20 @@ export type ConciergeV1AdminUserSummary = {
      * stops the console listing an "owner" the consilium has never heard of.
      */
     role_is_break_glass?: boolean;
+    /**
+     * suspended_by
+     *
+     * Why the account is disabled; see UserProfile.suspended_by. On the list because a
+     * held account and a suspended one need different action buttons, and a console that
+     * cannot tell them apart offers the wrong one.
+     */
+    suspended_by?: string;
+    /**
+     * hold_expires_at
+     *
+     * Unix SECONDS an "admin_hold" lapses. 0 when nothing lapses.
+     */
+    hold_expires_at?: number | string;
 };
 
 /**
@@ -3049,6 +3084,16 @@ export type ConciergeV1CancelOwnerRemovalRequest = {
      * removal_id
      */
     removal_id?: string;
+};
+
+/**
+ * CancelUserProposalRequest
+ */
+export type ConciergeV1CancelUserProposalRequest = {
+    /**
+     * proposal_id
+     */
+    proposal_id?: string;
 };
 
 /**
@@ -3147,6 +3192,16 @@ export type ConciergeV1GetRemovalInvitationRequest = {
 };
 
 /**
+ * GetUserProposalRequest
+ */
+export type ConciergeV1GetUserProposalRequest = {
+    /**
+     * proposal_id
+     */
+    proposal_id?: string;
+};
+
+/**
  * GetUserRequest
  */
 export type ConciergeV1GetUserRequest = {
@@ -3186,6 +3241,35 @@ export type ConciergeV1GovernanceTick = {
      * True for the periodic keepalive, which carries the current revision unchanged.
      */
     heartbeat?: boolean;
+};
+
+/**
+ * HoldUserRequest
+ */
+export type ConciergeV1HoldUserRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * reason
+     *
+     * REQUIRED. A brake that stops someone's money with no stated cause cannot be
+     * reviewed afterwards, and the owners asked to ratify it are reading exactly this.
+     */
+    reason?: string;
+};
+
+/**
+ * HoldUserResponse
+ */
+export type ConciergeV1HoldUserResponse = {
+    /**
+     * hold_expires_at
+     *
+     * Unix SECONDS the hold lapses unless the owners ratify it.
+     */
+    hold_expires_at?: number | string;
 };
 
 /**
@@ -3292,6 +3376,24 @@ export type ConciergeV1ListSessionsResponse = {
 };
 
 /**
+ * ListUserProposalsRequest
+ */
+export type ConciergeV1ListUserProposalsRequest = {
+    /**
+     * limit
+     *
+     * 0 means the server default. Includes closed proposals — nothing is deleted.
+     */
+    limit?: number;
+    /**
+     * kind
+     *
+     * UNSPECIFIED lists every kind.
+     */
+    kind?: ConciergeV1UserProposalKind;
+};
+
+/**
  * ListUsersRequest
  */
 export type ConciergeV1ListUsersRequest = {
@@ -3364,6 +3466,20 @@ export type ConciergeV1LogoutResponse = {
 };
 
 /**
+ * OpenAdminAdmissionRequest
+ */
+export type ConciergeV1OpenAdminAdmissionRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+};
+
+/**
  * OpenOwnerAdmissionRequest
  */
 export type ConciergeV1OpenOwnerAdmissionRequest = {
@@ -3389,6 +3505,36 @@ export type ConciergeV1OpenOwnerRemovalRequest = {
     target_user_id?: string;
     /**
      * reason
+     */
+    reason?: string;
+};
+
+/**
+ * OpenUserReinstatementRequest
+ */
+export type ConciergeV1OpenUserReinstatementRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+};
+
+/**
+ * OpenUserSuspensionRequest
+ */
+export type ConciergeV1OpenUserSuspensionRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * reason
+     *
+     * REQUIRED — it is what the other owners are voting on.
      */
     reason?: string;
 };
@@ -3758,6 +3904,17 @@ export type ConciergeV1PayoutOutcomeMail = {
 };
 
 /**
+ * ProposalVote
+ *
+ * Deliberately NEUTRAL verbs, where the owner consilia use remove/keep and
+ * admit/reject. Three kinds share this vote, so a kind-specific verb would only mean
+ * something read against UserProposal.kind — and a vocabulary that is correct only when
+ * cross-referenced is one that eventually gets rendered wrong. The kind-specific verb
+ * belongs on the SURFACE, which knows the kind; this is which way the voter pushed.
+ */
+export type ConciergeV1ProposalVote = 'PROPOSAL_VOTE_UNSPECIFIED' | 'PROPOSAL_VOTE_PENDING' | 'PROPOSAL_VOTE_FOR' | 'PROPOSAL_VOTE_AGAINST';
+
+/**
  * RefreshRequest
  */
 export type ConciergeV1RefreshRequest = {
@@ -3775,6 +3932,12 @@ export type ConciergeV1ReinstateUserRequest = {
      * user_id
      */
     user_id?: string;
+    /**
+     * reason
+     *
+     * Recorded verbatim on the audit row.
+     */
+    reason?: string;
 };
 
 /**
@@ -3857,6 +4020,13 @@ export type ConciergeV1RevokeTokensRequest = {
      * user_id
      */
     user_id?: string;
+    /**
+     * reason
+     *
+     * Recorded verbatim on the audit row. Optional here: revoking sessions is the
+     * reflex you want an operator to reach for without composing a sentence first.
+     */
+    reason?: string;
 };
 
 /**
@@ -3960,6 +4130,12 @@ export type ConciergeV1SetKycLevelRequest = {
      * kyc_level
      */
     kyc_level?: number;
+    /**
+     * reason
+     *
+     * Recorded verbatim on the audit row.
+     */
+    reason?: string;
 };
 
 /**
@@ -3986,8 +4162,18 @@ export type ConciergeV1SetRoleRequest = {
      * role
      *
      * The role to grant (snake_case: investor/operator/admin/owner).
+     *
+     * `owner` is refused in both directions and `admin` in the GRANTING direction, each
+     * naming the proposal that does it instead. Taking `admin` away is still one act:
+     * containing a rogue operator must never be the slower path.
      */
     role?: string;
+    /**
+     * reason
+     *
+     * Recorded verbatim on the audit row.
+     */
+    reason?: string;
 };
 
 /**
@@ -4070,6 +4256,20 @@ export type ConciergeV1SubmitSelfDecisionResponse = {
      * decided
      */
     decided?: boolean;
+};
+
+/**
+ * SubmitUserProposalVoteRequest
+ */
+export type ConciergeV1SubmitUserProposalVoteRequest = {
+    /**
+     * proposal_id
+     */
+    proposal_id?: string;
+    /**
+     * vote
+     */
+    vote?: ConciergeV1ProposalVote;
 };
 
 /**
@@ -4240,7 +4440,172 @@ export type ConciergeV1UserProfile = {
      * persisted owner, seating nobody. Render it as a warning, never as ownership.
      */
     role_is_break_glass?: boolean;
+    /**
+     * suspended_by
+     *
+     * WHY the account is disabled — and therefore who may undo it. Empty on an active
+     * user, and also on one suspended before this field existed (those keep the old
+     * one-act, never-lapsing semantics they were actually suspended under).
+     * "admin_hold"  — one operator's brake; lapses at hold_expires_at; ReinstateUser
+     * lifts it in one act.
+     * "governance"  — the owners' ratified verdict; never lapses; ReinstateUser
+     * refuses and names OpenUserReinstatement.
+     */
+    suspended_by?: string;
+    /**
+     * hold_expires_at
+     *
+     * Unix SECONDS an "admin_hold" lapses. 0 when nothing lapses.
+     */
+    hold_expires_at?: number | string;
 };
+
+/**
+ * UserProposal
+ *
+ * The owners' verdict over one PERSON's standing.
+ *
+ * It passes on a MAJORITY of the snapshotted voters, not the unanimity the OWNER
+ * consilia demand, and the difference is deliberate. Unanimity guards the owner roster
+ * because a minority able to add owners by majority grows itself into a majority.
+ * Neither thing decided here has that property: `admin` cannot vote in any consilium
+ * and cannot be granted `owner`, and a suspension is defensive and reversible by the
+ * same body. Against that, unanimity here would COST safety — a hold lapses in 24h, so
+ * ratifying one races a clock, and under unanimity one unreachable owner does not delay
+ * the verdict, they decide it by releasing a compromised account at the deadline.
+ *
+ * What is preserved is the property that matters: the initiator is excluded from the
+ * voter set and the threshold is at least one, so no single actor ever acts alone.
+ */
+export type ConciergeV1UserProposal = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * kind
+     */
+    kind?: ConciergeV1UserProposalKind;
+    /**
+     * state
+     */
+    state?: ConciergeV1UserProposalState;
+    /**
+     * subject_user_id
+     *
+     * Any user — NOT necessarily an owner. That is the difference from OwnerAdmission,
+     * and the reason none of its roster checks have an analogue here.
+     */
+    subject_user_id?: string;
+    /**
+     * subject_email
+     */
+    subject_email?: string;
+    /**
+     * initiator_user_id
+     */
+    initiator_user_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * reason
+     *
+     * Why, in the initiator's words. Required, and shown to every voter.
+     */
+    reason?: string;
+    /**
+     * peers
+     *
+     * Every owner except the initiator, with their answers. Never empty: a proposal with
+     * nobody to agree is refused at open rather than left open and unpassable.
+     */
+    peers?: Array<ConciergeV1UserProposalPeer>;
+    /**
+     * owner_count
+     *
+     * Owners at open. The initiator is counted but does not vote.
+     */
+    owner_count?: number;
+    /**
+     * threshold
+     *
+     * How many of `peers` must vote FOR, frozen at open — so a surface shows the bar this
+     * proposal is actually measured against, not one re-derived from a roster that moved.
+     */
+    threshold?: number;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decided_at
+     */
+    decided_at?: number | string;
+    /**
+     * void_reason
+     */
+    void_reason?: string;
+    /**
+     * version
+     */
+    version?: number | string;
+};
+
+/**
+ * UserProposalKind
+ *
+ * What a UserProposal decides. Three kinds share one message because all three are the
+ * same question — "do the owners agree to change this person's standing?" — differing
+ * only in what the verdict writes.
+ */
+export type ConciergeV1UserProposalKind = 'USER_PROPOSAL_KIND_UNSPECIFIED' | 'USER_PROPOSAL_KIND_SUSPENSION' | 'USER_PROPOSAL_KIND_REINSTATEMENT' | 'USER_PROPOSAL_KIND_ADMIN_ADMISSION';
+
+/**
+ * UserProposalList
+ */
+export type ConciergeV1UserProposalList = {
+    /**
+     * items
+     */
+    items?: Array<ConciergeV1UserProposal>;
+};
+
+/**
+ * UserProposalPeer
+ */
+export type ConciergeV1UserProposalPeer = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * vote
+     */
+    vote?: ConciergeV1ProposalVote;
+    /**
+     * voted_at
+     */
+    voted_at?: number | string;
+};
+
+/**
+ * UserProposalState
+ *
+ * The six states, again as their own enum: proto enum VALUES share one namespace per
+ * package, so the identical states have to be spelled three times even though the
+ * domain models them with one type.
+ */
+export type ConciergeV1UserProposalState = 'USER_PROPOSAL_STATE_UNSPECIFIED' | 'USER_PROPOSAL_STATE_OPEN' | 'USER_PROPOSAL_STATE_EXECUTED' | 'USER_PROPOSAL_STATE_REJECTED' | 'USER_PROPOSAL_STATE_EXPIRED' | 'USER_PROPOSAL_STATE_CANCELLED' | 'USER_PROPOSAL_STATE_VOID';
 
 /**
  * UserSummary
@@ -6583,6 +6948,35 @@ export type ConciergeV1GovernanceServiceCancelOwnerRemovalResponses = {
 
 export type ConciergeV1GovernanceServiceCancelOwnerRemovalResponse = ConciergeV1GovernanceServiceCancelOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceCancelOwnerRemovalResponses];
 
+export type ConciergeV1GovernanceServiceCancelUserProposalData = {
+    body: ConciergeV1CancelUserProposalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/CancelUserProposal';
+};
+
+export type ConciergeV1GovernanceServiceCancelUserProposalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceCancelUserProposalError = ConciergeV1GovernanceServiceCancelUserProposalErrors[keyof ConciergeV1GovernanceServiceCancelUserProposalErrors];
+
+export type ConciergeV1GovernanceServiceCancelUserProposalResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceCancelUserProposalResponse = ConciergeV1GovernanceServiceCancelUserProposalResponses[keyof ConciergeV1GovernanceServiceCancelUserProposalResponses];
+
 export type ConciergeV1GovernanceServiceGetOwnerAdmissionData = {
     body: ConciergeV1GetOwnerAdmissionRequest;
     headers: {
@@ -6640,6 +7034,35 @@ export type ConciergeV1GovernanceServiceGetOwnerRemovalResponses = {
 };
 
 export type ConciergeV1GovernanceServiceGetOwnerRemovalResponse = ConciergeV1GovernanceServiceGetOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceGetOwnerRemovalResponses];
+
+export type ConciergeV1GovernanceServiceGetUserProposalData = {
+    body: ConciergeV1GetUserProposalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/GetUserProposal';
+};
+
+export type ConciergeV1GovernanceServiceGetUserProposalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceGetUserProposalError = ConciergeV1GovernanceServiceGetUserProposalErrors[keyof ConciergeV1GovernanceServiceGetUserProposalErrors];
+
+export type ConciergeV1GovernanceServiceGetUserProposalResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceGetUserProposalResponse = ConciergeV1GovernanceServiceGetUserProposalResponses[keyof ConciergeV1GovernanceServiceGetUserProposalResponses];
 
 export type ConciergeV1GovernanceServiceListOwnerAdmissionsData = {
     body: ConciergeV1ListOwnerAdmissionsRequest;
@@ -6728,6 +7151,64 @@ export type ConciergeV1GovernanceServiceListOwnersResponses = {
 
 export type ConciergeV1GovernanceServiceListOwnersResponse = ConciergeV1GovernanceServiceListOwnersResponses[keyof ConciergeV1GovernanceServiceListOwnersResponses];
 
+export type ConciergeV1GovernanceServiceListUserProposalsData = {
+    body: ConciergeV1ListUserProposalsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/ListUserProposals';
+};
+
+export type ConciergeV1GovernanceServiceListUserProposalsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceListUserProposalsError = ConciergeV1GovernanceServiceListUserProposalsErrors[keyof ConciergeV1GovernanceServiceListUserProposalsErrors];
+
+export type ConciergeV1GovernanceServiceListUserProposalsResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposalList;
+};
+
+export type ConciergeV1GovernanceServiceListUserProposalsResponse = ConciergeV1GovernanceServiceListUserProposalsResponses[keyof ConciergeV1GovernanceServiceListUserProposalsResponses];
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionData = {
+    body: ConciergeV1OpenAdminAdmissionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/OpenAdminAdmission';
+};
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionError = ConciergeV1GovernanceServiceOpenAdminAdmissionErrors[keyof ConciergeV1GovernanceServiceOpenAdminAdmissionErrors];
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionResponse = ConciergeV1GovernanceServiceOpenAdminAdmissionResponses[keyof ConciergeV1GovernanceServiceOpenAdminAdmissionResponses];
+
 export type ConciergeV1GovernanceServiceOpenOwnerAdmissionData = {
     body: ConciergeV1OpenOwnerAdmissionRequest;
     headers: {
@@ -6785,6 +7266,64 @@ export type ConciergeV1GovernanceServiceOpenOwnerRemovalResponses = {
 };
 
 export type ConciergeV1GovernanceServiceOpenOwnerRemovalResponse = ConciergeV1GovernanceServiceOpenOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceOpenOwnerRemovalResponses];
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementData = {
+    body: ConciergeV1OpenUserReinstatementRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/OpenUserReinstatement';
+};
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementError = ConciergeV1GovernanceServiceOpenUserReinstatementErrors[keyof ConciergeV1GovernanceServiceOpenUserReinstatementErrors];
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementResponse = ConciergeV1GovernanceServiceOpenUserReinstatementResponses[keyof ConciergeV1GovernanceServiceOpenUserReinstatementResponses];
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionData = {
+    body: ConciergeV1OpenUserSuspensionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/OpenUserSuspension';
+};
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionError = ConciergeV1GovernanceServiceOpenUserSuspensionErrors[keyof ConciergeV1GovernanceServiceOpenUserSuspensionErrors];
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionResponse = ConciergeV1GovernanceServiceOpenUserSuspensionResponses[keyof ConciergeV1GovernanceServiceOpenUserSuspensionResponses];
 
 export type ConciergeV1GovernanceServiceResignOwnershipData = {
     body: ConciergeV1ResignOwnershipRequest;
@@ -6872,6 +7411,35 @@ export type ConciergeV1GovernanceServiceSubmitPeerVoteResponses = {
 };
 
 export type ConciergeV1GovernanceServiceSubmitPeerVoteResponse = ConciergeV1GovernanceServiceSubmitPeerVoteResponses[keyof ConciergeV1GovernanceServiceSubmitPeerVoteResponses];
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteData = {
+    body: ConciergeV1SubmitUserProposalVoteRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/SubmitUserProposalVote';
+};
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteError = ConciergeV1GovernanceServiceSubmitUserProposalVoteErrors[keyof ConciergeV1GovernanceServiceSubmitUserProposalVoteErrors];
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteResponse = ConciergeV1GovernanceServiceSubmitUserProposalVoteResponses[keyof ConciergeV1GovernanceServiceSubmitUserProposalVoteResponses];
 
 export type ConciergeV1MailRelayServiceSendGovernanceMailData = {
     body: ConciergeV1SendGovernanceMailRequest;
@@ -7046,6 +7614,35 @@ export type ConciergeV1UserDirectoryGetUserResponses = {
 };
 
 export type ConciergeV1UserDirectoryGetUserResponse = ConciergeV1UserDirectoryGetUserResponses[keyof ConciergeV1UserDirectoryGetUserResponses];
+
+export type ConciergeV1UserDirectoryHoldUserData = {
+    body: ConciergeV1HoldUserRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/HoldUser';
+};
+
+export type ConciergeV1UserDirectoryHoldUserErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryHoldUserError = ConciergeV1UserDirectoryHoldUserErrors[keyof ConciergeV1UserDirectoryHoldUserErrors];
+
+export type ConciergeV1UserDirectoryHoldUserResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1HoldUserResponse;
+};
+
+export type ConciergeV1UserDirectoryHoldUserResponse = ConciergeV1UserDirectoryHoldUserResponses[keyof ConciergeV1UserDirectoryHoldUserResponses];
 
 export type ConciergeV1UserDirectoryListUsersData = {
     body: ConciergeV1ListUsersRequest;
