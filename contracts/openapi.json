@@ -6536,6 +6536,7 @@
           },
           "revenue_payout": {
             "title": "revenue_payout",
+            "description": "EXACTLY ONE of the two terms fields is set, decided by the kind. Two fields rather than\n a oneof because the surfaces read them by name and a oneof buys nothing here that the\n \"exactly one\" rule does not already give.",
             "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
           },
           "payload_hash": {
@@ -6603,7 +6604,7 @@
           "executed_withdrawal_id": {
             "type": "string",
             "title": "executed_withdrawal_id",
-            "description": "Set exactly once, on EXECUTED."
+            "description": "Set exactly once, on EXECUTED — and exactly ONE of the two is, because a consilium has\n one effect. `consilium_execution_is_recorded` states that to the database as\n `num_nonnulls(...) = 1`."
           },
           "failure_reason": {
             "type": "string",
@@ -6617,6 +6618,15 @@
             "title": "version",
             "format": "int64",
             "description": "Monotonic per consilium. The live page watches this and refetches when it moves —\n the socket carries a version, never a tally."
+          },
+          "payment": {
+            "title": "payment",
+            "$ref": "#/components/schemas/banking.v1.ConsiliumPaymentTerms"
+          },
+          "executed_payment_id": {
+            "type": "string",
+            "title": "executed_payment_id",
+            "description": "The payment order an executed PAYMENT consilium carried."
           }
         },
         "title": "Consilium",
@@ -6635,6 +6645,7 @@
           },
           "revenue_payout": {
             "title": "revenue_payout",
+            "description": "Exactly one of `revenue_payout` and `payment` is set — see `Consilium`.",
             "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
           },
           "payload_hash": {
@@ -6688,6 +6699,10 @@
             "type": "integer",
             "title": "attempts_remaining",
             "description": "Code attempts left before the token burns."
+          },
+          "payment": {
+            "title": "payment",
+            "$ref": "#/components/schemas/banking.v1.ConsiliumPaymentTerms"
           }
         },
         "title": "ConsiliumInvitation",
@@ -6707,6 +6722,44 @@
         },
         "title": "ConsiliumList",
         "additionalProperties": false
+      },
+      "banking.v1.ConsiliumPaymentTerms": {
+        "type": "object",
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "title": "payment_id",
+            "description": "The order this quorum authorizes. Inside the hashed subject too, so an approval of one\n payment is never a valid signature over another with identical terms."
+          },
+          "tier": {
+            "type": "string",
+            "title": "tier",
+            "description": "internal | service | external — DERIVED from the destination, never supplied."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "Where the money leaves from."
+          },
+          "destination": {
+            "type": "string",
+            "title": "destination",
+            "description": "Where it lands. An external destination is rendered in FULL, address and rail: a\n truncated address in an approval flow is an invitation to approve the wrong one."
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "Decimal USDT string, as everywhere else on this wire."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the initiator's words. Required, shown verbatim, never interpreted."
+          }
+        },
+        "title": "ConsiliumPaymentTerms",
+        "additionalProperties": false,
+        "description": "The immutable subject of a PAYMENT consilium — the §3 rule that money belonging to the\n fund (`piggybank`, `revenue`, `service:\u003cid\u003e`) moves only on the owners' quorum, at every\n tier.\n\n A PROJECTION OF THE ORDER, not the order. `banking.v1.Payment` (payments.proto) is what\n the payments screen reads; this is what an owner needs in order to judge one request:\n where the money leaves from, where it lands, how much, and why. The two ends are rendered\n as LABELS rather than as `(kind, id)` pairs because the question an owner is answering is\n \"should this money move\", and an account id is not an answer to it."
       },
       "banking.v1.ConsiliumState": {
         "type": "string",

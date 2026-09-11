@@ -27,7 +27,7 @@ use tracing::{error, info, warn};
 
 use crate::{
 	application::consilium as consilium_app,
-	ports::{Custody, WithdrawalRepository, consilium::ConsiliumRepository, ledger::Ledger},
+	ports::{Custody, PaymentRepository, WithdrawalRepository, consilium::ConsiliumRepository, ledger::Ledger},
 };
 
 fn unix_now() -> i64 {
@@ -53,6 +53,7 @@ pub struct ConsiliumSweeper {
 	pub pool: PgPool,
 	pub consilia: Arc<dyn ConsiliumRepository>,
 	pub withdrawals: Arc<dyn WithdrawalRepository>,
+	pub payments: Arc<dyn PaymentRepository>,
 	pub ledger: Arc<dyn Ledger>,
 	pub custody: Arc<dyn Custody>,
 	pub notify: Arc<Notify>,
@@ -123,6 +124,7 @@ impl ConsiliumSweeper {
 		let ports = consilium_app::ConsiliumPorts {
 			consilia: self.consilia.as_ref(),
 			withdrawals: self.withdrawals.as_ref(),
+			payments: self.payments.as_ref(),
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
 			relay: &self.notify,

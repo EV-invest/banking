@@ -240,6 +240,10 @@ export type BankingV1Consilium = {
     state?: BankingV1ConsiliumState;
     /**
      * revenue_payout
+     *
+     * EXACTLY ONE of the two terms fields is set, decided by the kind. Two fields rather than
+     * a oneof because the surfaces read them by name and a oneof buys nothing here that the
+     * "exactly one" rule does not already give.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -296,7 +300,9 @@ export type BankingV1Consilium = {
     /**
      * executed_withdrawal_id
      *
-     * Set exactly once, on EXECUTED.
+     * Set exactly once, on EXECUTED — and exactly ONE of the two is, because a consilium has
+     * one effect. `consilium_execution_is_recorded` states that to the database as
+     * `num_nonnulls(...) = 1`.
      */
     executed_withdrawal_id?: string;
     /**
@@ -310,6 +316,16 @@ export type BankingV1Consilium = {
      * the socket carries a version, never a tally.
      */
     version?: number | string;
+    /**
+     * payment
+     */
+    payment?: BankingV1ConsiliumPaymentTerms;
+    /**
+     * executed_payment_id
+     *
+     * The payment order an executed PAYMENT consilium carried.
+     */
+    executed_payment_id?: string;
 };
 
 /**
@@ -329,6 +345,8 @@ export type BankingV1ConsiliumInvitation = {
     state?: BankingV1ConsiliumState;
     /**
      * revenue_payout
+     *
+     * Exactly one of `revenue_payout` and `payment` is set — see `Consilium`.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -380,6 +398,10 @@ export type BankingV1ConsiliumInvitation = {
      * Code attempts left before the token burns.
      */
     attempts_remaining?: number;
+    /**
+     * payment
+     */
+    payment?: BankingV1ConsiliumPaymentTerms;
 };
 
 /**
@@ -390,6 +412,60 @@ export type BankingV1ConsiliumList = {
      * items
      */
     items?: Array<BankingV1Consilium>;
+};
+
+/**
+ * ConsiliumPaymentTerms
+ *
+ * The immutable subject of a PAYMENT consilium — the §3 rule that money belonging to the
+ * fund (`piggybank`, `revenue`, `service:<id>`) moves only on the owners' quorum, at every
+ * tier.
+ *
+ * A PROJECTION OF THE ORDER, not the order. `banking.v1.Payment` (payments.proto) is what
+ * the payments screen reads; this is what an owner needs in order to judge one request:
+ * where the money leaves from, where it lands, how much, and why. The two ends are rendered
+ * as LABELS rather than as `(kind, id)` pairs because the question an owner is answering is
+ * "should this money move", and an account id is not an answer to it.
+ */
+export type BankingV1ConsiliumPaymentTerms = {
+    /**
+     * payment_id
+     *
+     * The order this quorum authorizes. Inside the hashed subject too, so an approval of one
+     * payment is never a valid signature over another with identical terms.
+     */
+    payment_id?: string;
+    /**
+     * tier
+     *
+     * internal | service | external — DERIVED from the destination, never supplied.
+     */
+    tier?: string;
+    /**
+     * source
+     *
+     * Where the money leaves from.
+     */
+    source?: string;
+    /**
+     * destination
+     *
+     * Where it lands. An external destination is rendered in FULL, address and rail: a
+     * truncated address in an approval flow is an invitation to approve the wrong one.
+     */
+    destination?: string;
+    /**
+     * amount
+     *
+     * Decimal USDT string, as everywhere else on this wire.
+     */
+    amount?: string;
+    /**
+     * reason
+     *
+     * Why, in the initiator's words. Required, shown verbatim, never interpreted.
+     */
+    reason?: string;
 };
 
 /**

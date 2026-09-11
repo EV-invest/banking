@@ -28,6 +28,7 @@ use crate::{
 	error::DomainError,
 	hex32,
 	money::{Network, Usdt, WalletAddress},
+	payments::{PaymentId, PaymentSubject},
 	push_field,
 	users::UserId,
 	withdrawals::WithdrawalId,
@@ -55,24 +56,34 @@ pub fn threshold(owner_count: u32) -> u32 {
 	owner_count / 2 + 1
 }
 
-/// What a consilium authorizes. One kind today, named rather than implied so a second
-/// governance subject would be a variant instead of a parallel aggregate.
+/// What a consilium authorizes.
+///
+/// THE VOCABULARY HERE AND THE `consilium.kind` CHECK ARE ONE SIZE, ALWAYS. A value the
+/// database admits but [`Self::parse`] refuses does not merely fail its own row: `kind`
+/// decides how `terms` is read, so one such row fails EVERY read of the governance history.
+/// That is why `0029_consilium_source_claim.sql` refused to widen the CHECK ahead of time
+/// and why `0031_consilium_payment_kind.sql` widens it in the commit that adds this variant.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConsiliumKind {
 	RevenuePayout,
+	/// A [`crate::payments::PaymentOrder`] whose source is fund-owned money — §3's rule
+	/// that the owners' money moves only on the owners' quorum, at every tier.
+	Payment,
 }
 
 impl ConsiliumKind {
 	pub fn as_str(self) -> &'static str {
 		match self {
 			Self::RevenuePayout => "revenue_payout",
+			Self::Payment => "payment",
 		}
 	}
 
 	pub fn parse(raw: &str) -> Result<Self, DomainError> {
 		match raw {
 			"revenue_payout" => Ok(Self::RevenuePayout),
+			"payment" => Ok(Self::Payment),
 			other => Err(DomainError::Validation(format!("unknown consilium kind: {other}"))),
 		}
 	}
@@ -207,20 +218,25 @@ impl RevenuePayoutTerms {
 
 /// What a consilium is deciding, by value.
 ///
-/// One variant today. It exists so a second governance subject is a variant here rather
-/// than a parallel aggregate, and it is an ENUM rather than a `Box<dyn Terms>` because
+/// It exists so a second governance subject is a variant here rather than a parallel
+/// aggregate, and it is an ENUM rather than a `Box<dyn Terms>` because
 /// [`ConsiliumEvent::Opened`] carries the terms by value into the `event_log` and must
 /// therefore round-trip through serde — which a trait object cannot do.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConsiliumTerms {
 	RevenuePayout(RevenuePayoutTerms),
+	/// The payment order this quorum authorizes, subject and all. The ORDER'S id is inside
+	/// the hashed subject (see [`PaymentSubject`]), so an approval of one payment is not a
+	/// valid signature over another with identical terms.
+	Payment(PaymentSubject),
 }
 
 impl ConsiliumTerms {
 	pub fn kind(&self) -> ConsiliumKind {
 		match self {
 			Self::RevenuePayout(_) => ConsiliumKind::RevenuePayout,
+			Self::Payment(_) => ConsiliumKind::Payment,
 		}
 	}
 
@@ -235,6 +251,7 @@ impl ConsiliumTerms {
 	pub fn canonical_bytes(&self) -> Vec<u8> {
 		match self {
 			Self::RevenuePayout(terms) => terms.canonical_bytes(),
+			Self::Payment(subject) => subject.canonical_bytes(),
 		}
 	}
 
@@ -244,6 +261,11 @@ impl ConsiliumTerms {
 	pub fn source_claim(&self) -> LedgerAccountKey {
 		match self {
 			Self::RevenuePayout(_) => LedgerAccountKey::FeeRevenue,
+			// READ OFF THE ORDER, never restated. The per-source "one open request" index and
+			// `payments_single_open_per_source_idx` then key on the same claim, so the two
+			// governance surfaces over one claim serialize against each other rather than
+			// each holding its own idea of what is being spent.
+			Self::Payment(subject) => subject.terms.source_claim(),
 		}
 	}
 }
@@ -251,6 +273,12 @@ impl ConsiliumTerms {
 impl From<RevenuePayoutTerms> for ConsiliumTerms {
 	fn from(terms: RevenuePayoutTerms) -> Self {
 		Self::RevenuePayout(terms)
+	}
+}
+
+impl From<PaymentSubject> for ConsiliumTerms {
+	fn from(subject: PaymentSubject) -> Self {
+		Self::Payment(subject)
 	}
 }
 
@@ -263,11 +291,20 @@ impl From<RevenuePayoutTerms> for ConsiliumTerms {
 #[serde(tag = "effect", content = "id", rename_all = "snake_case")]
 pub enum ConsiliumEffect {
 	Withdrawal(WithdrawalId),
+	/// The payment order this quorum carried. The order, not its money: what the payment
+	/// then settles as (a withdrawal, or one posted transfer) is the order's own business.
+	Payment(PaymentId),
 }
 
 impl From<WithdrawalId> for ConsiliumEffect {
 	fn from(id: WithdrawalId) -> Self {
 		Self::Withdrawal(id)
+	}
+}
+
+impl From<PaymentId> for ConsiliumEffect {
+	fn from(id: PaymentId) -> Self {
+		Self::Payment(id)
 	}
 }
 
@@ -659,6 +696,17 @@ impl Consilium {
 		// leave the column blank on a row that did execute.
 		match effect {
 			ConsiliumEffect::Withdrawal(id) => Some(id),
+			ConsiliumEffect::Payment(_) => None,
+		}
+	}
+
+	/// The executed effect NARROWED to a payment order — the `executed_payment_id` column's
+	/// projection, and the other half of `consilium_execution_is_recorded`'s
+	/// `num_nonnulls(...) = 1`: exactly one of the two accessors answers on an executed row.
+	pub fn executed_payment_id(&self) -> Option<PaymentId> {
+		match self.executed? {
+			ConsiliumEffect::Payment(id) => Some(id),
+			ConsiliumEffect::Withdrawal(_) => None,
 		}
 	}
 
@@ -1064,7 +1112,7 @@ mod tests {
 		// THE PREFIX IS THE WHOLE OF THE SEPARATION. Without one, a second kind whose fields
 		// happened to encode to the same bytes would produce the same digest — and an owner's
 		// approval of a payout would be a valid signature over that other request.
-		let ConsiliumTerms::RevenuePayout(payout) = terms();
+		let ConsiliumTerms::RevenuePayout(payout) = terms() else { panic!("terms() builds a payout") };
 		assert!(
 			payout.canonical_bytes().starts_with(RevenuePayoutTerms::DOMAIN),
 			"every variant's encoding must open with its own domain prefix"
@@ -1072,6 +1120,37 @@ mod tests {
 		// FROZEN BYTES. Live rows carry a `payload_hash` taken over an encoding that starts
 		// exactly here; a changed prefix invalidates every approval in flight at once.
 		assert_eq!(RevenuePayoutTerms::DOMAIN, b"banking.v1.RevenuePayoutTerms\x00");
+		// The second kind carries its own prefix, so the two encodings cannot collide however
+		// their fields line up — which is what keeps a payout approval from being a valid
+		// signature over a payment.
+		let subject = payment_subject();
+		assert!(subject.canonical_bytes().starts_with(crate::payments::PaymentSubject::DOMAIN));
+		assert_ne!(ConsiliumTerms::Payment(subject).canonical_bytes(), payout.canonical_bytes());
+	}
+
+	/// A payment subject over the fund's own pooled capital — the §3 case that needs a quorum.
+	fn payment_subject() -> crate::payments::PaymentSubject {
+		use crate::payments::{PaymentDestination, PaymentReason, PaymentSubject, PaymentTerms};
+		PaymentSubject {
+			payment_id: crate::payments::PaymentId::from_raw(uuid::Uuid::from_u128(0x9e17)),
+			terms: PaymentTerms::new(
+				crate::balance::Party::Piggybank,
+				PaymentDestination::Internal(crate::balance::Party::Revenue),
+				Usdt::parse_decimal("250").unwrap(),
+				PaymentReason::new("settle the quarterly management fee").unwrap(),
+			)
+			.unwrap(),
+		}
+	}
+
+	#[test]
+	fn a_payment_consilium_spends_the_orders_claim_and_names_its_own_kind() {
+		let terms = ConsiliumTerms::Payment(payment_subject());
+		assert_eq!(terms.kind(), ConsiliumKind::Payment);
+		// NOT `FeeRevenue`. The per-source "one open request" index keys on this, so a payment
+		// out of the fund's pooled capital must not queue behind a revenue payout — and must
+		// queue behind another payment that spends the same claim.
+		assert_eq!(terms.source_claim(), LedgerAccountKey::Fund);
 	}
 
 	#[test]
@@ -1080,7 +1159,9 @@ mod tests {
 		// consilium that already exists was taken over the inner encoding, so the wrapper
 		// must add nothing at all.
 		let wrapped = terms();
-		let ConsiliumTerms::RevenuePayout(inner) = wrapped.clone();
+		let ConsiliumTerms::RevenuePayout(inner) = wrapped.clone() else {
+			panic!("terms() builds a payout")
+		};
 		assert_eq!(wrapped.canonical_bytes(), inner.canonical_bytes());
 		assert_eq!(wrapped.kind(), ConsiliumKind::RevenuePayout);
 		assert_eq!(wrapped.source_claim(), LedgerAccountKey::FeeRevenue);
@@ -1102,7 +1183,13 @@ mod tests {
 		for decision in [VoteDecision::Pending, VoteDecision::Approve, VoteDecision::Reject] {
 			assert_eq!(VoteDecision::parse(decision.as_str()).unwrap(), decision);
 		}
-		assert_eq!(ConsiliumKind::parse(ConsiliumKind::RevenuePayout.as_str()).unwrap(), ConsiliumKind::RevenuePayout);
+		for kind in [ConsiliumKind::RevenuePayout, ConsiliumKind::Payment] {
+			// THE DATABASE ADMITS EXACTLY THESE. `0031_consilium_payment_kind.sql` widens the
+			// CHECK to the same two strings, and a value on one side only is a row that fails
+			// EVERY read of the governance history rather than just its own.
+			assert_eq!(ConsiliumKind::parse(kind.as_str()).unwrap(), kind);
+		}
+		assert_eq!(ConsiliumKind::Payment.as_str(), "payment");
 		assert!(ConsiliumState::parse("done").is_err());
 		assert!(VoteDecision::parse("maybe").is_err());
 		assert!(ConsiliumKind::parse("owner_removal").is_err());

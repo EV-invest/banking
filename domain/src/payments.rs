@@ -118,8 +118,14 @@ impl core::fmt::Display for PaymentReason {
 /// arrive from an address by anyone's say-so — that is a deposit, which a chain watcher
 /// attests. Making an external source unrepresentable is why the two ends have different
 /// types rather than one symmetrical one.
+/// ADJACENTLY tagged, not internally. [`Party`] is itself tagged on `kind`, and an internal
+/// tag would splice the two maps together: the inner `kind` overwrites the outer one, so
+/// `Internal(Party::Revenue)` serializes as `{"kind":"revenue",…}` — a value that has lost
+/// which VARIANT it is and cannot be read back. `PaymentEvent::Opened` carries these bytes
+/// into `event_log`, and `ConsiliumTerms::Payment` into `consilium.terms`, so a shape that
+/// only survives one direction is an audit row nobody can ever load.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", content = "target", rename_all = "snake_case")]
 pub enum PaymentDestination {
 	/// A claim inside the platform — settled as one posted ledger transfer.
 	Internal(Party),
@@ -377,6 +383,21 @@ impl PaymentTerms {
 		self.to.tier()
 	}
 
+	/// The source, as a human reading an approval request sees it.
+	pub fn source_label(&self) -> String {
+		party_label(&self.from)
+	}
+
+	/// The destination, as that same human sees it. An address is rendered in FULL with its
+	/// rail: a truncated address in an approval flow is an invitation to approve the wrong
+	/// one.
+	pub fn destination_label(&self) -> String {
+		match &self.to {
+			PaymentDestination::Internal(party) => party_label(party),
+			PaymentDestination::External { network, address } => format!("{} on {}", address.as_str(), network.as_str()),
+		}
+	}
+
 	/// The claim debited — both the "one open payment per source" key and the advisory-lock
 	/// target the execution path takes.
 	pub fn source_claim(&self) -> LedgerAccountKey {
@@ -421,6 +442,24 @@ impl PaymentTerms {
 		out.extend_from_slice(&self.amount.base_units().to_be_bytes());
 		push_field(&mut out, self.reason.as_str().as_bytes());
 		out
+	}
+}
+
+/// One end of a payment, in words rather than as a `(kind, id)` pair.
+///
+/// IT LIVES HERE, BESIDE THE DIGESTED TERMS, because three surfaces must describe one money
+/// move identically — the owners' approval screen, the subject's consent mail, and the
+/// payments history — and the terms are the only thing all three are bound to. A per-surface
+/// formatter is how the mail and the screen come to disagree about what was approved.
+///
+/// The singleton claims get names an operator uses out loud; the two identified ones keep
+/// their id, because "a service" and "an investor" are not answers to "which one".
+fn party_label(party: &Party) -> String {
+	match party {
+		Party::Piggybank => "the fund's pooled capital".to_owned(),
+		Party::Revenue => "the fund's earned revenue".to_owned(),
+		Party::Service(service) => format!("the {service} product"),
+		Party::User(user) => format!("investor {user}"),
 	}
 }
 
@@ -1276,5 +1315,35 @@ mod tests {
 		assert_eq!(payload_hash, "ab".repeat(32));
 		assert_eq!(tier, PaymentTier::External);
 		assert_eq!(requirement, PaymentApproval::OwnerConsilium);
+	}
+
+	/// BOTH DESTINATION SHAPES, BOTH DIRECTIONS.
+	///
+	/// The external one round-tripped under an internal tag by luck — its fields are
+	/// `network`/`address`, which do not collide with `kind`. `Internal(Party)` does collide:
+	/// [`Party`] carries its own `kind`, and the spliced map silently dropped the outer tag,
+	/// so `{"kind":"internal"}` went in and `{"kind":"revenue"}` came out — unreadable, and
+	/// discovered only when `consilium.terms` tried to load one back. These bytes are audit
+	/// (`event_log`) and stored governance terms, so a one-way encoding is a row nobody can
+	/// ever read.
+	#[test]
+	fn every_destination_shape_survives_a_json_round_trip() {
+		for destination in [
+			external(),
+			PaymentDestination::Internal(Party::Revenue),
+			PaymentDestination::Internal(Party::User(UserId::new())),
+			PaymentDestination::Internal(Party::Service(ServiceId::parse("alpha").unwrap())),
+		] {
+			let subject = PaymentSubject {
+				payment_id: PaymentId::new(),
+				terms: terms(Party::Piggybank, destination.clone()),
+			};
+			let json = serde_json::to_string(&subject).unwrap();
+			let back: PaymentSubject = serde_json::from_str(&json).unwrap_or_else(|err| panic!("{destination:?} must read back: {err} — from {json}"));
+			assert_eq!(back, subject);
+			// The digest is taken over `canonical_bytes`, never over serde, so the two must
+			// agree about what a round trip preserves.
+			assert_eq!(back.canonical_bytes(), subject.canonical_bytes());
+		}
 	}
 }

@@ -12,6 +12,7 @@ use domain::{
 	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
 	money::Network,
+	payments::PaymentSubject,
 	users::UserId,
 	withdrawals::WithdrawalId,
 };
@@ -22,7 +23,7 @@ use crate::{
 	application::withdrawals::{self as withdrawal_app, WithdrawalPorts},
 	infrastructure::consilium::digest,
 	ports::{
-		Custody, WithdrawalRepository,
+		Custody, PaymentRepository, WithdrawalRepository,
 		consilium::{ConsiliumRepository, ConsiliumView, DIGEST_BYTES, ExecutionOutcome, InvitationView, SubmitOutcome, VoteAudit, VoterCredential},
 		ledger::Ledger,
 	},
@@ -49,6 +50,10 @@ const PAYOUT_SALT: &[u8] = b"consilium:revenue-payout";
 pub struct ConsiliumPorts<'a> {
 	pub consilia: &'a dyn ConsiliumRepository,
 	pub withdrawals: &'a dyn WithdrawalRepository,
+	/// The payment orders a `ConsiliumKind::Payment` quorum authorizes. Only the execution
+	/// step touches it: opening and voting on a payment consilium know nothing about the
+	/// order beyond the subject frozen into the terms.
+	pub payments: &'a dyn PaymentRepository,
 	pub ledger: &'a dyn Ledger,
 	pub custody: &'a dyn Custody,
 	pub relay: &'a Notify,
@@ -294,8 +299,35 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 	// aggregate deliberately refuses to answer (it records an id, not a mechanism).
 	let outcome = match consilium.terms().clone() {
 		ConsiliumTerms::RevenuePayout(terms) => execute_revenue_payout(ports, id, terms).await?,
+		ConsiliumTerms::Payment(subject) => execute_payment(ports, subject, now).await?,
 	};
 	ports.consilia.record_execution(id, outcome, now).await
+}
+
+/// Carry an approved payment order past its one requirement.
+///
+/// The effect is the ORDER, not its money: `record_approval` moves the order to `approved`
+/// and — for an L2/L3 order — raises the reservation that stops N concurrent payments
+/// overdrawing one claim. Turning an approved order into a withdrawal or a posted transfer
+/// is [`crate::application::payments::execute`]'s job, driven by the same sweeper that
+/// drives this one, because those two steps fail for different reasons and must be retried
+/// independently.
+///
+/// No deterministic id to re-read here, for once: the order already exists and carries its
+/// own. `record_approval` is idempotent on an order that is already `approved`, which is
+/// what makes a retried consilium execution safe.
+async fn execute_payment(ports: &ConsiliumPorts<'_>, subject: PaymentSubject, now: i64) -> Result<ExecutionOutcome, DomainError> {
+	match ports.payments.record_approval(subject.payment_id, now).await {
+		Ok(_) => Ok(ExecutionOutcome::Executed(ConsiliumEffect::Payment(subject.payment_id))),
+		// A REFUSAL IS NOT PROOF THE APPROVAL DID NOT LAND. Two callers reach this — the vote
+		// that carried the quorum, and the sweeper — so one can lose the row lock race and see
+		// a conflict over an order the other has already approved. Re-read before believing it,
+		// exactly as `execute_revenue_payout` re-reads the payout id.
+		Err(err) => match ports.payments.find(subject.payment_id).await? {
+			Some(view) if !view.order.state().is_pending() => Ok(ExecutionOutcome::Executed(ConsiliumEffect::Payment(subject.payment_id))),
+			_ => Ok(ExecutionOutcome::Failed(failure_reason(&err))),
+		},
+	}
 }
 
 /// Create the withdrawal an approved revenue payout authorizes, and say how it went.
