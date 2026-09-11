@@ -26,7 +26,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
 	balance::LedgerAccountKey,
 	error::DomainError,
+	hex32,
 	money::{Network, Usdt, WalletAddress},
+	push_field,
 	users::UserId,
 	withdrawals::WithdrawalId,
 };
@@ -267,11 +269,6 @@ impl From<WithdrawalId> for ConsiliumEffect {
 	fn from(id: WithdrawalId) -> Self {
 		Self::Withdrawal(id)
 	}
-}
-
-fn push_field(out: &mut Vec<u8>, bytes: &[u8]) {
-	out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
-	out.extend_from_slice(bytes);
 }
 
 /// One recorded answer.
@@ -672,18 +669,6 @@ impl Consilium {
 	pub fn version(&self) -> u64 {
 		self.version
 	}
-}
-
-/// Lowercase hex of a digest. Hand-rolled so `domain` keeps its dependency set (and its
-/// wasm-safety) unchanged for four lines of work.
-fn hex32(bytes: &[u8; 32]) -> String {
-	const DIGITS: &[u8; 16] = b"0123456789abcdef";
-	let mut out = String::with_capacity(64);
-	for byte in bytes {
-		out.push(DIGITS[(byte >> 4) as usize] as char);
-		out.push(DIGITS[(byte & 0x0f) as usize] as char);
-	}
-	out
 }
 
 /// Facts raised by the [`Consilium`] aggregate. Audit-only — a consilium moves no money,
