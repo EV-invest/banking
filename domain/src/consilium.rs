@@ -24,6 +24,7 @@ use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+	balance::LedgerAccountKey,
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
 	users::UserId,
@@ -167,8 +168,12 @@ pub struct RevenuePayoutTerms {
 
 impl RevenuePayoutTerms {
 	/// The domain-separation prefix. Included in the digest so a hash over these terms
-	/// can never collide with one taken over some other message.
-	const DOMAIN: &'static [u8] = b"banking.v1.RevenuePayoutTerms\x00";
+	/// can never collide with one taken over some other message — including terms of
+	/// another [`ConsiliumTerms`] variant that happen to encode to the same field bytes.
+	///
+	/// FROZEN. Every `payload_hash` ever stored was taken over an encoding starting with
+	/// these bytes; changing one of them invalidates every live approval at once.
+	pub const DOMAIN: &'static [u8] = b"banking.v1.RevenuePayoutTerms\x00";
 
 	pub fn new(network: Network, address: WalletAddress, amount: Usdt, memo: String) -> Result<Self, DomainError> {
 		if address.network() != network {
@@ -198,6 +203,72 @@ impl RevenuePayoutTerms {
 	}
 }
 
+/// What a consilium is deciding, by value.
+///
+/// One variant today. It exists so a second governance subject is a variant here rather
+/// than a parallel aggregate, and it is an ENUM rather than a `Box<dyn Terms>` because
+/// [`ConsiliumEvent::Opened`] carries the terms by value into the `event_log` and must
+/// therefore round-trip through serde — which a trait object cannot do.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ConsiliumTerms {
+	RevenuePayout(RevenuePayoutTerms),
+}
+
+impl ConsiliumTerms {
+	pub fn kind(&self) -> ConsiliumKind {
+		match self {
+			Self::RevenuePayout(_) => ConsiliumKind::RevenuePayout,
+		}
+	}
+
+	/// The bytes the payload hash is taken over.
+	///
+	/// EVERY VARIANT MUST CARRY ITS OWN DOMAIN-SEPARATION PREFIX, and this method delegates
+	/// precisely because each one does (see [`RevenuePayoutTerms::DOMAIN`]). Without a
+	/// per-variant prefix the same field bytes could encode under two kinds, so the digest
+	/// an owner signed for one kind would be a valid signature over the other — a payout
+	/// approval spendable as a payment. `terms_of_one_kind_cannot_be_hashed_as_another`
+	/// pins it.
+	pub fn canonical_bytes(&self) -> Vec<u8> {
+		match self {
+			Self::RevenuePayout(terms) => terms.canonical_bytes(),
+		}
+	}
+
+	/// The claim this consilium spends from. Drives both the per-source "one open request"
+	/// index and the advisory lock the execution path takes, so two consilia over DIFFERENT
+	/// claims no longer block each other while two over the SAME claim still do.
+	pub fn source_claim(&self) -> LedgerAccountKey {
+		match self {
+			Self::RevenuePayout(_) => LedgerAccountKey::FeeRevenue,
+		}
+	}
+}
+
+impl From<RevenuePayoutTerms> for ConsiliumTerms {
+	fn from(terms: RevenuePayoutTerms) -> Self {
+		Self::RevenuePayout(terms)
+	}
+}
+
+/// What an executed consilium produced — an identity, never the machinery behind it.
+///
+/// The aggregate records WHICH artifact its approval was spent on and nothing more; how one
+/// is created stays in `application::consilium::execute`, which is the only place that is
+/// allowed to know that a payout is a withdrawal saga.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "effect", content = "id", rename_all = "snake_case")]
+pub enum ConsiliumEffect {
+	Withdrawal(WithdrawalId),
+}
+
+impl From<WithdrawalId> for ConsiliumEffect {
+	fn from(id: WithdrawalId) -> Self {
+		Self::Withdrawal(id)
+	}
+}
+
 fn push_field(out: &mut Vec<u8>, bytes: &[u8]) {
 	out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
 	out.extend_from_slice(bytes);
@@ -222,8 +293,7 @@ pub struct ConsiliumVote {
 #[derive(Clone, Debug)]
 pub struct Consilium {
 	id: ConsiliumId,
-	kind: ConsiliumKind,
-	terms: RevenuePayoutTerms,
+	terms: ConsiliumTerms,
 	payload_hash: [u8; 32],
 	initiator: UserId,
 	owner_count: u32,
@@ -234,7 +304,7 @@ pub struct Consilium {
 	created_at: i64,
 	expires_at: i64,
 	decided_at: Option<i64>,
-	executed_withdrawal_id: Option<WithdrawalId>,
+	executed: Option<ConsiliumEffect>,
 	failure_reason: Option<String>,
 	version: u64,
 	pending: Vec<ConsiliumEvent>,
@@ -242,13 +312,17 @@ pub struct Consilium {
 
 impl Consilium {
 	/// Open a consilium over `terms`, snapshotting `owners` as the roster it is judged
-	/// against. `payload_hash` is the SHA-256 of [`RevenuePayoutTerms::canonical_bytes`],
+	/// against. `payload_hash` is the SHA-256 of [`ConsiliumTerms::canonical_bytes`],
 	/// taken by the application layer (the domain stays free of crypto).
+	///
+	/// The kind is READ OFF the terms rather than supplied: the two cannot then disagree,
+	/// which is the whole reason the terms are one enum instead of a kind tag beside a
+	/// struct.
 	///
 	/// Refuses a roster below [`MIN_OWNERS`]: with the initiator barred from voting the
 	/// threshold would be unreachable, and a request that can never pass should not be
 	/// stored as though it might.
-	pub fn open(id: ConsiliumId, terms: RevenuePayoutTerms, payload_hash: [u8; 32], initiator: UserId, owners: &[UserId], created_at: i64) -> Result<Self, DomainError> {
+	pub fn open(id: ConsiliumId, terms: ConsiliumTerms, payload_hash: [u8; 32], initiator: UserId, owners: &[UserId], created_at: i64) -> Result<Self, DomainError> {
 		let mut roster: Vec<UserId> = Vec::with_capacity(owners.len());
 		for owner in owners {
 			if !roster.contains(owner) {
@@ -267,7 +341,6 @@ impl Consilium {
 		let eligible: Vec<UserId> = roster.into_iter().filter(|owner| *owner != initiator).collect();
 		let mut consilium = Self {
 			id,
-			kind: ConsiliumKind::RevenuePayout,
 			terms,
 			payload_hash,
 			initiator,
@@ -279,14 +352,14 @@ impl Consilium {
 			created_at,
 			expires_at: created_at.saturating_add(TTL_SECS),
 			decided_at: None,
-			executed_withdrawal_id: None,
+			executed: None,
 			failure_reason: None,
 			version: 1,
 			pending: Vec::new(),
 		};
 		consilium.pending.push(ConsiliumEvent::Opened {
 			consilium_id: id,
-			kind: consilium.kind,
+			kind: consilium.kind(),
 			terms: consilium.terms.clone(),
 			payload_hash: hex32(&payload_hash),
 			initiator,
@@ -301,8 +374,7 @@ impl Consilium {
 	#[allow(clippy::too_many_arguments)]
 	pub fn rehydrate(
 		id: ConsiliumId,
-		kind: ConsiliumKind,
-		terms: RevenuePayoutTerms,
+		terms: ConsiliumTerms,
 		payload_hash: [u8; 32],
 		initiator: UserId,
 		owner_count: u32,
@@ -313,13 +385,12 @@ impl Consilium {
 		created_at: i64,
 		expires_at: i64,
 		decided_at: Option<i64>,
-		executed_withdrawal_id: Option<WithdrawalId>,
+		executed: Option<ConsiliumEffect>,
 		failure_reason: Option<String>,
 		version: u64,
 	) -> Self {
 		Self {
 			id,
-			kind,
 			terms,
 			payload_hash,
 			initiator,
@@ -331,7 +402,7 @@ impl Consilium {
 			created_at,
 			expires_at,
 			decided_at,
-			executed_withdrawal_id,
+			executed,
 			failure_reason,
 			version,
 			pending: Vec::new(),
@@ -459,12 +530,12 @@ impl Consilium {
 		Ok(())
 	}
 
-	/// The approved payout now exists. Written exactly once — a repeat naming the SAME
-	/// withdrawal is the idempotent retry an at-least-once execution path depends on, and
-	/// one naming a different withdrawal is a conflict rather than a silent overwrite.
-	pub fn mark_executed(&mut self, withdrawal_id: WithdrawalId, at: i64) -> Result<(), DomainError> {
+	/// The approved request's effect now exists. Written exactly once — a repeat naming the
+	/// SAME effect is the idempotent retry an at-least-once execution path depends on, and
+	/// one naming a different effect is a conflict rather than a silent overwrite.
+	pub fn mark_executed(&mut self, effect: ConsiliumEffect, at: i64) -> Result<(), DomainError> {
 		if self.state == ConsiliumState::Executed {
-			return if self.executed_withdrawal_id == Some(withdrawal_id) {
+			return if self.executed == Some(effect) {
 				Ok(())
 			} else {
 				Err(DomainError::Conflict("consilium already executed a different payout".into()))
@@ -474,12 +545,8 @@ impl Consilium {
 			return Err(DomainError::Conflict(format!("consilium is {}, not executable", self.state.as_str())));
 		}
 		self.state = ConsiliumState::Executed;
-		self.executed_withdrawal_id = Some(withdrawal_id);
-		self.raise(ConsiliumEvent::Executed {
-			consilium_id: self.id,
-			withdrawal_id,
-			at,
-		});
+		self.executed = Some(effect);
+		self.raise(ConsiliumEvent::Executed { consilium_id: self.id, effect, at });
 		Ok(())
 	}
 
@@ -522,11 +589,16 @@ impl Consilium {
 	}
 
 	pub fn kind(&self) -> ConsiliumKind {
-		self.kind
+		self.terms.kind()
 	}
 
-	pub fn terms(&self) -> &RevenuePayoutTerms {
+	pub fn terms(&self) -> &ConsiliumTerms {
 		&self.terms
+	}
+
+	/// The claim this request spends from — see [`ConsiliumTerms::source_claim`].
+	pub fn source_claim(&self) -> LedgerAccountKey {
+		self.terms.source_claim()
 	}
 
 	pub fn payload_hash(&self) -> [u8; 32] {
@@ -575,8 +647,22 @@ impl Consilium {
 		self.decided_at
 	}
 
+	/// What this consilium's approval was spent on, if it has executed.
+	pub fn effect(&self) -> Option<ConsiliumEffect> {
+		self.executed
+	}
+
+	/// The executed effect NARROWED to a withdrawal — the projection the `consilium`
+	/// table's `executed_withdrawal_id` column and the read model both want. A future
+	/// non-withdrawal effect leaves that column NULL, which is why this returns an
+	/// `Option` over the variant rather than over the effect.
 	pub fn executed_withdrawal_id(&self) -> Option<WithdrawalId> {
-		self.executed_withdrawal_id
+		let effect = self.executed?;
+		// Exhaustive on purpose: a second effect must not silently fall through to `None` and
+		// leave the column blank on a row that did execute.
+		match effect {
+			ConsiliumEffect::Withdrawal(id) => Some(id),
+		}
 	}
 
 	pub fn failure_reason(&self) -> Option<&str> {
@@ -609,7 +695,7 @@ pub enum ConsiliumEvent {
 	Opened {
 		consilium_id: ConsiliumId,
 		kind: ConsiliumKind,
-		terms: RevenuePayoutTerms,
+		terms: ConsiliumTerms,
 		payload_hash: String,
 		initiator: UserId,
 		owner_count: u32,
@@ -643,7 +729,7 @@ pub enum ConsiliumEvent {
 	},
 	Executed {
 		consilium_id: ConsiliumId,
-		withdrawal_id: WithdrawalId,
+		effect: ConsiliumEffect,
 		at: i64,
 	},
 	ExecutionFailed {
@@ -687,9 +773,13 @@ mod tests {
 		(0..n).map(|_| UserId::new()).collect()
 	}
 
-	fn terms() -> RevenuePayoutTerms {
+	fn terms() -> ConsiliumTerms {
 		let address = WalletAddress::parse(Network::Bep20, "0x52908400098527886E0F7030069857D2E4169EE7").unwrap();
-		RevenuePayoutTerms::new(Network::Bep20, address, Usdt::parse_decimal("500").unwrap(), "quarterly draw".to_owned()).unwrap()
+		ConsiliumTerms::RevenuePayout(RevenuePayoutTerms::new(Network::Bep20, address, Usdt::parse_decimal("500").unwrap(), "quarterly draw".to_owned()).unwrap())
+	}
+
+	fn payout(id: WithdrawalId) -> ConsiliumEffect {
+		ConsiliumEffect::Withdrawal(id)
 	}
 
 	fn opened(roster: &[UserId]) -> Consilium {
@@ -857,7 +947,6 @@ mod tests {
 			.collect();
 		let reloaded = Consilium::rehydrate(
 			c.id(),
-			c.kind(),
 			c.terms().clone(),
 			c.payload_hash(),
 			c.initiator(),
@@ -869,7 +958,7 @@ mod tests {
 			c.created_at(),
 			c.expires_at(),
 			c.decided_at(),
-			c.executed_withdrawal_id(),
+			c.effect(),
 			None,
 			c.version(),
 		);
@@ -905,7 +994,7 @@ mod tests {
 		c.expire(NOW + TTL_SECS).unwrap();
 		// Execution is reachable only from `approved`, and expiry is reachable only from
 		// `open` — so no ordering of the two can produce an executed expired consilium.
-		assert!(matches!(c.mark_executed(WithdrawalId::new(), NOW + TTL_SECS + 1), Err(DomainError::Conflict(_))));
+		assert!(matches!(c.mark_executed(payout(WithdrawalId::new()), NOW + TTL_SECS + 1), Err(DomainError::Conflict(_))));
 		assert!(c.mark_execution_failed("late".into(), NOW).is_err());
 	}
 
@@ -916,15 +1005,16 @@ mod tests {
 		c.record_vote(roster[1], VoteDecision::Approve, NOW).unwrap();
 		c.record_vote(roster[2], VoteDecision::Approve, NOW).unwrap();
 		assert_eq!(c.state(), ConsiliumState::Approved);
-		let payout = WithdrawalId::new();
-		c.mark_executed(payout, NOW).unwrap();
+		let withdrawal = WithdrawalId::new();
+		c.mark_executed(payout(withdrawal), NOW).unwrap();
 		c.drain_events();
 		// The deterministic id makes a retry name the same payout, so it is a no-op.
-		c.mark_executed(payout, NOW + 5).unwrap();
+		c.mark_executed(payout(withdrawal), NOW + 5).unwrap();
 		assert!(c.drain_events().is_empty());
-		assert_eq!(c.executed_withdrawal_id(), Some(payout));
+		assert_eq!(c.effect(), Some(ConsiliumEffect::Withdrawal(withdrawal)));
+		assert_eq!(c.executed_withdrawal_id(), Some(withdrawal));
 		// A different payout is a conflict, never a silent overwrite.
-		assert!(matches!(c.mark_executed(WithdrawalId::new(), NOW + 6), Err(DomainError::Conflict(_))));
+		assert!(matches!(c.mark_executed(payout(WithdrawalId::new()), NOW + 6), Err(DomainError::Conflict(_))));
 		// And a failure can no longer be recorded over a completed execution.
 		assert!(c.mark_execution_failed("too late".into(), NOW + 7).is_err());
 	}
@@ -942,7 +1032,7 @@ mod tests {
 		c.mark_execution_failed("again".into(), NOW + 1).unwrap();
 		assert!(c.drain_events().is_empty());
 		// Nothing retries silently: an execution failure cannot become an execution.
-		assert!(c.mark_executed(WithdrawalId::new(), NOW + 2).is_err());
+		assert!(c.mark_executed(payout(WithdrawalId::new()), NOW + 2).is_err());
 	}
 
 	#[test]
@@ -982,6 +1072,33 @@ mod tests {
 		assert!(RevenuePayoutTerms::new(Network::Trc20, bep20.clone(), amount, String::new()).is_err());
 		assert!(RevenuePayoutTerms::new(Network::Bep20, bep20.clone(), amount, "x".repeat(MAX_MEMO_BYTES + 1)).is_err());
 		assert!(RevenuePayoutTerms::new(Network::Bep20, bep20, amount, "line\nbreak".to_owned()).is_err());
+	}
+
+	#[test]
+	fn terms_of_one_kind_cannot_be_hashed_as_another() {
+		// THE PREFIX IS THE WHOLE OF THE SEPARATION. Without one, a second kind whose fields
+		// happened to encode to the same bytes would produce the same digest — and an owner's
+		// approval of a payout would be a valid signature over that other request.
+		let ConsiliumTerms::RevenuePayout(payout) = terms();
+		assert!(
+			payout.canonical_bytes().starts_with(RevenuePayoutTerms::DOMAIN),
+			"every variant's encoding must open with its own domain prefix"
+		);
+		// FROZEN BYTES. Live rows carry a `payload_hash` taken over an encoding that starts
+		// exactly here; a changed prefix invalidates every approval in flight at once.
+		assert_eq!(RevenuePayoutTerms::DOMAIN, b"banking.v1.RevenuePayoutTerms\x00");
+	}
+
+	#[test]
+	fn wrapping_payout_terms_leaves_the_hashed_bytes_untouched() {
+		// The enum is a container, not a second encoding layer: `payload_hash` for every
+		// consilium that already exists was taken over the inner encoding, so the wrapper
+		// must add nothing at all.
+		let wrapped = terms();
+		let ConsiliumTerms::RevenuePayout(inner) = wrapped.clone();
+		assert_eq!(wrapped.canonical_bytes(), inner.canonical_bytes());
+		assert_eq!(wrapped.kind(), ConsiliumKind::RevenuePayout);
+		assert_eq!(wrapped.source_claim(), LedgerAccountKey::FeeRevenue);
 	}
 
 	#[test]

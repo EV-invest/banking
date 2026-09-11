@@ -9,7 +9,7 @@
 //! governance exists.
 
 use domain::{
-	consilium::{Consilium, ConsiliumId, ConsiliumState, RevenuePayoutTerms, VoteDecision},
+	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
 	money::Network,
 	users::UserId,
@@ -155,6 +155,7 @@ pub async fn open_revenue_payout(ports: &ConsiliumPorts<'_>, initiator: UserId, 
 	require_settled_roster(ports, now).await?;
 	withdrawal_app::check_revenue_payout(ports.ledger, ports.configured, terms.network, terms.address.clone(), terms.amount).await?;
 	let owners = ports.consilia.owner_roster().await?;
+	let terms = ConsiliumTerms::RevenuePayout(terms);
 	let payload_hash = digest(&terms.canonical_bytes());
 	let mut consilium = Consilium::open(ConsiliumId::new(), terms, payload_hash, initiator, &owners, now)?;
 	// One token and one code per ELIGIBLE seat. The initiator is not among them, which is
@@ -287,28 +288,43 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 		let reason = "the approval went stale: execution did not run within the grace period after the voting window closed".to_owned();
 		return ports.consilia.record_execution(id, ExecutionOutcome::Failed(reason), now).await;
 	}
-	let withdrawal = payout_id(id);
-	let terms = consilium.terms().clone();
-	if ports.withdrawals.find_by_id(withdrawal).await?.is_some() {
-		return ports.consilia.record_execution(id, ExecutionOutcome::Executed(withdrawal), now).await;
-	}
-	let outcome = match withdrawal_app::request_revenue_payout(&ports.withdrawal_ports(), ports.configured, withdrawal, terms.network, terms.address, terms.amount).await {
-		Ok(payout) => ExecutionOutcome::Executed(payout.id()),
-		// A REFUSAL HERE IS NOT PROOF THE PAYOUT DOES NOT EXIST.
-		//
-		// Two callers reach this by construction: the inline execute after the carrying vote,
-		// and the sweeper. Both can see `find_by_id == None` above; one then inserts and the
-		// other loses on the `withdrawals` primary key. Recording the loser's error as
-		// `Failed` would be a lie that sticks — the consilium would read `execution_failed`,
-		// every owner would be mailed a failure, and `awaiting_execution` would never return
-		// it again, all while the payout row exists and will be broadcast. So: re-read before
-		// believing the error.
-		Err(err) => match ports.withdrawals.find_by_id(withdrawal).await? {
-			Some(_) => ExecutionOutcome::Executed(withdrawal),
-			None => ExecutionOutcome::Failed(failure_reason(&err)),
-		},
+	// THE EFFECT DISPATCHER. Everything above this line is kind-agnostic policy; everything
+	// below is what one kind actually produces. The match has no `_` arm, so a second kind
+	// cannot be added without deciding here how it executes — which is the one question the
+	// aggregate deliberately refuses to answer (it records an id, not a mechanism).
+	let outcome = match consilium.terms().clone() {
+		ConsiliumTerms::RevenuePayout(terms) => execute_revenue_payout(ports, id, terms).await?,
 	};
 	ports.consilia.record_execution(id, outcome, now).await
+}
+
+/// Create the withdrawal an approved revenue payout authorizes, and say how it went.
+///
+/// The id is derived from the consilium, so a retried execution re-creates the same row
+/// rather than paying twice.
+async fn execute_revenue_payout(ports: &ConsiliumPorts<'_>, id: ConsiliumId, terms: RevenuePayoutTerms) -> Result<ExecutionOutcome, DomainError> {
+	let withdrawal = payout_id(id);
+	if ports.withdrawals.find_by_id(withdrawal).await?.is_some() {
+		return Ok(ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(withdrawal)));
+	}
+	Ok(
+		match withdrawal_app::request_revenue_payout(&ports.withdrawal_ports(), ports.configured, withdrawal, terms.network, terms.address, terms.amount).await {
+			Ok(payout) => ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(payout.id())),
+			// A REFUSAL HERE IS NOT PROOF THE PAYOUT DOES NOT EXIST.
+			//
+			// Two callers reach this by construction: the inline execute after the carrying vote,
+			// and the sweeper. Both can see `find_by_id == None` above; one then inserts and the
+			// other loses on the `withdrawals` primary key. Recording the loser's error as
+			// `Failed` would be a lie that sticks — the consilium would read `execution_failed`,
+			// every owner would be mailed a failure, and `awaiting_execution` would never return
+			// it again, all while the payout row exists and will be broadcast. So: re-read before
+			// believing the error.
+			Err(err) => match ports.withdrawals.find_by_id(withdrawal).await? {
+				Some(_) => ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(withdrawal)),
+				None => ExecutionOutcome::Failed(failure_reason(&err)),
+			},
+		},
+	)
 }
 
 /// How long after the voting window closes an approval may still be spent.

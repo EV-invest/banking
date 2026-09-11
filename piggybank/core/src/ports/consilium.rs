@@ -10,10 +10,9 @@
 
 use async_trait::async_trait;
 use domain::{
-	consilium::{Consilium, ConsiliumId, ConsiliumState, RevenuePayoutTerms, VoteDecision},
+	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumState, ConsiliumTerms, VoteDecision},
 	error::DomainError,
 	users::UserId,
-	withdrawals::WithdrawalId,
 };
 
 /// The digest length every stored secret is reduced to. Named so the schema's
@@ -61,7 +60,7 @@ pub struct ConsiliumView {
 pub struct InvitationView {
 	pub consilium_id: ConsiliumId,
 	pub state: ConsiliumState,
-	pub terms: RevenuePayoutTerms,
+	pub terms: ConsiliumTerms,
 	pub payload_hash: String,
 	pub initiator_email: String,
 	pub voter_email: String,
@@ -92,7 +91,7 @@ pub struct SubmitOutcome {
 
 /// How an execution attempt ended. Written by [`ConsiliumRepository::record_execution`].
 pub enum ExecutionOutcome {
-	Executed(WithdrawalId),
+	Executed(ConsiliumEffect),
 	Failed(String),
 }
 
