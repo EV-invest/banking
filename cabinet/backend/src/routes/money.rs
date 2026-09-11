@@ -238,8 +238,7 @@ pub async fn cancel_redemption(State(st): State<AppState>, jar: CookieJar, heade
 
 #[cfg(test)]
 mod tests {
-	use axum::{body::to_bytes, response::IntoResponse};
-	use axum::http::StatusCode;
+	use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
 
 	use super::*;
 
@@ -266,7 +265,11 @@ mod tests {
 	/// business, and a signer or ledger fault must not arrive dressed as a KYC problem.
 	#[tokio::test]
 	async fn every_other_failure_stays_generic() {
-		for hub in [Status::unavailable("internal error"), Status::internal("sqlx: connection refused"), Status::invalid_argument("unknown network")] {
+		for hub in [
+			Status::unavailable("internal error"),
+			Status::internal("sqlx: connection refused"),
+			Status::invalid_argument("unknown network"),
+		] {
 			let code = hub.code();
 			let (_, message) = render(deposit_address_error(hub)).await;
 			assert_eq!(message, "deposit address unavailable", "{code:?}");
