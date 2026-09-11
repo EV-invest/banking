@@ -228,13 +228,20 @@ fn an_order(from: Party, to: PaymentDestination, initiator: UserId, amount: &str
 
 const CODE: &str = "428913";
 
-fn a_consent_seat(subject: UserId) -> ApprovalSeat {
+/// A seat pinned to the subject AS THE PROJECTION HOLDS THEM NOW — the folded revoke floor
+/// and the mirrored address — exactly what the application layer will freeze at open.
+async fn a_consent_seat(pool: &PgPool, subject: UserId) -> ApprovalSeat {
+	let (token_version, email): (i64, String) = sqlx::query_as("SELECT GREATEST(concierge_token_version, token_version), email FROM users WHERE id = $1")
+		.bind(subject.raw())
+		.fetch_one(pool)
+		.await
+		.expect("the subject is mirrored");
 	ApprovalSeat::Consent(ConsentCredential {
 		subject,
 		token_hash: digest(format!("token-{subject}-{}", Uuid::new_v4()).as_bytes()),
 		code_hash: digest(CODE.as_bytes()),
-		token_version_at_open: 0,
-		email_hash_at_open: digest(b"subject@example.test"),
+		token_version_at_open: token_version as u64,
+		email_hash_at_open: digest(email.as_bytes()),
 	})
 }
 
@@ -289,7 +296,7 @@ async fn opening_an_order_materializes_its_consent_seat_and_relays_nothing() {
 
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "12.50");
 	let id = order.id();
-	payments.open(&mut order, a_consent_seat(investor)).await.expect("open the order");
+	payments.open(&mut order, a_consent_seat(&pool, investor).await).await.expect("open the order");
 
 	let view = payments.find(id).await.expect("find the order").expect("the order exists");
 	assert_eq!(view.order.state(), PaymentState::Pending);
@@ -317,7 +324,7 @@ async fn five_wrong_codes_burn_the_consent_and_close_the_order() {
 	reset_payments(&pool).await;
 	let investor = an_investor(&pool).await;
 	let payments = PgPayments::new(pool.clone());
-	let seat = a_consent_seat(investor);
+	let seat = a_consent_seat(&pool, investor).await;
 	let token = token_hash_of(&seat);
 
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.00");
@@ -366,7 +373,7 @@ async fn the_right_code_approves_the_order_and_reserves_its_source() {
 	reset_payments(&pool).await;
 	let investor = an_investor(&pool).await;
 	let payments = PgPayments::new(pool.clone());
-	let seat = a_consent_seat(investor);
+	let seat = a_consent_seat(&pool, investor).await;
 	let token = token_hash_of(&seat);
 
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "3.00");
@@ -462,7 +469,7 @@ async fn the_feed_filters_and_the_sweep_close_what_nobody_answered() {
 
 	let mut of_investor = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "5.00");
 	let investors_order = of_investor.id();
-	payments.open(&mut of_investor, a_consent_seat(investor)).await.expect("open the investor's order");
+	payments.open(&mut of_investor, a_consent_seat(&pool, investor).await).await.expect("open the investor's order");
 	let mut of_fund = an_order(Party::Revenue, PaymentDestination::Internal(Party::Piggybank), investor, "9.00");
 	let fund_order = of_fund.id();
 	payments
@@ -620,7 +627,7 @@ async fn an_approved_payment_reserves_its_source_and_then_settles_it() {
 		.await
 		.expect("fund the investor's claim");
 
-	let seat = a_consent_seat(investor);
+	let seat = a_consent_seat(&pool, investor).await;
 	let token = token_hash_of(&seat);
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "30");
 	let id = order.id();
@@ -649,6 +656,152 @@ async fn an_approved_payment_reserves_its_source_and_then_settles_it() {
 		.await
 		.unwrap();
 	assert_eq!(parked, 0);
+
+	reset_payments(&pool).await;
+}
+
+/// THE TOKEN-VERSION PIN, AT CONSENT. `RevokeTokens` is the investor's (or the operator's)
+/// "every session out" — a consent mailed before it must not be spendable after it, however
+/// right the code. The seat fails closed and takes the order with it: with one seat there is
+/// nobody to re-issue the request to.
+#[tokio::test]
+async fn revoking_the_investors_sessions_voids_a_pending_consent() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let users = PgUsers::new(pool.clone());
+	let seat = a_consent_seat(&pool, investor).await;
+	let token = token_hash_of(&seat);
+
+	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "2.00");
+	let id = order.id();
+	payments.open(&mut order, seat).await.expect("open the order");
+	assert!(payments.find(id).await.unwrap().unwrap().consent.unwrap().invalidated.is_none(), "the pins hold at open");
+
+	users.revoke_tokens(investor).await.expect("revoke every session");
+
+	let refused = payments.submit(&token, CODE, ConsentDecision::Approve, &audit(), now()).await;
+	assert!(
+		matches!(refused, Err(DomainError::Conflict(ref why)) if why.contains("revoked")),
+		"the right code no longer consents to anything: {refused:?}"
+	);
+	let view = payments.find(id).await.unwrap().unwrap();
+	assert_eq!(view.order.state(), PaymentState::Rejected, "a voided consent fails the payment closed");
+	assert!(view.consent.unwrap().invalidated.is_some_and(|why| why.contains("revoked")));
+	assert_eq!(
+		payments.find(id).await.unwrap().unwrap().consent.unwrap().attempts_remaining,
+		MAX_CODE_ATTEMPTS as u32,
+		"no attempt was charged"
+	);
+	assert!(relayed_kinds(&pool, id).await.is_empty(), "nothing was reserved");
+	// A closed order's token answers like an unknown one on both surfaces.
+	assert!(payments.invitation(&token, now()).await.is_err());
+	assert!(matches!(
+		payments.submit(&token, CODE, ConsentDecision::Approve, &audit(), now()).await,
+		Err(DomainError::NotFound { .. })
+	));
+
+	reset_payments(&pool).await;
+}
+
+/// THE SAME PIN, AT EXECUTION. Consent and execution can be 72h apart, and a revocation in
+/// between must win: the approved order fails closed instead of settling, and — because it
+/// was reserved at approval — releases its reservation on the way out.
+#[tokio::test]
+async fn a_revocation_between_consent_and_execution_fails_the_payment_closed() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let users = PgUsers::new(pool.clone());
+	let seat = a_consent_seat(&pool, investor).await;
+	let token = token_hash_of(&seat);
+
+	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "4.00");
+	let id = order.id();
+	payments.open(&mut order, seat).await.expect("open the order");
+	let consented = payments
+		.submit(&token, CODE, ConsentDecision::Approve, &audit(), now())
+		.await
+		.expect("consent while the pins hold");
+	assert!(consented.approved);
+	assert_eq!(payments.awaiting_execution().await.unwrap(), vec![id]);
+
+	users.revoke_tokens(investor).await.expect("revoke every session");
+
+	let refused = payments.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Transfer), now()).await;
+	assert!(
+		matches!(refused, Err(DomainError::Conflict(ref why)) if why.contains("revoked")),
+		"the settlement is refused: {refused:?}"
+	);
+	let view = payments.find(id).await.unwrap().unwrap();
+	assert_eq!(view.order.state(), PaymentState::ExecutionFailed);
+	assert!(view.order.failure_reason().is_some_and(|why| why.contains("revoked")));
+	assert_eq!(
+		relayed_kinds(&pool, id).await,
+		vec!["reserved".to_owned(), "released".to_owned()],
+		"the reservation is released, and nothing is settled"
+	);
+	assert!(payments.awaiting_execution().await.unwrap().is_empty());
+	// The refusal is idempotent: a retry finds a terminal order and is a plain conflict, not a
+	// second failure record.
+	assert!(matches!(
+		payments.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Transfer), now()).await,
+		Err(DomainError::Conflict(_))
+	));
+
+	reset_payments(&pool).await;
+}
+
+/// THE MAILBOX PIN. The identity provider changing the investor's address after the consent
+/// mail went out means the token in flight was delivered to an address that is no longer
+/// theirs — so it must not be able to consent. The address is re-read from the projection
+/// the bridge maintains, by the same digest the seat froze at open.
+#[tokio::test]
+async fn a_changed_mailbox_voids_a_pending_consent() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let users = PgUsers::new(pool.clone());
+	let tag = Uuid::new_v4();
+	let subject = || domain::auth::AuthSubject::parse(&format!("payments-test-{tag}")).unwrap();
+	let investor = users
+		.provision(subject(), Email::parse(&format!("before-{tag}@example.test")).unwrap(), true)
+		.await
+		.expect("provision the investor")
+		.id();
+	let seat = a_consent_seat(&pool, investor).await;
+	let token = token_hash_of(&seat);
+	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.50");
+	let id = order.id();
+	payments.open(&mut order, seat).await.expect("open the order");
+
+	// The provider reports a new address behind the same subject — the path the first-login
+	// upsert takes for an existing row.
+	users
+		.provision(subject(), Email::parse(&format!("after-{tag}@example.test")).unwrap(), true)
+		.await
+		.expect("apply the new address");
+
+	let refused = payments.submit(&token, CODE, ConsentDecision::Approve, &audit(), now()).await;
+	assert!(
+		matches!(refused, Err(DomainError::Conflict(ref why)) if why.contains("mailbox")),
+		"a moved mailbox voids the seat: {refused:?}"
+	);
+	assert_eq!(payments.find(id).await.unwrap().unwrap().order.state(), PaymentState::Rejected);
 
 	reset_payments(&pool).await;
 }

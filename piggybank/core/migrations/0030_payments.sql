@@ -169,12 +169,14 @@ CREATE TABLE payment_consent (
     -- moment of consent are the terms that were paid.
     payload_hash                  BYTEA       CHECK (payload_hash IS NULL OR octet_length(payload_hash) = 32),
 
-    -- THE THREE PINS RE-CHECKED AT EXECUTION, fail-closed. Acceptance and execution can be 72h
-    -- apart and the consent surface is mounted outside the auth layer, so each records what was
-    -- true at open and refuses if it has moved since:
-    --   - the token version is what makes `RevokeTokens` cancel a live consent;
-    --   - the email hash is what stops a mailbox change at the identity provider redirecting a
-    --     token that is already in flight.
+    -- THE TWO PINS RE-CHECKED AT CONSENT AND AGAIN AT EXECUTION, fail-closed. Acceptance and
+    -- execution can be 72h apart and the consent surface is mounted outside the auth layer, so
+    -- each records what was true at open; a pin that has moved rejects a pending order at
+    -- consent and fails an approved one at execution:
+    --   - the token version (the folded revoke floor, `GREATEST(concierge_token_version,
+    --     token_version)`) is what makes `RevokeTokens` on either plane void a live consent;
+    --   - the email hash (SHA-256 over `users.email` as stored) is what stops a mailbox change
+    --     at the identity provider redirecting a token that is already in flight.
     subject_token_version_at_open BIGINT      NOT NULL CHECK (subject_token_version_at_open >= 0),
     subject_email_hash_at_open    BYTEA       NOT NULL CHECK (octet_length(subject_email_hash_at_open) = 32),
 

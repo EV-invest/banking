@@ -50,10 +50,16 @@ macro_rules! payment_columns {
 	};
 }
 
+// The two pins ride along with every seat read: the values frozen at open beside the
+// subject's CURRENT ones, so `ConsentRow::invalidation` can be asked under whatever lock the
+// caller already holds. `subject_token_version` folds both revoke surfaces exactly as
+// `issuance_columns!` does — a concierge `SESSIONS_REVOKED` and banking's own `RevokeTokens`
+// must each void a consent.
 macro_rules! consent_columns {
 	() => {
 		"c.payment_id, c.subject_user_id, u.email AS subject_email, c.decision, EXTRACT(EPOCH FROM c.decided_at)::bigint AS decided_at, c.notified, c.attempts, \
-		 c.code_hash, c.burned_at IS NOT NULL AS burned, c.used_at IS NOT NULL AS used, EXTRACT(EPOCH FROM c.expires_at)::bigint AS token_expires_at"
+		 c.code_hash, c.burned_at IS NOT NULL AS burned, c.used_at IS NOT NULL AS used, EXTRACT(EPOCH FROM c.expires_at)::bigint AS token_expires_at, \
+		 c.subject_token_version_at_open, c.subject_email_hash_at_open, GREATEST(u.concierge_token_version, u.token_version) AS subject_token_version"
 	};
 }
 
@@ -177,6 +183,10 @@ struct ConsentRow {
 	burned: bool,
 	used: bool,
 	token_expires_at: i64,
+	token_version_at_open: i64,
+	email_hash_at_open: Vec<u8>,
+	/// The subject's current folded revoke floor, read beside the pin.
+	token_version: i64,
 }
 
 fn consent_of(row: &PgRow) -> Result<ConsentRow, DomainError> {
@@ -192,6 +202,9 @@ fn consent_of(row: &PgRow) -> Result<ConsentRow, DomainError> {
 		burned: row.try_get("burned").map_err(repo_err)?,
 		used: row.try_get("used").map_err(repo_err)?,
 		token_expires_at: row.try_get("token_expires_at").map_err(repo_err)?,
+		token_version_at_open: row.try_get("subject_token_version_at_open").map_err(repo_err)?,
+		email_hash_at_open: row.try_get("subject_email_hash_at_open").map_err(repo_err)?,
+		token_version: row.try_get("subject_token_version").map_err(repo_err)?,
 	})
 }
 
@@ -204,7 +217,28 @@ impl ConsentRow {
 			decided_at: self.decided_at.unwrap_or_default(),
 			notified: self.notified,
 			attempts_remaining: (MAX_CODE_ATTEMPTS - self.attempts).max(0) as u32,
+			invalidated: self.invalidation(),
 		})
+	}
+
+	/// Why this seat can no longer be trusted, or `None` while both pins still hold.
+	///
+	/// FAIL-CLOSED ON ANY MOVEMENT, not only on an increase: the revoke floor is monotonic
+	/// in practice, but a floor that reads LOWER than the one frozen at open means the
+	/// projection was rewritten under the seat, and that is not a state to execute out of.
+	/// The mailbox is compared by digest rather than by address so the row and the seat
+	/// stay comparable without either carrying the other's plaintext.
+	fn invalidation(&self) -> Option<String> {
+		if self.token_version != self.token_version_at_open {
+			return Some(format!(
+				"the investor's sessions were revoked after this consent was issued (token version {} at open, {} now), so the consent is void",
+				self.token_version_at_open, self.token_version
+			));
+		}
+		if !ct_eq(&digest(self.email.as_bytes()), &self.email_hash_at_open) {
+			return Some("the investor's mailbox changed after this consent was issued, so the consent is void".to_owned());
+		}
+		None
 	}
 }
 
@@ -488,6 +522,20 @@ impl PaymentRepository for PgPayments {
 			return Err(consent_not_found());
 		}
 
+		// THE PINS, RE-CHECKED BEFORE THE CODE IS EVEN COMPARED. A revoked session or a
+		// moved mailbox voids the seat whatever the code says, so no attempt is charged and no
+		// answer is recorded; the order fails closed instead — with one seat there is nobody
+		// to re-issue it to — and the holder is told why rather than shown the opaque door,
+		// because holding a live token already proves the seat exists.
+		if already == ConsentDecision::Pending
+			&& let Some(why) = seat.invalidation()
+		{
+			order.reject(at)?;
+			persist(&mut tx, &mut order).await?;
+			tx.commit().await.map_err(repo_err)?;
+			return Err(DomainError::Conflict(why));
+		}
+
 		let correct = ct_eq(&digest(code.as_bytes()), &seat.code_hash);
 
 		// ONLY A SEAT THAT CAN STILL CHANGE SOMETHING PAYS FOR A GUESS. A seat that has
@@ -621,6 +669,22 @@ impl PaymentRepository for PgPayments {
 	async fn record_execution(&self, id: PaymentId, outcome: ExecutionOutcome, at: i64) -> Result<PaymentView, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let mut order = locked(&mut tx, id).await?;
+		// THE PINS AGAIN, AT THE MOMENT THAT SPENDS THE MONEY. Consent and execution can be
+		// 72h apart; a `RevokeTokens` in between must not be overtaken by an execution the
+		// investor authorized before it. Only an order still `approved` is at stake — a
+		// repeat naming an effect that already exists is the idempotent retry and must stay
+		// one. The failure is committed and then reported as an error, so a caller that
+		// only checks for `Ok` cannot mistake it for success.
+		if matches!(outcome, ExecutionOutcome::Executed(_))
+			&& order.state() == PaymentState::Approved
+			&& let Some(seat) = consent_of_payment(&mut tx, id.raw()).await?
+			&& let Some(why) = seat.invalidation()
+		{
+			order.mark_execution_failed(why.clone(), at)?;
+			persist(&mut tx, &mut order).await?;
+			tx.commit().await.map_err(repo_err)?;
+			return Err(DomainError::Conflict(why));
+		}
 		match outcome {
 			ExecutionOutcome::Executed(effect) => order.mark_executed(effect, at)?,
 			ExecutionOutcome::Failed(reason) => order.mark_execution_failed(reason, at)?,

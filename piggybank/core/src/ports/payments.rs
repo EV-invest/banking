@@ -63,11 +63,14 @@ pub struct ConsentCredential {
 	pub subject: UserId,
 	pub token_hash: [u8; DIGEST_BYTES],
 	pub code_hash: [u8; DIGEST_BYTES],
-	/// The subject's `token_version` at open. Re-checked at execution, which is what makes
-	/// `RevokeTokens` cancel a consent that is already in flight.
+	/// The subject's folded revoke floor at open — `GREATEST(concierge_token_version,
+	/// token_version)`, the same value [`IssuanceTarget::token_version`](super::IssuanceTarget)
+	/// carries, so a revoke on either plane counts. Re-checked at consent and again at
+	/// execution, which is what makes `RevokeTokens` void a consent that is already in flight.
 	pub token_version_at_open: u64,
-	/// SHA-256 of the subject's address at open. Re-checked at execution, so changing the
-	/// mailbox at the identity provider cannot redirect a live token.
+	/// SHA-256 over the subject's mirrored `users.email` at open, byte for byte as stored
+	/// (already normalized by `Email::parse`). Re-checked at consent and at execution, so
+	/// changing the mailbox at the identity provider cannot redirect a live token.
 	pub email_hash_at_open: [u8; DIGEST_BYTES],
 }
 
@@ -81,6 +84,11 @@ pub struct ConsentView {
 	pub decided_at: i64,
 	pub notified: bool,
 	pub attempts_remaining: u32,
+	/// Why the seat can no longer be answered or executed — one of the pins recorded at open
+	/// has moved — or `None` while it still holds. The execution path for an L1 order must
+	/// read this BEFORE creating the withdrawal: `record_execution` refuses a moved pin too,
+	/// but by then the withdrawal would already exist.
+	pub invalidated: Option<String>,
 }
 
 /// What the emailed investor answered. The consilium's `VoteDecision` is the same three
@@ -220,6 +228,11 @@ pub trait PaymentRepository: Send + Sync {
 	///
 	/// Burning the token (five wrong codes) **fails the payment closed**. With one seat there
 	/// is no second party to escalate to, so the burn is a refusal, not a detector.
+	///
+	/// A seat whose pins have moved since open (the subject's sessions revoked, or their
+	/// mailbox changed) is refused with [`DomainError::Conflict`] before the code is compared,
+	/// and the order is rejected with it — fail-closed, and terminal for the same one-seat
+	/// reason.
 	async fn submit(&self, token_hash: &[u8; DIGEST_BYTES], code: &str, decision: ConsentDecision, audit: &ConsentAudit, at: i64) -> Result<ConsentOutcome, DomainError>;
 
 	/// Expire every pending order past its deadline. Returns how many closed.
@@ -233,6 +246,12 @@ pub trait PaymentRepository: Send + Sync {
 	/// Record how the execution attempt ended, under the row lock. Writing the effect is
 	/// idempotent for the same effect and a conflict for a different one — which is what lets
 	/// the caller re-read by the deterministic id and believe the row rather than the error.
+	///
+	/// An `Executed` outcome over a consent seat whose pins have moved since open is NOT
+	/// recorded: the order is moved to `execution_failed` (releasing an L2/L3 reservation)
+	/// and the call returns [`DomainError::Conflict`] naming why. See
+	/// [`ConsentView::invalidated`] for the L1 path, which must check before the withdrawal
+	/// exists.
 	async fn record_execution(&self, id: PaymentId, outcome: ExecutionOutcome, at: i64) -> Result<PaymentView, DomainError>;
 }
 
