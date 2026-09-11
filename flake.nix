@@ -676,6 +676,62 @@
           text = ''exec bash "$(git rev-parse --show-toplevel)/contracts/concierge-pin-check.sh"'';
         };
 
+        # ── drift gate (CI entry point) ─────────────────────────────────────
+        # `nix run .#drift-check` — the two committed artefacts that are OUTPUT, and
+        # so can disagree with the source they were generated from without anything
+        # failing to build:
+        #
+        #   Cargo.lock vs the manifests. `--locked` refuses to re-resolve, so a
+        #   textual merge that took a new git rev in Cargo.toml while keeping the old
+        #   one in Cargo.lock exits 101 HERE. v0.3.6 found it at the release image
+        #   build instead: a dev-shell `cargo test` has network, so cargo quietly
+        #   re-resolved and rewrote the lock in the working tree, and the tests went
+        #   green against a file nobody committed.
+        #
+        #   contracts/openapi.json + the cabinet's TS types vs the protos. Both are
+        #   committed so the app builds without the codegen toolchain — which also
+        #   means a stale pair ships and is discovered by whoever first wants a new
+        #   field.
+        #
+        # `rust`, not `pkgs.cargo`: this workspace sets an unstable `codegen-backend`
+        # in .cargo/config.toml, and stable cargo refuses to parse the manifest at all
+        # — with exit 101, the SAME code a genuine lock mismatch gives. A gate built on
+        # stable would be red on a clean tree and indistinguishable from a real find.
+        runDriftCheck = pkgs.writeShellApplication {
+          name = "run-drift-check";
+          runtimeInputs = [ rust pkgs.git pkgs.nodejs runGenApi ];
+          text = ''
+            cd "$(git rev-parse --show-toplevel)"
+
+            # A fresh clone — which is what CI is — has no .tb-client, and the workspace
+            # carries a path dependency on it, so `cargo metadata` cannot resolve without
+            # this. Same reason every other workspace-touching app links it first.
+            ${linkTbClient}
+
+            echo "▶ Cargo.lock agrees with the manifests"
+            cargo metadata --locked --format-version 1 >/dev/null
+
+            echo "▶ the committed contract is what the protos generate"
+            generated=(contracts/openapi.json cabinet/frontend/shared/contracts/gen)
+            # Ahead of gen-api's own `npm install` fallback, and deliberately `ci`: on a
+            # fresh checkout `install` is free to move a generator inside its semver range,
+            # which would show up here as contract drift nobody caused.
+            [ -d node_modules ] || npm ci
+            run-gen-api
+            # --porcelain rather than `git diff --exit-code`: a generator that emits a
+            # NEW file leaves it untracked, and a diff alone calls that clean.
+            drift="$(git status --porcelain -- "''${generated[@]}")"
+            if [ -n "$drift" ]; then
+              echo "::error::the committed contract is stale — run 'nix run .#gen-api' and commit both sides" >&2
+              echo "$drift" >&2
+              git --no-pager diff -- "''${generated[@]}" >&2
+              exit 1
+            fi
+
+            echo "✓ no drift"
+          '';
+        };
+
         # ── shared Redis (ensure-running) ───────────────────────────────────
         # ONE instance for all ev_invest repos (numeric dbs: 0=banking, 1=concierge),
         # daemonized under the user state dir so no repo's dev-stack exit can yank it
@@ -1034,6 +1090,7 @@
         # `nix run .#redis`     → ensure the SHARED ev_invest Redis is up
         # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
         # `nix run .#concierge-pin-check` → assert the concierge contract pin is an ancestor of origin/main + bytes match
+        # `nix run .#drift-check` → assert Cargo.lock matches the manifests and the committed contract matches the protos (CI: .github/workflows/drift.yml)
         # Author new migrations with the sqlx CLI (in the dev shell):
         #   sqlx migrate add --source piggybank/core/migrations --sequential <name>
         apps = {
@@ -1049,6 +1106,7 @@
           redis = { type = "app"; program = "${runRedis}/bin/run-redis"; };
           gen-api = { type = "app"; program = "${runGenApi}/bin/run-gen-api"; };
           concierge-pin-check = { type = "app"; program = "${runConciergePinCheck}/bin/run-concierge-pin-check"; };
+          drift-check = { type = "app"; program = "${runDriftCheck}/bin/run-drift-check"; };
           publish = { type = "app"; program = "${runPublish}/bin/publish"; };
         };
 
