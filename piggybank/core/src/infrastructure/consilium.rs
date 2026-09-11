@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use domain::{
-	consilium::{Consilium, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumVote, RevenuePayoutTerms, VoteDecision},
+	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, ConsiliumVote, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
 	users::UserId,
@@ -152,6 +152,18 @@ struct StoredTerms {
 	memo: String,
 }
 
+/// The payout terms of a consilium.
+///
+/// Everything below this line — the stored JSONB shape and all three governance mails — is
+/// payout-shaped, and deliberately so: a second kind moves different money and needs its own
+/// mail, not a widened one. The match has no `_` arm, so adding a kind breaks the build here
+/// and forces that decision instead of silently mailing owners a payout that is not one.
+fn payout_terms(consilium: &Consilium) -> &RevenuePayoutTerms {
+	match consilium.terms() {
+		ConsiliumTerms::RevenuePayout(terms) => terms,
+	}
+}
+
 impl StoredTerms {
 	fn of(terms: &RevenuePayoutTerms) -> Self {
 		Self {
@@ -222,7 +234,16 @@ async fn seats_of_locked(conn: &mut PgConnection, id: Uuid) -> Result<Vec<SeatRo
 /// carried into the tally only if its caster is STILL an owner. The snapshot alone is not
 /// trusted, so losing a seat retroactively voids the vote cast from it.
 fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
-	let stored: StoredTerms = serde_json::from_str(row.try_get::<String, _>("terms").map_err(repo_err)?.as_str()).map_err(|e| DomainError::Repository(e.to_string()))?;
+	// The `kind` column decides how `terms` is read, so the stored JSONB shape stays
+	// per-kind and rows written before the terms became an enum parse byte-for-byte as they
+	// always did.
+	let raw_terms: String = row.try_get("terms").map_err(repo_err)?;
+	let terms = match ConsiliumKind::parse(row.try_get::<String, _>("kind").map_err(repo_err)?.as_str())? {
+		ConsiliumKind::RevenuePayout => {
+			let stored: StoredTerms = serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?;
+			ConsiliumTerms::RevenuePayout(stored.into_domain()?)
+		}
+	};
 	let hash_bytes: Vec<u8> = row.try_get("payload_hash").map_err(repo_err)?;
 	let payload_hash: [u8; DIGEST_BYTES] = hash_bytes
 		.try_into()
@@ -242,8 +263,7 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 		.collect::<Result<Vec<_>, DomainError>>()?;
 	Ok(Consilium::rehydrate(
 		ConsiliumId::from_raw(row.try_get("id").map_err(repo_err)?),
-		ConsiliumKind::parse(row.try_get::<String, _>("kind").map_err(repo_err)?.as_str())?,
-		stored.into_domain()?,
+		terms,
 		payload_hash,
 		UserId::from_raw(row.try_get("initiator_user_id").map_err(repo_err)?),
 		row.try_get::<i32, _>("owner_count").map_err(repo_err)? as u32,
@@ -254,7 +274,9 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 		row.try_get("created_at").map_err(repo_err)?,
 		row.try_get("expires_at").map_err(repo_err)?,
 		row.try_get("decided_at").map_err(repo_err)?,
-		row.try_get::<Option<Uuid>, _>("executed_withdrawal_id").map_err(repo_err)?.map(WithdrawalId::from_raw),
+		row.try_get::<Option<Uuid>, _>("executed_withdrawal_id")
+			.map_err(repo_err)?
+			.map(|id| ConsiliumEffect::Withdrawal(WithdrawalId::from_raw(id))),
 		row.try_get("failure_reason").map_err(repo_err)?,
 		row.try_get::<i64, _>("version").map_err(repo_err)? as u64,
 	))
@@ -338,12 +360,13 @@ fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
 
 /// Tell that audience how the consilium ended.
 async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) -> Result<(), DomainError> {
+	let terms = payout_terms(consilium);
 	let mail = GovernanceMail::PayoutOutcome(PayoutOutcome {
 		consilium_id: consilium.id().to_string(),
 		outcome: consilium.state().as_str().to_uppercase(),
-		network: consilium.terms().network.as_str().to_owned(),
-		address: consilium.terms().address.as_str().to_owned(),
-		amount: consilium.terms().amount.to_decimal_string(),
+		network: terms.network.as_str().to_owned(),
+		address: terms.address.as_str().to_owned(),
+		amount: terms.amount.to_decimal_string(),
 		detail: detail.to_owned(),
 	});
 	for recipient in audience(consilium) {
@@ -356,12 +379,13 @@ async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) 
 /// Tell that audience a token burned. A brute-force attempt against one seat is a fact the
 /// whole roster needs, not just its holder — who may be the one person who never sees it.
 async fn announce_burn(conn: &mut PgConnection, consilium: &Consilium, voter: UserId) -> Result<(), DomainError> {
+	let terms = payout_terms(consilium);
 	let mail = GovernanceMail::TokenBurned(PayoutOutcome {
 		consilium_id: consilium.id().to_string(),
 		outcome: "TOKEN_BURNED".to_owned(),
-		network: consilium.terms().network.as_str().to_owned(),
-		address: consilium.terms().address.as_str().to_owned(),
-		amount: consilium.terms().amount.to_decimal_string(),
+		network: terms.network.as_str().to_owned(),
+		address: terms.address.as_str().to_owned(),
+		amount: terms.amount.to_decimal_string(),
 		detail: format!("five failed code attempts burned the approval token for seat {voter}"),
 	});
 	for recipient in audience(consilium) {
@@ -470,15 +494,19 @@ impl ConsiliumRepository for PgConsilia {
 	async fn open(&self, consilium: &mut Consilium, credentials: &[VoterCredential], approval_url_base: &str) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
-		let terms = serde_json::to_string(&StoredTerms::of(consilium.terms())).map_err(|e| DomainError::Repository(e.to_string()))?;
+		let terms = serde_json::to_string(&StoredTerms::of(payout_terms(consilium))).map_err(|e| DomainError::Repository(e.to_string()))?;
 		let inserted = sqlx::query(
-			"INSERT INTO consilium (id, kind, state, terms, payload_hash, initiator_user_id, owner_count, threshold, expires_at, version) \
-			 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, to_timestamp($9), $10)",
+			"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, version) \
+			 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, to_timestamp($10), $11)",
 		)
 		.bind(consilium.id().raw())
 		.bind(consilium.kind().as_str())
 		.bind(consilium.state().as_str())
 		.bind(terms)
+		// The claim this request spends. `consilium_single_open_per_source_idx` is unique over
+		// it among the open rows, so "one open request per source claim" is the database's
+		// statement rather than a convention the write path is trusted to keep.
+		.bind(consilium.source_claim().logical_key())
 		.bind(consilium.payload_hash().as_slice())
 		.bind(consilium.initiator().raw())
 		.bind(consilium.owner_count() as i32)
@@ -490,8 +518,8 @@ impl ConsiliumRepository for PgConsilia {
 		if let Err(sqlx::Error::Database(err)) = &inserted
 			&& err.code().as_deref() == Some(UNIQUE_VIOLATION)
 		{
-			// The partial unique index spoke. One consilium at a time is the whole of the
-			// concurrent-approval overdraw defence, so this is a refusal, not a retry.
+			// The partial unique index spoke. One open consilium per source claim is the whole
+			// of the concurrent-approval overdraw defence, so this is a refusal, not a retry.
 			return Err(DomainError::Conflict("a consilium is already open — cancel it before opening another".into()));
 		}
 		inserted.map_err(repo_err)?;
@@ -511,13 +539,14 @@ impl ConsiliumRepository for PgConsilia {
 			.await
 			.map_err(repo_err)?;
 
+			let payout = payout_terms(consilium);
 			let mail = GovernanceMail::PayoutApproval(PayoutApproval {
 				consilium_id: consilium.id().to_string(),
 				initiator_email: initiator_email.clone(),
-				network: consilium.terms().network.as_str().to_owned(),
-				address: consilium.terms().address.as_str().to_owned(),
-				amount: consilium.terms().amount.to_decimal_string(),
-				memo: consilium.terms().memo.clone(),
+				network: payout.network.as_str().to_owned(),
+				address: payout.address.as_str().to_owned(),
+				amount: payout.amount.to_decimal_string(),
+				memo: payout.memo.clone(),
 				payload_hash: consilium.payload_hash_hex(),
 				threshold: consilium.threshold(),
 				owner_count: consilium.owner_count(),
@@ -869,9 +898,11 @@ impl ConsiliumRepository for PgConsilia {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let (mut consilium, seats) = locked(&mut tx, id).await?;
 		let detail = match outcome {
-			ExecutionOutcome::Executed(withdrawal) => {
-				consilium.mark_executed(withdrawal, at)?;
-				format!("payout {withdrawal} created")
+			ExecutionOutcome::Executed(effect) => {
+				consilium.mark_executed(effect, at)?;
+				match effect {
+					ConsiliumEffect::Withdrawal(withdrawal) => format!("payout {withdrawal} created"),
+				}
 			}
 			ExecutionOutcome::Failed(reason) => {
 				consilium.mark_execution_failed(reason.clone(), at)?;

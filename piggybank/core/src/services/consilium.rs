@@ -15,7 +15,7 @@
 
 use domain::{
 	authz::Permission,
-	consilium::{ConsiliumState, RevenuePayoutTerms, VoteDecision},
+	consilium::{ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
 };
@@ -118,14 +118,20 @@ fn decision_from_proto(raw: i32) -> Result<VoteDecision, Status> {
 	}
 }
 
-fn terms_to_proto(terms: &RevenuePayoutTerms) -> pb::RevenuePayoutTerms {
-	pb::RevenuePayoutTerms {
-		network: terms.network.as_str().to_owned(),
-		// In FULL, never truncated: a shortened address in an approval flow is an
-		// invitation to approve the wrong wallet.
-		address: terms.address.as_str().to_owned(),
-		amount: terms.amount.to_decimal_string(),
-		memo: terms.memo.clone(),
+/// The payout terms as the wire carries them, or `None` for a kind that is not a payout.
+///
+/// No `_` arm: the day a second kind exists, the contract needs a field of its own and this
+/// stops compiling rather than quietly rendering the new kind as an absent payout.
+fn terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
+	match terms {
+		ConsiliumTerms::RevenuePayout(terms) => Some(pb::RevenuePayoutTerms {
+			network: terms.network.as_str().to_owned(),
+			// In FULL, never truncated: a shortened address in an approval flow is an
+			// invitation to approve the wrong wallet.
+			address: terms.address.as_str().to_owned(),
+			amount: terms.amount.to_decimal_string(),
+			memo: terms.memo.clone(),
+		}),
 	}
 }
 
@@ -146,7 +152,7 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 	pb::Consilium {
 		id: c.id().to_string(),
 		state: state_to_proto(c.state()),
-		revenue_payout: Some(terms_to_proto(c.terms())),
+		revenue_payout: terms_to_proto(c.terms()),
 		payload_hash: c.payload_hash_hex(),
 		initiator_user_id: c.initiator().to_string(),
 		initiator_email: view.initiator_email.clone(),
@@ -180,7 +186,7 @@ fn invitation_to_proto(view: &InvitationView) -> pb::ConsiliumInvitation {
 	pb::ConsiliumInvitation {
 		consilium_id: view.consilium_id.to_string(),
 		state: state_to_proto(view.state),
-		revenue_payout: Some(terms_to_proto(&view.terms)),
+		revenue_payout: terms_to_proto(&view.terms),
 		payload_hash: view.payload_hash.clone(),
 		initiator_email: mask_email(&view.initiator_email),
 		voter_email: mask_email(&view.voter_email),
@@ -212,7 +218,7 @@ impl ConsiliumService for ConsiliumSvc {
 		require_permission(&self.state, &request, Permission::RevenuePayout).await?;
 		let initiator = caller_id(&request)?;
 		let terms = parse_terms(request.into_inner().terms)?;
-		let view = consilium_app::open_revenue_payout(&self.state.consilium_ports(), initiator, terms, unix_now())
+		let view = consilium_app::open_revenue_payout(&self.state.consilium_ports(), initiator, terms.clone(), unix_now())
 			.await
 			.map_err(map_err)?;
 		// WARN on success on purpose: a request to move company money out is worth an audit
@@ -220,9 +226,9 @@ impl ConsiliumService for ConsiliumSvc {
 		tracing::warn!(
 			consilium_id = %view.consilium.id(),
 			initiator = %initiator,
-			network = %view.consilium.terms().network,
-			address = %view.consilium.terms().address.as_str(),
-			amount = %view.consilium.terms().amount,
+			network = %terms.network,
+			address = %terms.address.as_str(),
+			amount = %terms.amount,
 			threshold = view.consilium.threshold(),
 			owner_count = view.consilium.owner_count(),
 			"opened a revenue-payout consilium"

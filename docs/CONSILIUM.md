@@ -363,10 +363,15 @@ once, here, and each plane's tests assert against this table:
 15. **Double payout.** Execution is idempotent: the withdrawal id is
     `uuid_v5(request_id, "consilium:revenue-payout")`, so a retried execution
     re-creates the same row and the existing saga treats it as a no-op.
-    `executed_withdrawal_id` is written once.
-16. **Concurrent approved payouts overdrawing revenue.** At most **one** payout
-    consilium may be open at a time (partial unique index). This removes the race
-    rather than trying to win it. Insufficient revenue at execution is still handled:
+    the effect is written once (`ConsiliumEffect`, projected onto
+    `executed_withdrawal_id`).
+16. **Concurrent approved payouts overdrawing revenue.** At most **one** open
+    consilium **per source claim** — `consilium_single_open_per_source_idx ON
+    consilium (source_claim) WHERE state = 'open'`. Every payout spends `fee`, so
+    over payout rows this is the same single key the original
+    `ON consilium ((TRUE))` index used: "one open payout at a time" is unchanged.
+    What it no longer does is block a request over a different claim. This removes
+    the race rather than trying to win it. Insufficient revenue at execution is still handled:
     the existing solvency Read-First rejects it, the request lands in
     `ExecutionFailed` with the reason visible to owners, and nothing retries silently.
 17. **Stale approvals.** Requests expire after 72h. An expired request can never

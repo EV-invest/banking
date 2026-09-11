@@ -10,7 +10,9 @@
 
 use domain::{
 	architecture::{DomainEvent, EmitsEvents, Entity, Identifier},
+	balance::LedgerAccountKey,
 	error::DomainError,
+	users::UserId,
 };
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
@@ -26,12 +28,49 @@ use uuid::Uuid;
 /// engages even before the user row is materialized and needs no FK, so the serialization is
 /// unconditional. TigerBeetle's non-negative flag remains the actual money backstop.
 pub async fn lock_user(conn: &mut PgConnection, user_id: Uuid) -> Result<(), DomainError> {
+	lock_claim(conn, &LedgerAccountKey::UserClaim(UserId::from_raw(user_id))).await
+}
+
+/// Take the write lock for ONE claim — the general form of [`lock_user`] and
+/// [`lock_revenue_claim`], which are now the two claims that happen to have callers.
+///
+/// Every writer that spends a claim must take this same target before its optimistic
+/// Read-First, or the serialization silently stops covering whoever was added last. Keying
+/// it on the claim rather than on a user id is what lets a spender of `fee`, `fund` or a
+/// service claim join that discipline without inventing a second lock space.
+pub async fn lock_claim(conn: &mut PgConnection, claim: &LedgerAccountKey) -> Result<(), DomainError> {
 	sqlx::query("SELECT pg_advisory_xact_lock($1)")
-		.bind(advisory_key(user_id))
+		.bind(claim_lock_key(claim))
 		.execute(&mut *conn)
 		.await
 		.map_err(repo_err)?;
 	Ok(())
+}
+
+/// The advisory-lock name for a claim.
+///
+/// THE TWO NAMED ARMS ARE FROZEN, NOT STYLE. A rolling deploy runs the old binary and the
+/// new one against one database; if the new one derived a different name for the user claim
+/// or for `fee`, a withdraw on the old binary and a subscribe on the new one would take two
+/// DIFFERENT locks and stop serializing — the exact divergence this lock exists to prevent,
+/// arriving silently and only during a deploy. So the two names every released binary has
+/// been taking are reproduced here verbatim, and the general formula covers the claims that
+/// have never had a lock. `the_generalized_claim_lock_keeps_the_keys_the_old_helpers_computed`
+/// pins both against a rewrite.
+///
+/// A `_` arm is right here (unlike the exhaustive matches elsewhere in the domain): a new
+/// account key needs no decision, because the general formula already names it correctly and
+/// uniquely.
+fn claim_lock_name(claim: &LedgerAccountKey) -> Uuid {
+	match claim {
+		LedgerAccountKey::UserClaim(user) => user.raw(),
+		LedgerAccountKey::FeeRevenue => Uuid::new_v5(&Uuid::NAMESPACE_OID, b"withdrawal:revenue-claim"),
+		other => Uuid::new_v5(&Uuid::NAMESPACE_OID, other.logical_key().as_bytes()),
+	}
+}
+
+fn claim_lock_key(claim: &LedgerAccountKey) -> i64 {
+	advisory_key(claim_lock_name(claim))
 }
 
 /// Take the write lock for the fund's **revenue claim** (`fee`) — the account a revenue
@@ -40,7 +79,7 @@ pub async fn lock_user(conn: &mut PgConnection, user_id: Uuid) -> Result<(), Dom
 /// they serialize on one target too. The claim is a singleton with no row of its own,
 /// hence a fixed v5 UUID standing in as the lock's name rather than a real id.
 pub async fn lock_revenue_claim(conn: &mut PgConnection) -> Result<(), DomainError> {
-	lock_user(conn, Uuid::new_v5(&Uuid::NAMESPACE_OID, b"withdrawal:revenue-claim")).await
+	lock_claim(conn, &LedgerAccountKey::FeeRevenue).await
 }
 
 /// Insert one event into the `event_log` (always) and the `outbox` (when `relay`),
@@ -226,4 +265,35 @@ fn advisory_key(user_id: Uuid) -> i64 {
 
 fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn the_generalized_claim_lock_keeps_the_keys_the_old_helpers_computed() {
+		// The formulas below are written out rather than called, on purpose: they are what
+		// every deployed binary computes today, so this test fails the moment `claim_lock_name`
+		// is "simplified" into a uniform v5 over `logical_key()` and the two live locks quietly
+		// move to new targets.
+		let user = Uuid::new_v4();
+		assert_eq!(
+			claim_lock_key(&LedgerAccountKey::UserClaim(UserId::from_raw(user))),
+			advisory_key(user),
+			"lock_user keyed the raw user id"
+		);
+		assert_eq!(
+			claim_lock_key(&LedgerAccountKey::FeeRevenue),
+			advisory_key(Uuid::new_v5(&Uuid::NAMESPACE_OID, b"withdrawal:revenue-claim")),
+			"lock_revenue_claim keyed this fixed v5 name"
+		);
+		// And distinct claims still get distinct targets, or the generalization would have
+		// serialized unrelated writers against each other.
+		assert_ne!(claim_lock_key(&LedgerAccountKey::FeeRevenue), claim_lock_key(&LedgerAccountKey::Fund));
+		assert_ne!(
+			claim_lock_key(&LedgerAccountKey::UserClaim(UserId::from_raw(user))),
+			claim_lock_key(&LedgerAccountKey::UserClaim(UserId::from_raw(Uuid::new_v4())))
+		);
+	}
 }
