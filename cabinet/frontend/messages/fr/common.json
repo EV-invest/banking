@@ -963,6 +963,10 @@
     "en": "Access & security",
     "t": "Accès & sécurité"
   },
+  "admin.users.adminViaProposal": {
+    "en": "Admin is not on this list — granting it is a proposal the owners vote through. Taking it away is still one step here. Open one in",
+    "t": "Admin ne figure pas dans cette liste — l'accorder passe par une proposition que les propriétaires votent. Le retirer reste une étape ici. En ouvrir une dans"
+  },
   "admin.users.balance": {
     "en": "Balance",
     "t": "Solde"
@@ -978,6 +982,14 @@
   "admin.users.count": {
     "en": "{n, plural, one {# user} other {# users}}",
     "t": "{n, plural, one {# utilisateur} many {# utilisateurs} other {# utilisateurs}}"
+  },
+  "admin.users.hold": {
+    "en": "Hold for 24h",
+    "t": "Bloquer 24 h"
+  },
+  "admin.users.holdHint": {
+    "en": "Freezes the account now. It lapses by itself after 24 hours unless the owners vote to make it permanent.",
+    "t": "Gèle le compte immédiatement. Expire de lui-même après 24 heures sauf si les propriétaires le rendent définitif."
   },
   "admin.users.identity": {
     "en": "Identity",
@@ -999,6 +1011,14 @@
     "en": "L{n}",
     "t": "N{n}"
   },
+  "admin.users.liftHold": {
+    "en": "Lift hold",
+    "t": "Lever le blocage"
+  },
+  "admin.users.liftSuspension": {
+    "en": "Lift suspension",
+    "t": "Lever la suspension"
+  },
   "admin.users.noMatch": {
     "en": "No users match these filters.",
     "t": "Aucun utilisateur ne correspond à ces filtres."
@@ -1010,6 +1030,42 @@
   "admin.users.ownerSeatVia": {
     "en": "Owner is not on this list. A seat is written by the founding seed at start-up, or granted by an admission the current owners vote through — never from here. Open one in",
     "t": "Propriétaire ne figure pas dans cette liste. Un siège est inscrit par l'amorçage fondateur au démarrage, ou accordé par une admission votée par les propriétaires en exercice — jamais depuis ici. Déposez une proposition dans"
+  },
+  "admin.users.proposeAdmin": {
+    "en": "Propose admin",
+    "t": "Proposer admin"
+  },
+  "admin.users.proposeAdminHint": {
+    "en": "Granting admin is the owners' decision. Taking it away is still one step, right here.",
+    "t": "Accorder admin relève des propriétaires. Le retirer reste une seule étape, ici même."
+  },
+  "admin.users.proposeReinstatement": {
+    "en": "Propose reinstatement",
+    "t": "Proposer la levée"
+  },
+  "admin.users.proposeReinstatementHint": {
+    "en": "Only the owners can undo their own verdict. A simple majority of them carries it.",
+    "t": "Seuls les propriétaires peuvent défaire leur propre verdict. Une majorité simple l'emporte."
+  },
+  "admin.users.proposeSuspension": {
+    "en": "Propose permanent",
+    "t": "Proposer définitif"
+  },
+  "admin.users.proposeSuspensionHint": {
+    "en": "Asks the owners to make this block permanent. A simple majority of them carries it.",
+    "t": "Demande aux propriétaires de rendre ce blocage définitif. Une majorité simple l'emporte."
+  },
+  "admin.users.reasonHint": {
+    "en": "Recorded on the audit row, and read by every owner who votes.",
+    "t": "Consigné dans le journal d'audit et lu par chaque propriétaire qui vote."
+  },
+  "admin.users.reasonLabel": {
+    "en": "Reason",
+    "t": "Motif"
+  },
+  "admin.users.reasonPlaceholder": {
+    "en": "Why this account, in one line",
+    "t": "Pourquoi ce compte, en une ligne"
   },
   "admin.users.reinstate": {
     "en": "Reinstate",
@@ -1030,6 +1086,38 @@
   "admin.users.searchPlaceholder": {
     "en": "Search email or user id…",
     "t": "Rechercher un e-mail ou un id utilisateur…"
+  },
+  "admin.users.standing": {
+    "en": "Account standing",
+    "t": "État du compte"
+  },
+  "admin.users.standingActive": {
+    "en": "Active. This account can sign in and move money.",
+    "t": "Actif. Ce compte peut se connecter et déplacer de l'argent."
+  },
+  "admin.users.standingGovernance": {
+    "en": "Suspended by the owners' vote. It does not lapse, and one admin cannot lift it.",
+    "t": "Suspendu par le vote des propriétaires. N'expire pas, et un seul administrateur ne peut pas le lever."
+  },
+  "admin.users.standingHeld": {
+    "en": "Held. It lapses {when} unless the owners make it permanent.",
+    "t": "Bloqué. Expire {when} sauf si les propriétaires le rendent définitif."
+  },
+  "admin.users.standingHold": {
+    "en": "Held by one operator. It lapses on its own unless the owners vote to make it permanent.",
+    "t": "Bloqué par un seul opérateur. Expire de lui-même sauf si les propriétaires votent pour le rendre définitif."
+  },
+  "admin.users.standingHoldLapses": {
+    "en": "Lapses {when}",
+    "t": "Expire {when}"
+  },
+  "admin.users.standingLegacy": {
+    "en": "Suspended before holds and owners' verdicts were told apart. It does not lapse, and one admin can lift it.",
+    "t": "Suspendu avant que blocage et verdict des propriétaires soient distingués. N'expire pas, et un administrateur peut le lever."
+  },
+  "admin.users.standingOpened": {
+    "en": "Proposal opened. The owners vote in",
+    "t": "Proposition ouverte. Les propriétaires votent dans"
   },
   "admin.users.subtitle": {
     "en": "Investors and operators — identities, KYC, roles and sessions",
@@ -2984,12 +3072,12 @@
     "t": "Version de jeton"
   },
   "tips.admin.users.status.suspend.body": {
-    "en": "Suspend disables the account and blocks the user's access; Reinstate re-enables it. Reversible — the button reflects the current status.",
-    "t": "Suspendre désactive le compte et bloque l’accès de l’utilisateur ; Réactiver le rétablit. Réversible — le bouton reflète le statut actuel."
+    "en": "Three different things, told apart by why the account is blocked. Hold freezes it now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through; a simple majority carries it. An account suspended before the two were told apart carries no record of which it was, so it does not lapse and one admin can lift it.",
+    "t": "Trois choses différentes, distinguées par le motif du blocage. Le blocage gèle le compte immédiatement et expire de lui-même au bout de 24 heures — un seul opérateur peut le faire. Le rendre définitif, ou défaire un blocage définitif, est une proposition que les propriétaires votent ; une majorité simple l'emporte. Un compte suspendu avant que les deux soient distingués ne garde aucune trace de ce qu'il était : il n'expire pas, et un administrateur peut le lever."
   },
   "tips.admin.users.status.suspend.title": {
-    "en": "Suspend / Reinstate",
-    "t": "Suspendre / Réactiver"
+    "en": "Hold, suspension and reinstatement",
+    "t": "Blocage, suspension et levée"
   },
   "tips.admin.valuation.post.aum.body": {
     "en": "The fund's total assets under management you're marking. The NAV/share that pays redemptions is derived from it (AUM ÷ units outstanding), so a wrong figure mis-prices every settle.",

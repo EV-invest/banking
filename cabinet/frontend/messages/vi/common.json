@@ -963,6 +963,10 @@
     "en": "Access & security",
     "t": "Truy cập & bảo mật"
   },
+  "admin.users.adminViaProposal": {
+    "en": "Admin is not on this list — granting it is a proposal the owners vote through. Taking it away is still one step here. Open one in",
+    "t": "Quản trị viên không có trong danh sách này — cấp quyền đó là một đề xuất do các chủ sở hữu bỏ phiếu. Thu hồi vẫn là một bước tại đây. Mở đề xuất trong"
+  },
   "admin.users.balance": {
     "en": "Balance",
     "t": "Số dư"
@@ -978,6 +982,14 @@
   "admin.users.count": {
     "en": "{n, plural, one {# user} other {# users}}",
     "t": "{n, plural, other {# người dùng}}"
+  },
+  "admin.users.hold": {
+    "en": "Hold for 24h",
+    "t": "Tạm giữ 24 giờ"
+  },
+  "admin.users.holdHint": {
+    "en": "Freezes the account now. It lapses by itself after 24 hours unless the owners vote to make it permanent.",
+    "t": "Đóng băng tài khoản ngay lập tức. Tự hết hiệu lực sau 24 giờ trừ khi các chủ sở hữu biến nó thành vĩnh viễn."
   },
   "admin.users.identity": {
     "en": "Identity",
@@ -999,6 +1011,14 @@
     "en": "L{n}",
     "t": "L{n}"
   },
+  "admin.users.liftHold": {
+    "en": "Lift hold",
+    "t": "Gỡ tạm giữ"
+  },
+  "admin.users.liftSuspension": {
+    "en": "Lift suspension",
+    "t": "Gỡ đình chỉ"
+  },
   "admin.users.noMatch": {
     "en": "No users match these filters.",
     "t": "Không có người dùng nào khớp bộ lọc này."
@@ -1010,6 +1030,42 @@
   "admin.users.ownerSeatVia": {
     "en": "Owner is not on this list. A seat is written by the founding seed at start-up, or granted by an admission the current owners vote through — never from here. Open one in",
     "t": "Chủ sở hữu không có trong danh sách này. Một ghế do đợt gieo mầm sáng lập ghi lại lúc khởi động, hoặc do một đề nghị kết nạp được các chủ sở hữu đương nhiệm bỏ phiếu thông qua — không bao giờ từ đây. Hãy mở đề nghị trong"
+  },
+  "admin.users.proposeAdmin": {
+    "en": "Propose admin",
+    "t": "Đề xuất quản trị viên"
+  },
+  "admin.users.proposeAdminHint": {
+    "en": "Granting admin is the owners' decision. Taking it away is still one step, right here.",
+    "t": "Cấp quyền quản trị là quyết định của các chủ sở hữu. Thu hồi vẫn là một bước, ngay tại đây."
+  },
+  "admin.users.proposeReinstatement": {
+    "en": "Propose reinstatement",
+    "t": "Đề xuất khôi phục"
+  },
+  "admin.users.proposeReinstatementHint": {
+    "en": "Only the owners can undo their own verdict. A simple majority of them carries it.",
+    "t": "Chỉ các chủ sở hữu mới đảo ngược được phán quyết của chính họ. Đa số quá bán quyết định."
+  },
+  "admin.users.proposeSuspension": {
+    "en": "Propose permanent",
+    "t": "Đề xuất vĩnh viễn"
+  },
+  "admin.users.proposeSuspensionHint": {
+    "en": "Asks the owners to make this block permanent. A simple majority of them carries it.",
+    "t": "Đề nghị các chủ sở hữu biến lệnh chặn này thành vĩnh viễn. Đa số quá bán quyết định."
+  },
+  "admin.users.reasonHint": {
+    "en": "Recorded on the audit row, and read by every owner who votes.",
+    "t": "Được ghi vào nhật ký kiểm toán và mọi chủ sở hữu bỏ phiếu đều đọc."
+  },
+  "admin.users.reasonLabel": {
+    "en": "Reason",
+    "t": "Lý do"
+  },
+  "admin.users.reasonPlaceholder": {
+    "en": "Why this account, in one line",
+    "t": "Vì sao là tài khoản này, trong một dòng"
   },
   "admin.users.reinstate": {
     "en": "Reinstate",
@@ -1030,6 +1086,38 @@
   "admin.users.searchPlaceholder": {
     "en": "Search email or user id…",
     "t": "Tìm theo email hoặc mã người dùng…"
+  },
+  "admin.users.standing": {
+    "en": "Account standing",
+    "t": "Tình trạng tài khoản"
+  },
+  "admin.users.standingActive": {
+    "en": "Active. This account can sign in and move money.",
+    "t": "Đang hoạt động. Tài khoản này có thể đăng nhập và chuyển tiền."
+  },
+  "admin.users.standingGovernance": {
+    "en": "Suspended by the owners' vote. It does not lapse, and one admin cannot lift it.",
+    "t": "Bị đình chỉ theo phiếu bầu của các chủ sở hữu. Không tự hết hiệu lực, và một quản trị viên không thể gỡ."
+  },
+  "admin.users.standingHeld": {
+    "en": "Held. It lapses {when} unless the owners make it permanent.",
+    "t": "Đã tạm giữ. Hết hiệu lực {when} trừ khi các chủ sở hữu biến nó thành vĩnh viễn."
+  },
+  "admin.users.standingHold": {
+    "en": "Held by one operator. It lapses on its own unless the owners vote to make it permanent.",
+    "t": "Bị một quản trị viên tạm giữ. Sẽ tự hết hiệu lực trừ khi các chủ sở hữu bỏ phiếu biến nó thành vĩnh viễn."
+  },
+  "admin.users.standingHoldLapses": {
+    "en": "Lapses {when}",
+    "t": "Hết hiệu lực {when}"
+  },
+  "admin.users.standingLegacy": {
+    "en": "Suspended before holds and owners' verdicts were told apart. It does not lapse, and one admin can lift it.",
+    "t": "Bị đình chỉ trước khi tạm giữ và phán quyết của chủ sở hữu được phân biệt. Không tự hết hiệu lực, và một quản trị viên có thể gỡ."
+  },
+  "admin.users.standingOpened": {
+    "en": "Proposal opened. The owners vote in",
+    "t": "Đã mở đề xuất. Các chủ sở hữu bỏ phiếu trong"
   },
   "admin.users.subtitle": {
     "en": "Investors and operators — identities, KYC, roles and sessions",
@@ -2984,12 +3072,12 @@
     "t": "Phiên bản token"
   },
   "tips.admin.users.status.suspend.body": {
-    "en": "Suspend disables the account and blocks the user's access; Reinstate re-enables it. Reversible — the button reflects the current status.",
-    "t": "Tạm khóa vô hiệu hóa tài khoản và chặn quyền truy cập của người dùng; Khôi phục bật lại tài khoản. Có thể đảo ngược — nút bấm phản ánh trạng thái hiện tại."
+    "en": "Three different things, told apart by why the account is blocked. Hold freezes it now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through; a simple majority carries it. An account suspended before the two were told apart carries no record of which it was, so it does not lapse and one admin can lift it.",
+    "t": "Ba việc khác nhau, phân biệt theo lý do tài khoản bị chặn. Tạm giữ đóng băng tài khoản ngay và tự hết hiệu lực sau 24 giờ — một quản trị viên có thể làm điều đó. Biến nó thành vĩnh viễn, hoặc gỡ một lệnh vĩnh viễn, là đề xuất do các chủ sở hữu bỏ phiếu; đa số quá bán quyết định. Tài khoản bị đình chỉ trước khi hai việc này được phân biệt không lưu lại nó từng là loại nào: nó không tự hết hiệu lực, và một quản trị viên có thể gỡ."
   },
   "tips.admin.users.status.suspend.title": {
-    "en": "Suspend / Reinstate",
-    "t": "Tạm khóa / Khôi phục"
+    "en": "Hold, suspension and reinstatement",
+    "t": "Tạm giữ, đình chỉ và khôi phục"
   },
   "tips.admin.valuation.post.aum.body": {
     "en": "The fund's total assets under management you're marking. The NAV/share that pays redemptions is derived from it (AUM ÷ units outstanding), so a wrong figure mis-prices every settle.",

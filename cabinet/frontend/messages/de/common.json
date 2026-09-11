@@ -963,6 +963,10 @@
     "en": "Access & security",
     "t": "Zugriff & Sicherheit"
   },
+  "admin.users.adminViaProposal": {
+    "en": "Admin is not on this list — granting it is a proposal the owners vote through. Taking it away is still one step here. Open one in",
+    "t": "Admin steht nicht auf dieser Liste — vergeben wird die Rolle per Antrag, über den die Eigentümer abstimmen. Der Entzug bleibt hier ein Schritt. Antrag stellen in"
+  },
   "admin.users.balance": {
     "en": "Balance",
     "t": "Guthaben"
@@ -978,6 +982,14 @@
   "admin.users.count": {
     "en": "{n, plural, one {# user} other {# users}}",
     "t": "{n, plural, one {# Nutzer} other {# Nutzer}}"
+  },
+  "admin.users.hold": {
+    "en": "Hold for 24h",
+    "t": "24 Std. sperren"
+  },
+  "admin.users.holdHint": {
+    "en": "Freezes the account now. It lapses by itself after 24 hours unless the owners vote to make it permanent.",
+    "t": "Friert das Konto sofort ein. Läuft nach 24 Stunden von selbst aus, sofern die Eigentümer sie nicht dauerhaft machen."
   },
   "admin.users.identity": {
     "en": "Identity",
@@ -999,6 +1011,14 @@
     "en": "L{n}",
     "t": "L{n}"
   },
+  "admin.users.liftHold": {
+    "en": "Lift hold",
+    "t": "Sperre aufheben"
+  },
+  "admin.users.liftSuspension": {
+    "en": "Lift suspension",
+    "t": "Sperrung aufheben"
+  },
   "admin.users.noMatch": {
     "en": "No users match these filters.",
     "t": "Keine Nutzer passen zu diesen Filtern."
@@ -1010,6 +1030,42 @@
   "admin.users.ownerSeatVia": {
     "en": "Owner is not on this list. A seat is written by the founding seed at start-up, or granted by an admission the current owners vote through — never from here. Open one in",
     "t": "Eigentümer steht nicht in dieser Liste. Einen Sitz schreibt die Gründungssaat beim Start oder eine Aufnahme, über die die amtierenden Eigentümer abstimmen — niemals dieses Formular. Einen Antrag stellen Sie im Bereich"
+  },
+  "admin.users.proposeAdmin": {
+    "en": "Propose admin",
+    "t": "Admin beantragen"
+  },
+  "admin.users.proposeAdminHint": {
+    "en": "Granting admin is the owners' decision. Taking it away is still one step, right here.",
+    "t": "Admin zu vergeben ist Sache der Eigentümer. Der Entzug bleibt ein einziger Schritt, genau hier."
+  },
+  "admin.users.proposeReinstatement": {
+    "en": "Propose reinstatement",
+    "t": "Aufhebung beantragen"
+  },
+  "admin.users.proposeReinstatementHint": {
+    "en": "Only the owners can undo their own verdict. A simple majority of them carries it.",
+    "t": "Nur die Eigentümer können ihren eigenen Beschluss aufheben. Eine einfache Mehrheit entscheidet."
+  },
+  "admin.users.proposeSuspension": {
+    "en": "Propose permanent",
+    "t": "Dauerhaft beantragen"
+  },
+  "admin.users.proposeSuspensionHint": {
+    "en": "Asks the owners to make this block permanent. A simple majority of them carries it.",
+    "t": "Bittet die Eigentümer, diese Sperre dauerhaft zu machen. Eine einfache Mehrheit entscheidet."
+  },
+  "admin.users.reasonHint": {
+    "en": "Recorded on the audit row, and read by every owner who votes.",
+    "t": "Wird im Prüfprotokoll festgehalten und von jedem abstimmenden Eigentümer gelesen."
+  },
+  "admin.users.reasonLabel": {
+    "en": "Reason",
+    "t": "Grund"
+  },
+  "admin.users.reasonPlaceholder": {
+    "en": "Why this account, in one line",
+    "t": "Warum dieses Konto, in einer Zeile"
   },
   "admin.users.reinstate": {
     "en": "Reinstate",
@@ -1030,6 +1086,38 @@
   "admin.users.searchPlaceholder": {
     "en": "Search email or user id…",
     "t": "E-Mail oder Nutzer-ID suchen…"
+  },
+  "admin.users.standing": {
+    "en": "Account standing",
+    "t": "Kontostatus"
+  },
+  "admin.users.standingActive": {
+    "en": "Active. This account can sign in and move money.",
+    "t": "Aktiv. Dieses Konto kann sich anmelden und Geld bewegen."
+  },
+  "admin.users.standingGovernance": {
+    "en": "Suspended by the owners' vote. It does not lapse, and one admin cannot lift it.",
+    "t": "Durch Beschluss der Eigentümer gesperrt. Läuft nicht aus, und ein einzelner Admin hebt sie nicht auf."
+  },
+  "admin.users.standingHeld": {
+    "en": "Held. It lapses {when} unless the owners make it permanent.",
+    "t": "Gesperrt. Läuft {when} aus, sofern die Eigentümer sie nicht dauerhaft machen."
+  },
+  "admin.users.standingHold": {
+    "en": "Held by one operator. It lapses on its own unless the owners vote to make it permanent.",
+    "t": "Von einem Betreiber gesperrt. Läuft von selbst aus, sofern die Eigentümer sie nicht dauerhaft machen."
+  },
+  "admin.users.standingHoldLapses": {
+    "en": "Lapses {when}",
+    "t": "Läuft aus {when}"
+  },
+  "admin.users.standingLegacy": {
+    "en": "Suspended before holds and owners' verdicts were told apart. It does not lapse, and one admin can lift it.",
+    "t": "Gesperrt, bevor Haltesperre und Eigentümerbeschluss unterschieden wurden. Läuft nicht aus, und ein Admin kann sie aufheben."
+  },
+  "admin.users.standingOpened": {
+    "en": "Proposal opened. The owners vote in",
+    "t": "Antrag gestellt. Die Eigentümer stimmen ab in"
   },
   "admin.users.subtitle": {
     "en": "Investors and operators — identities, KYC, roles and sessions",
@@ -2984,12 +3072,12 @@
     "t": "Token-Version"
   },
   "tips.admin.users.status.suspend.body": {
-    "en": "Suspend disables the account and blocks the user's access; Reinstate re-enables it. Reversible — the button reflects the current status.",
-    "t": "Sperren deaktiviert das Konto und blockiert den Zugriff des Nutzers; Reaktivieren gibt es wieder frei. Umkehrbar — die Schaltfläche spiegelt den aktuellen Status."
+    "en": "Three different things, told apart by why the account is blocked. Hold freezes it now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through; a simple majority carries it. An account suspended before the two were told apart carries no record of which it was, so it does not lapse and one admin can lift it.",
+    "t": "Drei verschiedene Dinge, unterschieden danach, warum das Konto gesperrt ist. Die Haltesperre friert es sofort ein und läuft nach 24 Stunden von selbst aus — das darf ein einzelner Betreiber. Sie dauerhaft zu machen oder eine dauerhafte aufzuheben, ist ein Antrag, über den die Eigentümer abstimmen; eine einfache Mehrheit entscheidet. Ein Konto, das gesperrt wurde, bevor beides unterschieden wurde, trägt keinen Vermerk darüber, was es war: Es läuft nicht aus, und ein Admin kann es aufheben."
   },
   "tips.admin.users.status.suspend.title": {
-    "en": "Suspend / Reinstate",
-    "t": "Sperren / Reaktivieren"
+    "en": "Hold, suspension and reinstatement",
+    "t": "Haltesperre, Sperrung und Aufhebung"
   },
   "tips.admin.valuation.post.aum.body": {
     "en": "The fund's total assets under management you're marking. The NAV/share that pays redemptions is derived from it (AUM ÷ units outstanding), so a wrong figure mis-prices every settle.",

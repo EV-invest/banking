@@ -1071,6 +1071,10 @@
     "en": "Access & security",
     "t": "Доступ и безопасность"
   },
+  "admin.users.adminViaProposal": {
+    "en": "Admin is not on this list — granting it is a proposal the owners vote through. Taking it away is still one step here. Open one in",
+    "t": "Админа в этом списке нет — его выдают предложением, которое голосуют владельцы. Снять его по-прежнему можно одним шагом здесь. Открыть предложение —"
+  },
   "admin.users.balance": {
     "en": "Balance",
     "t": "Баланс"
@@ -1086,6 +1090,14 @@
   "admin.users.count": {
     "en": "{n, plural, one {# user} other {# users}}",
     "t": "{n, plural, one {# пользователь} few {# пользователя} many {# пользователей} other {# пользователя}}"
+  },
+  "admin.users.hold": {
+    "en": "Hold for 24h",
+    "t": "Удержать на 24 ч"
+  },
+  "admin.users.holdHint": {
+    "en": "Freezes the account now. It lapses by itself after 24 hours unless the owners vote to make it permanent.",
+    "t": "Замораживает аккаунт сейчас же. Спадёт сам через 24 часа, если владельцы не проголосуют сделать блокировку постоянной."
   },
   "admin.users.identity": {
     "en": "Identity",
@@ -1107,6 +1119,14 @@
     "en": "L{n}",
     "t": "ур. {n}"
   },
+  "admin.users.liftHold": {
+    "en": "Lift hold",
+    "t": "Снять удержание"
+  },
+  "admin.users.liftSuspension": {
+    "en": "Lift suspension",
+    "t": "Снять приостановку"
+  },
   "admin.users.noMatch": {
     "en": "No users match these filters.",
     "t": "Нет пользователей, подходящих под эти фильтры."
@@ -1118,6 +1138,42 @@
   "admin.users.ownerSeatVia": {
     "en": "Owner is not on this list. A seat is written by the founding seed at start-up, or granted by an admission the current owners vote through — never from here. Open one in",
     "t": "Роли «Владелец» в списке нет. Место записывает посев при старте сервиса либо приём, за который голосуют действующие владельцы, — но никогда не эта форма. Открыть предложение можно в разделе"
+  },
+  "admin.users.proposeAdmin": {
+    "en": "Propose admin",
+    "t": "Предложить админа"
+  },
+  "admin.users.proposeAdminHint": {
+    "en": "Granting admin is the owners' decision. Taking it away is still one step, right here.",
+    "t": "Выдача админа — решение владельцев. Снятие остаётся одним действием, прямо здесь."
+  },
+  "admin.users.proposeReinstatement": {
+    "en": "Propose reinstatement",
+    "t": "Предложить восстановление"
+  },
+  "admin.users.proposeReinstatementHint": {
+    "en": "Only the owners can undo their own verdict. A simple majority of them carries it.",
+    "t": "Отменить свой вердикт могут только владельцы. Решает простое большинство."
+  },
+  "admin.users.proposeSuspension": {
+    "en": "Propose permanent",
+    "t": "Предложить постоянную"
+  },
+  "admin.users.proposeSuspensionHint": {
+    "en": "Asks the owners to make this block permanent. A simple majority of them carries it.",
+    "t": "Просит владельцев сделать блокировку постоянной. Решает простое большинство."
+  },
+  "admin.users.reasonHint": {
+    "en": "Recorded on the audit row, and read by every owner who votes.",
+    "t": "Записывается в аудит и её читает каждый голосующий владелец."
+  },
+  "admin.users.reasonLabel": {
+    "en": "Reason",
+    "t": "Причина"
+  },
+  "admin.users.reasonPlaceholder": {
+    "en": "Why this account, in one line",
+    "t": "Почему именно этот аккаунт, одной строкой"
   },
   "admin.users.reinstate": {
     "en": "Reinstate",
@@ -1138,6 +1194,38 @@
   "admin.users.searchPlaceholder": {
     "en": "Search email or user id…",
     "t": "Поиск по email или user id…"
+  },
+  "admin.users.standing": {
+    "en": "Account standing",
+    "t": "Состояние аккаунта"
+  },
+  "admin.users.standingActive": {
+    "en": "Active. This account can sign in and move money.",
+    "t": "Активен. Может входить и двигать деньги."
+  },
+  "admin.users.standingGovernance": {
+    "en": "Suspended by the owners' vote. It does not lapse, and one admin cannot lift it.",
+    "t": "Приостановлен голосованием владельцев. Не спадает, и один админ его не снимет."
+  },
+  "admin.users.standingHeld": {
+    "en": "Held. It lapses {when} unless the owners make it permanent.",
+    "t": "Удержан. Спадёт {when}, если владельцы не сделают блокировку постоянной."
+  },
+  "admin.users.standingHold": {
+    "en": "Held by one operator. It lapses on its own unless the owners vote to make it permanent.",
+    "t": "Удержан одним админом. Спадёт сам, если владельцы не проголосуют сделать блокировку постоянной."
+  },
+  "admin.users.standingHoldLapses": {
+    "en": "Lapses {when}",
+    "t": "Спадёт {when}"
+  },
+  "admin.users.standingLegacy": {
+    "en": "Suspended before holds and owners' verdicts were told apart. It does not lapse, and one admin can lift it.",
+    "t": "Приостановлен до того, как удержание и вердикт владельцев стали разными вещами. Не спадает, и один админ может его снять."
+  },
+  "admin.users.standingOpened": {
+    "en": "Proposal opened. The owners vote in",
+    "t": "Предложение открыто. Владельцы голосуют в"
   },
   "admin.users.subtitle": {
     "en": "Investors and operators — identities, KYC, roles and sessions",
@@ -3888,12 +3976,12 @@
     "t": "Версия токена"
   },
   "tips.admin.users.status.suspend.body": {
-    "en": "Suspend disables the account and blocks the user's access; Reinstate re-enables it. Reversible — the button reflects the current status.",
-    "t": "«Отключить» деактивирует аккаунт и блокирует доступ пользователя; «Включить» возвращает его. Действие обратимо — кнопка отражает текущий статус."
+    "en": "Three different things, told apart by why the account is blocked. Hold freezes it now and lapses by itself in 24 hours — one operator may do that. Making it permanent, or undoing a permanent one, is a proposal the owners vote through; a simple majority carries it. An account suspended before the two were told apart carries no record of which it was, so it does not lapse and one admin can lift it.",
+    "t": "Три разные вещи, различаемые по тому, почему аккаунт заблокирован. Удержание замораживает его сейчас же и спадает само через 24 часа — это может сделать один оператор. Сделать блокировку постоянной или отменить постоянную — это предложение, которое голосуют владельцы; решает простое большинство. Аккаунт, приостановленный до того, как эти две вещи стали различаться, не хранит записи о том, чем это было: он не спадает, и снять его может один админ."
   },
   "tips.admin.users.status.suspend.title": {
-    "en": "Suspend / Reinstate",
-    "t": "Отключить / Включить"
+    "en": "Hold, suspension and reinstatement",
+    "t": "Удержание, приостановка и восстановление"
   },
   "tips.admin.valuation.post.aum.body": {
     "en": "The fund's total assets under management you're marking. The NAV/share that pays redemptions is derived from it (AUM ÷ units outstanding), so a wrong figure mis-prices every settle.",
