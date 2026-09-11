@@ -275,6 +275,11 @@ impl TonDepositWatcher {
 			Party::User(user) => user.to_string(),
 			Party::Piggybank => "piggybank".to_string(),
 			Party::Service(service) => service.as_str().to_owned(),
+			// The fee claim holds money the fund EARNED off dollars already on the ledger; a
+			// chain arrival is new custody. Refusing here rather than minting a discriminator
+			// keeps `record_deposit`'s refusal from being reachable only by a caller that first
+			// invented a `tx_ref` shape for a deposit that must not exist.
+			Party::Revenue => return Err(WatcherError::Credit("a chain deposit cannot credit the fee claim".into())),
 		};
 		let is_capital = matches!(party, Party::Piggybank);
 		// Disambiguate per recipient like the BEP20/TRC20 watchers: `deposits.tx_ref` is a global
