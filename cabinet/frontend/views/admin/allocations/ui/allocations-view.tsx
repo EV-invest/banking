@@ -213,10 +213,11 @@ function AllocationRow({
   const t = useT();
   const [title, setTitle] = useState(row.title);
   const [summary, setSummary] = useState(row.summary);
-  // Seeded from the row, so an operator who opens the editor to fix a typo in the title
-  // still submits the icon the product already wears. `/update` is a full replace: a body
-  // without `icon` is read as "none chosen" and resets the product to `fund`, so the
-  // editor holding the current value is what stops a rename from repainting the rail.
+  // Seeded from the row so the picker opens on the icon the product already wears, and a
+  // rename submits it back unchanged. This is no longer load-bearing: `icon` carries
+  // presence on the wire, so a body that omits it leaves the stored value alone — verified
+  // end to end. Keep the seeding anyway, because the control has to show something true,
+  // and a picker that opened on `fund` would invite an operator to save a lie.
   // `?? "fund"` covers the row arriving from a cache written before the field existed.
   const [icon, setIcon] = useState<AllocationIcon>(row.icon ?? "fund");
 
