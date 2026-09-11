@@ -12,7 +12,7 @@ use domain::{
 	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
 	money::Network,
-	payments::PaymentSubject,
+	payments::{PaymentState, PaymentSubject},
 	users::UserId,
 	withdrawals::WithdrawalId,
 };
@@ -316,15 +316,26 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 /// No deterministic id to re-read here, for once: the order already exists and carries its
 /// own. `record_approval` is idempotent on an order that is already `approved`, which is
 /// what makes a retried consilium execution safe.
-async fn execute_payment(ports: &ConsiliumPorts<'_>, subject: PaymentSubject, now: i64) -> Result<ExecutionOutcome, DomainError> {
+///
+/// Public so its outcome can be asserted on its own: through [`execute`] it is only ever
+/// observable via `record_execution`, whose owner mail the store refuses for the payment kind
+/// until concierge ships it.
+pub async fn execute_payment(ports: &ConsiliumPorts<'_>, subject: PaymentSubject, now: i64) -> Result<ExecutionOutcome, DomainError> {
 	match ports.payments.record_approval(subject.payment_id, now).await {
 		Ok(_) => Ok(ExecutionOutcome::Executed(ConsiliumEffect::Payment(subject.payment_id))),
 		// A REFUSAL IS NOT PROOF THE APPROVAL DID NOT LAND. Two callers reach this — the vote
 		// that carried the quorum, and the sweeper — so one can lose the row lock race and see
 		// a conflict over an order the other has already approved. Re-read before believing it,
 		// exactly as `execute_revenue_payout` re-reads the payout id.
+		//
+		// THE RE-READ ASKS FOR THE POSITIVE FACT. "No longer pending" is not it: an order the
+		// initiator withdrew, the sweeper expired or a burned seat rejected is also not
+		// pending, and reporting any of those as `Executed` would file a consilium as having
+		// authorized money that never moved. Only an order that IS approved (or has already
+		// gone past approval) proves the other caller's approval landed.
 		Err(err) => match ports.payments.find(subject.payment_id).await? {
-			Some(view) if !view.order.state().is_pending() => Ok(ExecutionOutcome::Executed(ConsiliumEffect::Payment(subject.payment_id))),
+			Some(view) if matches!(view.order.state(), PaymentState::Approved | PaymentState::Executed | PaymentState::ExecutionFailed) =>
+				Ok(ExecutionOutcome::Executed(ConsiliumEffect::Payment(subject.payment_id))),
 			_ => Ok(ExecutionOutcome::Failed(failure_reason(&err))),
 		},
 	}

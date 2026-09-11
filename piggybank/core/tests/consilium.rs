@@ -132,6 +132,13 @@ async fn reset_governance(h: &Harness) {
 	// and rehydrates every row, so one row this binary cannot parse fails every later test
 	// that reads the history — which is the exact failure `0029_consilium_source_claim.sql`
 	// describes, and a panicking fixture is enough to leave one behind.
+	// The orders those fixtures decide go first: `payment_approval` references the consilium
+	// with `ON DELETE RESTRICT`, so a fixture that panicked between opening its order and
+	// cleaning up would otherwise wedge every reset after it.
+	sqlx::query("DELETE FROM payments WHERE id IN (SELECT a.payment_id FROM payment_approval a JOIN consilium c ON c.id = a.consilium_id WHERE c.kind = 'payment')")
+		.execute(&h.pool)
+		.await
+		.unwrap();
 	sqlx::query("DELETE FROM consilium WHERE kind = 'payment'").execute(&h.pool).await.unwrap();
 	sqlx::query("UPDATE users SET role = 'investor' WHERE role = 'owner'").execute(&h.pool).await.unwrap();
 	// The cooling-off clock is global, so a test that exercises it would otherwise freeze
@@ -1210,4 +1217,122 @@ async fn a_payment_consilium_round_trips_and_leaves_the_history_readable() {
 	assert!(history.iter().any(|view| view.consilium.id() == payout.consilium.id()));
 
 	sqlx::query("DELETE FROM consilium WHERE id = $1").bind(id).execute(&h.pool).await.unwrap();
+}
+
+/// THE RE-READ AFTER A REFUSED APPROVAL ASKS FOR THE POSITIVE FACT.
+///
+/// `execute_payment` re-reads the order when `record_approval` refuses, because the refusal
+/// may be the loser of a two-caller race over an order the other caller has already
+/// approved. An earlier draft took "no longer pending" as that proof — but an order the
+/// initiator withdrew, the sweeper expired or a burned seat rejected is not pending either,
+/// and each of those was filed as `Executed`: a consilium recorded as having authorized money
+/// that never moved. Only `approved` (or a state past it) proves the approval landed; every
+/// other closer must come back as `Failed`, naming the order's state.
+///
+/// Driven directly rather than through `execute`, because the outcome is only ever
+/// observable through `record_execution`, whose owner mail is refused for the payment kind
+/// until concierge ships it (`no_payment_approval_mail`) — the same closed seam
+/// `a_payment_consilium_round_trips_and_leaves_the_history_readable` works around.
+#[tokio::test]
+async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() {
+	use domain::{
+		balance::{Party, ServiceId},
+		consilium::ConsiliumEffect,
+		payments::{PaymentDestination, PaymentId, PaymentOrder, PaymentReason, PaymentState, PaymentSubject, PaymentTerms},
+	};
+	use piggybank_core::ports::{consilium::ExecutionOutcome, payments::ApprovalSeat};
+	use sha2::{Digest, Sha256};
+
+	let _guard = exclusive_governance().await;
+	let Some(h) = harness().await else {
+		eprintln!("DATABASE_URL unset — skipping the consilium suite");
+		return;
+	};
+	reset_governance(&h).await;
+	let initiator = owner(&h).await;
+
+	/// The order, its subject and the approved payment consilium that links to it.
+	async fn a_linked_order(h: &Harness, initiator: UserId, from: Party, to: PaymentDestination) -> (PaymentSubject, ConsiliumId) {
+		let terms = PaymentTerms::new(from, to, usdt("250"), PaymentReason::new("settle the quarterly management fee").unwrap()).unwrap();
+		let subject = PaymentSubject {
+			payment_id: PaymentId::from_raw(Uuid::new_v4()),
+			terms,
+		};
+		let consilium = ConsiliumId::from_raw(Uuid::new_v4());
+		sqlx::query(
+			"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, decided_at) \
+			 VALUES ($1, 'payment', 'approved', $2::jsonb, $3, $4, $5, 3, 2, now() + interval '72 hours', now())",
+		)
+		.bind(consilium.raw())
+		.bind(serde_json::to_string(&subject).unwrap())
+		.bind(subject.terms.source_claim().logical_key())
+		.bind(Sha256::digest(domain::consilium::ConsiliumTerms::Payment(subject.clone()).canonical_bytes()).as_slice())
+		.bind(initiator.raw())
+		.execute(&h.pool)
+		.await
+		.expect("insert the approved payment consilium");
+		let mut order = PaymentOrder::open(
+			subject.payment_id,
+			subject.terms.clone(),
+			Sha256::digest(subject.terms.canonical_bytes()).into(),
+			initiator,
+			now(),
+		);
+		h.payments.open(&mut order, ApprovalSeat::Consilium(consilium)).await.expect("open the order");
+		(subject, consilium)
+	}
+
+	async fn remove(h: &Harness, subject: &PaymentSubject, consilium: ConsiliumId) {
+		sqlx::query("DELETE FROM payments WHERE id = $1").bind(subject.payment_id.raw()).execute(&h.pool).await.unwrap();
+		sqlx::query("DELETE FROM consilium WHERE id = $1").bind(consilium.raw()).execute(&h.pool).await.unwrap();
+	}
+
+	// One order per closer, each over its own fund-owned source so none queues behind
+	// another on the single-open-per-source index.
+	let closers: [(&str, Party, PaymentDestination); 3] = [
+		("rejected", Party::Piggybank, PaymentDestination::Internal(Party::Revenue)),
+		("cancelled", Party::Revenue, PaymentDestination::Internal(Party::Piggybank)),
+		("expired", Party::Service(ServiceId::parse("alpha").unwrap()), PaymentDestination::Internal(Party::Revenue)),
+	];
+	for (closer, from, to) in closers {
+		let (subject, consilium) = a_linked_order(&h, initiator, from, to).await;
+		let id = subject.payment_id;
+		let expected = match closer {
+			"rejected" => {
+				h.payments.record_rejection(id, now()).await.unwrap();
+				PaymentState::Rejected
+			}
+			"cancelled" => {
+				h.payments.cancel(id, initiator, now()).await.unwrap();
+				PaymentState::Cancelled
+			}
+			_ => {
+				h.payments.expire_due(now() + domain::payments::TTL_SECS + 1).await.unwrap();
+				PaymentState::Expired
+			}
+		};
+		assert_eq!(h.payments.find(id).await.unwrap().unwrap().order.state(), expected);
+
+		match consilium_app::execute_payment(&ports(&h), subject.clone(), now()).await.unwrap() {
+			ExecutionOutcome::Failed(why) => assert!(why.contains(closer), "the refusal names the order's state: {why}"),
+			ExecutionOutcome::Executed(_) => panic!("a consilium over a {closer} order was filed as having authorized it"),
+		}
+		// And the attempt moved nothing.
+		assert_eq!(h.payments.find(id).await.unwrap().unwrap().order.state(), expected);
+		remove(&h, &subject, consilium).await;
+	}
+
+	// THE POSITIVE CONTROL: an approval that did land — recorded by the other caller before
+	// this one got the row lock — is believed, and so is a repeat, because `record_approval`
+	// is idempotent on an approved order.
+	let (subject, consilium) = a_linked_order(&h, initiator, Party::Piggybank, PaymentDestination::Internal(Party::Revenue)).await;
+	h.payments.record_approval(subject.payment_id, now()).await.unwrap();
+	for _ in 0..2 {
+		match consilium_app::execute_payment(&ports(&h), subject.clone(), now()).await.unwrap() {
+			ExecutionOutcome::Executed(ConsiliumEffect::Payment(id)) => assert_eq!(id, subject.payment_id),
+			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_)) => panic!("a payment consilium produces no withdrawal"),
+			ExecutionOutcome::Failed(why) => panic!("an approved order must be believed: {why}"),
+		}
+	}
+	remove(&h, &subject, consilium).await;
 }
