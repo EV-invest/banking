@@ -15,9 +15,25 @@
     "en": "{n, plural, one {#s ago} other {#s ago}}",
     "t": "{n, plural, one {vor #s} other {vor #s}}"
   },
+  "admin.alloc.access.hidden": {
+    "en": "Hidden",
+    "t": "Verborgen"
+  },
+  "admin.alloc.access.invest": {
+    "en": "Investable",
+    "t": "Investierbar"
+  },
+  "admin.alloc.access.view": {
+    "en": "View only",
+    "t": "Nur Ansicht"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Schließen"
+  },
+  "admin.alloc.col.access": {
+    "en": "Access",
+    "t": "Zugriff"
   },
   "admin.alloc.col.product": {
     "en": "Product",
@@ -50,6 +66,58 @@
   "admin.alloc.footnote": {
     "en": "Registration lands in {state}, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.",
     "t": "Die Registrierung landet im Status {state}, der kein Geld annimmt — das Öffnen ist eine eigene Entscheidung. Das Schließen stoppt nur neue Zeichnungen: Investoren können Anteile eines geschlossenen Produkts jederzeit zurückgeben, ein Abwickeln lässt ihre Anteile also nie hängen. Die Service-ID ist nach der Registrierung dauerhaft. Das Anteilslimit begrenzt, wie viele Anteile insgesamt ausgegeben werden dürfen — anpassen lässt es sich im Bereich Bewertung, wo die ausgegebene Menge, an der es zu messen ist, auf derselben Seite steht."
+  },
+  "admin.alloc.grants.action": {
+    "en": "Grants",
+    "t": "Zugänge"
+  },
+  "admin.alloc.grants.col.grantedBy": {
+    "en": "Granted by",
+    "t": "Gewährt von"
+  },
+  "admin.alloc.grants.col.level": {
+    "en": "Level",
+    "t": "Stufe"
+  },
+  "admin.alloc.grants.empty": {
+    "en": "No grants yet",
+    "t": "Noch keine Zugänge"
+  },
+  "admin.alloc.grants.emptyHint": {
+    "en": "Every investor holds this product's default access until you raise one above it.",
+    "t": "Jeder Investor hat den Standardzugriff dieses Produkts, bis Sie ihn anheben."
+  },
+  "admin.alloc.grants.field.level": {
+    "en": "Level",
+    "t": "Stufe"
+  },
+  "admin.alloc.grants.field.user": {
+    "en": "Investor",
+    "t": "Investor"
+  },
+  "admin.alloc.grants.noUserMatch": {
+    "en": "No investors match",
+    "t": "Keine Investoren gefunden"
+  },
+  "admin.alloc.grants.pickUser": {
+    "en": "Search investors…",
+    "t": "Investoren suchen…"
+  },
+  "admin.alloc.grants.raise": {
+    "en": "Raise access",
+    "t": "Zugriff erhöhen"
+  },
+  "admin.alloc.grants.revoke": {
+    "en": "Revoke",
+    "t": "Widerrufen"
+  },
+  "admin.alloc.grants.roster": {
+    "en": "Grants",
+    "t": "Erteilte Zugänge"
+  },
+  "admin.alloc.grants.submit": {
+    "en": "Grant",
+    "t": "Gewähren"
   },
   "admin.alloc.hint.closed": {
     "en": "Closed to new money; redemptions still settle",
@@ -1615,6 +1683,10 @@
     "en": "Awaiting settlement",
     "t": "Wartet auf Abrechnung"
   },
+  "invest.badge.locked": {
+    "en": "Locked",
+    "t": "Gesperrt"
+  },
   "invest.badge.open": {
     "en": "Open",
     "t": "Offen"
@@ -1634,6 +1706,10 @@
   "invest.blocked.closed": {
     "en": "This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full.",
     "t": "Dieser Fonds ist für neue Zeichnungen geschlossen. Ihre Anteile sind davon nicht betroffen — Sie können sie weiterhin vollständig zurückgeben."
+  },
+  "invest.blocked.locked": {
+    "en": "This fund isn't open to you yet. You can see it, but subscribing is locked until an operator raises your access.",
+    "t": "Dieser Fonds ist für Sie noch nicht geöffnet. Sie können ihn sehen, aber die Zeichnung ist gesperrt, bis ein Operator Ihren Zugriff erhöht."
   },
   "invest.blocked.staleNav": {
     "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",

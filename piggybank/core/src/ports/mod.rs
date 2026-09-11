@@ -36,7 +36,7 @@ pub mod redemptions;
 pub mod subscriptions;
 pub mod withdrawals;
 
-pub use allocations::{AllocationRecord, AllocationRegistry};
+pub use allocations::{AllocationAccessGrant, AllocationRecord, AllocationRegistry};
 use async_trait::async_trait;
 pub use consilium::ConsiliumRepository;
 pub use custody::{BroadcastRequest, Custody, CustodyError};

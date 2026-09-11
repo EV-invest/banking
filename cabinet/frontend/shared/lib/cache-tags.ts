@@ -63,6 +63,8 @@ export const TAG = {
   adminQueue: "admin.queue",
   /** The operator allocation registry — drafts and closed products included. */
   adminAllocations: "admin.allocations",
+  /** Per-service investor access grants — who is raised above a product's default. */
+  adminAllocationGrants: "admin.allocations.grants",
   /** The user directory and a single user's detail. */
   adminUsers: "admin.users",
   /** The fund's earned revenue and its payouts. A payout also moves `adminQueue` (it

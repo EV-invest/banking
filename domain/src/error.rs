@@ -14,6 +14,14 @@ pub enum DomainError {
 	/// `invalid_argument`.
 	#[error("forbidden: {0}")]
 	Forbidden(String),
+	/// The request is well-formed and the caller is entitled to make it, but the
+	/// aggregate is not in a state that admits it right now — an investor subscribing
+	/// to a product they may only view, say. Distinct from `Validation` (the input is
+	/// wrong) and `Forbidden` (the caller may never): it maps to gRPC
+	/// `failed_precondition`, so a client can tell "fix your request" from "ask an
+	/// operator" from "this is not for you".
+	#[error("precondition failed: {0}")]
+	Precondition(String),
 	/// Unexpected failure from a driven adapter (e.g. the database). Carries a
 	/// description for logging only — it is never surfaced verbatim to clients,
 	/// and an infrastructure failure must never be mapped to `Validation`.

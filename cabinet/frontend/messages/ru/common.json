@@ -15,9 +15,25 @@
     "en": "{n, plural, one {#s ago} other {#s ago}}",
     "t": "{n, plural, one {# с назад} few {# с назад} many {# с назад} other {# с назад}}"
   },
+  "admin.alloc.access.hidden": {
+    "en": "Hidden",
+    "t": "Скрыт"
+  },
+  "admin.alloc.access.invest": {
+    "en": "Investable",
+    "t": "Доступен для инвестиций"
+  },
+  "admin.alloc.access.view": {
+    "en": "View only",
+    "t": "Только просмотр"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Закрыть"
+  },
+  "admin.alloc.col.access": {
+    "en": "Access",
+    "t": "Доступ"
   },
   "admin.alloc.col.product": {
     "en": "Product",
@@ -50,6 +66,58 @@
   "admin.alloc.footnote": {
     "en": "Registration lands in {state}, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.",
     "t": "Регистрация создаёт продукт в статусе {state}, который не принимает деньги, — открытие является отдельным решением. Закрытие останавливает только новые подписки: инвестор всегда может погасить паи закрытого продукта, поэтому его сворачивание никогда не блокирует их. ID сервиса неизменен после регистрации. Лимит паёв ограничивает общее количество паёв, которые могут быть выпущены, — изменить его можно на экране «Оценка», где рядом показан уже выпущенный объём, с которым его сверяют."
+  },
+  "admin.alloc.grants.action": {
+    "en": "Grants",
+    "t": "Гранты"
+  },
+  "admin.alloc.grants.col.grantedBy": {
+    "en": "Granted by",
+    "t": "Кем выдан"
+  },
+  "admin.alloc.grants.col.level": {
+    "en": "Level",
+    "t": "Уровень"
+  },
+  "admin.alloc.grants.empty": {
+    "en": "No grants yet",
+    "t": "Пока нет грантов"
+  },
+  "admin.alloc.grants.emptyHint": {
+    "en": "Every investor holds this product's default access until you raise one above it.",
+    "t": "У каждого инвестора действует доступ по умолчанию для этого продукта, пока вы не повысите его."
+  },
+  "admin.alloc.grants.field.level": {
+    "en": "Level",
+    "t": "Уровень"
+  },
+  "admin.alloc.grants.field.user": {
+    "en": "Investor",
+    "t": "Инвестор"
+  },
+  "admin.alloc.grants.noUserMatch": {
+    "en": "No investors match",
+    "t": "Совпадений не найдено"
+  },
+  "admin.alloc.grants.pickUser": {
+    "en": "Search investors…",
+    "t": "Поиск инвесторов…"
+  },
+  "admin.alloc.grants.raise": {
+    "en": "Raise access",
+    "t": "Повысить доступ"
+  },
+  "admin.alloc.grants.revoke": {
+    "en": "Revoke",
+    "t": "Отозвать"
+  },
+  "admin.alloc.grants.roster": {
+    "en": "Grants",
+    "t": "Гранты"
+  },
+  "admin.alloc.grants.submit": {
+    "en": "Grant",
+    "t": "Выдать"
   },
   "admin.alloc.hint.closed": {
     "en": "Closed to new money; redemptions still settle",
@@ -2515,6 +2583,10 @@
     "en": "Awaiting settlement",
     "t": "Ожидает исполнения"
   },
+  "invest.badge.locked": {
+    "en": "Locked",
+    "t": "Заблокирован"
+  },
   "invest.badge.open": {
     "en": "Open",
     "t": "Открыт"
@@ -2534,6 +2606,10 @@
   "invest.blocked.closed": {
     "en": "This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full.",
     "t": "Фонд закрыт для новых подписок. Ваши паи это не затрагивает — вы можете погасить их полностью."
+  },
+  "invest.blocked.locked": {
+    "en": "This fund isn't open to you yet. You can see it, but subscribing is locked until an operator raises your access.",
+    "t": "Этот фонд пока не открыт для вас. Вы можете его видеть, но подписка заблокирована, пока оператор не повысит ваш доступ."
   },
   "invest.blocked.staleNav": {
     "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",

@@ -10,8 +10,16 @@
 //!
 //! This aggregate carries **no money**. Units, NAV, cost basis and cash live in the
 //! `subscriptions` / `redemptions` / `balance` contexts, keyed by the same [`ServiceId`]
-//! — the registry owns identity, presentation and lifecycle only. Its events are audit
-//! facts (`event_log`), never relayed to the ledger.
+//! — the registry owns identity, presentation, lifecycle and access only. Its events
+//! are audit facts (`event_log`), never relayed to the ledger.
+//!
+//! **Access is a second axis, orthogonal to lifecycle.** [`AllocationState`] says whether
+//! the product deals at all; [`AllocationAccess`] says who sees it and who may put money
+//! in. The aggregate holds the product's *default* level; per-investor grants live beside
+//! it in the registry (they are keyed by user, so loading them all onto the hot path
+//! would be waste) and reach this aggregate only as the audit facts they raise. The
+//! effective level for one investor — [`AllocationAccess::effective`] — is the higher
+//! of the two, and it is what the subscribe gate and the catalog are decided on.
 //!
 //! Pure and wasm-safe (mirrors [`Withdrawal`](crate::withdrawals::Withdrawal)): ids are
 //! minted by the application layer, no clock, no I/O. Timestamps are DB-stamped and
@@ -20,7 +28,7 @@
 use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
-use crate::{balance::ServiceId, error::DomainError, money::Shares};
+use crate::{balance::ServiceId, error::DomainError, money::Shares, users::UserId};
 
 /// The longest accepted display title.
 const MAX_TITLE_LEN: usize = 120;
@@ -82,6 +90,76 @@ impl AllocationState {
 			"closed" => Ok(Self::Closed),
 			other => Err(DomainError::Validation(format!("unknown allocation state: {other}"))),
 		}
+	}
+}
+
+/// Who may see a product and who may put money in it.
+///
+/// Ranked, lowest first — the derived `Ord` is load-bearing: an investor's effective
+/// level is the *higher* of the product's default and their own grant
+/// ([`Self::effective`]), so the variant order here IS the access policy. Orthogonal
+/// to [`AllocationState`]: a product can be `open` and `hidden` (invite-only, dealing
+/// with the invited), or `draft` and `invest` (announced, not yet dealing).
+///
+/// Never consulted on the way *out*. Redemptions are gated by state alone
+/// ([`Allocation::ensure_redeemable`]), so locking a product cannot trap the units an
+/// investor already holds in it.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationAccess {
+	/// Not in the caller's catalog; a direct read answers as if unregistered.
+	Hidden,
+	/// Listed and readable; subscriptions refused. What a registration lands on.
+	#[default]
+	View,
+	/// Listed, readable, and open to new money (subject to state and cap).
+	Invest,
+}
+
+impl AllocationAccess {
+	/// The level a product carries from registration until an operator changes it:
+	/// visible, so the catalog shows what is coming, but locked — "closed by default".
+	pub const DEFAULT: Self = Self::View;
+
+	/// The stored/wire discriminant. Keep byte-identical with
+	/// `evbanking_contracts::allocation::access` (`allocation_access_strings_are_canonical`
+	/// guards this side).
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Hidden => "hidden",
+			Self::View => "view",
+			Self::Invest => "invest",
+		}
+	}
+
+	/// Parse the stored/wire form. An unrecognized value is an error rather than a
+	/// silent default, so a corrupt row never quietly opens a product to everyone.
+	pub fn parse(raw: &str) -> Result<Self, DomainError> {
+		match raw {
+			"hidden" => Ok(Self::Hidden),
+			"view" => Ok(Self::View),
+			"invest" => Ok(Self::Invest),
+			other => Err(DomainError::Validation(format!("unknown allocation access level: {other}"))),
+		}
+	}
+
+	/// The level one investor effectively holds: the product's `default`, raised by
+	/// their `grant` if they have one. A grant can only add — see
+	/// [`Allocation::grant_access`] for why `Hidden` is not grantable — so this is a
+	/// plain `max` and the derived order decides it.
+	pub fn effective(default: Self, grant: Option<Self>) -> Self {
+		grant.map_or(default, |granted| default.max(granted))
+	}
+
+	/// Whether an allocation at this level belongs in the caller's catalog.
+	pub fn permits_viewing(self) -> bool {
+		self >= Self::View
+	}
+
+	/// Whether this level lets the caller put money in. Necessary alongside
+	/// [`Allocation::ensure_subscribable`]'s state check, never sufficient on its own.
+	pub fn permits_investing(self) -> bool {
+		self >= Self::Invest
 	}
 }
 
@@ -206,6 +284,22 @@ impl AllocationIcon {
 	}
 }
 
+/// The stored shape of an [`Allocation`], as the persistence adapter reads it back —
+/// the input to [`Allocation::rehydrate`]. A struct rather than eight positional
+/// arguments for the same reason as [`UserSnapshot`](crate::users::UserSnapshot): the
+/// call site is a row-to-aggregate mapping, and named fields read against the `SELECT`
+/// beside it where a positional list has to be counted out.
+pub struct AllocationSnapshot {
+	pub id: AllocationId,
+	pub service: ServiceId,
+	pub title: String,
+	pub summary: String,
+	pub state: AllocationState,
+	pub unit_cap: Shares,
+	pub icon: AllocationIcon,
+	pub access: AllocationAccess,
+}
+
 /// The allocation aggregate — one investable product's registry entry. Construct via
 /// [`Allocation::register`] (raises [`AllocationEvent::Registered`]) or
 /// [`Allocation::rehydrate`] (load from the store, no events).
@@ -218,14 +312,15 @@ pub struct Allocation {
 	state: AllocationState,
 	unit_cap: Shares,
 	icon: AllocationIcon,
+	access: AllocationAccess,
 	pending: Vec<AllocationEvent>,
 }
 
 impl Allocation {
-	/// Register `service` as an investable product, in [`AllocationState::Draft`] and at
-	/// [`DEFAULT_UNIT_CAP`] — a registration never opens for business in the same step,
-	/// so listing, sizing and funding stay separate operator decisions. Raises
-	/// `Registered`.
+	/// Register `service` as an investable product, in [`AllocationState::Draft`], at
+	/// [`DEFAULT_UNIT_CAP`] and at [`AllocationAccess::DEFAULT`] — a registration never
+	/// opens for business in the same step, so listing, sizing, funding and admitting
+	/// investors stay separate operator decisions. Raises `Registered`.
 	pub fn register(id: AllocationId, service: ServiceId, title: &str, summary: &str, icon: AllocationIcon) -> Result<Self, DomainError> {
 		let title = validate_title(title)?;
 		let summary = validate_summary(summary)?;
@@ -237,6 +332,7 @@ impl Allocation {
 			state: AllocationState::Draft,
 			unit_cap: DEFAULT_UNIT_CAP,
 			icon,
+			access: AllocationAccess::DEFAULT,
 			pending: Vec::new(),
 		};
 		allocation.pending.push(AllocationEvent::Registered {
@@ -246,20 +342,22 @@ impl Allocation {
 			summary,
 			unit_cap: DEFAULT_UNIT_CAP,
 			icon,
+			access: AllocationAccess::DEFAULT,
 		});
 		Ok(allocation)
 	}
 
 	/// Reconstitute from the store. Raises no events.
-	pub fn rehydrate(id: AllocationId, service: ServiceId, title: String, summary: String, state: AllocationState, unit_cap: Shares, icon: AllocationIcon) -> Self {
+	pub fn rehydrate(snapshot: AllocationSnapshot) -> Self {
 		Self {
-			id,
-			service,
-			title,
-			summary,
-			state,
-			unit_cap,
-			icon,
+			id: snapshot.id,
+			service: snapshot.service,
+			title: snapshot.title,
+			summary: snapshot.summary,
+			state: snapshot.state,
+			unit_cap: snapshot.unit_cap,
+			icon: snapshot.icon,
+			access: snapshot.access,
 			pending: Vec::new(),
 		}
 	}
@@ -381,13 +479,84 @@ impl Allocation {
 		self.unit_cap.checked_sub(issued).unwrap_or(Shares::ZERO)
 	}
 
-	/// The gate the subscribe path runs: only an `Open` allocation takes new money.
-	pub fn ensure_subscribable(&self) -> Result<(), DomainError> {
-		match self.state {
-			AllocationState::Open => Ok(()),
-			AllocationState::Draft => Err(DomainError::Validation(format!("allocation '{}' is not open for subscriptions yet", self.service))),
-			AllocationState::Closed => Err(DomainError::Validation(format!("allocation '{}' is closed to new subscriptions", self.service))),
+	/// Set the default access level. Idempotent: the level it already holds raises
+	/// nothing. Raises `AccessChanged`.
+	///
+	/// Lowering the default never touches a per-investor grant — a grant is the
+	/// operator's explicit exception and stays until revoked — and never touches
+	/// redemptions, which are gated by state alone.
+	pub fn set_access(&mut self, access: AllocationAccess) {
+		if access == self.access {
+			return;
 		}
+		self.access = access;
+		self.pending.push(AllocationEvent::AccessChanged {
+			allocation_id: self.id,
+			service: self.service.clone(),
+			access,
+		});
+	}
+
+	/// Record that `user` was raised to `level` on this product by `granted_by`. The
+	/// grant itself is stored beside the aggregate, keyed by user (see the module doc);
+	/// this raises the audit fact and refuses the one level a grant must never carry.
+	///
+	/// `Hidden` is refused because a grant only ever *adds*: the effective level is
+	/// `max(default, grant)`, so a `hidden` grant would be a no-op that reads, in the
+	/// log and the operator's list, as if it locked someone out. Raises `AccessGranted`.
+	pub fn grant_access(&mut self, user: UserId, level: AllocationAccess, granted_by: UserId) -> Result<(), DomainError> {
+		if !level.permits_viewing() {
+			return Err(DomainError::Validation(format!(
+				"an access grant must be '{}' or '{}' — a grant only ever raises an investor above the default; revoke it to take one back",
+				AllocationAccess::View.as_str(),
+				AllocationAccess::Invest.as_str(),
+			)));
+		}
+		self.pending.push(AllocationEvent::AccessGranted {
+			allocation_id: self.id,
+			service: self.service.clone(),
+			user_id: user,
+			level,
+			granted_by,
+		});
+		Ok(())
+	}
+
+	/// Record that `user`'s grant on this product was taken back by `revoked_by`; they
+	/// fall back to the default level. Raises `AccessRevoked`. The caller raises this
+	/// only when a grant actually stood — revoking nothing is idempotent and unlogged.
+	pub fn revoke_access(&mut self, user: UserId, revoked_by: UserId) {
+		self.pending.push(AllocationEvent::AccessRevoked {
+			allocation_id: self.id,
+			service: self.service.clone(),
+			user_id: user,
+			revoked_by,
+		});
+	}
+
+	/// The gate the subscribe path runs, on both axes: only an `Open` allocation takes
+	/// new money, and only from a caller whose effective level ([`AllocationAccess::
+	/// effective`]) is `Invest`.
+	///
+	/// State is checked first, so a locked-but-closed product answers "closed" — the
+	/// answer that stays true after any grant. The two refusals are different kinds on
+	/// purpose: state is `Validation` (the product is not dealing, nobody can change that
+	/// for this caller), access is `Precondition` (the product deals, this caller has
+	/// not been let in — an operator can). A client tells them apart by code alone.
+	pub fn ensure_subscribable(&self, caller_access: AllocationAccess) -> Result<(), DomainError> {
+		match self.state {
+			AllocationState::Open => {}
+			AllocationState::Draft => return Err(DomainError::Validation(format!("allocation '{}' is not open for subscriptions yet", self.service))),
+			AllocationState::Closed => return Err(DomainError::Validation(format!("allocation '{}' is closed to new subscriptions", self.service))),
+		}
+		if !caller_access.permits_investing() {
+			return Err(DomainError::Precondition(format!(
+				"allocation '{}' is not open to you for investment — an operator must grant you '{}' access",
+				self.service,
+				AllocationAccess::Invest.as_str(),
+			)));
+		}
+		Ok(())
 	}
 
 	/// The gate the redeem path runs. A `Closed` allocation still lets investors out —
@@ -400,9 +569,14 @@ impl Allocation {
 		}
 	}
 
-	/// Whether this allocation belongs in the default (investor-facing) catalog.
-	pub fn is_listed(&self) -> bool {
-		self.state == AllocationState::Open
+	/// Whether this allocation belongs in the catalog of a caller holding
+	/// `caller_access`: dealing (`Open`) and at least visible to them.
+	pub fn is_listed_for(&self, caller_access: AllocationAccess) -> bool {
+		self.state == AllocationState::Open && caller_access.permits_viewing()
+	}
+
+	pub fn access(&self) -> AllocationAccess {
+		self.access
 	}
 
 	pub fn id(&self) -> AllocationId {
@@ -483,6 +657,12 @@ pub enum AllocationEvent {
 		/// the column backfills to the same value.
 		#[serde(default)]
 		icon: AllocationIcon,
+		/// `default` for rows written before access existed: a historical registration
+		/// reads back as landing on [`AllocationAccess::DEFAULT`], which is what
+		/// "registered" has always meant in effect — listed once opened, and the money
+		/// gate decided elsewhere.
+		#[serde(default)]
+		access: AllocationAccess,
 	},
 	/// Presentation fields changed; state and identity did not.
 	DetailsUpdated {
@@ -503,6 +683,29 @@ pub enum AllocationEvent {
 	Opened { allocation_id: AllocationId, service: ServiceId },
 	/// No longer accepting subscriptions; redemptions continue.
 	Closed { allocation_id: AllocationId, service: ServiceId },
+	/// The default access level changed. Its own fact, like `CapUpdated`, because it
+	/// gates money: "who opened this product to everyone, and when" must be answerable.
+	AccessChanged {
+		allocation_id: AllocationId,
+		service: ServiceId,
+		access: AllocationAccess,
+	},
+	/// One investor was raised above the default. `granted_by` is the operator — the
+	/// audit answer to "who let this investor in".
+	AccessGranted {
+		allocation_id: AllocationId,
+		service: ServiceId,
+		user_id: UserId,
+		level: AllocationAccess,
+		granted_by: UserId,
+	},
+	/// One investor's grant was taken back; they hold the default again.
+	AccessRevoked {
+		allocation_id: AllocationId,
+		service: ServiceId,
+		user_id: UserId,
+		revoked_by: UserId,
+	},
 }
 
 impl DomainEvent for AllocationEvent {
@@ -625,7 +828,7 @@ mod tests {
 	fn register_starts_in_draft_and_emits_registered() {
 		let mut allocation = registered();
 		assert_eq!(allocation.state(), AllocationState::Draft);
-		assert!(!allocation.is_listed());
+		assert!(!allocation.is_listed_for(AllocationAccess::Invest));
 		let events = allocation.drain_events();
 		assert_eq!(events.len(), 1);
 		assert!(matches!(events[0], AllocationEvent::Registered { .. }));
@@ -635,10 +838,10 @@ mod tests {
 	#[test]
 	fn a_draft_takes_no_money_until_opened() {
 		let mut allocation = registered();
-		assert!(allocation.ensure_subscribable().is_err());
+		assert!(allocation.ensure_subscribable(AllocationAccess::Invest).is_err());
 		allocation.open();
-		assert!(allocation.ensure_subscribable().is_ok());
-		assert!(allocation.is_listed());
+		assert!(allocation.ensure_subscribable(AllocationAccess::Invest).is_ok());
+		assert!(allocation.is_listed_for(AllocationAccess::Invest));
 	}
 
 	#[test]
@@ -646,10 +849,131 @@ mod tests {
 		let mut allocation = registered();
 		allocation.open();
 		allocation.close();
-		assert!(allocation.ensure_subscribable().is_err());
+		assert!(allocation.ensure_subscribable(AllocationAccess::Invest).is_err());
 		// The whole point of the split gate: units already minted can still be redeemed.
 		assert!(allocation.ensure_redeemable().is_ok());
-		assert!(!allocation.is_listed());
+		assert!(!allocation.is_listed_for(AllocationAccess::Invest));
+	}
+
+	#[test]
+	fn allocation_access_strings_are_canonical_and_ranked() {
+		// Wire contract: these must match `evbanking_contracts::allocation::access`.
+		assert_eq!(AllocationAccess::Hidden.as_str(), "hidden");
+		assert_eq!(AllocationAccess::View.as_str(), "view");
+		assert_eq!(AllocationAccess::Invest.as_str(), "invest");
+		for level in [AllocationAccess::Hidden, AllocationAccess::View, AllocationAccess::Invest] {
+			assert_eq!(AllocationAccess::parse(level.as_str()).unwrap(), level);
+			assert_eq!(serde_json::to_string(&level).unwrap(), format!("\"{}\"", level.as_str()));
+		}
+		assert!(AllocationAccess::parse("public").is_err());
+		assert!(AllocationAccess::parse("Invest").is_err(), "the wire form is lowercase");
+		// The derived order IS the policy — `effective` is a plain `max` over it.
+		assert!(AllocationAccess::Hidden < AllocationAccess::View);
+		assert!(AllocationAccess::View < AllocationAccess::Invest);
+	}
+
+	#[test]
+	fn a_registration_lands_visible_but_locked() {
+		// "Closed by default": the product shows in the catalog once opened, and takes
+		// no money until an operator raises the default or grants the investor.
+		let mut allocation = registered();
+		assert_eq!(allocation.access(), AllocationAccess::View);
+		assert_eq!(AllocationAccess::default(), AllocationAccess::DEFAULT);
+		allocation.open();
+		assert!(allocation.is_listed_for(allocation.access()));
+		let err = allocation.ensure_subscribable(allocation.access()).unwrap_err();
+		assert!(matches!(err, DomainError::Precondition(_)), "locked is a precondition, not bad input: {err:?}");
+	}
+
+	#[test]
+	fn the_effective_level_is_the_higher_of_default_and_grant() {
+		use AllocationAccess::{Hidden, Invest, View};
+		assert_eq!(AllocationAccess::effective(Hidden, None), Hidden);
+		assert_eq!(AllocationAccess::effective(Hidden, Some(View)), View);
+		assert_eq!(AllocationAccess::effective(Hidden, Some(Invest)), Invest);
+		assert_eq!(AllocationAccess::effective(View, Some(View)), View);
+		assert_eq!(AllocationAccess::effective(View, Some(Invest)), Invest);
+		// A grant never lowers: an `invest` default with a `view` grant is still `invest`.
+		assert_eq!(AllocationAccess::effective(Invest, Some(View)), Invest);
+		assert_eq!(AllocationAccess::effective(Invest, None), Invest);
+	}
+
+	#[test]
+	fn the_subscribe_gate_refuses_on_state_before_access_and_by_different_kinds() {
+		let mut allocation = registered();
+		// Closed wins over locked: the answer that stays true after any grant.
+		allocation.close();
+		let err = allocation.ensure_subscribable(AllocationAccess::View).unwrap_err();
+		assert!(matches!(err, DomainError::Validation(ref m) if m.contains("closed")), "{err:?}");
+
+		allocation.open();
+		assert!(matches!(allocation.ensure_subscribable(AllocationAccess::Hidden).unwrap_err(), DomainError::Precondition(_)));
+		assert!(matches!(allocation.ensure_subscribable(AllocationAccess::View).unwrap_err(), DomainError::Precondition(_)));
+		assert!(allocation.ensure_subscribable(AllocationAccess::Invest).is_ok());
+	}
+
+	#[test]
+	fn access_never_gates_the_way_out() {
+		let mut allocation = registered();
+		allocation.open();
+		allocation.set_access(AllocationAccess::Hidden);
+		// An investor holding units in a product that was locked after they bought in
+		// must still be able to leave; `ensure_redeemable` takes no access at all.
+		assert!(allocation.ensure_redeemable().is_ok());
+		assert!(!allocation.is_listed_for(AllocationAccess::Hidden));
+	}
+
+	#[test]
+	fn setting_access_is_idempotent_and_audited() {
+		let mut allocation = registered();
+		allocation.drain_events();
+		allocation.set_access(AllocationAccess::View);
+		assert!(allocation.drain_events().is_empty(), "re-setting the level it holds raises nothing");
+		allocation.set_access(AllocationAccess::Invest);
+		allocation.set_access(AllocationAccess::Invest);
+		let events = allocation.drain_events();
+		assert_eq!(events.len(), 1);
+		assert!(matches!(
+			events[0],
+			AllocationEvent::AccessChanged {
+				access: AllocationAccess::Invest,
+				..
+			}
+		));
+		assert_eq!(allocation.access(), AllocationAccess::Invest);
+	}
+
+	#[test]
+	fn a_grant_carries_who_and_refuses_hidden() {
+		let mut allocation = registered();
+		allocation.drain_events();
+		let (investor, operator) = (UserId::new(), UserId::new());
+		// A grant only ever adds; `hidden` would be a no-op that reads as a lockout.
+		assert!(allocation.grant_access(investor, AllocationAccess::Hidden, operator).is_err());
+		assert!(allocation.drain_events().is_empty(), "a refused grant leaves no fact behind");
+
+		allocation.grant_access(investor, AllocationAccess::Invest, operator).unwrap();
+		allocation.revoke_access(investor, operator);
+		let events = allocation.drain_events();
+		assert_eq!(events.len(), 2);
+		assert!(matches!(&events[0], AllocationEvent::AccessGranted { user_id, level: AllocationAccess::Invest, granted_by, .. } if *user_id == investor && *granted_by == operator));
+		assert!(matches!(&events[1], AllocationEvent::AccessRevoked { user_id, revoked_by, .. } if *user_id == investor && *revoked_by == operator));
+		// Grants live beside the aggregate, so the default is untouched by either.
+		assert_eq!(allocation.access(), AllocationAccess::View);
+	}
+
+	#[test]
+	fn a_pre_access_registered_payload_still_deserializes() {
+		// `event_log` rows written before this field existed carry no `access` key.
+		let mut allocation = registered();
+		let json = serde_json::to_string(&allocation.drain_events().pop().unwrap()).unwrap();
+		let legacy = json.replace(r#","access":"view""#, "");
+		assert!(!legacy.contains("access"), "the legacy payload must actually lack the key: {legacy}");
+		let back: AllocationEvent = serde_json::from_str(&legacy).unwrap();
+		let AllocationEvent::Registered { access, .. } = back else {
+			panic!("expected Registered, got {back:?}")
+		};
+		assert_eq!(access, AllocationAccess::DEFAULT);
 	}
 
 	#[test]
