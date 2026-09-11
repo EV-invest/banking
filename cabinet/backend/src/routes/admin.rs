@@ -13,7 +13,10 @@ use axum::{
 	http::HeaderMap,
 };
 use axum_extra::extract::cookie::CookieJar;
-use evbanking_contracts::{allocation::icon as wire_icon, banking::v1 as bk};
+use evbanking_contracts::{
+	allocation::{access as wire_access, icon as wire_icon},
+	banking::v1 as bk,
+};
 use evconcierge_contracts::concierge::v1 as cc;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -516,6 +519,94 @@ pub async fn set_allocation_unit_cap(State(st): State<AppState>, jar: CookieJar,
 	Ok(Json(st.grpc.set_allocation_unit_cap(&token, req).await?.into()))
 }
 
+/// An access level a body named, checked against the wire vocabulary before the hub
+/// sees it. `grantable` narrows to what a per-investor grant may carry (`view` |
+/// `invest`): `hidden` is a real level for the product's default and not for a grant,
+/// which only ever raises. The hub refuses both cases too; this answers in the shape
+/// the console can render, and before a money-plane token is minted for a request
+/// that was never going to be served.
+fn allocation_access_level(v: &Value, key: &str, grantable: bool) -> Result<String, ApiError> {
+	let expected: &[&str] = if grantable { &wire_access::GRANTABLE } else { &wire_access::ALL };
+	let Some(level) = required(v, key) else {
+		return Err(ApiError::BadRequest(format!("{key} is required — one of {}", expected.join(", "))));
+	};
+	let known = if grantable { wire_access::is_grantable(&level) } else { wire_access::is_known(&level) };
+	if !known {
+		return Err(ApiError::BadRequest(format!("unknown access level '{level}' — expected one of {}", expected.join(", "))));
+	}
+	Ok(level)
+}
+
+/// `POST /api/admin/allocations/access` — set a product's default access level
+/// (`hidden` | `view` | `invest`). Orthogonal to `/state`: that says whether the product
+/// deals, this says with whom by default. Per-investor grants are untouched.
+pub async fn set_allocation_access(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let Some(service) = required(&v, "service") else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let access = allocation_access_level(&v, "access", false)?;
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::SetAllocationAccessRequest { service, access };
+	Ok(Json(st.grpc.set_allocation_access(&token, req).await?.into()))
+}
+
+/// `GET /api/admin/allocations/grants?service=` — every investor raised above the
+/// product's default, with who granted it and when.
+pub async fn list_allocation_access_grants(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::AllocationAccessGrantList>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let grants = st
+		.grpc
+		.list_allocation_access_grants(&token, &service)
+		.await
+		.map_err(|s| ApiError::read(s, "allocation access grants unavailable"))?;
+	Ok(Json(grants.into()))
+}
+
+/// `POST /api/admin/allocations/grants/grant` — raise one investor to `view` | `invest`
+/// on a product. A repeat for the same investor overwrites the level. `user_id` is the
+/// id the console carries for the user (concierge-first, banking as a fallback — the
+/// hub resolves it the way `/users/balance` does).
+pub async fn grant_allocation_access(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::AllocationAccessGrant>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(user_id)) = (required(&v, "service"), required(&v, "user_id")) else {
+		return Err(ApiError::BadRequest("service and user_id are required".into()));
+	};
+	let level = allocation_access_level(&v, "level", true)?;
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::GrantAllocationAccessRequest { service, user_id, level };
+	Ok(Json(st.grpc.grant_allocation_access(&token, req).await?.into()))
+}
+
+/// `POST /api/admin/allocations/grants/revoke` — take an investor's grant back; they
+/// fall to the product's default. Idempotent: revoking a grant that does not stand is
+/// still `ok`. Units they already hold are untouched and stay redeemable.
+pub async fn revoke_allocation_access(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(user_id)) = (required(&v, "service"), required(&v, "user_id")) else {
+		return Err(ApiError::BadRequest("service and user_id are required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	st.grpc.revoke_allocation_access(&token, bk::RevokeAllocationAccessRequest { service, user_id }).await?;
+	Ok(Json(json!({ "ok": true })))
+}
+
 /// `POST /api/admin/valuation/post` — post a fund NAV (with the fat-finger guard).
 pub async fn post_valuation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FundNav>, ApiError> {
 	require_admin(&st, &jar).await?;
@@ -826,6 +917,7 @@ mod admin_route_tests {
 		http::{Request, StatusCode, header},
 	};
 	use evbanking_contracts::banking::v1::{
+		allocations_service_server::{AllocationsService, AllocationsServiceServer},
 		auth_service_server::{AuthService as BkAuthService, AuthServiceServer as BkAuthServiceServer},
 		fees_service_server::{FeesService, FeesServiceServer},
 	};
@@ -871,6 +963,9 @@ mod admin_route_tests {
 		set_policy: Option<bk::SetFeePolicyRequest>,
 		settle: Option<bk::SettleFeeSharesRequest>,
 		set_kyc: Option<cc::SetKycLevelRequest>,
+		set_access: Option<bk::SetAllocationAccessRequest>,
+		grant: Option<bk::GrantAllocationAccessRequest>,
+		revoke: Option<bk::RevokeAllocationAccessRequest>,
 		money_tokens_issued: usize,
 	}
 
@@ -1137,6 +1232,91 @@ mod admin_route_tests {
 		}
 	}
 
+	/// The allocation the stub answers every access write with: the level the request
+	/// named as the new default, and an HONEST `caller_access` for the admin — `view`,
+	/// what they would get as an investor — so a test can see the BFF relays the two
+	/// fields distinctly rather than collapsing them.
+	fn stub_allocation(access: &str) -> bk::Allocation {
+		bk::Allocation {
+			service: SERVICE.into(),
+			title: "Quy Nhon".into(),
+			summary: String::new(),
+			state: "open".into(),
+			created_at: 1_750_000_000,
+			updated_at: 1_750_000_300,
+			unit_cap: "1000".into(),
+			icon: "real_estate".into(),
+			access: access.into(),
+			caller_access: "view".into(),
+		}
+	}
+
+	#[tonic::async_trait]
+	impl AllocationsService for Hub {
+		async fn set_allocation_access(&self, request: GrpcRequest<bk::SetAllocationAccessRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().set_access = Some(req.clone());
+			Ok(GrpcResponse::new(stub_allocation(&req.access)))
+		}
+
+		async fn grant_allocation_access(&self, request: GrpcRequest<bk::GrantAllocationAccessRequest>) -> Result<GrpcResponse<bk::AllocationAccessGrant>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().grant = Some(req.clone());
+			Ok(GrpcResponse::new(bk::AllocationAccessGrant {
+				service: req.service,
+				user_id: req.user_id,
+				level: req.level,
+				granted_by: "user-1".into(),
+				granted_at: 1_750_000_400,
+			}))
+		}
+
+		async fn revoke_allocation_access(&self, request: GrpcRequest<bk::RevokeAllocationAccessRequest>) -> Result<GrpcResponse<bk::RevokeAllocationAccessResponse>, Status> {
+			self.guard_money_plane(&request)?;
+			self.seen.lock().unwrap().revoke = Some(request.into_inner());
+			Ok(GrpcResponse::new(bk::RevokeAllocationAccessResponse {}))
+		}
+
+		async fn list_allocation_access_grants(&self, request: GrpcRequest<bk::ListAllocationAccessGrantsRequest>) -> Result<GrpcResponse<bk::AllocationAccessGrantList>, Status> {
+			self.guard_money_plane(&request)?;
+			Ok(GrpcResponse::new(bk::AllocationAccessGrantList {
+				grants: vec![bk::AllocationAccessGrant {
+					service: request.into_inner().service,
+					user_id: "investor-7".into(),
+					level: "invest".into(),
+					granted_by: "user-1".into(),
+					granted_at: 1_750_000_400,
+				}],
+			}))
+		}
+
+		async fn list_allocations(&self, _: GrpcRequest<bk::ListAllocationsRequest>) -> Result<GrpcResponse<bk::AllocationList>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn get_allocation(&self, _: GrpcRequest<bk::GetAllocationRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn register_allocation(&self, _: GrpcRequest<bk::RegisterAllocationRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn update_allocation(&self, _: GrpcRequest<bk::UpdateAllocationRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn set_allocation_state(&self, _: GrpcRequest<bk::SetAllocationStateRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn set_allocation_unit_cap(&self, _: GrpcRequest<bk::SetAllocationUnitCapRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+	}
+
 	// ── harness ─────────────────────────────────────────────────────────────────
 
 	fn now_secs() -> i64 {
@@ -1160,6 +1340,7 @@ mod admin_route_tests {
 				.add_service(CcAuthServiceServer::new(hub.clone()))
 				.add_service(UserDirectoryServer::new(hub.clone()))
 				.add_service(BkAuthServiceServer::new(hub.clone()))
+				.add_service(AllocationsServiceServer::new(hub.clone()))
 				.add_service(FeesServiceServer::new(hub))
 				.serve_with_incoming(TcpListenerStream::new(listener))
 				.await
@@ -1653,5 +1834,224 @@ mod admin_route_tests {
 			let forwarded = seen.lock().unwrap().set_kyc.clone().expect("the hub saw the write");
 			assert_eq!((forwarded.user_id.as_str(), forwarded.kyc_level), ("u1", level), "the tier must reach the hub unchanged");
 		}
+	}
+
+	// ── allocation access ───────────────────────────────────────────────────────
+
+	/// The four access routes sit behind the same three gates as everything else on the
+	/// console: session, role, CSRF on the mutations. Pinned here because these are the
+	/// routes that decide who a product deals with — an investor reaching them would be
+	/// letting themselves in.
+	#[tokio::test]
+	async fn the_access_routes_are_gated_like_the_rest_of_the_console() {
+		let hub = Hub::new("investor");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, _) = send(&app, signed("GET", "/api/admin/allocations/grants?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not read who was let in");
+		for (uri, body) in [
+			("/api/admin/allocations/access", r#"{"service":"quy-nhon","access":"invest"}"#),
+			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","user_id":"investor-7","level":"invest"}"#),
+			("/api/admin/allocations/grants/revoke", r#"{"service":"quy-nhon","user_id":"investor-7"}"#),
+		] {
+			let (status, _) = send(&app, signed("POST", uri, Some(body), true)).await;
+			assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not change access: {uri}");
+		}
+
+		let admin = Hub::new("admin");
+		let admin_seen = admin.seen.clone();
+		let admin_app = self::app(serve(admin).await);
+		let (status, _) = send(
+			&admin_app,
+			signed("POST", "/api/admin/allocations/access", Some(r#"{"service":"quy-nhon","access":"invest"}"#), false),
+		)
+		.await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "opening a product to everyone must require the CSRF echo");
+		let (status, _) = send(
+			&admin_app,
+			signed(
+				"POST",
+				"/api/admin/allocations/grants/grant",
+				Some(r#"{"service":"quy-nhon","user_id":"investor-7","level":"invest"}"#),
+				false,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "granting must require the CSRF echo");
+
+		for seen in [seen, admin_seen] {
+			let seen = seen.lock().unwrap();
+			assert!(
+				seen.set_access.is_none() && seen.grant.is_none() && seen.revoke.is_none(),
+				"a refused caller must never reach the hub"
+			);
+			assert_eq!(seen.money_tokens_issued, 0, "a refused request must not mint a money-plane token");
+		}
+	}
+
+	/// Setting the default forwards the level verbatim, and the row comes back with BOTH
+	/// access fields — the product's default and the caller's own effective level — kept
+	/// distinct. Collapsing them would tell the console an admin "can invest" in a product
+	/// they just locked.
+	#[tokio::test]
+	async fn setting_the_default_access_forwards_the_level_and_relays_both_access_fields() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(&app, signed("POST", "/api/admin/allocations/access", Some(r#"{"service":"quy-nhon","access":"hidden"}"#), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(body["service"], SERVICE);
+		assert_eq!(body["access"], "hidden", "the product's default, as the hub applied it");
+		assert_eq!(body["caller_access"], "view", "the caller's own level, not the default and not their permission");
+		assert_eq!(body["updated_at"], "1750000300", "int64s cross as strings");
+
+		let forwarded = seen.lock().unwrap().set_access.clone().expect("the hub saw the write");
+		assert_eq!((forwarded.service.as_str(), forwarded.access.as_str()), (SERVICE, "hidden"));
+	}
+
+	/// A level outside the vocabulary — or, for a grant, `hidden`, which is a real level
+	/// that a grant may not carry — is refused here, before a money token is minted for a
+	/// request the hub was never going to serve. The message names what was expected.
+	#[tokio::test]
+	async fn an_access_level_outside_the_vocabulary_is_refused_locally() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for (uri, body) in [
+			("/api/admin/allocations/access", r#"{"service":"quy-nhon","access":"public"}"#),
+			("/api/admin/allocations/access", r#"{"service":"quy-nhon","access":""}"#),
+			("/api/admin/allocations/access", r#"{"service":"quy-nhon"}"#),
+			("/api/admin/allocations/access", r#"{"access":"invest"}"#),
+			// `hidden` is the product-default floor, never a grant: a grant only raises.
+			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","user_id":"investor-7","level":"hidden"}"#),
+			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","user_id":"investor-7","level":"owner"}"#),
+			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","user_id":"investor-7"}"#),
+			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","level":"invest"}"#),
+			("/api/admin/allocations/grants/revoke", r#"{"service":"quy-nhon"}"#),
+		] {
+			let (status, response) = send(&app, signed("POST", uri, Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {uri} {body}");
+			assert!(response["error"].is_string(), "the refusal says why: {response}");
+		}
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				"/api/admin/allocations/grants/grant",
+				Some(r#"{"service":"quy-nhon","user_id":"investor-7","level":"hidden"}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::BAD_REQUEST);
+		let reason = body["error"].as_str().unwrap_or_default();
+		assert!(
+			reason.contains("view") && reason.contains("invest") && !reason.contains("hidden, "),
+			"a grant's refusal lists the grantable levels only: {reason}"
+		);
+
+		let seen = seen.lock().unwrap();
+		assert!(
+			seen.set_access.is_none() && seen.grant.is_none() && seen.revoke.is_none(),
+			"a malformed level must never reach the hub"
+		);
+		assert_eq!(seen.money_tokens_issued, 0, "a body we are going to refuse must not cost a money-token mint");
+	}
+
+	/// Granting forwards the investor and the level as given and relays the grant the hub
+	/// wrote — `granted_at` as a string like every other int64; revoking forwards the pair
+	/// and answers `ok` (the hub is idempotent, so there is nothing else to say).
+	#[tokio::test]
+	async fn granting_and_revoking_forward_the_investor_and_relay_the_grant() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				"/api/admin/allocations/grants/grant",
+				Some(r#"{"service":"quy-nhon","user_id":"investor-7","level":"view"}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(body["service"], SERVICE);
+		assert_eq!(body["user_id"], "investor-7");
+		assert_eq!(body["level"], "view");
+		assert_eq!(body["granted_by"], "user-1");
+		assert_eq!(body["granted_at"], "1750000400", "granted_at must serialize as a string, not a number");
+		let forwarded = seen.lock().unwrap().grant.clone().expect("the hub saw the grant");
+		assert_eq!(
+			(forwarded.service.as_str(), forwarded.user_id.as_str(), forwarded.level.as_str()),
+			(SERVICE, "investor-7", "view")
+		);
+
+		let (status, body) = send(
+			&app,
+			signed("POST", "/api/admin/allocations/grants/revoke", Some(r#"{"service":"quy-nhon","user_id":"investor-7"}"#), true),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(body["ok"], true);
+		let forwarded = seen.lock().unwrap().revoke.clone().expect("the hub saw the revoke");
+		assert_eq!((forwarded.service.as_str(), forwarded.user_id.as_str()), (SERVICE, "investor-7"));
+	}
+
+	/// The grant list names its fund in the query string; a missing one is decided here.
+	#[tokio::test]
+	async fn the_grant_list_names_its_fund_and_keeps_every_column() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for uri in [
+			"/api/admin/allocations/grants",
+			"/api/admin/allocations/grants?service=",
+			"/api/admin/allocations/grants?service=%20",
+		] {
+			let (status, _) = send(&app, signed("GET", uri, None, false)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "{uri} must be rejected before the hub is called");
+		}
+		assert_eq!(seen.lock().unwrap().money_tokens_issued, 0);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/allocations/grants?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+		let row = &body["grants"][0];
+		assert_eq!(row["service"], SERVICE);
+		assert_eq!(row["user_id"], "investor-7");
+		assert_eq!(row["level"], "invest");
+		assert_eq!(row["granted_by"], "user-1");
+		assert_eq!(row["granted_at"], "1750000400");
+	}
+
+	/// The hub re-checks `AllocationManage` and answers its own codes; a grant for a user
+	/// the money plane does not know is NOT_FOUND, and that must reach the console as a
+	/// 404 carrying the reason rather than as a generic upstream failure.
+	#[tokio::test]
+	async fn an_upstream_refusal_on_an_access_write_surfaces_with_its_code() {
+		let app = app(serve(Hub::failing("admin", Code::NotFound)).await);
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				"/api/admin/allocations/grants/grant",
+				Some(r#"{"service":"quy-nhon","user_id":"nobody","level":"invest"}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::NOT_FOUND);
+		assert_eq!(body["error"], "upstream refused");
+
+		let app = self::app(serve(Hub::failing("admin", Code::Internal)).await);
+		let (status, body) = send(&app, signed("GET", "/api/admin/allocations/grants?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::BAD_GATEWAY);
+		assert_eq!(body["error"], "allocation access grants unavailable", "a read must not relay the hub's own message");
 	}
 }

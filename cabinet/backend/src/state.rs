@@ -252,6 +252,24 @@ impl Grpc {
 		Ok(self.allocations().set_allocation_unit_cap(bearer(token, req)?).await?.into_inner())
 	}
 
+	pub async fn set_allocation_access(&self, token: &str, req: bk::SetAllocationAccessRequest) -> Result<bk::Allocation, Status> {
+		Ok(self.allocations().set_allocation_access(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn grant_allocation_access(&self, token: &str, req: bk::GrantAllocationAccessRequest) -> Result<bk::AllocationAccessGrant, Status> {
+		Ok(self.allocations().grant_allocation_access(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn revoke_allocation_access(&self, token: &str, req: bk::RevokeAllocationAccessRequest) -> Result<(), Status> {
+		self.allocations().revoke_allocation_access(bearer(token, req)?).await?;
+		Ok(())
+	}
+
+	pub async fn list_allocation_access_grants(&self, token: &str, service: &str) -> Result<bk::AllocationAccessGrantList, Status> {
+		let req = bk::ListAllocationAccessGrantsRequest { service: service.to_string() };
+		Ok(self.allocations().list_allocation_access_grants(bearer(token, req)?).await?.into_inner())
+	}
+
 	pub async fn fund_nav(&self, token: &str, service: &str) -> Result<bk::FundNav, Status> {
 		let req = bk::GetFundNavRequest { service: service.to_string() };
 		Ok(self.funds().get_fund_nav(bearer(token, req)?).await?.into_inner())

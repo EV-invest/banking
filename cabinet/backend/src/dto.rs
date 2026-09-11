@@ -394,6 +394,15 @@ pub struct Allocation {
 	/// *cached* allocation from before this field existed still has to tolerate its
 	/// absence.
 	pub icon: String,
+	/// The product's default access level: `hidden` | `view` | `invest`. What the
+	/// admin console edits; an investor screen renders the card off the field below.
+	pub access: String,
+	/// The level the CALLER effectively holds — `max(access, their grant)`. The
+	/// subscribe control keys off this, never off `state` alone: an `open` product at
+	/// `view` is one the investor can see and cannot buy into. Honest for an admin too
+	/// (their permission does not make them an investor), so the console must not read
+	/// it as "what investors get".
+	pub caller_access: String,
 }
 
 impl From<bk::Allocation> for Allocation {
@@ -405,6 +414,8 @@ impl From<bk::Allocation> for Allocation {
 			state: a.state,
 			unit_cap: a.unit_cap,
 			icon: a.icon,
+			access: a.access,
+			caller_access: a.caller_access,
 			created_at: a.created_at.to_string(),
 			updated_at: a.updated_at.to_string(),
 		}
@@ -412,6 +423,34 @@ impl From<bk::Allocation> for Allocation {
 }
 
 list_dto! { AllocationList from bk::AllocationList { allocations: Vec<Allocation> } }
+
+/// One investor raised above a product's default level. `user_id` and `granted_by` are
+/// BANKING user ids (what the money plane stores), like the redemption queue's — the
+/// console resolves them the way it does there. `granted_at` crosses as a string like
+/// every other int64.
+#[derive(Serialize)]
+pub struct AllocationAccessGrant {
+	pub service: String,
+	pub user_id: String,
+	/// `view` | `invest`.
+	pub level: String,
+	pub granted_by: String,
+	pub granted_at: String,
+}
+
+impl From<bk::AllocationAccessGrant> for AllocationAccessGrant {
+	fn from(g: bk::AllocationAccessGrant) -> Self {
+		Self {
+			service: g.service,
+			user_id: g.user_id,
+			level: g.level,
+			granted_by: g.granted_by,
+			granted_at: g.granted_at.to_string(),
+		}
+	}
+}
+
+list_dto! { AllocationAccessGrantList from bk::AllocationAccessGrantList { grants: Vec<AllocationAccessGrant> } }
 
 // ── piggybank: funds (the service currency) ──────────────────────────────────
 
