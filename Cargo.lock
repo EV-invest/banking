@@ -1842,7 +1842,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_auth"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=899117d8ae39ef7c27b3a3e0dcb5c223db4b1dda#899117d8ae39ef7c27b3a3e0dcb5c223db4b1dda"
+source = "git+https://github.com/EV-invest/concierge.git?rev=06e494dc877222005d49ae8efb0aabec32740c07#06e494dc877222005d49ae8efb0aabec32740c07"
 dependencies = [
  "color-eyre",
  "ev_lib",
@@ -1864,7 +1864,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_contracts"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=899117d8ae39ef7c27b3a3e0dcb5c223db4b1dda#899117d8ae39ef7c27b3a3e0dcb5c223db4b1dda"
+source = "git+https://github.com/EV-invest/concierge.git?rev=06e494dc877222005d49ae8efb0aabec32740c07#06e494dc877222005d49ae8efb0aabec32740c07"
 dependencies = [
  "prost 0.14.4",
  "tonic 0.14.6",

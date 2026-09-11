@@ -3216,7 +3216,7 @@ export type ConciergeV1GetUserRequest = {
  *
  * The typed governance mails this plane knows how to render.
  */
-export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED';
+export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED' | 'GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT';
 
 /**
  * GovernanceTick
@@ -3813,6 +3813,96 @@ export type ConciergeV1OwnerRemovalList = {
 export type ConciergeV1OwnerRemovalState = 'OWNER_REMOVAL_STATE_UNSPECIFIED' | 'OWNER_REMOVAL_STATE_OPEN' | 'OWNER_REMOVAL_STATE_EXECUTED' | 'OWNER_REMOVAL_STATE_REJECTED' | 'OWNER_REMOVAL_STATE_EXPIRED' | 'OWNER_REMOVAL_STATE_CANCELLED' | 'OWNER_REMOVAL_STATE_VOID';
 
 /**
+ * PaymentConsentMail
+ *
+ * One user's consent to a payment that moves their own money.
+ *
+ * WHY subject_user_id EXISTS BESIDE SendGovernanceMailRequest.user_id. Every other kind
+ * is addressed to a fund owner, and "is this recipient an owner?" is a fact this plane
+ * holds independently of anything the money plane says. This kind has no such fact to
+ * check against: any user may consent to their own transfer, so "is this the right
+ * recipient?" is unanswerable from the addressing field alone. So the money plane must
+ * state, in the TYPED payload, whose money is moving — and the relay refuses unless the
+ * user it is being asked to write to IS that person. A caller that fans one consent out
+ * to a second mailbox has to contradict itself in the same message to do it.
+ *
+ * It is a redundancy on purpose. The address is still resolved HERE from the identity
+ * record and never taken from either field.
+ */
+export type ConciergeV1PaymentConsentMail = {
+    /**
+     * payment_id
+     */
+    payment_id?: string;
+    /**
+     * subject_user_id
+     *
+     * Concierge canonical id of the user whose money moves. MUST equal the request's
+     * user_id; the relay refuses the mail otherwise.
+     */
+    subject_user_id?: string;
+    /**
+     * initiator_email
+     *
+     * The operator who opened the payment. Shown so the subject knows who is asking.
+     */
+    initiator_email?: string;
+    /**
+     * tier
+     *
+     * internal | service | external. A closed set: an unknown tier is a bug in the money
+     * plane, not a string to render at a person deciding whether to part with money.
+     */
+    tier?: string;
+    /**
+     * source
+     *
+     * Where the money leaves from, in words a person recognises (not an account id).
+     */
+    source?: string;
+    /**
+     * destination
+     *
+     * Where it lands, in words a person recognises.
+     */
+    destination?: string;
+    /**
+     * amount
+     */
+    amount?: string;
+    /**
+     * reason
+     *
+     * Why the payment was opened, written by the operator and shown to the subject
+     * VERBATIM. Required — a consent request with no stated reason is one nobody can
+     * judge. Rendered under its own label so it never reads as a platform statement, and
+     * refused outright if it carries a control character: the text part of a mail is not
+     * escaped, so a newline here would forge the Amount/To lines this mail exists to show.
+     */
+    reason?: string;
+    /**
+     * payload_hash
+     */
+    payload_hash?: string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * approval_url
+     *
+     * Absolute URL of the consent page, carrying the opaque token.
+     */
+    approval_url?: string;
+    /**
+     * code
+     *
+     * The secret code the subject types on that page.
+     */
+    code?: string;
+};
+
+/**
  * PayoutApprovalMail
  */
 export type ConciergeV1PayoutApprovalMail = {
@@ -4070,6 +4160,10 @@ export type ConciergeV1SendGovernanceMailRequest = {
      * payout_outcome
      */
     payout_outcome?: ConciergeV1PayoutOutcomeMail;
+    /**
+     * payment_consent
+     */
+    payment_consent?: ConciergeV1PaymentConsentMail;
 };
 
 /**
