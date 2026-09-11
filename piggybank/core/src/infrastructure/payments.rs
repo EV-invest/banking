@@ -23,7 +23,7 @@ use domain::{
 	consilium::ConsiliumId,
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
-	payments::{PaymentDestination, PaymentEffect, PaymentEvent, PaymentId, PaymentOrder, PaymentReason, PaymentState, PaymentTerms},
+	payments::{PaymentApproval, PaymentDestination, PaymentEffect, PaymentEvent, PaymentId, PaymentOrder, PaymentReason, PaymentState, PaymentTerms},
 	users::UserId,
 	withdrawals::WithdrawalId,
 };
@@ -327,6 +327,26 @@ async fn persist(conn: &mut PgConnection, order: &mut PaymentOrder) -> Result<()
 	outbox::drain_to_outbox_by(conn, order, PaymentEvent::relays).await
 }
 
+/// Refuse a seat that is not the one the order's terms call for.
+///
+/// The requirement is read off the SOURCE and the seat is minted by the caller, so the two
+/// are two statements of one fact — and the interesting failure is where they disagree: an
+/// owner quorum seated over an investor's money, or one investor's consent over the fund's.
+/// The schema refuses both too (each seat table carries a composite FK into `payments`), but
+/// a foreign-key error is an infrastructure string; this names the mismatch before a row is
+/// written.
+fn require_seat_matches(seat: &ApprovalSeat, requirement: PaymentApproval) -> Result<(), DomainError> {
+	match (seat, requirement) {
+		(ApprovalSeat::Consilium(_), PaymentApproval::OwnerConsilium) => Ok(()),
+		(ApprovalSeat::Consent(credential), PaymentApproval::SubjectConsent(subject)) if credential.subject == subject => Ok(()),
+		(ApprovalSeat::Consent(_), PaymentApproval::SubjectConsent(_)) => Err(DomainError::Validation("the consent seat names an investor other than the order's source".into())),
+		(ApprovalSeat::Consilium(_), PaymentApproval::SubjectConsent(_)) => Err(DomainError::Validation(
+			"an investor's own money is decided by that investor's consent, not by the owner quorum".into(),
+		)),
+		(ApprovalSeat::Consent(_), PaymentApproval::OwnerConsilium) => Err(DomainError::Validation("fund-owned money is decided by the owner quorum, not by one investor's consent".into())),
+	}
+}
+
 /// The `(kind, id)` column pair for a destination, plus the address pair. Exactly one side is
 /// populated, which is what `payments_destination_is_coherent` states to the database.
 fn destination_columns(to: &PaymentDestination) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
@@ -339,6 +359,7 @@ fn destination_columns(to: &PaymentDestination) -> (Option<String>, Option<Strin
 #[async_trait]
 impl PaymentRepository for PgPayments {
 	async fn open(&self, order: &mut PaymentOrder, seat: ApprovalSeat) -> Result<(), DomainError> {
+		require_seat_matches(&seat, order.requirement())?;
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		// A payment spends the same claims a withdrawal or a subscription does. Skipping this
 		// would not fail loudly — it would silently stop the serialization those two rely on
@@ -376,6 +397,9 @@ impl PaymentRepository for PgPayments {
 
 		match seat {
 			ApprovalSeat::Consilium(consilium) => {
+				// The composite FK on (payment_id, fund_owned) refuses a quorum seat over an
+				// investor's order — the mirror of the consent seat's FK below — so the check
+				// at the top is the first statement of §3 and the schema is the second.
 				sqlx::query("INSERT INTO payment_approval (payment_id, consilium_id) VALUES ($1, $2)")
 					.bind(order.id().raw())
 					.bind(consilium.raw())

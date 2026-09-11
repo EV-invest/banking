@@ -57,6 +57,11 @@ CREATE TABLE payments (
     -- `from_id`. It exists only to carry the composite FK `payment_consent` points at (see
     -- that table): a generated column is the one kind of second copy that cannot drift.
     source_user_id         UUID GENERATED ALWAYS AS (CASE WHEN from_kind = 'user' THEN from_id::uuid END) STORED,
+    -- Its mirror image for the other requirement: whether the source is the fund's money,
+    -- derived by the DATABASE for the same reason. It exists only to carry the composite FK
+    -- `payment_approval` points at, so an owner-quorum seat can only ever attach to an order
+    -- the quorum actually decides.
+    fund_owned             BOOLEAN GENERATED ALWAYS AS (from_kind <> 'user') STORED,
 
     -- EXACTLY ONE DESTINATION SHAPE. An internal party names a claim; an external one names
     -- a network AND an address. A row with both would have two answers to "what tier is
@@ -79,7 +84,10 @@ CREATE TABLE payments (
     CONSTRAINT payments_failure_states_why CHECK ((state = 'execution_failed') = (failure_reason IS NOT NULL)),
     -- The composite target `payment_consent` references, so a consent seat can only ever
     -- name its own payment's actual source user.
-    CONSTRAINT payments_id_source_user_key UNIQUE (id, source_user_id)
+    CONSTRAINT payments_id_source_user_key UNIQUE (id, source_user_id),
+    -- The composite target `payment_approval` references, so a quorum seat can only ever
+    -- name a payment whose source is actually the fund's.
+    CONSTRAINT payments_id_fund_owned_key UNIQUE (id, fund_owned)
 );
 
 -- AT MOST ONE OPEN PAYMENT PER FUND-OWNED SOURCE CLAIM.
@@ -126,10 +134,20 @@ CREATE INDEX payments_to_user_idx ON payments (to_id, created_at DESC) WHERE to_
 --
 -- Both sides are unique: a payment has one consilium, and a consilium authorizes one payment.
 -- `ON DELETE RESTRICT` on the consilium end because a governance record is never deleted.
+--
+-- WHY THE COMPOSITE FK, the mirror of `payment_consent`'s. §3 says fund-owned money is
+-- decided by the owner quorum and an investor's claim by that investor alone; the consent
+-- table below makes the second half unrepresentable otherwise, and this makes the first. A
+-- user-sourced order generates `fund_owned = FALSE`, so the `(id, TRUE)` pair this row must
+-- reference does not exist for it — an owner quorum cannot be seated over an investor's
+-- money by any code path, forgotten check or not.
 CREATE TABLE payment_approval (
     payment_id   UUID PRIMARY KEY REFERENCES payments (id) ON DELETE CASCADE,
     consilium_id UUID NOT NULL UNIQUE REFERENCES consilium (id) ON DELETE RESTRICT,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- Always TRUE, and only ever TRUE: the column is the FK's second key and nothing else.
+    fund_owned   BOOLEAN NOT NULL DEFAULT TRUE CHECK (fund_owned),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (payment_id, fund_owned) REFERENCES payments (id, fund_owned) ON DELETE CASCADE
 );
 
 -- The investor-consent requirement, MATERIALIZED — one seat, and the credentials mailed to it.

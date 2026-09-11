@@ -176,6 +176,48 @@ async fn a_consent_seat_can_only_name_its_payments_own_source_user() {
 	reset_payments(&pool).await;
 }
 
+/// The mirror image of the test above, for the other requirement. `payments.fund_owned` is
+/// GENERATED from `from_kind`, and `payment_approval` carries a composite FK over
+/// `(payment_id, fund_owned)` with the second key pinned to TRUE — so an owner quorum cannot
+/// be seated over an investor's order by any code path, and a fund-owned order takes one.
+#[tokio::test]
+async fn a_quorum_seat_can_only_attach_to_a_fund_owned_order() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments schema tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let own = Uuid::new_v4();
+	let fund_owned = Uuid::new_v4();
+	insert_payment(&pool, own, "pending", "user", Some(&investor.to_string()), "revenue", investor)
+		.await
+		.expect("open the investor's order");
+	insert_payment(&pool, fund_owned, "pending", "revenue", None, "piggybank", investor)
+		.await
+		.expect("open a fund-owned order");
+
+	let consilium = a_decided_consilium(&pool, investor).await;
+	assert!(
+		quorum_seat(&pool, own, consilium).await.is_err(),
+		"an owner quorum must not be seated over an investor's own money"
+	);
+	quorum_seat(&pool, fund_owned, consilium).await.expect("the fund's order takes its quorum seat");
+
+	reset_payments(&pool).await;
+	sqlx::query("DELETE FROM consilium WHERE id = $1").bind(consilium.raw()).execute(&pool).await.ok();
+}
+
+async fn quorum_seat(pool: &PgPool, payment: Uuid, consilium: ConsiliumId) -> Result<(), sqlx::Error> {
+	sqlx::query("INSERT INTO payment_approval (payment_id, consilium_id) VALUES ($1, $2)")
+		.bind(payment)
+		.bind(consilium.raw())
+		.execute(pool)
+		.await
+		.map(|_| ())
+}
+
 async fn seat(pool: &PgPool, payment: Uuid, subject: UserId) -> Result<(), sqlx::Error> {
 	sqlx::query(
 		"INSERT INTO payment_consent (payment_id, subject_user_id, token_hash, code_hash, expires_at, subject_token_version_at_open, subject_email_hash_at_open) \
@@ -308,6 +350,44 @@ async fn opening_an_order_materializes_its_consent_seat_and_relays_nothing() {
 	assert_eq!(consent.attempts_remaining, MAX_CODE_ATTEMPTS as u32);
 	assert!(relayed_kinds(&pool, id).await.is_empty(), "a pending order has moved no money");
 
+	reset_payments(&pool).await;
+}
+
+/// The seat is minted by the caller and the requirement is read off the terms, so `open` is
+/// where the two can first disagree. Each mismatch is refused BEFORE a row is written, by
+/// name, rather than surfacing as the foreign-key string the schema would otherwise answer.
+#[tokio::test]
+async fn open_refuses_a_seat_that_is_not_the_one_the_terms_call_for() {
+	let _guard = exclusive_payments().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping payments adapter tests");
+		return;
+	};
+	reset_payments(&pool).await;
+	let investor = an_investor(&pool).await;
+	let stranger = an_investor(&pool).await;
+	let payments = PgPayments::new(pool.clone());
+	let consilium = a_decided_consilium(&pool, investor).await;
+
+	// An owner quorum over an investor's own money.
+	let mut own = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.00");
+	let refused = payments.open(&mut own, ApprovalSeat::Consilium(consilium)).await;
+	assert!(matches!(refused, Err(DomainError::Validation(_))), "a quorum seat over an investor's order: {refused:?}");
+	assert!(payments.find(own.id()).await.unwrap().is_none(), "a refused open writes nothing");
+
+	// One investor's consent over the fund's money.
+	let mut fund = an_order(Party::Revenue, PaymentDestination::Internal(Party::Piggybank), investor, "1.00");
+	let refused = payments.open(&mut fund, a_consent_seat(&pool, investor).await).await;
+	assert!(matches!(refused, Err(DomainError::Validation(_))), "a consent seat over a fund-owned order: {refused:?}");
+	assert!(payments.find(fund.id()).await.unwrap().is_none());
+
+	// The right kind of seat, naming the wrong investor.
+	let mut own = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.00");
+	let refused = payments.open(&mut own, a_consent_seat(&pool, stranger).await).await;
+	assert!(matches!(refused, Err(DomainError::Validation(_))), "a consent seat naming a stranger: {refused:?}");
+	assert!(payments.find(own.id()).await.unwrap().is_none());
+
+	sqlx::query("DELETE FROM consilium WHERE id = $1").bind(consilium.raw()).execute(&pool).await.ok();
 	reset_payments(&pool).await;
 }
 
