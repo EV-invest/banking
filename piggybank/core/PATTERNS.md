@@ -552,7 +552,12 @@ pending transfers (`timeout = 0` — the saga owns the lifecycle, never TB's clo
   the **same** `UserClaim`, yet live in different tables — so a per-table `FOR UPDATE` (the
   redemptions' `fund_positions` lock) does **not** serialize a withdraw against a subscribe.
   Both `PgWithdrawals::open` and `PgSubscriptions::open` therefore take one **shared** lock
-  first: `pg_advisory_xact_lock` keyed on the user id ([`outbox::lock_user`]), held to commit.
+  first: `pg_advisory_xact_lock` keyed on the claim ([`outbox::lock_claim`], of which
+  `lock_user` and `lock_revenue_claim` are the two named cases), held to commit. The key for
+  those two is **frozen** at what every released binary computes — the raw user id, and a
+  fixed v5 name for `fee` — so a rolling deploy cannot leave old and new writers serializing
+  on different targets; `the_generalized_claim_lock_keeps_the_keys_the_old_helpers_computed`
+  pins it.
   This serializes the two `open` transactions on a single target (an advisory lock needs no
   `users` row and no FK, so it engages unconditionally). It shrinks but does not erase the
   optimistic-Read-First window: the reservation is applied by the relay **after** commit, so a
