@@ -11,13 +11,15 @@
 use std::sync::Arc;
 
 use domain::{
-	allocations::{Allocation, AllocationIcon, AllocationId, AllocationState},
+	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId, AllocationState},
+	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party, ServiceId},
+	error::DomainError,
 	money::{Network, Shares, TxRef, Usdt},
-	users::UserId,
+	users::{Email, UserId},
 };
 use piggybank_core::{
-	application::{balance as balance_app, funds as funds_app},
+	application::{allocations as allocations_app, balance as balance_app, funds as funds_app},
 	infrastructure::{
 		allocations::PgAllocations,
 		custody::StubCustody,
@@ -29,8 +31,9 @@ use piggybank_core::{
 		relay::Relay,
 		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
+		users::PgUsers,
 	},
-	ports::{AllocationRegistry, ledger::Ledger},
+	ports::{AllocationRegistry, UserRepository, ledger::Ledger},
 };
 use sqlx::{
 	AssertSqlSafe, PgPool,
@@ -42,6 +45,7 @@ use uuid::Uuid;
 struct Harness {
 	pool: PgPool,
 	allocations: PgAllocations,
+	users: PgUsers,
 	subs: PgSubscriptions,
 	reds: PgRedemptions,
 	nav: PgNav,
@@ -68,6 +72,7 @@ async fn harness() -> Option<Harness> {
 	let notify = Arc::new(Notify::new());
 	Some(Harness {
 		allocations: PgAllocations::new(pool.clone()),
+		users: PgUsers::new(pool.clone()),
 		subs: PgSubscriptions::new(pool.clone()),
 		reds: PgRedemptions::new(pool.clone()),
 		nav: PgNav::new(pool.clone()),
@@ -108,6 +113,20 @@ fn now_unix() -> i64 {
 
 async fn register(h: &Harness, service: &ServiceId) -> Allocation {
 	register_with_icon(h, service, AllocationIcon::default()).await
+}
+
+/// Open for business AND to everyone: the two operator decisions a product dealing with
+/// the public needs. The lifecycle tests below are about `state`, so they take both.
+async fn open_to_everyone(h: &Harness, service: &ServiceId) {
+	h.allocations.open(service).await.unwrap();
+	h.allocations.set_access(service, AllocationAccess::Invest).await.unwrap();
+}
+
+/// A real `users` row — grants reference the table, as they do in production.
+async fn provisioned_user(h: &Harness) -> UserId {
+	let subject = AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap();
+	let email = Email::parse(&format!("u{}@example.com", Uuid::new_v4().simple())).unwrap();
+	h.users.provision(subject, email, true).await.unwrap().id()
 }
 
 async fn register_with_icon(h: &Harness, service: &ServiceId, icon: AllocationIcon) -> Allocation {
@@ -160,7 +179,7 @@ async fn a_draft_allocation_takes_no_money_until_opened() {
 	// Registered but still `draft` — listing and funding are separate operator decisions.
 	assert!(subscribe(&h, user, &service, "50").await.is_err(), "a draft must not accept money");
 
-	h.allocations.open(&service).await.unwrap();
+	open_to_everyone(&h, &service).await;
 	subscribe(&h, user, &service, "50").await.unwrap();
 	h.relay.drain().await;
 	let held = h.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await.unwrap();
@@ -174,7 +193,7 @@ async fn closing_stops_new_money_but_never_traps_an_investor() {
 	let service = unique_service();
 	fund_user(&h, user, "100").await;
 	register(&h, &service).await;
-	h.allocations.open(&service).await.unwrap();
+	open_to_everyone(&h, &service).await;
 	subscribe(&h, user, &service, "100").await.unwrap();
 	h.relay.drain().await;
 
@@ -252,12 +271,26 @@ async fn the_catalog_hides_drafts_and_closed_from_investors() {
 	h.allocations.open(&closed).await.unwrap();
 	h.allocations.close(&closed).await.unwrap();
 
-	let listed: Vec<String> = h.allocations.list(false).await.unwrap().iter().map(|r| r.allocation.service().to_string()).collect();
+	let listed: Vec<String> = h
+		.allocations
+		.list_for(UserId::new(), false)
+		.await
+		.unwrap()
+		.iter()
+		.map(|r| r.allocation.service().to_string())
+		.collect();
 	assert!(listed.contains(&open.to_string()), "an open allocation is in the investor catalog");
 	assert!(!listed.contains(&draft.to_string()), "a draft is hidden");
 	assert!(!listed.contains(&closed.to_string()), "a closed allocation is hidden");
 
-	let all: Vec<String> = h.allocations.list(true).await.unwrap().iter().map(|r| r.allocation.service().to_string()).collect();
+	let all: Vec<String> = h
+		.allocations
+		.list_for(UserId::new(), true)
+		.await
+		.unwrap()
+		.iter()
+		.map(|r| r.allocation.service().to_string())
+		.collect();
 	for service in [&draft, &open, &closed] {
 		assert!(all.contains(&service.to_string()), "include_unlisted surfaces {service}");
 	}
@@ -290,7 +323,7 @@ async fn a_subscription_past_the_unit_cap_is_refused_before_any_money_moves() {
 	let service = unique_service();
 	fund_user(&h, user, "200").await;
 	register(&h, &service).await;
-	h.allocations.open(&service).await.unwrap();
+	open_to_everyone(&h, &service).await;
 	// Sized to a hundred units — the whole point of the cap is that "open" and "unbounded"
 	// are different things.
 	h.allocations.set_unit_cap(&service, shares("100")).await.unwrap();
@@ -318,7 +351,7 @@ async fn narrowing_the_cap_below_the_issued_supply_stops_issuance_without_trappi
 	let service = unique_service();
 	fund_user(&h, user, "100").await;
 	register(&h, &service).await;
-	h.allocations.open(&service).await.unwrap();
+	open_to_everyone(&h, &service).await;
 	subscribe(&h, user, &service, "100").await.unwrap();
 	h.relay.drain().await;
 
@@ -397,7 +430,7 @@ async fn the_icon_is_stored_survives_a_reload_and_is_editable() {
 	);
 
 	// The catalog read carries it too — that projection is what the cabinet renders.
-	let listed = h.allocations.list(true).await.unwrap();
+	let listed = h.allocations.list_for(UserId::new(), true).await.unwrap();
 	let row = listed.iter().find(|r| r.allocation.service() == &service).expect("the registered product is in the catalog");
 	assert_eq!(row.allocation.icon(), AllocationIcon::Arbitrage);
 
@@ -438,7 +471,7 @@ async fn a_row_written_by_a_pod_that_predates_the_icon_column_reads_back_as_the_
 	assert_eq!(stored, "fund", "the column DEFAULT is what fills the gap the old writer leaves");
 	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().icon(), AllocationIcon::Fund);
 	// And it is in the catalog the cabinet renders, not just readable one row at a time.
-	let listed = h.allocations.list(true).await.unwrap();
+	let listed = h.allocations.list_for(UserId::new(), true).await.unwrap();
 	let row = listed.iter().find(|r| r.allocation.service() == &service).expect("the legacy row is in the catalog");
 	assert_eq!(row.allocation.icon(), AllocationIcon::Fund);
 }
@@ -532,7 +565,7 @@ async fn an_icon_from_a_wider_vocabulary_reads_back_as_the_default_instead_of_fa
 	let allocations = PgAllocations::new(probe.clone());
 
 	let found = allocations.find(&service).await;
-	let listed = allocations.list(true).await;
+	let listed = allocations.list_for(UserId::new(), true).await;
 	probe.close().await;
 	sqlx::query(AssertSqlSafe(format!("DROP SCHEMA {schema} CASCADE"))).execute(&h.pool).await.unwrap();
 
@@ -575,4 +608,271 @@ async fn an_update_that_names_no_icon_keeps_the_one_the_operator_picked() {
 	let reset = h.allocations.update_details(&service, "EV Property", "", Some(AllocationIcon::default())).await.unwrap();
 	assert_eq!(reset.icon(), AllocationIcon::Fund);
 	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().icon(), AllocationIcon::Fund);
+}
+
+// ── access: who sees a product, and who may put money in ─────────────────────
+
+#[tokio::test]
+async fn a_registration_lands_on_view_and_setting_access_is_idempotent_and_audited() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	let allocation = register(&h, &service).await;
+
+	// "Closed by default": the column and the aggregate agree on `view`.
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().access(), AllocationAccess::View);
+	let stored: String = sqlx::query_scalar("SELECT access FROM allocations WHERE service = $1")
+		.bind(service.as_str())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(stored, "view");
+
+	assert_eq!(h.allocations.set_access(&service, AllocationAccess::Invest).await.unwrap().access(), AllocationAccess::Invest);
+	assert_eq!(
+		h.allocations.set_access(&service, AllocationAccess::Invest).await.unwrap().access(),
+		AllocationAccess::Invest,
+		"re-setting is a no-op"
+	);
+	assert_eq!(
+		h.allocations.find(&service).await.unwrap().unwrap().access(),
+		AllocationAccess::Invest,
+		"the level survives a reload"
+	);
+
+	// Registered + one real change = two audit facts; the repeat left none.
+	let logged: i64 = sqlx::query_scalar("SELECT count(*) FROM event_log WHERE aggregate = 'allocation' AND aggregate_id = $1")
+		.bind(allocation.id().raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(logged, 2, "an idempotent re-set must not spam the log");
+	assert!(h.allocations.set_access(&unique_service(), AllocationAccess::Invest).await.is_err(), "unregistered is NotFound");
+}
+
+#[tokio::test]
+async fn every_access_level_the_domain_knows_is_accepted_by_the_column() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+	// The CHECK in 0030 spells the same strings as the enum; a level the domain knows
+	// but the column refuses would surface as `internal` on an operator's command.
+	for level in [AllocationAccess::Hidden, AllocationAccess::View, AllocationAccess::Invest] {
+		h.allocations
+			.set_access(&service, level)
+			.await
+			.unwrap_or_else(|err| panic!("the column refuses {level:?}, which the domain calls legal — migration 0030 is missing it: {err}"));
+		assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().access(), level);
+	}
+	let err = sqlx::query("UPDATE allocations SET access = 'public' WHERE service = $1")
+		.bind(service.as_str())
+		.execute(&h.pool)
+		.await
+		.unwrap_err();
+	let db_err = err.as_database_error().expect("a server-side error");
+	assert_eq!(db_err.code().as_deref(), Some("23514"), "23514 is check_violation; got {err}");
+	assert_eq!(db_err.constraint(), Some("allocations_access_check"), "refused by some other constraint: {err}");
+}
+
+#[tokio::test]
+async fn the_effective_level_is_the_higher_of_default_and_grant() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+	let investor = provisioned_user(&h).await;
+	let operator = provisioned_user(&h).await;
+
+	// No grant: the default is what the investor holds.
+	assert_eq!(h.allocations.find_for(&service, investor).await.unwrap().unwrap().caller_access, AllocationAccess::View);
+
+	// A grant raises above the default…
+	let grant = h.allocations.grant_access(&service, investor, AllocationAccess::Invest, operator).await.unwrap();
+	assert_eq!((grant.user_id, grant.level, grant.granted_by), (investor, AllocationAccess::Invest, operator));
+	assert!(grant.granted_at > 0, "the grant is dated by the database");
+	assert_eq!(h.allocations.find_for(&service, investor).await.unwrap().unwrap().caller_access, AllocationAccess::Invest);
+	// …for that investor only.
+	assert_eq!(h.allocations.find_for(&service, operator).await.unwrap().unwrap().caller_access, AllocationAccess::View);
+
+	// A grant never lowers: raising the default past it leaves the investor at the default.
+	h.allocations.set_access(&service, AllocationAccess::Invest).await.unwrap();
+	h.allocations.grant_access(&service, investor, AllocationAccess::View, operator).await.unwrap();
+	assert_eq!(h.allocations.find_for(&service, investor).await.unwrap().unwrap().caller_access, AllocationAccess::Invest);
+
+	// Lowering the default all the way down leaves the `view` grant standing.
+	h.allocations.set_access(&service, AllocationAccess::Hidden).await.unwrap();
+	assert_eq!(h.allocations.find_for(&service, investor).await.unwrap().unwrap().caller_access, AllocationAccess::View);
+	assert_eq!(h.allocations.find_for(&service, operator).await.unwrap().unwrap().caller_access, AllocationAccess::Hidden);
+
+	// The caller-agnostic read carries the default alone — the redeem gate wants nothing else.
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().access(), AllocationAccess::Hidden);
+}
+
+#[tokio::test]
+async fn grants_overwrite_revoke_idempotently_and_are_audited() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	let allocation = register(&h, &service).await;
+	let investor = provisioned_user(&h).await;
+	let operator = provisioned_user(&h).await;
+	let events = |aggregate_id: Uuid| {
+		let pool = h.pool.clone();
+		async move {
+			sqlx::query_scalar::<_, i64>("SELECT count(*) FROM event_log WHERE aggregate = 'allocation' AND aggregate_id = $1")
+				.bind(aggregate_id)
+				.fetch_one(&pool)
+				.await
+				.unwrap()
+		}
+	};
+	let baseline = events(allocation.id().raw()).await;
+
+	// `hidden` is not a level a grant may carry — refused as bad input, nothing written.
+	let err = h.allocations.grant_access(&service, investor, AllocationAccess::Hidden, operator).await.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(_)), "{err:?}");
+	assert!(h.allocations.list_grants(&service).await.unwrap().is_empty());
+
+	h.allocations.grant_access(&service, investor, AllocationAccess::View, operator).await.unwrap();
+	h.allocations.grant_access(&service, investor, AllocationAccess::View, operator).await.unwrap();
+	assert_eq!(events(allocation.id().raw()).await, baseline + 1, "a repeat grant at the same level leaves no fact");
+
+	// A repeat at a different level overwrites — one row, new level, one more fact.
+	let grant = h.allocations.grant_access(&service, investor, AllocationAccess::Invest, operator).await.unwrap();
+	assert_eq!(grant.level, AllocationAccess::Invest);
+	let grants = h.allocations.list_grants(&service).await.unwrap();
+	assert_eq!(grants.len(), 1);
+	assert_eq!(grants[0].level, AllocationAccess::Invest);
+	assert_eq!(events(allocation.id().raw()).await, baseline + 2);
+
+	// Revoke: once with a fact, again without — and the investor is back at the default.
+	h.allocations.revoke_access(&service, investor, operator).await.unwrap();
+	h.allocations.revoke_access(&service, investor, operator).await.unwrap();
+	assert!(h.allocations.list_grants(&service).await.unwrap().is_empty());
+	assert_eq!(events(allocation.id().raw()).await, baseline + 3, "revoking nothing is unlogged");
+	assert_eq!(h.allocations.find_for(&service, investor).await.unwrap().unwrap().caller_access, AllocationAccess::View);
+
+	// Grants are audit facts, never relay work.
+	let relayed: i64 = sqlx::query_scalar("SELECT count(*) FROM outbox WHERE aggregate = 'allocation'").fetch_one(&h.pool).await.unwrap();
+	assert_eq!(relayed, 0);
+
+	// An unregistered product has no grants to list, grant or revoke — NotFound, not empty.
+	let ghost = unique_service();
+	assert!(matches!(h.allocations.list_grants(&ghost).await, Err(DomainError::NotFound { entity: "allocation", .. })));
+	assert!(matches!(
+		h.allocations.grant_access(&ghost, investor, AllocationAccess::View, operator).await,
+		Err(DomainError::NotFound { .. })
+	));
+	assert!(matches!(h.allocations.revoke_access(&ghost, investor, operator).await, Err(DomainError::NotFound { .. })));
+}
+
+#[tokio::test]
+async fn the_catalog_hides_a_hidden_product_until_the_investor_is_granted() {
+	let Some(h) = harness().await else { return };
+	let hidden = unique_service();
+	let viewable = unique_service();
+	let investable = unique_service();
+	for service in [&hidden, &viewable, &investable] {
+		register(&h, service).await;
+		h.allocations.open(service).await.unwrap();
+	}
+	h.allocations.set_access(&hidden, AllocationAccess::Hidden).await.unwrap();
+	h.allocations.set_access(&investable, AllocationAccess::Invest).await.unwrap();
+	let investor = provisioned_user(&h).await;
+	let operator = provisioned_user(&h).await;
+	let catalog = |include_unlisted: bool| {
+		let allocations = &h.allocations;
+		async move {
+			allocations
+				.list_for(investor, include_unlisted)
+				.await
+				.unwrap()
+				.into_iter()
+				.map(|r| (r.allocation.service().to_string(), r.caller_access))
+				.collect::<Vec<_>>()
+		}
+	};
+
+	let listed = catalog(false).await;
+	assert!(listed.contains(&(viewable.to_string(), AllocationAccess::View)), "a `view` product is in the catalog, locked");
+	assert!(listed.contains(&(investable.to_string(), AllocationAccess::Invest)));
+	assert!(!listed.iter().any(|(s, _)| *s == hidden.to_string()), "a hidden product is not");
+
+	// A `view` grant is enough to surface it — and the row says what the investor holds.
+	h.allocations.grant_access(&hidden, investor, AllocationAccess::View, operator).await.unwrap();
+	assert!(catalog(false).await.contains(&(hidden.to_string(), AllocationAccess::View)), "granted `view`, so listed");
+	// The grant is per investor: the operator, holding none, still does not see it.
+	let operators_view: Vec<String> = h
+		.allocations
+		.list_for(operator, false)
+		.await
+		.unwrap()
+		.iter()
+		.map(|r| r.allocation.service().to_string())
+		.collect();
+	assert!(!operators_view.contains(&hidden.to_string()));
+
+	// The manager's unfiltered list carries every product, and still the HONEST level
+	// for the caller rather than a courtesy `invest`.
+	let all = catalog(true).await;
+	assert!(all.contains(&(hidden.to_string(), AllocationAccess::View)));
+	assert!(all.contains(&(viewable.to_string(), AllocationAccess::View)));
+	let for_operator = h.allocations.list_for(operator, true).await.unwrap();
+	let row = for_operator
+		.iter()
+		.find(|r| r.allocation.service() == &hidden)
+		.expect("include_unlisted surfaces the hidden product");
+	assert_eq!(row.caller_access, AllocationAccess::Hidden, "the manager's own effective level, not their permission");
+}
+
+#[tokio::test]
+async fn a_hidden_product_is_not_found_for_an_investor_but_readable_by_a_manager() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+	h.allocations.open(&service).await.unwrap();
+	h.allocations.set_access(&service, AllocationAccess::Hidden).await.unwrap();
+	let investor = provisioned_user(&h).await;
+	let operator = provisioned_user(&h).await;
+
+	// The application-layer read is what `GetAllocation` runs: hidden answers exactly as
+	// an unregistered slug does, so the catalog cannot be probed for locked products.
+	let err = allocations_app::get_for(&h.allocations, &service, investor, false).await.unwrap_err();
+	assert!(matches!(err, DomainError::NotFound { entity: "allocation", .. }), "{err:?}");
+	// `unrestricted` is the AllocationManage view — everything, with the honest level.
+	let record = allocations_app::get_for(&h.allocations, &service, investor, true).await.unwrap();
+	assert_eq!(record.caller_access, AllocationAccess::Hidden);
+	assert!(record.created_at > 0 && record.updated_at >= record.created_at, "a read carries the DB-stamped timestamps");
+
+	// A `view` grant makes it readable to that investor without any manager privilege.
+	h.allocations.grant_access(&service, investor, AllocationAccess::View, operator).await.unwrap();
+	let record = allocations_app::get_for(&h.allocations, &service, investor, false).await.unwrap();
+	assert_eq!(record.caller_access, AllocationAccess::View);
+	assert_eq!(
+		record.allocation.access(),
+		AllocationAccess::Hidden,
+		"the product's default is reported beside the caller's level"
+	);
+}
+
+#[tokio::test]
+async fn a_row_written_by_a_pod_that_predates_the_access_column_lands_locked() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	// The INSERT the currently deployed code runs names its columns and knows no
+	// `access`; the column default must land it on `view` — visible, locked — so a
+	// product registered mid-rollout lets nobody in by accident.
+	sqlx::query("INSERT INTO allocations (id, service, title, summary, state, unit_cap, icon) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+		.bind(Uuid::new_v4())
+		.bind(service.as_str())
+		.bind("Legacy Fund")
+		.bind("Registered by a pod that had never heard of access")
+		.bind("open")
+		.bind(domain::allocations::DEFAULT_UNIT_CAP.base_units().to_string())
+		.bind("fund")
+		.execute(&h.pool)
+		.await
+		.expect("the old INSERT must keep working — a migration that breaks it breaks the rolling deploy");
+	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().access(), AllocationAccess::View);
+	let user = UserId::new();
+	fund_user(&h, user, "10").await;
+	let err = subscribe(&h, user, &service, "10").await.unwrap_err();
+	assert!(matches!(err, DomainError::Precondition(_)), "listed but locked: {err:?}");
 }

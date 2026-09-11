@@ -345,7 +345,7 @@ const EXECUTION_GRACE_SECS: i64 = 24 * 60 * 60;
 /// goes to the log where an operator will look for it.
 fn failure_reason(err: &DomainError) -> String {
 	match err {
-		DomainError::Validation(_) | DomainError::Conflict(_) | DomainError::Forbidden(_) | DomainError::NotFound { .. } => err.to_string(),
+		DomainError::Validation(_) | DomainError::Conflict(_) | DomainError::Forbidden(_) | DomainError::Precondition(_) | DomainError::NotFound { .. } => err.to_string(),
 		DomainError::Repository(detail) => {
 			tracing::error!(detail = %detail, "consilium: payout creation failed on an infrastructure error");
 			"the payout could not be created because of an internal error; an operator has been alerted".to_owned()

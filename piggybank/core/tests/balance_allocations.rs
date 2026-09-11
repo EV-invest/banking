@@ -12,6 +12,7 @@
 use std::sync::Arc;
 
 use domain::{
+	allocations::AllocationAccess,
 	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
 	error::DomainError,
@@ -96,10 +97,19 @@ fn unique_service() -> ServiceId {
 	ServiceId::parse(&format!("svc-{}", Uuid::new_v4())).unwrap()
 }
 
-/// A unique service that is also REGISTERED AND OPEN in the allocation registry — the
-/// state every money path now requires. Tests that only poke the ledger directly keep
-/// using the bare [`unique_service`].
+/// A unique service that is also REGISTERED, OPEN and at `invest` access in the
+/// allocation registry — the state every money path now requires of a product that
+/// deals with anyone. Tests that only poke the ledger directly keep using the bare
+/// [`unique_service`]; the access tests below register their own at the locked default.
 async fn registered_service(h: &Harness) -> ServiceId {
+	let service = registered_locked_service(h).await;
+	h.allocations.set_access(&service, AllocationAccess::Invest).await.unwrap();
+	service
+}
+
+/// Registered and open, but left at the access level a registration lands on (`view`):
+/// listed, and refusing money from anyone an operator has not let in.
+async fn registered_locked_service(h: &Harness) -> ServiceId {
 	let service = unique_service();
 	let mut allocation = domain::allocations::Allocation::register(
 		domain::allocations::AllocationId::new(),
@@ -931,4 +941,111 @@ async fn settle_refuses_reduction_until_the_subscribe_projection_lands() {
 		"TB holding agrees: 30 burned"
 	);
 	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(user)).await, usdt("30"), "the payout (30 × seed NAV) reached the user");
+}
+
+// ── access: who a product deals with ─────────────────────────────────────────
+
+/// The money side of "closed by default". A product an operator opened but has not
+/// opened TO this investor refuses their subscription with its own kind of error —
+/// distinguishable from "not open" (validation) and from the cap (validation) — and,
+/// crucially, before any money moves. A grant to `invest` then lets the same request
+/// through; a grant to `view` does not.
+#[tokio::test]
+async fn subscribe_refuses_an_investor_the_product_is_not_open_to_until_granted() {
+	let Some(h) = harness().await else { return };
+	let users = PgUsers::new(h.pool.clone());
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let fund_ports = funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &nav_repo,
+		relay: &h.notify,
+	};
+	// Grants reference `users`, so these are real rows — as they are in production.
+	let investor = active_user(&h.pool, &users).await;
+	let operator = active_user(&h.pool, &users).await;
+	let service = registered_locked_service(&h).await;
+	let now = now_unix();
+
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(investor), Network::Bep20, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	let err = funds_app::subscribe(&fund_ports, &subs, investor, service.clone(), usdt("50"), now).await.unwrap_err();
+	assert!(
+		matches!(err, DomainError::Precondition(ref m) if m.contains("grant")),
+		"locked is its own kind of refusal: {err:?}"
+	);
+	h.relay.drain().await;
+	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(investor)).await, usdt("100"), "refused before any money moved");
+	assert!(units(&h, &LedgerAccountKey::SharesOutstanding(service.clone())).await.is_zero(), "nothing minted");
+
+	// `view` is a grant, but not enough to put money in.
+	h.allocations.grant_access(&service, investor, AllocationAccess::View, operator).await.unwrap();
+	let err = funds_app::subscribe(&fund_ports, &subs, investor, service.clone(), usdt("50"), now).await.unwrap_err();
+	assert!(matches!(err, DomainError::Precondition(_)), "{err:?}");
+
+	// A repeat grant overwrites the level, and `invest` opens the door for this investor.
+	h.allocations.grant_access(&service, investor, AllocationAccess::Invest, operator).await.unwrap();
+	funds_app::subscribe(&fund_ports, &subs, investor, service.clone(), usdt("50"), now).await.unwrap();
+	h.relay.drain().await;
+	assert_eq!(units(&h, &LedgerAccountKey::UserShares(service.clone(), investor)).await, shares("50"), "minted once granted");
+
+	// The product is still locked for everyone else — the grant is per investor.
+	let stranger = UserId::new();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(stranger), Network::Bep20, usdt("10"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	let err = funds_app::subscribe(&fund_ports, &subs, stranger, service.clone(), usdt("10"), now).await.unwrap_err();
+	assert!(matches!(err, DomainError::Precondition(_)), "{err:?}");
+}
+
+/// The other way in: raising the product's DEFAULT to `invest` admits everyone, no
+/// grant needed — and lowering it back locks new money without touching what is held.
+#[tokio::test]
+async fn an_invest_default_admits_anyone_and_lowering_it_never_traps_a_holder() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let fund_ports = funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &nav_repo,
+		relay: &h.notify,
+	};
+	let user = UserId::new();
+	let service = registered_locked_service(&h).await;
+	let now = now_unix();
+
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	h.allocations.set_access(&service, AllocationAccess::Invest).await.unwrap();
+	funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
+	h.relay.drain().await;
+	assert_eq!(units(&h, &LedgerAccountKey::UserShares(service.clone(), user)).await, shares("100"));
+
+	// The operator locks the product down completely — hidden from everyone without a
+	// grant. New money stops…
+	h.allocations.set_access(&service, AllocationAccess::Hidden).await.unwrap();
+	let err = funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("1"), now).await.unwrap_err();
+	assert!(
+		matches!(err, DomainError::NotFound { entity: "allocation", .. }),
+		"a hidden product answers as unregistered: {err:?}"
+	);
+
+	// …but the holder gets out in full: redemptions never consult access. Refusing here
+	// would lock 100 units of real money inside a product the investor can no longer see.
+	let redemption = funds_app::request_redemption(&fund_ports, &reds, user, service.clone(), shares("100"), now)
+		.await
+		.expect("a locked product must still redeem");
+	assert_eq!(redemption.state(), RedemptionState::Completed, "the fund's own claim covers it, so it settles at once");
+	h.relay.drain().await;
+	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(user)).await, usdt("100"), "the investor's cash came back");
 }

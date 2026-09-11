@@ -8,24 +8,39 @@ package banking.v1;
 // the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service
 // with no registered, open allocation, so a user can never mint a fund by typing an
 // unknown slug. Money never flows through this service — amounts, units and NAV stay
-// on FundsService/BalanceService; here live identity, presentation and lifecycle only.
+// on FundsService/BalanceService; here live identity, presentation, lifecycle and
+// access only.
 //
 // Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +
 // redeem) → `closed` (redeem only, so a closed product never traps an investor).
 // `closed` → `open` re-opens. Registration and every transition require
 // `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.
 //
-// Reads are open to any authenticated user; `ListAllocations` returns only `open`
-// allocations unless the caller holds `AllocationManage` and asks for all. See
+// Access is a second axis, orthogonal to the lifecycle. `state` says whether the
+// product takes money at all; `access` says WHO may see it and who may put money in.
+// Every allocation carries a default level — `hidden` | `view` | `invest` — and an
+// operator may raise one investor above it with a per-user grant (`view` | `invest`).
+// The level a caller effectively holds is the higher of the two. A registration lands
+// on `view`: visible, but locked until an operator opens it or grants the investor.
+//
+// Reads are open to any authenticated user, filtered by that effective level:
+// `ListAllocations` returns only `open` allocations the caller may at least view, and
+// `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller
+// holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses
+// (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is
+// never gated on access, so locking a product cannot trap an investor. See
 // docs/ARCHITECTURE.md.
 service AllocationsService {
-  // The catalog. Any authenticated user sees the `open` allocations; an
-  // `AllocationManage` holder may set `include_unlisted` to see drafts and closed
-  // ones too. Ordered by `service`.
+  // The catalog. Any authenticated user sees the `open` allocations they may at least
+  // view; an `AllocationManage` holder may set `include_unlisted` to see drafts,
+  // closed and hidden ones too. Ordered by `service`.
   rpc ListAllocations(ListAllocationsRequest) returns (AllocationList);
 
   // One allocation by service id. Readable by any authenticated user in any state —
-  // an investor holding units of a closed product still needs to render it.
+  // an investor holding units of a closed product still needs to render it — but a
+  // product whose effective level for the caller is `hidden` is NOT_FOUND, the same
+  // answer an unregistered slug gets, so the catalog cannot be probed for locked
+  // products. An `AllocationManage` holder reads any allocation.
   rpc GetAllocation(GetAllocationRequest) returns (Allocation);
 
   // Register a new allocation in `draft` (AllocationManage). The service id is a
@@ -48,6 +63,27 @@ service AllocationsService {
   // untouched, so this can never strand a holder. Zero is refused: use
   // SetAllocationState(`closed`) to stop new money, which says so in the state.
   rpc SetAllocationUnitCap(SetAllocationUnitCapRequest) returns (Allocation);
+
+  // Set the default access level (AllocationManage): `hidden` | `view` | `invest`.
+  // Idempotent. Separate from SetAllocationState because the two answer different
+  // questions — `state` is whether the product deals, `access` is who it deals with —
+  // and collapsing them would make "open but invite-only" unexpressible. Lowering
+  // the default never touches a per-user grant, and never touches redemptions.
+  rpc SetAllocationAccess(SetAllocationAccessRequest) returns (Allocation);
+
+  // Raise one investor above the default (AllocationManage): `view` | `invest`. A
+  // repeat grant for the same user overwrites the level. A grant can only ever add —
+  // an investor's effective level is the higher of the default and the grant — so
+  // `hidden` is not a level a grant can carry; use Revoke to take one back.
+  rpc GrantAllocationAccess(GrantAllocationAccessRequest) returns (AllocationAccessGrant);
+
+  // Take a per-user grant back (AllocationManage). Idempotent — revoking a grant that
+  // does not exist succeeds and changes nothing. The investor falls back to the
+  // default level; units they already hold are unaffected and still redeemable.
+  rpc RevokeAllocationAccess(RevokeAllocationAccessRequest) returns (RevokeAllocationAccessResponse);
+
+  // Every standing grant on one allocation (AllocationManage), ordered by `user_id`.
+  rpc ListAllocationAccessGrants(ListAllocationAccessGrantsRequest) returns (AllocationAccessGrantList);
 }
 
 // One registered investable product. Carries no money: units, NAV and positions are
@@ -64,6 +100,29 @@ message Allocation {
   // fund | real_estate | trading | yield | venture | treasury | commodity | credit |
   // index | arbitrage. Always populated on a response — `fund` is the default.
   string icon = 8;
+  // The product's default access level: hidden | view | invest. What an investor
+  // with no grant holds. A registration lands on `view`.
+  string access = 9;
+  // The level the CALLER effectively holds — the higher of `access` and the caller's
+  // own grant, if any. Populated honestly for everyone, an `AllocationManage` holder
+  // included: their permission lets them read and administer the product, it does not
+  // make them an investor in it, so a manager's `caller_access` says what they would
+  // get as one. A client renders the card off `access` and the subscribe control off
+  // this — never off `state` alone.
+  string caller_access = 10;
+}
+
+// One investor raised above an allocation's default level.
+message AllocationAccessGrant {
+  string service = 1;
+  string user_id = 2;    // the investor (banking user id)
+  string level = 3;      // view | invest
+  string granted_by = 4; // the AllocationManage holder who granted it
+  int64 granted_at = 5;  // unix seconds
+}
+
+message AllocationAccessGrantList {
+  repeated AllocationAccessGrant grants = 1;
 }
 
 message AllocationList {
@@ -71,8 +130,8 @@ message AllocationList {
 }
 
 message ListAllocationsRequest {
-  // Include `draft` and `closed` allocations. Requires AllocationManage; a caller
-  // without it is refused rather than silently downgraded to the open-only list.
+  // Include `draft`, `closed` and `hidden` allocations. Requires AllocationManage; a
+  // caller without it is refused rather than silently downgraded to the visible list.
   bool include_unlisted = 1;
 }
 
@@ -118,4 +177,26 @@ message SetAllocationStateRequest {
 message SetAllocationUnitCapRequest {
   string service = 1;
   string unit_cap = 2;  // decimal units, > 0 (e.g. "1000" or "100000000")
+}
+
+message SetAllocationAccessRequest {
+  string service = 1;
+  string access = 2;  // hidden | view | invest
+}
+
+message GrantAllocationAccessRequest {
+  string service = 1;
+  string user_id = 2;  // the investor's banking user id
+  string level = 3;    // view | invest (never hidden — a grant only ever adds)
+}
+
+message RevokeAllocationAccessRequest {
+  string service = 1;
+  string user_id = 2;
+}
+
+message RevokeAllocationAccessResponse {}
+
+message ListAllocationAccessGrantsRequest {
+  string service = 1;
 }

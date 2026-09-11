@@ -8,7 +8,7 @@
           "banking.v1.AllocationsService"
         ],
         "summary": "GetAllocation",
-        "description": "One allocation by service id. Readable by any authenticated user in any state —\n an investor holding units of a closed product still needs to render it.",
+        "description": "One allocation by service id. Readable by any authenticated user in any state —\n an investor holding units of a closed product still needs to render it — but a\n product whose effective level for the caller is `hidden` is NOT_FOUND, the same\n answer an unregistered slug gets, so the catalog cannot be probed for locked\n products. An `AllocationManage` holder reads any allocation.",
         "operationId": "banking.v1.AllocationsService.GetAllocation",
         "parameters": [
           {
@@ -61,13 +61,131 @@
         }
       }
     },
+    "/banking.v1.AllocationsService/GrantAllocationAccess": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "GrantAllocationAccess",
+        "description": "Raise one investor above the default (AllocationManage): `view` | `invest`. A\n repeat grant for the same user overwrites the level. A grant can only ever add —\n an investor's effective level is the higher of the default and the grant — so\n `hidden` is not a level a grant can carry; use Revoke to take one back.",
+        "operationId": "banking.v1.AllocationsService.GrantAllocationAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GrantAllocationAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.AllocationAccessGrant"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/ListAllocationAccessGrants": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "ListAllocationAccessGrants",
+        "description": "Every standing grant on one allocation (AllocationManage), ordered by `user_id`.",
+        "operationId": "banking.v1.AllocationsService.ListAllocationAccessGrants",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListAllocationAccessGrantsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.AllocationAccessGrantList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.AllocationsService/ListAllocations": {
       "post": {
         "tags": [
           "banking.v1.AllocationsService"
         ],
         "summary": "ListAllocations",
-        "description": "The catalog. Any authenticated user sees the `open` allocations; an\n `AllocationManage` holder may set `include_unlisted` to see drafts and closed\n ones too. Ordered by `service`.",
+        "description": "The catalog. Any authenticated user sees the `open` allocations they may at least\n view; an `AllocationManage` holder may set `include_unlisted` to see drafts,\n closed and hidden ones too. Ordered by `service`.",
         "operationId": "banking.v1.AllocationsService.ListAllocations",
         "parameters": [
           {
@@ -150,6 +268,124 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/banking.v1.RegisterAllocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/RevokeAllocationAccess": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "RevokeAllocationAccess",
+        "description": "Take a per-user grant back (AllocationManage). Idempotent — revoking a grant that\n does not exist succeeds and changes nothing. The investor falls back to the\n default level; units they already hold are unaffected and still redeemable.",
+        "operationId": "banking.v1.AllocationsService.RevokeAllocationAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RevokeAllocationAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.RevokeAllocationAccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/SetAllocationAccess": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "SetAllocationAccess",
+        "description": "Set the default access level (AllocationManage): `hidden` | `view` | `invest`.\n Idempotent. Separate from SetAllocationState because the two answer different\n questions — `state` is whether the product deals, `access` is who it deals with —\n and collapsing them would make \"open but invite-only\" unexpressible. Lowering\n the default never touches a per-user grant, and never touches redemptions.",
+        "operationId": "banking.v1.AllocationsService.SetAllocationAccess",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetAllocationAccessRequest"
               }
             }
           },
@@ -5944,11 +6180,71 @@
             "type": "string",
             "title": "icon",
             "description": "Catalog glyph the client maps onto one of its SVGs. Presentation only. One of:\n fund | real_estate | trading | yield | venture | treasury | commodity | credit |\n index | arbitrage. Always populated on a response — `fund` is the default."
+          },
+          "access": {
+            "type": "string",
+            "title": "access",
+            "description": "The product's default access level: hidden | view | invest. What an investor\n with no grant holds. A registration lands on `view`."
+          },
+          "caller_access": {
+            "type": "string",
+            "title": "caller_access",
+            "description": "The level the CALLER effectively holds — the higher of `access` and the caller's\n own grant, if any. Populated honestly for everyone, an `AllocationManage` holder\n included: their permission lets them read and administer the product, it does not\n make them an investor in it, so a manager's `caller_access` says what they would\n get as one. A client renders the card off `access` and the subscribe control off\n this — never off `state` alone."
           }
         },
         "title": "Allocation",
         "additionalProperties": false,
         "description": "One registered investable product. Carries no money: units, NAV and positions are\n read from FundsService against the same `service` id."
+      },
+      "banking.v1.AllocationAccessGrant": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "the investor (banking user id)"
+          },
+          "level": {
+            "type": "string",
+            "title": "level",
+            "description": "view | invest"
+          },
+          "granted_by": {
+            "type": "string",
+            "title": "granted_by",
+            "description": "the AllocationManage holder who granted it"
+          },
+          "granted_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "granted_at",
+            "format": "int64",
+            "description": "unix seconds"
+          }
+        },
+        "title": "AllocationAccessGrant",
+        "additionalProperties": false,
+        "description": "One investor raised above an allocation's default level."
+      },
+      "banking.v1.AllocationAccessGrantList": {
+        "type": "object",
+        "properties": {
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.AllocationAccessGrant"
+            },
+            "title": "grants"
+          }
+        },
+        "title": "AllocationAccessGrantList",
+        "additionalProperties": false
       },
       "banking.v1.AllocationList": {
         "type": "object",
@@ -6839,6 +7135,27 @@
         "title": "GetWalletRequest",
         "additionalProperties": false
       },
+      "banking.v1.GrantAllocationAccessRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "the investor's banking user id"
+          },
+          "level": {
+            "type": "string",
+            "title": "level",
+            "description": "view | invest (never hidden — a grant only ever adds)"
+          }
+        },
+        "title": "GrantAllocationAccessRequest",
+        "additionalProperties": false
+      },
       "banking.v1.IssueUserTokenRequest": {
         "type": "object",
         "properties": {
@@ -6911,13 +7228,24 @@
         "title": "JwksResponse",
         "additionalProperties": false
       },
+      "banking.v1.ListAllocationAccessGrantsRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "ListAllocationAccessGrantsRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListAllocationsRequest": {
         "type": "object",
         "properties": {
           "include_unlisted": {
             "type": "boolean",
             "title": "include_unlisted",
-            "description": "Include `draft` and `closed` allocations. Requires AllocationManage; a caller\n without it is refused rather than silently downgraded to the open-only list."
+            "description": "Include `draft`, `closed` and `hidden` allocations. Requires AllocationManage; a\n caller without it is refused rather than silently downgraded to the visible list."
           }
         },
         "title": "ListAllocationsRequest",
@@ -7807,6 +8135,26 @@
         "additionalProperties": false,
         "description": "Per-rail payout options, the mirror of WalletService's `NetworkWithdrawable`.\n `payable` is the whole available revenue (a request beyond `instant` is accepted and\n queued until the treasury is topped up); `instant` ships without queueing."
       },
+      "banking.v1.RevokeAllocationAccessRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          }
+        },
+        "title": "RevokeAllocationAccessRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.RevokeAllocationAccessResponse": {
+        "type": "object",
+        "title": "RevokeAllocationAccessResponse",
+        "additionalProperties": false
+      },
       "banking.v1.RevokeSessionRequest": {
         "type": "object",
         "properties": {
@@ -7946,6 +8294,22 @@
         "title": "Session",
         "additionalProperties": false,
         "description": "One active session = one refresh-token family. Timestamps are unix SECONDS."
+      },
+      "banking.v1.SetAllocationAccessRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "access": {
+            "type": "string",
+            "title": "access",
+            "description": "hidden | view | invest"
+          }
+        },
+        "title": "SetAllocationAccessRequest",
+        "additionalProperties": false
       },
       "banking.v1.SetAllocationStateRequest": {
         "type": "object",
@@ -10204,7 +10568,7 @@
   "tags": [
     {
       "name": "banking.v1.AllocationsService",
-      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation and lifecycle only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Reads are open to any authenticated user; `ListAllocations` returns only `open`\n allocations unless the caller holds `AllocationManage` and asks for all. See\n docs/ARCHITECTURE.md."
+      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md."
     },
     {
       "name": "banking.v1.AuthService",
