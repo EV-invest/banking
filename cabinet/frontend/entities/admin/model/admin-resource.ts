@@ -14,6 +14,7 @@
 // of re-fetching by hand, which keeps every other open surface in step for free.
 
 import {
+  fetchAllocationAccessGrants,
   fetchAllocations as fetchAdminAllocations,
   fetchCabinet,
   fetchFundRevenue,
@@ -141,6 +142,18 @@ export const adminAllocationsResource = defineResource({
   fetch: fetchAdminAllocations,
   revalidate: 30,
   tags: [TAG.adminAllocations],
+});
+
+// Who is raised above a product's default access, per service — operational cadence: the
+// grants panel opens on a specific product and an operator granting or revoking there is
+// looking at the roster *now*.
+export const allocationAccessGrantsResource = defineResource({
+  name: "admin.allocationGrants",
+  fetch: fetchAllocationAccessGrants,
+  key: (service) => service,
+  revalidate: OPERATIONAL,
+  tags: [TAG.adminAllocationGrants],
+  enabled: (service) => service.trim().length > 0,
 });
 
 // Keyed on the whole filter set: a search is a different question, not a refinement of the

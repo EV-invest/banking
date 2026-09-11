@@ -5,7 +5,7 @@
 // list and the product page must not describe the same fund two different ways.
 
 import { useT } from "@evinvest/i18n/react";
-import { Clock } from "lucide-react";
+import { Clock, Lock } from "lucide-react";
 
 import { Badge } from "@evinvest/uikit";
 
@@ -85,17 +85,25 @@ export function SupplyBar({ issued, cap, className }: { issued: string | undefin
   );
 }
 
-/** The badges that qualify a product: closed to new money, or priced off a stale mark. */
-export function ProductBadges({ closed, stale }: { closed: boolean; stale: boolean }) {
+/** The badges that qualify a product: closed to new money, locked below `invest` by an
+ *  operator, or priced off a stale mark. `closed` and `locked` are mutually exclusive by
+ *  construction — a closed (delisted) product has left the catalog entirely, so it has no
+ *  `caller_access` to be locked by — but both may join `stale`. */
+export function ProductBadges({ closed, locked, stale }: { closed: boolean; locked: boolean; stale: boolean }) {
   const t = useT();
-  if (!closed && !stale) return null;
-  // Inside a `flex-wrap` row here, so these two are safe at any length — the same two
-  // strings are NOT safe on the list card (see `invest-view`), which sets the cap.
+  if (!closed && !locked && !stale) return null;
+  // Inside a `flex-wrap` row here, so these are safe at any length — the same strings are
+  // NOT safe on the list card (see `invest-view`), which sets the cap.
   return (
     <div className="flex flex-wrap items-center gap-2">
       {closed && (
         <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3">
           {t("invest.badge.redeemOnly")}
+        </Badge>
+      )}
+      {locked && (
+        <Badge variant="outline" className="gap-1 border-border text-muted-foreground">
+          <Lock className="size-3" /> {t("invest.badge.locked")}
         </Badge>
       )}
       {stale && (

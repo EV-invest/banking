@@ -48,7 +48,16 @@ export type {
 // The allocation catalog is served to BOTH the investor surface (`/api/allocations`,
 // open products only) and the admin one from the same BFF DTO, so the hand-written
 // types live in one place and are re-exported here for the investor imports.
-export type { Allocation, AllocationIcon, AllocationList, AllocationState } from "./admin";
+export type {
+  Allocation,
+  AllocationAccessGrant,
+  AllocationAccessGrantList,
+  AllocationAccessLevel,
+  AllocationGrantLevel,
+  AllocationIcon,
+  AllocationList,
+  AllocationState,
+} from "./admin";
 
 // Identity surface — owned by the concierge plane.
 export type {

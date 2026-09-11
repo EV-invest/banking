@@ -149,6 +149,15 @@ export type AllocationState = "draft" | "open" | "closed";
  *  union and that list have to be edited together. `fund` is the hub's default. */
 export type AllocationIcon = "fund" | "real_estate" | "trading" | "yield" | "venture" | "treasury" | "commodity" | "credit" | "index" | "arbitrage";
 
+/** `hidden` — not in the caller's catalog at all. `view` — listed, `Subscribe` refused.
+ *  `invest` — listed and open to new money (subject to `state` and the unit cap). Ranked
+ *  `hidden < view < invest`, mirroring `contracts::allocation::access::ALL`. */
+export type AllocationAccessLevel = "hidden" | "view" | "invest";
+
+/** The levels a per-investor grant may carry — everything above the `hidden` floor.
+ *  Mirrors `contracts::allocation::access::GRANTABLE`. */
+export type AllocationGrantLevel = "view" | "invest";
+
 // ── fees ─────────────────────────────────────────────────────────────────────
 
 /** A fund's terms. `configured` false means no policy row exists, which is a different
@@ -225,10 +234,45 @@ export interface Allocation {
    * it changes nothing.
    */
   icon?: AllocationIcon;
+  /**
+   * access
+   *
+   * The product's default access level — what a caller with no grant holds. A
+   * registration lands on `view`: listed, locked. Optional on READ for the same reason
+   * `icon` is above — `allocationsResource` persists to sessionStorage, and a returning
+   * user's first frame may rehydrate an object serialised before this field existed.
+   */
+  access?: AllocationAccessLevel;
+  /**
+   * caller_access
+   *
+   * The level THIS caller effectively holds — `max(access, their own grant)`. The
+   * subscribe control and the "locked" badge key off this, never off `access` or `state`
+   * alone: an `open` product at `view` is visible and not investable. Honest for an
+   * `AllocationManage` holder too — their permission does not make them an investor. Same
+   * optionality caveat as `access`.
+   */
+  caller_access?: AllocationAccessLevel;
 }
 
 export interface AllocationList {
   allocations: Allocation[];
+}
+
+/** One investor raised above a product's default access level. */
+export interface AllocationAccessGrant {
+  service: string;
+  /** The investor — a banking user id. */
+  user_id: string;
+  level: AllocationGrantLevel;
+  /** The `AllocationManage` holder who granted it. */
+  granted_by: string;
+  /** Unix seconds. */
+  granted_at: string;
+}
+
+export interface AllocationAccessGrantList {
+  grants: AllocationAccessGrant[];
 }
 
 // ── valuation + redemptions ─────────────────────────────────────────────────────

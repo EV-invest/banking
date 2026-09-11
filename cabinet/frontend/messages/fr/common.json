@@ -15,9 +15,25 @@
     "en": "{n, plural, one {#s ago} other {#s ago}}",
     "t": "{n, plural, one {il y a # s} many {il y a # s} other {il y a # s}}"
   },
+  "admin.alloc.access.hidden": {
+    "en": "Hidden",
+    "t": "Masqué"
+  },
+  "admin.alloc.access.invest": {
+    "en": "Investable",
+    "t": "Investissable"
+  },
+  "admin.alloc.access.view": {
+    "en": "View only",
+    "t": "Lecture seule"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Fermer"
+  },
+  "admin.alloc.col.access": {
+    "en": "Access",
+    "t": "Accès"
   },
   "admin.alloc.col.product": {
     "en": "Product",
@@ -50,6 +66,58 @@
   "admin.alloc.footnote": {
     "en": "Registration lands in {state}, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.",
     "t": "L’inscription se fait à l’état {state}, ce qui n’engage aucun capital — l’ouverture est une décision distincte. La fermeture n’arrête que les nouvelles souscriptions : les investisseurs peuvent toujours racheter leurs parts d’un produit fermé, si bien qu’une mise en extinction ne bloque jamais leurs parts. L’id de service est définitif une fois inscrit. Le plafond de parts borne le nombre de parts qui pourront être émises — redimensionnez-le sur l’écran Valorisation, où figure sur la même page le nombre de parts émises auquel il est comparé."
+  },
+  "admin.alloc.grants.action": {
+    "en": "Grants",
+    "t": "Accès"
+  },
+  "admin.alloc.grants.col.grantedBy": {
+    "en": "Granted by",
+    "t": "Accordé par"
+  },
+  "admin.alloc.grants.col.level": {
+    "en": "Level",
+    "t": "Niveau"
+  },
+  "admin.alloc.grants.empty": {
+    "en": "No grants yet",
+    "t": "Aucun octroi pour l'instant"
+  },
+  "admin.alloc.grants.emptyHint": {
+    "en": "Every investor holds this product's default access until you raise one above it.",
+    "t": "Chaque investisseur détient l'accès par défaut de ce produit tant que vous ne l'élevez pas."
+  },
+  "admin.alloc.grants.field.level": {
+    "en": "Level",
+    "t": "Niveau"
+  },
+  "admin.alloc.grants.field.user": {
+    "en": "Investor",
+    "t": "Investisseur"
+  },
+  "admin.alloc.grants.noUserMatch": {
+    "en": "No investors match",
+    "t": "Aucun investisseur trouvé"
+  },
+  "admin.alloc.grants.pickUser": {
+    "en": "Search investors…",
+    "t": "Rechercher des investisseurs…"
+  },
+  "admin.alloc.grants.raise": {
+    "en": "Raise access",
+    "t": "Élever l'accès"
+  },
+  "admin.alloc.grants.revoke": {
+    "en": "Revoke",
+    "t": "Révoquer"
+  },
+  "admin.alloc.grants.roster": {
+    "en": "Grants",
+    "t": "Octrois"
+  },
+  "admin.alloc.grants.submit": {
+    "en": "Grant",
+    "t": "Accorder"
   },
   "admin.alloc.hint.closed": {
     "en": "Closed to new money; redemptions still settle",
@@ -1615,6 +1683,10 @@
     "en": "Awaiting settlement",
     "t": "En attente de règlement"
   },
+  "invest.badge.locked": {
+    "en": "Locked",
+    "t": "Verrouillé"
+  },
   "invest.badge.open": {
     "en": "Open",
     "t": "Ouvert"
@@ -1634,6 +1706,10 @@
   "invest.blocked.closed": {
     "en": "This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full.",
     "t": "Ce fonds est fermé aux nouvelles souscriptions. Vos parts ne sont pas affectées — vous pouvez toujours les racheter intégralement."
+  },
+  "invest.blocked.locked": {
+    "en": "This fund isn't open to you yet. You can see it, but subscribing is locked until an operator raises your access.",
+    "t": "Ce fonds ne vous est pas encore ouvert. Vous pouvez le voir, mais la souscription est verrouillée jusqu'à ce qu'un opérateur relève votre accès."
   },
   "invest.blocked.staleNav": {
     "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",

@@ -123,6 +123,70 @@ export type BankingV1Allocation = {
      * index | arbitrage. Always populated on a response — `fund` is the default.
      */
     icon?: string;
+    /**
+     * access
+     *
+     * The product's default access level: hidden | view | invest. What an investor
+     * with no grant holds. A registration lands on `view`.
+     */
+    access?: string;
+    /**
+     * caller_access
+     *
+     * The level the CALLER effectively holds — the higher of `access` and the caller's
+     * own grant, if any. Populated honestly for everyone, an `AllocationManage` holder
+     * included: their permission lets them read and administer the product, it does not
+     * make them an investor in it, so a manager's `caller_access` says what they would
+     * get as one. A client renders the card off `access` and the subscribe control off
+     * this — never off `state` alone.
+     */
+    caller_access?: string;
+};
+
+/**
+ * AllocationAccessGrant
+ *
+ * One investor raised above an allocation's default level.
+ */
+export type BankingV1AllocationAccessGrant = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * user_id
+     *
+     * the investor (banking user id)
+     */
+    user_id?: string;
+    /**
+     * level
+     *
+     * view | invest
+     */
+    level?: string;
+    /**
+     * granted_by
+     *
+     * the AllocationManage holder who granted it
+     */
+    granted_by?: string;
+    /**
+     * granted_at
+     *
+     * unix seconds
+     */
+    granted_at?: number | string;
+};
+
+/**
+ * AllocationAccessGrantList
+ */
+export type BankingV1AllocationAccessGrantList = {
+    /**
+     * grants
+     */
+    grants?: Array<BankingV1AllocationAccessGrant>;
 };
 
 /**
@@ -1007,6 +1071,28 @@ export type BankingV1GetWalletRequest = {
 };
 
 /**
+ * GrantAllocationAccessRequest
+ */
+export type BankingV1GrantAllocationAccessRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * user_id
+     *
+     * the investor's banking user id
+     */
+    user_id?: string;
+    /**
+     * level
+     *
+     * view | invest (never hidden — a grant only ever adds)
+     */
+    level?: string;
+};
+
+/**
  * IssueUserTokenRequest
  */
 export type BankingV1IssueUserTokenRequest = {
@@ -1083,14 +1169,24 @@ export type BankingV1JwksResponse = {
 };
 
 /**
+ * ListAllocationAccessGrantsRequest
+ */
+export type BankingV1ListAllocationAccessGrantsRequest = {
+    /**
+     * service
+     */
+    service?: string;
+};
+
+/**
  * ListAllocationsRequest
  */
 export type BankingV1ListAllocationsRequest = {
     /**
      * include_unlisted
      *
-     * Include `draft` and `closed` allocations. Requires AllocationManage; a caller
-     * without it is refused rather than silently downgraded to the open-only list.
+     * Include `draft`, `closed` and `hidden` allocations. Requires AllocationManage; a
+     * caller without it is refused rather than silently downgraded to the visible list.
      */
     include_unlisted?: boolean;
 };
@@ -2071,6 +2167,27 @@ export type BankingV1RevenueRail = {
 };
 
 /**
+ * RevokeAllocationAccessRequest
+ */
+export type BankingV1RevokeAllocationAccessRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * user_id
+     */
+    user_id?: string;
+};
+
+/**
+ * RevokeAllocationAccessResponse
+ */
+export type BankingV1RevokeAllocationAccessResponse = {
+    [key: string]: never;
+};
+
+/**
  * RevokeSessionRequest
  */
 export type BankingV1RevokeSessionRequest = {
@@ -2202,6 +2319,22 @@ export type BankingV1Session = {
      * True for the family that owns the refresh token presented on the listing call.
      */
     current?: boolean;
+};
+
+/**
+ * SetAllocationAccessRequest
+ */
+export type BankingV1SetAllocationAccessRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * access
+     *
+     * hidden | view | invest
+     */
+    access?: string;
 };
 
 /**
@@ -4379,6 +4512,64 @@ export type BankingV1AllocationsServiceGetAllocationResponses = {
 
 export type BankingV1AllocationsServiceGetAllocationResponse = BankingV1AllocationsServiceGetAllocationResponses[keyof BankingV1AllocationsServiceGetAllocationResponses];
 
+export type BankingV1AllocationsServiceGrantAllocationAccessData = {
+    body: BankingV1GrantAllocationAccessRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/GrantAllocationAccess';
+};
+
+export type BankingV1AllocationsServiceGrantAllocationAccessErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceGrantAllocationAccessError = BankingV1AllocationsServiceGrantAllocationAccessErrors[keyof BankingV1AllocationsServiceGrantAllocationAccessErrors];
+
+export type BankingV1AllocationsServiceGrantAllocationAccessResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1AllocationAccessGrant;
+};
+
+export type BankingV1AllocationsServiceGrantAllocationAccessResponse = BankingV1AllocationsServiceGrantAllocationAccessResponses[keyof BankingV1AllocationsServiceGrantAllocationAccessResponses];
+
+export type BankingV1AllocationsServiceListAllocationAccessGrantsData = {
+    body: BankingV1ListAllocationAccessGrantsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/ListAllocationAccessGrants';
+};
+
+export type BankingV1AllocationsServiceListAllocationAccessGrantsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceListAllocationAccessGrantsError = BankingV1AllocationsServiceListAllocationAccessGrantsErrors[keyof BankingV1AllocationsServiceListAllocationAccessGrantsErrors];
+
+export type BankingV1AllocationsServiceListAllocationAccessGrantsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1AllocationAccessGrantList;
+};
+
+export type BankingV1AllocationsServiceListAllocationAccessGrantsResponse = BankingV1AllocationsServiceListAllocationAccessGrantsResponses[keyof BankingV1AllocationsServiceListAllocationAccessGrantsResponses];
+
 export type BankingV1AllocationsServiceListAllocationsData = {
     body: BankingV1ListAllocationsRequest;
     headers: {
@@ -4436,6 +4627,64 @@ export type BankingV1AllocationsServiceRegisterAllocationResponses = {
 };
 
 export type BankingV1AllocationsServiceRegisterAllocationResponse = BankingV1AllocationsServiceRegisterAllocationResponses[keyof BankingV1AllocationsServiceRegisterAllocationResponses];
+
+export type BankingV1AllocationsServiceRevokeAllocationAccessData = {
+    body: BankingV1RevokeAllocationAccessRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/RevokeAllocationAccess';
+};
+
+export type BankingV1AllocationsServiceRevokeAllocationAccessErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceRevokeAllocationAccessError = BankingV1AllocationsServiceRevokeAllocationAccessErrors[keyof BankingV1AllocationsServiceRevokeAllocationAccessErrors];
+
+export type BankingV1AllocationsServiceRevokeAllocationAccessResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1RevokeAllocationAccessResponse;
+};
+
+export type BankingV1AllocationsServiceRevokeAllocationAccessResponse = BankingV1AllocationsServiceRevokeAllocationAccessResponses[keyof BankingV1AllocationsServiceRevokeAllocationAccessResponses];
+
+export type BankingV1AllocationsServiceSetAllocationAccessData = {
+    body: BankingV1SetAllocationAccessRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/SetAllocationAccess';
+};
+
+export type BankingV1AllocationsServiceSetAllocationAccessErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceSetAllocationAccessError = BankingV1AllocationsServiceSetAllocationAccessErrors[keyof BankingV1AllocationsServiceSetAllocationAccessErrors];
+
+export type BankingV1AllocationsServiceSetAllocationAccessResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Allocation;
+};
+
+export type BankingV1AllocationsServiceSetAllocationAccessResponse = BankingV1AllocationsServiceSetAllocationAccessResponses[keyof BankingV1AllocationsServiceSetAllocationAccessResponses];
 
 export type BankingV1AllocationsServiceSetAllocationStateData = {
     body: BankingV1SetAllocationStateRequest;

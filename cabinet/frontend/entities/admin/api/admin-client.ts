@@ -7,6 +7,10 @@ import { getJson, postJson } from "@/shared/lib/api-client";
 import type {
   AdminOverview,
   Allocation,
+  AllocationAccessGrant,
+  AllocationAccessGrantList,
+  AllocationAccessLevel,
+  AllocationGrantLevel,
   AllocationIcon,
   AllocationList,
   AdminUserList,
@@ -115,6 +119,25 @@ export const setAllocationState = (service: string, state: "open" | "closed"): P
 // Its own route rather than a field on `/update`: the cap gates money, so the hub raises
 // its own audit event for it and refuses a subscription that would mint past it.
 export const setAllocationUnitCap = (service: string, unitCap: string): Promise<Allocation> => postJson("/api/admin/allocations/cap", { service, unit_cap: unitCap });
+
+// A product's default access — "closed by default": every registration lands on `view`
+// (listed, locked) until an operator opens it up. Its own route for the same reason the
+// unit cap has one: the hub raises its own audit event for an access change.
+export const setAllocationAccess = (service: string, access: AllocationAccessLevel): Promise<Allocation> => postJson("/api/admin/allocations/access", { service, access });
+
+// One investor raised above the product's default — `hidden` is refused here (grantable
+// only, not the full vocabulary): a grant that lowered a holder below the default would
+// make "revoke" ambiguous.
+export const fetchAllocationAccessGrants = (service: string): Promise<AllocationAccessGrantList> =>
+  getJson(`/api/admin/allocations/grants?service=${encodeURIComponent(service)}`);
+
+export const grantAllocationAccess = (service: string, userId: string, level: AllocationGrantLevel): Promise<AllocationAccessGrant> =>
+  postJson("/api/admin/allocations/grants/grant", { service, user_id: userId, level });
+
+// Drops the investor back to the product's own default — not to `hidden`, which is why
+// this is "revoke" and not "hide".
+export const revokeAllocationAccess = (service: string, userId: string): Promise<Record<string, never>> =>
+  postJson("/api/admin/allocations/grants/revoke", { service, user_id: userId });
 
 // ── valuation + redemptions ─────────────────────────────────────────────────────
 export const fetchRedemptionQueue = (): Promise<RedemptionQueue> => getJson("/api/admin/valuation/queue");

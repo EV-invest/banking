@@ -15,9 +15,25 @@
     "en": "{n, plural, one {#s ago} other {#s ago}}",
     "t": "{n, plural, other {# giây trước}}"
   },
+  "admin.alloc.access.hidden": {
+    "en": "Hidden",
+    "t": "Ẩn"
+  },
+  "admin.alloc.access.invest": {
+    "en": "Investable",
+    "t": "Có thể đầu tư"
+  },
+  "admin.alloc.access.view": {
+    "en": "View only",
+    "t": "Chỉ xem"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Đóng"
+  },
+  "admin.alloc.col.access": {
+    "en": "Access",
+    "t": "Quyền truy cập"
   },
   "admin.alloc.col.product": {
     "en": "Product",
@@ -50,6 +66,58 @@
   "admin.alloc.footnote": {
     "en": "Registration lands in {state}, which takes no money — opening is a separate decision. Closing stops new subscriptions only: investors can always redeem out of a closed product, so winding one down never strands their units. The service id is permanent once registered. The unit cap bounds how many units may ever be issued — resize it on the Valuation screen, where the issued figure it is judged against is on the same page.",
     "t": "Đăng ký sản phẩm sẽ nằm ở trạng thái {state}, chưa nhận tiền — mở sản phẩm là một quyết định riêng. Đóng chỉ dừng các lệnh đăng ký mới: nhà đầu tư luôn có thể hoàn vốn khỏi một sản phẩm đã đóng, nên việc đóng không bao giờ khóa cứng đơn vị quỹ của họ. Mã dịch vụ là vĩnh viễn sau khi đăng ký. Trần đơn vị giới hạn tổng số đơn vị quỹ có thể phát hành — thay đổi trên màn hình Định giá, nơi số đã phát hành dùng để đối chiếu nằm ngay trên cùng một trang."
+  },
+  "admin.alloc.grants.action": {
+    "en": "Grants",
+    "t": "Cấp quyền"
+  },
+  "admin.alloc.grants.col.grantedBy": {
+    "en": "Granted by",
+    "t": "Người cấp"
+  },
+  "admin.alloc.grants.col.level": {
+    "en": "Level",
+    "t": "Cấp độ"
+  },
+  "admin.alloc.grants.empty": {
+    "en": "No grants yet",
+    "t": "Chưa có quyền nào được cấp"
+  },
+  "admin.alloc.grants.emptyHint": {
+    "en": "Every investor holds this product's default access until you raise one above it.",
+    "t": "Mọi nhà đầu tư đều có quyền truy cập mặc định của sản phẩm này cho đến khi bạn nâng quyền cho họ."
+  },
+  "admin.alloc.grants.field.level": {
+    "en": "Level",
+    "t": "Cấp độ"
+  },
+  "admin.alloc.grants.field.user": {
+    "en": "Investor",
+    "t": "Nhà đầu tư"
+  },
+  "admin.alloc.grants.noUserMatch": {
+    "en": "No investors match",
+    "t": "Không tìm thấy nhà đầu tư"
+  },
+  "admin.alloc.grants.pickUser": {
+    "en": "Search investors…",
+    "t": "Tìm nhà đầu tư…"
+  },
+  "admin.alloc.grants.raise": {
+    "en": "Raise access",
+    "t": "Nâng quyền truy cập"
+  },
+  "admin.alloc.grants.revoke": {
+    "en": "Revoke",
+    "t": "Thu hồi"
+  },
+  "admin.alloc.grants.roster": {
+    "en": "Grants",
+    "t": "Danh sách cấp quyền"
+  },
+  "admin.alloc.grants.submit": {
+    "en": "Grant",
+    "t": "Cấp quyền"
   },
   "admin.alloc.hint.closed": {
     "en": "Closed to new money; redemptions still settle",
@@ -1615,6 +1683,10 @@
     "en": "Awaiting settlement",
     "t": "Chờ tất toán"
   },
+  "invest.badge.locked": {
+    "en": "Locked",
+    "t": "Bị khóa"
+  },
   "invest.badge.open": {
     "en": "Open",
     "t": "Đang mở"
@@ -1634,6 +1706,10 @@
   "invest.blocked.closed": {
     "en": "This fund is closed to new subscriptions. Your units are unaffected — you can still redeem them in full.",
     "t": "Quỹ này đã đóng với các lệnh đăng ký mới. Đơn vị quỹ của bạn không bị ảnh hưởng — bạn vẫn có thể hoàn vốn toàn bộ."
+  },
+  "invest.blocked.locked": {
+    "en": "This fund isn't open to you yet. You can see it, but subscribing is locked until an operator raises your access.",
+    "t": "Quỹ này chưa mở cho bạn. Bạn có thể xem, nhưng việc đăng ký bị khóa cho đến khi người vận hành nâng quyền truy cập của bạn."
   },
   "invest.blocked.staleNav": {
     "en": "The fund's valuation is out of date, so dealing is paused until an operator posts a fresh one.",
