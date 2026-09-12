@@ -14,7 +14,8 @@ import { Button } from "@evinvest/uikit";
 
 import { requirementLabel, tierLabel } from "@/entities/payment/lib/format";
 import { formatExactUsdt } from "@/shared/lib/money";
-import { type EndDraft, draftWords, previewRequirement, previewTier } from "@/views/admin/payments/lib/terms";
+import { type EndDraft, previewRequirement, previewTier } from "@/views/admin/payments/lib/terms";
+import { draftWords } from "@/views/admin/payments/lib/words";
 
 export function TermsPreview({ source, destination }: { source: EndDraft; destination: EndDraft }) {
   const t = useT();

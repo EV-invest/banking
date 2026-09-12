@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evi
 import { adminAllocationsResource } from "@/entities/admin/model/admin-resource";
 import { useResource } from "@/shared/lib/resource";
 import { ProductIcon } from "@/shared/ui/icons/products";
-import { type EndDraft, type EndKind, END_KINDS, endKindLabel } from "@/views/admin/payments/lib/terms";
+import { type EndDraft, type EndKind, END_KINDS } from "@/views/admin/payments/lib/terms";
+import { endKindLabel } from "@/views/admin/payments/lib/words";
 import { ExternalFields } from "@/views/admin/payments/ui/external-fields";
 import { UserSearch } from "@/views/admin/payments/ui/user-search";
 

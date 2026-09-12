@@ -5,10 +5,10 @@
 // is not surprised by WHO gets emailed — every owner, or one investor — and the plane's
 // answer, echoed back on the opened order, is the one the list renders.
 
-import type { Translate } from "@evinvest/i18n";
+// Kept free of path-alias VALUE imports: `terms.test.ts` runs under Node's own resolver,
+// which knows nothing of `@/`. The words for a draft live next door in `words.ts`.
 
 import type { OpenPaymentRequest, Party, PartyKind, PaymentRequirement, PaymentTier } from "@/shared/contracts/payments";
-import { networkLabel } from "@/shared/lib/rail";
 
 export const PARTY_KINDS: readonly PartyKind[] = ["piggybank", "revenue", "service", "user"];
 
@@ -40,20 +40,6 @@ const BYTES = new TextEncoder();
 
 export function reasonBytes(reason: string): number {
   return BYTES.encode(reason).length;
-}
-
-export function endKindLabel(kind: EndKind, t: Translate): string {
-  return t(`admin.payments.kind.${kind}`);
-}
-
-/**
- * An end as the review sentence names it — the same words the picker showed, so what the
- * operator confirms is what they chose, not a wire id they never saw.
- */
-export function draftWords(end: EndDraft, t: Translate): string {
-  if (end.kind === "external") return `${networkLabel(end.network)} · ${end.address.trim()}`;
-  if (needsId(end.kind)) return `${endKindLabel(end.kind, t)} · ${end.name || end.id}`;
-  return endKindLabel(end.kind, t);
 }
 
 /** The two internal kinds that name one of many, and so need an id picked. */
