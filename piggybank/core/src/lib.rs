@@ -28,8 +28,8 @@ use domain::money::Network;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use ports::{
-	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository,
-	UserRepository, WithdrawalRepository, ledger::Ledger,
+	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, PaymentFeed, PaymentRepository,
+	RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -63,6 +63,14 @@ pub struct AppState {
 	/// payouts. Control plane only; it moves no money itself, and reaches the money plane
 	/// exactly once, through the ordinary payout path, when a request is approved.
 	pub consilia: Arc<dyn ConsiliumRepository>,
+	/// The `payments` aggregate's driven port — the order that moves money between two named
+	/// ends of the platform, plus the consent seat that authorizes an investor-sourced one.
+	/// Control plane only: the money leaves through the relay, from the two events the order
+	/// drains to the outbox.
+	pub payments: Arc<dyn PaymentRepository>,
+	/// The admin payments screen's read model. A separate handle from [`Self::payments`] for
+	/// the reason `operations` is separate from the aggregates it reads: it owns nothing.
+	pub payment_feed: Arc<dyn PaymentFeed>,
 	/// The registry of investable products — the gate every subscribe resolves its
 	/// service through. Control plane only; moves no money.
 	pub allocations: Arc<dyn AllocationRegistry>,
@@ -119,6 +127,8 @@ impl AppState {
 		users: Arc<dyn UserRepository>,
 		withdrawals: Arc<dyn WithdrawalRepository>,
 		consilia: Arc<dyn ConsiliumRepository>,
+		payments: Arc<dyn PaymentRepository>,
+		payment_feed: Arc<dyn PaymentFeed>,
 		allocations: Arc<dyn AllocationRegistry>,
 		subscriptions: Arc<dyn SubscriptionRepository>,
 		redemptions: Arc<dyn RedemptionRepository>,
@@ -143,6 +153,8 @@ impl AppState {
 			users,
 			withdrawals,
 			consilia,
+			payments,
+			payment_feed,
 			allocations,
 			subscriptions,
 			redemptions,

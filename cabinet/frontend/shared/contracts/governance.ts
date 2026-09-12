@@ -253,6 +253,76 @@ export interface OwnerAdmissionList {
 }
 
 /**
+ * What a user proposal decides. Three kinds share one message because all three ask the
+ * same question — "do the owners agree to change this person's standing?" — differing only
+ * in what the verdict writes.
+ */
+export type UserProposalKind = "suspension" | "reinstatement" | "admin_admission";
+
+/**
+ * An answer to a user proposal. Deliberately NEUTRAL, where {@link RemovalVote} says
+ * remove/keep and {@link AdmissionVote} says admit/reject.
+ *
+ * Three kinds share this vote, so a kind-specific verb would only mean something read
+ * against `kind` — and a vocabulary that is correct only when cross-referenced is one that
+ * eventually gets rendered wrong. The kind-specific verb belongs on the SURFACE, which
+ * knows the kind; this is which way the voter pushed.
+ */
+export type ProposalVote = "for" | "against";
+
+/** One eligible owner voter and their answer. Same wire caveat as {@link RemovalPeer}: an
+ *  unanswered peer arrives as `""` or `"pending"`, never as null. */
+export interface UserProposalPeer {
+  user_id: string;
+  email: string;
+  vote?: string | null;
+  voted_at?: Timestamp | null;
+}
+
+/**
+ * The owners' verdict over one PERSON's standing.
+ *
+ * Two things separate it from {@link OwnerAdmission}, and neither is cosmetic:
+ *
+ *   · `subject_user_id` is ANY user, not necessarily an owner — which is why none of the
+ *     admission's roster checks have an analogue here.
+ *   · It passes on a MAJORITY of the snapshotted voters, not unanimity. Unanimity guards
+ *     the owner roster because a minority able to add owners by majority grows itself into
+ *     a majority; neither thing decided here has that property, and unanimity would COST
+ *     safety — a hold lapses in 24h, so one unreachable owner would not delay a
+ *     ratification, they would decide it by releasing a compromised account at the deadline.
+ *
+ * `threshold` is frozen at open and must be READ, never re-derived from `peers.length` or
+ * the current roster: it is the bar this proposal is actually measured against, and a
+ * roster that moved underneath it does not move the bar.
+ */
+export interface UserProposal {
+  id: string;
+  kind: UserProposalKind | string;
+  state: string;
+  subject_user_id: string;
+  subject_email: string;
+  initiator_user_id: string;
+  initiator_email: string;
+  reason: string;
+  /** Every owner except the initiator, frozen at open. Membership IS the eligibility test. */
+  peers: UserProposalPeer[];
+  owner_count: number;
+  /** How many of `peers` must vote FOR. Frozen at open — read it, do not recompute it. */
+  threshold: number;
+  created_at: Timestamp;
+  expires_at: Timestamp;
+  decided_at?: Timestamp | null;
+  void_reason?: string | null;
+  /** Serialised as a string by the BFF's integer encoding; never do arithmetic on it here. */
+  version: number | string;
+}
+
+export interface UserProposalList {
+  items: UserProposal[];
+}
+
+/**
  * A consilium as the owners' room sees it. Only the payout kind exists today, so
  * `revenue_payout` is what distinguishes it; a second kind would arrive as a sibling field
  * rather than by widening this one.

@@ -157,5 +157,13 @@ fn user_to_proto(user: &User) -> pb::UserProfile {
 		// Likewise: the emergency allowlist lives in concierge, so there is nothing here to
 		// report. The field exists to keep the two planes wire-identical.
 		role_is_break_glass: false,
+		// And likewise for WHY an account is blocked. Concierge splits that into a lapsing
+		// `admin_hold` and a ratified `governance` verdict; this plane only ever learns
+		// THAT a user was suspended, through the one-way lifecycle bridge, never by which
+		// of the two. Defaults here, for parity — an empty `suspended_by` is also the
+		// wire's "suspended before the field existed", so nothing reading this may treat
+		// the default as a claim that the account is active.
+		suspended_by: String::new(),
+		hold_expires_at: 0,
 	}
 }

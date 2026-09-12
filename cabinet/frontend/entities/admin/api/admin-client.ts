@@ -66,8 +66,28 @@ export const fetchUserBalance = (userId: string): Promise<UserBalance> => getJso
 
 export const setUserRole = (userId: string, role: string): Promise<{ role: string }> => postJson("/api/admin/users/role", { user_id: userId, role });
 
-export const suspendUser = (userId: string): Promise<{ ok: boolean }> => postJson("/api/admin/users/suspend", { user_id: userId });
+/**
+ * The emergency brake: freeze the account NOW. It lapses on its own after 24h unless the
+ * owners ratify it, and the answer is WHEN — `hold_expires_at`, unix seconds as a string.
+ *
+ * This replaces `suspendUser`, which posted to `DisableUser`: the identity plane now always
+ * refuses that verb, because it was both this instant freeze and a permanent verdict one
+ * person made with no record of why. Making an account stay blocked is the separate
+ * {@link openUserSuspension} in `entities/governance`.
+ *
+ * `reason` is required, and not by this console's choice — it is what the owners asked to
+ * ratify the hold are reading, and the plane refuses a hold without one.
+ */
+export const holdUser = (userId: string, reason: string): Promise<{ hold_expires_at: string }> => postJson("/api/admin/users/hold", { user_id: userId, reason });
 
+/**
+ * Lift a HOLD, in one act.
+ *
+ * Deliberately takes no reason: this is the undo of a recorded action, and an undo that
+ * demands a sentence first is friction on the path that makes someone's money work again.
+ * The plane refuses this outright when the suspension was the owners' verdict — the console
+ * reads `suspended_by` and offers {@link openUserReinstatement} instead of this.
+ */
 export const reinstateUser = (userId: string): Promise<{ ok: boolean }> => postJson("/api/admin/users/reinstate", { user_id: userId });
 
 export const revokeSessions = (userId: string): Promise<{ token_version: string }> => postJson("/api/admin/users/revoke", { user_id: userId });

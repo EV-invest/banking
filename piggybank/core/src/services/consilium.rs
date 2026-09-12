@@ -61,6 +61,7 @@ impl AppState {
 		consilium_app::ConsiliumPorts {
 			consilia: self.consilia.as_ref(),
 			withdrawals: self.withdrawals.as_ref(),
+			payments: self.payments.as_ref(),
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
 			relay: &self.relay_notify,
@@ -120,9 +121,10 @@ fn decision_from_proto(raw: i32) -> Result<VoteDecision, Status> {
 
 /// The payout terms as the wire carries them, or `None` for a kind that is not a payout.
 ///
-/// No `_` arm: the day a second kind exists, the contract needs a field of its own and this
-/// stops compiling rather than quietly rendering the new kind as an absent payout.
-fn terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
+/// No `_` arm: a new kind needs a field of its own on the contract, and this stops compiling
+/// rather than quietly rendering it as an absent payout — a request that reads as having no
+/// terms at all on the one screen an owner authorizes money from.
+fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
 	match terms {
 		ConsiliumTerms::RevenuePayout(terms) => Some(pb::RevenuePayoutTerms {
 			network: terms.network.as_str().to_owned(),
@@ -131,6 +133,27 @@ fn terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
 			address: terms.address.as_str().to_owned(),
 			amount: terms.amount.to_decimal_string(),
 			memo: terms.memo.clone(),
+		}),
+		ConsiliumTerms::Payment(_) => None,
+	}
+}
+
+/// The payment terms as the wire carries them — the other half of "exactly one of the two
+/// terms fields is set".
+///
+/// The two ends are LABELS, taken from the same [`domain::payments::PaymentTerms`] the
+/// consent mail and the payments screen describe, so the three surfaces cannot come to
+/// disagree about what an owner approved.
+fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPaymentTerms> {
+	match terms {
+		ConsiliumTerms::RevenuePayout(_) => None,
+		ConsiliumTerms::Payment(subject) => Some(pb::ConsiliumPaymentTerms {
+			payment_id: subject.payment_id.to_string(),
+			tier: subject.terms.tier().as_str().to_owned(),
+			source: subject.terms.source_label(),
+			destination: subject.terms.destination_label(),
+			amount: subject.terms.amount().to_decimal_string(),
+			reason: subject.terms.reason().as_str().to_owned(),
 		}),
 	}
 }
@@ -152,7 +175,8 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 	pb::Consilium {
 		id: c.id().to_string(),
 		state: state_to_proto(c.state()),
-		revenue_payout: terms_to_proto(c.terms()),
+		revenue_payout: payout_terms_to_proto(c.terms()),
+		payment: payment_terms_to_proto(c.terms()),
 		payload_hash: c.payload_hash_hex(),
 		initiator_user_id: c.initiator().to_string(),
 		initiator_email: view.initiator_email.clone(),
@@ -177,6 +201,7 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 		expires_at: c.expires_at(),
 		decided_at: c.decided_at().unwrap_or_default(),
 		executed_withdrawal_id: c.executed_withdrawal_id().map(|id| id.to_string()).unwrap_or_default(),
+		executed_payment_id: c.executed_payment_id().map(|id| id.to_string()).unwrap_or_default(),
 		failure_reason: c.failure_reason().unwrap_or_default().to_owned(),
 		version: c.version(),
 	}
@@ -186,7 +211,8 @@ fn invitation_to_proto(view: &InvitationView) -> pb::ConsiliumInvitation {
 	pb::ConsiliumInvitation {
 		consilium_id: view.consilium_id.to_string(),
 		state: state_to_proto(view.state),
-		revenue_payout: terms_to_proto(&view.terms),
+		revenue_payout: payout_terms_to_proto(&view.terms),
+		payment: payment_terms_to_proto(&view.terms),
 		payload_hash: view.payload_hash.clone(),
 		initiator_email: mask_email(&view.initiator_email),
 		voter_email: mask_email(&view.voter_email),

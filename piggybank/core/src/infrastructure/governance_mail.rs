@@ -80,6 +80,7 @@ pub mod wired {
 				dedupe_key: dedupe_key.to_owned(),
 				payout_approval: None,
 				payout_outcome: None,
+				payment_consent: None,
 			};
 			match mail {
 				GovernanceMail::PayoutApproval(approval) => {

@@ -87,7 +87,9 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/users", get(admin::list_users))
 		.route("/api/admin/users/detail", get(admin::get_user))
 		.route("/api/admin/users/role", post(admin::set_role))
-		.route("/api/admin/users/suspend", post(admin::suspend_user))
+		// `/hold` and not `/suspend`: the plane split the verb, and the path says which half
+		// this is. Permanent suspension is a proposal, under `/api/owners/proposals`.
+		.route("/api/admin/users/hold", post(admin::hold_user))
 		.route("/api/admin/users/reinstate", post(admin::reinstate_user))
 		.route("/api/admin/users/revoke", post(admin::revoke_sessions))
 		.route("/api/admin/users/kyc", post(admin::set_kyc))
@@ -137,6 +139,16 @@ fn requests(state: AppState) -> Router {
 		.route("/api/owners/removals/{id}/vote", post(consilium::vote_removal))
 		.route("/api/owners/removals/{id}/cancel", post(consilium::cancel_removal))
 		.route("/api/owners/admissions", get(consilium::list_admissions).post(consilium::open_admission))
+		// User proposals — the owners' verdict over one PERSON's standing: the permanent
+		// half of the split blocking verb, its undo, and the admin seat. Listed, voted and
+		// withdrawn together, because a hold lapses in 24h and a family you can open but
+		// not ratify is a dead end.
+		.route("/api/owners/proposals", get(consilium::list_proposals))
+		.route("/api/owners/proposals/suspension", post(consilium::open_suspension))
+		.route("/api/owners/proposals/reinstatement", post(consilium::open_reinstatement))
+		.route("/api/owners/proposals/admin-admission", post(consilium::open_admin_admission))
+		.route("/api/owners/proposals/{id}/vote", post(consilium::vote_proposal))
+		.route("/api/owners/proposals/{id}/cancel", post(consilium::cancel_proposal))
 		.route("/api/owners/admissions/{id}/vote", post(consilium::vote_admission))
 		.route("/api/owners/admissions/{id}/cancel", post(consilium::cancel_admission))
 		// The public approval surface. NO session, NO CSRF, and no session cookie is even

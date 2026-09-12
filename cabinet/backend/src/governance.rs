@@ -73,6 +73,65 @@ impl AdmissionVote {
 	}
 }
 
+/// What an owner may answer on a USER proposal.
+///
+/// Neutral verbs, and a third enum rather than a reuse of either above — the proto makes
+/// the same split for the same reason. Three kinds (suspension, reinstatement, admin
+/// admission) share one vote, so a kind-specific verb would only mean something read
+/// against the kind. `for`/`against` says which way the voter pushed; the SURFACE, which
+/// knows the kind, is what renders that as "suspend" or "admit".
+#[derive(Clone, Copy)]
+pub enum ProposalVote {
+	For,
+	Against,
+}
+
+impl ProposalVote {
+	pub fn parse(raw: &str) -> Option<Self> {
+		match raw {
+			"for" => Some(Self::For),
+			"against" => Some(Self::Against),
+			_ => None,
+		}
+	}
+
+	pub fn wire(self) -> cc::ProposalVote {
+		match self {
+			Self::For => cc::ProposalVote::For,
+			Self::Against => cc::ProposalVote::Against,
+		}
+	}
+}
+
+/// Which user proposals a listing asks for. Absent means every kind — the words are the
+/// browser's, and an unrecognised one is refused rather than widened to "all", because a
+/// filter that silently stops filtering shows the reader rows they did not ask for.
+#[derive(Clone, Copy)]
+pub enum ProposalKind {
+	Suspension,
+	Reinstatement,
+	AdminAdmission,
+}
+
+impl ProposalKind {
+	pub fn parse(raw: &str) -> Option<Self> {
+		match raw {
+			"suspension" => Some(Self::Suspension),
+			"reinstatement" => Some(Self::Reinstatement),
+			"admin_admission" => Some(Self::AdminAdmission),
+			_ => None,
+		}
+	}
+
+	pub fn wire(self) -> cc::UserProposalKind {
+		match self {
+			Self::Suspension => cc::UserProposalKind::Suspension,
+			Self::Reinstatement => cc::UserProposalKind::Reinstatement,
+			Self::AdminAdmission => cc::UserProposalKind::AdminAdmission,
+		}
+	}
+}
+
 /// One frame of the live governance feed: a REVISION and when it was produced, never a
 /// tally and never a secret. One revision covers removals and admissions together, so a
 /// single subscription follows the whole ownership surface, and the client refetches the
@@ -146,6 +205,42 @@ mod tests {
 		assert!(AdmissionVote::parse("keep").is_none());
 		assert!(RemovalVote::parse("admit").is_none());
 		assert!(RemovalVote::parse("reject").is_none());
+	}
+
+	/// The user-proposal vocabulary is a THIRD one, and must not accept either consilium's
+	/// words. A page that submitted "remove" here would otherwise be answering a question
+	/// nobody asked — the kinds share one vote precisely because the verb is decided on the
+	/// surface, so the wire word has to stay neutral.
+	#[test]
+	fn the_user_proposal_vote_is_neutral_and_shares_no_word() {
+		assert!(matches!(ProposalVote::parse("for"), Some(ProposalVote::For)));
+		assert!(matches!(ProposalVote::parse("against"), Some(ProposalVote::Against)));
+		for foreign in ["remove", "keep", "admit", "reject", "FOR", ""] {
+			assert!(ProposalVote::parse(foreign).is_none(), "{foreign} must not parse as a proposal vote");
+		}
+	}
+
+	/// An unrecognised kind is refused rather than widened to "every kind": a filter that
+	/// silently stops filtering shows the reader rows they did not ask for.
+	#[test]
+	fn only_the_three_proposal_kinds_parse() {
+		assert!(matches!(ProposalKind::parse("suspension"), Some(ProposalKind::Suspension)));
+		assert!(matches!(ProposalKind::parse("reinstatement"), Some(ProposalKind::Reinstatement)));
+		assert!(matches!(ProposalKind::parse("admin_admission"), Some(ProposalKind::AdminAdmission)));
+		assert!(ProposalKind::parse("admission").is_none());
+		assert!(ProposalKind::parse("").is_none());
+	}
+
+	/// The neutral words must land on the plane's own FOR/AGAINST and never on its
+	/// `UNSPECIFIED`/`PENDING` — either of which the server could read as "no answer yet"
+	/// while the owner believes they voted.
+	#[test]
+	fn every_proposal_vote_and_kind_maps_onto_its_own_proto_variant() {
+		assert_eq!(ProposalVote::For.wire(), cc::ProposalVote::For);
+		assert_eq!(ProposalVote::Against.wire(), cc::ProposalVote::Against);
+		assert_eq!(ProposalKind::Suspension.wire(), cc::UserProposalKind::Suspension);
+		assert_eq!(ProposalKind::Reinstatement.wire(), cc::UserProposalKind::Reinstatement);
+		assert_eq!(ProposalKind::AdminAdmission.wire(), cc::UserProposalKind::AdminAdmission);
 	}
 
 	/// The words the browser sends must land on the proto variants they name, and not on

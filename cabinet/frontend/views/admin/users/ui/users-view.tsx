@@ -1,12 +1,12 @@
 "use client";
 
-import { KeyRound, Loader2, ShieldBan, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { KeyRound, Loader2, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
 import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
-import { reinstateUser, revokeSessions, setKycLevel, setUserRole, suspendUser, type UserFilters } from "@/entities/admin/api/admin-client";
+import { revokeSessions, setKycLevel, type UserFilters } from "@/entities/admin/api/admin-client";
 import { adminUserBalanceResource, adminUserResource, usersResource } from "@/entities/admin/model/admin-resource";
 import type { AdminUserSummary } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
@@ -14,12 +14,13 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { BreakGlassNotice } from "@/shared/ui/break-glass-notice";
-import { Link } from "@/shared/ui/cabinet-link";
 import { Panel, PanelPresence, PanelSwap, Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor, type TipKey } from "@/shared/tips";
-import { ASSIGNABLE_ROLES, KYC_LEVELS, type KycLevel, ROLES, ago, formatUsd, kycLevelLabel, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
+import { KYC_LEVELS, type KycLevel, ROLES, accountStanding, ago, formatUsd, kycLevelLabel, roleLabel, statusLabel, statusTone } from "@/views/admin/lib/format";
 import { AdminHeader, AdminScreen, StatusDot } from "@/views/admin/ui/shell";
+import { AccountStandingField } from "@/views/admin/users/ui/account-standing-field";
+import { RoleField } from "@/views/admin/users/ui/role-field";
 
 export function UsersView() {
   const t = useT();
@@ -339,7 +340,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
         </Section>
 
         <Section title={t("admin.users.accessSecurity")}>
-          <RoleField role={role} busy={busy === "role"} onPick={(next) => run("role", () => setUserRole(summary.user_id, next))} />
+          <RoleField userId={summary.user_id} role={role} busy={busy} run={run} />
           <KycField
             level={profile?.kyc_level ?? summary.kyc_level}
             busy={busy === "kyc"}
@@ -355,83 +356,22 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
           </p>
         </Section>
 
-        {/* i18n-max: 12 per verb — a `flex-1` Button beside a `shrink-0` tip anchor in a
-            340px drawer. */}
-        <div className="flex gap-2">
-          {status === "disabled" ? (
-            <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy === "status"} onClick={() => run("status", () => reinstateUser(summary.user_id))}>
-              <ShieldCheck className="size-3.5" /> {t("admin.users.reinstate")}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="flex-1 border-destructive/40 text-destructive hover:bg-destructive/10"
-              disabled={busy === "status"}
-              onClick={() => run("status", () => suspendUser(summary.user_id))}
-            >
-              <ShieldBan className="size-3.5" /> {t("admin.users.suspend")}
+        {/* Three cases, not two. Which control an account gets is decided by WHY it is
+            blocked (`suspended_by`), never by `status` alone — see `AccountStandingField`.
+            The tip anchor moves inside it, beside the action it is about. */}
+        <AccountStandingField
+          userId={summary.user_id}
+          standing={accountStanding({
+            status,
+            suspended_by: profile?.suspended_by ?? summary.suspended_by,
+            hold_expires_at: profile?.hold_expires_at ?? summary.hold_expires_at,
+          })}
+          busy={busy}
+          run={run}
+        />
 
-            </Button>
-          )}
-          <TipAnchor anchor="admin.users.status.suspend" className="self-center" />
-        </div>
       </CardContent>
     </Card>
-  );
-}
-
-/**
- * The role control, and the one sentence that says where the missing option went.
- *
- * Owner is not in the list and the plane is the reason: a seat is a persisted column that
- * `SetRole` refuses to grant OR withdraw, so both directions across that line are the
- * consilium's — an admission on the way in, a removal or a resignation on the way out (the
- * very first seats come from the genesis seed the service applies at start-up, before
- * there is a consilium to ask). Leaving the option in place is what the reader complained
- * about: the console offered a role change and the plane answered `FAILED_PRECONDITION`,
- * which reads as a broken console rather than a rule.
- *
- * So an owner's row disables the control outright instead of offering three choices that
- * would all be refused, and the note beside it links to the room that can actually do it.
- * Muted and one line, not an alert: nothing here has gone wrong.
- */
-function RoleField({ role, busy, onPick }: { role: string; busy: boolean; onPick: (role: string) => void }) {
-  const t = useT();
-  const seated = role === "owner";
-  return (
-    <div className="flex flex-col gap-1.5 py-1">
-      <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="flex items-center gap-1.5 text-muted-foreground">
-          {t("admin.users.role")}
-          <TipAnchor anchor="admin.users.access.role" />
-        </span>
-        {/* Disabled on the trigger, which is the button: the uikit's `Select` root takes no
-            `disabled` of its own, and a trigger that cannot be pressed is the only door in. */}
-        <Select value={role} onValueChange={onPick}>
-          <SelectTrigger size="sm" className="border-border bg-main-surface" disabled={busy || seated}>
-            <span>{roleLabel(role, t)}</span>
-          </SelectTrigger>
-          <SelectContent>
-            {ASSIGNABLE_ROLES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {roleLabel(r, t)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {seated ? t("admin.users.ownerSeatHeld") : t("admin.users.ownerSeatVia")}{" "}
-        {/* The destination is the link text, so the sentence stops outside it — a trailing
-            full stop inside the anchor would be underlined and clickable. */}
-        <Link href="/consilium" className="rounded-xs underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-          {t("nav.consilium")}
-        </Link>
-        .
-      </p>
-    </div>
   );
 }
 

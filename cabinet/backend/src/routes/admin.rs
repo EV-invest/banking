@@ -159,35 +159,54 @@ pub async fn set_role(State(st): State<AppState>, jar: CookieJar, headers: Heade
 	let (Some(user_id), Some(role)) = (required(&v, "user_id"), required(&v, "role")) else {
 		return Err(ApiError::BadRequest("user_id and role are required".into()));
 	};
-	let res = st.grpc.admin_set_role(&token, &user_id, &role).await?;
+	let res = st.grpc.admin_set_role(&token, &user_id, &role, &editable(&v, "reason")).await?;
 	Ok(Json(json!({ "role": res.role })))
 }
 
-/// `POST /api/admin/users/suspend` — disable a user.
-pub async fn suspend_user(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
+/// `POST /api/admin/users/hold` — the emergency brake: freeze the account NOW, lapsing on
+/// its own after 24h unless the owners ratify it.
+///
+/// Replaces the old `/suspend`, which called `DisableUser` — a verb the identity plane now
+/// always refuses, because it was both the instant freeze and a permanent verdict one
+/// person made. The two need opposite treatments, so the console has to say which it
+/// means: this, or `POST /api/owners/proposals/suspension`.
+///
+/// The reason is REQUIRED here rather than forwarded empty, and it is the only one of the
+/// identity mutations for which that is true. It is what the owners asked to ratify the
+/// hold are reading, and the refusal is more legible one hop from the console than five.
+pub async fn hold_user(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
 	let token = require_token(&st, &jar).await?;
-	let Some(user_id) = required(&parse_body(&body), "user_id") else {
-		return Err(ApiError::BadRequest("user_id is required".into()));
+	let v = parse_body(&body);
+	let (Some(user_id), Some(reason)) = (required(&v, "user_id"), required(&v, "reason")) else {
+		return Err(ApiError::BadRequest("user_id and reason are required".into()));
 	};
-	st.grpc.admin_disable_user(&token, &user_id).await?;
-	Ok(Json(json!({ "ok": true })))
+	let res = st.grpc.admin_hold_user(&token, &user_id, &reason).await?;
+	// The lapse stamp is the answer, not an acknowledgement: the console has to tell the
+	// operator when the brake they just pulled comes off by itself.
+	Ok(Json(json!({ "hold_expires_at": res.hold_expires_at.to_string() })))
 }
 
-/// `POST /api/admin/users/reinstate` — re-enable a disabled user.
+/// `POST /api/admin/users/reinstate` — lift a HOLD in one act.
+///
+/// The plane refuses when the suspension was the owners' verdict (`suspended_by =
+/// "governance"`), naming `OpenUserReinstatement` — otherwise one admin could overturn a
+/// consilium and the consilium would be advisory. That refusal reaches the browser as the
+/// plane's own 4xx; the console reads `suspended_by` and offers the proposal instead.
 pub async fn reinstate_user(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
 	}
 	let token = require_token(&st, &jar).await?;
-	let Some(user_id) = required(&parse_body(&body), "user_id") else {
+	let v = parse_body(&body);
+	let Some(user_id) = required(&v, "user_id") else {
 		return Err(ApiError::BadRequest("user_id is required".into()));
 	};
-	st.grpc.admin_reinstate_user(&token, &user_id).await?;
+	st.grpc.admin_reinstate_user(&token, &user_id, &editable(&v, "reason")).await?;
 	Ok(Json(json!({ "ok": true })))
 }
 
@@ -198,10 +217,13 @@ pub async fn revoke_sessions(State(st): State<AppState>, jar: CookieJar, headers
 		return Err(ApiError::Csrf);
 	}
 	let token = require_token(&st, &jar).await?;
-	let Some(user_id) = required(&parse_body(&body), "user_id") else {
+	let v = parse_body(&body);
+	let Some(user_id) = required(&v, "user_id") else {
 		return Err(ApiError::BadRequest("user_id is required".into()));
 	};
-	let res = st.grpc.admin_revoke_tokens(&token, &user_id).await?;
+	// Optional, unlike the hold's: revoking sessions is the reflex you want an operator to
+	// reach for without composing a sentence first.
+	let res = st.grpc.admin_revoke_tokens(&token, &user_id, &editable(&v, "reason")).await?;
 	Ok(Json(json!({ "token_version": res.token_version.to_string() })))
 }
 
@@ -229,7 +251,7 @@ pub async fn set_kyc(State(st): State<AppState>, jar: CookieJar, headers: Header
 	if kyc_level > MAX_KYC_LEVEL {
 		return Err(ApiError::BadRequest(format!("kyc_level {kyc_level} is outside the tier ladder 0..={MAX_KYC_LEVEL}")));
 	}
-	let res = st.grpc.admin_set_kyc_level(&token, &user_id, kyc_level).await?;
+	let res = st.grpc.admin_set_kyc_level(&token, &user_id, kyc_level, &editable(&v, "reason")).await?;
 	Ok(Json(json!({ "kyc_level": res.kyc_level })))
 }
 
@@ -981,7 +1003,13 @@ mod admin_route_tests {
 			Err(Status::unimplemented("not reached by the fees routes"))
 		}
 
+		/// Kept in the contract rather than deleted so an older console gets an explanatory
+		/// refusal instead of an UNIMPLEMENTED. Nothing in this BFF calls it any more.
 		async fn disable_user(&self, _: GrpcRequest<cc::DisableUserRequest>) -> Result<GrpcResponse<cc::DisableUserResponse>, Status> {
+			Err(Status::unimplemented("not reached by the fees routes"))
+		}
+
+		async fn hold_user(&self, _: GrpcRequest<cc::HoldUserRequest>) -> Result<GrpcResponse<cc::HoldUserResponse>, Status> {
 			Err(Status::unimplemented("not reached by the fees routes"))
 		}
 
