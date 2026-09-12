@@ -168,7 +168,13 @@ async fn check_executable(ports: &PaymentPorts<'_>, terms: &PaymentTerms) -> Res
 		// Read-First on the source's claim: the spendable balance (posted minus what other
 		// in-flight spends have already reserved) must cover the amount. TigerBeetle's
 		// non-negative flag is the backstop at settlement.
-		(PaymentDestination::Internal(_), _) => {
+		(PaymentDestination::Internal(_), from) => {
+			// An investor's claim leaves on their say-so whichever tier it lands on, and the
+			// verification floor applies to the say-so, not to the rail: without this, an
+			// unverified account could pay a verified one, who then withdraws.
+			if let Party::User(user) = from {
+				withdrawal_app::admit_user_account(&ports.admission_gates(), *user).await?;
+			}
 			let claim = ports.ledger.balance(&terms.source_claim()).await?;
 			if Usdt::from_base_units(claim.available()) < terms.amount() {
 				return Err(DomainError::Validation("the source claim's available balance does not cover the payment".into()));

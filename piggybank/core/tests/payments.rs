@@ -1170,6 +1170,25 @@ async fn an_order_that_could_never_execute_is_refused_at_open() {
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(_)), "an uncovered source is refused: {err:?}");
 
+	// An unverified investor cannot route around the floor by paying a verified one who then
+	// withdraws: the internal hop is refused for the same reason the external one is.
+	fund(&a, LedgerAccountKey::UserClaim(investor), "10").await;
+	common::set_kyc_level(&a.pool, investor, 0).await;
+	let enforced = payments_app::PaymentPorts {
+		kyc: KycGate::ENFORCED,
+		..ports(&a)
+	};
+	let verified = an_investor(&a.pool).await;
+	let err = payments_app::open(&enforced, investor, terms(Party::User(investor), PaymentDestination::Internal(Party::User(verified)), "1"), now())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(ref why) if why.contains("verification")), "{err:?}");
+	common::set_kyc_level(&a.pool, investor, 1).await;
+	payments_app::open(&enforced, investor, terms(Party::User(investor), PaymentDestination::Internal(Party::User(verified)), "1"), now())
+		.await
+		.expect("verified, the same order opens");
+	reset_payments(&a.pool).await;
+
 	let unwired = payments_app::PaymentPorts {
 		governance_mail_wired: false,
 		..ports(&a)
@@ -1181,6 +1200,7 @@ async fn an_order_that_could_never_execute_is_refused_at_open() {
 
 	let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM payments").fetch_one(&a.pool).await.unwrap();
 	assert_eq!(stored, 0, "a refused open writes nothing");
+	a.relay.drain().await;
 }
 
 /// A revocation between consent and execution: the execution path reads the moved pin

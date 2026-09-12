@@ -130,6 +130,15 @@ pub async fn queue_withdrawal(
 /// open for exactly the reasons its execution would refuse it 72 hours later.
 async fn admit_user_withdrawal(gates: &AdmissionGates<'_>, user: UserId, network: Network) -> Result<(), DomainError> {
 	require_configured(gates.configured, network)?;
+	admit_user_account(gates, user).await
+}
+
+/// The account half of the admission gates — the freeze and the verification floor, with
+/// no rail in the question. On its own so a payment order can run it over an INTERNAL
+/// destination too: a hop from one investor's claim to another's is that investor moving
+/// money on their say-so exactly as a withdrawal is, and an unverified account must not be
+/// able to route around the floor by paying a verified one who then withdraws.
+pub async fn admit_user_account(gates: &AdmissionGates<'_>, user: UserId) -> Result<(), DomainError> {
 	// KYC/freeze gate — a disabled account may not move money out.
 	let account = gates.users.find_by_id(user).await?.ok_or_else(|| DomainError::NotFound {
 		entity: "user",
