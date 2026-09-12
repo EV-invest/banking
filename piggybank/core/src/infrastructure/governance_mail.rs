@@ -52,14 +52,13 @@ pub const fn is_wired() -> bool {
 #[cfg(feature = "concierge_governance_mail")]
 pub mod wired {
 	use async_trait::async_trait;
-	use domain::error::DomainError;
 	use evconcierge_contracts::concierge::v1::{
 		GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PayoutApprovalMail, PayoutOutcomeMail, SendGovernanceMailRequest, mail_relay_service_client::MailRelayServiceClient,
 	};
-	use tonic::{Request, metadata::MetadataValue, transport::Channel};
+	use tonic::{Code, Request, metadata::MetadataValue, transport::Channel};
 	use uuid::Uuid;
 
-	use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer};
+	use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError};
 
 	/// Calls concierge's mail relay, authenticated with the shared banking↔concierge service
 	/// secret — the same `BRIDGE_SERVICE_TOKEN` the one-way lifecycle bridge presents, on the
@@ -77,7 +76,7 @@ pub mod wired {
 
 	#[async_trait]
 	impl GovernanceMailer for ConciergeGovernanceMailer {
-		async fn send(&self, concierge_user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
+		async fn send(&self, concierge_user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
 			let mut payload = SendGovernanceMailRequest {
 				kind: GovernanceMailKind::Unspecified as i32,
 				user_id: concierge_user_id.to_string(),
@@ -167,13 +166,18 @@ pub mod wired {
 			let mut request = Request::new(payload);
 			let token: MetadataValue<_> = format!("Bearer {}", self.service_token)
 				.parse()
-				.map_err(|_| DomainError::Repository("malformed governance mail service token".into()))?;
+				.map_err(|_| MailDeliveryError::Failed("malformed governance mail service token".into()))?;
 			request.metadata_mut().insert("authorization", token);
 			MailRelayServiceClient::new(self.channel.clone())
 				.send_governance_mail(request)
 				.await
 				.map(|_| ())
-				.map_err(|status| DomainError::Repository(format!("governance mail relay: {status}")))
+				.map_err(|status| match status.code() {
+					// The recipient is being rate-limited, or the relay is down: nothing about
+					// THIS message was refused, so nothing about it is charged.
+					Code::ResourceExhausted | Code::Unavailable => MailDeliveryError::Deferred(format!("governance mail relay: {status}")),
+					_ => MailDeliveryError::Failed(format!("governance mail relay: {status}")),
+				})
 		}
 	}
 }

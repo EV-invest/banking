@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer};
+use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError};
 
 /// What a queued mail is ABOUT — the row it announces or asks a decision on. Exactly one,
 /// which `consilium_mail_names_one_subject` states to the database; the worker uses it to
@@ -63,6 +63,17 @@ const BATCH: i64 = 100;
 /// After this many failures a row stops being retried and starts being an alert. It is
 /// never deleted: the audit trail keeps what could not be delivered, and why.
 const MAX_ATTEMPTS: i32 = 10;
+
+/// How long a mail keeps being DEFERRED — the relay throttling its recipient, or being
+/// unreachable — before it is finally given up on. A deferral charges no attempt (nothing
+/// about the message was refused), so the ceiling here is time, not count: a day covers a
+/// relay outage or a busy recipient without letting a throttled approval mail sit forever.
+pub const DEFERRAL_CEILING: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// The longest wait between two deferred retries. The backoff doubles from the sweep
+/// interval and stops here, so a recipient the relay is protecting is asked again minutes
+/// apart, not seconds — and a relay coming back is noticed within the hour.
+const MAX_DEFERRAL_BACKOFF: Duration = Duration::from_secs(60 * 60);
 
 pub struct ConsiliumMailer {
 	pool: PgPool,
@@ -128,10 +139,12 @@ impl ConsiliumMailer {
 	/// One pass. Returns how many messages were handed over. Public so an integration test
 	/// can drive it deterministically.
 	pub async fn drain(&self) -> Result<usize, DomainError> {
+		// A deferred row waits out its backoff; everything else undelivered and under the
+		// ceiling is due now.
 		let rows = sqlx::query(
 			"SELECT m.id, m.dedupe_key, m.payload::text AS payload, u.concierge_user_id \
 			 FROM consilium_mail m JOIN users u ON u.id = m.user_id \
-			 WHERE m.sent_at IS NULL AND m.attempts < $1 ORDER BY m.id LIMIT $2",
+			 WHERE m.sent_at IS NULL AND m.attempts < $1 AND (m.next_attempt_at IS NULL OR m.next_attempt_at <= now()) ORDER BY m.id LIMIT $2",
 		)
 		.bind(MAX_ATTEMPTS)
 		.bind(BATCH)
@@ -190,10 +203,59 @@ impl ConsiliumMailer {
 					}
 					sent += 1;
 				}
-				Err(err) => self.fail(id, &err.to_string()).await?,
+				Err(MailDeliveryError::Deferred(why)) => self.defer(id, &why).await?,
+				Err(MailDeliveryError::Failed(why)) => self.fail(id, &why).await?,
 			}
 		}
 		Ok(sent)
+	}
+
+	/// Put a row back for later WITHOUT charging an attempt: the relay is throttling this
+	/// recipient or is down, and neither says anything about the message. The wait doubles
+	/// from the sweep interval up to [`MAX_DEFERRAL_BACKOFF`]; past [`DEFERRAL_CEILING`] from
+	/// creation the row is given up on the way a failed one is, so a permanently throttled
+	/// recipient still becomes an alert rather than a silent stall.
+	async fn defer(&self, id: i64, reason: &str) -> Result<(), DomainError> {
+		let expired: bool = sqlx::query_scalar("SELECT created_at + $2 < now() FROM consilium_mail WHERE id = $1")
+			.bind(id)
+			.bind(DEFERRAL_CEILING)
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		if expired {
+			sqlx::query("UPDATE consilium_mail SET attempts = $2, last_error = $3 WHERE id = $1")
+				.bind(id)
+				.bind(MAX_ATTEMPTS)
+				.bind(reason)
+				.execute(&self.pool)
+				.await
+				.map_err(repo_err)?;
+			error!(
+				mail_id = id,
+				"consilium mailer: giving up on a governance mail deferred for over {DEFERRAL_CEILING:?} — an owner will not be told: {reason}"
+			);
+			return Ok(());
+		}
+		let deferrals: i32 = sqlx::query_scalar("UPDATE consilium_mail SET deferrals = deferrals + 1, last_error = $2 WHERE id = $1 RETURNING deferrals")
+			.bind(id)
+			.bind(reason)
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		let backoff = SWEEP_INTERVAL.saturating_mul(1u32 << (deferrals - 1).clamp(0, 16)).min(MAX_DEFERRAL_BACKOFF);
+		sqlx::query("UPDATE consilium_mail SET next_attempt_at = now() + $2 WHERE id = $1")
+			.bind(id)
+			.bind(backoff)
+			.execute(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		warn!(
+			mail_id = id,
+			deferrals,
+			?backoff,
+			"consilium mailer: delivery deferred by the relay (no attempt charged): {reason}"
+		);
+		Ok(())
 	}
 
 	/// Record a delivery failure. At the ceiling it becomes an `error!` (Sentry-shipped): an

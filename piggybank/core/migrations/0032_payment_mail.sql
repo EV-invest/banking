@@ -29,6 +29,15 @@ ALTER TABLE consilium_mail ADD CONSTRAINT consilium_mail_kind_check
 -- `notified` flag can be flipped without scanning the queue.
 CREATE INDEX consilium_mail_payment_idx ON consilium_mail (payment_id) WHERE payment_id IS NOT NULL;
 
+-- DEFERRAL, DISTINCT FROM FAILURE. Concierge rate-limits governance mail per recipient
+-- (RESOURCE_EXHAUSTED) and can be unreachable (UNAVAILABLE); neither says anything about
+-- the message, so neither spends one of its ten `attempts` — a throttled recipient must not
+-- lose their approval token to a limit that was protecting them. A deferred row waits until
+-- `next_attempt_at` (exponential from the sweep interval, capped) and is retried for up to a
+-- day from creation before it is finally given up on.
+ALTER TABLE consilium_mail ADD COLUMN deferrals INTEGER NOT NULL DEFAULT 0 CHECK (deferrals >= 0);
+ALTER TABLE consilium_mail ADD COLUMN next_attempt_at TIMESTAMPTZ;
+
 -- `revenue` is a PARTY (a payment can pay the fund's earned money out) but never a deposit
 -- target: money arriving from outside is attested by a chain watcher and lands on the party
 -- whose address received it, and no address is the fee claim's. `application::balance`

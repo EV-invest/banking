@@ -173,6 +173,36 @@ pub struct PaymentApproval {
 	pub code: String,
 }
 
+/// Why a mail was not taken — split by what the worker should do about it.
+///
+/// The identity plane rate-limits governance mail per recipient and answers
+/// `RESOURCE_EXHAUSTED`; it can also simply be unreachable. Neither says anything about
+/// the message, so neither may spend one of the message's attempts: a recipient who is
+/// throttled ten times in five minutes would otherwise lose their approval token for good
+/// while the mechanism reported a delivery failure that never happened.
+#[derive(Debug)]
+pub enum MailDeliveryError {
+	/// Try again later, charging nothing: the relay is throttling this recipient or is down.
+	Deferred(String),
+	/// The relay refused this message, or the transport failed in a way a retry may fix;
+	/// each such answer costs an attempt.
+	Failed(String),
+}
+
+impl core::fmt::Display for MailDeliveryError {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		match self {
+			Self::Deferred(why) | Self::Failed(why) => f.write_str(why),
+		}
+	}
+}
+
+impl From<MailDeliveryError> for DomainError {
+	fn from(err: MailDeliveryError) -> Self {
+		DomainError::Repository(err.to_string())
+	}
+}
+
 /// The driven port: hand one mail to the identity plane's mailer.
 ///
 /// `dedupe_key` makes the call idempotent on concierge's side, so the retrying worker
@@ -181,5 +211,5 @@ pub struct PaymentApproval {
 /// which is what stops the money plane from redirecting a governance mail.
 #[async_trait]
 pub trait GovernanceMailer: Send + Sync {
-	async fn send(&self, concierge_user_id: uuid::Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), DomainError>;
+	async fn send(&self, concierge_user_id: uuid::Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError>;
 }
