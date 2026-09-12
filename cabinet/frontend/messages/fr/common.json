@@ -1499,6 +1499,22 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Expédier, régler ou faire échouer les retraits — ceux des investisseurs et les versements du fonds"
   },
+  "approval.payment.from": {
+    "en": "From",
+    "t": "De"
+  },
+  "approval.payment.payloadHashHint": {
+    "en": "The fingerprint is taken over the amount, both ends and the reason above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
+    "t": "L'empreinte est calculée sur le montant, les deux extrémités et le motif ci-dessus. Elle est revérifiée avant tout mouvement d'argent, de sorte qu'une demande ne peut plus être modifiée après votre accord."
+  },
+  "approval.payment.tier": {
+    "en": "Tier",
+    "t": "Niveau"
+  },
+  "approval.payment.to": {
+    "en": "To",
+    "t": "Vers"
+  },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
     "t": "Un accès de qualité institutionnelle à des fonds sélectionnés d’immobilier côtier et d’infrastructures — gérés de bout en bout."
@@ -1570,6 +1586,62 @@
   "auth.welcomeBack": {
     "en": "Welcome back",
     "t": "Bon retour"
+  },
+  "consent.approve": {
+    "en": "Approve — move my money",
+    "t": "Accepter — déplacer mon argent"
+  },
+  "consent.askedBy": {
+    "en": "Asked by",
+    "t": "Demandé par"
+  },
+  "consent.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed. Nothing was approved and your money has not moved. Whoever asked can open a new request.",
+    "t": "Le code a été saisi incorrectement trop de fois, le lien a donc été fermé. Rien n'a été approuvé et votre argent n'a pas bougé. La personne qui a demandé peut ouvrir une nouvelle demande."
+  },
+  "consent.decided.approvedFresh": {
+    "en": "Your answer has been recorded and the payment goes ahead. There is nothing further to do here.",
+    "t": "Votre réponse a été enregistrée et le paiement va être exécuté. Il n'y a rien d'autre à faire ici."
+  },
+  "consent.decided.approvedTitle": {
+    "en": "You approved this payment",
+    "t": "Vous avez accepté ce paiement"
+  },
+  "consent.decided.rejectedFresh": {
+    "en": "Your answer has been recorded. Your money stays exactly where it is, and whoever asked has been told.",
+    "t": "Votre réponse a été enregistrée. Votre argent reste exactement là où il est, et la personne qui a demandé en a été informée."
+  },
+  "consent.decided.rejectedTitle": {
+    "en": "You rejected this payment",
+    "t": "Vous avez refusé ce paiement"
+  },
+  "consent.decisionLead": {
+    "en": "Both answers need the code from your email. Enter it once, then choose. Rejecting keeps your money exactly where it is.",
+    "t": "Les deux réponses nécessitent le code de votre e-mail. Saisissez-le une fois, puis choisissez. Refuser laisse votre argent exactement là où il est."
+  },
+  "consent.decisionTitle": {
+    "en": "Your decision",
+    "t": "Votre décision"
+  },
+  "consent.lead": {
+    "en": "This is YOUR money. {initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.",
+    "t": "C'est VOTRE argent. {initiator} demande à le déplacer comme indiqué ci-dessous. Rien ne se passe sans votre accord — personne d'autre n'est consulté, et personne ne peut répondre à votre place."
+  },
+  "consent.reasonLabel": {
+    "en": "Reason given by {initiator}",
+    "t": "Motif donné par {initiator}"
+  },
+  "consent.reject": {
+    "en": "Reject",
+    "t": "Refuser"
+  },
+  "consent.title": {
+    "en": "Your money is asked to move",
+    "t": "On demande à déplacer votre argent"
+  },
+  "consent.yourMoney": {
+    "en": "Whose money",
+    "t": "À qui est l'argent"
   },
   "consilium.admit.genesis": {
     "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",

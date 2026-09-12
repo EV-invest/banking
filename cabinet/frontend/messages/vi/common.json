@@ -1499,6 +1499,22 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Gửi lệnh, tất toán hoặc báo lỗi các lệnh rút — của nhà đầu tư và của chính quỹ"
   },
+  "approval.payment.from": {
+    "en": "From",
+    "t": "Từ"
+  },
+  "approval.payment.payloadHashHint": {
+    "en": "The fingerprint is taken over the amount, both ends and the reason above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
+    "t": "Dấu vân tay được tính trên số tiền, hai đầu và lý do ở trên. Nó được kiểm tra lại trước khi tiền được chuyển, nên yêu cầu không thể bị chỉnh sửa sau khi bạn đã đồng ý."
+  },
+  "approval.payment.tier": {
+    "en": "Tier",
+    "t": "Cấp"
+  },
+  "approval.payment.to": {
+    "en": "To",
+    "t": "Tới"
+  },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
     "t": "Tiếp cận theo chuẩn tổ chức tới các quỹ bất động sản ven biển và hạ tầng đã được thẩm định — quản lý trọn vẹn từ đầu đến cuối."
@@ -1570,6 +1586,62 @@
   "auth.welcomeBack": {
     "en": "Welcome back",
     "t": "Chào mừng trở lại"
+  },
+  "consent.approve": {
+    "en": "Approve — move my money",
+    "t": "Đồng ý — chuyển tiền của tôi"
+  },
+  "consent.askedBy": {
+    "en": "Asked by",
+    "t": "Yêu cầu bởi"
+  },
+  "consent.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed. Nothing was approved and your money has not moved. Whoever asked can open a new request.",
+    "t": "Mã đã bị nhập sai quá nhiều lần nên liên kết đã bị đóng. Không có gì được phê duyệt và tiền của bạn chưa được chuyển. Người yêu cầu có thể mở một yêu cầu mới."
+  },
+  "consent.decided.approvedFresh": {
+    "en": "Your answer has been recorded and the payment goes ahead. There is nothing further to do here.",
+    "t": "Câu trả lời của bạn đã được ghi nhận và khoản thanh toán sẽ được thực hiện. Không cần làm gì thêm ở đây."
+  },
+  "consent.decided.approvedTitle": {
+    "en": "You approved this payment",
+    "t": "Bạn đã đồng ý khoản thanh toán này"
+  },
+  "consent.decided.rejectedFresh": {
+    "en": "Your answer has been recorded. Your money stays exactly where it is, and whoever asked has been told.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Tiền của bạn vẫn ở nguyên chỗ cũ, và người yêu cầu đã được thông báo."
+  },
+  "consent.decided.rejectedTitle": {
+    "en": "You rejected this payment",
+    "t": "Bạn đã từ chối khoản thanh toán này"
+  },
+  "consent.decisionLead": {
+    "en": "Both answers need the code from your email. Enter it once, then choose. Rejecting keeps your money exactly where it is.",
+    "t": "Cả hai câu trả lời đều cần mã trong email của bạn. Nhập một lần rồi chọn. Từ chối sẽ giữ nguyên tiền của bạn ở nơi hiện tại."
+  },
+  "consent.decisionTitle": {
+    "en": "Your decision",
+    "t": "Quyết định của bạn"
+  },
+  "consent.lead": {
+    "en": "This is YOUR money. {initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.",
+    "t": "Đây là tiền CỦA BẠN. {initiator} yêu cầu chuyển số tiền này như mô tả bên dưới. Không có gì xảy ra nếu bạn không đồng ý — không ai khác được hỏi, và không ai có thể trả lời thay bạn."
+  },
+  "consent.reasonLabel": {
+    "en": "Reason given by {initiator}",
+    "t": "Lý do do {initiator} đưa ra"
+  },
+  "consent.reject": {
+    "en": "Reject",
+    "t": "Từ chối"
+  },
+  "consent.title": {
+    "en": "Your money is asked to move",
+    "t": "Có yêu cầu chuyển tiền của bạn"
+  },
+  "consent.yourMoney": {
+    "en": "Whose money",
+    "t": "Tiền của ai"
   },
   "consilium.admit.genesis": {
     "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",

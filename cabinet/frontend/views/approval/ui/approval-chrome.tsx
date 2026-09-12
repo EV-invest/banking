@@ -241,15 +241,20 @@ export function ApprovalExpired() {
   );
 }
 
-/** The token burned: five wrong codes, and every owner has been told (policy 7). */
-export function ApprovalBurned() {
+/**
+ * The token burned: five wrong codes, and every owner has been told (policy 7).
+ *
+ * The consent page passes its own body: there the seat is one investor's, and "every
+ * owner has been told" would name people who were never part of it.
+ */
+export function ApprovalBurned({ description }: { description?: string }) {
   const t = useT();
   return (
     <ApprovalOutcome
       icon={<ShieldX />}
       tone="text-destructive"
       title={t("approval.burned.title")}
-      description={t("approval.burned.body")}
+      description={description ?? t("approval.burned.body")}
     />
   );
 }

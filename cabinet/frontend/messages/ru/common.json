@@ -1743,6 +1743,22 @@
     "en": "The fingerprint is taken over the amount, the address, the network and the memo above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
     "t": "Отпечаток вычислен по сумме, адресу, сети и memo выше. Он проверяется заново перед переводом денег, поэтому изменить запрос после вашего согласия невозможно."
   },
+  "approval.payment.from": {
+    "en": "From",
+    "t": "Откуда"
+  },
+  "approval.payment.payloadHashHint": {
+    "en": "The fingerprint is taken over the amount, both ends and the reason above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
+    "t": "Отпечаток считается по сумме, обеим сторонам и причине выше. Он проверяется снова перед движением денег, поэтому запрос нельзя изменить после вашего согласия."
+  },
+  "approval.payment.tier": {
+    "en": "Tier",
+    "t": "Уровень"
+  },
+  "approval.payment.to": {
+    "en": "To",
+    "t": "Куда"
+  },
   "approval.payout.lead": {
     "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
     "t": "{initiator} просит выплатить деньги, которые заработал фонд. Выплата собственных средств фонда никогда не решается одним человеком, поэтому нужно согласие владельцев."
@@ -1926,6 +1942,62 @@
   "auth.welcomeBack": {
     "en": "Welcome back",
     "t": "С возвращением"
+  },
+  "consent.approve": {
+    "en": "Approve — move my money",
+    "t": "Согласиться — перевести мои деньги"
+  },
+  "consent.askedBy": {
+    "en": "Asked by",
+    "t": "Запросил"
+  },
+  "consent.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed. Nothing was approved and your money has not moved. Whoever asked can open a new request.",
+    "t": "Код был введён неверно слишком много раз, и ссылка закрыта. Ничего не согласовано, ваши деньги не двигались. Запросивший может открыть новый запрос."
+  },
+  "consent.decided.approvedFresh": {
+    "en": "Your answer has been recorded and the payment goes ahead. There is nothing further to do here.",
+    "t": "Ваш ответ записан, платёж будет исполнен. Больше здесь ничего делать не нужно."
+  },
+  "consent.decided.approvedTitle": {
+    "en": "You approved this payment",
+    "t": "Вы согласились на этот платёж"
+  },
+  "consent.decided.rejectedFresh": {
+    "en": "Your answer has been recorded. Your money stays exactly where it is, and whoever asked has been told.",
+    "t": "Ваш ответ записан. Ваши деньги остаются там, где были, а запросивший об этом узнает."
+  },
+  "consent.decided.rejectedTitle": {
+    "en": "You rejected this payment",
+    "t": "Вы отказали в этом платеже"
+  },
+  "consent.decisionLead": {
+    "en": "Both answers need the code from your email. Enter it once, then choose. Rejecting keeps your money exactly where it is.",
+    "t": "Для обоих ответов нужен код из письма. Введите его один раз и выберите. Отказ оставляет ваши деньги там, где они есть."
+  },
+  "consent.decisionTitle": {
+    "en": "Your decision",
+    "t": "Ваше решение"
+  },
+  "consent.lead": {
+    "en": "This is YOUR money. {initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.",
+    "t": "Это ВАШИ деньги. {initiator} просит перевести их, как описано ниже. Ничего не произойдёт без вашего согласия — больше никого не спрашивают, и никто не может ответить за вас."
+  },
+  "consent.reasonLabel": {
+    "en": "Reason given by {initiator}",
+    "t": "Причина, указанная {initiator}"
+  },
+  "consent.reject": {
+    "en": "Reject",
+    "t": "Отказать"
+  },
+  "consent.title": {
+    "en": "Your money is asked to move",
+    "t": "Ваши деньги просят перевести"
+  },
+  "consent.yourMoney": {
+    "en": "Whose money",
+    "t": "Чьи деньги"
   },
   "consilium.admission.cancel": {
     "en": "Withdraw this proposal",
