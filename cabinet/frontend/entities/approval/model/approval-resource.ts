@@ -1,6 +1,6 @@
 "use client";
 
-// The two token-addressed reads, as resources.
+// The token-addressed reads, as resources.
 //
 // They go through `defineResource` for the same reason every other read in this cabinet
 // does: it is the one place a read is started, and it starts it from `useResource`'s
@@ -24,8 +24,10 @@
 // make is expiring.
 
 import {
+  fetchConsentApproval,
   fetchPayoutApproval,
   fetchRemovalApproval,
+  submitConsentDecision,
   submitPayoutDecision,
   submitRemovalDecision,
 } from "@/entities/approval/api/approval-client";
@@ -35,6 +37,7 @@ import type {
   RemovalApprovalResult,
   RemovalDecision,
 } from "@/shared/contracts/governance";
+import type { ConsentDecision, PaymentConsentResult } from "@/shared/contracts/payments";
 import { defineResource } from "@/shared/lib/resource";
 
 const REVALIDATE_S = 60;
@@ -50,6 +53,14 @@ export const payoutApprovalResource = defineResource({
 export const removalApprovalResource = defineResource({
   name: "approval.removal",
   fetch: fetchRemovalApproval,
+  key: (token: string) => token,
+  revalidate: REVALIDATE_S,
+  enabled: (token: string) => token.trim().length > 0,
+});
+
+export const consentApprovalResource = defineResource({
+  name: "approval.consent",
+  fetch: fetchConsentApproval,
   key: (token: string) => token,
   revalidate: REVALIDATE_S,
   enabled: (token: string) => token.trim().length > 0,
@@ -74,5 +85,12 @@ export async function decidePayout(token: string, code: string, decision: Payout
 export async function decideRemoval(token: string, code: string, decision: RemovalDecision): Promise<RemovalApprovalResult> {
   const result = await submitRemovalDecision(token, code, decision);
   removalApprovalResource.publish(result.invitation, token);
+  return result;
+}
+
+/** The same, for an investor's consent over their own money. */
+export async function decideConsent(token: string, code: string, decision: ConsentDecision): Promise<PaymentConsentResult> {
+  const result = await submitConsentDecision(token, code, decision);
+  consentApprovalResource.publish(result.invitation, token);
   return result;
 }

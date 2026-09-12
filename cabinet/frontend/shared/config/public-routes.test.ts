@@ -31,6 +31,7 @@ test("an approval link from an email is public in every locale", () => {
   for (const locale of LOCALES) {
     assert.equal(isPublicPath(`/${locale}/cabinet/approve/01J8XYZTOKEN`), true, locale);
     assert.equal(isPublicPath(`/${locale}/cabinet/owner-removal/01J8XYZTOKEN`), true, locale);
+    assert.equal(isPublicPath(`/${locale}/cabinet/consent/01J8XYZTOKEN`), true, locale);
   }
 });
 
@@ -44,6 +45,7 @@ test("a token route with no token is public and merely 404s", () => {
   // saying so is more use than asking for credentials that would not fix it.
   assert.equal(isPublicPath("/en/cabinet/approve"), true);
   assert.equal(isPublicPath("/en/cabinet/owner-removal"), true);
+  assert.equal(isPublicPath("/en/cabinet/consent"), true);
 });
 
 test("a private page that merely starts with a public name is still private", () => {
@@ -53,6 +55,7 @@ test("a private page that merely starts with a public name is still private", ()
     "/en/cabinet/approvals",
     "/en/cabinet/approve-all",
     "/en/cabinet/owner-removals",
+    "/en/cabinet/consents",
     "/en/cabinet/logins",
   ]) {
     assert.equal(isPublicPath(path), false, path);
@@ -76,6 +79,7 @@ test("only the token pages ask for no-referrer", () => {
   // scoped to them rather than weakening the referrer policy of the whole cabinet.
   assert.equal(isTokenApprovalPath("/en/cabinet/approve/tok"), true);
   assert.equal(isTokenApprovalPath("/fr/cabinet/owner-removal/tok"), true);
+  assert.equal(isTokenApprovalPath("/ru/cabinet/consent/tok"), true);
   assert.equal(isTokenApprovalPath("/en/cabinet/login"), false);
   assert.equal(isTokenApprovalPath("/en/cabinet/consilium"), false);
 });
@@ -89,6 +93,7 @@ test("the approval pages are never observed by analytics or error monitoring", (
   for (const locale of LOCALES) {
     assert.equal(mayObserve(`/${locale}/cabinet/approve/01J8XYZTOKEN`), false, locale);
     assert.equal(mayObserve(`/${locale}/cabinet/owner-removal/01J8XYZTOKEN`), false, locale);
+    assert.equal(mayObserve(`/${locale}/cabinet/consent/01J8XYZTOKEN`), false, locale);
   }
 });
 
