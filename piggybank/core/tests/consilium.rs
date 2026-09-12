@@ -25,6 +25,7 @@ use domain::{
 };
 use piggybank_core::{
 	application::consilium as consilium_app,
+	config::KycGate,
 	infrastructure::{consilium::PgConsilia, custody::StubCustody, payments::PgPayments, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
 	ports::{
 		ConsiliumRepository, LedgerTransfer, PaymentRepository, UserRepository, WithdrawalRepository,
@@ -46,6 +47,7 @@ const PAYOUT_ADDRESS: &str = "0x52908400098527886E0F7030069857D2E4169EE7";
 const CONFIGURED: [Network; 1] = [Network::Bep20];
 
 const APPROVAL_URL_BASE: &str = "https://example.test/consilium";
+const CONSENT_URL_BASE: &str = "https://example.test/consent";
 
 /// Serialises every test in this file — see the module docs.
 static GOVERNANCE: std::sync::LazyLock<tokio::sync::Mutex<()>> = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
@@ -86,11 +88,14 @@ fn ports(h: &Harness) -> consilium_app::ConsiliumPorts<'_> {
 		consilia: h.consilia.as_ref(),
 		withdrawals: h.withdrawals.as_ref(),
 		payments: h.payments.as_ref(),
+		users: h.users.as_ref(),
 		ledger: h.ledger.as_ref(),
 		custody: &StubCustody,
 		relay: &h.notify,
 		configured: &CONFIGURED,
+		kyc: KycGate::LIFTED,
 		approval_url_base: APPROVAL_URL_BASE,
+		consent_url_base: CONSENT_URL_BASE,
 		// The suite exercises the governance path itself, so it stands in for a wired mailer.
 		// `opening_without_a_governance_mailer_is_refused` pins the false case explicitly.
 		governance_mail_wired: true,
@@ -1229,10 +1234,8 @@ async fn a_payment_consilium_round_trips_and_leaves_the_history_readable() {
 /// that never moved. Only `approved` (or a state past it) proves the approval landed; every
 /// other closer must come back as `Failed`, naming the order's state.
 ///
-/// Driven directly rather than through `execute`, because the outcome is only ever
-/// observable through `record_execution`, whose owner mail is refused for the payment kind
-/// until concierge ships it (`no_payment_approval_mail`) — the same closed seam
-/// `a_payment_consilium_round_trips_and_leaves_the_history_readable` works around.
+/// Driven directly rather than through `execute` so each closer's outcome can be read off
+/// the returned value rather than off the consilium row it would be recorded on.
 #[tokio::test]
 async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() {
 	use domain::{
@@ -1278,7 +1281,7 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 			initiator,
 			now(),
 		);
-		h.payments.open(&mut order, ApprovalSeat::Consilium(consilium)).await.expect("open the order");
+		h.payments.open(&mut order, ApprovalSeat::Consilium(consilium), CONSENT_URL_BASE).await.expect("open the order");
 		(subject, consilium)
 	}
 
@@ -1313,7 +1316,8 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 		};
 		assert_eq!(h.payments.find(id).await.unwrap().unwrap().order.state(), expected);
 
-		match consilium_app::execute_payment(&ports(&h), subject.clone(), now()).await.unwrap() {
+		let view = h.consilia.find(consilium).await.unwrap().unwrap();
+		match consilium_app::execute_payment(&ports(&h), &view.consilium, subject.clone(), now()).await.unwrap() {
 			ExecutionOutcome::Failed(why) => assert!(why.contains(closer), "the refusal names the order's state: {why}"),
 			ExecutionOutcome::Executed(_) => panic!("a consilium over a {closer} order was filed as having authorized it"),
 		}
@@ -1326,9 +1330,10 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 	// this one got the row lock — is believed, and so is a repeat, because `record_approval`
 	// is idempotent on an approved order.
 	let (subject, consilium) = a_linked_order(&h, initiator, Party::Piggybank, PaymentDestination::Internal(Party::Revenue)).await;
-	h.payments.record_approval(subject.payment_id, now()).await.unwrap();
+	h.payments.record_approval(subject.payment_id, consilium, now()).await.unwrap();
+	let view = h.consilia.find(consilium).await.unwrap().unwrap();
 	for _ in 0..2 {
-		match consilium_app::execute_payment(&ports(&h), subject.clone(), now()).await.unwrap() {
+		match consilium_app::execute_payment(&ports(&h), &view.consilium, subject.clone(), now()).await.unwrap() {
 			ExecutionOutcome::Executed(ConsiliumEffect::Payment(id)) => assert_eq!(id, subject.payment_id),
 			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_)) => panic!("a payment consilium produces no withdrawal"),
 			ExecutionOutcome::Failed(why) => panic!("an approved order must be believed: {why}"),

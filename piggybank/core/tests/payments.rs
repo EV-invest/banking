@@ -62,8 +62,23 @@ async fn an_investor(pool: &PgPool) -> UserId {
 	let tag = Uuid::new_v4();
 	let subject = domain::auth::AuthSubject::parse(&format!("payments-test-{tag}")).unwrap();
 	let email = Email::parse(&format!("payments-{tag}@example.test")).unwrap();
-	users.provision(subject, email, true).await.expect("provision an investor").id()
+	let id = users.provision(subject, email, true).await.expect("provision an investor").id();
+	mirror_concierge_id(pool, id).await;
+	id
 }
+
+/// The identity-plane id the bridge mirrors onto a row. A consent mail is addressed by it, so
+/// an investor without one cannot be asked for anything — `open` refuses, as pinned below.
+async fn mirror_concierge_id(pool: &PgPool, id: UserId) {
+	sqlx::query("UPDATE users SET concierge_user_id = $2 WHERE id = $1")
+		.bind(id.raw())
+		.bind(Uuid::new_v4())
+		.execute(pool)
+		.await
+		.expect("mirror the concierge id");
+}
+
+const CONSENT_URL_BASE: &str = "https://example.test/consent";
 
 /// Insert one order directly. These tests are about what the SCHEMA refuses, so the rows go
 /// in the way a buggy adapter would write them, with nothing in between to launder a violation.
@@ -278,10 +293,13 @@ async fn a_consent_seat(pool: &PgPool, subject: UserId) -> ApprovalSeat {
 		.fetch_one(pool)
 		.await
 		.expect("the subject is mirrored");
+	let token = format!("token-{subject}-{}", Uuid::new_v4());
 	ApprovalSeat::Consent(ConsentCredential {
 		subject,
-		token_hash: digest(format!("token-{subject}-{}", Uuid::new_v4()).as_bytes()),
+		token_hash: digest(token.as_bytes()),
 		code_hash: digest(CODE.as_bytes()),
+		token,
+		code: CODE.to_owned(),
 		token_version_at_open: token_version as u64,
 		email_hash_at_open: digest(email.as_bytes()),
 	})
@@ -338,7 +356,7 @@ async fn opening_an_order_materializes_its_consent_seat_and_relays_nothing() {
 
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "12.50");
 	let id = order.id();
-	payments.open(&mut order, a_consent_seat(&pool, investor).await).await.expect("open the order");
+	payments.open(&mut order, a_consent_seat(&pool, investor).await, CONSENT_URL_BASE).await.expect("open the order");
 
 	let view = payments.find(id).await.expect("find the order").expect("the order exists");
 	assert_eq!(view.order.state(), PaymentState::Pending);
@@ -371,19 +389,19 @@ async fn open_refuses_a_seat_that_is_not_the_one_the_terms_call_for() {
 
 	// An owner quorum over an investor's own money.
 	let mut own = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.00");
-	let refused = payments.open(&mut own, ApprovalSeat::Consilium(consilium)).await;
+	let refused = payments.open(&mut own, ApprovalSeat::Consilium(consilium), CONSENT_URL_BASE).await;
 	assert!(matches!(refused, Err(DomainError::Validation(_))), "a quorum seat over an investor's order: {refused:?}");
 	assert!(payments.find(own.id()).await.unwrap().is_none(), "a refused open writes nothing");
 
 	// One investor's consent over the fund's money.
 	let mut fund = an_order(Party::Revenue, PaymentDestination::Internal(Party::Piggybank), investor, "1.00");
-	let refused = payments.open(&mut fund, a_consent_seat(&pool, investor).await).await;
+	let refused = payments.open(&mut fund, a_consent_seat(&pool, investor).await, CONSENT_URL_BASE).await;
 	assert!(matches!(refused, Err(DomainError::Validation(_))), "a consent seat over a fund-owned order: {refused:?}");
 	assert!(payments.find(fund.id()).await.unwrap().is_none());
 
 	// The right kind of seat, naming the wrong investor.
 	let mut own = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.00");
-	let refused = payments.open(&mut own, a_consent_seat(&pool, stranger).await).await;
+	let refused = payments.open(&mut own, a_consent_seat(&pool, stranger).await, CONSENT_URL_BASE).await;
 	assert!(matches!(refused, Err(DomainError::Validation(_))), "a consent seat naming a stranger: {refused:?}");
 	assert!(payments.find(own.id()).await.unwrap().is_none());
 
@@ -409,7 +427,7 @@ async fn five_wrong_codes_burn_the_consent_and_close_the_order() {
 
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.00");
 	let id = order.id();
-	payments.open(&mut order, seat).await.expect("open the order");
+	payments.open(&mut order, seat, CONSENT_URL_BASE).await.expect("open the order");
 
 	// Reading the invitation costs no attempt — mail scanners fetch every URL in a message.
 	let invitation = payments.invitation(&token, now()).await.expect("the token resolves");
@@ -458,7 +476,7 @@ async fn the_right_code_approves_the_order_and_reserves_its_source() {
 
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "3.00");
 	let id = order.id();
-	payments.open(&mut order, seat).await.expect("open the order");
+	payments.open(&mut order, seat, CONSENT_URL_BASE).await.expect("open the order");
 
 	let outcome = payments
 		.submit(&token, CODE, ConsentDecision::Approve, &audit(), now())
@@ -511,17 +529,23 @@ async fn a_fund_owned_order_is_carried_by_its_consilium() {
 
 	let mut order = an_order(Party::Revenue, PaymentDestination::Internal(Party::Piggybank), operator, "40.00");
 	let id = order.id();
-	payments.open(&mut order, ApprovalSeat::Consilium(consilium)).await.expect("open the order");
+	payments.open(&mut order, ApprovalSeat::Consilium(consilium), CONSENT_URL_BASE).await.expect("open the order");
 
 	let view = payments.find(id).await.unwrap().unwrap();
 	assert_eq!(view.consilium_id, Some(consilium));
 	assert!(view.consent.is_none(), "fund-owned money is never consented to by one investor");
 
 	assert_eq!(payments.awaiting_execution().await.unwrap(), Vec::new(), "a pending order is not executable");
-	payments.record_approval(id, now()).await.expect("the quorum carried it");
+	// A quorum over some OTHER order cannot carry this one, whatever its terms say.
+	let stranger = a_decided_consilium(&pool, operator).await;
+	assert!(
+		matches!(payments.record_approval(id, stranger, now()).await, Err(DomainError::Conflict(_))),
+		"only the linked consilium may approve the order"
+	);
+	payments.record_approval(id, consilium, now()).await.expect("the quorum carried it");
 	assert_eq!(payments.awaiting_execution().await.unwrap(), vec![id]);
 	assert_eq!(relayed_kinds(&pool, id).await, vec!["reserved".to_owned()]);
-	payments.record_approval(id, now()).await.expect("recording the same approval twice is a no-op");
+	payments.record_approval(id, consilium, now()).await.expect("recording the same approval twice is a no-op");
 
 	payments.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Transfer), now()).await.expect("execute");
 	let conflict = payments
@@ -529,8 +553,12 @@ async fn a_fund_owned_order_is_carried_by_its_consilium() {
 		.await;
 	assert!(matches!(conflict, Err(DomainError::Conflict(_))), "a second, different effect is a conflict, not an overwrite");
 
-	sqlx::query("DELETE FROM consilium WHERE id = $1").bind(consilium.raw()).execute(&pool).await.ok();
 	reset_payments(&pool).await;
+	sqlx::query("DELETE FROM consilium WHERE id = ANY($1)")
+		.bind(vec![consilium.raw(), stranger.raw()])
+		.execute(&pool)
+		.await
+		.ok();
 }
 
 /// The admin feed's filters, the expiry sweep, and the rule that only the operator who opened
@@ -549,11 +577,14 @@ async fn the_feed_filters_and_the_sweep_close_what_nobody_answered() {
 
 	let mut of_investor = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "5.00");
 	let investors_order = of_investor.id();
-	payments.open(&mut of_investor, a_consent_seat(&pool, investor).await).await.expect("open the investor's order");
+	payments
+		.open(&mut of_investor, a_consent_seat(&pool, investor).await, CONSENT_URL_BASE)
+		.await
+		.expect("open the investor's order");
 	let mut of_fund = an_order(Party::Revenue, PaymentDestination::Internal(Party::Piggybank), investor, "9.00");
 	let fund_order = of_fund.id();
 	payments
-		.open(&mut of_fund, ApprovalSeat::Consilium(a_decided_consilium(&pool, investor).await))
+		.open(&mut of_fund, ApprovalSeat::Consilium(a_decided_consilium(&pool, investor).await), CONSENT_URL_BASE)
 		.await
 		.expect("open the fund's order");
 
@@ -633,11 +664,9 @@ async fn a_failed_execution_releases_the_reservation_it_was_holding() {
 
 	let mut order = an_order(Party::Piggybank, PaymentDestination::Internal(Party::Revenue), investor, "30");
 	let id = order.id();
-	payments
-		.open(&mut order, ApprovalSeat::Consilium(a_decided_consilium(&pool, investor).await))
-		.await
-		.expect("open the order");
-	payments.record_approval(id, now()).await.expect("the quorum carried it");
+	let consilium = a_decided_consilium(&pool, investor).await;
+	payments.open(&mut order, ApprovalSeat::Consilium(consilium), CONSENT_URL_BASE).await.expect("open the order");
+	payments.record_approval(id, consilium, now()).await.expect("the quorum carried it");
 	relay.drain().await;
 	let reserved = ledger.balance(&LedgerAccountKey::Fund).await.unwrap();
 	assert_eq!(reserved.locked - before.locked, usdt("30").base_units(), "the approval locked the source");
@@ -711,7 +740,7 @@ async fn an_approved_payment_reserves_its_source_and_then_settles_it() {
 	let token = token_hash_of(&seat);
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "30");
 	let id = order.id();
-	payments.open(&mut order, seat).await.expect("open the order");
+	payments.open(&mut order, seat, CONSENT_URL_BASE).await.expect("open the order");
 	payments.submit(&token, CODE, ConsentDecision::Approve, &audit(), now()).await.expect("consent");
 
 	relay.drain().await;
@@ -760,7 +789,7 @@ async fn revoking_the_investors_sessions_voids_a_pending_consent() {
 
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "2.00");
 	let id = order.id();
-	payments.open(&mut order, seat).await.expect("open the order");
+	payments.open(&mut order, seat, CONSENT_URL_BASE).await.expect("open the order");
 	assert!(payments.find(id).await.unwrap().unwrap().consent.unwrap().invalidated.is_none(), "the pins hold at open");
 
 	users.revoke_tokens(investor).await.expect("revoke every session");
@@ -808,7 +837,7 @@ async fn a_revocation_between_consent_and_execution_fails_the_payment_closed() {
 
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "4.00");
 	let id = order.id();
-	payments.open(&mut order, seat).await.expect("open the order");
+	payments.open(&mut order, seat, CONSENT_URL_BASE).await.expect("open the order");
 	let consented = payments
 		.submit(&token, CODE, ConsentDecision::Approve, &audit(), now())
 		.await
@@ -863,11 +892,18 @@ async fn a_changed_mailbox_voids_a_pending_consent() {
 		.await
 		.expect("provision the investor")
 		.id();
+	// Without a mirrored identity-plane id there is nobody to address the consent mail to,
+	// and `open` refuses rather than seating a consent nobody will ever receive.
+	let mut unaddressed = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.50");
+	let refused = payments.open(&mut unaddressed, a_consent_seat(&pool, investor).await, CONSENT_URL_BASE).await;
+	assert!(matches!(refused, Err(DomainError::Conflict(_))), "an investor with no concierge id cannot be asked: {refused:?}");
+	assert!(payments.find(unaddressed.id()).await.unwrap().is_none(), "a refused open writes nothing");
+	mirror_concierge_id(&pool, investor).await;
 	let seat = a_consent_seat(&pool, investor).await;
 	let token = token_hash_of(&seat);
 	let mut order = an_order(Party::User(investor), PaymentDestination::Internal(Party::Revenue), investor, "1.50");
 	let id = order.id();
-	payments.open(&mut order, seat).await.expect("open the order");
+	payments.open(&mut order, seat, CONSENT_URL_BASE).await.expect("open the order");
 
 	// The provider reports a new address behind the same subject — the path the first-login
 	// upsert takes for an existing row.

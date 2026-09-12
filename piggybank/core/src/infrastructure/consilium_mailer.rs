@@ -14,12 +14,46 @@
 use std::{sync::Arc, time::Duration};
 
 use domain::error::DomainError;
-use sqlx::{PgPool, Row};
+use sqlx::{PgConnection, PgPool, Row};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer};
+
+/// What a queued mail is ABOUT — the row it announces or asks a decision on. Exactly one,
+/// which `consilium_mail_names_one_subject` states to the database; the worker uses it to
+/// know which seat's `notified` flag a delivered token mail flips.
+#[derive(Clone, Copy)]
+pub enum MailSubject {
+	Consilium(Uuid),
+	Payment(Uuid),
+}
+
+/// Queue one mail on the caller's open transaction, so the notification commits with the
+/// fact it announces or not at all. `ON CONFLICT DO NOTHING` on the dedupe key makes a
+/// retried transition (or a redelivered sweep) enqueue the same notification exactly once.
+///
+/// `user_id` is the recipient's BANKING id; the worker resolves it to the concierge id at
+/// send time, because the relay addresses identities in the plane that owns them.
+pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
+	let payload = serde_json::to_string(mail).map_err(|e| DomainError::Repository(e.to_string()))?;
+	let (consilium_id, payment_id) = match subject {
+		MailSubject::Consilium(id) => (Some(id), None),
+		MailSubject::Payment(id) => (None, Some(id)),
+	};
+	sqlx::query("INSERT INTO consilium_mail (consilium_id, payment_id, user_id, kind, dedupe_key, payload) VALUES ($1, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (dedupe_key) DO NOTHING")
+		.bind(consilium_id)
+		.bind(payment_id)
+		.bind(user_id)
+		.bind(mail.as_str())
+		.bind(dedupe_key)
+		.bind(payload)
+		.execute(&mut *conn)
+		.await
+		.map_err(repo_err)?;
+	Ok(())
+}
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -134,15 +168,21 @@ impl ConsiliumMailer {
 						.execute(&self.pool)
 						.await
 						.map_err(repo_err)?;
-					// `consilium_voter.notified` used to be set TRUE at INSERT, where it meant
-					// "queued" while the operator screen reading it says "notified". During a
-					// concierge outage every seat would show as notified with not one mail
-					// delivered — the screen would look healthiest exactly when the mechanism
-					// was most broken. It is set HERE, once concierge has actually taken the
-					// message, and only for the approval mail: an outcome or burn notice tells
-					// an owner nothing about whether they were given a token to vote with.
-					if matches!(mail, GovernanceMail::PayoutApproval(_)) {
-						sqlx::query("UPDATE consilium_voter SET notified = TRUE WHERE consilium_id = (SELECT consilium_id FROM consilium_mail WHERE id = $1) AND user_id = (SELECT user_id FROM consilium_mail WHERE id = $1)")
+					// `notified` used to be set TRUE at INSERT, where it meant "queued" while
+					// the operator screen reading it says "notified". During a concierge outage
+					// every seat would show as notified with not one mail delivered — the screen
+					// would look healthiest exactly when the mechanism was most broken. It is set
+					// HERE, once concierge has actually taken the message, and only for a mail
+					// that carries a token: an outcome or burn notice tells the recipient nothing
+					// about whether they were given one to answer with. Which seat table holds
+					// the flag follows from which subject the row names.
+					if mail.carries_a_token() {
+						sqlx::query("UPDATE consilium_voter v SET notified = TRUE FROM consilium_mail m WHERE m.id = $1 AND v.consilium_id = m.consilium_id AND v.user_id = m.user_id")
+							.bind(id)
+							.execute(&self.pool)
+							.await
+							.map_err(repo_err)?;
+						sqlx::query("UPDATE payment_consent c SET notified = TRUE FROM consilium_mail m WHERE m.id = $1 AND c.payment_id = m.payment_id AND c.subject_user_id = m.user_id")
 							.bind(id)
 							.execute(&self.pool)
 							.await

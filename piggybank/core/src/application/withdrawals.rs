@@ -80,14 +80,30 @@ pub struct AdmissionGates<'a> {
 
 /// The calling user withdraws `amount` (gross) of free balance to `address`. The fee
 /// is the per-network policy fee; the net (`amount − fee`) is what leaves on-chain.
+///
+/// `id` is supplied by the caller for the reason [`request_revenue_payout`]'s is: a payment
+/// order derives it from itself (`uuid_v5(payment_id, "payment:withdrawal")`) so a retried
+/// execution re-creates the same row instead of a second withdrawal. The self-service wallet
+/// passes a fresh [`WithdrawalId::new`].
 pub async fn request_withdrawal(
 	ports: &WithdrawalPorts<'_>,
 	gates: &AdmissionGates<'_>,
+	id: WithdrawalId,
 	user: UserId,
 	network: Network,
 	address: WalletAddress,
 	amount: Usdt,
 ) -> Result<Withdrawal, DomainError> {
+	admit_user_withdrawal(gates, user, network).await?;
+	let source = WithdrawalSource::User(user);
+	open_withdrawal(ports, id, source, network, address, amount).await
+}
+
+/// The user-facing admission gates, on their own: the rail is run, the account is active,
+/// and the verification floor admits it. Shared by [`request_withdrawal`] and the payment
+/// order's open-time pre-check, so an L1 payment out of an investor's claim is refused at
+/// open for exactly the reasons its execution would refuse it 72 hours later.
+async fn admit_user_withdrawal(gates: &AdmissionGates<'_>, user: UserId, network: Network) -> Result<(), DomainError> {
 	require_configured(gates.configured, network)?;
 	// KYC/freeze gate — a disabled account may not move money out.
 	let account = gates.users.find_by_id(user).await?.ok_or_else(|| DomainError::NotFound {
@@ -107,8 +123,17 @@ pub async fn request_withdrawal(
 	if !gates.kyc.admits(account.kyc_level()) {
 		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
 	}
+	Ok(())
+}
+
+/// Would this user withdrawal be accepted *right now*, without recording anything? The
+/// user-side twin of [`check_revenue_payout`], run by a payment order at OPEN so an
+/// impossible L1 payment is refused before its subject spends 72 hours consenting to it.
+pub async fn check_user_withdrawal(ledger: &dyn Ledger, gates: &AdmissionGates<'_>, user: UserId, network: Network, address: WalletAddress, amount: Usdt) -> Result<(), DomainError> {
+	admit_user_withdrawal(gates, user, network).await?;
 	let source = WithdrawalSource::User(user);
-	open_withdrawal(ports, WithdrawalId::new(), source, network, address, amount).await
+	Withdrawal::request(WithdrawalId::new(), source, network, address, amount, WithdrawalPolicy::fee_for(source, network))?;
+	require_solvent(ledger, source, amount).await
 }
 
 /// Rail gate — the withdrawable view no longer offers an unconfigured rail, but a direct

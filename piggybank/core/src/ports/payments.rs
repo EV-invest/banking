@@ -49,18 +49,17 @@ pub enum ApprovalSeat {
 	Consent(ConsentCredential),
 }
 
-/// The minted consent seat — **digests only**. The plaintext token and code exist in the
-/// application layer just long enough to be handed to the mailer, and are never stored, so a
+/// The minted consent seat. The plaintext token and code travel no further than the mail row
+/// [`PaymentRepository::open`] writes from them — in the SAME transaction as the seat, so a
+/// concierge outage can never leave an order nobody was asked about, and a mail can never
+/// exist for an order that failed to commit. Only their digests are stored on the seat, so a
 /// dump of `payment_consent` yields nothing that can consent to anything.
-///
-/// NOT YET ATOMIC WITH ITS NOTIFICATION, and deliberately called out rather than implied.
-/// `consilium_mail` enqueues the approval mail in the same transaction as the seat, so a
-/// concierge outage can never leave a request nobody was told about. Payments has no
-/// equivalent queue yet — the `payment_consent` mail kind is a concierge change that lands
-/// before the RPCs do — so until then the seat commits and the notification is the caller's
-/// to send. `payment_consent.notified` is the column that will carry it.
 pub struct ConsentCredential {
 	pub subject: UserId,
+	/// The opaque single-use token that goes in the emailed link.
+	pub token: String,
+	/// The secret code the subject types on the consent page.
+	pub code: String,
 	pub token_hash: [u8; DIGEST_BYTES],
 	pub code_hash: [u8; DIGEST_BYTES],
 	/// The subject's folded revoke floor at open — `GREATEST(concierge_token_version,
@@ -120,6 +119,18 @@ impl ConsentDecision {
 	}
 }
 
+/// What a human recognises the receiving end BY, beside the canonical label. The label
+/// (`PaymentTerms::destination_label`) is what the digest binds and every surface shares; an
+/// investor's masked mailbox or a product's title is the detail that lets an approver tell
+/// "investor 8f3e…" from the person they meant. Never digested, and masked by the surface.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EndDetail {
+	/// The receiving investor's mirrored address, UNMASKED — every surface masks it.
+	Mailbox(String),
+	/// The receiving product's title from the allocation registry.
+	ProductTitle(String),
+}
+
 /// An order and the identity slice a surface needs beside it.
 #[derive(Debug)]
 pub struct PaymentView {
@@ -129,6 +140,8 @@ pub struct PaymentView {
 	pub consilium_id: Option<ConsiliumId>,
 	/// Present exactly when the requirement is the subject's consent.
 	pub consent: Option<ConsentView>,
+	/// The receiving end's recognisable detail, when it has one.
+	pub destination_detail: Option<EndDetail>,
 }
 
 /// What the emailed investor is shown. Deliberately narrower than [`PaymentView`]: the terms
@@ -144,6 +157,7 @@ pub struct ConsentInvitation {
 	pub expires_at: i64,
 	pub decision: ConsentDecision,
 	pub attempts_remaining: u32,
+	pub destination_detail: Option<EndDetail>,
 }
 
 /// Audit facts the edge supplies with a consent. Recorded, never trusted for authorization.
@@ -166,6 +180,20 @@ pub struct ConsentOutcome {
 pub enum ExecutionOutcome {
 	Executed(PaymentEffect),
 	Failed(String),
+}
+
+/// Where an L2/L3 order's reservation stands in the relay — the Read-First the settlement
+/// takes before it is recorded, because `Approved` commits the `Reserved` event and the
+/// relay applies it afterwards, in its own time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReservationStatus {
+	/// The relay applied the reserve: its deterministic transfer id is in `saga_steps`.
+	Applied,
+	/// Still in the outbox, or not yet reached. Try again later.
+	Pending,
+	/// The ledger refused the reserve and the relay parked the event. The order can never
+	/// settle; an operator sees the row in the parked outbox.
+	Parked,
 }
 
 /// What an admin screen filters the payments table by. Every field is additive and `None`
@@ -199,7 +227,12 @@ pub trait PaymentRepository: Send + Sync {
 	///
 	/// Refuses with [`DomainError::Conflict`] when another order is already open against the
 	/// same fund-owned source (the partial unique index is what actually enforces it).
-	async fn open(&self, order: &mut PaymentOrder, seat: ApprovalSeat) -> Result<(), DomainError>;
+	///
+	/// For a consent seat the invitation mail is queued in this same transaction, addressed
+	/// to the subject's identity-plane id; `consent_url_base` is what the emailed link is
+	/// built on. Refused when the subject has no mirrored concierge id — there would be no
+	/// safe address to send to, and an order nobody can be asked about must not exist.
+	async fn open(&self, order: &mut PaymentOrder, seat: ApprovalSeat, consent_url_base: &str) -> Result<(), DomainError>;
 
 	/// Load one order in full (no lock; for queries).
 	async fn find(&self, id: PaymentId) -> Result<Option<PaymentView>, DomainError>;
@@ -207,7 +240,11 @@ pub trait PaymentRepository: Send + Sync {
 	/// Record that the owner quorum carried this order — the consilium branch's counterpart
 	/// to [`Self::submit`]. Applies [`PaymentOrder::approve`] under the order's row lock, so
 	/// the reservation event and the state change commit together. Idempotent.
-	async fn record_approval(&self, id: PaymentId, at: i64) -> Result<PaymentView, DomainError>;
+	///
+	/// `consilium` must be the quorum this order was opened under (the `payment_approval`
+	/// link), checked under the same lock: a consilium over one order must not be able to
+	/// approve another, whatever its terms happen to say.
+	async fn record_approval(&self, id: PaymentId, consilium: ConsiliumId, at: i64) -> Result<PaymentView, DomainError>;
 
 	/// Record that the owner quorum refused, or that the order was withdrawn by its initiator.
 	/// Under the row lock; idempotent on an already-closed order.
@@ -243,6 +280,13 @@ pub trait PaymentRepository: Send + Sync {
 	/// deliberately NOT here: nothing retries silently.
 	async fn awaiting_execution(&self) -> Result<Vec<PaymentId>, DomainError>;
 
+	/// Whether the relay has applied this order's reservation (`reserve_tid` is its
+	/// deterministic transfer id, `uuid_v5(payment_id, "payment:reserve")`). Read from the
+	/// relay's own record, `saga_steps` and the parked outbox — not from the ledger, which
+	/// cannot say "refused" — so the settlement is never recorded over a reserve that
+	/// never landed.
+	async fn reservation_status(&self, id: PaymentId, reserve_tid: u128) -> Result<ReservationStatus, DomainError>;
+
 	/// Record how the execution attempt ended, under the row lock. Writing the effect is
 	/// idempotent for the same effect and a conflict for a different one — which is what lets
 	/// the caller re-read by the deterministic id and believe the row rather than the error.
@@ -251,7 +295,11 @@ pub trait PaymentRepository: Send + Sync {
 	/// recorded: the order is moved to `execution_failed` (releasing an L2/L3 reservation)
 	/// and the call returns [`DomainError::Conflict`] naming why. See
 	/// [`ConsentView::invalidated`] for the L1 path, which must check before the withdrawal
-	/// exists.
+	/// exists — and for the window between that check and this call, a withdrawal the
+	/// refused effect names is CANCELLED in this same transaction while it is still queued,
+	/// so a revocation that lands after the check still stops the money. A withdrawal that
+	/// has already been dispatched cannot be voided (the broadcast may have landed), so the
+	/// effect is recorded as it is and the pin movement is logged rather than lied about.
 	async fn record_execution(&self, id: PaymentId, outcome: ExecutionOutcome, at: i64) -> Result<PaymentView, DomainError>;
 }
 

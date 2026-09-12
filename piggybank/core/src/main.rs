@@ -450,11 +450,14 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		consilia: consilia.clone(),
 		withdrawals: withdrawals.clone(),
 		payments: payments.clone(),
+		users: users.clone(),
 		ledger: ledger.clone(),
 		custody: custody.clone(),
 		notify: relay_notify.clone(),
 		configured: Arc::from(rails.configured_networks()),
+		kyc: kyc_gate,
 		approval_url_base: config.consilium_approval_url_base.clone(),
+		consent_url_base: config.payment_consent_url_base.clone(),
 	};
 	// The mail worker exists only when the seam is compiled in — see
 	// `infrastructure::governance_mail`. Unwired, the queue still fills (nothing is lost)
@@ -490,6 +493,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		kyc_gate,
 		relay_notify,
 		config.consilium_approval_url_base.clone(),
+		config.payment_consent_url_base.clone(),
 		rails.ton.as_ref().is_some_and(|ton| ton.is_testnet),
 	);
 

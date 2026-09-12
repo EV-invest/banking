@@ -116,6 +116,30 @@ async fn insert_row(conn: &mut PgConnection, withdrawal: &Withdrawal) -> Result<
 
 /// Persist a state transition (settle/fail) — `state` and `tx_ref` are the only
 /// mutable columns. We hold the row lock, so exactly one row must update.
+/// Cancel a still-queued withdrawal on the caller's open transaction: load `FOR UPDATE`,
+/// apply [`Withdrawal::cancel`] (which refuses anything past `Queued` — a broadcast may have
+/// landed), persist, drain the void to the outbox. Crate-visible so the payments adapter can
+/// void the withdrawal an L1 execution created in the SAME transaction that refuses that
+/// execution over a moved consent pin — the one place two aggregates must move together,
+/// because leaving the withdrawal queued would let a revoked consent's money ship anyway.
+pub(crate) async fn cancel_on(conn: &mut PgConnection, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
+	let row = sqlx::query_as::<_, WithdrawalRow>(SELECT_BY_ID_FOR_UPDATE)
+		.bind(id.raw())
+		.fetch_optional(&mut *conn)
+		.await
+		.map_err(repo_err)?;
+	let mut withdrawal = row
+		.ok_or_else(|| DomainError::NotFound {
+			entity: "withdrawal",
+			id: id.to_string(),
+		})?
+		.into_domain()?;
+	withdrawal.cancel()?;
+	update_row(conn, &withdrawal).await?;
+	outbox::drain_to_outbox(conn, &mut withdrawal, true).await?;
+	Ok(withdrawal)
+}
+
 async fn update_row(conn: &mut PgConnection, withdrawal: &Withdrawal) -> Result<(), DomainError> {
 	let result = sqlx::query("UPDATE withdrawals SET state = $2, tx_ref = $3, updated_at = now() WHERE id = $1")
 		.bind(withdrawal.id().raw())
@@ -212,20 +236,7 @@ impl WithdrawalRepository for PgWithdrawals {
 
 	async fn cancel(&self, id: WithdrawalId) -> Result<Withdrawal, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let row = sqlx::query_as::<_, WithdrawalRow>(SELECT_BY_ID_FOR_UPDATE)
-			.bind(id.raw())
-			.fetch_optional(&mut *tx)
-			.await
-			.map_err(repo_err)?;
-		let mut withdrawal = row
-			.ok_or_else(|| DomainError::NotFound {
-				entity: "withdrawal",
-				id: id.to_string(),
-			})?
-			.into_domain()?;
-		withdrawal.cancel()?;
-		update_row(&mut tx, &withdrawal).await?;
-		outbox::drain_to_outbox(&mut tx, &mut withdrawal, true).await?;
+		let withdrawal = cancel_on(&mut tx, id).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(withdrawal)
 	}

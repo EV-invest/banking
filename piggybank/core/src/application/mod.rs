@@ -25,6 +25,10 @@
 //! [`allocations`] is the pure control-plane registry of investable products — it moves
 //! no money, and its `require_subscribable` gate is what every subscribe runs before one
 //! does.
+//! [`payments`] is the order that moves money between two named ends of the platform —
+//! authorized by the owners' [`consilium`] when the source is fund-owned, by the investor's
+//! own emailed consent when it is theirs — and the execution that turns an approved order
+//! into a withdrawal or one settled transfer.
 //! [`fees`] assesses a fund's management + performance terms against a holding. It is the
 //! one money use case that never moves cash while charging: a fee is collected by moving
 //! *units* between holders, so it costs no chain fee and cannot touch an investor's cash
@@ -34,9 +38,11 @@ pub mod allocations;
 pub mod auth_sync;
 pub mod balance;
 pub mod consilium;
+pub(crate) mod credentials;
 pub mod fees;
 pub mod funds;
 pub mod operations;
+pub mod payments;
 pub mod users;
 pub mod wallet;
 pub mod withdrawals;

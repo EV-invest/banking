@@ -18,7 +18,8 @@ use evbanking_auth::{TokenClass, grpc_auth_layer};
 use evbanking_contracts::banking::v1::{
 	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, consilium_approval_service_server::ConsiliumApprovalServiceServer,
 	consilium_service_server::ConsiliumServiceServer, fees_service_server::FeesServiceServer, funds_service_server::FundsServiceServer, health_service_server::HealthServiceServer,
-	operations_service_server::OperationsServiceServer, users_service_server::UsersServiceServer, wallet_service_server::WalletServiceServer,
+	operations_service_server::OperationsServiceServer, payment_consent_service_server::PaymentConsentServiceServer, payments_service_server::PaymentsServiceServer,
+	users_service_server::UsersServiceServer, wallet_service_server::WalletServiceServer,
 };
 use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
@@ -35,6 +36,7 @@ use crate::{
 		funds::FundsSvc,
 		health::Health,
 		operations::OperationsSvc,
+		payments::{PaymentConsentSvc, PaymentsSvc},
 		users::UsersSvc,
 		wallet::WalletSvc,
 	},
@@ -47,6 +49,7 @@ pub mod fees;
 pub mod funds;
 pub mod health;
 pub mod operations;
+pub mod payments;
 pub(crate) mod support;
 pub mod users;
 pub mod wallet;
@@ -72,7 +75,9 @@ pub mod wallet;
 /// mail useless. Its own surface is what carries the authorization — a single-use hashed
 /// token with a 72h TTL, plus a secret code compared in constant time — and every unusable
 /// token gets one identical `NOT_FOUND`. `ConsiliumService`, the owners' own surface, stays
-/// behind the layer like every other data service.
+/// behind the layer like every other data service. `PaymentConsentService` is the same shape
+/// for the same reason — the emailed investor is its credential — and `PaymentsService`,
+/// the operators' surface, stays behind the layer.
 pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Output = ()>) -> Result<(), tonic::transport::Error> {
 	let auth = grpc_auth_layer(state.authorizer.for_class(TokenClass::Client));
 	let health = Health::new(state.pool.clone(), state.ledger.clone(), state.configured_networks.clone());
@@ -95,6 +100,8 @@ pub async fn serve(addr: SocketAddr, state: AppState, shutdown: impl Future<Outp
 		.add_service(auth.layer(OperationsServiceServer::new(OperationsSvc::new(state.clone()))))
 		.add_service(auth.layer(ConsiliumServiceServer::new(ConsiliumSvc::new(state.clone()))))
 		.add_service(ConsiliumApprovalServiceServer::new(ConsiliumApprovalSvc::new(state.clone())))
+		.add_service(auth.layer(PaymentsServiceServer::new(PaymentsSvc::new(state.clone()))))
+		.add_service(PaymentConsentServiceServer::new(PaymentConsentSvc::new(state.clone())))
 		.add_service(auth.layer(WalletServiceServer::new(WalletSvc::new(state))))
 		.serve_with_shutdown(addr, shutdown)
 		.await

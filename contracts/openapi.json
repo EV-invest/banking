@@ -8590,6 +8590,11 @@
           "address": {
             "type": "string",
             "title": "address"
+          },
+          "detail": {
+            "type": "string",
+            "title": "detail",
+            "description": "What a person recognises this end BY, beside the label: the receiving investor's\n MASKED mailbox for `user`, the product's title for `service`. Empty otherwise. Never\n part of the digest — the label is what an approval binds."
           }
         },
         "title": "PaymentEnd",

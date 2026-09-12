@@ -32,6 +32,8 @@ pub fn mail_kind_str(mail: &GovernanceMail) -> &'static str {
 		GovernanceMail::PayoutApproval(_) => "PAYOUT_APPROVAL",
 		GovernanceMail::PayoutOutcome(_) => "PAYOUT_OUTCOME",
 		GovernanceMail::TokenBurned(_) => "APPROVAL_TOKEN_BURNED",
+		GovernanceMail::PaymentConsent(_) => "PAYMENT_CONSENT",
+		GovernanceMail::PaymentApproval(_) => "PAYMENT_APPROVAL",
 	}
 }
 
@@ -51,7 +53,9 @@ pub const fn is_wired() -> bool {
 pub mod wired {
 	use async_trait::async_trait;
 	use domain::error::DomainError;
-	use evconcierge_contracts::concierge::v1::{GovernanceMailKind, PayoutApprovalMail, PayoutOutcomeMail, SendGovernanceMailRequest, mail_relay_service_client::MailRelayServiceClient};
+	use evconcierge_contracts::concierge::v1::{
+		GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PayoutApprovalMail, PayoutOutcomeMail, SendGovernanceMailRequest, mail_relay_service_client::MailRelayServiceClient,
+	};
 	use tonic::{Request, metadata::MetadataValue, transport::Channel};
 	use uuid::Uuid;
 
@@ -81,6 +85,7 @@ pub mod wired {
 				payout_approval: None,
 				payout_outcome: None,
 				payment_consent: None,
+				payment_approval: None,
 			};
 			match mail {
 				GovernanceMail::PayoutApproval(approval) => {
@@ -116,6 +121,46 @@ pub mod wired {
 						address: outcome.address.clone(),
 						amount: outcome.amount.clone(),
 						detail: outcome.detail.clone(),
+						tier: outcome.tier.clone(),
+						source: outcome.source.clone(),
+						destination: outcome.destination.clone(),
+						reason: outcome.reason.clone(),
+					});
+				}
+				GovernanceMail::PaymentConsent(consent) => {
+					payload.kind = GovernanceMailKind::PaymentConsent as i32;
+					payload.payment_consent = Some(PaymentConsentMail {
+						payment_id: consent.payment_id.clone(),
+						subject_user_id: consent.subject_user_id.clone(),
+						initiator_email: consent.initiator_email.clone(),
+						tier: consent.tier.clone(),
+						source: consent.source.clone(),
+						destination: consent.destination.clone(),
+						amount: consent.amount.clone(),
+						reason: consent.reason.clone(),
+						payload_hash: consent.payload_hash.clone(),
+						expires_at: consent.expires_at,
+						approval_url: consent.approval_url.clone(),
+						code: consent.code.clone(),
+					});
+				}
+				GovernanceMail::PaymentApproval(approval) => {
+					payload.kind = GovernanceMailKind::PaymentApproval as i32;
+					payload.payment_approval = Some(PaymentApprovalMail {
+						consilium_id: approval.consilium_id.clone(),
+						payment_id: approval.payment_id.clone(),
+						initiator_email: approval.initiator_email.clone(),
+						tier: approval.tier.clone(),
+						source: approval.source.clone(),
+						destination: approval.destination.clone(),
+						amount: approval.amount.clone(),
+						reason: approval.reason.clone(),
+						payload_hash: approval.payload_hash.clone(),
+						threshold: approval.threshold,
+						owner_count: approval.owner_count,
+						expires_at: approval.expires_at,
+						approval_url: approval.approval_url.clone(),
+						code: approval.code.clone(),
 					});
 				}
 			}

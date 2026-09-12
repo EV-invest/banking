@@ -120,6 +120,10 @@ message PaymentEnd {
   // Set only when `kind` is `external`.
   string network = 4;
   string address = 5;
+  // What a person recognises this end BY, beside the label: the receiving investor's
+  // MASKED mailbox for `user`, the product's title for `service`. Empty otherwise. Never
+  // part of the digest — the label is what an approval binds.
+  string detail = 6;
 }
 
 // The consent seat of an investor-sourced order, as the owner surface sees it.

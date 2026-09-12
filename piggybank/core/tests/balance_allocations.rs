@@ -19,6 +19,7 @@ use domain::{
 	redemptions::RedemptionState,
 	subscriptions::{Subscription, SubscriptionId},
 	users::{Email, UserId},
+	withdrawals::WithdrawalId,
 };
 use piggybank_core::{
 	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
@@ -702,7 +703,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 		kyc: KycGate::ENFORCED,
 	};
 	let sub_fut = funds_app::subscribe(&fund_ports, subs.as_ref(), user, service.clone(), usdt("80"), now);
-	let wd_fut = withdrawal_app::request_withdrawal(&withdrawal_ports, &admission, user, network, destination(network), usdt("80"));
+	let wd_fut = withdrawal_app::request_withdrawal(&withdrawal_ports, &admission, WithdrawalId::new(), user, network, destination(network), usdt("80"));
 	let (sub_res, wd_res) = tokio::join!(sub_fut, wd_fut);
 
 	// At least one must succeed (100 covers a single 80-spend); the relay then applies the

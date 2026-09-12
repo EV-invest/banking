@@ -1076,6 +1076,14 @@ fn tid(aggregate_id: Uuid, salt: &[u8]) -> u128 {
 	Uuid::new_v5(&aggregate_id, salt).as_u128()
 }
 
+/// The transfer id of a payment's reservation leg — what the payment execution path asks
+/// `saga_steps` and the ledger about before recording an L2/L3 settlement, so the settle can
+/// never be recorded over a reserve that has not landed. The same derivation
+/// [`plan_payment`] uses, exposed rather than duplicated so the two cannot drift.
+pub fn payment_reserve_id(payment_id: Uuid) -> u128 {
+	tid(payment_id, PAYMENT_RESERVE)
+}
+
 /// Whether a withdrawal's clearing reservation actually applied to the ledger: its
 /// deterministic transfer id (`tid(aggregate, CLEARING_RESERVE)`) was recorded in
 /// `saga_steps` when the Requested leg posted. Strict `seq` order (single worker)

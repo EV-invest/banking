@@ -2017,6 +2017,14 @@ export type BankingV1PaymentEnd = {
      * address
      */
     address?: string;
+    /**
+     * detail
+     *
+     * What a person recognises this end BY, beside the label: the receiving investor's
+     * MASKED mailbox for `user`, the product's title for `service`. Empty otherwise. Never
+     * part of the digest — the label is what an approval binds.
+     */
+    detail?: string;
 };
 
 /**

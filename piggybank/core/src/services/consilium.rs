@@ -18,6 +18,7 @@ use domain::{
 	consilium::{ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
+	users::mask_email,
 };
 use evbanking_contracts::banking::v1::{self as pb, consilium_approval_service_server::ConsiliumApprovalService, consilium_service_server::ConsiliumService};
 use tonic::{Request, Response, Status};
@@ -62,11 +63,14 @@ impl AppState {
 			consilia: self.consilia.as_ref(),
 			withdrawals: self.withdrawals.as_ref(),
 			payments: self.payments.as_ref(),
+			users: self.users.as_ref(),
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
+			kyc: self.kyc_gate,
 			approval_url_base: &self.consilium_approval_url_base,
+			consent_url_base: &self.payment_consent_url_base,
 			governance_mail_wired: crate::infrastructure::governance_mail::is_wired(),
 		}
 	}
@@ -155,18 +159,6 @@ fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPayment
 			amount: subject.terms.amount().to_decimal_string(),
 			reason: subject.terms.reason().as_str().to_owned(),
 		}),
-	}
-}
-
-/// `alice@example.com` → `a***@example.com`. Used on every surface a non-owner can reach:
-/// an emailed owner needs to recognise their own address, not learn anyone else's.
-fn mask_email(email: &str) -> String {
-	let Some((local, domain)) = email.split_once('@') else {
-		return String::new();
-	};
-	match local.chars().next() {
-		Some(first) => format!("{first}***@{domain}"),
-		None => format!("***@{domain}"),
 	}
 }
 
@@ -330,17 +322,6 @@ impl ConsiliumApprovalService for ConsiliumApprovalSvc {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn an_email_is_masked_to_its_first_letter_and_domain() {
-		// What an emailed owner needs is to recognise their own seat, not to learn anyone
-		// else's address.
-		assert_eq!(mask_email("alice@example.com"), "a***@example.com");
-		assert_eq!(mask_email("@example.com"), "***@example.com");
-		// A value that is not an address discloses nothing at all rather than passing through.
-		assert_eq!(mask_email("not-an-email"), "");
-		assert_eq!(mask_email(""), "");
-	}
 
 	#[test]
 	fn pending_is_not_an_acceptable_vote() {

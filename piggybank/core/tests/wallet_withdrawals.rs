@@ -19,7 +19,7 @@ use domain::{
 	error::DomainError,
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
-	withdrawals::WithdrawalState,
+	withdrawals::{WithdrawalId, WithdrawalState},
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
@@ -187,6 +187,7 @@ async fn withdraw_reserves_then_settles_and_retains_fee() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -234,6 +235,7 @@ async fn withdraw_on_polygon_reserves_then_settles_and_retains_fee() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -271,6 +273,7 @@ async fn withdraw_fail_voids_and_refunds_in_full() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -299,6 +302,7 @@ async fn withdraw_below_minimum_is_rejected() {
 	let err = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -320,6 +324,7 @@ async fn withdraw_beyond_available_is_rejected_read_first() {
 	let err = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -342,6 +347,7 @@ async fn a_disabled_user_cannot_withdraw() {
 	let err = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -369,6 +375,7 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		Network::Ton,
 		destination(Network::Ton),
@@ -411,6 +418,7 @@ async fn a_queued_withdrawal_can_be_cancelled_and_refunds() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &StubCustody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		Network::Trc20,
 		destination(Network::Trc20),
@@ -448,6 +456,7 @@ async fn an_onchain_short_treasury_queues_despite_a_liquid_tb_rail() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &custody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -480,6 +489,7 @@ async fn an_onchain_liquid_treasury_dispatches_immediately() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &custody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -511,6 +521,7 @@ async fn a_treasury_read_failure_queues_and_never_rejects() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &custody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -539,6 +550,7 @@ async fn admin_dispatch_is_refused_when_the_treasury_is_short_onchain() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, &custody),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -581,6 +593,7 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, custody.as_ref()),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -640,6 +653,7 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, custody.as_ref()),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -700,6 +714,7 @@ async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 		let withdrawal = withdrawal_app::request_withdrawal(
 			&withdrawal_ports(&h, custody.as_ref()),
 			&admission(&h, KycGate::ENFORCED),
+			WithdrawalId::new(),
 			user,
 			network,
 			destination(network),
@@ -772,6 +787,7 @@ async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() 
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h, custody.as_ref()),
 		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
 		user,
 		network,
 		destination(network),
@@ -824,9 +840,17 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	// Queue it on an on-chain-short treasury, then dispatch against a liquid view: the
 	// liquidity gate is covered elsewhere and must not be what refuses here.
 	let short = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &short), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
-		.await
-		.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &short),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 	let liquid = TestCustody::with_view(network, TreasuryView::OnChain(usdt("1000000000")));
@@ -887,9 +911,17 @@ async fn dispatch_is_refused_when_the_owner_has_no_control_plane_row() {
 	deposit(&h, user, network, "100").await;
 
 	let short = TestCustody::with_view(network, TreasuryView::OnChain(Usdt::ZERO));
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h, &short), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
-		.await
-		.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &short),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
 	assert_eq!(withdrawal.state(), WithdrawalState::Queued);
 	h.relay.drain().await;
 

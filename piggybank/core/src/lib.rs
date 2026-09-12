@@ -111,6 +111,9 @@ pub struct AppState {
 	/// page it points at is served by the cabinet, not here; the hub only has to mint a
 	/// link an owner's mail client will render.
 	pub consilium_approval_url_base: String,
+	/// Base URL the emailed payment CONSENT link is built on (`<base>/<token>`) — the
+	/// investor-facing twin of the approval base.
+	pub payment_consent_url_base: String,
 	/// Whether the TON rail is on testnet — surfaced on its deposit addresses so the client
 	/// renders the correct (testnet-tagged) user-friendly TON address. `false` when TON is
 	/// unconfigured or on mainnet. The other rails have no testnet-specific address form.
@@ -143,6 +146,7 @@ impl AppState {
 		kyc_gate: config::KycGate,
 		relay_notify: Arc<Notify>,
 		consilium_approval_url_base: String,
+		payment_consent_url_base: String,
 		ton_is_testnet: bool,
 	) -> Self {
 		Self {
@@ -169,6 +173,7 @@ impl AppState {
 			kyc_gate,
 			relay_notify,
 			consilium_approval_url_base,
+			payment_consent_url_base,
 			ton_is_testnet,
 		}
 	}

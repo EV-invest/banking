@@ -26,8 +26,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
 use crate::{
-	application::consilium as consilium_app,
-	ports::{Custody, PaymentRepository, WithdrawalRepository, consilium::ConsiliumRepository, ledger::Ledger},
+	application::{consilium as consilium_app, payments as payments_app},
+	config::KycGate,
+	ports::{Custody, PaymentRepository, UserRepository, WithdrawalRepository, consilium::ConsiliumRepository, ledger::Ledger},
 };
 
 fn unix_now() -> i64 {
@@ -45,6 +46,8 @@ pub struct SweepReport {
 	pub executed: usize,
 	pub execution_failures: usize,
 	pub voided: usize,
+	/// The payment orders' own half of the sweep.
+	pub payments: payments_app::SweepReport,
 }
 
 /// Constructed with a struct literal rather than a positional `new`: eight `Arc`s in a row
@@ -54,11 +57,14 @@ pub struct ConsiliumSweeper {
 	pub consilia: Arc<dyn ConsiliumRepository>,
 	pub withdrawals: Arc<dyn WithdrawalRepository>,
 	pub payments: Arc<dyn PaymentRepository>,
+	pub users: Arc<dyn UserRepository>,
 	pub ledger: Arc<dyn Ledger>,
 	pub custody: Arc<dyn Custody>,
 	pub notify: Arc<Notify>,
 	pub configured: Arc<[Network]>,
+	pub kyc: KycGate,
 	pub approval_url_base: String,
+	pub consent_url_base: String,
 }
 
 impl ConsiliumSweeper {
@@ -125,11 +131,14 @@ impl ConsiliumSweeper {
 			consilia: self.consilia.as_ref(),
 			withdrawals: self.withdrawals.as_ref(),
 			payments: self.payments.as_ref(),
+			users: self.users.as_ref(),
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
 			relay: &self.notify,
 			configured: &self.configured,
+			kyc: self.kyc,
 			approval_url_base: &self.approval_url_base,
+			consent_url_base: &self.consent_url_base,
 			governance_mail_wired: super::governance_mail::is_wired(),
 		};
 		for id in self.consilia.awaiting_execution().await? {
@@ -144,6 +153,10 @@ impl ConsiliumSweeper {
 				Err(err) => warn!(consilium_id = %id, "consilium: execution attempt failed (will retry): {err}"),
 			}
 		}
+		// The payment orders' clock rides the same sweep: their windows run out on the same
+		// 72h, and an approved order whose effect never got created (a crash after the
+		// consent, a reservation the relay had not yet applied) is picked up here.
+		report.payments = payments_app::sweep(&ports.payment_ports(), now).await?;
 		Ok(report)
 	}
 }

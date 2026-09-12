@@ -30,12 +30,15 @@ use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
 use crate::{
-	infrastructure::outbox,
+	infrastructure::{
+		consilium_mailer::{MailSubject, enqueue},
+		outbox,
+	},
 	ports::{
 		consilium::{
 			ConsiliumRepository, ConsiliumView, DIGEST_BYTES, ExecutionOutcome, InvitationView, MAX_CODE_ATTEMPTS, SubmitOutcome, VoteAudit, VoterCredential, VoterView, invitation_not_found,
 		},
-		governance_mail::{GovernanceMail, PayoutApproval, PayoutOutcome},
+		governance_mail::{GovernanceMail, PaymentApproval, PayoutApproval, PayoutOutcome},
 	},
 };
 
@@ -152,38 +155,93 @@ struct StoredTerms {
 	memo: String,
 }
 
-/// The payout terms of a consilium, or the refusal that says why this kind has no mail.
+/// The stored JSONB for the terms, per kind. A payout keeps the [`StoredTerms`] shape its rows
+/// predate the enum with; a payment stores the subject's OWN serde shape, the same bytes
+/// `PaymentEvent::Opened` carries into `event_log`. `rehydrate` reads by `kind`, so the two
+/// must agree with it and with nothing else.
+fn stored_terms(terms: &ConsiliumTerms) -> Result<String, DomainError> {
+	match terms {
+		ConsiliumTerms::RevenuePayout(payout) => serde_json::to_string(&StoredTerms::of(payout)),
+		ConsiliumTerms::Payment(subject) => serde_json::to_string(subject),
+	}
+	.map_err(|e| DomainError::Repository(e.to_string()))
+}
+
+/// The approval invitation for one seat, per kind.
 ///
-/// Everything below this line — the stored JSONB shape and all three governance mails — is
-/// payout-shaped, and deliberately so: a second kind moves different money and needs its own
-/// mail, not a widened one. The match has no `_` arm, so adding a kind has to answer here.
-///
-/// [`ConsiliumKind::Payment`] answers "not yet, and not by pretending". Concierge's
-/// `GovernanceMailKind` names four kinds and none of them is an owner-facing payment
-/// approval, so the only template available is `payout_approval` — which opens with
-/// "a request to pay fund revenue out on-chain" and labels its two middle rows Network and
-/// Destination address. Rendering `Piggybank → Revenue` through it would mail the whole
-/// roster a sentence that names the wrong claim and the wrong rail on a money move they are
-/// being asked to authorize, which is the one thing this mail exists to state correctly.
-fn payout_terms(consilium: &Consilium) -> Result<&RevenuePayoutTerms, DomainError> {
+/// TWO MAILS, NOT ONE WIDENED. The payout template opens with "a request to pay fund revenue
+/// out on-chain" and labels its middle rows Network and Destination address; a payment is a
+/// transfer between two claims the platform holds, and rendering `Piggybank → Revenue`
+/// through that copy would mail the whole roster a sentence naming the wrong claim and the
+/// wrong rail on a money move they are being asked to authorize. The match has no `_` arm,
+/// so a third kind has to say what its owners read.
+fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str) -> GovernanceMail {
+	let approval_url = format!("{}/{}", approval_url_base.trim_end_matches('/'), credential.token);
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(terms) => Ok(terms),
-		ConsiliumTerms::Payment(_) => Err(no_payment_approval_mail()),
+		ConsiliumTerms::RevenuePayout(payout) => GovernanceMail::PayoutApproval(PayoutApproval {
+			consilium_id: consilium.id().to_string(),
+			initiator_email: initiator_email.to_owned(),
+			network: payout.network.as_str().to_owned(),
+			address: payout.address.as_str().to_owned(),
+			amount: payout.amount.to_decimal_string(),
+			memo: payout.memo.clone(),
+			payload_hash: consilium.payload_hash_hex(),
+			threshold: consilium.threshold(),
+			owner_count: consilium.owner_count(),
+			expires_at: consilium.expires_at(),
+			approval_url,
+			code: credential.code.clone(),
+		}),
+		ConsiliumTerms::Payment(subject) => GovernanceMail::PaymentApproval(PaymentApproval {
+			consilium_id: consilium.id().to_string(),
+			payment_id: subject.payment_id.to_string(),
+			initiator_email: initiator_email.to_owned(),
+			tier: subject.terms.tier().as_str().to_owned(),
+			source: subject.terms.source_label(),
+			destination: subject.terms.destination_label(),
+			amount: subject.terms.amount().to_decimal_string(),
+			reason: subject.terms.reason().as_str().to_owned(),
+			payload_hash: consilium.payload_hash_hex(),
+			threshold: consilium.threshold(),
+			owner_count: consilium.owner_count(),
+			expires_at: consilium.expires_at(),
+			approval_url,
+			code: credential.code.clone(),
+		}),
 	}
 }
 
-/// The one wording for "the owners cannot be asked about a payment yet", so the refusal at
-/// open and any later transition that tries to mail say the same thing and name the same fix.
-///
-/// A refusal rather than a silent skip, for `require_governance_mail`'s reason: a consilium
-/// whose seats are never mailed is unvotable from its first instant, and 72h later it expires
-/// having looked open the whole time.
-pub fn no_payment_approval_mail() -> DomainError {
-	DomainError::Conflict(
-		"a payment whose source is fund-owned needs the owner quorum, and concierge has no owner-facing payment-approval mail to ask them with; \
-		 the payout templates name a revenue payout on a rail, which a payment is not. Ship `GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL` in concierge and bump the pin first."
-			.into(),
-	)
+/// The outcome shape for either kind: the payout pair or the payment tuple, the other left
+/// empty — the renderer switches on which is filled.
+fn outcome_of(consilium: &Consilium, outcome: String, detail: String) -> PayoutOutcome {
+	let base = PayoutOutcome {
+		consilium_id: consilium.id().to_string(),
+		outcome,
+		network: String::new(),
+		address: String::new(),
+		amount: String::new(),
+		detail,
+		tier: String::new(),
+		source: String::new(),
+		destination: String::new(),
+		reason: String::new(),
+	};
+	match consilium.terms() {
+		ConsiliumTerms::RevenuePayout(payout) => PayoutOutcome {
+			network: payout.network.as_str().to_owned(),
+			address: payout.address.as_str().to_owned(),
+			amount: payout.amount.to_decimal_string(),
+			..base
+		},
+		ConsiliumTerms::Payment(subject) => PayoutOutcome {
+			amount: subject.terms.amount().to_decimal_string(),
+			tier: subject.terms.tier().as_str().to_owned(),
+			source: subject.terms.source_label(),
+			destination: subject.terms.destination_label(),
+			reason: subject.terms.reason().as_str().to_owned(),
+			..base
+		},
+	}
 }
 
 impl StoredTerms {
@@ -369,22 +427,6 @@ async fn persist(conn: &mut PgConnection, consilium: &mut Consilium) -> Result<(
 	outbox::drain_to_outbox(conn, consilium, false).await
 }
 
-/// Queue one mail. `ON CONFLICT DO NOTHING` on the dedupe key makes a retried transition (or
-/// a redelivered sweep) enqueue the same notification exactly once.
-async fn enqueue(conn: &mut PgConnection, consilium_id: Uuid, user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
-	let payload = serde_json::to_string(mail).map_err(|e| DomainError::Repository(e.to_string()))?;
-	sqlx::query("INSERT INTO consilium_mail (consilium_id, user_id, kind, dedupe_key, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (dedupe_key) DO NOTHING")
-		.bind(consilium_id)
-		.bind(user_id)
-		.bind(mail.as_str())
-		.bind(dedupe_key)
-		.bind(payload)
-		.execute(&mut *conn)
-		.await
-		.map_err(repo_err)?;
-	Ok(())
-}
-
 /// Everyone who was told about this consilium: the seats, plus the initiator — who opened it
 /// and is entitled to learn how it ended without polling for the answer.
 fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
@@ -393,18 +435,10 @@ fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
 
 /// Tell that audience how the consilium ended.
 async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) -> Result<(), DomainError> {
-	let terms = payout_terms(consilium)?;
-	let mail = GovernanceMail::PayoutOutcome(PayoutOutcome {
-		consilium_id: consilium.id().to_string(),
-		outcome: consilium.state().as_str().to_uppercase(),
-		network: terms.network.as_str().to_owned(),
-		address: terms.address.as_str().to_owned(),
-		amount: terms.amount.to_decimal_string(),
-		detail: detail.to_owned(),
-	});
+	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned()));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:outcome:{}:{recipient}", consilium.id(), consilium.state().as_str());
-		enqueue(conn, consilium.id().raw(), recipient.raw(), &key, &mail).await?;
+		enqueue(conn, MailSubject::Consilium(consilium.id().raw()), recipient.raw(), &key, &mail).await?;
 	}
 	Ok(())
 }
@@ -412,18 +446,14 @@ async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) 
 /// Tell that audience a token burned. A brute-force attempt against one seat is a fact the
 /// whole roster needs, not just its holder — who may be the one person who never sees it.
 async fn announce_burn(conn: &mut PgConnection, consilium: &Consilium, voter: UserId) -> Result<(), DomainError> {
-	let terms = payout_terms(consilium)?;
-	let mail = GovernanceMail::TokenBurned(PayoutOutcome {
-		consilium_id: consilium.id().to_string(),
-		outcome: "TOKEN_BURNED".to_owned(),
-		network: terms.network.as_str().to_owned(),
-		address: terms.address.as_str().to_owned(),
-		amount: terms.amount.to_decimal_string(),
-		detail: format!("five failed code attempts burned the approval token for seat {voter}"),
-	});
+	let mail = GovernanceMail::TokenBurned(outcome_of(
+		consilium,
+		"TOKEN_BURNED".to_owned(),
+		format!("five failed code attempts burned the approval token for seat {voter}"),
+	));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:burn:{voter}:{recipient}", consilium.id());
-		enqueue(conn, consilium.id().raw(), recipient.raw(), &key, &mail).await?;
+		enqueue(conn, MailSubject::Consilium(consilium.id().raw()), recipient.raw(), &key, &mail).await?;
 	}
 	Ok(())
 }
@@ -527,9 +557,7 @@ impl ConsiliumRepository for PgConsilia {
 	async fn open(&self, consilium: &mut Consilium, credentials: &[VoterCredential], approval_url_base: &str) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
-		// REFUSED HERE, BEFORE ANY ROW IS WRITTEN. A kind with no approval mail would open a
-		// consilium whose every seat is unreachable — see `no_payment_approval_mail`.
-		let terms = serde_json::to_string(&StoredTerms::of(payout_terms(consilium)?)).map_err(|e| DomainError::Repository(e.to_string()))?;
+		let terms = stored_terms(consilium.terms())?;
 		let inserted = sqlx::query(
 			"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, version) \
 			 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, to_timestamp($10), $11)",
@@ -574,23 +602,9 @@ impl ConsiliumRepository for PgConsilia {
 			.await
 			.map_err(repo_err)?;
 
-			let payout = payout_terms(consilium)?;
-			let mail = GovernanceMail::PayoutApproval(PayoutApproval {
-				consilium_id: consilium.id().to_string(),
-				initiator_email: initiator_email.clone(),
-				network: payout.network.as_str().to_owned(),
-				address: payout.address.as_str().to_owned(),
-				amount: payout.amount.to_decimal_string(),
-				memo: payout.memo.clone(),
-				payload_hash: consilium.payload_hash_hex(),
-				threshold: consilium.threshold(),
-				owner_count: consilium.owner_count(),
-				expires_at: consilium.expires_at(),
-				approval_url: format!("{}/{}", approval_url_base.trim_end_matches('/'), credential.token),
-				code: credential.code.clone(),
-			});
+			let mail = approval_mail(consilium, &initiator_email, credential, approval_url_base);
 			let key = format!("consilium:{}:approval:{}", consilium.id(), credential.user_id);
-			enqueue(&mut tx, consilium.id().raw(), credential.user_id.raw(), &key, &mail).await?;
+			enqueue(&mut tx, MailSubject::Consilium(consilium.id().raw()), credential.user_id.raw(), &key, &mail).await?;
 		}
 
 		outbox::drain_to_outbox(&mut tx, consilium, false).await?;
