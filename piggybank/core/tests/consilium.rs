@@ -1210,6 +1210,9 @@ async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_rea
 		})
 		.await
 		.unwrap();
+	// Apply whatever an earlier test left in the outbox BEFORE the snapshots, so the deltas
+	// below measure this order's two legs and nothing else.
+	h.relay.drain().await;
 	let revenue_before = h.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted;
 	let fund_locked_before = h.ledger.balance(&LedgerAccountKey::Fund).await.unwrap().locked;
 
@@ -1347,9 +1350,17 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 		(subject, consilium)
 	}
 
+	// The money facts go too: a `reserved` row left in the outbox would be applied by the
+	// next test's relay drain against the global `fund` claim and skew every delta after it.
 	async fn remove(h: &Harness, subject: &PaymentSubject, consilium: ConsiliumId) {
 		sqlx::query("DELETE FROM payments WHERE id = $1").bind(subject.payment_id.raw()).execute(&h.pool).await.unwrap();
 		sqlx::query("DELETE FROM consilium WHERE id = $1").bind(consilium.raw()).execute(&h.pool).await.unwrap();
+		for statement in [
+			"DELETE FROM outbox WHERE aggregate = 'payment' AND aggregate_id = $1",
+			"DELETE FROM event_log WHERE aggregate = 'payment' AND aggregate_id = $1",
+		] {
+			sqlx::query(statement).bind(subject.payment_id.raw()).execute(&h.pool).await.unwrap();
+		}
 	}
 
 	// One order per closer, each over its own fund-owned source so none queues behind

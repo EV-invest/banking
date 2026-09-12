@@ -659,6 +659,9 @@ async fn a_failed_execution_releases_the_reservation_it_was_holding() {
 		})
 		.await
 		.expect("fund the fund's own claim");
+	// Whatever an earlier suite left undrained is applied before the snapshots, so the
+	// deltas below are this order's alone.
+	relay.drain().await;
 	let before = ledger.balance(&LedgerAccountKey::Fund).await.unwrap();
 	let revenue_before = ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted;
 
@@ -735,6 +738,7 @@ async fn an_approved_payment_reserves_its_source_and_then_settles_it() {
 		})
 		.await
 		.expect("fund the investor's claim");
+	relay.drain().await;
 
 	let seat = a_consent_seat(&pool, investor).await;
 	let token = token_hash_of(&seat);
