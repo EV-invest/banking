@@ -471,6 +471,10 @@
     "en": "Worth at current NAV",
     "t": "Valeur à la VL actuelle"
   },
+  "admin.fundRevenue": {
+    "en": "Fund revenue",
+    "t": "Revenus du fonds"
+  },
   "admin.kyc.elevated": {
     "en": "Elevated",
     "t": "Approfondi"
@@ -614,6 +618,194 @@
   "admin.overview.unparked": {
     "en": "unparked",
     "t": "réinjecté"
+  },
+  "admin.payments.address": {
+    "en": "Destination address",
+    "t": "Adresse de destination"
+  },
+  "admin.payments.amountUsdt": {
+    "en": "Amount (USDT)",
+    "t": "Montant (USDT)"
+  },
+  "admin.payments.col.amountUsdt": {
+    "en": "Amount, USDT",
+    "t": "Montant, USDT"
+  },
+  "admin.payments.col.approval": {
+    "en": "Approval",
+    "t": "Approbation"
+  },
+  "admin.payments.col.ends": {
+    "en": "From → to",
+    "t": "De → vers"
+  },
+  "admin.payments.col.opened": {
+    "en": "Opened",
+    "t": "Ouvert"
+  },
+  "admin.payments.confirmOpen": {
+    "en": "Open payment",
+    "t": "Ouvrir le paiement"
+  },
+  "admin.payments.err.enterAmount": {
+    "en": "Enter an amount.",
+    "t": "Saisissez un montant."
+  },
+  "admin.payments.err.enterReason": {
+    "en": "A reason is required — it is what the approvers read.",
+    "t": "Un motif est obligatoire — c'est ce que lisent les approbateurs."
+  },
+  "admin.payments.err.noRailFromPooled": {
+    "en": "Fund capital and a product's pooled claim cannot ship to an address. Move it to fund revenue or to an investor first.",
+    "t": "Le capital du fonds et la créance commune d'un produit ne peuvent pas être envoyés à une adresse. Transférez-les d'abord vers les revenus du fonds ou vers un investisseur."
+  },
+  "admin.payments.err.pickDestination": {
+    "en": "Complete the destination.",
+    "t": "Complétez la destination."
+  },
+  "admin.payments.err.pickSource": {
+    "en": "Choose which product or investor the money comes from.",
+    "t": "Choisissez de quel produit ou investisseur provient l'argent."
+  },
+  "admin.payments.err.reasonTooLong": {
+    "en": "The reason is over 500 bytes.",
+    "t": "Le motif dépasse 500 octets."
+  },
+  "admin.payments.err.sameEnds": {
+    "en": "The source and the destination are the same claim.",
+    "t": "La source et la destination sont la même créance."
+  },
+  "admin.payments.formNote": {
+    "en": "Opening a payment moves no money. Fund-owned money is proposed to the owners' consilium; an investor's own money is put to that investor by email. Only once they agree does anything move.",
+    "t": "Ouvrir un paiement ne déplace aucun argent. L'argent du fonds est proposé au consilium des propriétaires ; l'argent propre d'un investisseur lui est soumis par e-mail. Rien ne bouge tant qu'ils n'ont pas accepté."
+  },
+  "admin.payments.kind.external": {
+    "en": "An external address",
+    "t": "Une adresse externe"
+  },
+  "admin.payments.kind.piggybank": {
+    "en": "Fund capital (piggybank)",
+    "t": "Capital du fonds (piggybank)"
+  },
+  "admin.payments.kind.revenue": {
+    "en": "Fund revenue",
+    "t": "Revenus du fonds"
+  },
+  "admin.payments.kind.service": {
+    "en": "A product",
+    "t": "Un produit"
+  },
+  "admin.payments.kind.user": {
+    "en": "An investor",
+    "t": "Un investisseur"
+  },
+  "admin.payments.list": {
+    "en": "Payments",
+    "t": "Paiements"
+  },
+  "admin.payments.noProducts": {
+    "en": "No product is registered yet.",
+    "t": "Aucun produit n'est encore enregistré."
+  },
+  "admin.payments.noRail": {
+    "en": "No rail is configured — an external payment needs a chain rail with a running watcher.",
+    "t": "Aucun rail n'est configuré — un paiement externe nécessite un rail avec un observateur actif."
+  },
+  "admin.payments.noUsers": {
+    "en": "No investor matches.",
+    "t": "Aucun investisseur ne correspond."
+  },
+  "admin.payments.none": {
+    "en": "No payments yet",
+    "t": "Aucun paiement pour l'instant"
+  },
+  "admin.payments.noneHint": {
+    "en": "Every order opened here appears with who has to agree and where that stands. An order executes once they have, and shows what it became.",
+    "t": "Chaque ordre ouvert ici apparaît avec qui doit accepter et où en est l'approbation. Une fois acceptée, il s'exécute et montre ce qu'il est devenu."
+  },
+  "admin.payments.noneInState": {
+    "en": "No payments in this state",
+    "t": "Aucun paiement dans cet état"
+  },
+  "admin.payments.open": {
+    "en": "Open a payment",
+    "t": "Ouvrir un paiement"
+  },
+  "admin.payments.openConsilium": {
+    "en": "Open the consilium",
+    "t": "Ouvrir le consilium"
+  },
+  "admin.payments.openedConsentBody": {
+    "en": "{email} has been emailed a link and a code. Nothing moves until they agree — this is their money, and only they can say so.",
+    "t": "{email} a reçu un lien et un code par e-mail. Rien ne bouge tant que cette personne n'a pas accepté — c'est son argent, et elle seule peut le dire."
+  },
+  "admin.payments.openedConsiliumBody": {
+    "en": "The owners have each been emailed a link. Nothing moves until more than half of them confirm from their own mailboxes; the live tally is in the consilium.",
+    "t": "Chaque propriétaire a reçu un lien par e-mail. Rien ne bouge tant que plus de la moitié n'ont pas confirmé depuis leur messagerie ; le décompte en direct est dans le consilium."
+  },
+  "admin.payments.openedExpires": {
+    "en": "Expires {at} · {left}",
+    "t": "Expire le {at} · {left}"
+  },
+  "admin.payments.openedTitle": {
+    "en": "Opened — no money has moved",
+    "t": "Ouvert — aucun argent n'a bougé"
+  },
+  "admin.payments.pickProduct": {
+    "en": "Choose a product",
+    "t": "Choisir un produit"
+  },
+  "admin.payments.placeholder.address": {
+    "en": "The wallet that receives the payment",
+    "t": "Le portefeuille qui reçoit le paiement"
+  },
+  "admin.payments.placeholder.reason": {
+    "en": "Why this money moves — the approvers read exactly this",
+    "t": "Pourquoi cet argent est transféré — les approbateurs liront exactement ceci"
+  },
+  "admin.payments.placeholder.userSearch": {
+    "en": "Search investors by email",
+    "t": "Rechercher un investisseur par e-mail"
+  },
+  "admin.payments.reason": {
+    "en": "Reason",
+    "t": "Motif"
+  },
+  "admin.payments.reasonHint": {
+    "en": "Required. {used} of {max} bytes. Part of what is approved, and covered by the request fingerprint — it cannot be changed afterwards.",
+    "t": "Obligatoire. {used} sur {max} octets. Fait partie de ce qui est approuvé et couvert par l'empreinte de la demande — impossible à modifier ensuite."
+  },
+  "admin.payments.requirement": {
+    "en": "Who must agree",
+    "t": "Qui doit accepter"
+  },
+  "admin.payments.review": {
+    "en": "Review payment",
+    "t": "Vérifier le paiement"
+  },
+  "admin.payments.reviewNote.owner_consilium": {
+    "en": "The terms are fixed once opened. Every owner is emailed exactly these and they are checked again before any money moves — changing anything means cancelling and starting over, and votes are not carried across.",
+    "t": "Les conditions sont figées une fois ouvertes. Chaque propriétaire les reçoit exactement par e-mail et elles sont revérifiées avant tout mouvement d'argent — modifier quoi que ce soit signifie annuler et recommencer, et les votes ne sont pas reportés."
+  },
+  "admin.payments.reviewNote.subject_consent": {
+    "en": "The terms are fixed once opened. This is the investor's own money: they alone are emailed exactly these and must agree with the code from that message. Changing anything means cancelling and starting over.",
+    "t": "Les conditions sont figées une fois ouvertes. Il s'agit de l'argent propre de l'investisseur : lui seul les reçoit par e-mail et doit accepter avec le code de ce message. Modifier quoi que ce soit signifie annuler et recommencer."
+  },
+  "admin.payments.reviewSentence": {
+    "en": "Pay {amount} from {source} to {destination}?",
+    "t": "Payer {amount} de {source} vers {destination} ?"
+  },
+  "admin.payments.source": {
+    "en": "Source",
+    "t": "Source"
+  },
+  "admin.payments.subtitle": {
+    "en": "Money between two named ends of the platform — inside the fund, into a product, or out to an address — each authorised by whoever the money belongs to",
+    "t": "De l'argent entre deux extrémités nommées de la plateforme — au sein du fonds, vers un produit ou vers une adresse externe — chacun autorisé par celui à qui l'argent appartient"
+  },
+  "admin.payments.tier": {
+    "en": "Tier",
+    "t": "Niveau"
   },
   "admin.rail": {
     "en": "Rail",
@@ -2015,9 +2207,13 @@
     "en": "Overview",
     "t": "Synthèse"
   },
+  "nav.payments": {
+    "en": "Payments",
+    "t": "Paiements"
+  },
   "nav.revenue": {
-    "en": "Fund revenue",
-    "t": "Revenus"
+    "en": "Revenue stats",
+    "t": "Statistiques des revenus"
   },
   "nav.settings": {
     "en": "Settings",

@@ -471,6 +471,10 @@
     "en": "Worth at current NAV",
     "t": "Стоимость по текущему NAV"
   },
+  "admin.fundRevenue": {
+    "en": "Fund revenue",
+    "t": "Доход фонда"
+  },
   "admin.kyc.elevated": {
     "en": "Elevated",
     "t": "Углублённая проверка"
@@ -615,6 +619,194 @@
     "en": "unparked",
     "t": "возвращено"
   },
+  "admin.payments.address": {
+    "en": "Destination address",
+    "t": "Адрес получателя"
+  },
+  "admin.payments.amountUsdt": {
+    "en": "Amount (USDT)",
+    "t": "Сумма (USDT)"
+  },
+  "admin.payments.col.amountUsdt": {
+    "en": "Amount, USDT",
+    "t": "Сумма, USDT"
+  },
+  "admin.payments.col.approval": {
+    "en": "Approval",
+    "t": "Согласование"
+  },
+  "admin.payments.col.ends": {
+    "en": "From → to",
+    "t": "Откуда → куда"
+  },
+  "admin.payments.col.opened": {
+    "en": "Opened",
+    "t": "Открыт"
+  },
+  "admin.payments.confirmOpen": {
+    "en": "Open payment",
+    "t": "Открыть платёж"
+  },
+  "admin.payments.err.enterAmount": {
+    "en": "Enter an amount.",
+    "t": "Введите сумму."
+  },
+  "admin.payments.err.enterReason": {
+    "en": "A reason is required — it is what the approvers read.",
+    "t": "Причина обязательна — именно её читают согласующие."
+  },
+  "admin.payments.err.noRailFromPooled": {
+    "en": "Fund capital and a product's pooled claim cannot ship to an address. Move it to fund revenue or to an investor first.",
+    "t": "Капитал фонда и общий счёт продукта не могут уйти на адрес. Сначала переведите в доход фонда или инвестору."
+  },
+  "admin.payments.err.pickDestination": {
+    "en": "Complete the destination.",
+    "t": "Заполните получателя."
+  },
+  "admin.payments.err.pickSource": {
+    "en": "Choose which product or investor the money comes from.",
+    "t": "Выберите продукт или инвестора, от которого идут деньги."
+  },
+  "admin.payments.err.reasonTooLong": {
+    "en": "The reason is over 500 bytes.",
+    "t": "Причина длиннее 500 байт."
+  },
+  "admin.payments.err.sameEnds": {
+    "en": "The source and the destination are the same claim.",
+    "t": "Источник и получатель — один и тот же счёт."
+  },
+  "admin.payments.formNote": {
+    "en": "Opening a payment moves no money. Fund-owned money is proposed to the owners' consilium; an investor's own money is put to that investor by email. Only once they agree does anything move.",
+    "t": "Открытие платежа не перемещает деньги. Деньги фонда выносятся на консилиум владельцев; собственные деньги инвестора — на согласие самого инвестора по почте. Средства двигаются только после их согласия."
+  },
+  "admin.payments.kind.external": {
+    "en": "An external address",
+    "t": "Внешний адрес"
+  },
+  "admin.payments.kind.piggybank": {
+    "en": "Fund capital (piggybank)",
+    "t": "Капитал фонда (piggybank)"
+  },
+  "admin.payments.kind.revenue": {
+    "en": "Fund revenue",
+    "t": "Доход фонда"
+  },
+  "admin.payments.kind.service": {
+    "en": "A product",
+    "t": "Продукт"
+  },
+  "admin.payments.kind.user": {
+    "en": "An investor",
+    "t": "Инвестор"
+  },
+  "admin.payments.list": {
+    "en": "Payments",
+    "t": "Платежи"
+  },
+  "admin.payments.noProducts": {
+    "en": "No product is registered yet.",
+    "t": "Ни один продукт ещё не зарегистрирован."
+  },
+  "admin.payments.noRail": {
+    "en": "No rail is configured — an external payment needs a chain rail with a running watcher.",
+    "t": "Рельс не настроен — внешнему платежу нужна сеть с работающим наблюдателем."
+  },
+  "admin.payments.noUsers": {
+    "en": "No investor matches.",
+    "t": "Инвесторов не найдено."
+  },
+  "admin.payments.none": {
+    "en": "No payments yet",
+    "t": "Платежей пока нет"
+  },
+  "admin.payments.noneHint": {
+    "en": "Every order opened here appears with who has to agree and where that stands. An order executes once they have, and shows what it became.",
+    "t": "Каждый открытый здесь платёж появится с указанием, кто должен согласиться и как идёт согласование. После согласия он исполняется и показывает, во что превратился."
+  },
+  "admin.payments.noneInState": {
+    "en": "No payments in this state",
+    "t": "Нет платежей в этом состоянии"
+  },
+  "admin.payments.open": {
+    "en": "Open a payment",
+    "t": "Открыть платёж"
+  },
+  "admin.payments.openConsilium": {
+    "en": "Open the consilium",
+    "t": "Открыть консилиум"
+  },
+  "admin.payments.openedConsentBody": {
+    "en": "{email} has been emailed a link and a code. Nothing moves until they agree — this is their money, and only they can say so.",
+    "t": "{email} отправлены ссылка и код. Ничего не двигается, пока инвестор не согласится — это его деньги, и решить может только он."
+  },
+  "admin.payments.openedConsiliumBody": {
+    "en": "The owners have each been emailed a link. Nothing moves until more than half of them confirm from their own mailboxes; the live tally is in the consilium.",
+    "t": "Каждому владельцу отправлена ссылка. Ничего не двигается, пока больше половины не подтвердят из своей почты; текущий подсчёт — в консилиуме."
+  },
+  "admin.payments.openedExpires": {
+    "en": "Expires {at} · {left}",
+    "t": "Истекает {at} · {left}"
+  },
+  "admin.payments.openedTitle": {
+    "en": "Opened — no money has moved",
+    "t": "Открыт — деньги не двигались"
+  },
+  "admin.payments.pickProduct": {
+    "en": "Choose a product",
+    "t": "Выберите продукт"
+  },
+  "admin.payments.placeholder.address": {
+    "en": "The wallet that receives the payment",
+    "t": "Кошелёк, который получит платёж"
+  },
+  "admin.payments.placeholder.reason": {
+    "en": "Why this money moves — the approvers read exactly this",
+    "t": "Зачем этот перевод — согласующие прочитают ровно этот текст"
+  },
+  "admin.payments.placeholder.userSearch": {
+    "en": "Search investors by email",
+    "t": "Поиск инвестора по email"
+  },
+  "admin.payments.reason": {
+    "en": "Reason",
+    "t": "Причина"
+  },
+  "admin.payments.reasonHint": {
+    "en": "Required. {used} of {max} bytes. Part of what is approved, and covered by the request fingerprint — it cannot be changed afterwards.",
+    "t": "Обязательно. {used} из {max} байт. Часть того, что согласуется, и входит в отпечаток запроса — потом изменить нельзя."
+  },
+  "admin.payments.requirement": {
+    "en": "Who must agree",
+    "t": "Кто должен согласиться"
+  },
+  "admin.payments.review": {
+    "en": "Review payment",
+    "t": "Проверить платёж"
+  },
+  "admin.payments.reviewNote.owner_consilium": {
+    "en": "The terms are fixed once opened. Every owner is emailed exactly these and they are checked again before any money moves — changing anything means cancelling and starting over, and votes are not carried across.",
+    "t": "После открытия условия зафиксированы. Каждому владельцу уходит письмо ровно с ними, и они проверяются снова перед движением денег — чтобы что-то изменить, придётся отменить и начать заново, голоса не переносятся."
+  },
+  "admin.payments.reviewNote.subject_consent": {
+    "en": "The terms are fixed once opened. This is the investor's own money: they alone are emailed exactly these and must agree with the code from that message. Changing anything means cancelling and starting over.",
+    "t": "После открытия условия зафиксированы. Это собственные деньги инвестора: письмо ровно с этими условиями получает только он и должен согласиться кодом из письма. Чтобы что-то изменить, придётся отменить и начать заново."
+  },
+  "admin.payments.reviewSentence": {
+    "en": "Pay {amount} from {source} to {destination}?",
+    "t": "Перевести {amount} от {source} к {destination}?"
+  },
+  "admin.payments.source": {
+    "en": "Source",
+    "t": "Источник"
+  },
+  "admin.payments.subtitle": {
+    "en": "Money between two named ends of the platform — inside the fund, into a product, or out to an address — each authorised by whoever the money belongs to",
+    "t": "Деньги между двумя названными сторонами платформы — внутри фонда, в продукт или наружу на адрес — каждый перевод с согласия того, кому деньги принадлежат"
+  },
+  "admin.payments.tier": {
+    "en": "Tier",
+    "t": "Уровень"
+  },
   "admin.rail": {
     "en": "Rail",
     "t": "Канал"
@@ -634,6 +826,38 @@
   "admin.rail.trc20": {
     "en": "TRC20 · TRON",
     "t": "TRC20 · TRON"
+  },
+  "admin.refusal.coolingBody": {
+    "en": "The list of owners changed within the last 48 hours. Payouts resume at {at}. The pause is deliberate: it keeps a change of ownership and a payout as two separate, visible events rather than one motion.",
+    "t": "Список владельцев менялся в последние 48 часов. Выплаты возобновятся {at}. Пауза сделана намеренно: она разделяет смену состава владельцев и выплату на два отдельных заметных события вместо одного слитного действия."
+  },
+  "admin.refusal.coolingBodyNoTime": {
+    "en": "The list of owners changed within the last 48 hours, and payouts stay paused until that period lifts. The pause is deliberate: it keeps a change of ownership and a payout as two separate, visible events rather than one motion.",
+    "t": "Список владельцев менялся в последние 48 часов, и выплаты остаются приостановленными, пока этот срок не истечёт. Пауза сделана намеренно: она разделяет смену состава владельцев и выплату на два отдельных заметных события вместо одного слитного действия."
+  },
+  "admin.refusal.coolingTitle": {
+    "en": "Payouts are paused while the roster settles",
+    "t": "Выплаты приостановлены, пока состав владельцев не устоится"
+  },
+  "admin.refusal.floorBody": {
+    "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it.",
+    "t": "Для выплаты нужно согласие больше половины владельцев, а при {n, plural, one {# владельце} few {# владельцах} many {# владельцах} other {# владельцах}} этот порог недостижим. Добавление владельцев вернёт эту возможность."
+  },
+  "admin.refusal.floorBodyNoCount": {
+    "en": "A payout needs more than half of the owners to agree, and this fund has too few owners for that bar to be met. Adding owners restores it.",
+    "t": "Для выплаты нужно согласие больше половины владельцев, а владельцев в этом фонде слишком мало, чтобы его достичь. Добавление владельцев вернёт эту возможность."
+  },
+  "admin.refusal.floorTitle": {
+    "en": "This fund cannot authorise a payout",
+    "t": "Этот фонд не может авторизовать выплату"
+  },
+  "admin.refusal.mailBody": {
+    "en": "Owners receive their approval link by email, and no mailer is wired — so a proposal opened now could never be voted on and would simply expire. This has to be configured before the fund can pay itself out.",
+    "t": "Владельцы получают ссылку для подтверждения по электронной почте, а отправка не настроена — поэтому за поданное сейчас предложение никто не смог бы проголосовать, и оно просто истекло бы. Это нужно настроить, прежде чем фонд сможет выплачивать свои средства."
+  },
+  "admin.refusal.mailTitle": {
+    "en": "Governance mail is not configured",
+    "t": "Служебная почта не настроена"
   },
   "admin.revenue.amountUsdt": {
     "en": "Amount (USDT)",
@@ -786,38 +1010,6 @@
   "admin.revenue.proposedTitle": {
     "en": "Proposed — no money has moved",
     "t": "Предложено — деньги никуда не ушли"
-  },
-  "admin.revenue.refusal.coolingBody": {
-    "en": "The list of owners changed within the last 48 hours. Payouts resume at {at}. The pause is deliberate: it keeps a change of ownership and a payout as two separate, visible events rather than one motion.",
-    "t": "Список владельцев менялся в последние 48 часов. Выплаты возобновятся {at}. Пауза сделана намеренно: она разделяет смену состава владельцев и выплату на два отдельных заметных события вместо одного слитного действия."
-  },
-  "admin.revenue.refusal.coolingBodyNoTime": {
-    "en": "The list of owners changed within the last 48 hours, and payouts stay paused until that period lifts. The pause is deliberate: it keeps a change of ownership and a payout as two separate, visible events rather than one motion.",
-    "t": "Список владельцев менялся в последние 48 часов, и выплаты остаются приостановленными, пока этот срок не истечёт. Пауза сделана намеренно: она разделяет смену состава владельцев и выплату на два отдельных заметных события вместо одного слитного действия."
-  },
-  "admin.revenue.refusal.coolingTitle": {
-    "en": "Payouts are paused while the roster settles",
-    "t": "Выплаты приостановлены, пока состав владельцев не устоится"
-  },
-  "admin.revenue.refusal.floorBody": {
-    "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it.",
-    "t": "Для выплаты нужно согласие больше половины владельцев, а при {n, plural, one {# владельце} few {# владельцах} many {# владельцах} other {# владельцах}} этот порог недостижим. Добавление владельцев вернёт эту возможность."
-  },
-  "admin.revenue.refusal.floorBodyNoCount": {
-    "en": "A payout needs more than half of the owners to agree, and this fund has too few owners for that bar to be met. Adding owners restores it.",
-    "t": "Для выплаты нужно согласие больше половины владельцев, а владельцев в этом фонде слишком мало, чтобы его достичь. Добавление владельцев вернёт эту возможность."
-  },
-  "admin.revenue.refusal.floorTitle": {
-    "en": "This fund cannot authorise a payout",
-    "t": "Этот фонд не может авторизовать выплату"
-  },
-  "admin.revenue.refusal.mailBody": {
-    "en": "Owners receive their approval link by email, and no mailer is wired — so a proposal opened now could never be voted on and would simply expire. This has to be configured before the fund can pay itself out.",
-    "t": "Владельцы получают ссылку для подтверждения по электронной почте, а отправка не настроена — поэтому за поданное сейчас предложение никто не смог бы проголосовать, и оно просто истекло бы. Это нужно настроить, прежде чем фонд сможет выплачивать свои средства."
-  },
-  "admin.revenue.refusal.mailTitle": {
-    "en": "Governance mail is not configured",
-    "t": "Служебная почта не настроена"
   },
   "admin.revenue.reviewPropose": {
     "en": "Review proposal",
@@ -3035,9 +3227,13 @@
     "en": "Overview",
     "t": "Обзор"
   },
+  "nav.payments": {
+    "en": "Payments",
+    "t": "Платежи"
+  },
   "nav.revenue": {
-    "en": "Fund revenue",
-    "t": "Доход"
+    "en": "Revenue stats",
+    "t": "Статистика дохода"
   },
   "nav.settings": {
     "en": "Settings",

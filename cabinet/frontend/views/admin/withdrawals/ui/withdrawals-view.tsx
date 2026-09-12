@@ -186,7 +186,7 @@ function WithdrawalRow({
               earnings out. Naming that beats rendering a blank User cell, and it tells
               the operator whose money the dispatch/settle below is about to move. */}
           {item.source === "revenue" ? (
-            <p className="font-medium text-main-accent-t2">{t("nav.revenue")}</p>
+            <p className="font-medium text-main-accent-t2">{t("admin.fundRevenue")}</p>
           ) : (
             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
           )}
