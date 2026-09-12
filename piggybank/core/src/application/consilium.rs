@@ -28,7 +28,7 @@ use crate::{
 	config::KycGate,
 	infrastructure::consilium::digest,
 	ports::{
-		Custody, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository,
+		AllocationRegistry, Custody, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumRepository, ConsiliumView, ExecutionOutcome, InvitationView, SubmitOutcome, VoteAudit, VoterCredential},
 		ledger::Ledger,
 	},
@@ -53,6 +53,9 @@ pub struct ConsiliumPorts<'a> {
 	pub custody: &'a dyn Custody,
 	/// The read-only kill-switch, for the same chained execution.
 	pub policy: &'a dyn OutflowPolicy,
+	/// The product registry — carried so the payment ports can be borrowed from here whole,
+	/// though nothing on this path opens an order.
+	pub allocations: &'a dyn AllocationRegistry,
 	pub relay: &'a Notify,
 	pub configured: &'a [Network],
 	/// The deployment's verification gate, for the same chained execution.
@@ -90,6 +93,7 @@ impl ConsiliumPorts<'_> {
 			ledger: self.ledger,
 			custody: self.custody,
 			policy: self.policy,
+			allocations: self.allocations,
 			relay: self.relay,
 			configured: self.configured,
 			kyc: self.kyc,

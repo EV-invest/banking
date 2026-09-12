@@ -936,7 +936,7 @@ use domain::money::WalletAddress;
 use piggybank_core::{
 	application::payments as payments_app,
 	config::KycGate,
-	infrastructure::{consilium::PgConsilia, operations, outflow::PgOutflowPolicy, withdrawals::PgWithdrawals},
+	infrastructure::{allocations::PgAllocations, consilium::PgConsilia, operations, outflow::PgOutflowPolicy, withdrawals::PgWithdrawals},
 	ports::{WithdrawalRepository, ledger::Ledger},
 };
 
@@ -950,6 +950,7 @@ struct App {
 	users: PgUsers,
 	withdrawals: PgWithdrawals,
 	outflow: PgOutflowPolicy,
+	allocations: PgAllocations,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -965,6 +966,7 @@ async fn app(skipping: &str) -> Option<App> {
 		users: PgUsers::new(pool.clone()),
 		withdrawals: PgWithdrawals::new(pool.clone()),
 		outflow: PgOutflowPolicy::new(pool.clone()),
+		allocations: PgAllocations::new(pool.clone()),
 		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
 		ledger,
 		notify,
@@ -981,6 +983,7 @@ fn ports(a: &App) -> payments_app::PaymentPorts<'_> {
 		ledger: a.ledger.as_ref(),
 		custody: &StubCustody,
 		policy: &a.outflow,
+		allocations: &a.allocations,
 		relay: &a.notify,
 		configured: &[Network::Bep20],
 		kyc: KycGate::LIFTED,
@@ -1169,6 +1172,13 @@ async fn an_order_that_could_never_execute_is_refused_at_open() {
 		.await
 		.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(_)), "an uncovered source is refused: {err:?}");
+
+	// A product nobody registered: its claim would take the money, and nobody could reach it.
+	let unregistered = PaymentDestination::Internal(Party::Service(domain::balance::ServiceId::parse("no-such-product").unwrap()));
+	let err = payments_app::open(&ports(&a), investor, terms(Party::User(investor), unregistered, "1"), now())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(ref why) if why.contains("no product")), "{err:?}");
 
 	// An unverified investor cannot route around the floor by paying a verified one who then
 	// withdraws: the internal hop is refused for the same reason the external one is.

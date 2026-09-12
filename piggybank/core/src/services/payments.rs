@@ -30,7 +30,7 @@ use crate::{
 	AppState,
 	application::payments as payments_app,
 	ports::payments::{ConsentAudit, ConsentDecision, ConsentInvitation, EndDetail, PaymentFilter, PaymentView},
-	services::support::{caller_id, map_err, require_permission, unix_now},
+	services::support::{MAX_AUDIT_IP_BYTES, MAX_AUDIT_USER_AGENT_BYTES, caller_id, clamp, map_err, require_permission, unix_now},
 };
 
 /// The default page size for the payment history.
@@ -69,6 +69,7 @@ impl AppState {
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
 			policy: self.outflow.as_ref(),
+			allocations: self.allocations.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
 			kyc: self.kyc_gate,
@@ -349,8 +350,8 @@ impl PaymentConsentService for PaymentConsentSvc {
 		let req = request.into_inner();
 		let decision = decision_from_proto(req.decision)?;
 		let audit = ConsentAudit {
-			client_ip: req.client_ip,
-			user_agent: req.user_agent,
+			client_ip: clamp(req.client_ip, MAX_AUDIT_IP_BYTES),
+			user_agent: clamp(req.user_agent, MAX_AUDIT_USER_AGENT_BYTES),
 		};
 		let outcome = payments_app::submit_consent(&self.state.payment_ports(), &req.token, &req.code, decision, &audit, unix_now())
 			.await
@@ -410,6 +411,15 @@ mod tests {
 		});
 		assert_eq!(one.code(), tonic::Code::NotFound);
 		assert_eq!(one.message(), two.message());
+	}
+
+	#[test]
+	fn audit_strings_are_clamped_on_a_character_boundary() {
+		assert_eq!(clamp("203.0.113.7".to_owned(), MAX_AUDIT_IP_BYTES), "203.0.113.7");
+		assert_eq!(clamp("x".repeat(1000), MAX_AUDIT_USER_AGENT_BYTES).len(), MAX_AUDIT_USER_AGENT_BYTES);
+		// A 4-byte code point straddling the cut is dropped whole rather than split.
+		let clamped = clamp(format!("{}😀", "a".repeat(510)), MAX_AUDIT_USER_AGENT_BYTES);
+		assert_eq!(clamped.len(), 510);
 	}
 
 	#[test]

@@ -28,7 +28,7 @@ use crate::{
 	AppState,
 	application::consilium as consilium_app,
 	ports::consilium::{ConsiliumView, InvitationView, VoteAudit},
-	services::support::{caller_id, map_err, require_permission, unix_now},
+	services::support::{MAX_AUDIT_IP_BYTES, MAX_AUDIT_USER_AGENT_BYTES, caller_id, clamp, map_err, require_permission, unix_now},
 };
 
 /// The default page size for the governance history.
@@ -67,6 +67,7 @@ impl AppState {
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
 			policy: self.outflow.as_ref(),
+			allocations: self.allocations.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
 			kyc: self.kyc_gate,
@@ -297,8 +298,8 @@ impl ConsiliumApprovalService for ConsiliumApprovalSvc {
 		let req = request.into_inner();
 		let decision = decision_from_proto(req.decision)?;
 		let audit = VoteAudit {
-			client_ip: req.client_ip,
-			user_agent: req.user_agent,
+			client_ip: clamp(req.client_ip, MAX_AUDIT_IP_BYTES),
+			user_agent: clamp(req.user_agent, MAX_AUDIT_USER_AGENT_BYTES),
 		};
 		let now = unix_now();
 		let outcome = consilium_app::submit_decision(self.state.consilia.as_ref(), &req.token, &req.code, decision, &audit, now)

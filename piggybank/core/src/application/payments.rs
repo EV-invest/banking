@@ -36,7 +36,7 @@ use crate::{
 	config::KycGate,
 	infrastructure::{consilium::digest, relay::payment_reserve_id},
 	ports::{
-		Custody, OutflowPolicy, UserRepository, WithdrawalRepository,
+		AllocationRegistry, Custody, OutflowPolicy, UserRepository, WithdrawalRepository,
 		consilium::ConsiliumRepository,
 		ledger::Ledger,
 		payments::{
@@ -62,6 +62,9 @@ pub struct PaymentPorts<'a> {
 	/// The read-only kill-switch, re-read at execution: an approved order is still money
 	/// leaving, and an operator pause must hold it exactly as it holds a queued withdrawal.
 	pub policy: &'a dyn OutflowPolicy,
+	/// The product registry a `service:<slug>` destination is checked against at open: a
+	/// claim no product owns is money nobody can reach.
+	pub allocations: &'a dyn AllocationRegistry,
 	pub relay: &'a Notify,
 	pub configured: &'a [Network],
 	pub kyc: KycGate,
@@ -157,6 +160,14 @@ pub async fn open(ports: &PaymentPorts<'_>, initiator: UserId, terms: PaymentTer
 
 /// Everything the order's eventual execution will check, checked now.
 async fn check_executable(ports: &PaymentPorts<'_>, terms: &PaymentTerms) -> Result<(), DomainError> {
+	// A product's pooled claim exists in the ledger the moment something is posted to it,
+	// registered or not — so the registry, not the ledger, is what says the slug names a
+	// product. Money paid into a claim no product owns is reachable by nobody.
+	if let PaymentDestination::Internal(Party::Service(service)) = terms.to()
+		&& ports.allocations.find(service).await?.is_none()
+	{
+		return Err(DomainError::Validation(format!("no product is registered as service {service}")));
+	}
 	match (terms.to(), terms.from()) {
 		(PaymentDestination::External { .. }, Party::Piggybank | Party::Service(_)) => {
 			// The withdrawal saga pays out of an investor's claim or of the fund's earned

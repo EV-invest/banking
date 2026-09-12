@@ -26,7 +26,9 @@ use domain::{
 use piggybank_core::{
 	application::{consilium as consilium_app, payments as payments_app},
 	config::KycGate,
-	infrastructure::{consilium::PgConsilia, custody::StubCustody, outflow::PgOutflowPolicy, payments::PgPayments, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
+	infrastructure::{
+		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, outflow::PgOutflowPolicy, payments::PgPayments, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
+	},
 	ports::{
 		ConsiliumRepository, LedgerTransfer, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumView, MAX_CODE_ATTEMPTS, VoteAudit},
@@ -63,6 +65,7 @@ struct Harness {
 	payments: Arc<dyn PaymentRepository>,
 	users: Arc<dyn UserRepository>,
 	outflow: PgOutflowPolicy,
+	allocations: PgAllocations,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -78,6 +81,7 @@ async fn harness() -> Option<Harness> {
 		payments: Arc::new(PgPayments::new(pool.clone())),
 		users: Arc::new(PgUsers::new(pool.clone())),
 		outflow: PgOutflowPolicy::new(pool.clone()),
+		allocations: PgAllocations::new(pool.clone()),
 		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
 		ledger,
 		notify,
@@ -94,6 +98,7 @@ fn ports(h: &Harness) -> consilium_app::ConsiliumPorts<'_> {
 		ledger: h.ledger.as_ref(),
 		custody: &StubCustody,
 		policy: &h.outflow,
+		allocations: &h.allocations,
 		relay: &h.notify,
 		configured: &CONFIGURED,
 		kyc: KycGate::LIFTED,
