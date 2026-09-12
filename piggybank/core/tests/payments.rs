@@ -921,3 +921,390 @@ async fn a_changed_mailbox_voids_a_pending_consent() {
 
 	reset_payments(&pool).await;
 }
+
+// ---------------------------------------------------------------------------------------
+// The use cases. Everything below drives `application::payments` end to end — the seat is
+// minted, the mail is queued, the consent is answered by the credentials read out of that
+// queue, and the money is read back from the ledger that owns it.
+// ---------------------------------------------------------------------------------------
+
+use domain::money::WalletAddress;
+use piggybank_core::{
+	application::payments as payments_app,
+	config::KycGate,
+	infrastructure::{consilium::PgConsilia, withdrawals::PgWithdrawals},
+	ports::{WithdrawalRepository, ledger::Ledger},
+};
+
+const APPROVAL_URL_BASE: &str = "https://example.test/approve";
+const BEP20_ADDRESS: &str = "0x52908400098527886E0F7030069857D2E4169EE7";
+
+struct App {
+	pool: PgPool,
+	payments: PgPayments,
+	consilia: PgConsilia,
+	users: PgUsers,
+	withdrawals: PgWithdrawals,
+	ledger: Arc<dyn Ledger>,
+	relay: Relay,
+	notify: Arc<Notify>,
+}
+
+async fn app(skipping: &str) -> Option<App> {
+	let pool = common::pool().await?;
+	let ledger = common::seeded_ledger(&pool, skipping).await?;
+	let notify = Arc::new(Notify::new());
+	Some(App {
+		payments: PgPayments::new(pool.clone()),
+		consilia: PgConsilia::new(pool.clone()),
+		users: PgUsers::new(pool.clone()),
+		withdrawals: PgWithdrawals::new(pool.clone()),
+		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
+		ledger,
+		notify,
+		pool,
+	})
+}
+
+fn ports(a: &App) -> payments_app::PaymentPorts<'_> {
+	payments_app::PaymentPorts {
+		payments: &a.payments,
+		consilia: &a.consilia,
+		users: &a.users,
+		withdrawals: &a.withdrawals,
+		ledger: a.ledger.as_ref(),
+		custody: &StubCustody,
+		relay: &a.notify,
+		configured: &[Network::Bep20],
+		kyc: KycGate::LIFTED,
+		approval_url_base: APPROVAL_URL_BASE,
+		consent_url_base: CONSENT_URL_BASE,
+		governance_mail_wired: true,
+	}
+}
+
+fn terms(from: Party, to: PaymentDestination, amount: &str) -> PaymentTerms {
+	PaymentTerms::new(from, to, usdt(amount), PaymentReason::new("a documented reason").unwrap()).unwrap()
+}
+
+fn external() -> PaymentDestination {
+	PaymentDestination::External {
+		network: Network::Bep20,
+		address: WalletAddress::parse(Network::Bep20, BEP20_ADDRESS).unwrap(),
+	}
+}
+
+/// Credit a claim the way a deposit does: `Dr wallet:<net> / Cr <claim>`.
+async fn fund(a: &App, claim: LedgerAccountKey, amount: &str) {
+	a.ledger
+		.post(&LedgerTransfer {
+			id: Uuid::new_v4().as_u128(),
+			debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
+			credit: claim,
+			amount: usdt(amount).base_units(),
+			code: TransferCode::Deposit,
+			reference: 0,
+		})
+		.await
+		.expect("fund the claim");
+}
+
+/// The token and code mailed to the subject — read out of the queue exactly as the investor
+/// reads them off the message, because the plaintexts live nowhere else.
+async fn consent_credentials(pool: &PgPool, payment: PaymentId) -> (String, String) {
+	let payload: String = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE payment_id = $1 AND kind = 'payment_consent'")
+		.bind(payment.raw())
+		.fetch_one(pool)
+		.await
+		.expect("the consent mail was queued with the order");
+	let mail: serde_json::Value = serde_json::from_str(&payload).unwrap();
+	let url = mail["approval_url"].as_str().unwrap().to_owned();
+	assert!(url.starts_with(CONSENT_URL_BASE), "the link is built on the consent base: {url}");
+	(url.rsplit('/').next().unwrap().to_owned(), mail["code"].as_str().unwrap().to_owned())
+}
+
+/// Open → consent mail queued → consent → execute, at the internal tier, with the money read
+/// back from TigerBeetle. The settlement is recorded only once the relay has applied the
+/// reservation — the inline execute after the consent finds it pending and records nothing.
+#[tokio::test]
+async fn an_investors_internal_payment_is_consented_to_by_mail_and_settles_once_reserved() {
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments consent flow").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+	let revenue_before = a.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted;
+
+	let view = payments_app::open(&ports(&a), investor, terms(Party::User(investor), PaymentDestination::Internal(Party::Revenue), "30"), now())
+		.await
+		.expect("open the order");
+	let id = view.order.id();
+	assert_eq!(view.order.state(), PaymentState::Pending);
+	let consent = view.consent.expect("a consent seat");
+	assert!(!consent.notified, "notified means handed to concierge, not queued");
+	assert!(consent.invalidated.is_none());
+	// The queue row names the PAYMENT and the subject's identity-plane id, so the relay can
+	// refuse it unless the addressee is the subject.
+	let (subject_id, kind): (String, String) = sqlx::query_as("SELECT payload ->> 'subject_user_id', kind FROM consilium_mail WHERE payment_id = $1")
+		.bind(id.raw())
+		.fetch_one(&a.pool)
+		.await
+		.unwrap();
+	assert_eq!(kind, "payment_consent");
+	let concierge_id: Uuid = sqlx::query_scalar("SELECT concierge_user_id FROM users WHERE id = $1")
+		.bind(investor.raw())
+		.fetch_one(&a.pool)
+		.await
+		.unwrap();
+	assert_eq!(subject_id, concierge_id.to_string());
+
+	let (token, code) = consent_credentials(&a.pool, id).await;
+	let invitation = payments_app::invitation(&a.payments, &token, now()).await.expect("the token resolves");
+	assert_eq!(invitation.payment_id, id);
+	let outcome = payments_app::submit_consent(&ports(&a), &token, &code, ConsentDecision::Approve, &audit(), now())
+		.await
+		.expect("the right code consents");
+	assert!(outcome.decided && outcome.approved);
+	// The inline execute found the reservation still in the outbox: nothing recorded.
+	let view = payments_app::find(&a.payments, id).await.unwrap();
+	assert_eq!(view.order.state(), PaymentState::Approved, "no settlement over a reserve that has not landed");
+	assert_eq!(relayed_kinds(&a.pool, id).await, vec!["reserved".to_owned()]);
+
+	a.relay.drain().await;
+	let reserved = a.ledger.balance(&LedgerAccountKey::UserClaim(investor)).await.unwrap();
+	assert_eq!(reserved.locked, usdt("30").base_units());
+
+	// The sweeper's half: the reserve has landed, so the settlement is recorded now.
+	let report = payments_app::sweep(&ports(&a), now()).await.unwrap();
+	assert_eq!((report.executed, report.deferred, report.execution_failures), (1, 0, 0));
+	assert_eq!(payments_app::find(&a.payments, id).await.unwrap().order.state(), PaymentState::Executed);
+	a.relay.drain().await;
+	let settled = a.ledger.balance(&LedgerAccountKey::UserClaim(investor)).await.unwrap();
+	assert_eq!(settled.posted, usdt("70").base_units());
+	assert_eq!(settled.locked, 0);
+	assert_eq!(a.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted - revenue_before, usdt("30").base_units());
+	// Idempotent: a repeat execution records nothing new.
+	assert_eq!(payments_app::execute(&ports(&a), id, now()).await.unwrap().order.state(), PaymentState::Executed);
+
+	reset_payments(&a.pool).await;
+}
+
+/// The external tier out of an investor's claim: the withdrawal is created under the id
+/// derived from the order, and a second execution finds it rather than opening another.
+#[tokio::test]
+async fn an_investors_external_payment_creates_one_withdrawal_under_the_derived_id() {
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments external flow").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+
+	let view = payments_app::open(&ports(&a), investor, terms(Party::User(investor), external(), "50"), now())
+		.await
+		.expect("open the order");
+	let id = view.order.id();
+	let (token, code) = consent_credentials(&a.pool, id).await;
+	payments_app::submit_consent(&ports(&a), &token, &code, ConsentDecision::Approve, &audit(), now())
+		.await
+		.expect("consent");
+
+	let expected = payments_app::withdrawal_id(id);
+	let view = payments_app::find(&a.payments, id).await.unwrap();
+	assert_eq!(view.order.state(), PaymentState::Executed, "the consent executed the order inline");
+	assert_eq!(view.order.executed_withdrawal_id(), Some(expected));
+	let withdrawal = a.withdrawals.find_by_id(expected).await.unwrap().expect("the withdrawal exists under the derived id");
+	assert_eq!(withdrawal.user(), Some(investor));
+	assert_eq!(withdrawal.amount(), usdt("50"));
+	// An L1 order relays nothing of its own: the withdrawal's `Requested` is the only money fact.
+	assert!(relayed_kinds(&a.pool, id).await.is_empty());
+
+	for _ in 0..3 {
+		assert_eq!(payments_app::execute(&ports(&a), id, now()).await.unwrap().order.executed_withdrawal_id(), Some(expected));
+	}
+	assert_eq!(
+		a.withdrawals.list_by_user(investor).await.unwrap().len(),
+		1,
+		"a retried execution never opens a second withdrawal"
+	);
+
+	a.relay.drain().await;
+	reset_payments(&a.pool).await;
+}
+
+/// The refusals at OPEN: an external payment from a source the withdrawal saga cannot pay
+/// from, a source that cannot cover the amount, and an unwired mailer.
+#[tokio::test]
+async fn an_order_that_could_never_execute_is_refused_at_open() {
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments open refusals").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+
+	let err = payments_app::open(&ports(&a), investor, terms(Party::Piggybank, external(), "5"), now()).await.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(_)), "the saga has no account for the fund's pooled capital: {err:?}");
+	let err = payments_app::open(
+		&ports(&a),
+		investor,
+		terms(Party::Service(domain::balance::ServiceId::parse("alpha").unwrap()), external(), "5"),
+		now(),
+	)
+	.await
+	.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(_)), "nor for a product's pooled funds: {err:?}");
+
+	// The investor's claim is empty: refused now rather than after 72 hours of consent.
+	let err = payments_app::open(&ports(&a), investor, terms(Party::User(investor), PaymentDestination::Internal(Party::Revenue), "1"), now())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(_)), "an uncovered source is refused: {err:?}");
+
+	let unwired = payments_app::PaymentPorts {
+		governance_mail_wired: false,
+		..ports(&a)
+	};
+	let err = payments_app::open(&unwired, investor, terms(Party::User(investor), PaymentDestination::Internal(Party::Revenue), "1"), now())
+		.await
+		.unwrap_err();
+	assert!(err.to_string().contains("governance mail is not configured"), "{err}");
+
+	let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM payments").fetch_one(&a.pool).await.unwrap();
+	assert_eq!(stored, 0, "a refused open writes nothing");
+}
+
+/// A revocation between consent and execution: the execution path reads the moved pin
+/// BEFORE creating anything, fails the order closed and releases the reservation.
+#[tokio::test]
+async fn a_revocation_after_consent_fails_execution_closed_and_releases_the_reserve() {
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments revoked consent").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+	let before = a.ledger.balance(&LedgerAccountKey::UserClaim(investor)).await.unwrap();
+
+	let id = payments_app::open(&ports(&a), investor, terms(Party::User(investor), PaymentDestination::Internal(Party::Revenue), "20"), now())
+		.await
+		.unwrap()
+		.order
+		.id();
+	let (token, code) = consent_credentials(&a.pool, id).await;
+	// The consent through the PORT, so nothing executes inline and the window is real.
+	a.payments.submit(&digest(token.as_bytes()), &code, ConsentDecision::Approve, &audit(), now()).await.unwrap();
+	a.relay.drain().await;
+	a.users.revoke_tokens(investor).await.unwrap();
+
+	let view = payments_app::execute(&ports(&a), id, now()).await.expect("the refusal is recorded on the order, not raised");
+	assert_eq!(view.order.state(), PaymentState::ExecutionFailed);
+	assert!(view.order.failure_reason().is_some_and(|why| why.contains("revoked")), "{:?}", view.order.failure_reason());
+	assert_eq!(relayed_kinds(&a.pool, id).await, vec!["reserved".to_owned(), "released".to_owned()]);
+	a.relay.drain().await;
+	let after = a.ledger.balance(&LedgerAccountKey::UserClaim(investor)).await.unwrap();
+	assert_eq!((after.posted, after.locked), (before.posted, before.locked), "the reservation was given back");
+	assert!(a.payments.awaiting_execution().await.unwrap().is_empty(), "nothing retries a failure");
+
+	reset_payments(&a.pool).await;
+}
+
+/// THE L1 WINDOW. The execution path checks the pins, then creates the withdrawal, then
+/// records the effect — and a revocation can land between the first and the last. The
+/// record refuses under the order's lock and, in that same transaction, voids the
+/// still-queued withdrawal, so a revoked consent's money never ships.
+#[tokio::test]
+async fn a_revocation_inside_the_execution_window_cancels_the_queued_withdrawal() {
+	use domain::withdrawals::WithdrawalState;
+
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments L1 window").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	// Funded on BEP20, paid out on TRC20 for a gross no rail's liquidity can cover — so the
+	// withdrawal is accepted-and-queued, never dispatched, as in `relay_recovery`.
+	let big = "1000000000";
+	fund(&a, LedgerAccountKey::UserClaim(investor), big).await;
+	let short = PaymentDestination::External {
+		network: Network::Trc20,
+		address: WalletAddress::parse(Network::Trc20, "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8").unwrap(),
+	};
+	let with_trc20 = payments_app::PaymentPorts {
+		configured: &[Network::Trc20],
+		..ports(&a)
+	};
+	let id = payments_app::open(&with_trc20, investor, terms(Party::User(investor), short, big), now())
+		.await
+		.unwrap()
+		.order
+		.id();
+	let (token, code) = consent_credentials(&a.pool, id).await;
+	a.payments.submit(&digest(token.as_bytes()), &code, ConsentDecision::Approve, &audit(), now()).await.unwrap();
+
+	// Stand in for the window: the pins have been read and the withdrawal created...
+	let withdrawal = payments_app::withdrawal_id(id);
+	piggybank_core::application::withdrawals::request_withdrawal(
+		&piggybank_core::application::withdrawals::WithdrawalPorts {
+			withdrawals: &a.withdrawals,
+			ledger: a.ledger.as_ref(),
+			custody: &StubCustody,
+			relay: &a.notify,
+		},
+		&piggybank_core::application::withdrawals::AdmissionGates {
+			users: &a.users,
+			configured: &[Network::Trc20],
+			kyc: KycGate::LIFTED,
+		},
+		withdrawal,
+		investor,
+		Network::Trc20,
+		WalletAddress::parse(Network::Trc20, "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8").unwrap(),
+		usdt(big),
+	)
+	.await
+	.unwrap();
+	assert_eq!(a.withdrawals.find_by_id(withdrawal).await.unwrap().unwrap().state(), WithdrawalState::Queued);
+	// ...and the revocation lands before the effect is recorded.
+	a.users.revoke_tokens(investor).await.unwrap();
+
+	let refused = a.payments.record_execution(id, ExecutionOutcome::Executed(PaymentEffect::Withdrawal(withdrawal)), now()).await;
+	assert!(matches!(refused, Err(DomainError::Conflict(_))), "{refused:?}");
+	assert_eq!(payments_app::find(&a.payments, id).await.unwrap().order.state(), PaymentState::ExecutionFailed);
+	assert_eq!(
+		a.withdrawals.find_by_id(withdrawal).await.unwrap().unwrap().state(),
+		WithdrawalState::Cancelled,
+		"the withdrawal was voided in the same transaction, so it can never be dispatched"
+	);
+	assert!(
+		a.withdrawals.list_actionable().await.unwrap().iter().all(|queued| queued.id != withdrawal),
+		"nothing left for the dispatcher"
+	);
+
+	a.relay.drain().await;
+	reset_payments(&a.pool).await;
+}
+
+/// The expiry half of the sweep, and the initiator's withdrawal closing the consilium with it.
+#[tokio::test]
+async fn the_sweep_expires_what_nobody_consented_to() {
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments expiry sweep").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "10").await;
+	let id = payments_app::open(&ports(&a), investor, terms(Party::User(investor), PaymentDestination::Internal(Party::Revenue), "1"), now())
+		.await
+		.unwrap()
+		.order
+		.id();
+
+	let report = payments_app::sweep(&ports(&a), now() + domain::payments::TTL_SECS + 1).await.unwrap();
+	assert_eq!(report.expired, 1);
+	assert_eq!(payments_app::find(&a.payments, id).await.unwrap().order.state(), PaymentState::Expired);
+	let (token, code) = consent_credentials(&a.pool, id).await;
+	assert!(
+		matches!(
+			payments_app::submit_consent(&ports(&a), &token, &code, ConsentDecision::Approve, &audit(), now()).await,
+			Err(DomainError::NotFound { .. })
+		),
+		"an expired order's token answers like an unknown one"
+	);
+
+	reset_payments(&a.pool).await;
+}
