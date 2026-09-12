@@ -32,13 +32,14 @@ use uuid::Uuid;
 use crate::{
 	infrastructure::{
 		consilium_mailer::{MailSubject, enqueue},
-		outbox,
+		outbox, payments,
 	},
 	ports::{
 		consilium::{
 			ConsiliumRepository, ConsiliumView, DIGEST_BYTES, ExecutionOutcome, InvitationView, MAX_CODE_ATTEMPTS, SubmitOutcome, VoteAudit, VoterCredential, VoterView, invitation_not_found,
 		},
 		governance_mail::{GovernanceMail, PaymentApproval, PayoutApproval, PayoutOutcome},
+		payments::EndDetail,
 	},
 };
 
@@ -167,6 +168,15 @@ fn stored_terms(terms: &ConsiliumTerms) -> Result<String, DomainError> {
 	.map_err(|e| DomainError::Repository(e.to_string()))
 }
 
+/// The receiving end's recognisable detail for a payment consilium — the same detail the
+/// consent mail and the console show — or `None` for a payout, which names an address.
+async fn destination_detail(conn: &mut PgConnection, consilium: &Consilium) -> Result<Option<EndDetail>, DomainError> {
+	match consilium.terms() {
+		ConsiliumTerms::RevenuePayout(_) => Ok(None),
+		ConsiliumTerms::Payment(subject) => payments::detail_of(conn, subject.terms.to()).await,
+	}
+}
+
 /// The approval invitation for one seat, per kind.
 ///
 /// TWO MAILS, NOT ONE WIDENED. The payout template opens with "a request to pay fund revenue
@@ -175,7 +185,7 @@ fn stored_terms(terms: &ConsiliumTerms) -> Result<String, DomainError> {
 /// through that copy would mail the whole roster a sentence naming the wrong claim and the
 /// wrong rail on a money move they are being asked to authorize. The match has no `_` arm,
 /// so a third kind has to say what its owners read.
-fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str) -> GovernanceMail {
+fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str, detail: Option<&EndDetail>) -> GovernanceMail {
 	let approval_url = format!("{}/{}", approval_url_base.trim_end_matches('/'), credential.token);
 	match consilium.terms() {
 		ConsiliumTerms::RevenuePayout(payout) => GovernanceMail::PayoutApproval(PayoutApproval {
@@ -198,7 +208,9 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 			initiator_email: initiator_email.to_owned(),
 			tier: subject.terms.tier().as_str().to_owned(),
 			source: subject.terms.source_label(),
-			destination: subject.terms.destination_label(),
+			// The label plus what a person recognises it by (a masked mailbox, a product
+			// title): an owner approving "investor 8f3e…" must be able to tell who that is.
+			destination: payments::mail_destination(&subject.terms, detail),
 			amount: subject.terms.amount().to_decimal_string(),
 			reason: subject.terms.reason().as_str().to_owned(),
 			payload_hash: consilium.payload_hash_hex(),
@@ -213,7 +225,7 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 
 /// The outcome shape for either kind: the payout pair or the payment tuple, the other left
 /// empty — the renderer switches on which is filled.
-fn outcome_of(consilium: &Consilium, outcome: String, detail: String) -> PayoutOutcome {
+fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destination_detail: Option<&EndDetail>) -> PayoutOutcome {
 	let base = PayoutOutcome {
 		consilium_id: consilium.id().to_string(),
 		outcome,
@@ -237,7 +249,7 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String) -> PayoutO
 			amount: subject.terms.amount().to_decimal_string(),
 			tier: subject.terms.tier().as_str().to_owned(),
 			source: subject.terms.source_label(),
-			destination: subject.terms.destination_label(),
+			destination: payments::mail_destination(&subject.terms, destination_detail),
 			reason: subject.terms.reason().as_str().to_owned(),
 			..base
 		},
@@ -435,7 +447,8 @@ fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
 
 /// Tell that audience how the consilium ended.
 async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) -> Result<(), DomainError> {
-	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned()));
+	let destination = destination_detail(conn, consilium).await?;
+	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned(), destination.as_ref()));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:outcome:{}:{recipient}", consilium.id(), consilium.state().as_str());
 		enqueue(conn, MailSubject::Consilium(consilium.id().raw()), recipient.raw(), &key, &mail).await?;
@@ -446,10 +459,12 @@ async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) 
 /// Tell that audience a token burned. A brute-force attempt against one seat is a fact the
 /// whole roster needs, not just its holder — who may be the one person who never sees it.
 async fn announce_burn(conn: &mut PgConnection, consilium: &Consilium, voter: UserId) -> Result<(), DomainError> {
+	let destination = destination_detail(conn, consilium).await?;
 	let mail = GovernanceMail::TokenBurned(outcome_of(
 		consilium,
 		"TOKEN_BURNED".to_owned(),
 		format!("five failed code attempts burned the approval token for seat {voter}"),
+		destination.as_ref(),
 	));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:burn:{voter}:{recipient}", consilium.id());
@@ -557,6 +572,7 @@ impl ConsiliumRepository for PgConsilia {
 	async fn open(&self, consilium: &mut Consilium, credentials: &[VoterCredential], approval_url_base: &str) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
+		let detail = destination_detail(&mut tx, consilium).await?;
 		let terms = stored_terms(consilium.terms())?;
 		let inserted = sqlx::query(
 			"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, version) \
@@ -602,7 +618,7 @@ impl ConsiliumRepository for PgConsilia {
 			.await
 			.map_err(repo_err)?;
 
-			let mail = approval_mail(consilium, &initiator_email, credential, approval_url_base);
+			let mail = approval_mail(consilium, &initiator_email, credential, approval_url_base, detail.as_ref());
 			let key = format!("consilium:{}:approval:{}", consilium.id(), credential.user_id);
 			enqueue(&mut tx, MailSubject::Consilium(consilium.id().raw()), credential.user_id.raw(), &key, &mail).await?;
 		}

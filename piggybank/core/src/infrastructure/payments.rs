@@ -274,7 +274,8 @@ async fn consilium_of(conn: &mut PgConnection, payment: Uuid) -> Result<Option<C
 /// The receiving end's recognisable detail — an investor's mirrored mailbox, a product's
 /// title — or `None` for a singleton claim, an address, or a row that is not there (a
 /// product deregistered after the order was opened still has a label; it just has no title).
-async fn detail_of(conn: &mut PgConnection, to: &PaymentDestination) -> Result<Option<EndDetail>, DomainError> {
+/// Crate-visible so the consilium adapter states the same detail on the owners' mails.
+pub(crate) async fn detail_of(conn: &mut PgConnection, to: &PaymentDestination) -> Result<Option<EndDetail>, DomainError> {
 	Ok(match to.party() {
 		Some(Party::User(user)) => sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
 			.bind(user.raw())
@@ -296,7 +297,7 @@ async fn detail_of(conn: &mut PgConnection, to: &PaymentDestination) -> Result<O
 /// when there is one. The label alone is what the digest binds; the detail is what keeps
 /// "investor 8f3e…" from being approved for the wrong person. A mailbox is masked here
 /// because this string goes to someone who is not its owner.
-fn mail_destination(terms: &PaymentTerms, detail: Option<&EndDetail>) -> String {
+pub(crate) fn mail_destination(terms: &PaymentTerms, detail: Option<&EndDetail>) -> String {
 	let label = terms.destination_label();
 	match detail {
 		Some(EndDetail::Mailbox(email)) => format!("{label} ({})", mask_email(email)),
