@@ -335,6 +335,12 @@ async fn settle_on_the_ledger(ports: &PaymentPorts<'_>, id: PaymentId) -> Result
 }
 
 /// The L1 effect: the withdrawal the order pays out through, under the order's derived id.
+///
+/// ALWAYS QUEUED, never dispatched on creation. The consent pins are re-read under the
+/// order's lock only after this withdrawal exists, and the refusal there can void a
+/// withdrawal only while it is still `Queued`. Leaving it for the dispatcher is what keeps
+/// that void possible — and it puts the withdrawal through `require_dispatchable`, so the
+/// pause, the freeze and the verification floor are read at the moment the money leaves.
 async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Result<ExecutionOutcome, DomainError> {
 	let PaymentDestination::External { network, address } = order.terms().to() else {
 		return Ok(ExecutionOutcome::Failed("an internal payment has no withdrawal to create".to_owned()));
@@ -345,7 +351,7 @@ async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Re
 	}
 	let requested = match order.terms().from() {
 		Party::User(user) =>
-			withdrawal_app::request_withdrawal(
+			withdrawal_app::queue_withdrawal(
 				&ports.withdrawal_ports(),
 				&ports.admission_gates(),
 				withdrawal,
@@ -355,7 +361,7 @@ async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Re
 				order.terms().amount(),
 			)
 			.await,
-		Party::Revenue => withdrawal_app::request_revenue_payout(&ports.withdrawal_ports(), ports.configured, withdrawal, *network, address.clone(), order.terms().amount()).await,
+		Party::Revenue => withdrawal_app::queue_revenue_payout(&ports.withdrawal_ports(), ports.configured, withdrawal, *network, address.clone(), order.terms().amount()).await,
 		// Refused at open; stated here too so the match is total and a row that somehow
 		// carries this shape fails visibly rather than paying from a source the saga has no
 		// account for.

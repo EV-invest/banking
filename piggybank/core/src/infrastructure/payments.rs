@@ -343,6 +343,23 @@ async fn require_linked(conn: &mut PgConnection, payment: PaymentId, consilium: 
 	}
 }
 
+/// Share-lock the consent subject's `users` row before the pins are read.
+///
+/// A revoke or a mailbox change is an UPDATE on `users`, held as a row lock until its
+/// transaction commits. A pin read that does not wait on that lock can see the OLD version,
+/// commit the effect, and be overtaken by a revocation that was already issued. `FOR SHARE`
+/// waits for the writer and reads what it wrote. Taken AFTER the order's lock, as every
+/// lock here is, so the `payments` row stays the first lock and the order total. A no-op
+/// for a consilium-decided order, which has no seat row to join.
+async fn lock_subject(conn: &mut PgConnection, payment: PaymentId) -> Result<(), DomainError> {
+	sqlx::query("SELECT 1 FROM users u JOIN payment_consent c ON c.subject_user_id = u.id WHERE c.payment_id = $1 FOR SHARE OF u")
+		.bind(payment.raw())
+		.execute(&mut *conn)
+		.await
+		.map_err(repo_err)?;
+	Ok(())
+}
+
 /// Load an order `FOR UPDATE` — the opening move of every transition here. The `payments` row
 /// is always the lock taken, and always first, so the transitions cannot deadlock each other.
 async fn locked(conn: &mut PgConnection, id: PaymentId) -> Result<PaymentOrder, DomainError> {
@@ -811,38 +828,43 @@ impl PaymentRepository for PgPayments {
 		// only checks for `Ok` cannot mistake it for success.
 		if let ExecutionOutcome::Executed(effect) = outcome
 			&& order.state() == PaymentState::Approved
-			&& let Some(seat) = consent_of_payment(&mut tx, id.raw()).await?
-			&& let Some(why) = seat.invalidation()
 		{
-			// THE L1 WINDOW. The execution path reads `invalidated` before it creates the
-			// withdrawal, but a revocation can land between that read and this lock; by then
-			// the withdrawal exists and, left alone, ships. Voiding it HERE, under the order's
-			// lock and in the failure's own transaction, is what closes the window — the one
-			// place two aggregates move together, because the alternative is money leaving
-			// under a consent that no longer stands.
-			if let PaymentEffect::Withdrawal(withdrawal) = effect {
-				match withdrawals::cancel_on(&mut tx, withdrawal).await {
-					Ok(_) => {}
-					// Past `Queued` the broadcast may have landed and the cardinal rule forbids
-					// the void. The effect then EXISTS whatever the pins say, and the honest
-					// record is that it does; a failure written over a shipped withdrawal would
-					// be the lie that sticks. Logged at error so an operator sees the one case
-					// the pins could not stop.
-					Err(DomainError::Conflict(state)) => {
-						tracing::error!(payment_id = %id, %withdrawal, %why, "payments: the consent pins moved after the withdrawal was already dispatched ({state}); recording the effect that exists");
-						order.mark_executed(effect, at)?;
-						persist(&mut tx, &mut order).await?;
-						let view = view_of(&mut tx, order).await?;
-						tx.commit().await.map_err(repo_err)?;
-						return Ok(view);
+			lock_subject(&mut tx, id).await?;
+			if let Some(seat) = consent_of_payment(&mut tx, id.raw()).await?
+				&& let Some(why) = seat.invalidation()
+			{
+				// THE L1 WINDOW. The execution path reads `invalidated` before it creates the
+				// withdrawal, but a revocation can land between that read and this lock; by
+				// then the withdrawal exists and, left alone, ships. Voiding it HERE, under the
+				// order's lock and in the failure's own transaction, is what closes the window
+				// — the one place two aggregates move together, because the alternative is
+				// money leaving under a consent that no longer stands. A payment's withdrawal
+				// is always created `Queued` (never dispatched on creation) precisely so that
+				// the void is possible here.
+				if let PaymentEffect::Withdrawal(withdrawal) = effect {
+					match withdrawals::cancel_on(&mut tx, withdrawal).await {
+						Ok(_) => {}
+						// Past `Queued` the broadcast may have landed and the cardinal rule
+						// forbids the void. The effect then EXISTS whatever the pins say, and
+						// the honest record is that it does; a failure written over a shipped
+						// withdrawal would be the lie that sticks. Logged at error so an
+						// operator sees the one case the pins could not stop.
+						Err(DomainError::Conflict(state)) => {
+							tracing::error!(payment_id = %id, %withdrawal, %why, "payments: the consent pins moved after the withdrawal was already dispatched ({state}); recording the effect that exists");
+							order.mark_executed(effect, at)?;
+							persist(&mut tx, &mut order).await?;
+							let view = view_of(&mut tx, order).await?;
+							tx.commit().await.map_err(repo_err)?;
+							return Ok(view);
+						}
+						Err(err) => return Err(err),
 					}
-					Err(err) => return Err(err),
 				}
+				order.mark_execution_failed(why.clone(), at)?;
+				persist(&mut tx, &mut order).await?;
+				tx.commit().await.map_err(repo_err)?;
+				return Err(DomainError::Conflict(why));
 			}
-			order.mark_execution_failed(why.clone(), at)?;
-			persist(&mut tx, &mut order).await?;
-			tx.commit().await.map_err(repo_err)?;
-			return Err(DomainError::Conflict(why));
 		}
 		match outcome {
 			ExecutionOutcome::Executed(effect) => order.mark_executed(effect, at)?,

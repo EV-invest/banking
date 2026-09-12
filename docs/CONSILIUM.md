@@ -498,12 +498,25 @@ told why, because holding a live token already proves the seat exists) and fails
 one at execution, releasing an L2/L3 reservation on the way out.
 
 **The L1 window.** Execution reads the pins, creates the withdrawal, then records the effect.
-A revocation can land between the first and the last, and by then a queued withdrawal exists
-and would ship. `record_execution` therefore re-reads the pins under the order's lock and, in
-that same transaction, **cancels the withdrawal it is refusing** while it is still `Queued`.
-A withdrawal already past `Queued` cannot be voided (the broadcast may have landed — the
-cardinal rule), so the effect that exists is recorded as it is and the movement of the pins
-is logged at error, not lied about.
+A revocation can land between the first and the last, and by then a withdrawal exists. Two
+things close that window, and neither works without the other:
+
+- **A payment's withdrawal is never dispatched on creation.** A self-service withdrawal on a
+  liquid rail leaves for custody in the same transaction that records it, and past `Queued`
+  nothing may void it (the broadcast may have landed — the cardinal rule). A payment order
+  therefore creates its withdrawal `Queued` whatever the rail holds, and the dispatcher
+  sends it on its next sweep — which also means every payment withdrawal passes
+  `require_dispatchable`: the pause, the freeze and the verification floor are re-read at
+  the moment the money leaves, not only when the order was opened 72 hours earlier.
+- **`record_execution` re-reads the pins under the order's lock**, after share-locking the
+  subject's `users` row so a revocation still committing is waited for rather than read
+  around, and, in that same transaction, **cancels the withdrawal it is refusing**.
+
+What this does NOT cover: a withdrawal the dispatcher has already sent. Between the sweep
+that dispatched it and the record that refuses it, the pins can still move, and then the
+effect that exists is recorded as it is and the movement of the pins is logged at error,
+not lied about. That gap is the dispatcher's cadence, not 72 hours — and the money that
+left in it left through the same policy gate every other withdrawal passes.
 
 ### Execution
 

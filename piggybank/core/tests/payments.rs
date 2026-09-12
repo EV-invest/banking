@@ -1122,6 +1122,11 @@ async fn an_investors_external_payment_creates_one_withdrawal_under_the_derived_
 	let withdrawal = a.withdrawals.find_by_id(expected).await.unwrap().expect("the withdrawal exists under the derived id");
 	assert_eq!(withdrawal.user(), Some(investor));
 	assert_eq!(withdrawal.amount(), usdt("50"));
+	assert_eq!(
+		withdrawal.state(),
+		domain::withdrawals::WithdrawalState::Queued,
+		"a payment's withdrawal is never dispatched on creation, however liquid the rail: the dispatcher re-reads the policy"
+	);
 	// An L1 order relays nothing of its own: the withdrawal's `Requested` is the only money fact.
 	assert!(relayed_kinds(&a.pool, id).await.is_empty());
 
@@ -1257,6 +1262,10 @@ async fn an_operator_pause_holds_an_approved_order_without_closing_it() {
 /// records the effect — and a revocation can land between the first and the last. The
 /// record refuses under the order's lock and, in that same transaction, voids the
 /// still-queued withdrawal, so a revoked consent's money never ships.
+///
+/// On a LIQUID rail on purpose: a self-service withdrawal here would dispatch on creation
+/// and be past voiding. A payment's withdrawal is always left `Queued`, which is the whole
+/// reason the void below is possible.
 #[tokio::test]
 async fn a_revocation_inside_the_execution_window_cancels_the_queued_withdrawal() {
 	use domain::withdrawals::WithdrawalState;
@@ -1265,19 +1274,8 @@ async fn a_revocation_inside_the_execution_window_cancels_the_queued_withdrawal(
 	let Some(a) = app("payments L1 window").await else { return };
 	reset_payments(&a.pool).await;
 	let investor = an_investor(&a.pool).await;
-	// Funded on BEP20, paid out on TRC20 for a gross no rail's liquidity can cover — so the
-	// withdrawal is accepted-and-queued, never dispatched, as in `relay_recovery`.
-	let big = "1000000000";
-	fund(&a, LedgerAccountKey::UserClaim(investor), big).await;
-	let short = PaymentDestination::External {
-		network: Network::Trc20,
-		address: WalletAddress::parse(Network::Trc20, "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8").unwrap(),
-	};
-	let with_trc20 = payments_app::PaymentPorts {
-		configured: &[Network::Trc20],
-		..ports(&a)
-	};
-	let id = payments_app::open(&with_trc20, investor, terms(Party::User(investor), short, big), now())
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+	let id = payments_app::open(&ports(&a), investor, terms(Party::User(investor), external(), "50"), now())
 		.await
 		.unwrap()
 		.order
@@ -1285,9 +1283,10 @@ async fn a_revocation_inside_the_execution_window_cancels_the_queued_withdrawal(
 	let (token, code) = consent_credentials(&a.pool, id).await;
 	a.payments.submit(&digest(token.as_bytes()), &code, ConsentDecision::Approve, &audit(), now()).await.unwrap();
 
-	// Stand in for the window: the pins have been read and the withdrawal created...
+	// Stand in for the window: the pins have been read and the withdrawal created, the way
+	// `execute` creates it...
 	let withdrawal = payments_app::withdrawal_id(id);
-	piggybank_core::application::withdrawals::request_withdrawal(
+	piggybank_core::application::withdrawals::queue_withdrawal(
 		&piggybank_core::application::withdrawals::WithdrawalPorts {
 			withdrawals: &a.withdrawals,
 			ledger: a.ledger.as_ref(),
@@ -1296,18 +1295,22 @@ async fn a_revocation_inside_the_execution_window_cancels_the_queued_withdrawal(
 		},
 		&piggybank_core::application::withdrawals::AdmissionGates {
 			users: &a.users,
-			configured: &[Network::Trc20],
+			configured: &[Network::Bep20],
 			kyc: KycGate::LIFTED,
 		},
 		withdrawal,
 		investor,
-		Network::Trc20,
-		WalletAddress::parse(Network::Trc20, "TJRabPrwbZy45sbavfcjinPJC18kjpRTv8").unwrap(),
-		usdt(big),
+		Network::Bep20,
+		WalletAddress::parse(Network::Bep20, BEP20_ADDRESS).unwrap(),
+		usdt("50"),
 	)
 	.await
 	.unwrap();
-	assert_eq!(a.withdrawals.find_by_id(withdrawal).await.unwrap().unwrap().state(), WithdrawalState::Queued);
+	assert_eq!(
+		a.withdrawals.find_by_id(withdrawal).await.unwrap().unwrap().state(),
+		WithdrawalState::Queued,
+		"queued even though the rail could cover it"
+	);
 	// ...and the revocation lands before the effect is recorded.
 	a.users.revoke_tokens(investor).await.unwrap();
 

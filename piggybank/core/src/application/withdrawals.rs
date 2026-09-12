@@ -96,7 +96,32 @@ pub async fn request_withdrawal(
 ) -> Result<Withdrawal, DomainError> {
 	admit_user_withdrawal(gates, user, network).await?;
 	let source = WithdrawalSource::User(user);
-	open_withdrawal(ports, id, source, network, address, amount).await
+	open_withdrawal(ports, id, source, network, address, amount, true).await
+}
+
+/// [`request_withdrawal`], except that the withdrawal is ALWAYS left `Queued` for the
+/// dispatcher, however liquid the rail is right now.
+///
+/// This is the shape a payment order takes. Its consent was given up to 72 hours before
+/// the order executes, and the execution re-reads the consent pins under the order's lock
+/// only AFTER the withdrawal exists — so a revocation landing in that window must find a
+/// withdrawal it can still void. A withdrawal that dispatched on creation is past `Queued`
+/// and can never be voided again (the broadcast may have landed). Deferring the dispatch
+/// keeps the void possible and, as a bonus, puts every payment withdrawal through
+/// [`require_dispatchable`]: the pause, the freeze and the verification floor are all
+/// re-read at the moment the money actually leaves, not only when the order was opened.
+pub async fn queue_withdrawal(
+	ports: &WithdrawalPorts<'_>,
+	gates: &AdmissionGates<'_>,
+	id: WithdrawalId,
+	user: UserId,
+	network: Network,
+	address: WalletAddress,
+	amount: Usdt,
+) -> Result<Withdrawal, DomainError> {
+	admit_user_withdrawal(gates, user, network).await?;
+	let source = WithdrawalSource::User(user);
+	open_withdrawal(ports, id, source, network, address, amount, false).await
 }
 
 /// The user-facing admission gates, on their own: the rail is run, the account is active,
@@ -207,42 +232,70 @@ pub async fn request_revenue_payout(
 	amount: Usdt,
 ) -> Result<Withdrawal, DomainError> {
 	require_configured(configured, network)?;
-	open_withdrawal(ports, id, WithdrawalSource::Revenue, network, address, amount).await
+	open_withdrawal(ports, id, WithdrawalSource::Revenue, network, address, amount, true).await
 }
 
-/// The shared body of both request paths: validate the shape, Read-First the **source's**
-/// solvency and the rail's liquidity, then record (dispatching straight away when the
-/// rail can already cover it).
-async fn open_withdrawal(ports: &WithdrawalPorts<'_>, id: WithdrawalId, source: WithdrawalSource, network: Network, address: WalletAddress, amount: Usdt) -> Result<Withdrawal, DomainError> {
+/// [`request_revenue_payout`], left `Queued` for the dispatcher regardless of liquidity —
+/// the revenue-sourced twin of [`queue_withdrawal`], so every withdrawal a payment order
+/// creates leaves through the one funnel that re-reads the outflow policy at dispatch.
+pub async fn queue_revenue_payout(
+	ports: &WithdrawalPorts<'_>,
+	configured: &[Network],
+	id: WithdrawalId,
+	network: Network,
+	address: WalletAddress,
+	amount: Usdt,
+) -> Result<Withdrawal, DomainError> {
+	require_configured(configured, network)?;
+	open_withdrawal(ports, id, WithdrawalSource::Revenue, network, address, amount, false).await
+}
+
+/// The shared body of every request path: validate the shape, Read-First the **source's**
+/// solvency, then record — dispatching straight away when `dispatch_immediately` is set
+/// and the rail can already cover it, otherwise leaving the row `Queued` for the
+/// dispatcher. A caller that passes `false` is deliberately NOT asked about liquidity: it
+/// wants the withdrawal to exist in a state that can still be voided, whatever the rail
+/// holds.
+async fn open_withdrawal(
+	ports: &WithdrawalPorts<'_>,
+	id: WithdrawalId,
+	source: WithdrawalSource,
+	network: Network,
+	address: WalletAddress,
+	amount: Usdt,
+	dispatch_immediately: bool,
+) -> Result<Withdrawal, DomainError> {
 	let fee = WithdrawalPolicy::fee_for(source, network);
 	// Validate the request shape (minimum, fee coverage, no on-chain dust, address net).
 	let mut withdrawal = Withdrawal::request(id, source, network, address, amount, fee)?;
 	// Read-First #1 — the source can actually cover the gross.
 	require_solvent(ports.ledger, source, amount).await?;
-	// Read-First #2 — rail liquidity: dispatchable liquidity is `min(TB rail, on-chain
-	// treasury)`. The TB `wallet:<net>` balance alone over-counts — it includes confirmed
-	// deposits still sitting on users' derived addresses, which the treasury hot wallet
-	// cannot spend. If the effective liquidity covers the net, dispatch to custody
-	// immediately; otherwise accept and leave it queued for the dispatcher to send once
-	// the rail is topped up (accept-and-queue). A treasury read failure also degrades to
-	// queued — acceptance and the clearing reserve NEVER depend on rail liquidity, so a
-	// flaky node must not refuse a user.
-	let rail_liquidity = Usdt::from_base_units(ports.ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
-	let dispatchable = match ports.custody.treasury_liquidity(network).await {
-		Ok(Some(onchain)) => rail_liquidity.min(onchain) >= withdrawal.net_amount(),
-		// No chain view (stub / unwired rail) — the TB accounting balance is all there is.
-		Ok(None) => rail_liquidity >= withdrawal.net_amount(),
-		Err(err) => {
-			warn!(%network, "treasury liquidity read failed — accepting the withdrawal queued: {err}");
-			false
-		}
-	};
-	if dispatchable {
+	if dispatch_immediately && rail_covers(ports, network, withdrawal.net_amount()).await? {
 		withdrawal.dispatch()?;
 	}
 	ports.withdrawals.open(&mut withdrawal).await?;
 	ports.relay.notify_one();
 	Ok(withdrawal)
+}
+
+/// Read-First #2 — rail liquidity: dispatchable liquidity is `min(TB rail, on-chain
+/// treasury)`. The TB `wallet:<net>` balance alone over-counts — it includes confirmed
+/// deposits still sitting on users' derived addresses, which the treasury hot wallet cannot
+/// spend. `true` means the effective liquidity covers the net and the withdrawal may go to
+/// custody now; `false` means accept-and-queue, for the dispatcher to send once the rail is
+/// topped up. A treasury read failure also degrades to queued — acceptance and the clearing
+/// reserve NEVER depend on rail liquidity, so a flaky node must not refuse a user.
+async fn rail_covers(ports: &WithdrawalPorts<'_>, network: Network, net: Usdt) -> Result<bool, DomainError> {
+	let rail_liquidity = Usdt::from_base_units(ports.ledger.balance(&LedgerAccountKey::CryptoWallet(network)).await?.posted);
+	Ok(match ports.custody.treasury_liquidity(network).await {
+		Ok(Some(onchain)) => rail_liquidity.min(onchain) >= net,
+		// No chain view (stub / unwired rail) — the TB accounting balance is all there is.
+		Ok(None) => rail_liquidity >= net,
+		Err(err) => {
+			warn!(%network, "treasury liquidity read failed — accepting the withdrawal queued: {err}");
+			false
+		}
+	})
 }
 
 /// The global outflow pause — the read-only kill-switch — as a gate.
