@@ -1611,10 +1611,6 @@
     "en": "Amount",
     "t": "Сумма"
   },
-  "approval.approve": {
-    "en": "Approve this payout",
-    "t": "Подтвердить выплату"
-  },
   "approval.burned.body": {
     "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and no money has moved. Ask whoever opened the request to send a new one.",
     "t": "Код вводили неверно слишком много раз, поэтому ссылка закрыта, а все владельцы уведомлены. Ничего не подтверждено, деньги никуда не ушли. Попросите того, кто открыл запрос, прислать новую ссылку."
@@ -1639,21 +1635,9 @@
     "en": "That code didn't match. {n, plural, one {# attempt remains} other {# attempts remain}} before this link closes for good.",
     "t": "Код не подошёл. {n, plural, one {Осталась # попытка} few {Осталось # попытки} many {Осталось # попыток} other {Осталось # попытки}}, после чего ссылка закроется окончательно."
   },
-  "approval.decided.approvedTitle": {
-    "en": "You approved this payout",
-    "t": "Вы подтвердили эту выплату"
-  },
   "approval.decided.body": {
     "en": "You answered this earlier, and that answer stands. An answer cannot be changed once it is given.",
     "t": "Вы ответили на это ранее, и ваш ответ остаётся в силе. Изменить данный ответ нельзя."
-  },
-  "approval.decided.freshBody": {
-    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
-    "t": "Ваш ответ записан. Больше здесь делать нечего — выплата пройдёт, когда согласится достаточно владельцев."
-  },
-  "approval.decided.rejectedTitle": {
-    "en": "You rejected this payout",
-    "t": "Вы отклонили эту выплату"
   },
   "approval.decisionLead": {
     "en": "Both answers need the code from your email. Enter it once, then choose.",
@@ -1743,21 +1727,65 @@
     "en": "The fingerprint is taken over the amount, the address, the network and the memo above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
     "t": "Отпечаток вычислен по сумме, адресу, сети и memo выше. Он проверяется заново перед переводом денег, поэтому изменить запрос после вашего согласия невозможно."
   },
+  "approval.payment.approve": {
+    "en": "Approve this payment",
+    "t": "Согласовать платёж"
+  },
+  "approval.payment.decided.approvedTitle": {
+    "en": "You approved this payment",
+    "t": "Вы согласовали этот платёж"
+  },
+  "approval.payment.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payment goes ahead once enough owners have agreed.",
+    "t": "Ваш ответ записан. Больше здесь ничего делать не нужно — платёж исполнится, когда согласится достаточно владельцев."
+  },
+  "approval.payment.decided.rejectedTitle": {
+    "en": "You rejected this payment",
+    "t": "Вы отклонили этот платёж"
+  },
   "approval.payment.from": {
     "en": "From",
     "t": "Откуда"
+  },
+  "approval.payment.lead": {
+    "en": "{initiator} has asked to move money the fund owns, as set out below. Moving the fund's own money is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} просит перевести деньги фонда, как описано ниже. Перевод собственных средств фонда никогда не решается одним человеком, поэтому нужно согласие владельцев."
   },
   "approval.payment.payloadHashHint": {
     "en": "The fingerprint is taken over the amount, both ends and the reason above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
     "t": "Отпечаток считается по сумме, обеим сторонам и причине выше. Он проверяется снова перед движением денег, поэтому запрос нельзя изменить после вашего согласия."
   },
+  "approval.payment.reasonLabel": {
+    "en": "Reason given",
+    "t": "Указанная причина"
+  },
   "approval.payment.tier": {
     "en": "Tier",
     "t": "Уровень"
   },
+  "approval.payment.title": {
+    "en": "Approve a fund payment",
+    "t": "Согласовать платёж фонда"
+  },
   "approval.payment.to": {
     "en": "To",
     "t": "Куда"
+  },
+  "approval.payout.approve": {
+    "en": "Approve this payout",
+    "t": "Подтвердить выплату"
+  },
+  "approval.payout.decided.approvedTitle": {
+    "en": "You approved this payout",
+    "t": "Вы подтвердили эту выплату"
+  },
+  "approval.payout.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
+    "t": "Ваш ответ записан. Больше здесь делать нечего — выплата пройдёт, когда согласится достаточно владельцев."
+  },
+  "approval.payout.decided.rejectedTitle": {
+    "en": "You rejected this payout",
+    "t": "Вы отклонили эту выплату"
   },
   "approval.payout.lead": {
     "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
@@ -2167,6 +2195,22 @@
     "en": "This room is for the fund's owners",
     "t": "Эта комната — для владельцев фонда"
   },
+  "consilium.payment.from": {
+    "en": "From",
+    "t": "Откуда"
+  },
+  "consilium.payment.reason": {
+    "en": "Reason given",
+    "t": "Указанная причина"
+  },
+  "consilium.payment.tier": {
+    "en": "Tier · {tier}",
+    "t": "Уровень · {tier}"
+  },
+  "consilium.payment.to": {
+    "en": "To",
+    "t": "Куда"
+  },
   "consilium.payout.cancel": {
     "en": "Cancel this request",
     "t": "Отменить запрос"
@@ -2180,16 +2224,16 @@
     "t": "Отмена аннулирует все собранные подтверждения. При повторном открытии запроса голоса не переносятся, поэтому каждому из уже ответивших владельцев придётся отвечать заново."
   },
   "consilium.payout.emptyAction": {
-    "en": "Go to fund revenue",
-    "t": "Перейти к доходу фонда"
+    "en": "Go to payments",
+    "t": "Перейти к платежам"
   },
   "consilium.payout.emptyBody": {
-    "en": "When someone asks to pay out the fund's earnings, it appears here with its running tally, and every owner is emailed a link to answer from.",
-    "t": "Когда кто-нибудь запросит выплату заработанного фондом, запрос появится здесь вместе с текущим подсчётом, а каждому владельцу придёт письмо со ссылкой для ответа."
+    "en": "When someone opens a payment of the fund's money, it appears here with its running tally, and every owner is emailed a link to answer from.",
+    "t": "Когда кто-то откроет платёж деньгами фонда, он появится здесь с текущим подсчётом, а каждому владельцу придёт ссылка для ответа."
   },
   "consilium.payout.emptyTitle": {
-    "en": "No payout is open",
-    "t": "Открытых выплат нет"
+    "en": "No request is open",
+    "t": "Открытых запросов нет"
   },
   "consilium.payout.expires": {
     "en": "Expires {at} · {left}",
@@ -2224,16 +2268,16 @@
     "t": "Прошлые запросы"
   },
   "consilium.payout.sub": {
-    "en": "Paying out money the fund has earned. One request at a time, and never one person's decision.",
-    "t": "Выплата денег, которые заработал фонд. По одному запросу за раз, и никогда — решением одного человека."
+    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
+    "t": "Движение денег фонда — выплата дохода или платёж между двумя сторонами платформы. По одному запросу за раз и никогда по решению одного человека."
   },
   "consilium.payout.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",
     "t": "{approvals} из {threshold, plural, one {# подтверждения} few {# подтверждений} many {# подтверждений} other {# подтверждений}}"
   },
   "consilium.payout.title": {
-    "en": "Fund payout",
-    "t": "Выплата фонда"
+    "en": "Fund payouts and payments",
+    "t": "Выплаты и платежи фонда"
   },
   "consilium.payout.voteByEmail": {
     "en": "Owners answer from the link emailed to them, not from this page — the code in that message is what makes an answer deliberate.",

@@ -1499,17 +1499,45 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Gửi lệnh, tất toán hoặc báo lỗi các lệnh rút — của nhà đầu tư và của chính quỹ"
   },
+  "approval.payment.approve": {
+    "en": "Approve this payment",
+    "t": "Phê duyệt khoản thanh toán này"
+  },
+  "approval.payment.decided.approvedTitle": {
+    "en": "You approved this payment",
+    "t": "Bạn đã phê duyệt khoản thanh toán này"
+  },
+  "approval.payment.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payment goes ahead once enough owners have agreed.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Không cần làm gì thêm ở đây — khoản thanh toán sẽ được thực hiện khi đủ chủ sở hữu đồng ý."
+  },
+  "approval.payment.decided.rejectedTitle": {
+    "en": "You rejected this payment",
+    "t": "Bạn đã từ chối khoản thanh toán này"
+  },
   "approval.payment.from": {
     "en": "From",
     "t": "Từ"
+  },
+  "approval.payment.lead": {
+    "en": "{initiator} has asked to move money the fund owns, as set out below. Moving the fund's own money is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} yêu cầu chuyển tiền thuộc sở hữu của quỹ như mô tả bên dưới. Việc chuyển tiền của quỹ không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
   },
   "approval.payment.payloadHashHint": {
     "en": "The fingerprint is taken over the amount, both ends and the reason above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
     "t": "Dấu vân tay được tính trên số tiền, hai đầu và lý do ở trên. Nó được kiểm tra lại trước khi tiền được chuyển, nên yêu cầu không thể bị chỉnh sửa sau khi bạn đã đồng ý."
   },
+  "approval.payment.reasonLabel": {
+    "en": "Reason given",
+    "t": "Lý do đưa ra"
+  },
   "approval.payment.tier": {
     "en": "Tier",
     "t": "Cấp"
+  },
+  "approval.payment.title": {
+    "en": "Approve a fund payment",
+    "t": "Phê duyệt một khoản thanh toán của quỹ"
   },
   "approval.payment.to": {
     "en": "To",
@@ -1646,6 +1674,42 @@
   "consilium.admit.genesis": {
     "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
     "t": "Quỹ này có {n, plural, other {# chủ sở hữu có ghế}}. Một đề nghị kết nạp cần ít nhất một chủ sở hữu ngoài người đề xuất, nên nó không thể đưa những người sáng lập vào ghế: những ghế đó do chính dịch vụ ghi lại lúc khởi động, từ danh sách khởi thủy, và chỉ khi sổ đăng ký còn trống. Lần khởi động đó đóng cửa sổ này vĩnh viễn, và từ đó biểu mẫu này là lối vào duy nhất."
+  },
+  "consilium.payment.from": {
+    "en": "From",
+    "t": "Từ"
+  },
+  "consilium.payment.reason": {
+    "en": "Reason given",
+    "t": "Lý do đưa ra"
+  },
+  "consilium.payment.tier": {
+    "en": "Tier · {tier}",
+    "t": "Cấp · {tier}"
+  },
+  "consilium.payment.to": {
+    "en": "To",
+    "t": "Tới"
+  },
+  "consilium.payout.emptyAction": {
+    "en": "Go to payments",
+    "t": "Đi tới thanh toán"
+  },
+  "consilium.payout.emptyBody": {
+    "en": "When someone opens a payment of the fund's money, it appears here with its running tally, and every owner is emailed a link to answer from.",
+    "t": "Khi ai đó mở một khoản thanh toán bằng tiền của quỹ, nó sẽ xuất hiện ở đây cùng số phiếu hiện tại, và mỗi chủ sở hữu nhận email chứa liên kết để trả lời."
+  },
+  "consilium.payout.emptyTitle": {
+    "en": "No request is open",
+    "t": "Không có yêu cầu nào đang mở"
+  },
+  "consilium.payout.sub": {
+    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
+    "t": "Chuyển tiền thuộc sở hữu của quỹ — chi trả doanh thu, hoặc một lệnh thanh toán giữa hai đầu của nền tảng. Mỗi lần một yêu cầu, và không bao giờ là quyết định của một người."
+  },
+  "consilium.payout.title": {
+    "en": "Fund payouts and payments",
+    "t": "Chi trả và thanh toán của quỹ"
   },
   "consilium.roster.emptyBody": {
     "en": "Genesis has not run yet. At start-up the service seats everyone on the OWNER_SUBJECTS list who already has an account — but only if at least two of them resolve. A sole owner could never admit the second, so seating one is refused outright rather than left as a dead end.",

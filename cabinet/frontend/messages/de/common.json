@@ -1499,17 +1499,45 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Auszahlungen versenden, abrechnen oder verwerfen — die der Investoren und die eigenen Ausschüttungen des Fonds"
   },
+  "approval.payment.approve": {
+    "en": "Approve this payment",
+    "t": "Diese Zahlung genehmigen"
+  },
+  "approval.payment.decided.approvedTitle": {
+    "en": "You approved this payment",
+    "t": "Sie haben diese Zahlung genehmigt"
+  },
+  "approval.payment.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payment goes ahead once enough owners have agreed.",
+    "t": "Ihre Antwort wurde aufgezeichnet. Hier gibt es nichts weiter zu tun — die Zahlung wird ausgeführt, sobald genügend Eigentümer zugestimmt haben."
+  },
+  "approval.payment.decided.rejectedTitle": {
+    "en": "You rejected this payment",
+    "t": "Sie haben diese Zahlung abgelehnt"
+  },
   "approval.payment.from": {
     "en": "From",
     "t": "Von"
+  },
+  "approval.payment.lead": {
+    "en": "{initiator} has asked to move money the fund owns, as set out below. Moving the fund's own money is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} bittet darum, Geld des Fonds wie unten beschrieben zu bewegen. Das eigene Geld des Fonds zu bewegen ist nie die Entscheidung einer einzelnen Person, daher müssen die Eigentümer zustimmen."
   },
   "approval.payment.payloadHashHint": {
     "en": "The fingerprint is taken over the amount, both ends and the reason above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
     "t": "Der Fingerabdruck wird über den Betrag, beide Enden und den obigen Grund gebildet. Er wird vor jeder Geldbewegung erneut geprüft, sodass eine Anfrage nach Ihrer Zustimmung nicht mehr geändert werden kann."
   },
+  "approval.payment.reasonLabel": {
+    "en": "Reason given",
+    "t": "Angegebener Grund"
+  },
   "approval.payment.tier": {
     "en": "Tier",
     "t": "Ebene"
+  },
+  "approval.payment.title": {
+    "en": "Approve a fund payment",
+    "t": "Eine Fondszahlung genehmigen"
   },
   "approval.payment.to": {
     "en": "To",
@@ -1646,6 +1674,42 @@
   "consilium.admit.genesis": {
     "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
     "t": "Dieser Fonds hat {n, plural, =0 {keine Eigentümer mit Sitz} one {# Eigentümer mit Sitz} other {# Eigentümer mit Sitz}}. Eine Aufnahme braucht mindestens einen Eigentümer außer dem Antragsteller und kann die Gründer daher nicht einsetzen: die schreibt der Dienst beim Start selbst, aus der Genesis-Liste und nur solange das Register leer ist. Dieser Start schließt das Fenster endgültig, und danach ist dieses Formular der einzige Weg hinein."
+  },
+  "consilium.payment.from": {
+    "en": "From",
+    "t": "Von"
+  },
+  "consilium.payment.reason": {
+    "en": "Reason given",
+    "t": "Angegebener Grund"
+  },
+  "consilium.payment.tier": {
+    "en": "Tier · {tier}",
+    "t": "Ebene · {tier}"
+  },
+  "consilium.payment.to": {
+    "en": "To",
+    "t": "An"
+  },
+  "consilium.payout.emptyAction": {
+    "en": "Go to payments",
+    "t": "Zu den Zahlungen"
+  },
+  "consilium.payout.emptyBody": {
+    "en": "When someone opens a payment of the fund's money, it appears here with its running tally, and every owner is emailed a link to answer from.",
+    "t": "Wenn jemand eine Zahlung mit Fondsgeld eröffnet, erscheint sie hier mit der laufenden Zählung, und jeder Eigentümer erhält per E-Mail einen Link zum Antworten."
+  },
+  "consilium.payout.emptyTitle": {
+    "en": "No request is open",
+    "t": "Keine Anfrage offen"
+  },
+  "consilium.payout.sub": {
+    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
+    "t": "Bewegung von Geld, das dem Fonds gehört — eine Ertragsauszahlung oder eine Zahlung zwischen zwei Enden der Plattform. Eine Anfrage nach der anderen, und nie die Entscheidung einer einzelnen Person."
+  },
+  "consilium.payout.title": {
+    "en": "Fund payouts and payments",
+    "t": "Auszahlungen und Zahlungen des Fonds"
   },
   "consilium.roster.emptyBody": {
     "en": "Genesis has not run yet. At start-up the service seats everyone on the OWNER_SUBJECTS list who already has an account — but only if at least two of them resolve. A sole owner could never admit the second, so seating one is refused outright rather than left as a dead end.",
