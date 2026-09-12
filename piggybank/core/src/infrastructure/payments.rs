@@ -344,6 +344,25 @@ async fn require_linked(conn: &mut PgConnection, payment: PaymentId, consilium: 
 	}
 }
 
+/// Reject a still-pending order on the caller's open transaction — the cascade of a
+/// consilium verdict that is not an approval. Crate-visible so the consilium adapter closes
+/// the order in the SAME transaction that records the quorum's refusal, expiry or
+/// withdrawal: an order left `pending` under a dead consilium would sit for the rest of its
+/// 72 hours looking answerable, and the sweeper would then expire what was in fact refused.
+///
+/// A no-op on an order that is already decided: the initiator's own withdrawal reaches the
+/// order first and the consilium second, and the second must not fail over the first.
+/// LOCK ORDER: the consilium row, then the order's — the only place the two nest, and
+/// always in this direction.
+pub(crate) async fn reject_on(conn: &mut PgConnection, id: PaymentId, at: i64) -> Result<PaymentOrder, DomainError> {
+	let mut order = locked(conn, id).await?;
+	if order.state().is_pending() {
+		order.reject(at)?;
+		persist(conn, &mut order).await?;
+	}
+	Ok(order)
+}
+
 /// Share-lock the consent subject's `users` row before the pins are read.
 ///
 /// A revoke or a mailbox change is an UPDATE on `users`, held as a row lock until its
@@ -576,9 +595,7 @@ impl PaymentRepository for PgPayments {
 
 	async fn record_rejection(&self, id: PaymentId, at: i64) -> Result<PaymentView, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let mut order = locked(&mut tx, id).await?;
-		order.reject(at)?;
-		persist(&mut tx, &mut order).await?;
+		let order = reject_on(&mut tx, id, at).await?;
 		let view = view_of(&mut tx, order).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(view)

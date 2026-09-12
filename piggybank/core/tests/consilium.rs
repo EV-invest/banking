@@ -1292,6 +1292,86 @@ async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_rea
 	assert!(history.iter().any(|view| view.consilium.id() == payout.consilium.id()));
 }
 
+/// The owners' mails name the RECIPIENT, a duplicate order is refused before a quorum is
+/// seated, and a quorum's refusal closes the order it was over in the same transaction.
+#[tokio::test]
+async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_recipient() {
+	use domain::{
+		balance::Party,
+		payments::{PaymentDestination, PaymentReason, PaymentState, PaymentTerms},
+		users::mask_email,
+	};
+
+	let _guard = exclusive_governance().await;
+	let Some(h) = harness().await else {
+		eprintln!("DATABASE_URL unset — skipping the consilium suite");
+		return;
+	};
+	reset_governance(&h).await;
+	let roster = owners(&h, 3).await;
+	fund_revenue(&h, "100").await;
+	h.relay.drain().await;
+	// The receiving investor, whose masked mailbox is what the owners must be shown.
+	let mailbox = format!("recipient-{}@example.com", Uuid::new_v4().simple());
+	let recipient = h
+		.users
+		.provision(AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap(), Email::parse(&mailbox).unwrap(), true)
+		.await
+		.unwrap()
+		.id();
+	let payment_terms = PaymentTerms::new(
+		Party::Revenue,
+		PaymentDestination::Internal(Party::User(recipient)),
+		usdt("10"),
+		PaymentReason::new("a referral bonus").unwrap(),
+	)
+	.unwrap();
+	let order = payments_app::open(&ports(&h).payment_ports(), roster[0], payment_terms.clone(), now())
+		.await
+		.expect("open the payment");
+	let payment_id = order.order.id();
+	let consilium = order.consilium_id.expect("decided by the quorum");
+
+	let payloads: Vec<String> = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 AND kind = 'payment_approval'")
+		.bind(consilium.raw())
+		.fetch_all(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(payloads.len(), 2);
+	for payload in &payloads {
+		let mail: serde_json::Value = serde_json::from_str(payload).unwrap();
+		let destination = mail["destination"].as_str().unwrap();
+		assert!(destination.contains(&mask_email(&mailbox)), "the owners are told who receives: {destination}");
+		assert!(!destination.contains(&mailbox), "…but never the unmasked address: {destination}");
+	}
+
+	// A second order against the same source is refused BEFORE a quorum is seated: no
+	// consilium row, no approval mails, no withdrawal notices.
+	let mails_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium_mail").fetch_one(&h.pool).await.unwrap();
+	let consilia_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium").fetch_one(&h.pool).await.unwrap();
+	let duplicate = payments_app::open(&ports(&h).payment_ports(), roster[0], payment_terms, now()).await;
+	assert!(matches!(duplicate, Err(DomainError::Conflict(ref why)) if why.contains("already open")), "{duplicate:?}");
+	let mails_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium_mail").fetch_one(&h.pool).await.unwrap();
+	let consilia_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium").fetch_one(&h.pool).await.unwrap();
+	assert_eq!((mails_after, consilia_after), (mails_before, consilia_before), "the refusal touched nothing");
+
+	// One rejection makes the threshold (2 of 3) unreachable: the consilium closes, and the
+	// order closes with it rather than sitting pending until the sweeper expires it.
+	assert!(vote(&h, consilium, roster[1], VoteDecision::Reject).await.unwrap());
+	assert_eq!(state_of(&h, consilium).await, ConsiliumState::Rejected);
+	assert_eq!(h.payments.find(payment_id).await.unwrap().unwrap().order.state(), PaymentState::Rejected);
+	let outcome: String = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 AND kind = 'payout_outcome' LIMIT 1")
+		.bind(consilium.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	let mail: serde_json::Value = serde_json::from_str(&outcome).unwrap();
+	assert_eq!(mail["outcome"], "REJECTED");
+	assert!(mail["destination"].as_str().unwrap().contains(&mask_email(&mailbox)), "{outcome}");
+	let expired = h.payments.expire_due(now() + domain::payments::TTL_SECS + 1).await.unwrap();
+	assert_eq!(expired, 0, "the order was closed with the verdict, so nothing is left for the sweeper to expire");
+}
+
 /// THE RE-READ AFTER A REFUSED APPROVAL ASKS FOR THE POSITIVE FACT.
 ///
 /// `execute_payment` re-reads the order when `record_approval` refuses, because the refusal

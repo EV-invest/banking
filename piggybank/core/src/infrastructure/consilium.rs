@@ -119,6 +119,7 @@ impl PgConsilia {
 		}
 		consilium.expire(at)?;
 		persist(&mut tx, &mut consilium).await?;
+		close_decided_payment(&mut tx, &consilium, at).await?;
 		announce(&mut tx, &consilium, "the window closed with no verdict").await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(true)
@@ -135,6 +136,7 @@ impl PgConsilia {
 		}
 		consilium.cancel(at)?;
 		persist(&mut tx, &mut consilium).await?;
+		close_decided_payment(&mut tx, &consilium, at).await?;
 		announce(
 			&mut tx,
 			&consilium,
@@ -445,6 +447,16 @@ fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
 	core::iter::once(consilium.initiator()).chain(consilium.eligible().iter().copied())
 }
 
+/// Close the payment order a consilium decided against — the cascade for every verdict that
+/// is not an approval, in the verdict's own transaction. Nothing to do for a payout, whose
+/// consilium IS the request.
+async fn close_decided_payment(conn: &mut PgConnection, consilium: &Consilium, at: i64) -> Result<(), DomainError> {
+	match consilium.terms() {
+		ConsiliumTerms::RevenuePayout(_) => Ok(()),
+		ConsiliumTerms::Payment(subject) => payments::reject_on(conn, subject.payment_id, at).await.map(|_| ()),
+	}
+}
+
 /// Tell that audience how the consilium ended.
 async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) -> Result<(), DomainError> {
 	let destination = destination_detail(conn, consilium).await?;
@@ -707,6 +719,7 @@ impl ConsiliumRepository for PgConsilia {
 		}
 		consilium.cancel(at)?;
 		persist(&mut tx, &mut consilium).await?;
+		close_decided_payment(&mut tx, &consilium, at).await?;
 		announce(&mut tx, &consilium, "withdrawn by the owner who opened it").await?;
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
 		tx.commit().await.map_err(repo_err)?;
@@ -881,6 +894,7 @@ impl ConsiliumRepository for PgConsilia {
 		// An approval is announced by the execution step instead, once there is an outcome
 		// worth reading; announcing both would mail the owners twice about one event.
 		if decided && !approved {
+			close_decided_payment(&mut tx, &consilium, at).await?;
 			announce(&mut tx, &consilium, "the threshold can no longer be reached").await?;
 		}
 		tx.commit().await.map_err(repo_err)?;
@@ -976,6 +990,12 @@ impl ConsiliumRepository for PgConsilia {
 			}
 		};
 		persist(&mut tx, &mut consilium).await?;
+		// A quorum that carried but could not be spent (a stale approval, a roster change)
+		// is terminal for the consilium, so the order it was over must not stay answerable.
+		// A no-op when the approval did land on the order before the failure.
+		if consilium.state() == ConsiliumState::ExecutionFailed {
+			close_decided_payment(&mut tx, &consilium, at).await?;
+		}
 		announce(&mut tx, &consilium, &detail).await?;
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
 		tx.commit().await.map_err(repo_err)?;
