@@ -41,7 +41,7 @@ use crate::{
 		ledger::Ledger,
 		payments::{
 			ApprovalSeat, ConsentAudit, ConsentCredential, ConsentDecision, ConsentInvitation, ConsentOutcome, ExecutionOutcome, PaymentFeed, PaymentFilter, PaymentRepository, PaymentView,
-			ReservationStatus,
+			ReservationStatus, already_open,
 		},
 	},
 };
@@ -132,6 +132,13 @@ pub async fn open(ports: &PaymentPorts<'_>, initiator: UserId, terms: PaymentTer
 			ports.payments.open(&mut order, ApprovalSeat::Consent(credential), ports.consent_url_base).await?;
 		}
 		PaymentApproval::OwnerConsilium => {
+			// Asked BEFORE the quorum is seated. The unique index refuses the duplicate order
+			// regardless — but by then N owners have been mailed an approval and are about
+			// to be mailed a withdrawal. A race past this read still lands on the index and
+			// the compensating cancel below; this only makes the ordinary case quiet.
+			if ports.payments.has_open_against(order.terms().from()).await? {
+				return Err(already_open());
+			}
 			let consilium = open_consilium(ports, initiator, &order, now).await?;
 			// The consilium row is the FK target of the order's seat, so it goes first — and if
 			// the order then cannot be written (another one is open against the same source,

@@ -42,7 +42,7 @@ use crate::{
 		governance_mail::{GovernanceMail, PaymentConsent},
 		payments::{
 			ApprovalSeat, ConsentAudit, ConsentDecision, ConsentInvitation, ConsentOutcome, ConsentView, DIGEST_BYTES, EndDetail, ExecutionOutcome, MAX_CODE_ATTEMPTS, PaymentFeed,
-			PaymentFilter, PaymentRepository, PaymentView, ReservationStatus, consent_not_found,
+			PaymentFilter, PaymentRepository, PaymentView, ReservationStatus, already_open, consent_not_found,
 		},
 	},
 };
@@ -463,7 +463,7 @@ impl PaymentRepository for PgPayments {
 		{
 			// The partial unique index spoke: one open order per fund-owned source claim. A
 			// refusal, not a retry — the operator has a live request to finish or withdraw.
-			return Err(DomainError::Conflict("a payment is already open against this claim — close it before opening another".into()));
+			return Err(already_open());
 		}
 		inserted.map_err(repo_err)?;
 
@@ -552,6 +552,15 @@ impl PaymentRepository for PgPayments {
 			return Ok(None);
 		};
 		Ok(Some(view_of(&mut conn, rehydrate(&row)?).await?))
+	}
+
+	async fn has_open_against(&self, source: &Party) -> Result<bool, DomainError> {
+		sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM payments WHERE from_kind = $1 AND from_id IS NOT DISTINCT FROM $2 AND state IN ('pending', 'approved'))")
+			.bind(source.kind_str())
+			.bind(source.id_str())
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)
 	}
 
 	async fn record_approval(&self, id: PaymentId, consilium: ConsiliumId, at: i64) -> Result<PaymentView, DomainError> {

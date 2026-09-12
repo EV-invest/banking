@@ -208,6 +208,13 @@ pub struct PaymentFilter {
 	pub fund_owned_source: Option<bool>,
 }
 
+/// The refusal for a second open order against one fund-owned source claim — the partial
+/// unique index's answer, and the pre-check's, in the same words: which of the two spoke
+/// is an accident of timing the caller has no business telling apart.
+pub fn already_open() -> DomainError {
+	DomainError::Conflict("a payment is already open against this claim — close it before opening another".into())
+}
+
 /// The single response every unusable consent token produces, whatever made it unusable —
 /// unknown, expired, spent, burned, or attached to an order that has closed. A caller cannot
 /// tell which they hit, so the surface cannot be used to probe for live tokens.
@@ -236,6 +243,13 @@ pub trait PaymentRepository: Send + Sync {
 
 	/// Load one order in full (no lock; for queries).
 	async fn find(&self, id: PaymentId) -> Result<Option<PaymentView>, DomainError>;
+
+	/// Whether an order is already open (`pending` or `approved`) against `source`. A read
+	/// the fund-owned open path takes BEFORE seating its consilium: the unique index would
+	/// refuse the order anyway, but only after a quorum had been opened and every owner
+	/// mailed — and then withdrawn and every owner mailed again. Advisory, not the guard:
+	/// the index is the guard.
+	async fn has_open_against(&self, source: &Party) -> Result<bool, DomainError>;
 
 	/// Record that the owner quorum carried this order — the consilium branch's counterpart
 	/// to [`Self::submit`]. Applies [`PaymentOrder::approve`] under the order's row lock, so
