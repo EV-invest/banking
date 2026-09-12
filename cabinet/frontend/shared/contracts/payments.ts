@@ -34,7 +34,9 @@ export type PartyKind = "piggybank" | "revenue" | "service" | "user";
 
 /**
  * One internal end of an order. `id` is empty for the two singleton claims (`piggybank`,
- * `revenue`), the product id for `service`, and the banking user id for `user`.
+ * `revenue`), the product id for `service`, and for `user` the CONCIERGE user id the
+ * console carries (`AdminUserSummary.user_id`) — the plane resolves it to its own id and
+ * echoes THAT back in `PaymentEnd.id`, so the two never round-trip (payments.proto).
  */
 export interface Party {
   kind: PartyKind;

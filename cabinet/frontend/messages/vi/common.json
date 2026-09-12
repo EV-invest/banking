@@ -2479,6 +2479,94 @@
     "en": "Showing your most recent operations — older activity isn't listed here yet.",
     "t": "Đang hiển thị các giao dịch gần nhất — hoạt động cũ hơn chưa được liệt kê ở đây."
   },
+  "payment.consent.approve": {
+    "en": "Consented",
+    "t": "Đã đồng ý"
+  },
+  "payment.consent.invalidated": {
+    "en": "Consent void",
+    "t": "Sự đồng ý đã vô hiệu"
+  },
+  "payment.consent.pending": {
+    "en": "Awaiting the investor",
+    "t": "Đang chờ nhà đầu tư"
+  },
+  "payment.consent.reject": {
+    "en": "Declined",
+    "t": "Đã từ chối"
+  },
+  "payment.consent.unsent": {
+    "en": "Email not yet sent",
+    "t": "Email chưa được gửi"
+  },
+  "payment.requirement.hint.owner_consilium": {
+    "en": "Fund-owned money: more than half of the owners must confirm from their mailboxes.",
+    "t": "Tiền của quỹ: hơn một nửa chủ sở hữu phải xác nhận từ hộp thư của họ."
+  },
+  "payment.requirement.hint.subject_consent": {
+    "en": "An investor's own money: that investor alone is emailed and must agree.",
+    "t": "Tiền riêng của nhà đầu tư: chỉ nhà đầu tư đó nhận email và phải đồng ý."
+  },
+  "payment.requirement.owner_consilium": {
+    "en": "Owners' consilium",
+    "t": "Hội đồng chủ sở hữu"
+  },
+  "payment.requirement.subject_consent": {
+    "en": "The investor's consent",
+    "t": "Sự đồng ý của nhà đầu tư"
+  },
+  "payment.state.approved": {
+    "en": "Approved",
+    "t": "Đã duyệt"
+  },
+  "payment.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Đã huỷ"
+  },
+  "payment.state.executed": {
+    "en": "Executed",
+    "t": "Đã thực hiện"
+  },
+  "payment.state.execution_failed": {
+    "en": "Execution failed",
+    "t": "Thực hiện thất bại"
+  },
+  "payment.state.expired": {
+    "en": "Expired",
+    "t": "Đã hết hạn"
+  },
+  "payment.state.pending": {
+    "en": "Pending",
+    "t": "Đang chờ"
+  },
+  "payment.state.rejected": {
+    "en": "Rejected",
+    "t": "Bị từ chối"
+  },
+  "payment.tier.external": {
+    "en": "External",
+    "t": "Bên ngoài"
+  },
+  "payment.tier.hint.external": {
+    "en": "Out to an on-chain address. Ships as a withdrawal once approved.",
+    "t": "Ra ngoài tới một địa chỉ on-chain. Được gửi như một lệnh rút sau khi duyệt."
+  },
+  "payment.tier.hint.internal": {
+    "en": "Between two claims inside the fund. No money leaves the ledger.",
+    "t": "Giữa hai tài khoản trong quỹ. Không có tiền rời khỏi sổ cái."
+  },
+  "payment.tier.hint.service": {
+    "en": "Into one of the fund's products, as its pooled claim.",
+    "t": "Vào một sản phẩm của quỹ, dưới dạng tài khoản gộp của nó."
+  },
+  "payment.tier.internal": {
+    "en": "Internal",
+    "t": "Nội bộ"
+  },
+  "payment.tier.service": {
+    "en": "To a product",
+    "t": "Vào sản phẩm"
+  },
   "profile.accountSnapshot": {
     "en": "Account snapshot",
     "t": "Tổng quan tài khoản"

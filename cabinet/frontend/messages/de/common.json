@@ -2479,6 +2479,94 @@
     "en": "Showing your most recent operations — older activity isn't listed here yet.",
     "t": "Es werden Ihre jüngsten Vorgänge gezeigt — ältere Aktivität ist hier noch nicht aufgeführt."
   },
+  "payment.consent.approve": {
+    "en": "Consented",
+    "t": "Zugestimmt"
+  },
+  "payment.consent.invalidated": {
+    "en": "Consent void",
+    "t": "Zustimmung ungültig"
+  },
+  "payment.consent.pending": {
+    "en": "Awaiting the investor",
+    "t": "Wartet auf den Anleger"
+  },
+  "payment.consent.reject": {
+    "en": "Declined",
+    "t": "Abgelehnt"
+  },
+  "payment.consent.unsent": {
+    "en": "Email not yet sent",
+    "t": "E-Mail noch nicht gesendet"
+  },
+  "payment.requirement.hint.owner_consilium": {
+    "en": "Fund-owned money: more than half of the owners must confirm from their mailboxes.",
+    "t": "Fondseigenes Geld: mehr als die Hälfte der Eigentümer muss aus ihrem Postfach bestätigen."
+  },
+  "payment.requirement.hint.subject_consent": {
+    "en": "An investor's own money: that investor alone is emailed and must agree.",
+    "t": "Das eigene Geld eines Anlegers: nur dieser Anleger wird angeschrieben und muss zustimmen."
+  },
+  "payment.requirement.owner_consilium": {
+    "en": "Owners' consilium",
+    "t": "Konsilium der Eigentümer"
+  },
+  "payment.requirement.subject_consent": {
+    "en": "The investor's consent",
+    "t": "Zustimmung des Anlegers"
+  },
+  "payment.state.approved": {
+    "en": "Approved",
+    "t": "Genehmigt"
+  },
+  "payment.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Storniert"
+  },
+  "payment.state.executed": {
+    "en": "Executed",
+    "t": "Ausgeführt"
+  },
+  "payment.state.execution_failed": {
+    "en": "Execution failed",
+    "t": "Ausführung fehlgeschlagen"
+  },
+  "payment.state.expired": {
+    "en": "Expired",
+    "t": "Abgelaufen"
+  },
+  "payment.state.pending": {
+    "en": "Pending",
+    "t": "Ausstehend"
+  },
+  "payment.state.rejected": {
+    "en": "Rejected",
+    "t": "Abgelehnt"
+  },
+  "payment.tier.external": {
+    "en": "External",
+    "t": "Extern"
+  },
+  "payment.tier.hint.external": {
+    "en": "Out to an on-chain address. Ships as a withdrawal once approved.",
+    "t": "Nach außen an eine On-Chain-Adresse. Wird nach Genehmigung als Auszahlung versendet."
+  },
+  "payment.tier.hint.internal": {
+    "en": "Between two claims inside the fund. No money leaves the ledger.",
+    "t": "Zwischen zwei Ansprüchen innerhalb des Fonds. Kein Geld verlässt das Hauptbuch."
+  },
+  "payment.tier.hint.service": {
+    "en": "Into one of the fund's products, as its pooled claim.",
+    "t": "In eines der Produkte des Fonds, als dessen gepoolter Anspruch."
+  },
+  "payment.tier.internal": {
+    "en": "Internal",
+    "t": "Intern"
+  },
+  "payment.tier.service": {
+    "en": "To a product",
+    "t": "An ein Produkt"
+  },
   "profile.accountSnapshot": {
     "en": "Account snapshot",
     "t": "Kontoübersicht"

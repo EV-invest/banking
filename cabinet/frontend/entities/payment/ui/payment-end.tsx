@@ -1,0 +1,40 @@
+"use client";
+
+// One end of a payment order, as a reader recognises it.
+//
+// The label is what the digest binds and every approval surface shares; the detail is
+// what a PERSON tells the end by — the receiving investor's masked mailbox, the product's
+// title. Both are always shown together so "investor 8f3e…" is never approved for the
+// wrong person. An external end shows its rail and a shortened address here; the surfaces
+// where the address is the thing being approved render it whole through `FullAddress`
+// instead (docs/CONSILIUM.md, policy 13).
+
+import type { PaymentEnd } from "@/shared/contracts/payments";
+import { cn } from "@/shared/lib/cn";
+import { shortAddress } from "@/shared/lib/money";
+import { networkLabel } from "@/shared/lib/rail";
+import { NetworkMark } from "@/shared/ui/icons/networks";
+
+export function PaymentEndSummary({ end, className }: { end: PaymentEnd; className?: string }) {
+  const external = end.kind === "external";
+  return (
+    <span className={cn("flex min-w-0 flex-col gap-0.5", className)}>
+      <span className="truncate font-medium text-foreground">{end.label || "—"}</span>
+      {external ? (
+        <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground" title={end.address}>
+          <NetworkMark network={end.network} className="size-3.5 shrink-0" />
+          {networkLabel(end.network)}
+          <span className="font-mono-tech">{shortAddress(end.address)}</span>
+        </span>
+      ) : end.detail ? (
+        <span className="truncate text-xs text-muted-foreground">{end.detail}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/** The two ends in one line, for a sentence-shaped summary: "Fund revenue → Investor …". */
+export function endWords(end: PaymentEnd): string {
+  if (end.kind === "external") return `${end.label || networkLabel(end.network)} · ${end.address}`;
+  return end.detail ? `${end.label} · ${end.detail}` : end.label;
+}
