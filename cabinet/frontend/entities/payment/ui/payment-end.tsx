@@ -21,10 +21,10 @@ export function PaymentEndSummary({ end, className }: { end: PaymentEnd; classNa
     <span className={cn("flex min-w-0 flex-col gap-0.5", className)}>
       <span className="truncate font-medium text-foreground">{end.label || "—"}</span>
       {external ? (
-        <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground" title={end.address}>
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={end.address}>
           <NetworkMark network={end.network} className="size-3.5 shrink-0" />
-          {networkLabel(end.network)}
-          <span className="font-mono-tech">{shortAddress(end.address)}</span>
+          <span className="shrink-0">{networkLabel(end.network)}</span>
+          <span className="min-w-0 truncate font-mono-tech">{shortAddress(end.address)}</span>
         </span>
       ) : end.detail ? (
         <span className="truncate text-xs text-muted-foreground">{end.detail}</span>

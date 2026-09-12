@@ -15,13 +15,28 @@ import { shortAddress } from "@/shared/lib/money";
 import { networkLabel } from "@/shared/lib/rail";
 import { NetworkMark } from "@/shared/ui/icons/networks";
 import { Settled } from "@/shared/ui/motion";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { formatUsd, stateLabel } from "@/views/admin/lib/format";
 
 /** In flight — the operator can still act on these; the rest are history. */
 const OPEN_STATES = new Set(["queued", "processing"]);
 
-export function PayoutHistory({ history, busy, onCancel }: { history: RevenuePayout[] | null; busy: string | null; onCancel: (id: string) => void }) {
+export function PayoutHistory({
+  history,
+  error,
+  onRetry,
+  busy,
+  onCancel,
+}: {
+  history: RevenuePayout[] | null;
+  /** The read failed and nothing is on screen — not the same as an empty history. */
+  error: unknown;
+  onRetry: () => void;
+  busy: string | null;
+  onCancel: (id: string) => void;
+}) {
   const t = useT();
+  if (!history && error !== null && error !== undefined) return <ResourceError error={error} onRetry={onRetry} />;
   return (
     <Card>
       <CardContent className="p-0">

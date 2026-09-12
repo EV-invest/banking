@@ -6,7 +6,7 @@
 // plane refuses anyone else, so the button is offered on every pending row and the
 // refusal, if it comes, is shown rather than pre-empted.
 
-import { Loader2 } from "lucide-react";
+import { ArrowDown, Loader2 } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
@@ -34,9 +34,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
       <td className="px-5 py-3">
         <div className="flex flex-col gap-1.5 text-sm">
           <PaymentEndSummary end={payment.source} />
-          <span aria-hidden className="text-xs text-muted-foreground">
-            ↓
-          </span>
+          <ArrowDown aria-hidden className="size-3 text-muted-foreground" />
           <PaymentEndSummary end={payment.destination} />
         </div>
       </td>
@@ -45,7 +43,7 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
       <td className="px-5 py-3 text-xs">
         <p>{requirementLabel(payment.requirement, t)}</p>
         {payment.consilium_id ? (
-          <Link href="/consilium" className="text-main-accent-t1 underline-offset-2 hover:underline">
+          <Link href="/consilium" className="rounded-md text-main-accent-t1 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
             {t("admin.payments.openConsilium")}
           </Link>
         ) : payment.consent ? (

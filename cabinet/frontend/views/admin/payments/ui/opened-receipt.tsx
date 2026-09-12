@@ -10,7 +10,8 @@
 // because until someone answers there is nothing more to see.
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button } from "@evinvest/uikit";
+import { Alert, AlertDescription, AlertTitle, Button } from "@evinvest/uikit";
+import { CheckCircle2 } from "lucide-react";
 
 import type { Payment } from "@/shared/contracts/payments";
 import { expiresIn, formatMoment } from "@/shared/lib/datetime";
@@ -21,28 +22,29 @@ export function OpenedReceipt({ payment, onDismiss }: { payment: Payment; onDism
   const locale = useLocale();
   const consent = payment.consent;
   return (
-    <div className="space-y-3 rounded-lg border border-main-accent-t2/40 bg-main-accent-t2/10 p-4" role="status">
-      <div className="space-y-1">
-        <p className="text-sm font-semibold text-foreground">{t("admin.payments.openedTitle")}</p>
-        <p className="text-sm leading-relaxed text-foreground">
+    <Alert role="status" className="border-main-accent-t2/40 bg-main-accent-t2/10">
+      <CheckCircle2 className="size-4 text-main-accent-t2" />
+      <AlertTitle>{t("admin.payments.openedTitle")}</AlertTitle>
+      <AlertDescription className="gap-3 text-foreground">
+        <p className="leading-relaxed">
           {consent
             ? t("admin.payments.openedConsentBody", { email: consent.subject_email })
             : t("admin.payments.openedConsiliumBody")}
         </p>
-      </div>
-      <p className="text-xs tabular-nums text-muted-foreground">
-        {t("admin.payments.openedExpires", { at: formatMoment(payment.expires_at, locale), left: expiresIn(payment.expires_at, t) })}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {payment.consilium_id && (
-          <Button asChild size="sm" variant="outline">
-            <Link href="/consilium">{t("admin.payments.openConsilium")}</Link>
+        <p className="text-xs tabular-nums text-muted-foreground">
+          {t("admin.payments.openedExpires", { at: formatMoment(payment.expires_at, locale), left: expiresIn(payment.expires_at, t) })}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {payment.consilium_id && (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/consilium">{t("admin.payments.openConsilium")}</Link>
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
+            {t("ui.close")}
           </Button>
-        )}
-        <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>
-          {t("ui.close")}
-        </Button>
-      </div>
-    </div>
+        </div>
+      </AlertDescription>
+    </Alert>
   );
 }

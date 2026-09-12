@@ -65,47 +65,51 @@ export function PaymentList() {
 
       {error !== null && <ResourceError message={errorMessage(error, t)} />}
 
-      <Card>
-        <CardContent className="p-0">
-          <Settled loading={!items && !list.error} skeleton={<Skeleton className="m-6 h-24" />}>
-            {!items ? null : items.length === 0 ? (
-              <div className="p-8">
-                <Empty className="border md:p-6">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <ArrowLeftRight />
-                    </EmptyMedia>
-                    <EmptyTitle>{state ? t("admin.payments.noneInState") : t("admin.payments.none")}</EmptyTitle>
-                    <EmptyDescription>{t("admin.payments.noneHint")}</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </div>
-            ) : (
-              // Seven columns do not fit a phone: the table scrolls inside its own box.
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-200 text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="px-5 py-3 font-medium">{t("admin.payments.col.opened")}</th>
-                      <th className="px-5 py-3 font-medium">{t("admin.payments.col.ends")}</th>
-                      <th className="px-5 py-3 font-medium">{t("admin.payments.col.amountUsdt")}</th>
-                      <th className="px-5 py-3 font-medium">{t("admin.payments.tier")}</th>
-                      <th className="px-5 py-3 font-medium">{t("admin.payments.col.approval")}</th>
-                      <th className="px-5 py-3 font-medium">{t("admin.col.state")}</th>
-                      <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {items.map((payment) => (
-                      <PaymentRow key={payment.id} payment={payment} busy={busy === payment.id} onCancel={() => void cancel(payment.id)} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Settled>
-        </CardContent>
-      </Card>
+      {/* No card while the read has failed with nothing to show: a `Settled` with null
+          children would leave an empty box under the error. */}
+      {!items && list.error ? null : (
+        <Card>
+          <CardContent className="p-0">
+            <Settled loading={!items && !list.error} skeleton={<Skeleton className="m-6 h-24" />}>
+              {!items ? null : items.length === 0 ? (
+                <div className="p-8">
+                  <Empty className="border md:p-6">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <ArrowLeftRight />
+                      </EmptyMedia>
+                      <EmptyTitle>{state ? t("admin.payments.noneInState") : t("admin.payments.none")}</EmptyTitle>
+                      <EmptyDescription>{t("admin.payments.noneHint")}</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                </div>
+              ) : (
+                // Seven columns do not fit a phone: the table scrolls inside its own box.
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-200 text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="px-5 py-3 font-medium">{t("admin.payments.col.opened")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.payments.col.ends")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.payments.col.amountUsdt")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.payments.tier")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.payments.col.approval")}</th>
+                        <th className="px-5 py-3 font-medium">{t("admin.col.state")}</th>
+                        <th className="px-5 py-3 text-right font-medium">{t("admin.col.actions")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {items.map((payment) => (
+                        <PaymentRow key={payment.id} payment={payment} busy={busy === payment.id} onCancel={() => void cancel(payment.id)} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Settled>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

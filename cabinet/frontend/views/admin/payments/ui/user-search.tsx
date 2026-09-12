@@ -19,6 +19,7 @@ import { Button, Input, Skeleton } from "@evinvest/uikit";
 import { usersResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { ResourceError } from "@/shared/ui/resource-error";
 
 /** Enough to disambiguate an address; a longer list means the query is not specific yet. */
 const RESULT_LIMIT = 6;
@@ -47,7 +48,9 @@ export function UserSearch({ value, onChange }: { value: string; onChange: (id: 
   return (
     <div className="space-y-2">
       <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("admin.payments.placeholder.userSearch")} spellCheck={false} />
-      {!users ? (
+      {!users && list.error ? (
+        <ResourceError error={list.error} onRetry={() => void list.refresh()} retrying={list.isValidating} />
+      ) : !users ? (
         <Skeleton className="h-16 w-full" />
       ) : users.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t("admin.payments.noUsers")}</p>

@@ -38,7 +38,8 @@ export function RevenueView() {
 
   const data = revenue.data ?? null;
   const history = payouts.data?.withdrawals ?? null;
-  const error = actionError ?? (data || !revenue.error ? null : errorMessage(revenue.error, t));
+  const failed = !data && Boolean(revenue.error);
+  const error = actionError ?? (failed ? errorMessage(revenue.error, t) : null);
 
   // A cancelled payout releases a claim and leaves the operator withdrawal queue, so it
   // moves three facts, not one. Naming all three keeps the treasury and queue in step.
@@ -65,9 +66,9 @@ export function RevenueView() {
       <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.revenue.earned")}</p>
         <div className="grid gap-4 sm:grid-cols-3">
-          <MoneyCard label={t("admin.revenue.earnedTotal")} value={data?.earned} hint={t("admin.revenue.earnedTotalHint")} loading={!data} />
-          <MoneyCard label={t("admin.revenue.availableToPayOut")} value={data?.available} hint={t("admin.revenue.availableHint")} loading={!data} emphasis />
-          <MoneyCard label={t("admin.revenue.pendingPayout")} value={data?.pending_payout} hint={t("admin.revenue.pendingHint")} loading={!data} />
+          <MoneyCard label={t("admin.revenue.earnedTotal")} value={data?.earned} hint={t("admin.revenue.earnedTotalHint")} loading={!data && !failed} unavailable={failed} />
+          <MoneyCard label={t("admin.revenue.availableToPayOut")} value={data?.available} hint={t("admin.revenue.availableHint")} loading={!data && !failed} unavailable={failed} emphasis />
+          <MoneyCard label={t("admin.revenue.pendingPayout")} value={data?.pending_payout} hint={t("admin.revenue.pendingHint")} loading={!data && !failed} unavailable={failed} />
         </div>
         <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.revenue.ownMoneyNote")}</p>
       </StaggerItem>
@@ -79,7 +80,7 @@ export function RevenueView() {
 
       <StaggerItem as="section" className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t("admin.revenue.payouts")}</p>
-        <PayoutHistory history={history} busy={busy} onCancel={(id) => void cancel(id)} />
+        <PayoutHistory history={history} error={history ? null : payouts.error} onRetry={() => void payouts.refresh()} busy={busy} onCancel={(id) => void cancel(id)} />
         <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.revenue.footnote")}</p>
       </StaggerItem>
     </AdminScreen>

@@ -8,12 +8,14 @@
 // choice the form can make on its behalf.
 
 import { useT } from "@evinvest/i18n/react";
-import { Input, Skeleton } from "@evinvest/uikit";
+import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
 
 import { fundRevenueResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { Link } from "@/shared/ui/cabinet-link";
 import { NetworkMark } from "@/shared/ui/icons/networks";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { railLabel } from "@/views/admin/lib/format";
 
 export function ExternalFields({
@@ -31,10 +33,22 @@ export function ExternalFields({
 
   return (
     <div className="space-y-2">
-      {!rails ? (
-        <Skeleton className="h-10 w-full" />
+      {!rails && revenue.error ? (
+        <ResourceError error={revenue.error} onRetry={() => void revenue.refresh()} retrying={revenue.isValidating} />
+      ) : !rails ? (
+        <Skeleton className="h-9 w-full" />
       ) : rails.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{t("admin.payments.noRail")}</p>
+        <Empty className="border p-4">
+          <EmptyHeader>
+            <EmptyTitle className="text-sm">{t("admin.payments.noRail")}</EmptyTitle>
+            <EmptyDescription className="text-xs">{t("admin.payments.noRailHint")}</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/admin/treasury">{t("nav.treasury")}</Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
       ) : (
         <div role="radiogroup" aria-label={t("admin.rail")} className="flex flex-wrap gap-2">
           {rails.map((rail) => {

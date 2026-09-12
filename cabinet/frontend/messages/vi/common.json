@@ -707,9 +707,17 @@
     "en": "No product is registered yet.",
     "t": "Chưa có sản phẩm nào được đăng ký."
   },
+  "admin.payments.noProductsHint": {
+    "en": "A product appears here once it is registered as an allocation.",
+    "t": "Sản phẩm sẽ xuất hiện ở đây sau khi được đăng ký làm allocation."
+  },
   "admin.payments.noRail": {
-    "en": "No rail is configured — an external payment needs a chain rail with a running watcher.",
-    "t": "Chưa cấu hình rail — thanh toán bên ngoài cần một rail chuỗi với watcher đang chạy."
+    "en": "No rail is configured",
+    "t": "Chưa cấu hình rail"
+  },
+  "admin.payments.noRailHint": {
+    "en": "Rails are configured on the treasury; a payment ships only on a chain with a running watcher.",
+    "t": "Rail được cấu hình ở kho bạc; thanh toán chỉ được gửi trên chuỗi có watcher đang chạy."
   },
   "admin.payments.noUsers": {
     "en": "No investor matches.",

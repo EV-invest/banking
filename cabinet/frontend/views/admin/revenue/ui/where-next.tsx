@@ -28,9 +28,10 @@ export function WhereNext() {
 
 function LinkCard({ href, icon, title, body }: { href: `/${string}`; icon: ReactNode; title: string; body: string }) {
   return (
-    <Card className="transition-colors hover:bg-foreground/5 focus-within:ring-2 focus-within:ring-ring">
+    <Card className="relative transition-colors has-hover:bg-foreground/5 has-focus-visible:ring-2 has-focus-visible:ring-ring">
       <CardContent className="py-5">
-        <Link href={href} className="flex items-start gap-3 outline-none">
+        {/* The link is stretched over the whole card, so the hit target and the ring are the card. */}
+        <Link href={href} className="flex items-start gap-3 outline-none after:absolute after:inset-0 after:rounded-xl">
           <span className="mt-0.5 shrink-0 text-main-accent-t1">{icon}</span>
           <span className="min-w-0 flex-1 space-y-1">
             <span className="block text-sm font-semibold text-foreground">{title}</span>

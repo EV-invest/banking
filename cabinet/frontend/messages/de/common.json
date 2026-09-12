@@ -707,9 +707,17 @@
     "en": "No product is registered yet.",
     "t": "Noch kein Produkt registriert."
   },
+  "admin.payments.noProductsHint": {
+    "en": "A product appears here once it is registered as an allocation.",
+    "t": "Ein Produkt erscheint hier, sobald es als Allokation registriert ist."
+  },
   "admin.payments.noRail": {
-    "en": "No rail is configured — an external payment needs a chain rail with a running watcher.",
-    "t": "Kein Rail konfiguriert — eine externe Zahlung braucht ein Chain-Rail mit laufendem Watcher."
+    "en": "No rail is configured",
+    "t": "Kein Rail konfiguriert"
+  },
+  "admin.payments.noRailHint": {
+    "en": "Rails are configured on the treasury; a payment ships only on a chain with a running watcher.",
+    "t": "Rails werden in der Treasury konfiguriert; eine Zahlung wird nur über eine Chain mit laufendem Watcher versendet."
   },
   "admin.payments.noUsers": {
     "en": "No investor matches.",

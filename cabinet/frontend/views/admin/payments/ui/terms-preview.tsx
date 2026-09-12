@@ -66,7 +66,7 @@ export function ReviewPanel({
       {/* One sentence, one key: the order of amount, source and destination is a
           per-language decision. `break-words` because an address is 40-plus unbroken
           characters. The amount is the exact wire decimal — the figure the hash covers. */}
-      <p className="text-sm break-words">
+      <p className="text-sm tabular-nums break-words">
         {t("admin.payments.reviewSentence", {
           amount: `${formatExactUsdt(amount.trim())} USDT`,
           source: draftWords(source, t),

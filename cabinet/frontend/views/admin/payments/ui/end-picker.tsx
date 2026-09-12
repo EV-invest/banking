@@ -7,11 +7,13 @@
 // instead of forwarding two resources it never looks at itself.
 
 import { useT } from "@evinvest/i18n/react";
-import { Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { adminAllocationsResource } from "@/entities/admin/model/admin-resource";
 import { useResource } from "@/shared/lib/resource";
+import { Link } from "@/shared/ui/cabinet-link";
 import { ProductIcon } from "@/shared/ui/icons/products";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { type EndDraft, type EndKind, END_KINDS } from "@/views/admin/payments/lib/terms";
 import { endKindLabel } from "@/views/admin/payments/lib/words";
 import { ExternalFields } from "@/views/admin/payments/ui/external-fields";
@@ -59,8 +61,24 @@ function ProductSelect({ value, onChange }: { value: string; onChange: (id: stri
   const t = useT();
   const allocations = useResource(adminAllocationsResource);
   const products = allocations.data?.allocations ?? null;
+  // A read that failed is not an empty registry, and a skeleton is not an answer either.
+  if (!products && allocations.error) return <ResourceError error={allocations.error} onRetry={() => void allocations.refresh()} retrying={allocations.isValidating} />;
   if (!products) return <Skeleton className="h-9 w-full" />;
-  if (products.length === 0) return <p className="text-xs text-muted-foreground">{t("admin.payments.noProducts")}</p>;
+  if (products.length === 0) {
+    return (
+      <Empty className="border p-4">
+        <EmptyHeader>
+          <EmptyTitle className="text-sm">{t("admin.payments.noProducts")}</EmptyTitle>
+          <EmptyDescription className="text-xs">{t("admin.payments.noProductsHint")}</EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/admin/allocations">{t("nav.allocations")}</Link>
+          </Button>
+        </EmptyContent>
+      </Empty>
+    );
+  }
   const picked = products.find((p) => p.service === value);
   return (
     <Select value={value} onValueChange={(next) => onChange(next, products.find((p) => p.service === next)?.title ?? next)}>
