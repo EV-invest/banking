@@ -21,7 +21,7 @@ use piggybank_core::{
 	infrastructure::{consilium_mailer::ConsiliumMailer, users::PgUsers},
 	ports::{
 		UserRepository,
-		governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError, PayoutOutcome},
+		governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError, PayoutApproval, PayoutOutcome},
 	},
 };
 use sqlx::PgPool;
@@ -69,6 +69,45 @@ fn refusing() -> Arc<FixedRelay> {
 /// A recipient with a mirrored concierge id, a terminal consilium fixture to hang the mail
 /// on, and one queued outcome mail. Returns the mail row's id.
 async fn a_queued_mail(pool: &PgPool) -> i64 {
+	a_queued(pool, |consilium| {
+		GovernanceMail::PayoutOutcome(PayoutOutcome {
+			consilium_id: consilium.to_string(),
+			outcome: "CANCELLED".into(),
+			network: "bep20".into(),
+			address: "0x52908400098527886E0F7030069857D2E4169EE7".into(),
+			amount: "1".into(),
+			detail: "fixture".into(),
+			tier: String::new(),
+			source: String::new(),
+			destination: String::new(),
+			reason: String::new(),
+		})
+	})
+	.await
+}
+
+/// The same fixture, carrying a token and a code — the kind whose payload holds a secret.
+async fn a_queued_token_mail(pool: &PgPool) -> i64 {
+	a_queued(pool, |consilium| {
+		GovernanceMail::PayoutApproval(PayoutApproval {
+			consilium_id: consilium.to_string(),
+			initiator_email: "owner@example.test".into(),
+			network: "bep20".into(),
+			address: "0x52908400098527886E0F7030069857D2E4169EE7".into(),
+			amount: "1".into(),
+			memo: "fixture".into(),
+			payload_hash: "00".repeat(32),
+			threshold: 2,
+			owner_count: 3,
+			expires_at: 0,
+			approval_url: "https://example.test/approve/SECRET-TOKEN".into(),
+			code: "SECRET-CODE".into(),
+		})
+	})
+	.await
+}
+
+async fn a_queued(pool: &PgPool, mail: impl FnOnce(Uuid) -> GovernanceMail) -> i64 {
 	let users = PgUsers::new(pool.clone());
 	let tag = Uuid::new_v4();
 	let owner: UserId = users
@@ -98,18 +137,7 @@ async fn a_queued_mail(pool: &PgPool) -> i64 {
 	.execute(pool)
 	.await
 	.unwrap();
-	let mail = GovernanceMail::PayoutOutcome(PayoutOutcome {
-		consilium_id: consilium.to_string(),
-		outcome: "CANCELLED".into(),
-		network: "bep20".into(),
-		address: "0x52908400098527886E0F7030069857D2E4169EE7".into(),
-		amount: "1".into(),
-		detail: "fixture".into(),
-		tier: String::new(),
-		source: String::new(),
-		destination: String::new(),
-		reason: String::new(),
-	});
+	let mail = mail(consilium);
 	sqlx::query_scalar("INSERT INTO consilium_mail (consilium_id, user_id, kind, dedupe_key, payload) VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING id")
 		.bind(consilium)
 		.bind(owner.raw())
@@ -205,4 +233,50 @@ async fn a_mail_deferred_for_longer_than_the_ceiling_is_given_up_on() {
 	assert_eq!(relay.calls.load(Ordering::SeqCst), 1);
 
 	sqlx::query("DELETE FROM consilium_mail WHERE id = $1").bind(id).execute(&pool).await.unwrap();
+}
+
+/// A row the mailer gives up on — ten refusals, or a day of deferrals — keeps its audit
+/// trail but not its secrets: the token and the code are stripped exactly as they are on
+/// delivery, because a credential nobody will ever receive is one nobody should hold.
+#[tokio::test]
+async fn a_mail_given_up_on_is_redacted_like_a_delivered_one() {
+	let _guard = QUEUE.lock().await;
+	let Some(pool) = common::pool().await else {
+		eprintln!("DATABASE_URL unset — skipping the mailer suite");
+		return;
+	};
+	quiet_queue(&pool).await;
+
+	let refused = a_queued_token_mail(&pool).await;
+	let relay = refusing();
+	for _ in 0..10 {
+		ConsiliumMailer::new(pool.clone(), relay.clone()).drain().await.unwrap();
+	}
+	let deferred = a_queued_token_mail(&pool).await;
+	sqlx::query("UPDATE consilium_mail SET created_at = now() - interval '25 hours' WHERE id = $1")
+		.bind(deferred)
+		.execute(&pool)
+		.await
+		.unwrap();
+	ConsiliumMailer::new(pool.clone(), throttling()).drain().await.unwrap();
+
+	for id in [refused, deferred] {
+		let (attempts, _, _, sent) = row(&pool, id).await;
+		assert!(attempts >= 10 && !sent, "retired: attempts={attempts}");
+		let payload: String = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE id = $1")
+			.bind(id)
+			.fetch_one(&pool)
+			.await
+			.unwrap();
+		assert!(!payload.contains("SECRET"), "the retired row holds no secret: {payload}");
+		let mail: serde_json::Value = serde_json::from_str(&payload).unwrap();
+		assert_eq!(mail["kind"], "payout_approval", "the audit trail keeps what was attempted");
+		assert_eq!(mail["memo"], "fixture");
+	}
+
+	sqlx::query("DELETE FROM consilium_mail WHERE id = ANY($1)")
+		.bind(vec![refused, deferred])
+		.execute(&pool)
+		.await
+		.unwrap();
 }

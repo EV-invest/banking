@@ -161,7 +161,9 @@ impl ConsiliumMailer {
 			let mail: GovernanceMail = match serde_json::from_str(&payload) {
 				Ok(mail) => mail,
 				Err(err) => {
-					self.fail(id, &format!("unreadable payload: {err}")).await?;
+					// Nothing typed to redact: a payload this worker cannot read is one it
+					// cannot strip either, and the row is retired as it stands.
+					self.fail(id, &format!("unreadable payload: {err}"), None).await?;
 					continue;
 				}
 			};
@@ -169,7 +171,7 @@ impl ConsiliumMailer {
 			// plane cannot redirect a governance mail. Without the mirrored id there is no
 			// safe address to send to, and guessing is not an option.
 			let Some(recipient) = concierge_user_id else {
-				self.fail(id, "recipient has no mirrored concierge user id").await?;
+				self.fail(id, "recipient has no mirrored concierge user id", Some(&mail)).await?;
 				continue;
 			};
 			match self.mailer.send(recipient, &dedupe_key, &mail).await {
@@ -203,8 +205,8 @@ impl ConsiliumMailer {
 					}
 					sent += 1;
 				}
-				Err(MailDeliveryError::Deferred(why)) => self.defer(id, &why).await?,
-				Err(MailDeliveryError::Failed(why)) => self.fail(id, &why).await?,
+				Err(MailDeliveryError::Deferred(why)) => self.defer(id, &why, &mail).await?,
+				Err(MailDeliveryError::Failed(why)) => self.fail(id, &why, Some(&mail)).await?,
 			}
 		}
 		Ok(sent)
@@ -215,7 +217,7 @@ impl ConsiliumMailer {
 	/// from the sweep interval up to [`MAX_DEFERRAL_BACKOFF`]; past [`DEFERRAL_CEILING`] from
 	/// creation the row is given up on the way a failed one is, so a permanently throttled
 	/// recipient still becomes an alert rather than a silent stall.
-	async fn defer(&self, id: i64, reason: &str) -> Result<(), DomainError> {
+	async fn defer(&self, id: i64, reason: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
 		let expired: bool = sqlx::query_scalar("SELECT created_at + $2 < now() FROM consilium_mail WHERE id = $1")
 			.bind(id)
 			.bind(DEFERRAL_CEILING)
@@ -223,13 +225,7 @@ impl ConsiliumMailer {
 			.await
 			.map_err(repo_err)?;
 		if expired {
-			sqlx::query("UPDATE consilium_mail SET attempts = $2, last_error = $3 WHERE id = $1")
-				.bind(id)
-				.bind(MAX_ATTEMPTS)
-				.bind(reason)
-				.execute(&self.pool)
-				.await
-				.map_err(repo_err)?;
+			self.retire(id, reason, Some(mail)).await?;
 			error!(
 				mail_id = id,
 				"consilium mailer: giving up on a governance mail deferred for over {DEFERRAL_CEILING:?} — an owner will not be told: {reason}"
@@ -260,8 +256,9 @@ impl ConsiliumMailer {
 
 	/// Record a delivery failure. At the ceiling it becomes an `error!` (Sentry-shipped): an
 	/// approval mail that never arrives is a consilium that can never reach quorum, which is
-	/// exactly the kind of silent stall an operator must be told about.
-	async fn fail(&self, id: i64, reason: &str) -> Result<(), DomainError> {
+	/// exactly the kind of silent stall an operator must be told about — and the row is
+	/// retired with its secrets stripped, exactly as a delivered one is.
+	async fn fail(&self, id: i64, reason: &str, mail: Option<&GovernanceMail>) -> Result<(), DomainError> {
 		let attempts: i32 = sqlx::query_scalar("UPDATE consilium_mail SET attempts = attempts + 1, last_error = $2 WHERE id = $1 RETURNING attempts")
 			.bind(id)
 			.bind(reason)
@@ -269,10 +266,31 @@ impl ConsiliumMailer {
 			.await
 			.map_err(repo_err)?;
 		if attempts >= MAX_ATTEMPTS {
+			self.retire(id, reason, mail).await?;
 			error!(mail_id = id, attempts, "consilium mailer: giving up on a governance mail — an owner will not be told: {reason}");
 		} else {
 			warn!(mail_id = id, attempts, "consilium mailer: delivery failed (will retry): {reason}");
 		}
+		Ok(())
+	}
+
+	/// Give a row up for good: pinned at the attempt ceiling so no sweep picks it up again,
+	/// and its payload rewritten WITHOUT its secrets. A token and a code that will never be
+	/// delivered are a credential nobody legitimately holds, and the row is kept for the
+	/// audit trail — which needs to say what was attempted, not what the code was.
+	async fn retire(&self, id: i64, reason: &str, mail: Option<&GovernanceMail>) -> Result<(), DomainError> {
+		let redacted = mail
+			.map(|mail| serde_json::to_string(&mail.redacted()))
+			.transpose()
+			.map_err(|e| DomainError::Repository(e.to_string()))?;
+		sqlx::query("UPDATE consilium_mail SET attempts = $2, last_error = $3, payload = COALESCE($4::jsonb, payload) WHERE id = $1")
+			.bind(id)
+			.bind(MAX_ATTEMPTS)
+			.bind(reason)
+			.bind(redacted)
+			.execute(&self.pool)
+			.await
+			.map_err(repo_err)?;
 		Ok(())
 	}
 }
