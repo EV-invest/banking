@@ -66,6 +66,7 @@ impl AppState {
 			users: self.users.as_ref(),
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
+			policy: self.outflow.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
 			kyc: self.kyc_gate,

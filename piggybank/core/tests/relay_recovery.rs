@@ -283,7 +283,7 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 	withdrawal_app::dispatch_withdrawal(
 		h.withdrawals.as_ref(),
 		&StubCustody,
-		&PgOutflowPolicy::new(&h.pool),
+		&PgOutflowPolicy::new(h.pool.clone()),
 		KycGate::ENFORCED,
 		&h.notify,
 		withdrawal.id(),

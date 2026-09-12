@@ -31,12 +31,12 @@ use crate::{
 	application::{
 		consilium::{mint_credential, require_governance_mail, require_settled_roster},
 		credentials::{self, token_digest},
-		withdrawals::{self as withdrawal_app, AdmissionGates, WithdrawalPorts},
+		withdrawals::{self as withdrawal_app, AdmissionGates, WithdrawalPorts, require_outflows_enabled},
 	},
 	config::KycGate,
 	infrastructure::{consilium::digest, relay::payment_reserve_id},
 	ports::{
-		Custody, UserRepository, WithdrawalRepository,
+		Custody, OutflowPolicy, UserRepository, WithdrawalRepository,
 		consilium::ConsiliumRepository,
 		ledger::Ledger,
 		payments::{
@@ -59,6 +59,9 @@ pub struct PaymentPorts<'a> {
 	pub withdrawals: &'a dyn WithdrawalRepository,
 	pub ledger: &'a dyn Ledger,
 	pub custody: &'a dyn Custody,
+	/// The read-only kill-switch, re-read at execution: an approved order is still money
+	/// leaving, and an operator pause must hold it exactly as it holds a queued withdrawal.
+	pub policy: &'a dyn OutflowPolicy,
 	pub relay: &'a Notify,
 	pub configured: &'a [Network],
 	pub kyc: KycGate,
@@ -274,15 +277,19 @@ pub async fn submit_consent(ports: &PaymentPorts<'_>, token: &str, code: &str, d
 ///
 /// 1. only an `approved` order is executable; `executed` returns as it is and every other
 ///    state is refused, so a late answer can never reach the money;
-/// 2. the payload hash is re-taken over the stored terms, so what executes is what was
+/// 2. the read-only pause is re-read and, while it holds, the attempt is an `Err` and NOT
+///    a recorded failure: the order stays `approved` for the sweeper to pick up once the
+///    operator lifts the pause, rather than being closed for good by a control the
+///    operator meant as a hold;
+/// 3. the payload hash is re-taken over the stored terms, so what executes is what was
 ///    approved;
-/// 3. a consent seat whose pins have moved fails the order closed BEFORE anything is
+/// 4. a consent seat whose pins have moved fails the order closed BEFORE anything is
 ///    created — and `record_execution` re-checks under the lock, voiding a still-queued
 ///    withdrawal if a revocation landed in between;
-/// 4. an L2/L3 settlement is recorded only once the relay has applied the reservation the
+/// 5. an L2/L3 settlement is recorded only once the relay has applied the reservation the
 ///    approval raised; until then nothing is recorded and the sweeper comes back, and a
 ///    reservation the ledger refused (parked) fails the order rather than waiting forever;
-/// 5. an L1 withdrawal's id is derived from the order, and a refusal from the withdrawal
+/// 6. an L1 withdrawal's id is derived from the order, and a refusal from the withdrawal
 ///    path is re-read against that id before being believed, so the loser of a two-caller
 ///    race records the withdrawal that exists rather than a phantom failure.
 pub async fn execute(ports: &PaymentPorts<'_>, id: PaymentId, now: i64) -> Result<PaymentView, DomainError> {
@@ -294,6 +301,7 @@ pub async fn execute(ports: &PaymentPorts<'_>, id: PaymentId, now: i64) -> Resul
 	if order.state() != PaymentState::Approved {
 		return Err(DomainError::Conflict(format!("payment is {}, not executable", order.state().as_str())));
 	}
+	require_outflows_enabled(ports.policy).await?;
 	if digest(&order.terms().canonical_bytes()) != order.payload_hash() {
 		let reason = "the stored terms no longer match the payload hash that was approved".to_owned();
 		return ports.payments.record_execution(id, ExecutionOutcome::Failed(reason), now).await;

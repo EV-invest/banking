@@ -28,7 +28,7 @@ use tracing::{error, info, warn};
 use crate::{
 	application::{consilium as consilium_app, payments as payments_app},
 	config::KycGate,
-	ports::{Custody, PaymentRepository, UserRepository, WithdrawalRepository, consilium::ConsiliumRepository, ledger::Ledger},
+	ports::{Custody, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository, consilium::ConsiliumRepository, ledger::Ledger},
 };
 
 fn unix_now() -> i64 {
@@ -60,6 +60,7 @@ pub struct ConsiliumSweeper {
 	pub users: Arc<dyn UserRepository>,
 	pub ledger: Arc<dyn Ledger>,
 	pub custody: Arc<dyn Custody>,
+	pub policy: Arc<dyn OutflowPolicy>,
 	pub notify: Arc<Notify>,
 	pub configured: Arc<[Network]>,
 	pub kyc: KycGate,
@@ -134,6 +135,7 @@ impl ConsiliumSweeper {
 			users: self.users.as_ref(),
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
+			policy: self.policy.as_ref(),
 			relay: &self.notify,
 			configured: &self.configured,
 			kyc: self.kyc,

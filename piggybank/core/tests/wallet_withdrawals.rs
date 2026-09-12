@@ -125,8 +125,8 @@ fn destination(network: Network) -> WalletAddress {
 /// The outflow policy over the harness's control plane — the kill-switch and the owner's
 /// freeze/KYC standing that `dispatch_withdrawal` gates on. A borrow-holder, so a test can
 /// mutate the underlying rows between calls and the next call sees the new state.
-fn policy(h: &Harness) -> PgOutflowPolicy<'_> {
-	PgOutflowPolicy::new(&h.pool)
+fn policy(h: &Harness) -> PgOutflowPolicy {
+	PgOutflowPolicy::new(h.pool.clone())
 }
 
 /// A fresh user who is active AND verified — what every money-moving path here needs.

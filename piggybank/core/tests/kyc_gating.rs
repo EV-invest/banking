@@ -420,7 +420,7 @@ async fn a_lifted_gate_both_admits_and_dispatches_an_unverified_withdrawal() {
 	.expect("a lifted gate admits an unverified withdrawal");
 	h.relay.drain().await;
 
-	let policy = PgOutflowPolicy::new(&h.pool);
+	let policy = PgOutflowPolicy::new(h.pool.clone());
 	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy, KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();

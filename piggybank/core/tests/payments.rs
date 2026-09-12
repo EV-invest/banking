@@ -936,7 +936,7 @@ use domain::money::WalletAddress;
 use piggybank_core::{
 	application::payments as payments_app,
 	config::KycGate,
-	infrastructure::{consilium::PgConsilia, withdrawals::PgWithdrawals},
+	infrastructure::{consilium::PgConsilia, operations, outflow::PgOutflowPolicy, withdrawals::PgWithdrawals},
 	ports::{WithdrawalRepository, ledger::Ledger},
 };
 
@@ -949,6 +949,7 @@ struct App {
 	consilia: PgConsilia,
 	users: PgUsers,
 	withdrawals: PgWithdrawals,
+	outflow: PgOutflowPolicy,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -963,6 +964,7 @@ async fn app(skipping: &str) -> Option<App> {
 		consilia: PgConsilia::new(pool.clone()),
 		users: PgUsers::new(pool.clone()),
 		withdrawals: PgWithdrawals::new(pool.clone()),
+		outflow: PgOutflowPolicy::new(pool.clone()),
 		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
 		ledger,
 		notify,
@@ -978,6 +980,7 @@ fn ports(a: &App) -> payments_app::PaymentPorts<'_> {
 		withdrawals: &a.withdrawals,
 		ledger: a.ledger.as_ref(),
 		custody: &StubCustody,
+		policy: &a.outflow,
 		relay: &a.notify,
 		configured: &[Network::Bep20],
 		kyc: KycGate::LIFTED,
@@ -1206,6 +1209,47 @@ async fn a_revocation_after_consent_fails_execution_closed_and_releases_the_rese
 	assert_eq!((after.posted, after.locked), (before.posted, before.locked), "the reservation was given back");
 	assert!(a.payments.awaiting_execution().await.unwrap().is_empty(), "nothing retries a failure");
 
+	reset_payments(&a.pool).await;
+}
+
+/// The read-only kill-switch holds an APPROVED order the way it holds a queued withdrawal:
+/// the attempt is an error, not a recorded failure, so the order is still `approved` when
+/// the operator lifts the pause and the sweeper comes back to it.
+#[tokio::test]
+async fn an_operator_pause_holds_an_approved_order_without_closing_it() {
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments read-only pause").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+
+	let id = payments_app::open(&ports(&a), investor, terms(Party::User(investor), PaymentDestination::Internal(Party::Revenue), "20"), now())
+		.await
+		.unwrap()
+		.order
+		.id();
+	let (token, code) = consent_credentials(&a.pool, id).await;
+	a.payments.submit(&digest(token.as_bytes()), &code, ConsentDecision::Approve, &audit(), now()).await.unwrap();
+	a.relay.drain().await;
+
+	operations::set_read_only(&a.pool, true).await.unwrap();
+	let held = payments_app::execute(&ports(&a), id, now()).await;
+	let report = payments_app::sweep(&ports(&a), now()).await.unwrap();
+	operations::set_read_only(&a.pool, false).await.unwrap();
+
+	assert!(matches!(held, Err(DomainError::Forbidden(ref why)) if why.contains("paused")), "{held:?}");
+	assert_eq!((report.executed, report.execution_failures), (0, 0), "a pause records nothing");
+	assert_eq!(
+		payments_app::find(&a.payments, id).await.unwrap().order.state(),
+		PaymentState::Approved,
+		"still waiting, not failed"
+	);
+	assert_eq!(a.payments.awaiting_execution().await.unwrap(), vec![id], "the sweeper will come back to it");
+
+	let view = payments_app::execute(&ports(&a), id, now()).await.expect("executes once the pause is lifted");
+	assert_eq!(view.order.state(), PaymentState::Executed);
+
+	a.relay.drain().await;
 	reset_payments(&a.pool).await;
 }
 

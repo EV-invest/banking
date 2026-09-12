@@ -178,9 +178,16 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 	.await
 	.unwrap();
 	if first.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), KycGate::ENFORCED, &h.notify, first.id())
-			.await
-			.unwrap();
+		withdrawal_app::dispatch_withdrawal(
+			h.withdrawals.as_ref(),
+			&StubCustody,
+			&PgOutflowPolicy::new(h.pool.clone()),
+			KycGate::ENFORCED,
+			&h.notify,
+			first.id(),
+		)
+		.await
+		.unwrap();
 	}
 	let second = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h),
@@ -194,9 +201,16 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 	.await
 	.expect("the second request passes the Read-First — TB lags the undrained outbox");
 	if second.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), KycGate::ENFORCED, &h.notify, second.id())
-			.await
-			.unwrap();
+		withdrawal_app::dispatch_withdrawal(
+			h.withdrawals.as_ref(),
+			&StubCustody,
+			&PgOutflowPolicy::new(h.pool.clone()),
+			KycGate::ENFORCED,
+			&h.notify,
+			second.id(),
+		)
+		.await
+		.unwrap();
 	}
 
 	h.relay.drain().await;
