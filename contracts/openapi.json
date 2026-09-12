@@ -3363,6 +3363,360 @@
         }
       }
     },
+    "/banking.v1.PaymentConsentService/GetConsentInvitation": {
+      "post": {
+        "tags": [
+          "banking.v1.PaymentConsentService"
+        ],
+        "summary": "GetConsentInvitation",
+        "description": "The redacted invitation behind an emailed token. Side-effect free. Unknown, expired,\n spent, burned and closed tokens all return the SAME NOT_FOUND.",
+        "operationId": "banking.v1.PaymentConsentService.GetConsentInvitation",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetConsentInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.PaymentConsentInvitation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.PaymentConsentService/SubmitConsent": {
+      "post": {
+        "tags": [
+          "banking.v1.PaymentConsentService"
+        ],
+        "summary": "SubmitConsent",
+        "description": "Answer the consent. Requires the token AND the secret code from the mail. Five failed\n code attempts burn the token permanently — and, with one seat, fail the payment closed.",
+        "operationId": "banking.v1.PaymentConsentService.SubmitConsent",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SubmitConsentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.SubmitConsentResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.PaymentsService/CancelPayment": {
+      "post": {
+        "tags": [
+          "banking.v1.PaymentsService"
+        ],
+        "summary": "CancelPayment",
+        "description": "Withdraw an order the CALLER opened, while it is still pending. Anyone else is refused.",
+        "operationId": "banking.v1.PaymentsService.CancelPayment",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CancelPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Payment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.PaymentsService/GetPayment": {
+      "post": {
+        "tags": [
+          "banking.v1.PaymentsService"
+        ],
+        "summary": "GetPayment",
+        "description": "One order in full (Admin/Owner).",
+        "operationId": "banking.v1.PaymentsService.GetPayment",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Payment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.PaymentsService/ListPayments": {
+      "post": {
+        "tags": [
+          "banking.v1.PaymentsService"
+        ],
+        "summary": "ListPayments",
+        "description": "The payment history, newest first, filtered (Admin/Owner). Nothing is ever deleted.",
+        "operationId": "banking.v1.PaymentsService.ListPayments",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListPaymentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.PaymentList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.PaymentsService/OpenPayment": {
+      "post": {
+        "tags": [
+          "banking.v1.PaymentsService"
+        ],
+        "summary": "OpenPayment",
+        "description": "Open a payment order (Admin/Owner). Refused when the source cannot cover the amount\n right now, when the shape could never execute (an unconfigured rail, a sub-minimum\n external amount, an external destination out of `piggybank` or a service claim), or\n when another order is already open against the same fund-owned source.",
+        "operationId": "banking.v1.PaymentsService.OpenPayment",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.OpenPaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Payment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.UsersService/DisableUser": {
       "post": {
         "tags": [
@@ -6474,6 +6828,17 @@
         "title": "CancelConsiliumRequest",
         "additionalProperties": false
       },
+      "banking.v1.CancelPaymentRequest": {
+        "type": "object",
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "title": "payment_id"
+          }
+        },
+        "title": "CancelPaymentRequest",
+        "additionalProperties": false
+      },
       "banking.v1.CancelRedemptionRequest": {
         "type": "object",
         "properties": {
@@ -6522,6 +6887,17 @@
         },
         "title": "CheckResponse",
         "additionalProperties": false
+      },
+      "banking.v1.ConsentDecision": {
+        "type": "string",
+        "title": "ConsentDecision",
+        "enum": [
+          "CONSENT_DECISION_UNSPECIFIED",
+          "CONSENT_DECISION_PENDING",
+          "CONSENT_DECISION_APPROVE",
+          "CONSENT_DECISION_REJECT"
+        ],
+        "description": "What the emailed investor answered."
       },
       "banking.v1.Consilium": {
         "type": "object",
@@ -6934,6 +7310,23 @@
         "title": "DispatchWithdrawalResponse",
         "additionalProperties": false
       },
+      "banking.v1.ExternalDestination": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "Rail the payment ships on (BEP20 / POLYGON / TRC20 / TON)."
+          },
+          "address": {
+            "type": "string",
+            "title": "address",
+            "description": "Destination address, rendered in FULL wherever a human approves it."
+          }
+        },
+        "title": "ExternalDestination",
+        "additionalProperties": false
+      },
       "banking.v1.FailRedemptionRequest": {
         "type": "object",
         "properties": {
@@ -7254,6 +7647,18 @@
         "title": "GetAllocationRequest",
         "additionalProperties": false
       },
+      "banking.v1.GetConsentInvitationRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "token",
+            "description": "The opaque single-use token from the mail. Never the code."
+          }
+        },
+        "title": "GetConsentInvitationRequest",
+        "additionalProperties": false
+      },
       "banking.v1.GetConsiliumRequest": {
         "type": "object",
         "properties": {
@@ -7335,6 +7740,17 @@
       "banking.v1.GetOperationsModeRequest": {
         "type": "object",
         "title": "GetOperationsModeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetPaymentRequest": {
+        "type": "object",
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "title": "payment_id"
+          }
+        },
+        "title": "GetPaymentRequest",
         "additionalProperties": false
       },
       "banking.v1.GetPositionRequest": {
@@ -7502,6 +7918,33 @@
         "title": "ListParkedEventsRequest",
         "additionalProperties": false
       },
+      "banking.v1.ListPaymentsRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "0 means the server default."
+          },
+          "state": {
+            "title": "state",
+            "description": "UNSPECIFIED means every state.",
+            "$ref": "#/components/schemas/banking.v1.PaymentState"
+          },
+          "party": {
+            "title": "party",
+            "description": "Either end. Unset means every party.",
+            "$ref": "#/components/schemas/banking.v1.Party"
+          },
+          "fund_owned_only": {
+            "type": "boolean",
+            "title": "fund_owned_only",
+            "description": "Only orders whose source is fund-owned — the governance surface."
+          }
+        },
+        "title": "ListPaymentsRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListPositionsRequest": {
         "type": "object",
         "title": "ListPositionsRequest",
@@ -7645,6 +8088,31 @@
         "title": "NetworkWithdrawable",
         "additionalProperties": false,
         "description": "Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole\n available balance (a request beyond `instant` is accepted and queued); `instant` is\n the portion that ships without queueing = min(available, rail liquidity)."
+      },
+      "banking.v1.OpenPaymentRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "title": "source",
+            "$ref": "#/components/schemas/banking.v1.Party"
+          },
+          "destination": {
+            "title": "destination",
+            "$ref": "#/components/schemas/banking.v1.PaymentDestination"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "Decimal USDT string."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Required. Bounded at 500 bytes, no control characters; it is INSIDE the hashed\n payload the approver signs."
+          }
+        },
+        "title": "OpenPaymentRequest",
+        "additionalProperties": false
       },
       "banking.v1.OpenRevenuePayoutRequest": {
         "type": "object",
@@ -7834,6 +8302,328 @@
         },
         "title": "ParkedEventList",
         "additionalProperties": false
+      },
+      "banking.v1.Party": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "piggybank | revenue | service | user."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "Empty for the two singleton claims. A service slug for `service`. For `user`, the\n CONCIERGE user id the console carries (resolved to the money-plane id here; a banking\n id is accepted as a fallback, the way UsersService.GetUserBalance resolves one)."
+          }
+        },
+        "title": "Party",
+        "additionalProperties": false,
+        "description": "One end of a payment, as a REQUEST names it."
+      },
+      "banking.v1.Payment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/banking.v1.PaymentState"
+          },
+          "tier": {
+            "type": "string",
+            "title": "tier",
+            "description": "internal | service | external — DERIVED from the destination, never supplied."
+          },
+          "source": {
+            "title": "source",
+            "$ref": "#/components/schemas/banking.v1.PaymentEnd"
+          },
+          "destination": {
+            "title": "destination",
+            "$ref": "#/components/schemas/banking.v1.PaymentEnd"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "Decimal USDT string, as everywhere else on this wire."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the initiator's words. Required, shown verbatim, never interpreted."
+          },
+          "requirement": {
+            "type": "string",
+            "title": "requirement",
+            "description": "owner_consilium | subject_consent — the one requirement, read off the source."
+          },
+          "payload_hash": {
+            "type": "string",
+            "title": "payload_hash",
+            "description": "Hex SHA-256 over the canonical terms, re-verified at execution."
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email"
+          },
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id",
+            "description": "Set exactly when the requirement is the owner consilium."
+          },
+          "consent": {
+            "title": "consent",
+            "description": "Set exactly when the requirement is the subject's consent.",
+            "$ref": "#/components/schemas/banking.v1.PaymentConsent"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "decided_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "decided_at",
+            "format": "int64",
+            "description": "Unix seconds; 0 while pending."
+          },
+          "executed_withdrawal_id": {
+            "type": "string",
+            "title": "executed_withdrawal_id",
+            "description": "Set on EXECUTED for an external order only: an internal one settled as a ledger\n transfer and records no id of its own."
+          },
+          "failure_reason": {
+            "type": "string",
+            "title": "failure_reason"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "version",
+            "format": "int64",
+            "description": "Monotonic per order."
+          }
+        },
+        "title": "Payment",
+        "additionalProperties": false
+      },
+      "banking.v1.PaymentConsent": {
+        "type": "object",
+        "properties": {
+          "subject_email": {
+            "type": "string",
+            "title": "subject_email",
+            "description": "Masked (`a***@example.com`)."
+          },
+          "decision": {
+            "title": "decision",
+            "$ref": "#/components/schemas/banking.v1.ConsentDecision"
+          },
+          "notified": {
+            "type": "boolean",
+            "title": "notified",
+            "description": "True once the consent mail has actually been handed to concierge."
+          },
+          "attempts_remaining": {
+            "type": "integer",
+            "title": "attempts_remaining",
+            "description": "Code attempts left before the token burns."
+          },
+          "invalidated": {
+            "type": "boolean",
+            "title": "invalidated",
+            "description": "True when one of the pins recorded at open (the subject's token version, their\n mailbox) has moved: the seat can no longer be answered or executed."
+          },
+          "invalidation_reason": {
+            "type": "string",
+            "title": "invalidation_reason",
+            "description": "Why, when `invalidated` is true."
+          }
+        },
+        "title": "PaymentConsent",
+        "additionalProperties": false,
+        "description": "The consent seat of an investor-sourced order, as the owner surface sees it."
+      },
+      "banking.v1.PaymentConsentInvitation": {
+        "type": "object",
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "title": "payment_id"
+          },
+          "state": {
+            "title": "state",
+            "$ref": "#/components/schemas/banking.v1.PaymentState"
+          },
+          "tier": {
+            "type": "string",
+            "title": "tier"
+          },
+          "source": {
+            "title": "source",
+            "$ref": "#/components/schemas/banking.v1.PaymentEnd"
+          },
+          "destination": {
+            "title": "destination",
+            "$ref": "#/components/schemas/banking.v1.PaymentEnd"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "payload_hash": {
+            "type": "string",
+            "title": "payload_hash"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email",
+            "description": "Who opened it, masked."
+          },
+          "subject_email": {
+            "type": "string",
+            "title": "subject_email",
+            "description": "The recipient's own masked address, so they can confirm the mail reached the right\n mailbox before typing the code."
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "decision": {
+            "title": "decision",
+            "description": "This seat's own answer, so a reopened link shows what was already said.",
+            "$ref": "#/components/schemas/banking.v1.ConsentDecision"
+          },
+          "attempts_remaining": {
+            "type": "integer",
+            "title": "attempts_remaining",
+            "description": "Code attempts left before the token burns."
+          }
+        },
+        "title": "PaymentConsentInvitation",
+        "additionalProperties": false,
+        "description": "What the emailed investor is shown BEFORE they answer. Deliberately narrower than\n `Payment`: the terms they are consenting to, and nothing about the operator beyond a\n masked address."
+      },
+      "banking.v1.PaymentDestination": {
+        "type": "object",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "external": {
+                "title": "external",
+                "$ref": "#/components/schemas/banking.v1.ExternalDestination"
+              }
+            },
+            "title": "external",
+            "required": [
+              "external"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "internal": {
+                "title": "internal",
+                "$ref": "#/components/schemas/banking.v1.Party"
+              }
+            },
+            "title": "internal",
+            "required": [
+              "internal"
+            ]
+          }
+        ],
+        "title": "PaymentDestination",
+        "additionalProperties": false,
+        "description": "Where a payment lands. An external SOURCE is unrepresentable on purpose: money cannot\n arrive from an address by anyone's say-so — that is a deposit, which a chain watcher\n attests."
+      },
+      "banking.v1.PaymentEnd": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "label"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "piggybank | revenue | service | user, or `external` for an address."
+          },
+          "id": {
+            "type": "string",
+            "title": "id",
+            "description": "The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the\n response carries what the order stored). Empty for singletons and addresses."
+          },
+          "network": {
+            "type": "string",
+            "title": "network",
+            "description": "Set only when `kind` is `external`."
+          },
+          "address": {
+            "type": "string",
+            "title": "address"
+          }
+        },
+        "title": "PaymentEnd",
+        "additionalProperties": false,
+        "description": "One end of a payment, as a RESPONSE describes it. `label` is the wording every approval\n surface (the owners' mail, the subject's mail, this screen) shares; the structured\n fields let a screen link to the account."
+      },
+      "banking.v1.PaymentList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Payment"
+            },
+            "title": "items"
+          }
+        },
+        "title": "PaymentList",
+        "additionalProperties": false
+      },
+      "banking.v1.PaymentState": {
+        "type": "string",
+        "title": "PaymentState",
+        "enum": [
+          "PAYMENT_STATE_UNSPECIFIED",
+          "PAYMENT_STATE_PENDING",
+          "PAYMENT_STATE_APPROVED",
+          "PAYMENT_STATE_EXECUTED",
+          "PAYMENT_STATE_EXECUTION_FAILED",
+          "PAYMENT_STATE_REJECTED",
+          "PAYMENT_STATE_EXPIRED",
+          "PAYMENT_STATE_CANCELLED"
+        ],
+        "description": "Where an order stands. Terminal everywhere except PENDING and APPROVED."
       },
       "banking.v1.Position": {
         "type": "object",
@@ -8591,6 +9381,53 @@
       "banking.v1.SettleWithdrawalResponse": {
         "type": "object",
         "title": "SettleWithdrawalResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.SubmitConsentRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "token"
+          },
+          "code": {
+            "type": "string",
+            "title": "code",
+            "description": "The secret code from the same mail. Compared in constant time, as a hash."
+          },
+          "decision": {
+            "title": "decision",
+            "description": "APPROVE or REJECT. PENDING is rejected as an invalid argument.",
+            "$ref": "#/components/schemas/banking.v1.ConsentDecision"
+          },
+          "client_ip": {
+            "type": "string",
+            "title": "client_ip",
+            "description": "Audit only — the edge supplies these; they are never trusted for authorization."
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "user_agent"
+          }
+        },
+        "title": "SubmitConsentRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SubmitConsentResponse": {
+        "type": "object",
+        "properties": {
+          "invitation": {
+            "title": "invitation",
+            "description": "The invitation as it stands after the answer.",
+            "$ref": "#/components/schemas/banking.v1.PaymentConsentInvitation"
+          },
+          "decided": {
+            "type": "boolean",
+            "title": "decided",
+            "description": "True when this answer carried the order out of PENDING."
+          }
+        },
+        "title": "SubmitConsentResponse",
         "additionalProperties": false
       },
       "banking.v1.SubmitDecisionRequest": {
@@ -9455,7 +10292,8 @@
           "GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL",
           "GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME",
           "GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED",
-          "GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT"
+          "GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT",
+          "GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL"
         ],
         "description": "The typed governance mails this plane knows how to render."
       },
@@ -10136,6 +10974,80 @@
           "OWNER_REMOVAL_STATE_VOID"
         ]
       },
+      "concierge.v1.PaymentApprovalMail": {
+        "type": "object",
+        "properties": {
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id"
+          },
+          "payment_id": {
+            "type": "string",
+            "title": "payment_id"
+          },
+          "initiator_email": {
+            "type": "string",
+            "title": "initiator_email"
+          },
+          "tier": {
+            "type": "string",
+            "title": "tier",
+            "description": "internal | service | external."
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "Where the money leaves from, in words a person recognises (not an account id)."
+          },
+          "destination": {
+            "type": "string",
+            "title": "destination",
+            "description": "Where it lands, in words a person recognises."
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why the payment was opened, in the operator's words. Required."
+          },
+          "payload_hash": {
+            "type": "string",
+            "title": "payload_hash"
+          },
+          "threshold": {
+            "type": "integer",
+            "title": "threshold"
+          },
+          "owner_count": {
+            "type": "integer",
+            "title": "owner_count"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "expires_at",
+            "format": "int64"
+          },
+          "approval_url": {
+            "type": "string",
+            "title": "approval_url",
+            "description": "Absolute URL of the approval page, carrying the opaque token."
+          },
+          "code": {
+            "type": "string",
+            "title": "code",
+            "description": "The secret code the owner types on that page. Held only until the mail is sent,\n then cleared from the delivery row."
+          }
+        },
+        "title": "PaymentApprovalMail",
+        "additionalProperties": false,
+        "description": "An owner asked to approve a payment of fund-owned money.\n\n WHY NOT PayoutApprovalMail. That template opens with \"a request to pay fund revenue\n out on-chain\" and labels its middle rows Network and Destination address. A payment\n is a transfer between two claims the platform holds — `Piggybank → Revenue`, or into a\n service's pooled funds, or off the platform — and rendering it through the payout\n copy would mail the whole roster a sentence naming the wrong claim and the wrong rail\n on a money move they are being asked to authorize. The one thing an approval mail\n must do is describe correctly what is being approved, so a payment gets its own.\n\n The recipient rule is the payout one: a seated owner, resolved from the identity\n record, and nobody else. Field rules are PaymentConsentMail's — every string is\n bounded in bytes and refused if it carries a control character, `tier` is a closed\n set, and `reason` is required and rendered attributed to the operator who typed it."
+      },
       "concierge.v1.PaymentConsentMail": {
         "type": "object",
         "properties": {
@@ -10275,11 +11187,12 @@
           "outcome": {
             "type": "string",
             "title": "outcome",
-            "description": "APPROVED / REJECTED / EXPIRED / CANCELLED / EXECUTED / EXECUTION_FAILED."
+            "description": "APPROVED / REJECTED / EXPIRED / CANCELLED / EXECUTED / EXECUTION_FAILED, or\n TOKEN_BURNED under the burn kind."
           },
           "network": {
             "type": "string",
-            "title": "network"
+            "title": "network",
+            "description": "The payout pair. Empty for a payment."
           },
           "address": {
             "type": "string",
@@ -10292,10 +11205,28 @@
           "detail": {
             "type": "string",
             "title": "detail"
+          },
+          "tier": {
+            "type": "string",
+            "title": "tier",
+            "description": "The payment tuple. Empty for a payout. Same rules as PaymentApprovalMail: `tier`\n is the closed set, `source` and `destination` are words a person recognises, and\n `reason` is the operator's own text, shown attributed and refused if it carries a\n control character."
+          },
+          "source": {
+            "type": "string",
+            "title": "source"
+          },
+          "destination": {
+            "type": "string",
+            "title": "destination"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
           }
         },
         "title": "PayoutOutcomeMail",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "How a consilium ended — over a revenue payout OR over a payment — and, under\n APPROVAL_TOKEN_BURNED, that one of its tokens burned.\n\n ONE message for both subjects, additively. The burn notice already rides this shape\n under its own kind, so a payment consilium's outcome and burn ride it too rather than\n each growing a message of their own: `network` + `address` describe a payout,\n `source` + `destination` (+ `tier`, `reason`) describe a payment, and the renderer\n switches on which pair is filled. A caller sets one pair and leaves the other empty."
       },
       "concierge.v1.ProposalVote": {
         "type": "string",
@@ -10471,6 +11402,10 @@
           "payment_consent": {
             "title": "payment_consent",
             "$ref": "#/components/schemas/concierge.v1.PaymentConsentMail"
+          },
+          "payment_approval": {
+            "title": "payment_approval",
+            "$ref": "#/components/schemas/concierge.v1.PaymentApprovalMail"
           }
         },
         "title": "SendGovernanceMailRequest",
@@ -11207,6 +12142,14 @@
       "description": "OperationsService — the caller's activity timeline: every money event that touched\n their account, in one time-ordered stream.\n\n A pure CQRS **read model**. The four things a user does — deposit, withdraw,\n subscribe, redeem — are separate aggregates written through their own services\n (WalletService, FundsService); each already exposes its own list. What none of them\n can answer is \"what happened, in order\", because interleaving four lists client-side\n needs a timestamp every one of them must agree on. This service is that join, done\n once in the hub over the Postgres projections.\n\n Read-only: it moves no money and owns no state. Every RPC acts on the caller's own\n access-token `sub`. Amounts are decimal USDT STRINGS (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`).\n See docs/ARCHITECTURE.md and piggybank/core/PATTERNS.md."
     },
     {
+      "name": "banking.v1.PaymentsService",
+      "description": "PaymentsService — the ORDER that moves money between two named ends of the platform.\n\n Three tiers on one order, DERIVED from the destination and never supplied: an external\n wallet address (L1, settled by the withdrawal saga), a product's pooled claim\n `service:\u003cid\u003e` (L2, one posted transfer), any other internal claim (L3, one posted\n transfer). See domain/src/payments.rs for the aggregate and docs/CONSILIUM.md § Payments\n for the policy.\n\n AUTHORIZATION IS A FUNCTION OF THE SOURCE. A payment out of fund-owned money\n (`piggybank`, `revenue`, `service:\u003cid\u003e`) needs the owners' consilium at every tier — the\n consilium is opened INSIDE OpenPayment, there is no separate RPC. A payment out of an\n investor's own claim (`user:\u003cid\u003e`) needs THAT investor's emailed consent at every tier.\n There is deliberately no cell in which one admin moves fund money alone.\n\n IMMUTABILITY. There is no edit RPC. `payload_hash` binds the approval to the exact terms\n shown in the mail; changing anything means cancel and reopen."
+    },
+    {
+      "name": "banking.v1.PaymentConsentService",
+      "description": "PaymentConsentService — the surface an emailed investor reaches. Mounted OUTSIDE the\n user-auth layer, exactly as ConsiliumApprovalService is: the emailed token IS the\n credential, and the investor clicking it may not be signed in.\n\n The GET is strictly read-only because mail scanners issue automatic requests for every\n URL in a message. The consent is a separate call carrying the secret code from the same\n mail — that is what turns a scanned link into a deliberate human act."
+    },
+    {
       "name": "banking.v1.UsersService",
       "description": "UsersService — investor accounts and their investments.\n\n Identity metadata is the Postgres control plane; money is read live from the\n authoritative TigerBeetle ledger and is NEVER re-bookkept in Postgres. Every\n RPC is authorized from the verified access-token Claims injected by core's\n inbound auth layer; self-service RPCs act on the caller's own `sub`, admin RPCs\n are gated by the hub's admin allowlist (config). See docs/ARCHITECTURE.md."
     },
@@ -11228,7 +12171,7 @@
     },
     {
       "name": "concierge.v1.MailRelayService",
-      "description": "MailRelayService — the one seam over which the MONEY plane asks this plane to send a\n governance mail, because this plane owns the only mailer (lettre + the delivery queue\n + backoff + the daily budget) and standing up a second one would duplicate all of it.\n\n Authenticated by the shared banking↔concierge service secret, compared in constant\n time, and mounted outside the user-auth layer exactly as the lifecycle bridge is.\n\n The payload is TYPED, never rendered HTML: this plane renders it. A compromised money\n plane must not be able to put arbitrary markup into an owner's mailbox.\n\n WHO MAY RECEIVE ONE is decided per KIND, and the default is the strict one. The three\n payout kinds speak to the consilium, so they go to a seated owner and to nobody else —\n that rule is what stops a compromised money plane aiming a concierge-branded security\n mail at any address on the platform. PAYMENT_CONSENT cannot use it: consenting to a\n transfer of your own money has nothing to do with holding a seat. It gets its own rule,\n narrower in the dimension that matters — the recipient must BE the payment's subject,\n named in the typed payload — so the surface widens by exactly one person per message\n rather than to everyone.\n\n This path deliberately bypasses notification preferences. `NotificationService.Emit`\n is opt-out on both channels, and a security mail that a subscriber can silently\n switch off is not a security mail."
+      "description": "MailRelayService — the one seam over which the MONEY plane asks this plane to send a\n governance mail, because this plane owns the only mailer (lettre + the delivery queue\n + backoff + the daily budget) and standing up a second one would duplicate all of it.\n\n Authenticated by the shared banking↔concierge service secret, compared in constant\n time, and mounted outside the user-auth layer exactly as the lifecycle bridge is.\n\n The payload is TYPED, never rendered HTML: this plane renders it. A compromised money\n plane must not be able to put arbitrary markup into an owner's mailbox.\n\n WHO MAY RECEIVE ONE is decided per KIND, and the default is the strict one. The\n consilium kinds — the three payout kinds and PAYMENT_APPROVAL — speak to the\n consilium, so they go to a seated owner and to nobody else — that rule is what stops a\n compromised money plane aiming a concierge-branded security mail at any address on\n the platform. PAYMENT_CONSENT cannot use it: consenting to a\n transfer of your own money has nothing to do with holding a seat. It gets its own rule,\n narrower in the dimension that matters — the recipient must BE the payment's subject,\n named in the typed payload — so the surface widens by exactly one person per message\n rather than to everyone.\n\n This path deliberately bypasses notification preferences. `NotificationService.Emit`\n is opt-out on both channels, and a security mail that a subscriber can silently\n switch off is not a security mail."
     }
   ]
 }

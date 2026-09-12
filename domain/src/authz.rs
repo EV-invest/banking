@@ -92,6 +92,12 @@ pub enum Permission {
 	/// it sits with the Admin/Owner capabilities — an Operator may see the treasury but
 	/// never send from it.
 	RevenuePayout,
+	/// Open a payment order between two named ends of the platform, and read the payment
+	/// history. Opening is a proposal, never a move: fund-owned money still needs the owner
+	/// consilium and an investor's claim still needs that investor's consent — so this sits
+	/// with the Admin/Owner capabilities for the same reason `RevenuePayout` does, and an
+	/// Operator may see the treasury but never propose spending it.
+	PaymentOpen,
 	/// Toggle the money-plane operations mode (read-only kill-switch).
 	OperationsManage,
 	/// Unpark a parked outbox event so the relay re-drives it.
@@ -176,6 +182,11 @@ mod tests {
 		assert!(!grants(Role::Operator, Permission::RevenuePayout));
 		assert!(grants(Role::Admin, Permission::RevenuePayout));
 		assert!(grants(Role::Owner, Permission::RevenuePayout));
+		// Proposing a payment is the same kind of act, whatever approval it then needs.
+		assert!(!grants(Role::Investor, Permission::PaymentOpen));
+		assert!(!grants(Role::Operator, Permission::PaymentOpen));
+		assert!(grants(Role::Admin, Permission::PaymentOpen));
+		assert!(grants(Role::Owner, Permission::PaymentOpen));
 		// Retiring a live deposit key is a money-plane act, not a read: an Operator may not,
 		// however much of the treasury they can see.
 		assert!(!grants(Role::Operator, Permission::DepositAddressMigrate));

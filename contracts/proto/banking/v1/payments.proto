@@ -1,0 +1,251 @@
+syntax = "proto3";
+
+package banking.v1;
+
+// PaymentsService — the ORDER that moves money between two named ends of the platform.
+//
+// Three tiers on one order, DERIVED from the destination and never supplied: an external
+// wallet address (L1, settled by the withdrawal saga), a product's pooled claim
+// `service:<id>` (L2, one posted transfer), any other internal claim (L3, one posted
+// transfer). See domain/src/payments.rs for the aggregate and docs/CONSILIUM.md § Payments
+// for the policy.
+//
+// AUTHORIZATION IS A FUNCTION OF THE SOURCE. A payment out of fund-owned money
+// (`piggybank`, `revenue`, `service:<id>`) needs the owners' consilium at every tier — the
+// consilium is opened INSIDE OpenPayment, there is no separate RPC. A payment out of an
+// investor's own claim (`user:<id>`) needs THAT investor's emailed consent at every tier.
+// There is deliberately no cell in which one admin moves fund money alone.
+//
+// IMMUTABILITY. There is no edit RPC. `payload_hash` binds the approval to the exact terms
+// shown in the mail; changing anything means cancel and reopen.
+service PaymentsService {
+  // Open a payment order (Admin/Owner). Refused when the source cannot cover the amount
+  // right now, when the shape could never execute (an unconfigured rail, a sub-minimum
+  // external amount, an external destination out of `piggybank` or a service claim), or
+  // when another order is already open against the same fund-owned source.
+  rpc OpenPayment(OpenPaymentRequest) returns (Payment);
+
+  // The payment history, newest first, filtered (Admin/Owner). Nothing is ever deleted.
+  rpc ListPayments(ListPaymentsRequest) returns (PaymentList);
+
+  // One order in full (Admin/Owner).
+  rpc GetPayment(GetPaymentRequest) returns (Payment);
+
+  // Withdraw an order the CALLER opened, while it is still pending. Anyone else is refused.
+  rpc CancelPayment(CancelPaymentRequest) returns (Payment);
+}
+
+// PaymentConsentService — the surface an emailed investor reaches. Mounted OUTSIDE the
+// user-auth layer, exactly as ConsiliumApprovalService is: the emailed token IS the
+// credential, and the investor clicking it may not be signed in.
+//
+// The GET is strictly read-only because mail scanners issue automatic requests for every
+// URL in a message. The consent is a separate call carrying the secret code from the same
+// mail — that is what turns a scanned link into a deliberate human act.
+service PaymentConsentService {
+  // The redacted invitation behind an emailed token. Side-effect free. Unknown, expired,
+  // spent, burned and closed tokens all return the SAME NOT_FOUND.
+  rpc GetConsentInvitation(GetConsentInvitationRequest) returns (PaymentConsentInvitation);
+
+  // Answer the consent. Requires the token AND the secret code from the mail. Five failed
+  // code attempts burn the token permanently — and, with one seat, fail the payment closed.
+  rpc SubmitConsent(SubmitConsentRequest) returns (SubmitConsentResponse);
+}
+
+// Where an order stands. Terminal everywhere except PENDING and APPROVED.
+enum PaymentState {
+  PAYMENT_STATE_UNSPECIFIED = 0;
+  // Recorded, awaiting its one approval.
+  PAYMENT_STATE_PENDING = 1;
+  // Approved; for L2/L3 the source is reserved. The effect does not exist yet.
+  PAYMENT_STATE_APPROVED = 2;
+  // The effect exists: a withdrawal (L1) or a settled transfer (L2/L3).
+  PAYMENT_STATE_EXECUTED = 3;
+  // Approved, but the effect could not be created. `failure_reason` says why. Nothing
+  // retries silently; an L2/L3 reservation is released.
+  PAYMENT_STATE_EXECUTION_FAILED = 4;
+  // The approver refused, their token burned, or their consent was voided.
+  PAYMENT_STATE_REJECTED = 5;
+  // The 72h window closed with no answer.
+  PAYMENT_STATE_EXPIRED = 6;
+  // The initiator withdrew it.
+  PAYMENT_STATE_CANCELLED = 7;
+}
+
+// What the emailed investor answered.
+enum ConsentDecision {
+  CONSENT_DECISION_UNSPECIFIED = 0;
+  CONSENT_DECISION_PENDING = 1;
+  CONSENT_DECISION_APPROVE = 2;
+  CONSENT_DECISION_REJECT = 3;
+}
+
+// One end of a payment, as a REQUEST names it.
+message Party {
+  // piggybank | revenue | service | user.
+  string kind = 1;
+  // Empty for the two singleton claims. A service slug for `service`. For `user`, the
+  // CONCIERGE user id the console carries (resolved to the money-plane id here; a banking
+  // id is accepted as a fallback, the way UsersService.GetUserBalance resolves one).
+  string id = 2;
+}
+
+message ExternalDestination {
+  // Rail the payment ships on (BEP20 / POLYGON / TRC20 / TON).
+  string network = 1;
+  // Destination address, rendered in FULL wherever a human approves it.
+  string address = 2;
+}
+
+// Where a payment lands. An external SOURCE is unrepresentable on purpose: money cannot
+// arrive from an address by anyone's say-so — that is a deposit, which a chain watcher
+// attests.
+message PaymentDestination {
+  oneof target {
+    Party internal = 1;
+    ExternalDestination external = 2;
+  }
+}
+
+// One end of a payment, as a RESPONSE describes it. `label` is the wording every approval
+// surface (the owners' mail, the subject's mail, this screen) shares; the structured
+// fields let a screen link to the account.
+message PaymentEnd {
+  string label = 1;
+  // piggybank | revenue | service | user, or `external` for an address.
+  string kind = 2;
+  // The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the
+  // response carries what the order stored). Empty for singletons and addresses.
+  string id = 3;
+  // Set only when `kind` is `external`.
+  string network = 4;
+  string address = 5;
+}
+
+// The consent seat of an investor-sourced order, as the owner surface sees it.
+message PaymentConsent {
+  // Masked (`a***@example.com`).
+  string subject_email = 1;
+  ConsentDecision decision = 2;
+  // True once the consent mail has actually been handed to concierge.
+  bool notified = 3;
+  // Code attempts left before the token burns.
+  uint32 attempts_remaining = 4;
+  // True when one of the pins recorded at open (the subject's token version, their
+  // mailbox) has moved: the seat can no longer be answered or executed.
+  bool invalidated = 5;
+  // Why, when `invalidated` is true.
+  string invalidation_reason = 6;
+}
+
+message Payment {
+  string id = 1;
+  PaymentState state = 2;
+  // internal | service | external — DERIVED from the destination, never supplied.
+  string tier = 3;
+  PaymentEnd source = 4;
+  PaymentEnd destination = 5;
+  // Decimal USDT string, as everywhere else on this wire.
+  string amount = 6;
+  // Why, in the initiator's words. Required, shown verbatim, never interpreted.
+  string reason = 7;
+  // owner_consilium | subject_consent — the one requirement, read off the source.
+  string requirement = 8;
+  // Hex SHA-256 over the canonical terms, re-verified at execution.
+  string payload_hash = 9;
+  string initiator_email = 10;
+  // Set exactly when the requirement is the owner consilium.
+  string consilium_id = 11;
+  // Set exactly when the requirement is the subject's consent.
+  PaymentConsent consent = 12;
+  int64 created_at = 13;
+  int64 expires_at = 14;
+  // Unix seconds; 0 while pending.
+  int64 decided_at = 15;
+  // Set on EXECUTED for an external order only: an internal one settled as a ledger
+  // transfer and records no id of its own.
+  string executed_withdrawal_id = 16;
+  string failure_reason = 17;
+  // Monotonic per order.
+  uint64 version = 18;
+}
+
+message PaymentList {
+  repeated Payment items = 1;
+}
+
+message OpenPaymentRequest {
+  Party source = 1;
+  PaymentDestination destination = 2;
+  // Decimal USDT string.
+  string amount = 3;
+  // Required. Bounded at 500 bytes, no control characters; it is INSIDE the hashed
+  // payload the approver signs.
+  string reason = 4;
+}
+
+message ListPaymentsRequest {
+  // 0 means the server default.
+  uint32 limit = 1;
+  // UNSPECIFIED means every state.
+  PaymentState state = 2;
+  // Either end. Unset means every party.
+  Party party = 3;
+  // Only orders whose source is fund-owned — the governance surface.
+  bool fund_owned_only = 4;
+}
+
+message GetPaymentRequest {
+  string payment_id = 1;
+}
+
+message CancelPaymentRequest {
+  string payment_id = 1;
+}
+
+message GetConsentInvitationRequest {
+  // The opaque single-use token from the mail. Never the code.
+  string token = 1;
+}
+
+// What the emailed investor is shown BEFORE they answer. Deliberately narrower than
+// `Payment`: the terms they are consenting to, and nothing about the operator beyond a
+// masked address.
+message PaymentConsentInvitation {
+  string payment_id = 1;
+  PaymentState state = 2;
+  string tier = 3;
+  PaymentEnd source = 4;
+  PaymentEnd destination = 5;
+  string amount = 6;
+  string reason = 7;
+  string payload_hash = 8;
+  // Who opened it, masked.
+  string initiator_email = 9;
+  // The recipient's own masked address, so they can confirm the mail reached the right
+  // mailbox before typing the code.
+  string subject_email = 10;
+  int64 expires_at = 11;
+  // This seat's own answer, so a reopened link shows what was already said.
+  ConsentDecision decision = 12;
+  // Code attempts left before the token burns.
+  uint32 attempts_remaining = 13;
+}
+
+message SubmitConsentRequest {
+  string token = 1;
+  // The secret code from the same mail. Compared in constant time, as a hash.
+  string code = 2;
+  // APPROVE or REJECT. PENDING is rejected as an invalid argument.
+  ConsentDecision decision = 3;
+  // Audit only — the edge supplies these; they are never trusted for authorization.
+  string client_ip = 4;
+  string user_agent = 5;
+}
+
+message SubmitConsentResponse {
+  // The invitation as it stands after the answer.
+  PaymentConsentInvitation invitation = 1;
+  // True when this answer carried the order out of PENDING.
+  bool decided = 2;
+}
