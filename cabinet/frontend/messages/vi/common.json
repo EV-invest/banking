@@ -839,10 +839,6 @@
     "en": "Available to pay out",
     "t": "Khả dụng để chi trả"
   },
-  "admin.revenue.destinationAddress": {
-    "en": "Destination address",
-    "t": "Địa chỉ nhận"
-  },
   "admin.revenue.earned": {
     "en": "Earned",
     "t": "Đã thu được"
@@ -855,18 +851,6 @@
     "en": "fees + settled 2-and-20",
     "t": "phí + phần 2-and-20 đã tất toán"
   },
-  "admin.revenue.err.belowMinimum": {
-    "en": "Below the {min} minimum for this rail.",
-    "t": "Thấp hơn mức tối thiểu {min} của kênh này."
-  },
-  "admin.revenue.err.enterAmount": {
-    "en": "Enter an amount.",
-    "t": "Hãy nhập số tiền."
-  },
-  "admin.revenue.err.overAvailable": {
-    "en": "Only {available} of earned revenue is available.",
-    "t": "Chỉ có {available} doanh thu đã thu là khả dụng."
-  },
   "admin.revenue.footnote": {
     "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
     "t": "Một khoản chi trả chạy cùng quy trình saga như lệnh rút của người dùng, nên nó cũng xuất hiện trong hàng đợi Rút tiền để gửi lệnh và tất toán. Chỉ khoản chi trả còn đang xếp hàng mới có thể hủy — khi đã chuyển sang xử lý, giao dịch có thể đã lên mạng và việc hủy sẽ dẫn tới trả trùng."
@@ -875,21 +859,9 @@
     "en": "In flight",
     "t": "Đang thực hiện"
   },
-  "admin.revenue.instantSuffix": {
-    "en": "{amount} instant",
-    "t": "{amount} tức thì"
-  },
   "admin.revenue.noPayouts": {
     "en": "No payouts yet",
     "t": "Chưa có khoản chi trả nào"
-  },
-  "admin.revenue.noRail": {
-    "en": "No rail is configured",
-    "t": "Chưa cấu hình kênh nào"
-  },
-  "admin.revenue.noRailHint": {
-    "en": "A payout ships on a chain rail with a running watcher. Configure one to enable payouts.",
-    "t": "Khoản chi trả được chuyển qua một kênh blockchain có bộ theo dõi đang chạy. Hãy cấu hình một kênh để bật chức năng chi trả."
   },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
@@ -907,13 +879,21 @@
     "en": "Pending payout",
     "t": "Chi trả đang chờ"
   },
-  "admin.revenue.placeholder.address": {
-    "en": "The wallet that receives the payout",
-    "t": "Ví nhận khoản chi trả"
+  "admin.revenue.subtitle": {
+    "en": "What the fund earned — fees and the settled 2-and-20 — and the payouts it has made of it",
+    "t": "Quỹ đã kiếm được gì — phí và 2-và-20 đã quyết toán — và các khoản chi trả đã thực hiện từ đó"
   },
-  "admin.revenue.placeholder.minAmount": {
-    "en": "min {n}",
-    "t": "tối thiểu {n}"
+  "admin.revenue.toPayments": {
+    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
+    "t": "Chi trả doanh thu — tới một địa chỉ, vào một sản phẩm, hoặc cho một nhà đầu tư — là một lệnh thanh toán do chủ sở hữu phê duyệt. Mở lệnh ở đó."
+  },
+  "admin.revenue.toTreasury": {
+    "en": "The revenue claim beside the fund's other balances: custody per rail, client claims, seed capital.",
+    "t": "Tài khoản doanh thu bên cạnh các số dư khác của quỹ: lưu ký theo rail, tài khoản khách hàng, vốn hạt giống."
+  },
+  "admin.revenue.whereNext": {
+    "en": "Move or inspect it",
+    "t": "Chuyển hoặc xem"
   },
   "admin.role.admin": {
     "en": "Admin",

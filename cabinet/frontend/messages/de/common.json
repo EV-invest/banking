@@ -839,10 +839,6 @@
     "en": "Available to pay out",
     "t": "Verfügbar zur Ausschüttung"
   },
-  "admin.revenue.destinationAddress": {
-    "en": "Destination address",
-    "t": "Empfängeradresse"
-  },
   "admin.revenue.earned": {
     "en": "Earned",
     "t": "Verdient"
@@ -855,18 +851,6 @@
     "en": "fees + settled 2-and-20",
     "t": "Gebühren + abgerechnete 2-and-20"
   },
-  "admin.revenue.err.belowMinimum": {
-    "en": "Below the {min} minimum for this rail.",
-    "t": "Unter dem Minimum von {min} für diesen Kanal."
-  },
-  "admin.revenue.err.enterAmount": {
-    "en": "Enter an amount.",
-    "t": "Bitte geben Sie einen Betrag ein."
-  },
-  "admin.revenue.err.overAvailable": {
-    "en": "Only {available} of earned revenue is available.",
-    "t": "Von den verdienten Erträgen sind nur {available} verfügbar."
-  },
   "admin.revenue.footnote": {
     "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
     "t": "Eine Ausschüttung durchläuft dieselbe Saga wie die Auszahlung eines Nutzers und erscheint daher auch in der Auszahlungs-Warteschlange zum Versenden und Abrechnen. Nur eine noch wartende Ausschüttung lässt sich stornieren — ist sie in Arbeit, kann eine Übertragung bereits angekommen sein, und ein Widerruf würde doppelt zahlen."
@@ -875,21 +859,9 @@
     "en": "In flight",
     "t": "Unterwegs"
   },
-  "admin.revenue.instantSuffix": {
-    "en": "{amount} instant",
-    "t": "{amount} sofort"
-  },
   "admin.revenue.noPayouts": {
     "en": "No payouts yet",
     "t": "Noch keine Ausschüttungen"
-  },
-  "admin.revenue.noRail": {
-    "en": "No rail is configured",
-    "t": "Kein Kanal konfiguriert"
-  },
-  "admin.revenue.noRailHint": {
-    "en": "A payout ships on a chain rail with a running watcher. Configure one to enable payouts.",
-    "t": "Eine Ausschüttung geht über einen Chain-Kanal mit laufendem Watcher. Konfigurieren Sie einen, um Ausschüttungen zu ermöglichen."
   },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
@@ -907,13 +879,21 @@
     "en": "Pending payout",
     "t": "Offene Ausschüttung"
   },
-  "admin.revenue.placeholder.address": {
-    "en": "The wallet that receives the payout",
-    "t": "Das Wallet, das die Ausschüttung erhält"
+  "admin.revenue.subtitle": {
+    "en": "What the fund earned — fees and the settled 2-and-20 — and the payouts it has made of it",
+    "t": "Was der Fonds verdient hat — Gebühren und die abgerechneten 2-und-20 — und welche Auszahlungen daraus erfolgt sind"
   },
-  "admin.revenue.placeholder.minAmount": {
-    "en": "min {n}",
-    "t": "min. {n}"
+  "admin.revenue.toPayments": {
+    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
+    "t": "Einnahmen auszuzahlen — an eine Adresse, in ein Produkt oder an einen Anleger — ist eine Zahlung, die die Eigentümer genehmigen. Dort eröffnen."
+  },
+  "admin.revenue.toTreasury": {
+    "en": "The revenue claim beside the fund's other balances: custody per rail, client claims, seed capital.",
+    "t": "Der Einnahmenanspruch neben den anderen Salden des Fonds: Verwahrung je Rail, Kundenansprüche, Startkapital."
+  },
+  "admin.revenue.whereNext": {
+    "en": "Move or inspect it",
+    "t": "Bewegen oder einsehen"
   },
   "admin.role.admin": {
     "en": "Admin",

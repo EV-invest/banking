@@ -839,10 +839,6 @@
     "en": "Available to pay out",
     "t": "Disponible au versement"
   },
-  "admin.revenue.destinationAddress": {
-    "en": "Destination address",
-    "t": "Adresse du destinataire"
-  },
   "admin.revenue.earned": {
     "en": "Earned",
     "t": "Gagné"
@@ -855,18 +851,6 @@
     "en": "fees + settled 2-and-20",
     "t": "frais + 2-et-20 réglés"
   },
-  "admin.revenue.err.belowMinimum": {
-    "en": "Below the {min} minimum for this rail.",
-    "t": "En dessous du minimum de {min} pour ce rail."
-  },
-  "admin.revenue.err.enterAmount": {
-    "en": "Enter an amount.",
-    "t": "Saisissez un montant."
-  },
-  "admin.revenue.err.overAvailable": {
-    "en": "Only {available} of earned revenue is available.",
-    "t": "Seuls {available} de revenus gagnés sont disponibles."
-  },
   "admin.revenue.footnote": {
     "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
     "t": "Un versement suit la même saga qu’un retrait client : il apparaît donc aussi dans la file Retraits, pour expédition puis règlement. Seul un versement encore en file peut être annulé — une fois en cours de traitement, une diffusion a pu aboutir et l’annuler reviendrait à payer deux fois."
@@ -875,21 +859,9 @@
     "en": "In flight",
     "t": "En cours d’envoi"
   },
-  "admin.revenue.instantSuffix": {
-    "en": "{amount} instant",
-    "t": "{amount} instantané"
-  },
   "admin.revenue.noPayouts": {
     "en": "No payouts yet",
     "t": "Aucun versement pour l’instant"
-  },
-  "admin.revenue.noRail": {
-    "en": "No rail is configured",
-    "t": "Aucun rail configuré"
-  },
-  "admin.revenue.noRailHint": {
-    "en": "A payout ships on a chain rail with a running watcher. Configure one to enable payouts.",
-    "t": "Un versement part sur un rail de chaîne doté d’un watcher actif. Configurez-en un pour activer les versements."
   },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
@@ -907,13 +879,21 @@
     "en": "Pending payout",
     "t": "Versement en attente"
   },
-  "admin.revenue.placeholder.address": {
-    "en": "The wallet that receives the payout",
-    "t": "Le wallet qui reçoit le versement"
+  "admin.revenue.subtitle": {
+    "en": "What the fund earned — fees and the settled 2-and-20 — and the payouts it has made of it",
+    "t": "Ce que le fonds a gagné — frais et 2-et-20 réglés — et les versements effectués à partir de ces revenus"
   },
-  "admin.revenue.placeholder.minAmount": {
-    "en": "min {n}",
-    "t": "min {n}"
+  "admin.revenue.toPayments": {
+    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
+    "t": "Verser les revenus — vers une adresse, dans un produit ou à un investisseur — est un ordre de paiement que les propriétaires autorisent. Ouvrez-en un là-bas."
+  },
+  "admin.revenue.toTreasury": {
+    "en": "The revenue claim beside the fund's other balances: custody per rail, client claims, seed capital.",
+    "t": "La créance de revenus à côté des autres soldes du fonds : garde par rail, créances clients, capital initial."
+  },
+  "admin.revenue.whereNext": {
+    "en": "Move or inspect it",
+    "t": "Déplacer ou consulter"
   },
   "admin.role.admin": {
     "en": "Admin",
