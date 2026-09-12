@@ -555,6 +555,13 @@ person recognises it by — the receiving investor's masked mailbox, the product
 "investor 8f3e…" is not approved for the wrong person; the label alone is what the digest
 binds.
 
+A consent that burns (five wrong codes) or is voided by a moved pin rejects the order and
+mails **nobody**: the outcome kinds concierge renders are addressed to a seated owner, and a
+consent-decided order's initiator may be an admin who holds no seat. The initiator reads
+the verdict and its reason on the payments screen. Telling them by mail needs a kind
+concierge does not yet have, and is deliberately not faked through `PAYOUT_OUTCOME`, which
+concierge would refuse for a non-owner recipient after ten charged attempts.
+
 ---
 
 ## Audit
