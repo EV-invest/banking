@@ -38,6 +38,7 @@ use piggybank_core::{
 		db,
 		ledger::{self, TbLedger},
 		nav::PgNav,
+		outflow::PgOutflowPolicy,
 		positions::PgFundPositions,
 		signer_addresses::SignerDepositAddresses,
 		tigerbeetle::TigerBeetle,
@@ -224,6 +225,7 @@ async fn an_unconfigured_rail_withdrawal_is_rejected() {
 	let ledger: Arc<dyn Ledger> = Arc::new(TbLedger::new(tigerbeetle, pool.clone()));
 	let withdrawals = PgWithdrawals::new(pool.clone());
 	let users = PgUsers::new(pool.clone());
+	let policy = PgOutflowPolicy::new(pool.clone());
 	let notify = Notify::new();
 	let user = active_user(&pool, &users).await;
 
@@ -236,7 +238,7 @@ async fn an_unconfigured_rail_withdrawal_is_rejected() {
 			relay: &notify,
 		},
 		&withdrawal_app::AdmissionGates {
-			users: &users,
+			policy: &policy,
 			configured: &[Network::Bep20],
 			kyc: KycGate::ENFORCED,
 		},

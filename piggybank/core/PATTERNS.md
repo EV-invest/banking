@@ -653,13 +653,13 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | RPC | Who | Boundary | In-tx invariant |
 | --- | --- | --- | --- |
 | `GetTreasury` / `SeedCapital` / `RecordDeposit` | operator | `require_permission` (RBAC matrix) | `tx_ref` gate |
-| `Subscribe` | the user | `sub == user`, `is_access`, **not frozen** | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
-| `Redeem` | the user | `sub == user`, `is_access`, **not frozen** | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
+| `Subscribe` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
+| `Redeem` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
 | `CancelRedemption` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `GetPosition` / `ListPositions` / `ListRedemptions` / `GetFundNav` | the user | `sub == user` | — |
 | `GetWallet` / `ListWithdrawals` | the user | `sub == user` | — (`GetWallet` serves an address only at `kyc_level ≥ 1`) |
 | `GetDepositAddress` | the user | `sub == user` | `kyc_level ≥ 1` (else `permission_denied`) |
-| `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | active account ∧ `kyc_level ≥ 1` ∧ available claim ≥ gross (TB flag backstop) |
+| `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | owner not frozen (`frozen ∨ disabled`, via `OutflowPolicy::standing`) ∧ `kyc_level ≥ 1` ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ **not read-only** ∧ (user source) owner not frozen ∧ `kyc_level ≥ 1` — fail-closed, no `force` |
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
@@ -676,15 +676,22 @@ verification gate below); every other arm in this matrix is unconditional.
 
 `require_permission` (`services::support`) is `is_access` + the pure RBAC matrix
 (`domain::authz::grants` — the single place the matrix is defined) over the caller's
-bridge-mirrored role, **after** the account gates: a `disabled` (or frozen) operator is
-refused and a stale `token_version` is refused. The mirrored `users.role` column is the
+bridge-mirrored role, **after** the account gates, in the money-path gate's order: a stale
+`token_version` is `unauthenticated` first, then a `disabled` (or frozen) operator is
+`permission_denied`. The mirrored `users.role` column is the
 **only** source of the role — there is no environment-driven override, so a caller with
 no local row holds nothing and a non-UUID subject is refused outright.
 
-**Cross-plane freeze gate** (`services::support::unfrozen_caller`): the value-leaving RPCs
-above (`Subscribe`/`Redeem`/`RequestWithdrawal`) reject with `failed_precondition` when the
-caller's banking row is `frozen`. `frozen` is set by the one-way concierge→banking lifecycle
-bridge consumer (`infrastructure::bridge`), which PULLS `UserLifecycleEvent`s from the
+**Money-path gate** (`services::support::unfrozen_caller`): the value-leaving RPCs above
+(`Subscribe`/`Redeem`/`RequestWithdrawal`) run one `IssuanceTarget` resolve and one
+kill-switch read per call and refuse, in this order: `unauthenticated` when the token's
+`token_version` is below the folded revoke floor (the same floor `require_permission` holds
+operators to — answered first, so a revoked caller learns nothing about the platform's
+state); `failed_precondition` when outflows are paused; `failed_precondition` when the
+caller's banking row is `frozen` or `disabled`, or has no row at all (fail-closed). The
+decision is the pure `money_caller_gate`, unit-tested for the ordering. `frozen` is set
+by the one-way concierge→banking lifecycle bridge consumer (`infrastructure::bridge`),
+which PULLS `UserLifecycleEvent`s from the
 concierge plane (`UserEvents.PullUserLifecycle`, `BRIDGE_SERVICE_TOKEN`) and mirrors
 SUSPENDED→frozen / REINSTATED→unfrozen, KYC, and the revoke floor onto `users`, keyed by
 `auth_subject` and dedup/ordered by per-user `sequence`. Identity stays owned by concierge;
