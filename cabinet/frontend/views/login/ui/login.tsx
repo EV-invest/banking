@@ -1,6 +1,6 @@
 import { translator } from "@evinvest/i18n";
 
-import { Logo } from "@/application/layout/logo";
+import { Logo } from "@/shared/ui/logo";
 import { safeReturnTo } from "@/features/auth/lib/return-to";
 import { withBasePath } from "@/shared/config/base-path";
 import { messagesFor } from "@/shared/config/i18n";
