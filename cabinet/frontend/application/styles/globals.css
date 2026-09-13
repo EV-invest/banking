@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@evinvest/uikit/styles/tokens.css";
+/* The legacy sheet, not `tokens.css`: uikit 0.10 renamed the vocabulary (`ink`,
+   `positive`, `accent-error`, …) and the cabinet still writes the old names
+   (`text-main-mist`, `bg-main-surface`, `text-muted-foreground`). `tokens-legacy.css`
+   declares BOTH — the current tokens the kit's own components (and the terminal)
+   paint with, and the old utilities layered over them — so this is the one import
+   that keeps every screen coloured until the cabinet's own markup is migrated. */
+@import "@evinvest/uikit/styles/tokens-legacy.css";
 
 /* The shared UI kit ships compiled; point Tailwind at its dist so the classes
    baked into @evinvest/uikit components are generated. Deps hoist to the REPO

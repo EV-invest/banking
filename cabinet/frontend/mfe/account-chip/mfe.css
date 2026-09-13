@@ -16,7 +16,7 @@
    painting the old colours against a host that has already moved. */
 @import "tailwindcss/theme.css";
 @import "tailwindcss/utilities.css" layer(reamfe);
-@import "@evinvest/uikit/styles/tokens.css" layer(reamfe);
+@import "@evinvest/uikit/styles/tokens-legacy.css" layer(reamfe);
 
 @source "../../features/account-chip/ui/account-chip.tsx";
 
