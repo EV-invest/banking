@@ -131,6 +131,34 @@
     "en": "Accepting subscriptions and redemptions",
     "t": "Accepte souscriptions et rachats"
   },
+  "admin.alloc.holders.company": {
+    "en": "Company",
+    "t": "Société"
+  },
+  "admin.alloc.holders.empty": {
+    "en": "No units issued yet",
+    "t": "Aucune part émise pour l'instant"
+  },
+  "admin.alloc.holders.emptyHint": {
+    "en": "The split by holder appears once a subscription or an in-kind issuance mints the first unit.",
+    "t": "La répartition par détenteur apparaît dès qu'une souscription ou une émission en nature crée la première part."
+  },
+  "admin.alloc.holders.fee": {
+    "en": "Fee account",
+    "t": "Compte de frais"
+  },
+  "admin.alloc.holders.investors": {
+    "en": "Investors",
+    "t": "Investisseurs"
+  },
+  "admin.alloc.holders.outstanding": {
+    "en": "Outstanding",
+    "t": "En circulation"
+  },
+  "admin.alloc.holders.title": {
+    "en": "Holders",
+    "t": "Détenteurs"
+  },
   "admin.alloc.icon.arbitrage": {
     "en": "Arbitrage",
     "t": "Arbitrage"
@@ -170,6 +198,62 @@
   "admin.alloc.icon.yield": {
     "en": "Yield",
     "t": "Rendement"
+  },
+  "admin.alloc.issue.action": {
+    "en": "Issue",
+    "t": "Émettre"
+  },
+  "admin.alloc.issue.costBasisHint": {
+    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
+    "t": "Facultatif — par défaut parts × VL à la valorisation actuelle. Zéro est admis : une participation dans un actif que la société possédait déjà ne lui a rien coûté."
+  },
+  "admin.alloc.issue.field.costBasis": {
+    "en": "Cost basis (USDT)",
+    "t": "Prix de revient (USDT)"
+  },
+  "admin.alloc.issue.field.holder": {
+    "en": "Holder",
+    "t": "Détenteur"
+  },
+  "admin.alloc.issue.field.units": {
+    "en": "Units",
+    "t": "Parts"
+  },
+  "admin.alloc.issue.holder.company": {
+    "en": "Company",
+    "t": "Société"
+  },
+  "admin.alloc.issue.holder.investor": {
+    "en": "Investor",
+    "t": "Investisseur"
+  },
+  "admin.alloc.issue.note": {
+    "en": "In kind: no cash moves. The units count against the cap like a subscription would, and the cost basis is what the holder is deemed to have paid.",
+    "t": "En nature : aucun mouvement d'argent. Les parts s'imputent sur le plafond comme une souscription, et le prix de revient est le montant que le détenteur est réputé avoir payé."
+  },
+  "admin.alloc.issue.problem.costBasis": {
+    "en": "Cost basis must be a decimal USDT amount",
+    "t": "Le prix de revient doit être un montant décimal en USDT"
+  },
+  "admin.alloc.issue.problem.units": {
+    "en": "Units must be a decimal number above zero",
+    "t": "Les parts doivent être un nombre décimal supérieur à zéro"
+  },
+  "admin.alloc.issue.resultApplied": {
+    "en": "{units} units issued to {holder}.",
+    "t": "{units} parts émises pour {holder}."
+  },
+  "admin.alloc.issue.resultQueued": {
+    "en": "{units} units to {holder} queued — the relay posts the mint shortly, and the split below follows.",
+    "t": "{units} parts pour {holder} en file — le relais comptabilise l'émission sous peu, et la répartition ci-dessous suivra."
+  },
+  "admin.alloc.issue.submit": {
+    "en": "Issue units",
+    "t": "Émettre des parts"
+  },
+  "admin.alloc.issue.title": {
+    "en": "Issue units",
+    "t": "Émettre des parts"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -1722,6 +1806,14 @@
   "invest.carriedOver": {
     "en": "Carried over",
     "t": "Reporté"
+  },
+  "invest.companyStake": {
+    "en": "Company stake",
+    "t": "Participation de la société"
+  },
+  "invest.companyStakeValue": {
+    "en": "{pct} · {units} units",
+    "t": "{pct} · {units} parts"
   },
   "invest.costBasis": {
     "en": "Cost basis",

@@ -12,6 +12,7 @@ export {
   fromBaseUnits,
   isNegative,
   isZero,
+  shareBps,
   subUsdt,
   toBaseUnits,
 } from "@/shared/lib/money";

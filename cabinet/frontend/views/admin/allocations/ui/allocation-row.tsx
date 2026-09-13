@@ -10,6 +10,7 @@ import type { Allocation, AllocationAccessLevel, AllocationIcon } from "@/shared
 import { cn } from "@/shared/lib/cn";
 import { ProductIcon } from "@/shared/ui/icons/products";
 import { compactUnits } from "@/views/admin/lib/format";
+import type { AllocationPanelKind } from "@/views/admin/allocations/lib/panel";
 import { AllocationAccessCell } from "@/views/admin/allocations/ui/allocation-access-cell";
 import { AllocationRowActions } from "@/views/admin/allocations/ui/allocation-row-actions";
 import { AllocationStateCell } from "@/views/admin/allocations/ui/allocation-state-cell";
@@ -25,7 +26,7 @@ export function AllocationRow({
   onSave,
   onToggle,
   onSetAccess,
-  onOpenGrants,
+  onOpenPanel,
 }: {
   row: Allocation;
   busy: boolean;
@@ -34,7 +35,7 @@ export function AllocationRow({
   onSave: (body: AllocationWrite) => void;
   onToggle: () => void;
   onSetAccess: (level: AllocationAccessLevel) => void;
-  onOpenGrants: () => void;
+  onOpenPanel: (kind: AllocationPanelKind) => void;
 }) {
   const t = useT();
   const [title, setTitle] = useState(row.title);
@@ -73,7 +74,7 @@ export function AllocationRow({
             Valuation screen, next to the issued figure it has to be judged against. */}
         <td className="px-5 py-3 tabular-nums text-muted-foreground">{compactUnits(row.unit_cap)}</td>
         <td className="px-5 py-3">
-          <AllocationRowActions state={row.state} busy={busy} editing={editing} onOpenGrants={onOpenGrants} onEdit={onEdit} onToggle={onToggle} />
+          <AllocationRowActions state={row.state} busy={busy} editing={editing} onOpenPanel={onOpenPanel} onEdit={onEdit} onToggle={onToggle} />
         </td>
       </tr>
       {editing && (

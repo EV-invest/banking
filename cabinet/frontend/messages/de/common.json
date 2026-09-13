@@ -131,6 +131,34 @@
     "en": "Accepting subscriptions and redemptions",
     "t": "Nimmt Zeichnungen und Rückgaben an"
   },
+  "admin.alloc.holders.company": {
+    "en": "Company",
+    "t": "Unternehmen"
+  },
+  "admin.alloc.holders.empty": {
+    "en": "No units issued yet",
+    "t": "Noch keine Anteile ausgegeben"
+  },
+  "admin.alloc.holders.emptyHint": {
+    "en": "The split by holder appears once a subscription or an in-kind issuance mints the first unit.",
+    "t": "Die Aufteilung nach Inhabern erscheint, sobald eine Zeichnung oder eine Sachausgabe den ersten Anteil erzeugt."
+  },
+  "admin.alloc.holders.fee": {
+    "en": "Fee account",
+    "t": "Gebührenkonto"
+  },
+  "admin.alloc.holders.investors": {
+    "en": "Investors",
+    "t": "Investoren"
+  },
+  "admin.alloc.holders.outstanding": {
+    "en": "Outstanding",
+    "t": "Im Umlauf"
+  },
+  "admin.alloc.holders.title": {
+    "en": "Holders",
+    "t": "Inhaber"
+  },
   "admin.alloc.icon.arbitrage": {
     "en": "Arbitrage",
     "t": "Arbitrage"
@@ -170,6 +198,62 @@
   "admin.alloc.icon.yield": {
     "en": "Yield",
     "t": "Rendite"
+  },
+  "admin.alloc.issue.action": {
+    "en": "Issue",
+    "t": "Ausgeben"
+  },
+  "admin.alloc.issue.costBasisHint": {
+    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
+    "t": "Optional — standardmäßig Anteile × NAV zur aktuellen Bewertung. Null ist zulässig: ein Anteil an einem Vermögenswert, den das Unternehmen bereits besaß, hat es nichts gekostet."
+  },
+  "admin.alloc.issue.field.costBasis": {
+    "en": "Cost basis (USDT)",
+    "t": "Anschaffungswert (USDT)"
+  },
+  "admin.alloc.issue.field.holder": {
+    "en": "Holder",
+    "t": "Inhaber"
+  },
+  "admin.alloc.issue.field.units": {
+    "en": "Units",
+    "t": "Anteile"
+  },
+  "admin.alloc.issue.holder.company": {
+    "en": "Company",
+    "t": "Unternehmen"
+  },
+  "admin.alloc.issue.holder.investor": {
+    "en": "Investor",
+    "t": "Investor"
+  },
+  "admin.alloc.issue.note": {
+    "en": "In kind: no cash moves. The units count against the cap like a subscription would, and the cost basis is what the holder is deemed to have paid.",
+    "t": "Sachausgabe: es fließt kein Geld. Die Anteile zählen wie bei einer Zeichnung gegen die Obergrenze, und der Anschaffungswert ist der Betrag, den der Inhaber als gezahlt gilt."
+  },
+  "admin.alloc.issue.problem.costBasis": {
+    "en": "Cost basis must be a decimal USDT amount",
+    "t": "Der Anschaffungswert muss ein dezimaler USDT-Betrag sein"
+  },
+  "admin.alloc.issue.problem.units": {
+    "en": "Units must be a decimal number above zero",
+    "t": "Anteile müssen eine Dezimalzahl größer als null sein"
+  },
+  "admin.alloc.issue.resultApplied": {
+    "en": "{units} units issued to {holder}.",
+    "t": "{units} Anteile an {holder} ausgegeben."
+  },
+  "admin.alloc.issue.resultQueued": {
+    "en": "{units} units to {holder} queued — the relay posts the mint shortly, and the split below follows.",
+    "t": "{units} Anteile an {holder} wartend — das Relay bucht die Ausgabe in Kürze, und die Aufteilung unten folgt."
+  },
+  "admin.alloc.issue.submit": {
+    "en": "Issue units",
+    "t": "Anteile ausgeben"
+  },
+  "admin.alloc.issue.title": {
+    "en": "Issue units",
+    "t": "Anteile ausgeben"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -1722,6 +1806,14 @@
   "invest.carriedOver": {
     "en": "Carried over",
     "t": "Übertragen"
+  },
+  "invest.companyStake": {
+    "en": "Company stake",
+    "t": "Unternehmensanteil"
+  },
+  "invest.companyStakeValue": {
+    "en": "{pct} · {units} units",
+    "t": "{pct} · {units} Anteile"
   },
   "invest.costBasis": {
     "en": "Cost basis",

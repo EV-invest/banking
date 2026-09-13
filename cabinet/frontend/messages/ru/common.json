@@ -131,6 +131,34 @@
     "en": "Accepting subscriptions and redemptions",
     "t": "Принимает подписки и погашения"
   },
+  "admin.alloc.holders.company": {
+    "en": "Company",
+    "t": "Компания"
+  },
+  "admin.alloc.holders.empty": {
+    "en": "No units issued yet",
+    "t": "Паи ещё не выпущены"
+  },
+  "admin.alloc.holders.emptyHint": {
+    "en": "The split by holder appears once a subscription or an in-kind issuance mints the first unit.",
+    "t": "Разбивка по держателям появится, когда подписка или выпуск in kind создаст первый пай."
+  },
+  "admin.alloc.holders.fee": {
+    "en": "Fee account",
+    "t": "Счёт комиссий"
+  },
+  "admin.alloc.holders.investors": {
+    "en": "Investors",
+    "t": "Инвесторы"
+  },
+  "admin.alloc.holders.outstanding": {
+    "en": "Outstanding",
+    "t": "В обращении"
+  },
+  "admin.alloc.holders.title": {
+    "en": "Holders",
+    "t": "Держатели"
+  },
   "admin.alloc.icon.arbitrage": {
     "en": "Arbitrage",
     "t": "Арбитраж"
@@ -170,6 +198,62 @@
   "admin.alloc.icon.yield": {
     "en": "Yield",
     "t": "Доходность"
+  },
+  "admin.alloc.issue.action": {
+    "en": "Issue",
+    "t": "Выпустить"
+  },
+  "admin.alloc.issue.costBasisHint": {
+    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
+    "t": "Необязательно — по умолчанию паи × NAV по текущей оценке. Ноль допустим: доля в активе, которым компания уже владела, не стоила ей денег."
+  },
+  "admin.alloc.issue.field.costBasis": {
+    "en": "Cost basis (USDT)",
+    "t": "Себестоимость (USDT)"
+  },
+  "admin.alloc.issue.field.holder": {
+    "en": "Holder",
+    "t": "Держатель"
+  },
+  "admin.alloc.issue.field.units": {
+    "en": "Units",
+    "t": "Паи"
+  },
+  "admin.alloc.issue.holder.company": {
+    "en": "Company",
+    "t": "Компания"
+  },
+  "admin.alloc.issue.holder.investor": {
+    "en": "Investor",
+    "t": "Инвестор"
+  },
+  "admin.alloc.issue.note": {
+    "en": "In kind: no cash moves. The units count against the cap like a subscription would, and the cost basis is what the holder is deemed to have paid.",
+    "t": "In kind: деньги не движутся. Паи учитываются в лимите так же, как при подписке, а себестоимость — это сумма, которую держатель считается заплатившим."
+  },
+  "admin.alloc.issue.problem.costBasis": {
+    "en": "Cost basis must be a decimal USDT amount",
+    "t": "Себестоимость должна быть десятичной суммой в USDT"
+  },
+  "admin.alloc.issue.problem.units": {
+    "en": "Units must be a decimal number above zero",
+    "t": "Паи должны быть десятичным числом больше нуля"
+  },
+  "admin.alloc.issue.resultApplied": {
+    "en": "{units} units issued to {holder}.",
+    "t": "{units} паёв выпущено: {holder}."
+  },
+  "admin.alloc.issue.resultQueued": {
+    "en": "{units} units to {holder} queued — the relay posts the mint shortly, and the split below follows.",
+    "t": "{units} паёв для {holder} поставлено в очередь — реле вскоре проведёт выпуск, и разбивка ниже обновится."
+  },
+  "admin.alloc.issue.submit": {
+    "en": "Issue units",
+    "t": "Выпустить паи"
+  },
+  "admin.alloc.issue.title": {
+    "en": "Issue units",
+    "t": "Выпуск паёв"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -2622,6 +2706,14 @@
   "invest.carriedOver": {
     "en": "Carried over",
     "t": "Перенесено"
+  },
+  "invest.companyStake": {
+    "en": "Company stake",
+    "t": "Доля компании"
+  },
+  "invest.companyStakeValue": {
+    "en": "{pct} · {units} units",
+    "t": "{pct} · {units} паёв"
   },
   "invest.costBasis": {
     "en": "Cost basis",
