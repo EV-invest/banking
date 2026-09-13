@@ -582,24 +582,6 @@ async fn record_roster_change(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, us
 	Ok(())
 }
 
-/// Whether the caller's banking row is blocked from moving money — the money-op gate.
-/// Blocked by EITHER a concierge SUSPENDED (mirrored into `frozen`) OR a banking-side
-/// DisableUser (`status='disabled'`), the SAME fold issuance/refresh already apply
-/// (`resolve_issuance_by_*`); otherwise a banking DisableUser would not stop
-/// subscribe/redeem during the access-token TTL, unlike a concierge SUSPENDED.
-/// `None` (no local row) reads as BLOCKED. Every caller reaches this with a minted money
-/// token, and minting resolves the same row (`resolve_issuance_by_*`), so a missing row is
-/// not the ordinary "not provisioned yet" case — it is a state the gate cannot evaluate,
-/// on a path whose next step moves money. Errs to the caller as a control-plane failure
-/// (mapped to UNAVAILABLE) — fail-closed, like every other arm here.
-pub async fn is_frozen(pool: &PgPool, user_id: UserId) -> Result<bool, sqlx::Error> {
-	let blocked: Option<bool> = sqlx::query_scalar("SELECT (frozen OR status = 'disabled') FROM users WHERE id = $1")
-		.bind(user_id.raw())
-		.fetch_optional(pool)
-		.await?;
-	Ok(blocked.unwrap_or(true))
-}
-
 /// The mirrored access role for a banking user id (the money-op RBAC gate reads this).
 /// `None` local row ⇒ `Investor` (holds nothing) so the gate fails closed. A corrupt
 /// stored value likewise degrades to `Investor` rather than erroring the gate open.

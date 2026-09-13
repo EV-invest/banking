@@ -1774,6 +1774,35 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::PRECONDITION_FAILED, "an uncoverable settlement must be refused, never queued");
 	}
 
+	/// An `UNAUTHENTICATED` from the money plane — a banking token below the plane's
+	/// revoke floor — must drop the cached pair, so the frontend's single heal-replay
+	/// mints afresh instead of presenting the same refused token. Pinned by counting
+	/// mints: the same two requests against a plane refusing for any OTHER reason share
+	/// one mint, which is the cache doing its job.
+	#[tokio::test]
+	async fn an_unauthenticated_money_rpc_drops_the_cached_pair_so_the_replay_re_mints() {
+		async fn mints_over_two_reads(hub: Hub, expected: StatusCode) -> usize {
+			let seen = hub.seen.clone();
+			let app = app(serve(hub).await);
+			for _ in 0..2 {
+				let (status, _) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+				assert_eq!(status, expected);
+			}
+			seen.lock().unwrap().money_tokens_issued
+		}
+
+		assert_eq!(
+			mints_over_two_reads(Hub::failing("admin", Code::Unauthenticated), StatusCode::UNAUTHORIZED).await,
+			2,
+			"the replay after a 401 must mint a new banking token"
+		);
+		assert_eq!(
+			mints_over_two_reads(Hub::failing("admin", Code::PermissionDenied), StatusCode::FORBIDDEN).await,
+			1,
+			"any other refusal leaves the cached pair in place"
+		);
+	}
+
 	/// Reads are the other half of the contract: a failing hub must map its code but
 	/// surface the handler's fixed message, so internal detail never rides out on a GET.
 	#[tokio::test]
