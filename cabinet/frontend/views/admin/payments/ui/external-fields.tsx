@@ -7,8 +7,10 @@
 // only ship on a rail with a running watcher. A rail the hub does not list is not a
 // choice the form can make on its behalf.
 
+import { useId } from "react";
+
 import { useT } from "@evinvest/i18n/react";
-import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle, Input, Label, RadioGroup, RadioGroupItem, Skeleton } from "@evinvest/uikit";
 
 import { fundRevenueResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
@@ -28,6 +30,7 @@ export function ExternalFields({
   onChange: (patch: { network?: string; address?: string }) => void;
 }) {
   const t = useT();
+  const railId = useId();
   const revenue = useResource(fundRevenueResource);
   const rails = revenue.data?.rails ?? null;
 
@@ -50,27 +53,28 @@ export function ExternalFields({
           </EmptyContent>
         </Empty>
       ) : (
-        <div role="radiogroup" aria-label={t("admin.rail")} className="flex flex-wrap gap-2">
+        // The uikit group rather than a hand-rolled `role="radiogroup"`: it brings roving
+        // focus, so the rails are one tab stop and the arrow keys move between them.
+        <RadioGroup value={network} onValueChange={(next) => onChange({ network: next })} aria-label={t("admin.rail")} className="flex flex-wrap gap-2">
           {rails.map((rail) => {
             const selected = rail.network === network;
+            const id = `${railId}-${rail.network}`;
             return (
-              <button
+              <Label
                 key={rail.network}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => onChange({ network: rail.network })}
+                htmlFor={id}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                  "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
                   selected ? "border-primary bg-primary/10" : "border-border hover:bg-foreground/5",
                 )}
               >
+                <RadioGroupItem id={id} value={rail.network} />
                 <NetworkMark network={rail.network} className="size-3.5 shrink-0" />
                 {railLabel(rail.network, t)}
-              </button>
+              </Label>
             );
           })}
-        </div>
+        </RadioGroup>
       )}
       <Input
         value={address}
