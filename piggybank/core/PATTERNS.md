@@ -597,8 +597,9 @@ verification gate below); every other arm in this matrix is unconditional.
 
 `require_permission` (`services::support`) is `is_access` + the pure RBAC matrix
 (`domain::authz::grants` — the single place the matrix is defined) over the caller's
-bridge-mirrored role, **after** the account gates: a `disabled` (or frozen) operator is
-refused and a stale `token_version` is refused. The mirrored `users.role` column is the
+bridge-mirrored role, **after** the account gates, in the money-path gate's order: a stale
+`token_version` is `unauthenticated` first, then a `disabled` (or frozen) operator is
+`permission_denied`. The mirrored `users.role` column is the
 **only** source of the role — there is no environment-driven override, so a caller with
 no local row holds nothing and a non-UUID subject is refused outright.
 

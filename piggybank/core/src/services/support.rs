@@ -105,8 +105,10 @@ fn money_caller_gate(token_version: u64, target: Option<&IssuanceTarget>, paused
 /// ownership is whatever concierge persisted and nothing else. Every path fails closed:
 /// no local row is [`Role::default`] (holds nothing), a non-UUID subject is
 /// `UNAUTHENTICATED`, and a control-plane read failure is `UNAVAILABLE` — an admin op
-/// never proceeds when the gate can't be read. The disable and revoke gates run first,
-/// so `DisableUser`/`RevokeTokens` bite on the most privileged principals too.
+/// never proceeds when the gate can't be read. The revoke and disable gates run before the
+/// role, so `RevokeTokens`/`DisableUser` bite on the most privileged principals too —
+/// revoke first, as [`money_caller_gate`] answers an investor: a revoked operator is not
+/// authenticated, and learns nothing about their standing, not even that it is disabled.
 pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>, permission: Permission) -> Result<(), Status> {
 	let (is_access, sub, token_version) = {
 		let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
@@ -119,11 +121,11 @@ pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>
 	let target = state.users.resolve_issuance_by_banking_id(id).await.map_err(|_| Status::unavailable("internal error"))?;
 	let role = match target {
 		Some(target) => {
-			if target.disabled {
-				return Err(Status::permission_denied("account is disabled"));
-			}
 			if token_version < target.token_version {
 				return Err(Status::unauthenticated("tokens revoked"));
+			}
+			if target.disabled {
+				return Err(Status::permission_denied("account is disabled"));
 			}
 			crate::infrastructure::bridge::role_of(&state.pool, id).await.map_err(|_| Status::unavailable("internal error"))?
 		}
