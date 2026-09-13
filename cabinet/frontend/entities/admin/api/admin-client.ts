@@ -31,6 +31,8 @@ import type {
   RevenuePayout,
   RevenuePayoutList,
   Treasury,
+  UnitHolders,
+  UnitIssuance,
   UserBalance,
   WithdrawalQueue,
 } from "@/shared/contracts/admin";
@@ -138,6 +140,27 @@ export const grantAllocationAccess = (service: string, userId: string, level: Al
 // this is "revoke" and not "hide".
 export const revokeAllocationAccess = (service: string, userId: string): Promise<Record<string, never>> =>
   postJson("/api/admin/allocations/grants/revoke", { service, user_id: userId });
+
+/** The in-kind issue body, exactly as the BFF reads it: one of `user_id` or `company`
+ *  (both is a 400), `cost_basis` present only when the operator typed one (absent means
+ *  `units × NAV` hub-side — an empty string is NOT the same as absent). The two holder
+ *  shapes are a union rather than two optional fields so a body naming both cannot be
+ *  typed at all; `issueUnitsBody` in `views/admin/allocations/lib/issuance.ts` is the
+ *  one place that builds it from a form. */
+export type IssueUnitsBody = {
+  service: string;
+  /** Decimal units, > 0. */
+  units: string;
+  /** Decimal USDT the holder is deemed to have paid; omitted = `units × NAV`. */
+  cost_basis?: string;
+  /** 1..64 chars, unique per service. The retry contract: one key per submission, the
+   *  same key on a retry of that submission, so a double click lands one mint. */
+  idempotency_key: string;
+} & ({ user_id: string; company?: never } | { company: true; user_id?: never });
+
+export const issueUnits = (body: IssueUnitsBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/issue", body);
+
+export const fetchUnitHolders = (service: string): Promise<UnitHolders> => getJson(`/api/admin/allocations/holders?service=${encodeURIComponent(service)}`);
 
 // ── valuation + redemptions ─────────────────────────────────────────────────────
 export const fetchRedemptionQueue = (): Promise<RedemptionQueue> => getJson("/api/admin/valuation/queue");

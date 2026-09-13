@@ -65,6 +65,10 @@ export const TAG = {
   adminAllocations: "admin.allocations",
   /** Per-service investor access grants — who is raised above a product's default. */
   adminAllocationGrants: "admin.allocations.grants",
+  /** Per-service supply split by holder class. An in-kind issuance moves this AND `nav`
+   *  (the mark's `units_outstanding` and `company_units` are the same ledger fact), so
+   *  the mutation names both rather than this one alone. */
+  adminUnitHolders: "admin.allocations.holders",
   /** The user directory and a single user's detail. */
   adminUsers: "admin.users",
   /** The fund's earned revenue and its payouts. A payout also moves `adminQueue` (it

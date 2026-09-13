@@ -184,6 +184,18 @@ export function fractionOfCap(issued: string | undefined, cap: string | undefine
   return Number((a * CAP_FRACTION_SCALE) / b) / Number(CAP_FRACTION_SCALE);
 }
 
+// One holder class's share of a supply, in the basis points `pct()` (`./rate`) renders —
+// "Company stake 12.5%" on the product card, the holders split on the admin panel. Exact
+// bigint division for the same reason `fractionOfCap` is; the floor to a whole basis
+// point is deliberate, since a stake under 0.01% of the fund reads as 0% and should.
+export function shareBps(part: string | undefined, whole: string | undefined): number {
+  const a = toBaseUnits(part);
+  const b = toBaseUnits(whole);
+  if (a <= 0n || b <= 0n) return 0;
+  if (a >= b) return 10_000;
+  return Number((a * 10_000n) / b);
+}
+
 // How much of an address survives truncation. The wallet (the default) keeps enough of a
 // deposit address to check it against a wallet app; the dashboard's activity lines have
 // far less room and cut harder. `min` rides along because each screen also picked its own

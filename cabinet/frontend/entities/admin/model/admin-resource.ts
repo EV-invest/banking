@@ -27,6 +27,7 @@ import {
   fetchRedemptionQueue,
   fetchRevenuePayouts,
   fetchTreasury,
+  fetchUnitHolders,
   fetchUser,
   fetchUserBalance,
   fetchUsers,
@@ -153,6 +154,18 @@ export const allocationAccessGrantsResource = defineResource({
   key: (service) => service,
   revalidate: OPERATIONAL,
   tags: [TAG.adminAllocationGrants],
+  enabled: (service) => service.trim().length > 0,
+});
+
+// The settled supply split by holder class, per service. Operational: the issuance panel
+// opens on one product, and an operator who has just queued a mint is watching for it to
+// land — the split moves when the relay posts, not when the POST answers.
+export const unitHoldersResource = defineResource({
+  name: "admin.unitHolders",
+  fetch: fetchUnitHolders,
+  key: (service) => service,
+  revalidate: OPERATIONAL,
+  tags: [TAG.adminUnitHolders],
   enabled: (service) => service.trim().length > 0,
 });
 
