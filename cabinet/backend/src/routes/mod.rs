@@ -103,6 +103,8 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/allocations/grants", get(admin::list_allocation_access_grants))
 		.route("/api/admin/allocations/grants/grant", post(admin::grant_allocation_access))
 		.route("/api/admin/allocations/grants/revoke", post(admin::revoke_allocation_access))
+		.route("/api/admin/allocations/issue", post(admin::issue_units))
+		.route("/api/admin/allocations/holders", get(admin::list_unit_holders))
 		.route("/api/admin/fees/policies", get(admin::list_fee_policies))
 		.route("/api/admin/fees/policy", post(admin::set_fee_policy))
 		.route("/api/admin/fees/shares", get(admin::fee_shares))

@@ -452,6 +452,66 @@ impl From<bk::AllocationAccessGrant> for AllocationAccessGrant {
 
 list_dto! { AllocationAccessGrantList from bk::AllocationAccessGrantList { grants: Vec<AllocationAccessGrant> } }
 
+/// One in-kind mint — units an operator issued with no cash behind them. `holder_id`
+/// is a BANKING user id for a `user` holder and empty for `company` (the fund's own
+/// stake, which has no user to resolve). `state` is `queued` until the relay posts the
+/// mint, then `applied`; the console polls for the latter before it shows the holder
+/// their units.
+#[derive(Serialize)]
+pub struct UnitIssuance {
+	pub id: String,
+	pub service: String,
+	/// `user` | `company`.
+	pub holder_kind: String,
+	pub holder_id: String,
+	pub units: String,
+	pub nav: String,
+	pub cost_basis: String,
+	/// `queued` | `applied`.
+	pub state: String,
+	pub created_at: String,
+}
+
+impl From<bk::UnitIssuance> for UnitIssuance {
+	fn from(i: bk::UnitIssuance) -> Self {
+		Self {
+			id: i.id,
+			service: i.service,
+			holder_kind: i.holder_kind,
+			holder_id: i.holder_id,
+			units: i.units,
+			nav: i.nav,
+			cost_basis: i.cost_basis,
+			state: i.state,
+			created_at: i.created_at.to_string(),
+		}
+	}
+}
+
+/// A product's settled supply by holder class, all decimal units. `investor_units` is
+/// what is left once the company's and the fee account's holdings are taken out of
+/// `units_outstanding`.
+#[derive(Serialize)]
+pub struct UnitHolders {
+	pub service: String,
+	pub units_outstanding: String,
+	pub company_units: String,
+	pub fee_units: String,
+	pub investor_units: String,
+}
+
+impl From<bk::UnitHolders> for UnitHolders {
+	fn from(h: bk::UnitHolders) -> Self {
+		Self {
+			service: h.service,
+			units_outstanding: h.units_outstanding,
+			company_units: h.company_units,
+			fee_units: h.fee_units,
+			investor_units: h.investor_units,
+		}
+	}
+}
+
 // ── piggybank: funds (the service currency) ──────────────────────────────────
 
 #[derive(Serialize)]
@@ -539,6 +599,9 @@ pub struct FundNav {
 	/// Units still issuable — already nets off in-flight mints, so a screen offering it
 	/// can never offer more than Subscribe accepts.
 	pub remaining_capacity: String,
+	/// Of `units_outstanding`, the company's own in-kind stake — so the share of the
+	/// product that is neither the investor's nor the market's is on the card.
+	pub company_units: String,
 }
 
 impl From<bk::FundNav> for FundNav {
@@ -552,6 +615,7 @@ impl From<bk::FundNav> for FundNav {
 			stale: f.stale,
 			unit_cap: f.unit_cap,
 			remaining_capacity: f.remaining_capacity,
+			company_units: f.company_units,
 		}
 	}
 }
