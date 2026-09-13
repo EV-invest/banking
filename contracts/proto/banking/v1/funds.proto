@@ -118,4 +118,9 @@ message FundNav {
   // than Subscribe will accept.
   string unit_cap = 7;           // decimal units
   string remaining_capacity = 8; // decimal units still issuable (0 once at the cap)
+  // Of `units_outstanding`, the company's own stake — units issued in kind to the fund
+  // itself (AllocationsService.IssueUnits), never bought through Subscribe. Shown to an
+  // investor so the share of the product that is neither theirs nor the market's is on
+  // the card rather than inferred from a supply that does not add up.
+  string company_units = 9;      // decimal units
 }

@@ -120,6 +120,65 @@
         }
       }
     },
+    "/banking.v1.AllocationsService/IssueUnits": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "Mint units to a holder with no cash leg (AllocationManage). The allocation must be\n registered, in any state — a product is normally seeded before it opens. The mint\n is priced at the current (fresh) NAV for the record and the holder's cost basis,\n and counts against the unit cap exactly as a subscription does: an operator sizing\n a product below what they mean to issue raises the cap first, then issues.",
+        "description": "Idempotent by `idempotency_key`, unique per service: a retry of a timed-out call\n returns the issuance the key already names and mints nothing. A key reused for a\n DIFFERENT holder or amount is ALREADY_EXISTS — the retry is the case the key exists\n for, the reuse is the mistake it has to catch.",
+        "operationId": "banking.v1.AllocationsService.IssueUnits",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.IssueUnitsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UnitIssuance"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.AllocationsService/ListAllocationAccessGrants": {
       "post": {
         "tags": [
@@ -231,6 +290,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/banking.v1.AllocationList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/ListUnitHolders": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "ListUnitHolders",
+        "description": "The settled supply of one product by holder class (AllocationManage): what the\n company holds, what the fee account holds, and what is left to investors. Read\n straight from the ledger — the number an operator checks against the registration\n before opening a product to the market.",
+        "operationId": "banking.v1.AllocationsService.ListUnitHolders",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListUnitHoldersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UnitHolders"
                 }
               }
             }
@@ -6968,6 +7086,11 @@
             "type": "string",
             "title": "remaining_capacity",
             "description": "decimal units still issuable (0 once at the cap)"
+          },
+          "company_units": {
+            "type": "string",
+            "title": "company_units",
+            "description": "Of `units_outstanding`, the company's own stake — units issued in kind to the fund\n itself (AllocationsService.IssueUnits), never bought through Subscribe. Shown to an\n investor so the share of the product that is neither theirs nor the market's is on\n the card rather than inferred from a supply that does not add up. decimal units"
           }
         },
         "title": "FundNav",
@@ -7154,6 +7277,66 @@
           }
         },
         "title": "GrantAllocationAccessRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.IssueUnitsRequest": {
+        "type": "object",
+        "allOf": [
+          {
+            "properties": {
+              "service": {
+                "type": "string",
+                "title": "service"
+              },
+              "units": {
+                "type": "string",
+                "title": "units",
+                "description": "decimal units, \u003e 0"
+              },
+              "cost_basis": {
+                "type": "string",
+                "title": "cost_basis",
+                "description": "Decimal USDT the holder is deemed to have paid. Empty means `units × NAV` at the\n dealing mark — what a subscription for these units would have cost right now. An\n explicit value may be anything, zero included: the company's stake in an asset it\n already owned cost it no cash. For a user holder this is what lands in their\n position's cost basis, and so what their P\u0026L and management fee are measured from."
+              },
+              "idempotency_key": {
+                "type": "string",
+                "title": "idempotency_key",
+                "description": "required, 1..64 chars, unique per service"
+              }
+            }
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "company": {
+                    "type": "boolean",
+                    "title": "company"
+                  }
+                },
+                "title": "company",
+                "required": [
+                  "company"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "title": "user_id"
+                  }
+                },
+                "title": "user_id",
+                "required": [
+                  "user_id"
+                ]
+              }
+            ]
+          }
+        ],
+        "title": "IssueUnitsRequest",
         "additionalProperties": false
       },
       "banking.v1.IssueUserTokenRequest": {
@@ -7350,6 +7533,17 @@
           }
         },
         "title": "ListSessionsResponse",
+        "additionalProperties": false
+      },
+      "banking.v1.ListUnitHoldersRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "ListUnitHoldersRequest",
         "additionalProperties": false
       },
       "banking.v1.ListWithdrawalQueueRequest": {
@@ -8606,6 +8800,89 @@
         "title": "Treasury",
         "additionalProperties": false,
         "description": "The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).\n Under the unified-claim model the invariant is GLOBAL — `total_custody` (the asset\n side) equals the sum of all claims — so client liabilities are the remainder beyond\n the fund's own capital and retained fees."
+      },
+      "banking.v1.UnitHolders": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "units_outstanding": {
+            "type": "string",
+            "title": "units_outstanding"
+          },
+          "company_units": {
+            "type": "string",
+            "title": "company_units"
+          },
+          "fee_units": {
+            "type": "string",
+            "title": "fee_units"
+          },
+          "investor_units": {
+            "type": "string",
+            "title": "investor_units"
+          }
+        },
+        "title": "UnitHolders",
+        "additionalProperties": false,
+        "description": "The settled supply of one product by holder class, all decimal units.\n `investor_units` is `units_outstanding − company_units − fee_units`: the ledger keeps\n one holding per investor, and the supply invariant makes the difference exact."
+      },
+      "banking.v1.UnitIssuance": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "holder_kind": {
+            "type": "string",
+            "title": "holder_kind",
+            "description": "user | company"
+          },
+          "holder_id": {
+            "type": "string",
+            "title": "holder_id",
+            "description": "the banking user id for `user`; empty for `company`"
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "decimal units minted"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav",
+            "description": "decimal USDT per unit the mint was recorded at"
+          },
+          "cost_basis": {
+            "type": "string",
+            "title": "cost_basis",
+            "description": "decimal USDT"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "`queued` until the relay posts the mint, then `applied`. A client that needs the\n units to be visible on the ledger polls for `applied`; a `queued` row is a mint the\n relay has not reached yet (or one it parked — see BalanceService.ListParkedEvents)."
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64",
+            "description": "unix seconds"
+          }
+        },
+        "title": "UnitIssuance",
+        "additionalProperties": false,
+        "description": "One in-kind mint. The holder is flattened to a kind + id pair here, unlike the\n request's `oneof`, because this shape is projected to TypeScript through OpenAPI and\n a flat message survives that pipeline unambiguously (the same trade the operations\n timeline makes)."
       },
       "banking.v1.UnparkEventRequest": {
         "type": "object",
@@ -10568,7 +10845,7 @@
   "tags": [
     {
       "name": "banking.v1.AllocationsService",
-      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md."
+      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md.\n\n The one place this service touches supply is `IssueUnits`: an operator minting units\n IN KIND — to an investor or to the company — with no cash behind them, for a product\n registered against an asset that already exists and already has owners. It lives here\n rather than on FundsService because it is a registry decision about who holds what,\n made by the same `AllocationManage` holder who sizes the product, not an investor\n dealing at NAV."
     },
     {
       "name": "banking.v1.AuthService",
