@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use domain::{
-	allocations::{Allocation, AllocationIcon, AllocationId},
+	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	balance::{LedgerAccountKey, Party, ServiceId},
 	fees::{self, CrystallizationPeriod, FeeAssessment, FeeAssessmentId, FeePolicy, ManagementBasis, Trigger},
 	money::{Nav, Network, Shares, TxRef, Usdt},
@@ -183,6 +183,8 @@ async fn open_fund(h: &Harness, service: &ServiceId) {
 	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "EV Trading", "Systematic crypto", AllocationIcon::default()).unwrap();
 	h.allocations.register(&mut allocation).await.unwrap();
 	h.allocations.open(service).await.unwrap();
+	// Fees are about holdings, not admission — every investor here is let in.
+	h.allocations.set_access(service, AllocationAccess::Invest).await.unwrap();
 	h.policies.set(service, FeePolicy::HOUSE, "itest").await.unwrap();
 }
 
@@ -474,6 +476,7 @@ async fn a_fund_with_no_policy_is_never_charged() {
 	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "EV Trading", "Systematic crypto", AllocationIcon::default()).unwrap();
 	h.allocations.register(&mut allocation).await.unwrap();
 	h.allocations.open(&service).await.unwrap();
+	h.allocations.set_access(&service, AllocationAccess::Invest).await.unwrap();
 
 	fund_user(&h, user, "1000").await;
 	subscribe(&h, user, &service, "1000").await;

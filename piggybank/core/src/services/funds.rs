@@ -8,6 +8,7 @@
 #![allow(clippy::result_large_err)]
 
 use domain::{
+	authz::Permission,
 	balance::ServiceId,
 	money::{Shares, Usdt},
 	redemptions::Redemption,
@@ -19,7 +20,7 @@ use tonic::{Request, Response, Status};
 use crate::{
 	AppState,
 	application::funds as funds_app,
-	services::support::{caller_id, map_err, parse_redemption_id, unfrozen_caller, unix_now},
+	services::support::{caller_id, holds_permission, map_err, parse_redemption_id, unfrozen_caller, unix_now},
 };
 
 #[derive(Clone)]
@@ -118,12 +119,24 @@ impl FundsService for FundsSvc {
 	}
 
 	async fn get_fund_nav(&self, request: Request<pb::GetFundNavRequest>) -> Result<Response<pb::FundNav>, Status> {
-		// Any authenticated user may read a fund's price.
-		caller_id(&request)?;
+		// Any authenticated user may read a fund's price — of a product they may see. A
+		// product hidden from THIS caller is NOT_FOUND, exactly as `GetAllocation` answers,
+		// unless they hold AllocationManage: a question, not a gate, since the handler
+		// serves everyone and merely widens for a manager.
+		let caller = caller_id(&request)?;
+		let unrestricted = holds_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
-		let view = funds_app::fund_nav_view(self.state.allocations.as_ref(), self.state.nav.as_ref(), self.state.ledger.as_ref(), service, unix_now())
-			.await
-			.map_err(map_err)?;
+		let view = funds_app::fund_nav_view(
+			self.state.allocations.as_ref(),
+			self.state.nav.as_ref(),
+			self.state.ledger.as_ref(),
+			service,
+			caller,
+			unrestricted,
+			unix_now(),
+		)
+		.await
+		.map_err(map_err)?;
 		Ok(Response::new(fund_nav_to_proto(&view)))
 	}
 }

@@ -200,6 +200,7 @@ function ProductCard({ product }: { product: Product }) {
 
   const held = product.position && !isZero(product.position.units) ? product.position : null;
   const closed = product.allocation === null;
+  const locked = product.allocation?.caller_access === "view";
   const loss = held ? isNegative(held.pnl) : false;
   const flat = held ? isZero(held.pnl) : true;
 
@@ -219,8 +220,8 @@ function ProductCard({ product }: { product: Product }) {
           </div>
           {/* A non-shrinking sibling of the `min-w-0 flex-1` title column, so a long badge
               is taken straight out of the fund's name. i18n-max: 12. */}
-          <Badge variant="outline" className={cn(closed ? "border-main-accent-t3/40 text-main-accent-t3" : "border-main-accent-t2/40 text-main-accent-t2")}>
-            {closed ? t("invest.badge.redeemOnly") : t("invest.badge.open")}
+          <Badge variant="outline" className={cn(closed ? "border-main-accent-t3/40 text-main-accent-t3" : locked ? "border-border text-muted-foreground" : "border-main-accent-t2/40 text-main-accent-t2")}>
+            {closed ? t("invest.badge.redeemOnly") : locked ? t("invest.badge.locked") : t("invest.badge.open")}
           </Badge>
         </div>
 

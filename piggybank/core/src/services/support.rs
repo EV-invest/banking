@@ -15,7 +15,7 @@ use domain::{
 	error::DomainError,
 	money::Network,
 	redemptions::RedemptionId,
-	users::UserId,
+	users::{ConciergeUserId, UserId},
 	withdrawals::WithdrawalId,
 };
 use evbanking_auth::claims_of;
@@ -110,6 +110,19 @@ fn money_caller_gate(token_version: u64, target: Option<&IssuanceTarget>, paused
 /// revoke first, as [`money_caller_gate`] answers an investor: a revoked operator is not
 /// authenticated, and learns nothing about their standing, not even that it is disabled.
 pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>, permission: Permission) -> Result<(), Status> {
+	if holds_permission(state, request, permission).await? {
+		Ok(())
+	} else {
+		Err(Status::permission_denied("insufficient role"))
+	}
+}
+
+/// [`require_permission`] as a question rather than a gate: the same resolution, the
+/// same fail-closed answers for a disabled account, revoked tokens or an unreadable
+/// control plane — only the final "no" comes back as `Ok(false)` instead of
+/// `PERMISSION_DENIED`. For handlers that serve everyone and merely *widen* for a
+/// permission holder (an investor's filtered catalog versus a manager's full one).
+pub(super) async fn holds_permission<T>(state: &AppState, request: &Request<T>, permission: Permission) -> Result<bool, Status> {
 	let (is_access, sub, token_version) = {
 		let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
 		(claims.is_access(), claims.sub.clone(), claims.token_version)
@@ -132,11 +145,30 @@ pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>
 		// No local row: nothing the mirror can grant, so the caller holds nothing.
 		None => Role::default(),
 	};
-	if grants(role, permission) {
-		Ok(())
-	} else {
-		Err(Status::permission_denied("insufficient role"))
+	Ok(grants(role, permission))
+}
+
+/// Resolve the user an admin RPC names. The operator console carries CONCIERGE ids
+/// (the identity plane's `ListUsers`) while money-plane callers (the redemption queue)
+/// carry banking ids — so concierge-first via the bridge mirror, then the banking id;
+/// an id matching neither is `NOT_FOUND`. `disabled`/`token_version` on the target are
+/// deliberately ignored: an operator must be able to act on a frozen or disabled user.
+///
+/// A malformed id is `INVALID_ARGUMENT` — it is a field of the request, not the
+/// caller's own subject, so [`parse_user_id`]'s `UNAUTHENTICATED` would be the wrong
+/// thing to tell an operator who mistyped.
+pub(super) async fn resolve_target_user(state: &AppState, raw: &str) -> Result<UserId, Status> {
+	let raw = Uuid::parse_str(raw).map_err(|_| Status::invalid_argument("invalid user id"))?;
+	if let Some(target) = state.users.resolve_issuance_by_concierge_id(ConciergeUserId::from_raw(raw)).await.map_err(map_err)? {
+		return Ok(target.user_id);
 	}
+	state
+		.users
+		.resolve_issuance_by_banking_id(UserId::from_raw(raw))
+		.await
+		.map_err(map_err)?
+		.map(|target| target.user_id)
+		.ok_or_else(|| Status::not_found("user"))
 }
 
 pub(super) fn parse_user_id(raw: &str) -> Result<UserId, Status> {

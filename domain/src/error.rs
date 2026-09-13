@@ -15,11 +15,13 @@ pub enum DomainError {
 	/// to gRPC `permission_denied`, not `invalid_argument` or `failed_precondition`.
 	#[error("forbidden: {0}")]
 	Forbidden(String),
-	/// The system or the account is in a state that refuses the action *right now* — the
-	/// outflow pause, a frozen account. The request is well-formed and the caller is
-	/// entitled to make it; only the state stands in the way, and the same request goes
-	/// through once the state changes. Distinct from `Forbidden` (this caller may never do
-	/// this) — it maps to gRPC `failed_precondition`.
+	/// The request is well-formed and the caller is entitled to make it, but the system or
+	/// the aggregate is not in a state that admits it *right now* — the outflow pause, a
+	/// frozen account, an investor subscribing to a product they may only view. Only the
+	/// state stands in the way, and the same request goes through once it changes. Distinct
+	/// from `Validation` (the input is wrong) and `Forbidden` (the caller may never): it
+	/// maps to gRPC `failed_precondition`, so a client can tell "fix your request" from
+	/// "ask an operator" from "this is not for you".
 	#[error("precondition failed: {0}")]
 	Precondition(String),
 	/// Unexpected failure from a driven adapter (e.g. the database). Carries a

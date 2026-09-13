@@ -125,8 +125,10 @@ pub async fn cancel_withdrawal(State(st): State<AppState>, jar: CookieJar, heade
 
 // ── allocations (the catalog of investable products) ─────────────────────────
 
-/// `GET /api/allocations` — the investor-facing catalog: the `open` allocations only.
-/// The unlisted (draft/closed) half is admin-only and lives on the admin surface.
+/// `GET /api/allocations` — the investor-facing catalog: the `open` allocations the caller
+/// may at least view. Each row carries `access` (the product's default) and `caller_access`
+/// (what THIS investor holds) — the subscribe control keys off the latter. The unlisted
+/// half (draft/closed/hidden) is admin-only and lives on the admin surface.
 pub async fn list_allocations(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::AllocationList>, ApiError> {
 	let token = require_money_token(&st, &jar).await?;
 	let list = st.grpc.list_allocations(&token, false).await.map_err(|s| ApiError::read(s, "allocations unavailable"))?;
@@ -134,7 +136,8 @@ pub async fn list_allocations(State(st): State<AppState>, jar: CookieJar) -> Res
 }
 
 /// `GET /api/allocations/detail?service=` — one allocation, in any state. An investor
-/// holding units of a closed product still has to render it.
+/// holding units of a closed product still has to render it. A product hidden from this
+/// investor is a 404, exactly as an unknown service is.
 pub async fn get_allocation(State(st): State<AppState>, jar: CookieJar, Query(q): Query<ServiceQuery>) -> Result<Json<dto::Allocation>, ApiError> {
 	let token = require_money_token(&st, &jar).await?;
 	let allocation = st

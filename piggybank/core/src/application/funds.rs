@@ -104,9 +104,13 @@ pub async fn dealing_nav(nav: &dyn NavMarks, service: &ServiceId, now_unix: i64)
 /// SharesOutstanding`) — cash-leg first, so an insufficient claim parks before any mint.
 ///
 /// The **registry gate runs first**, before any balance read or pricing: `service` must
-/// be a registered, `open` allocation. It is what stops a user from minting a fund out
-/// of an arbitrary slug — previously the only check was the slug's shape, and a service
-/// with no valuation bootstrapped silently at the seed NAV.
+/// be a registered, `open` allocation that this user holds `invest` access to — by the
+/// product's default or by a grant. It is what stops a user from minting a fund out of
+/// an arbitrary slug — previously the only check was the slug's shape, and a service
+/// with no valuation bootstrapped silently at the seed NAV — and what keeps a product
+/// an operator has not opened to this investor from taking their money. The access
+/// refusal is its own kind ([`DomainError::Precondition`]) so a client can tell "ask an
+/// operator" from "the product is closed" from "over the cap".
 ///
 /// The **supply gate** runs second, once the mint has been priced and is therefore
 /// known: `issued + minting` must fit the allocation's unit cap. Like the cash check
@@ -125,7 +129,7 @@ pub async fn dealing_nav(nav: &dyn NavMarks, service: &ServiceId, now_unix: i64)
 /// a figure TigerBeetle already owns, which is the trade this architecture refuses
 /// everywhere else.
 pub async fn subscribe(ports: &FundPorts<'_>, subscriptions: &dyn SubscriptionRepository, user: UserId, service: ServiceId, cash: Usdt, now_unix: i64) -> Result<Subscription, DomainError> {
-	let allocation = allocations_app::require_subscribable(ports.allocations, &service).await?;
+	let allocation = allocations_app::require_subscribable(ports.allocations, &service, user).await?;
 	let claim = ports.ledger.balance(&LedgerAccountKey::UserClaim(user)).await?;
 	if Usdt::from_base_units(claim.available()) < cash {
 		return Err(DomainError::Validation("insufficient available balance to subscribe".into()));
@@ -158,8 +162,9 @@ async fn issued_units(ledger: &dyn Ledger, service: &ServiceId) -> Result<Shares
 /// command (never co-emitting `Requested`+`Settled`, which would race the burn reserve);
 /// otherwise it stays `Queued` for an operator `settle_redemption` once the fund tops up.
 ///
-/// The registry gate here is the **laxer** one: a `closed` allocation still redeems, so
-/// winding a product down never traps an investor's units inside it.
+/// The registry gate here is the **laxer** one: a `closed` allocation still redeems, and
+/// the caller's access is never consulted, so neither winding a product down nor locking
+/// it can trap an investor's units inside it.
 pub async fn request_redemption(
 	ports: &FundPorts<'_>,
 	redemptions: &dyn RedemptionRepository,
@@ -270,11 +275,23 @@ pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Led
 }
 
 /// The current NAV + freshness for a fund (the seed NAV when never marked), plus the
-/// supply headroom left against its allocation's cap. Gated on the allocation existing,
-/// for the same reason the valuation post is: a price quoted for a service no registry
-/// entry backs is a price for a fund that does not exist.
-pub async fn fund_nav_view(allocations: &dyn AllocationRegistry, nav: &dyn NavMarks, ledger: &dyn Ledger, service: ServiceId, now_unix: i64) -> Result<FundNavView, DomainError> {
-	let allocation = allocations_app::get(allocations, &service).await?;
+/// supply headroom left against its allocation's cap, as `caller` may see it. Gated the
+/// same way [`allocations_app::get_for`] is: an unregistered service is `NotFound`, and
+/// so — unless `unrestricted` — is one hidden from this caller. A price is as good a
+/// probe as a title: were the NAV of a hidden product readable, a locked slug would
+/// answer differently from an unregistered one and the catalog could be enumerated
+/// through this route. `unrestricted` is the `AllocationManage` view, gated at the
+/// boundary.
+pub async fn fund_nav_view(
+	allocations: &dyn AllocationRegistry,
+	nav: &dyn NavMarks,
+	ledger: &dyn Ledger,
+	service: ServiceId,
+	caller: UserId,
+	unrestricted: bool,
+	now_unix: i64,
+) -> Result<FundNavView, DomainError> {
+	let allocation = allocations_app::get_for(allocations, &service, caller, unrestricted).await?.allocation;
 	let balance = ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?;
 	let units_outstanding = Shares::from_base_units(balance.posted);
 	let remaining_capacity = allocation.remaining_capacity(Shares::from_base_units(balance.posted.saturating_add(balance.pending)));

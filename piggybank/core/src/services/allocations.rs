@@ -1,9 +1,10 @@
 //! `allocations` context — the registry of investable products.
 //!
-//! Reads are open to any authenticated user; every write, and the unlisted half of the
-//! catalog, is gated on [`Permission::AllocationManage`] (Admin/Owner) — the same trust
-//! seam as posting a valuation, because registering a product is what brings a fund into
-//! existence at all.
+//! Reads are open to any authenticated user and filtered to what that user may see;
+//! every write, and the unfiltered view of the catalog, is gated on
+//! [`Permission::AllocationManage`] (Admin/Owner) — the same trust seam as posting a
+//! valuation, because registering a product is what brings a fund into existence at
+//! all, and opening it to an investor is what lets their money in.
 //!
 //! No money crosses this surface: the handlers below never touch the ledger or notify
 //! the relay.
@@ -13,13 +14,14 @@
 #![allow(clippy::result_large_err)]
 
 use domain::{
-	allocations::{Allocation, AllocationIcon},
+	allocations::{AllocationAccess, AllocationIcon},
 	authz::Permission,
 	balance::ServiceId,
 	money::Shares,
+	users::UserId,
 };
 use evbanking_contracts::{
-	allocation::state as wire_state,
+	allocation::{access as wire_access, state as wire_state},
 	banking::v1::{self as pb, allocations_service_server::AllocationsService},
 };
 use tonic::{Request, Response, Status};
@@ -27,8 +29,8 @@ use tonic::{Request, Response, Status};
 use crate::{
 	AppState,
 	application::allocations as allocations_app,
-	ports::allocations::AllocationRecord,
-	services::support::{caller_id, map_err, require_permission},
+	ports::allocations::{AllocationAccessGrant, AllocationRecord},
+	services::support::{caller_id, holds_permission, map_err, require_permission, resolve_target_user},
 };
 
 #[derive(Clone)]
@@ -40,19 +42,30 @@ impl AllocationsSvc {
 	pub fn new(state: AppState) -> Self {
 		Self { state }
 	}
+
+	/// The response every write handler ends on: the product re-read as the caller
+	/// sees it. The aggregate a transition returns is deliberately clock-free and knows
+	/// nothing of the caller's grant, so rather than answer with zeroed timestamps and a
+	/// guessed `caller_access`, the handler pays one indexed read for an honest row —
+	/// these are operator commands, not the hot path. Unrestricted: the caller just
+	/// proved `AllocationManage`, so a product they hid from themselves still renders.
+	async fn manager_view(&self, caller: UserId, service: &ServiceId) -> Result<Response<pb::Allocation>, Status> {
+		let record = allocations_app::get_for(self.state.allocations.as_ref(), service, caller, true).await.map_err(map_err)?;
+		Ok(Response::new(record_to_proto(&record)))
+	}
 }
 
 #[tonic::async_trait]
 impl AllocationsService for AllocationsSvc {
 	async fn list_allocations(&self, request: Request<pb::ListAllocationsRequest>) -> Result<Response<pb::AllocationList>, Status> {
-		caller_id(&request)?;
+		let caller = caller_id(&request)?;
 		let include_unlisted = request.get_ref().include_unlisted;
-		// Refuse rather than silently downgrade to the open-only list: a caller that asked
+		// Refuse rather than silently downgrade to the visible list: a caller that asked
 		// for drafts and got a filtered list would read it as "there are none".
 		if include_unlisted {
 			require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		}
-		let records = allocations_app::list(self.state.allocations.as_ref(), include_unlisted).await.map_err(map_err)?;
+		let records = allocations_app::list_for(self.state.allocations.as_ref(), caller, include_unlisted).await.map_err(map_err)?;
 		Ok(Response::new(pb::AllocationList {
 			allocations: records.iter().map(record_to_proto).collect(),
 		}))
@@ -60,51 +73,58 @@ impl AllocationsService for AllocationsSvc {
 
 	async fn get_allocation(&self, request: Request<pb::GetAllocationRequest>) -> Result<Response<pb::Allocation>, Status> {
 		// Any authenticated user, any state — an investor holding units of a closed
-		// product still has to render it.
-		caller_id(&request)?;
+		// product still has to render it. A product hidden from THIS caller is NOT_FOUND,
+		// unless they hold AllocationManage: a question here, not a gate, because the
+		// handler serves everyone and merely widens for a manager.
+		let caller = caller_id(&request)?;
+		let unrestricted = holds_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
-		let allocation = allocations_app::get(self.state.allocations.as_ref(), &service).await.map_err(map_err)?;
-		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
+		let record = allocations_app::get_for(self.state.allocations.as_ref(), &service, caller, unrestricted).await.map_err(map_err)?;
+		Ok(Response::new(record_to_proto(&record)))
 	}
 
 	async fn register_allocation(&self, request: Request<pb::RegisterAllocationRequest>) -> Result<Response<pb::Allocation>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let icon = parse_icon(&req.icon)?;
-		let allocation = allocations_app::register(self.state.allocations.as_ref(), service, &req.title, &req.summary, icon)
+		allocations_app::register(self.state.allocations.as_ref(), service.clone(), &req.title, &req.summary, icon)
 			.await
 			.map_err(map_err)?;
-		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
+		self.manager_view(caller, &service).await
 	}
 
 	async fn update_allocation(&self, request: Request<pb::UpdateAllocationRequest>) -> Result<Response<pb::Allocation>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let icon = parse_icon_update(req.icon.as_deref())?;
-		let allocation = allocations_app::update_details(self.state.allocations.as_ref(), &service, &req.title, &req.summary, icon)
+		allocations_app::update_details(self.state.allocations.as_ref(), &service, &req.title, &req.summary, icon)
 			.await
 			.map_err(map_err)?;
-		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
+		self.manager_view(caller, &service).await
 	}
 
 	async fn set_allocation_unit_cap(&self, request: Request<pb::SetAllocationUnitCapRequest>) -> Result<Response<pb::Allocation>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		// Parsed at the boundary, so a malformed cap is an `invalid_argument` about the
 		// input rather than a validation error from inside the aggregate.
 		let unit_cap = Shares::parse_decimal(&req.unit_cap).map_err(map_err)?;
-		let allocation = allocations_app::set_unit_cap(self.state.allocations.as_ref(), &service, unit_cap).await.map_err(map_err)?;
-		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
+		allocations_app::set_unit_cap(self.state.allocations.as_ref(), &service, unit_cap).await.map_err(map_err)?;
+		self.manager_view(caller, &service).await
 	}
 
 	async fn set_allocation_state(&self, request: Request<pb::SetAllocationStateRequest>) -> Result<Response<pb::Allocation>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let caller = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let allocation = match req.state.as_str() {
+		match req.state.as_str() {
 			wire_state::OPEN => allocations_app::open(self.state.allocations.as_ref(), &service).await,
 			wire_state::CLOSED => allocations_app::close(self.state.allocations.as_ref(), &service).await,
 			// `draft` is entered only by RegisterAllocation — a product that has taken
@@ -117,24 +137,90 @@ impl AllocationsService for AllocationsSvc {
 				))),
 		}
 		.map_err(map_err)?;
-		Ok(Response::new(allocation_to_proto(&allocation, 0, 0)))
+		self.manager_view(caller, &service).await
+	}
+
+	async fn set_allocation_access(&self, request: Request<pb::SetAllocationAccessRequest>) -> Result<Response<pb::Allocation>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let caller = caller_id(&request)?;
+		let req = request.into_inner();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		let access = parse_access(&req.access)?;
+		allocations_app::set_access(self.state.allocations.as_ref(), &service, access).await.map_err(map_err)?;
+		self.manager_view(caller, &service).await
+	}
+
+	async fn grant_allocation_access(&self, request: Request<pb::GrantAllocationAccessRequest>) -> Result<Response<pb::AllocationAccessGrant>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let granted_by = caller_id(&request)?;
+		let req = request.into_inner();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		// The console names investors by their concierge id; resolve the way every admin
+		// RPC does, so a grant lands on the money-plane row the subscribe gate reads.
+		let user = resolve_target_user(&self.state, &req.user_id).await?;
+		let level = parse_access(&req.level)?;
+		let grant = allocations_app::grant_access(self.state.allocations.as_ref(), &service, user, level, granted_by)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(grant_to_proto(&grant)))
+	}
+
+	async fn revoke_allocation_access(&self, request: Request<pb::RevokeAllocationAccessRequest>) -> Result<Response<pb::RevokeAllocationAccessResponse>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let revoked_by = caller_id(&request)?;
+		let req = request.into_inner();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		let user = resolve_target_user(&self.state, &req.user_id).await?;
+		allocations_app::revoke_access(self.state.allocations.as_ref(), &service, user, revoked_by)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(pb::RevokeAllocationAccessResponse {}))
+	}
+
+	async fn list_allocation_access_grants(&self, request: Request<pb::ListAllocationAccessGrantsRequest>) -> Result<Response<pb::AllocationAccessGrantList>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
+		let grants = allocations_app::list_grants(self.state.allocations.as_ref(), &service).await.map_err(map_err)?;
+		Ok(Response::new(pb::AllocationAccessGrantList {
+			grants: grants.iter().map(grant_to_proto).collect(),
+		}))
 	}
 }
 
-/// A write handler returns the aggregate, which is deliberately clock-free — the
-/// timestamps come back on the next read. Zero is the wire's "unset" for both, matching
-/// `Position.nav_as_of`.
-fn allocation_to_proto(allocation: &Allocation, created_at: i64, updated_at: i64) -> pb::Allocation {
+fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
+	let allocation = &record.allocation;
 	pb::Allocation {
 		service: allocation.service().to_string(),
 		title: allocation.title().to_owned(),
 		summary: allocation.summary().to_owned(),
 		state: allocation.state().as_str().to_owned(),
-		created_at,
-		updated_at,
+		created_at: record.created_at,
+		updated_at: record.updated_at,
 		unit_cap: allocation.unit_cap().to_decimal_string(),
 		icon: allocation.icon().as_str().to_owned(),
+		access: allocation.access().as_str().to_owned(),
+		caller_access: record.caller_access.as_str().to_owned(),
 	}
+}
+
+fn grant_to_proto(grant: &AllocationAccessGrant) -> pb::AllocationAccessGrant {
+	pb::AllocationAccessGrant {
+		service: grant.service.to_string(),
+		user_id: grant.user_id.to_string(),
+		level: grant.level.as_str().to_owned(),
+		granted_by: grant.granted_by.to_string(),
+		granted_at: grant.granted_at,
+	}
+}
+
+/// An access level a request named, parsed strictly. Unlike the icon there is no
+/// "chose nothing" here: an empty level is as much a client bug as an unknown one,
+/// because every level gates money and none is a safe guess. The message names the
+/// vocabulary so an operator sees what was expected, not just that it was wrong. The
+/// grant handler runs the same parser — `hidden` is a real level, and refusing it FOR A
+/// GRANT is the aggregate's rule, so it is refused there with its own reason.
+fn parse_access(raw: &str) -> Result<AllocationAccess, Status> {
+	AllocationAccess::parse(raw).map_err(|_| Status::invalid_argument(format!("access level must be one of {}, got '{raw}'", wire_access::ALL.join(", "))))
 }
 
 /// The icon a *request* named. Empty means "the operator chose nothing", which is
@@ -166,10 +252,6 @@ fn parse_icon_update(raw: Option<&str>) -> Result<Option<AllocationIcon>, Status
 	raw.map(parse_icon).transpose()
 }
 
-fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
-	allocation_to_proto(&record.allocation, record.created_at, record.updated_at)
-}
-
 /// The wire vocabulary in `evbanking_contracts` is what consumer repos match on; the
 /// domain enum is what the hub stores. They are two halves of one contract, so drift
 /// between them is a compile-and-test-time failure, not a runtime mystery.
@@ -190,6 +272,30 @@ mod tests {
 		for state in wire_state::ALL {
 			assert_eq!(AllocationState::parse(state).unwrap().as_str(), state);
 		}
+	}
+
+	#[test]
+	fn domain_access_levels_match_the_wire_contract() {
+		// The second axis, held to the same standard as state: the wire list is what
+		// consumer repos match on, the domain enum is what the hub stores and RANKS, so
+		// the two must agree member for member AND in order — the wire's `ALL` is
+		// documented lowest-first, and a client that trusts that documentation would
+		// otherwise rank a product wrong.
+		let domain = [AllocationAccess::Hidden, AllocationAccess::View, AllocationAccess::Invest];
+		let as_wire: Vec<&str> = domain.iter().map(|level| level.as_str()).collect();
+		assert_eq!(as_wire.as_slice(), wire_access::ALL.as_slice(), "the domain enum and the wire vocabulary have drifted");
+		for level in wire_access::ALL {
+			assert_eq!(AllocationAccess::parse(level).unwrap().as_str(), level);
+		}
+		assert!(domain.windows(2).all(|pair| pair[0] < pair[1]), "the wire order must be the domain's rank order");
+		assert_eq!(AllocationAccess::DEFAULT.as_str(), wire_access::DEFAULT);
+		// The grantable subset is exactly what `Allocation::grant_access` admits.
+		for level in wire_access::ALL {
+			assert_eq!(AllocationAccess::parse(level).unwrap().permits_viewing(), wire_access::is_grantable(level), "{level}");
+		}
+		assert_eq!(parse_access(wire_access::INVEST).unwrap(), AllocationAccess::Invest);
+		assert_eq!(parse_access("").unwrap_err().code(), tonic::Code::InvalidArgument, "no level is a safe guess");
+		assert_eq!(parse_access("public").unwrap_err().code(), tonic::Code::InvalidArgument);
 	}
 
 	#[test]
