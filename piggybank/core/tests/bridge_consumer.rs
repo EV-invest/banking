@@ -18,8 +18,8 @@ use evconcierge_contracts::concierge::v1::{
 	user_lifecycle_event::Kind,
 };
 use piggybank_core::{
-	infrastructure::{bridge, bridge::BridgeConsumer, db, users::PgUsers},
-	ports::UserRepository,
+	infrastructure::{bridge, bridge::BridgeConsumer, db, outflow::PgOutflowPolicy, users::PgUsers},
+	ports::{OutflowPolicy, UserRepository},
 };
 use sqlx::PgPool;
 use tokio::net::TcpListener;
@@ -27,6 +27,17 @@ use tokio_util::sync::CancellationToken;
 use tonic::{Request, Response, Status, transport::Server};
 
 const BRIDGE_TOKEN: &str = "test-bridge-token";
+
+/// The money-out block the gates read: the `frozen OR disabled` fold, through the same
+/// port admission and dispatch use.
+async fn blocked(pool: &PgPool, user_id: uuid::Uuid) -> bool {
+	PgOutflowPolicy::new(pool.clone())
+		.standing(domain::users::UserId::from_raw(user_id))
+		.await
+		.unwrap()
+		.expect("the user has a banking row")
+		.blocked
+}
 /// Fixed advisory-lock key serializing the two tests' drains over the single global cursor row.
 const BRIDGE_TEST_LOCK: i64 = 0x4556_4252_4944_4745;
 
@@ -179,10 +190,7 @@ async fn created_then_suspended_freezes_user_and_gates_money_op() {
 
 	drive(&pool, events, |pool| async move {
 		let user_id = user_id_for(&pool, &subject).await.expect("CREATED provisioned a banking user");
-		assert!(
-			bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
-			"SUSPENDED must freeze the banking user — the money-op gate then rejects"
-		);
+		assert!(blocked(&pool, user_id).await, "SUSPENDED must freeze the banking user — the money-op gate then rejects");
 		// And the issuance resolve reports the freeze, so AuthService.IssueUserToken refuses to
 		// mint a money-plane token for a suspended user (defense in depth beyond the op gate).
 		let target = PgUsers::new(pool.clone())
@@ -205,15 +213,12 @@ async fn banking_disable_blocks_money_ops_without_a_concierge_freeze() {
 	drive(&pool, vec![event(&subject, Kind::Created, 1)], |pool| async move {
 		let user_id = user_id_for(&pool, &subject).await.expect("CREATED provisioned a banking user");
 		// Not concierge-frozen, so nothing blocks money ops yet.
-		assert!(!bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(), "a fresh user is not blocked");
+		assert!(!blocked(&pool, user_id).await, "a fresh user is not blocked");
 
 		// A banking-side DisableUser sets status='disabled' and leaves `frozen` FALSE. The
 		// money-op gate must still block it, matching the fold issuance already applies.
 		sqlx::query("UPDATE users SET status = 'disabled' WHERE id = $1").bind(user_id).execute(&pool).await.unwrap();
-		assert!(
-			bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
-			"a banking-disabled user must be blocked from money ops, like a concierge freeze"
-		);
+		assert!(blocked(&pool, user_id).await, "a banking-disabled user must be blocked from money ops, like a concierge freeze");
 	})
 	.await;
 }
@@ -305,10 +310,7 @@ async fn redelivery_is_idempotent() {
 			.await
 			.unwrap();
 		assert_eq!(seq, 5, "applied through the suspend; the stale lower-sequence reinstate is dropped");
-		assert!(
-			bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
-			"stale REINSTATED must not un-freeze"
-		);
+		assert!(blocked(&pool, user_id).await, "stale REINSTATED must not un-freeze");
 	})
 	.await;
 
@@ -323,10 +325,7 @@ async fn redelivery_is_idempotent() {
 			.await
 			.unwrap();
 		assert_eq!(seq, 5, "redelivery is a no-op — sequence does not move");
-		assert!(
-			bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
-			"redelivery keeps the user frozen"
-		);
+		assert!(blocked(&pool, user_id).await, "redelivery keeps the user frozen");
 	})
 	.await;
 }
@@ -606,10 +605,7 @@ async fn an_unreadable_kind_holds_the_cursor_until_a_build_that_understands_it()
 		let subject = subject.clone();
 		async move {
 			let user_id = user_id_for(&pool, &subject).await.expect("provisioned by the first pass");
-			assert!(
-				bridge::is_frozen(&pool, domain::users::UserId::from_raw(user_id)).await.unwrap(),
-				"the freeze that was unreadable before must land after the upgrade"
-			);
+			assert!(blocked(&pool, user_id).await, "the freeze that was unreadable before must land after the upgrade");
 			assert_eq!(sequence_of(&pool, &subject).await, 3, "and the events behind it apply in order");
 			assert_eq!(cursor_position(&pool).await, 3, "the whole batch is consumed once every event in it is readable");
 		}

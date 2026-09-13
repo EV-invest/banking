@@ -39,6 +39,14 @@ use crate::{
 	ports::{Custody, OutflowPolicy, WithdrawalRepository, ledger::Ledger, outflow::PayoutStanding},
 };
 
+/// What a caller is told when the outflow kill-switch is engaged. One constant for the
+/// boundary gate (`services::support::unfrozen_caller`), the admission path and the
+/// dispatch re-check, so the three cannot drift into three descriptions of one switch.
+pub const OUTFLOWS_PAUSED: &str = "money movements are temporarily paused (read-only mode)";
+/// What a caller is told when their account is blocked from moving money — the
+/// `frozen OR disabled` fold. Shared for the same reason as [`OUTFLOWS_PAUSED`].
+pub const ACCOUNT_FROZEN: &str = "account is frozen";
+
 /// The driven ports the withdrawal write-path borrows: the aggregate's repository, the
 /// ledger both Read-First checks read, the custody gateway the rail-liquidity check asks,
 /// and the relay nudged once the control-plane commit lands. Exactly the set
@@ -150,7 +158,7 @@ pub async fn admit_user_account(gates: &AdmissionGates<'_>, user: UserId) -> Res
 	// let a suspended account queue withdrawals the dispatcher then had to catch.
 	let standing = policy_standing(gates, user).await?;
 	if standing.blocked {
-		return Err(DomainError::Precondition("account is frozen".into()));
+		return Err(DomainError::Precondition(ACCOUNT_FROZEN.into()));
 	}
 	// Verification gate — an unverified account (tier 0 is a registration and a confirmed
 	// email, nothing more) may not move money off the platform. The tier is the identity
@@ -331,7 +339,7 @@ async fn rail_covers(ports: &WithdrawalPorts<'_>, network: Network, net: Usdt) -
 /// interval instead of N of each.
 pub async fn require_outflows_enabled(policy: &dyn OutflowPolicy) -> Result<(), DomainError> {
 	if policy.outflows_paused().await? {
-		return Err(DomainError::Precondition("money movements are temporarily paused (read-only mode)".into()));
+		return Err(DomainError::Precondition(OUTFLOWS_PAUSED.into()));
 	}
 	Ok(())
 }
@@ -357,7 +365,7 @@ async fn require_dispatchable(policy: &dyn OutflowPolicy, gate: KycGate, withdra
 		.await?
 		.ok_or_else(|| DomainError::Precondition("the withdrawal's owner has no control-plane row — dispatch refused".into()))?;
 	if standing.blocked {
-		return Err(DomainError::Precondition("account is frozen".into()));
+		return Err(DomainError::Precondition(ACCOUNT_FROZEN.into()));
 	}
 	if !gate.admits(standing.kyc_level) {
 		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
