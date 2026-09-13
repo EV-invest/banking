@@ -16,6 +16,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useT } from "@evinvest/i18n/react";
 import {
   Button,
+  CardTitle,
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -38,15 +39,32 @@ import { cn } from "@/shared/lib/cn";
  *
  * `--ev-shell-offset` is the one contract the cabinet has with the conductor's header, and
  * it is honoured here as everywhere else — these pages are chromeless, not context-free.
+ *
+ * A `<main>` because nothing else on these routes provides one: the `(public)` layout is
+ * a bare `div` by design, and a reader arriving by screen reader with no rail and no nav
+ * has the landmark as the one way to jump to the content.
  */
 export function ApprovalPage({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] justify-center px-4 py-10 lg:py-16">
+    <main className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] justify-center px-4 py-10 lg:py-16">
       <div className="flex w-full max-w-160 flex-col gap-6">
         <Logo className="h-8 w-auto text-main-mist" />
         {children}
       </div>
-    </div>
+    </main>
+  );
+}
+
+/**
+ * The page's one heading. `CardTitle` is a `div`, and a page whose only title is a styled
+ * `div` has no `h1` for a reader to land on — so the heading role is put back here, once,
+ * rather than remembered on each of the three pages.
+ */
+export function ApprovalTitle({ children }: { children: ReactNode }) {
+  return (
+    <CardTitle role="heading" aria-level={1} className="text-xl">
+      {children}
+    </CardTitle>
   );
 }
 
@@ -241,15 +259,20 @@ export function ApprovalExpired() {
   );
 }
 
-/** The token burned: five wrong codes, and every owner has been told (policy 7). */
-export function ApprovalBurned() {
+/**
+ * The token burned: five wrong codes, and every owner has been told (policy 7).
+ *
+ * The consent page passes its own body: there the seat is one investor's, and "every
+ * owner has been told" would name people who were never part of it.
+ */
+export function ApprovalBurned({ description }: { description?: string }) {
   const t = useT();
   return (
     <ApprovalOutcome
       icon={<ShieldX />}
       tone="text-destructive"
       title={t("approval.burned.title")}
-      description={t("approval.burned.body")}
+      description={description ?? t("approval.burned.body")}
     />
   );
 }
@@ -294,11 +317,14 @@ export function ApprovalUnreachable({ onRetry, retrying }: { onRetry: () => void
  * network level, so "try again" is not the whole story — what matters is that no decision
  * is being offered, because there is nothing on screen to decide about. An approval page
  * that cannot show the amount and the address must not show buttons (policy 12–13).
+ *
+ * The consent page passes its own body, as with {@link ApprovalBurned}: the default
+ * speaks of a payout, and the investor's page is about a payment of their own money.
  */
-export function ApprovalUnrenderable({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
+export function ApprovalUnrenderable({ description, onRetry, retrying }: { description?: string; onRetry: () => void; retrying: boolean }) {
   const t = useT();
   return (
-    <ApprovalOutcome icon={<Unplug />} title={t("approval.unavailableTitle")} description={t("approval.unavailableBody")}>
+    <ApprovalOutcome icon={<Unplug />} title={t("approval.unavailableTitle")} description={description ?? t("approval.unavailableBody")}>
       <Button variant="outline" onClick={onRetry} disabled={retrying}>
         {retrying && <Loader2 className="size-4 animate-spin" />}
         {t("status.tryAgain")}

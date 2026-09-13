@@ -80,6 +80,7 @@ import {
 } from "@/views/consilium/lib/reads";
 import { AdmissionList, ProposeAdmission } from "@/views/consilium/ui/admissions";
 import { PayoutSkeleton, RosterSkeleton } from "@/views/consilium/ui/loading";
+import { PaymentTerms, paymentWords } from "@/views/consilium/ui/payment-terms";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
 import { ProposeRemoval, RemovalList } from "@/views/consilium/ui/removals";
 import { UserProposalList } from "@/views/consilium/ui/user-proposals";
@@ -412,7 +413,7 @@ function PayoutSection({
               </EmptyHeader>
               <EmptyContent>
                 <Button asChild variant="outline">
-                  <Link href="/admin/revenue">{t("consilium.payout.emptyAction")}</Link>
+                  <Link href="/admin/payments">{t("consilium.payout.emptyAction")}</Link>
                 </Button>
               </EmptyContent>
             </Empty>
@@ -440,7 +441,9 @@ function PayoutSection({
                     <Item size="sm" className="px-0">
                       <ItemContent className="min-w-0 gap-0.5">
                         <ItemTitle className="block w-auto truncate font-medium tabular-nums">
-                          {formatExactUsdt(consilium.revenue_payout?.amount)} USDT · {networkLabel(consilium.revenue_payout?.network)}
+                          {consilium.payment
+                            ? `${formatExactUsdt(consilium.payment.amount)} USDT · ${paymentWords(consilium.payment)}`
+                            : `${formatExactUsdt(consilium.revenue_payout?.amount)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
                         </ItemTitle>
                         <ItemDescription className="truncate text-xs tabular-nums">
                           {/* `??` cannot do this: an undecided consilium carries the STRING "0", which is truthy. */}
@@ -470,6 +473,8 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
   const [error, setError] = useState<unknown>(null);
 
   const payout = consilium.revenue_payout;
+  // A payment consilium carries its terms in `payment`; the payout fields are empty then.
+  const payment = consilium.payment ?? null;
   const threshold = consilium.threshold ?? 0;
   const approvals = consilium.approvals ?? 0;
   const progress = threshold > 0 ? Math.min(100, Math.round((approvals / threshold) * 100)) : 0;
@@ -494,7 +499,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-2xl font-semibold leading-none tabular-nums text-foreground">
-          {formatExactUsdt(payout?.amount)}
+          {formatExactUsdt(payment ? payment.amount : payout?.amount)}
           <span className="ml-2 text-sm font-medium text-muted-foreground">USDT</span>
         </p>
         <Badge variant="outline" className={stateTone(consilium.state)}>
@@ -502,15 +507,19 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
         </Badge>
       </div>
 
-      {/* Full, monospace, wrapped rather than truncated — the same rule as the approval
-          email and the approval page. An owner who checks the address here and approves it
-          there must be looking at the same characters (policy 13). */}
-      <p className="break-all rounded-lg border border-border bg-main-surface px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-foreground">
-        {payout?.address || "—"}
-      </p>
+      {payment ? (
+        <PaymentTerms terms={payment} />
+      ) : (
+        // Full, monospace, wrapped rather than truncated — the same rule as the approval
+        // email and the approval page. An owner who checks the address here and approves it
+        // there must be looking at the same characters (policy 13).
+        <p className="break-all rounded-lg border border-border bg-main-surface px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-foreground">
+          {payout?.address || "—"}
+        </p>
+      )}
 
       <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-        <span className="tabular-nums">{t("consilium.payout.network", { network: networkLabel(payout?.network) })}</span>
+        {!payment && <span className="tabular-nums">{t("consilium.payout.network", { network: networkLabel(payout?.network) })}</span>}
         <span className="font-mono-tech">{t("consilium.payout.fingerprint", { hash: hashPrefix(consilium.payload_hash) })}</span>
         <span>{t("consilium.payout.openedBy", { initiator: consilium.initiator_email })}</span>
         <span className="tabular-nums">

@@ -43,26 +43,9 @@ export type {
   // What a fund charges, and what the caller's holding owes for it right now.
   BankingV1FeePolicy as FeePolicy,
   BankingV1AccruedFees as AccruedFees,
-  // Payment orders — money between two named ends, authorized by the owners' consilium
-  // (fund-owned source) or the investor's own emailed consent (their claim).
-  BankingV1Payment as Payment,
-  BankingV1PaymentList as PaymentList,
-  BankingV1PaymentState as PaymentState,
-  BankingV1PaymentEnd as PaymentEnd,
-  BankingV1PaymentConsent as PaymentConsent,
-  BankingV1Party as Party,
-  BankingV1ExternalDestination as ExternalDestination,
-  BankingV1PaymentDestination as PaymentDestination,
-  BankingV1OpenPaymentRequest as OpenPaymentRequest,
-  BankingV1ListPaymentsRequest as ListPaymentsRequest,
-  BankingV1CancelPaymentRequest as CancelPaymentRequest,
-  // The consent page an emailed investor reaches, outside any session.
-  BankingV1PaymentConsentInvitation as PaymentConsentInvitation,
-  BankingV1ConsentDecision as ConsentDecision,
-  BankingV1SubmitConsentRequest as SubmitConsentRequest,
-  BankingV1SubmitConsentResponse as SubmitConsentResponse,
-  // The payment terms as a consilium decides them.
-  BankingV1ConsiliumPaymentTerms as ConsiliumPaymentTerms,
+  // Payment orders are NOT re-exported from `./gen`: the BFF reshapes them (resolved ends
+  // with a `detail`, a nested consent, lowercase states, string stamps), so the
+  // hand-written `./payments` is the cabinet's contract for that surface.
 } from "./gen";
 
 // The allocation catalog is served to BOTH the investor surface (`/api/allocations`,

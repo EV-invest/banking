@@ -14,6 +14,10 @@
 //     exactly these values, and an owner who was shown a truncated address approved
 //     something else.
 //
+// A consilium carries one of two things — a revenue payout, or a payment order
+// (`invitation.payment`, docs/CONSILIUM.md § Payments). The page is the same either way;
+// only the terms card and the words naming what is approved change.
+//
 // The tally, the attempt counter and the settled decision are all read back from the
 // server. This page never decrements, increments or predicts any of them: a wrong code is
 // counted in the same transaction as the comparison (policy 7), so a number this component
@@ -31,9 +35,6 @@ import type { PayoutDecision } from "@/shared/contracts/governance";
 import { errorMessage } from "@/shared/lib/api-client";
 import { expiresIn, formatMoment, hasExpired } from "@/shared/lib/datetime";
 import { settledPayout } from "@/shared/lib/decision";
-import { hashPrefix } from "@/shared/lib/hash";
-import { formatExactUsdt } from "@/shared/lib/money";
-import { networkLabel } from "@/shared/lib/rail";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import {
@@ -42,14 +43,15 @@ import {
   ApprovalOutcome,
   ApprovalPage,
   ApprovalSkeleton,
+  ApprovalTitle,
   ApprovalUnavailable,
   ApprovalUnreachable,
   ApprovalUnrenderable,
   CodeField,
   DetailRow,
-  FieldCaption,
-  FullAddress,
 } from "@/views/approval/ui/approval-chrome";
+import { PaymentTermsBlock, renderablePayment } from "@/views/approval/ui/payment-terms";
+import { PayoutTerms } from "@/views/approval/ui/payout-terms";
 
 export function PayoutApprovalView({ token }: { token: string }) {
   const t = useT();
@@ -138,13 +140,15 @@ export function PayoutApprovalView({ token }: { token: string }) {
     );
   }
 
+  const payment = invitation.payment ?? null;
   const payout = invitation.revenue_payout;
   // The terms an owner is agreeing to must actually be on screen. The BFF fills a missing
   // payout with `unwrap_or_default()`, which is empty strings — and an empty string is not
   // nullish, so a `?? "-"` renders nothing at all while the Approve button stays live. That
   // is precisely the approval-of-something-unseen policy 12/13 exists to prevent, so a
   // request whose amount or address did not arrive is not offered for decision at all.
-  const renderable = Boolean(payout?.amount?.trim()) && Boolean(payout?.address?.trim());
+  const renderable = payment ? renderablePayment(payment) : Boolean(payout?.amount?.trim()) && Boolean(payout?.address?.trim());
+  const words = payment ? "approval.payment" : "approval.payout";
   const burned = !settled && (invitation.attempts_remaining ?? 0) <= 0;
   const expired = !settled && hasExpired(invitation.expires_at);
   const threshold = invitation.threshold ?? 0;
@@ -165,36 +169,18 @@ export function PayoutApprovalView({ token }: { token: string }) {
     <ApprovalPage>
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">{t("approval.payout.title")}</CardTitle>
+          <ApprovalTitle>{t(`${words}.title`)}</ApprovalTitle>
           <CardDescription className="text-balance">
-            {t("approval.payout.lead", { initiator: invitation.initiator_email })}
+            {t(`${words}.lead`, { initiator: invitation.initiator_email })}
           </CardDescription>
         </CardHeader>
 
         <CardContent className="flex flex-col gap-5">
-          {/* The two things being agreed to get the whole top of the card: the exact amount
-              and the whole address. Everything past the separator is context. */}
-          <div className="flex flex-col gap-1.5">
-            <FieldCaption>{t("approval.amount")}</FieldCaption>
-            <p className="text-4xl font-semibold leading-none tabular-nums text-foreground">
-              {/* The wire string, digit for digit - `formatUsdt` caps at 6 dp and parses
-                  through a float, and `payload_hash` covers the exact decimal. */}
-              {formatExactUsdt(payout?.amount)}
-              <span className="ml-2 text-base font-medium text-muted-foreground">USDT</span>
-            </p>
-          </div>
-
-          <FullAddress label={t("approval.destination")} address={payout?.address ?? ""} />
-
-          <div className="flex flex-col gap-2.5">
-            <DetailRow label={t("approval.network")} value={networkLabel(payout?.network)} />
-            {payout?.memo ? <DetailRow label={t("approval.memo")} value={payout.memo} mono /> : null}
-            <DetailRow label={t("approval.payloadHash")} value={hashPrefix(invitation.payload_hash)} mono />
-          </div>
-
-          <p className="text-xs text-muted-foreground">{t("approval.payloadHashHint")}</p>
-
-          <Separator />
+          {payment ? (
+            <PaymentTermsBlock terms={payment} payloadHash={invitation.payload_hash} reasonLabel={t("approval.payment.reasonLabel")} />
+          ) : (
+            <PayoutTerms payout={payout} payloadHash={invitation.payload_hash} />
+          )}
 
           <div className="flex flex-col gap-2.5">
             <DetailRow label={t("approval.openedBy")} value={invitation.initiator_email} />
@@ -233,8 +219,8 @@ export function PayoutApprovalView({ token }: { token: string }) {
         <ApprovalOutcome
           icon={settled === "approve" ? <CheckCircle2 /> : <XCircle />}
           tone={settled === "approve" ? "text-main-accent-t2" : "text-muted-foreground"}
-          title={t(settled === "approve" ? "approval.decided.approvedTitle" : "approval.decided.rejectedTitle")}
-          description={t(justDecided ? "approval.decided.freshBody" : "approval.decided.body")}
+          title={t(settled === "approve" ? `${words}.decided.approvedTitle` : `${words}.decided.rejectedTitle`)}
+          description={t(justDecided ? `${words}.decided.freshBody` : "approval.decided.body")}
         />
       ) : (
         <Card>
@@ -264,7 +250,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
                 onClick={() => void decide("approve")}
               >
                 {pending === "approve" && <Loader2 className="size-4 animate-spin" />}
-                {t("approval.approve")}
+                {t(`${words}.approve`)}
               </Button>
               <Button
                 size="lg"

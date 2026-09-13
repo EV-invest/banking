@@ -56,6 +56,10 @@ export const TAG = {
   userProposals: "owners.proposals",
   /** Payout consilia and their tallies. */
   consilium: "consilium",
+  /** Payment orders — every tier, both requirements. An order that opens a consilium
+   *  moves `consilium` too, and one that executes debits a claim, so the mutations name
+   *  this beside `consilium` and `adminTreasury`. */
+  payments: "payments",
 
   // ── operator console ──────────────────────────────────────────────────────────
   /** Fleet health and the parked-event backlog — one screen, two reads that move together. */

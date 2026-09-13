@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowUpFromLine, Bell, Boxes, Gavel, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type ReactNode, useState } from "react";
@@ -58,11 +58,16 @@ const ADMIN: NavItem[] = [
   { href: "/admin/cabinet", label: "Cabinet", key: "nav.cabinet", icon: PanelsTopLeft, active: (p) => p.startsWith("/admin/cabinet") },
   { href: "/admin/treasury", label: "Treasury", key: "nav.treasury", icon: Landmark, active: (p) => p.startsWith("/admin/treasury") },
   { href: "/admin/withdrawals", label: "Withdrawals", key: "nav.withdrawals", icon: ArrowUpFromLine, active: (p) => p.startsWith("/admin/withdrawals") },
+  // Payments is where money is moved between the platform's claims and out to a chain —
+  // every tier, authorised by whoever the money belongs to. Beside Withdrawals because
+  // an external order becomes one.
+  { href: "/admin/payments", label: "Payments", key: "nav.payments", icon: ArrowLeftRight, active: (p) => p.startsWith("/admin/payments") },
   // Sits next to Treasury, not to Withdrawals: the question it answers is "what did the
   // fund earn", which belongs with the chart of accounts rather than with the user queue.
-  { href: "/admin/revenue", label: "Fund revenue", key: "nav.revenue", icon: PiggyBank, active: (p) => p.startsWith("/admin/revenue") },
-  // Directly under Fund revenue, because the consilium is what authorizes money leaving it
-  // — the page and the balance it governs read as one thought. Shown to every operator
+  // Statistics only since Payments took over the proposal; it links there and to Treasury.
+  { href: "/admin/revenue", label: "Revenue stats", key: "nav.revenue", icon: PiggyBank, active: (p) => p.startsWith("/admin/revenue") },
+  // Directly under Revenue stats, because the consilium is what authorizes money leaving
+  // the fund — the page and the balance it governs read as one thought. Shown to every operator
   // session like its neighbours; only owners have a room to be in, and the BFF answers 403
   // to anyone else (the page renders that as its own state, not as an error).
   { href: "/consilium", label: "Consilium", key: "nav.consilium", icon: Gavel, active: (p) => p.startsWith("/consilium") },
