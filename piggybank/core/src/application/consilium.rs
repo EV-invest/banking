@@ -20,27 +20,19 @@ use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::{
-	application::withdrawals::{self as withdrawal_app, WithdrawalPorts},
+	application::{
+		credentials::{self, token_digest},
+		payments as payments_app,
+		withdrawals::{self as withdrawal_app, WithdrawalPorts},
+	},
+	config::KycGate,
 	infrastructure::consilium::digest,
 	ports::{
-		Custody, PaymentRepository, WithdrawalRepository,
-		consilium::{ConsiliumRepository, ConsiliumView, DIGEST_BYTES, ExecutionOutcome, InvitationView, SubmitOutcome, VoteAudit, VoterCredential},
+		AllocationRegistry, Custody, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository,
+		consilium::{ConsiliumRepository, ConsiliumView, ExecutionOutcome, InvitationView, SubmitOutcome, VoteAudit, VoterCredential},
 		ledger::Ledger,
 	},
 };
-
-/// Crockford base32 minus `I`, `L`, `O` and `U` — the four glyphs a human misreads or
-/// mistypes. 32 symbols divides 256 exactly, so sampling a byte modulo the alphabet is
-/// unbiased with no rejection loop.
-const CODE_ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-/// 10 symbols over a 32-letter alphabet ≈ 50 bits — far beyond what five attempts can reach,
-/// while still being something an owner will actually type off a screen.
-const CODE_LEN: usize = 10;
-
-/// 32 random bytes (256 bits), hex-encoded. Comfortably past the 24-byte floor, and the
-/// token is single-use with a 72h TTL besides.
-const TOKEN_BYTES: usize = 32;
 
 /// The salt that makes the payout id a pure function of the consilium.
 const PAYOUT_SALT: &[u8] = b"consilium:revenue-payout";
@@ -54,12 +46,25 @@ pub struct ConsiliumPorts<'a> {
 	/// step touches it: opening and voting on a payment consilium know nothing about the
 	/// order beyond the subject frozen into the terms.
 	pub payments: &'a dyn PaymentRepository,
+	/// The user rows an L1 payment's withdrawal is admitted against. Only the payment
+	/// execution chained off a carried quorum reaches it.
+	pub users: &'a dyn UserRepository,
 	pub ledger: &'a dyn Ledger,
 	pub custody: &'a dyn Custody,
+	/// The read-only kill-switch, for the same chained execution.
+	pub policy: &'a dyn OutflowPolicy,
+	/// The product registry — carried so the payment ports can be borrowed from here whole,
+	/// though nothing on this path opens an order.
+	pub allocations: &'a dyn AllocationRegistry,
 	pub relay: &'a Notify,
 	pub configured: &'a [Network],
+	/// The deployment's verification gate, for the same chained execution.
+	pub kyc: KycGate,
 	/// Base URL the emailed approval link is built on.
 	pub approval_url_base: &'a str,
+	/// Base URL the emailed CONSENT link is built on — carried so the payment ports can be
+	/// borrowed from here whole, though nothing on this path mints a consent.
+	pub consent_url_base: &'a str,
 	/// Whether a governance mailer is actually wired behind the `consilium_mail` queue.
 	///
 	/// A runtime fact rather than a `cfg!`, because it is the composition root that decides
@@ -75,6 +80,26 @@ impl ConsiliumPorts<'_> {
 			ledger: self.ledger,
 			custody: self.custody,
 			relay: self.relay,
+		}
+	}
+
+	/// The same handles, as the payment use cases borrow them.
+	pub fn payment_ports(&self) -> payments_app::PaymentPorts<'_> {
+		payments_app::PaymentPorts {
+			payments: self.payments,
+			consilia: self.consilia,
+			users: self.users,
+			withdrawals: self.withdrawals,
+			ledger: self.ledger,
+			custody: self.custody,
+			policy: self.policy,
+			allocations: self.allocations,
+			relay: self.relay,
+			configured: self.configured,
+			kyc: self.kyc,
+			approval_url_base: self.approval_url_base,
+			consent_url_base: self.consent_url_base,
+			governance_mail_wired: self.governance_mail_wired,
 		}
 	}
 }
@@ -114,8 +139,8 @@ pub const ROSTER_COOLING_OFF_SECS: i64 = 48 * 60 * 60;
 /// Paired with [`ConsiliumRepository::void_open_for_roster_change`], which closes the other
 /// half: a change landing while a proposal is already open voids that proposal, so the
 /// window cannot be straddled by opening first and changing the roster after.
-async fn require_settled_roster(ports: &ConsiliumPorts<'_>, now: i64) -> Result<(), DomainError> {
-	let Some(changed_at) = ports.consilia.last_roster_change_at().await? else {
+pub(crate) async fn require_settled_roster(consilia: &dyn ConsiliumRepository, now: i64) -> Result<(), DomainError> {
+	let Some(changed_at) = consilia.last_roster_change_at().await? else {
 		return Ok(());
 	};
 	let lifts_at = changed_at.saturating_add(ROSTER_COOLING_OFF_SECS);
@@ -146,7 +171,7 @@ async fn require_settled_roster(ports: &ConsiliumPorts<'_>, now: i64) -> Result<
 /// direct single-admin payout RPC is now closed (see `services/balance.rs`): there is no
 /// bypass to fall back on, so an operator who needs to pay revenue out has to wire the
 /// mailer rather than route around governance.
-fn require_governance_mail(wired: bool) -> Result<(), DomainError> {
+pub(crate) fn require_governance_mail(wired: bool) -> Result<(), DomainError> {
 	if wired {
 		return Ok(());
 	}
@@ -157,7 +182,7 @@ fn require_governance_mail(wired: bool) -> Result<(), DomainError> {
 
 pub async fn open_revenue_payout(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: RevenuePayoutTerms, now: i64) -> Result<ConsiliumView, DomainError> {
 	require_governance_mail(ports.governance_mail_wired)?;
-	require_settled_roster(ports, now).await?;
+	require_settled_roster(ports.consilia, now).await?;
 	withdrawal_app::check_revenue_payout(ports.ledger, ports.configured, terms.network, terms.address.clone(), terms.amount).await?;
 	let owners = ports.consilia.owner_roster().await?;
 	let terms = ConsiliumTerms::RevenuePayout(terms);
@@ -173,19 +198,14 @@ pub async fn open_revenue_payout(ports: &ConsiliumPorts<'_>, initiator: UserId, 
 
 /// Mint one seat's credentials. The plaintexts are returned to the caller (they have to
 /// reach the owner's mailbox); only their digests are ever stored.
-fn mint_credential(user_id: UserId) -> Result<VoterCredential, DomainError> {
-	let mut token_bytes = [0u8; TOKEN_BYTES];
-	let mut code_bytes = [0u8; CODE_LEN];
-	getrandom::fill(&mut token_bytes).map_err(|_| DomainError::Repository("OS randomness unavailable".into()))?;
-	getrandom::fill(&mut code_bytes).map_err(|_| DomainError::Repository("OS randomness unavailable".into()))?;
-	let token = hex::encode(token_bytes);
-	let code: String = code_bytes.iter().map(|byte| CODE_ALPHABET[(*byte % 32) as usize] as char).collect();
+pub(crate) fn mint_credential(user_id: UserId) -> Result<VoterCredential, DomainError> {
+	let secret = credentials::mint()?;
 	Ok(VoterCredential {
 		user_id,
-		token_hash: digest(token.as_bytes()),
-		code_hash: digest(code.as_bytes()),
-		token,
-		code,
+		token: secret.token,
+		code: secret.code,
+		token_hash: secret.token_hash,
+		code_hash: secret.code_hash,
 	})
 }
 
@@ -216,10 +236,6 @@ pub async fn invitation(consilia: &dyn ConsiliumRepository, token: &str, now: i6
 /// transition — in one transaction under the consilium's row lock.
 pub async fn submit_decision(consilia: &dyn ConsiliumRepository, token: &str, code: &str, decision: VoteDecision, audit: &VoteAudit, now: i64) -> Result<SubmitOutcome, DomainError> {
 	consilia.submit(&token_digest(token), code, decision, audit, now).await
-}
-
-fn token_digest(token: &str) -> [u8; DIGEST_BYTES] {
-	digest(token.as_bytes())
 }
 
 /// Turn an approved consilium into a revenue payout.
@@ -299,7 +315,7 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 	// aggregate deliberately refuses to answer (it records an id, not a mechanism).
 	let outcome = match consilium.terms().clone() {
 		ConsiliumTerms::RevenuePayout(terms) => execute_revenue_payout(ports, id, terms).await?,
-		ConsiliumTerms::Payment(subject) => execute_payment(ports, subject, now).await?,
+		ConsiliumTerms::Payment(subject) => execute_payment(ports, consilium, subject, now).await?,
 	};
 	ports.consilia.record_execution(id, outcome, now).await
 }
@@ -317,11 +333,22 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 /// own. `record_approval` is idempotent on an order that is already `approved`, which is
 /// what makes a retried consilium execution safe.
 ///
-/// Public so its outcome can be asserted on its own: through [`execute`] it is only ever
-/// observable via `record_execution`, whose owner mail the store refuses for the payment kind
-/// until concierge ships it.
-pub async fn execute_payment(ports: &ConsiliumPorts<'_>, subject: PaymentSubject, now: i64) -> Result<ExecutionOutcome, DomainError> {
-	match ports.payments.record_approval(subject.payment_id, now).await {
+/// THE ORDER IS RE-READ AND RE-HASHED before the approval is recorded. `execute` has already
+/// proved the consilium's stored terms hash to what the owners signed; this proves the ORDER
+/// ROW those terms name still hashes to the same thing, so an order edited underneath its
+/// quorum cannot spend the quorum's signature. And the approval is recorded against THIS
+/// consilium's id, checked under the order's lock against the `payment_approval` link, so a
+/// quorum over one order can never carry another.
+///
+/// Public so its outcome can be asserted on its own.
+pub async fn execute_payment(ports: &ConsiliumPorts<'_>, consilium: &Consilium, subject: PaymentSubject, now: i64) -> Result<ExecutionOutcome, DomainError> {
+	let Some(order) = ports.payments.find(subject.payment_id).await? else {
+		return Ok(ExecutionOutcome::Failed(format!("payment {} no longer exists", subject.payment_id)));
+	};
+	if digest(&order.order.subject().canonical_bytes()) != consilium.payload_hash() {
+		return Ok(ExecutionOutcome::Failed("the payment order no longer matches the terms the owners approved".to_owned()));
+	}
+	let outcome = match ports.payments.record_approval(subject.payment_id, consilium.id(), now).await {
 		Ok(_) => Ok(ExecutionOutcome::Executed(ConsiliumEffect::Payment(subject.payment_id))),
 		// A REFUSAL IS NOT PROOF THE APPROVAL DID NOT LAND. Two callers reach this — the vote
 		// that carried the quorum, and the sweeper — so one can lose the row lock race and see
@@ -338,7 +365,18 @@ pub async fn execute_payment(ports: &ConsiliumPorts<'_>, subject: PaymentSubject
 				Ok(ExecutionOutcome::Executed(ConsiliumEffect::Payment(subject.payment_id))),
 			_ => Ok(ExecutionOutcome::Failed(failure_reason(&err))),
 		},
+	};
+	// THE MONEY, CHAINED INLINE. The consilium's effect is the approval, recorded above; the
+	// settlement or the withdrawal is the order's own step, and it is attempted here so a
+	// carried quorum moves money promptly rather than on the next sweep. Its failure is the
+	// ORDER's to record (`execution_failed`, or a deferral the sweeper retries) and must not
+	// turn the consilium's outcome into a failure over an approval that did land.
+	if let Ok(ExecutionOutcome::Executed(_)) = &outcome
+		&& let Err(err) = payments_app::execute(&ports.payment_ports(), subject.payment_id, now).await
+	{
+		tracing::error!(payment_id = %subject.payment_id, "payments: the quorum carried the order but its execution did not complete: {err}");
 	}
+	outcome
 }
 
 /// Create the withdrawal an approved revenue payout authorizes, and say how it went.

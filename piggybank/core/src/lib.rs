@@ -28,7 +28,7 @@ use domain::money::Network;
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use ports::{
-	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, PaymentFeed, PaymentRepository,
+	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, OutflowPolicy, PaymentFeed, PaymentRepository,
 	RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 };
 use sqlx::PgPool;
@@ -105,12 +105,20 @@ pub struct AppState {
 	/// deployment explicitly says otherwise. Carried here rather than re-read per call so
 	/// the deposit, admission and dispatch gates cannot disagree about it mid-flight.
 	pub kyc_gate: config::KycGate,
+	/// The outflow policy — the read-only kill-switch and the per-owner money-out standing —
+	/// every payout path clears at the moment the money leaves: the dispatcher, the admin
+	/// dispatch RPC and a payment order's execution. One handle, so the three cannot read
+	/// the pause differently. Built here from the pool rather than passed in.
+	pub outflow: Arc<dyn OutflowPolicy>,
 	/// Nudges the outbox relay to dispatch right after a command commits.
 	pub relay_notify: Arc<Notify>,
 	/// Base URL the emailed consilium approval link is built on (`<base>/<token>`). The
 	/// page it points at is served by the cabinet, not here; the hub only has to mint a
 	/// link an owner's mail client will render.
 	pub consilium_approval_url_base: String,
+	/// Base URL the emailed payment CONSENT link is built on (`<base>/<token>`) — the
+	/// investor-facing twin of the approval base.
+	pub payment_consent_url_base: String,
 	/// Whether the TON rail is on testnet — surfaced on its deposit addresses so the client
 	/// renders the correct (testnet-tagged) user-friendly TON address. `false` when TON is
 	/// unconfigured or on mainnet. The other rails have no testnet-specific address form.
@@ -143,7 +151,9 @@ impl AppState {
 		kyc_gate: config::KycGate,
 		relay_notify: Arc<Notify>,
 		consilium_approval_url_base: String,
+		payment_consent_url_base: String,
 		ton_is_testnet: bool,
+		outflow: Arc<dyn OutflowPolicy>,
 	) -> Self {
 		Self {
 			pool,
@@ -169,7 +179,9 @@ impl AppState {
 			kyc_gate,
 			relay_notify,
 			consilium_approval_url_base,
+			payment_consent_url_base,
 			ton_is_testnet,
+			outflow,
 		}
 	}
 }

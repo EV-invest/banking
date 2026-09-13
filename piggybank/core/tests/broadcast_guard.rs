@@ -22,7 +22,7 @@ use domain::{
 	balance::{LedgerAccountKey, Party},
 	money::{Network, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
-	withdrawals::WithdrawalState,
+	withdrawals::{WithdrawalId, WithdrawalState},
 };
 use piggybank_core::{
 	application::{balance as balance_app, withdrawals as withdrawal_app},
@@ -166,21 +166,51 @@ async fn a_withdrawal_whose_reserve_parked_is_never_broadcast() {
 	// Double-submit the full balance WITHOUT draining in between — the exploit window.
 	// The shared rail's liquidity decides queued-vs-dispatched; dispatch explicitly so
 	// both withdrawals carry a Dispatched (broadcast) row regardless of rail state.
-	let first = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination.clone(), usdt("100"))
+	let first = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination.clone(),
+		usdt("100"),
+	)
+	.await
+	.unwrap();
+	if first.state() == WithdrawalState::Queued {
+		withdrawal_app::dispatch_withdrawal(
+			h.withdrawals.as_ref(),
+			&StubCustody,
+			&PgOutflowPolicy::new(h.pool.clone()),
+			KycGate::ENFORCED,
+			&h.notify,
+			first.id(),
+		)
 		.await
 		.unwrap();
-	if first.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), KycGate::ENFORCED, &h.notify, first.id())
-			.await
-			.unwrap();
 	}
-	let second = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination, usdt("100"))
-		.await
-		.expect("the second request passes the Read-First — TB lags the undrained outbox");
+	let second = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination,
+		usdt("100"),
+	)
+	.await
+	.expect("the second request passes the Read-First — TB lags the undrained outbox");
 	if second.state() == WithdrawalState::Queued {
-		withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &PgOutflowPolicy::new(&h.pool), KycGate::ENFORCED, &h.notify, second.id())
-			.await
-			.unwrap();
+		withdrawal_app::dispatch_withdrawal(
+			h.withdrawals.as_ref(),
+			&StubCustody,
+			&PgOutflowPolicy::new(h.pool.clone()),
+			KycGate::ENFORCED,
+			&h.notify,
+			second.id(),
+		)
+		.await
+		.unwrap();
 	}
 
 	h.relay.drain().await;

@@ -18,7 +18,6 @@ use tonic::{Request, Response, Status};
 use crate::{
 	AppState,
 	application::{balance as balance_app, funds as funds_app, wallet as wallet_app, withdrawals as withdrawal_app},
-	infrastructure::outflow::PgOutflowPolicy,
 	services::{
 		funds::redemption_to_proto,
 		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
@@ -118,7 +117,7 @@ impl BalanceService for BalanceSvc {
 		withdrawal_app::dispatch_withdrawal(
 			self.state.withdrawals.as_ref(),
 			self.state.custody.as_ref(),
-			&PgOutflowPolicy::new(&self.state.pool),
+			self.state.outflow.as_ref(),
 			self.state.kyc_gate,
 			&self.state.relay_notify,
 			id,

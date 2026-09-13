@@ -14,12 +14,46 @@
 use std::{sync::Arc, time::Duration};
 
 use domain::error::DomainError;
-use sqlx::{PgPool, Row};
+use sqlx::{PgConnection, PgPool, Row};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer};
+use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError};
+
+/// What a queued mail is ABOUT — the row it announces or asks a decision on. Exactly one,
+/// which `consilium_mail_names_one_subject` states to the database; the worker uses it to
+/// know which seat's `notified` flag a delivered token mail flips.
+#[derive(Clone, Copy)]
+pub enum MailSubject {
+	Consilium(Uuid),
+	Payment(Uuid),
+}
+
+/// Queue one mail on the caller's open transaction, so the notification commits with the
+/// fact it announces or not at all. `ON CONFLICT DO NOTHING` on the dedupe key makes a
+/// retried transition (or a redelivered sweep) enqueue the same notification exactly once.
+///
+/// `user_id` is the recipient's BANKING id; the worker resolves it to the concierge id at
+/// send time, because the relay addresses identities in the plane that owns them.
+pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
+	let payload = serde_json::to_string(mail).map_err(|e| DomainError::Repository(e.to_string()))?;
+	let (consilium_id, payment_id) = match subject {
+		MailSubject::Consilium(id) => (Some(id), None),
+		MailSubject::Payment(id) => (None, Some(id)),
+	};
+	sqlx::query("INSERT INTO consilium_mail (consilium_id, payment_id, user_id, kind, dedupe_key, payload) VALUES ($1, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (dedupe_key) DO NOTHING")
+		.bind(consilium_id)
+		.bind(payment_id)
+		.bind(user_id)
+		.bind(mail.as_str())
+		.bind(dedupe_key)
+		.bind(payload)
+		.execute(&mut *conn)
+		.await
+		.map_err(repo_err)?;
+	Ok(())
+}
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -29,6 +63,17 @@ const BATCH: i64 = 100;
 /// After this many failures a row stops being retried and starts being an alert. It is
 /// never deleted: the audit trail keeps what could not be delivered, and why.
 const MAX_ATTEMPTS: i32 = 10;
+
+/// How long a mail keeps being DEFERRED — the relay throttling its recipient, or being
+/// unreachable — before it is finally given up on. A deferral charges no attempt (nothing
+/// about the message was refused), so the ceiling here is time, not count: a day covers a
+/// relay outage or a busy recipient without letting a throttled approval mail sit forever.
+pub const DEFERRAL_CEILING: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// The longest wait between two deferred retries. The backoff doubles from the sweep
+/// interval and stops here, so a recipient the relay is protecting is asked again minutes
+/// apart, not seconds — and a relay coming back is noticed within the hour.
+const MAX_DEFERRAL_BACKOFF: Duration = Duration::from_secs(60 * 60);
 
 pub struct ConsiliumMailer {
 	pool: PgPool,
@@ -94,10 +139,12 @@ impl ConsiliumMailer {
 	/// One pass. Returns how many messages were handed over. Public so an integration test
 	/// can drive it deterministically.
 	pub async fn drain(&self) -> Result<usize, DomainError> {
+		// A deferred row waits out its backoff; everything else undelivered and under the
+		// ceiling is due now.
 		let rows = sqlx::query(
 			"SELECT m.id, m.dedupe_key, m.payload::text AS payload, u.concierge_user_id \
 			 FROM consilium_mail m JOIN users u ON u.id = m.user_id \
-			 WHERE m.sent_at IS NULL AND m.attempts < $1 ORDER BY m.id LIMIT $2",
+			 WHERE m.sent_at IS NULL AND m.attempts < $1 AND (m.next_attempt_at IS NULL OR m.next_attempt_at <= now()) ORDER BY m.id LIMIT $2",
 		)
 		.bind(MAX_ATTEMPTS)
 		.bind(BATCH)
@@ -114,7 +161,9 @@ impl ConsiliumMailer {
 			let mail: GovernanceMail = match serde_json::from_str(&payload) {
 				Ok(mail) => mail,
 				Err(err) => {
-					self.fail(id, &format!("unreadable payload: {err}")).await?;
+					// Nothing typed to redact: a payload this worker cannot read is one it
+					// cannot strip either, and the row is retired as it stands.
+					self.fail(id, &format!("unreadable payload: {err}"), None).await?;
 					continue;
 				}
 			};
@@ -122,7 +171,7 @@ impl ConsiliumMailer {
 			// plane cannot redirect a governance mail. Without the mirrored id there is no
 			// safe address to send to, and guessing is not an option.
 			let Some(recipient) = concierge_user_id else {
-				self.fail(id, "recipient has no mirrored concierge user id").await?;
+				self.fail(id, "recipient has no mirrored concierge user id", Some(&mail)).await?;
 				continue;
 			};
 			match self.mailer.send(recipient, &dedupe_key, &mail).await {
@@ -134,15 +183,21 @@ impl ConsiliumMailer {
 						.execute(&self.pool)
 						.await
 						.map_err(repo_err)?;
-					// `consilium_voter.notified` used to be set TRUE at INSERT, where it meant
-					// "queued" while the operator screen reading it says "notified". During a
-					// concierge outage every seat would show as notified with not one mail
-					// delivered — the screen would look healthiest exactly when the mechanism
-					// was most broken. It is set HERE, once concierge has actually taken the
-					// message, and only for the approval mail: an outcome or burn notice tells
-					// an owner nothing about whether they were given a token to vote with.
-					if matches!(mail, GovernanceMail::PayoutApproval(_)) {
-						sqlx::query("UPDATE consilium_voter SET notified = TRUE WHERE consilium_id = (SELECT consilium_id FROM consilium_mail WHERE id = $1) AND user_id = (SELECT user_id FROM consilium_mail WHERE id = $1)")
+					// `notified` used to be set TRUE at INSERT, where it meant "queued" while
+					// the operator screen reading it says "notified". During a concierge outage
+					// every seat would show as notified with not one mail delivered — the screen
+					// would look healthiest exactly when the mechanism was most broken. It is set
+					// HERE, once concierge has actually taken the message, and only for a mail
+					// that carries a token: an outcome or burn notice tells the recipient nothing
+					// about whether they were given one to answer with. Which seat table holds
+					// the flag follows from which subject the row names.
+					if mail.carries_a_token() {
+						sqlx::query("UPDATE consilium_voter v SET notified = TRUE FROM consilium_mail m WHERE m.id = $1 AND v.consilium_id = m.consilium_id AND v.user_id = m.user_id")
+							.bind(id)
+							.execute(&self.pool)
+							.await
+							.map_err(repo_err)?;
+						sqlx::query("UPDATE payment_consent c SET notified = TRUE FROM consilium_mail m WHERE m.id = $1 AND c.payment_id = m.payment_id AND c.subject_user_id = m.user_id")
 							.bind(id)
 							.execute(&self.pool)
 							.await
@@ -150,16 +205,60 @@ impl ConsiliumMailer {
 					}
 					sent += 1;
 				}
-				Err(err) => self.fail(id, &err.to_string()).await?,
+				Err(MailDeliveryError::Deferred(why)) => self.defer(id, &why, &mail).await?,
+				Err(MailDeliveryError::Failed(why)) => self.fail(id, &why, Some(&mail)).await?,
 			}
 		}
 		Ok(sent)
 	}
 
+	/// Put a row back for later WITHOUT charging an attempt: the relay is throttling this
+	/// recipient or is down, and neither says anything about the message. The wait doubles
+	/// from the sweep interval up to [`MAX_DEFERRAL_BACKOFF`]; past [`DEFERRAL_CEILING`] from
+	/// creation the row is given up on the way a failed one is, so a permanently throttled
+	/// recipient still becomes an alert rather than a silent stall.
+	async fn defer(&self, id: i64, reason: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
+		let expired: bool = sqlx::query_scalar("SELECT created_at + $2 < now() FROM consilium_mail WHERE id = $1")
+			.bind(id)
+			.bind(DEFERRAL_CEILING)
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		if expired {
+			self.retire(id, reason, Some(mail)).await?;
+			error!(
+				mail_id = id,
+				"consilium mailer: giving up on a governance mail deferred for over {DEFERRAL_CEILING:?} — an owner will not be told: {reason}"
+			);
+			return Ok(());
+		}
+		let deferrals: i32 = sqlx::query_scalar("UPDATE consilium_mail SET deferrals = deferrals + 1, last_error = $2 WHERE id = $1 RETURNING deferrals")
+			.bind(id)
+			.bind(reason)
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		let backoff = SWEEP_INTERVAL.saturating_mul(1u32 << (deferrals - 1).clamp(0, 16)).min(MAX_DEFERRAL_BACKOFF);
+		sqlx::query("UPDATE consilium_mail SET next_attempt_at = now() + $2 WHERE id = $1")
+			.bind(id)
+			.bind(backoff)
+			.execute(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		warn!(
+			mail_id = id,
+			deferrals,
+			?backoff,
+			"consilium mailer: delivery deferred by the relay (no attempt charged): {reason}"
+		);
+		Ok(())
+	}
+
 	/// Record a delivery failure. At the ceiling it becomes an `error!` (Sentry-shipped): an
 	/// approval mail that never arrives is a consilium that can never reach quorum, which is
-	/// exactly the kind of silent stall an operator must be told about.
-	async fn fail(&self, id: i64, reason: &str) -> Result<(), DomainError> {
+	/// exactly the kind of silent stall an operator must be told about — and the row is
+	/// retired with its secrets stripped, exactly as a delivered one is.
+	async fn fail(&self, id: i64, reason: &str, mail: Option<&GovernanceMail>) -> Result<(), DomainError> {
 		let attempts: i32 = sqlx::query_scalar("UPDATE consilium_mail SET attempts = attempts + 1, last_error = $2 WHERE id = $1 RETURNING attempts")
 			.bind(id)
 			.bind(reason)
@@ -167,10 +266,31 @@ impl ConsiliumMailer {
 			.await
 			.map_err(repo_err)?;
 		if attempts >= MAX_ATTEMPTS {
+			self.retire(id, reason, mail).await?;
 			error!(mail_id = id, attempts, "consilium mailer: giving up on a governance mail — an owner will not be told: {reason}");
 		} else {
 			warn!(mail_id = id, attempts, "consilium mailer: delivery failed (will retry): {reason}");
 		}
+		Ok(())
+	}
+
+	/// Give a row up for good: pinned at the attempt ceiling so no sweep picks it up again,
+	/// and its payload rewritten WITHOUT its secrets. A token and a code that will never be
+	/// delivered are a credential nobody legitimately holds, and the row is kept for the
+	/// audit trail — which needs to say what was attempted, not what the code was.
+	async fn retire(&self, id: i64, reason: &str, mail: Option<&GovernanceMail>) -> Result<(), DomainError> {
+		let redacted = mail
+			.map(|mail| serde_json::to_string(&mail.redacted()))
+			.transpose()
+			.map_err(|e| DomainError::Repository(e.to_string()))?;
+		sqlx::query("UPDATE consilium_mail SET attempts = $2, last_error = $3, payload = COALESCE($4::jsonb, payload) WHERE id = $1")
+			.bind(id)
+			.bind(MAX_ATTEMPTS)
+			.bind(reason)
+			.bind(redacted)
+			.execute(&self.pool)
+			.await
+			.map_err(repo_err)?;
 		Ok(())
 	}
 }

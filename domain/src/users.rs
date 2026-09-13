@@ -60,6 +60,19 @@ impl core::fmt::Display for Email {
 	}
 }
 
+/// `alice@example.com` → `a***@example.com`. Used on every surface a non-owner can reach:
+/// an emailed person needs to recognise their own address, not learn anyone else's. A value
+/// that is not an address discloses nothing at all rather than passing through.
+pub fn mask_email(email: &str) -> String {
+	let Some((local, domain)) = email.split_once('@') else {
+		return String::new();
+	};
+	match local.chars().next() {
+		Some(first) => format!("{first}***@{domain}"),
+		None => format!("***@{domain}"),
+	}
+}
+
 /// The minimal user lifecycle. `Disabled` freezes sign-in/refresh without deleting
 /// the record (the ledger and audit trail must outlive a deactivation).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -367,6 +380,14 @@ impl EmitsEvents for User {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn an_email_is_masked_to_its_first_letter_and_domain() {
+		assert_eq!(mask_email("alice@example.com"), "a***@example.com");
+		assert_eq!(mask_email("@example.com"), "***@example.com");
+		assert_eq!(mask_email("not-an-email"), "");
+		assert_eq!(mask_email(""), "");
+	}
 
 	fn fixture() -> User {
 		User::provision(UserId::new(), AuthSubject::parse("g-123").unwrap(), Email::parse("Ada@Example.com").unwrap(), true)

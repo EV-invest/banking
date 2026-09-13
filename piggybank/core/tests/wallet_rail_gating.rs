@@ -21,6 +21,7 @@ use domain::{
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
 	users::{Email, UserId},
+	withdrawals::WithdrawalId,
 };
 use evbanking_contracts::signer::v1::{
 	GetKeyHealthRequest, GetKeyHealthResponse, MigrateAddressToCustodianRequest, MigrateAddressToCustodianResponse, ProvisionAddressRequest, ProvisionAddressResponse, RotateAddressRequest,
@@ -239,6 +240,7 @@ async fn an_unconfigured_rail_withdrawal_is_rejected() {
 			configured: &[Network::Bep20],
 			kyc: KycGate::ENFORCED,
 		},
+		WithdrawalId::new(),
 		user,
 		Network::Ton,
 		destination,

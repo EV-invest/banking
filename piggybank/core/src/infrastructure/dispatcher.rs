@@ -91,7 +91,7 @@ impl Dispatcher {
 	/// static check, dispatch in full, and mass-park at the custody backstop. What no
 	/// longer fits stays queued for the next top-up.
 	pub async fn sweep(&self) -> Result<usize, sqlx::Error> {
-		let policy = PgOutflowPolicy::new(&self.pool);
+		let policy = PgOutflowPolicy::new(self.pool.clone());
 		// Whole-sweep short-circuit on the global pause. `dispatch_withdrawal` re-checks it
 		// per withdrawal anyway — this is the same gate, called once, so an operator pause
 		// (or an unreadable flag: it fails closed) does not cost a refusal and a log line

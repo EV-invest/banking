@@ -16,16 +16,21 @@ use async_trait::async_trait;
 use domain::error::DomainError;
 use serde::{Deserialize, Serialize};
 
-/// One governance mail, addressed to a single owner.
+/// One governance mail, addressed to a single person.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GovernanceMail {
-	/// Asking an owner to approve a payout. The only variant carrying secrets.
+	/// Asking an owner to approve a revenue payout. Carries secrets.
 	PayoutApproval(PayoutApproval),
-	/// Telling the owners how a consilium ended.
+	/// Telling the audience how a consilium ended — over a payout or over a payment.
 	PayoutOutcome(PayoutOutcome),
 	/// Warning every owner that a token burned on failed code attempts.
 	TokenBurned(PayoutOutcome),
+	/// Asking ONE investor to consent to a payment out of their own claim. Carries secrets,
+	/// and is the one kind addressed by identity rather than by seat.
+	PaymentConsent(PaymentConsent),
+	/// Asking an owner to approve a payment out of fund-owned money. Carries secrets.
+	PaymentApproval(PaymentApproval),
 }
 
 impl GovernanceMail {
@@ -35,6 +40,18 @@ impl GovernanceMail {
 			Self::PayoutApproval(_) => "payout_approval",
 			Self::PayoutOutcome(_) => "payout_outcome",
 			Self::TokenBurned(_) => "token_burned",
+			Self::PaymentConsent(_) => "payment_consent",
+			Self::PaymentApproval(_) => "payment_approval",
+		}
+	}
+
+	/// Whether this mail hands its recipient a token to answer with — the kinds whose
+	/// delivery is what a seat's `notified` flag reports. An outcome or burn notice tells the
+	/// recipient nothing about whether they can vote, so it flips nothing.
+	pub fn carries_a_token(&self) -> bool {
+		match self {
+			Self::PayoutApproval(_) | Self::PaymentConsent(_) | Self::PaymentApproval(_) => true,
+			Self::PayoutOutcome(_) | Self::TokenBurned(_) => false,
 		}
 	}
 
@@ -48,7 +65,17 @@ impl GovernanceMail {
 				code: String::new(),
 				..mail.clone()
 			}),
-			other => other.clone(),
+			Self::PaymentConsent(mail) => Self::PaymentConsent(PaymentConsent {
+				approval_url: String::new(),
+				code: String::new(),
+				..mail.clone()
+			}),
+			Self::PaymentApproval(mail) => Self::PaymentApproval(PaymentApproval {
+				approval_url: String::new(),
+				code: String::new(),
+				..mail.clone()
+			}),
+			Self::PayoutOutcome(_) | Self::TokenBurned(_) => self.clone(),
 		}
 	}
 }
@@ -75,6 +102,11 @@ pub struct PayoutApproval {
 }
 
 /// How a consilium ended, or why a token burned.
+///
+/// ONE shape for both subjects, additively — the wire's `PayoutOutcomeMail` is the same:
+/// `network` + `address` describe a payout, `tier` + `source` + `destination` + `reason`
+/// describe a payment, and the renderer switches on which pair is filled. The payment
+/// fields default to empty so queue rows written before they existed still deserialize.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PayoutOutcome {
 	pub consilium_id: String,
@@ -85,6 +117,90 @@ pub struct PayoutOutcome {
 	pub address: String,
 	pub amount: String,
 	pub detail: String,
+	#[serde(default)]
+	pub tier: String,
+	#[serde(default)]
+	pub source: String,
+	#[serde(default)]
+	pub destination: String,
+	#[serde(default)]
+	pub reason: String,
+}
+
+/// The consent invitation to the ONE investor whose claim a payment spends.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PaymentConsent {
+	pub payment_id: String,
+	/// The subject's id IN THE IDENTITY PLANE. Concierge refuses the mail unless the user it
+	/// is being asked to write to is this person — a caller that fans one consent out to a
+	/// second mailbox has to contradict itself in the same message to do it.
+	pub subject_user_id: String,
+	pub initiator_email: String,
+	pub tier: String,
+	pub source: String,
+	pub destination: String,
+	pub amount: String,
+	pub reason: String,
+	pub payload_hash: String,
+	pub expires_at: i64,
+	/// Absolute URL of the consent page, carrying the opaque token.
+	pub approval_url: String,
+	/// The secret code. Cleared from the queue row on success.
+	pub code: String,
+}
+
+/// The owner-facing approval invitation over a PAYMENT — the consilium counterpart of
+/// [`PaymentConsent`]. Its own shape rather than a widened [`PayoutApproval`], because the
+/// payout template opens with "a request to pay fund revenue out on-chain" and a payment
+/// between two claims rendered through it would name the wrong claim and the wrong rail.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PaymentApproval {
+	pub consilium_id: String,
+	pub payment_id: String,
+	pub initiator_email: String,
+	pub tier: String,
+	pub source: String,
+	pub destination: String,
+	pub amount: String,
+	pub reason: String,
+	pub payload_hash: String,
+	pub threshold: u32,
+	pub owner_count: u32,
+	pub expires_at: i64,
+	/// Absolute URL of the approval page, carrying the opaque token.
+	pub approval_url: String,
+	/// The secret code. Cleared from the queue row on success.
+	pub code: String,
+}
+
+/// Why a mail was not taken — split by what the worker should do about it.
+///
+/// The identity plane rate-limits governance mail per recipient and answers
+/// `RESOURCE_EXHAUSTED`; it can also simply be unreachable. Neither says anything about
+/// the message, so neither may spend one of the message's attempts: a recipient who is
+/// throttled ten times in five minutes would otherwise lose their approval token for good
+/// while the mechanism reported a delivery failure that never happened.
+#[derive(Debug)]
+pub enum MailDeliveryError {
+	/// Try again later, charging nothing: the relay is throttling this recipient or is down.
+	Deferred(String),
+	/// The relay refused this message, or the transport failed in a way a retry may fix;
+	/// each such answer costs an attempt.
+	Failed(String),
+}
+
+impl core::fmt::Display for MailDeliveryError {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		match self {
+			Self::Deferred(why) | Self::Failed(why) => f.write_str(why),
+		}
+	}
+}
+
+impl From<MailDeliveryError> for DomainError {
+	fn from(err: MailDeliveryError) -> Self {
+		DomainError::Repository(err.to_string())
+	}
 }
 
 /// The driven port: hand one mail to the identity plane's mailer.
@@ -95,5 +211,5 @@ pub struct PayoutOutcome {
 /// which is what stops the money plane from redirecting a governance mail.
 #[async_trait]
 pub trait GovernanceMailer: Send + Sync {
-	async fn send(&self, concierge_user_id: uuid::Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), DomainError>;
+	async fn send(&self, concierge_user_id: uuid::Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError>;
 }

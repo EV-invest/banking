@@ -24,8 +24,11 @@ use domain::{
 	users::{Email, UserId},
 };
 use piggybank_core::{
-	application::consilium as consilium_app,
-	infrastructure::{consilium::PgConsilia, custody::StubCustody, payments::PgPayments, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals},
+	application::{consilium as consilium_app, payments as payments_app},
+	config::KycGate,
+	infrastructure::{
+		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, outflow::PgOutflowPolicy, payments::PgPayments, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
+	},
 	ports::{
 		ConsiliumRepository, LedgerTransfer, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumView, MAX_CODE_ATTEMPTS, VoteAudit},
@@ -46,6 +49,7 @@ const PAYOUT_ADDRESS: &str = "0x52908400098527886E0F7030069857D2E4169EE7";
 const CONFIGURED: [Network; 1] = [Network::Bep20];
 
 const APPROVAL_URL_BASE: &str = "https://example.test/consilium";
+const CONSENT_URL_BASE: &str = "https://example.test/consent";
 
 /// Serialises every test in this file — see the module docs.
 static GOVERNANCE: std::sync::LazyLock<tokio::sync::Mutex<()>> = std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
@@ -60,6 +64,8 @@ struct Harness {
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	payments: Arc<dyn PaymentRepository>,
 	users: Arc<dyn UserRepository>,
+	outflow: PgOutflowPolicy,
+	allocations: PgAllocations,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -74,6 +80,8 @@ async fn harness() -> Option<Harness> {
 		withdrawals: Arc::new(PgWithdrawals::new(pool.clone())),
 		payments: Arc::new(PgPayments::new(pool.clone())),
 		users: Arc::new(PgUsers::new(pool.clone())),
+		outflow: PgOutflowPolicy::new(pool.clone()),
+		allocations: PgAllocations::new(pool.clone()),
 		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
 		ledger,
 		notify,
@@ -86,11 +94,16 @@ fn ports(h: &Harness) -> consilium_app::ConsiliumPorts<'_> {
 		consilia: h.consilia.as_ref(),
 		withdrawals: h.withdrawals.as_ref(),
 		payments: h.payments.as_ref(),
+		users: h.users.as_ref(),
 		ledger: h.ledger.as_ref(),
 		custody: &StubCustody,
+		policy: &h.outflow,
+		allocations: &h.allocations,
 		relay: &h.notify,
 		configured: &CONFIGURED,
+		kyc: KycGate::LIFTED,
 		approval_url_base: APPROVAL_URL_BASE,
+		consent_url_base: CONSENT_URL_BASE,
 		// The suite exercises the governance path itself, so it stands in for a wired mailer.
 		// `opening_without_a_governance_mailer_is_refused` pins the false case explicitly.
 		governance_mail_wired: true,
@@ -135,11 +148,29 @@ async fn reset_governance(h: &Harness) {
 	// The orders those fixtures decide go first: `payment_approval` references the consilium
 	// with `ON DELETE RESTRICT`, so a fixture that panicked between opening its order and
 	// cleaning up would otherwise wedge every reset after it.
-	sqlx::query("DELETE FROM payments WHERE id IN (SELECT a.payment_id FROM payment_approval a JOIN consilium c ON c.id = a.consilium_id WHERE c.kind = 'payment')")
+	// The link is a cycle once a consilium has executed (`payment_approval` restricts the
+	// consilium's deletion, `executed_payment_id` restricts the order's), so it is broken in
+	// order: the orders' ids are collected, the links dropped, the consilia deleted, then
+	// the orders and the money facts they drained.
+	let orders: Vec<Uuid> = sqlx::query_scalar(
+		"SELECT a.payment_id FROM payment_approval a JOIN consilium c ON c.id = a.consilium_id WHERE c.kind = 'payment' \
+		 UNION SELECT executed_payment_id FROM consilium WHERE kind = 'payment' AND executed_payment_id IS NOT NULL",
+	)
+	.fetch_all(&h.pool)
+	.await
+	.unwrap();
+	sqlx::query("DELETE FROM payment_approval WHERE consilium_id IN (SELECT id FROM consilium WHERE kind = 'payment')")
 		.execute(&h.pool)
 		.await
 		.unwrap();
 	sqlx::query("DELETE FROM consilium WHERE kind = 'payment'").execute(&h.pool).await.unwrap();
+	sqlx::query("DELETE FROM payments WHERE id = ANY($1)").bind(&orders).execute(&h.pool).await.unwrap();
+	for statement in [
+		"DELETE FROM outbox WHERE aggregate = 'payment' AND aggregate_id = ANY($1)",
+		"DELETE FROM event_log WHERE aggregate = 'payment' AND aggregate_id = ANY($1)",
+	] {
+		sqlx::query(statement).bind(&orders).execute(&h.pool).await.unwrap();
+	}
 	sqlx::query("UPDATE users SET role = 'investor' WHERE role = 'owner'").execute(&h.pool).await.unwrap();
 	// The cooling-off clock is global, so a test that exercises it would otherwise freeze
 	// every test after it for 48 simulated hours.
@@ -211,7 +242,7 @@ async fn drain_revenue(h: &Harness, base_units: u128) {
 /// The token and code that were mailed to one seat. Reading them out of the queue is exactly
 /// what the owner does when the message lands — the plaintexts live nowhere else.
 async fn credentials(h: &Harness, consilium: ConsiliumId, voter: UserId) -> (String, String) {
-	let payload: String = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 AND user_id = $2 AND kind = 'payout_approval'")
+	let payload: String = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 AND user_id = $2 AND kind IN ('payout_approval', 'payment_approval')")
 		.bind(consilium.raw())
 		.bind(voter.raw())
 		.fetch_one(&h.pool)
@@ -1153,20 +1184,19 @@ async fn the_shared_token_specification_holds_on_this_side() {
 	assert_eq!(attempts_of(&h, id, roster[2]).await, before, "a closed request must not charge an attempt");
 }
 
-/// THE SECOND KIND, AS THE DATABASE AND `rehydrate` SEE IT.
-///
-/// `0029_consilium_source_claim.sql` refused to widen `consilium_kind_check` ahead of the
-/// Rust arm, and named the reason: `kind` decides how `terms` is read, so a row this binary
-/// cannot parse fails EVERY read of the governance history and not merely its own. This is
-/// that rule held from the other side — the CHECK now admits `'payment'`, the adapter parses
-/// it back into the subject it was written from, and a payout sitting beside it still reads.
-///
-/// The row is inserted directly because the write path is deliberately closed: a payment
-/// consilium cannot be opened until concierge ships an owner-facing payment-approval mail
-/// (see `no_payment_approval_mail`), and until then the only thing worth pinning is that the
-/// store and the domain agree about the shape.
+/// THE SECOND KIND, END TO END. A payment out of the fund's pooled capital opens its own
+/// consilium inside `payments::open`, every eligible seat is mailed a PAYMENT approval (not
+/// the payout template, which would name the wrong claim and the wrong rail), the carrying
+/// vote records the approval on the order and chains its execution — deferred until the
+/// relay has applied the reservation — and the governance history still reads with a payout
+/// sitting beside it.
 #[tokio::test]
-async fn a_payment_consilium_round_trips_and_leaves_the_history_readable() {
+async fn a_payment_consilium_is_opened_mailed_carried_and_leaves_the_history_readable() {
+	use domain::{
+		balance::Party,
+		payments::{PaymentDestination, PaymentReason, PaymentState, PaymentTerms},
+	};
+
 	let _guard = exclusive_governance().await;
 	let Some(h) = harness().await else {
 		eprintln!("DATABASE_URL unset — skipping the consilium suite");
@@ -1174,49 +1204,177 @@ async fn a_payment_consilium_round_trips_and_leaves_the_history_readable() {
 	};
 	reset_governance(&h).await;
 	let roster = owners(&h, 3).await;
-	// A payout in the same table, so the assertion below is "the history still reads", not
-	// just "the new row reads".
+	// A payout in the same table, so the assertion below is "the history still reads".
 	let payout = consilium_app::open_revenue_payout(&ports(&h), roster[0], terms("500"), now()).await.unwrap();
+	// The fund's pooled capital, credited the deposit way, so the solvency pre-check passes.
+	h.ledger
+		.post(&LedgerTransfer {
+			id: Uuid::new_v4().as_u128(),
+			debit: LedgerAccountKey::CryptoWallet(Network::Bep20),
+			credit: LedgerAccountKey::Fund,
+			amount: usdt("1000").base_units(),
+			code: TransferCode::Deposit,
+			reference: 0,
+		})
+		.await
+		.unwrap();
+	// Apply whatever an earlier test left in the outbox BEFORE the snapshots, so the deltas
+	// below measure this order's two legs and nothing else.
+	h.relay.drain().await;
+	let revenue_before = h.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted;
+	let fund_locked_before = h.ledger.balance(&LedgerAccountKey::Fund).await.unwrap().locked;
 
-	let subject = domain::payments::PaymentSubject {
-		payment_id: domain::payments::PaymentId::from_raw(Uuid::new_v4()),
-		terms: domain::payments::PaymentTerms::new(
-			domain::balance::Party::Piggybank,
-			domain::payments::PaymentDestination::Internal(domain::balance::Party::Revenue),
-			domain::money::Usdt::parse_decimal("250").unwrap(),
-			domain::payments::PaymentReason::new("settle the quarterly management fee").unwrap(),
-		)
-		.unwrap(),
-	};
-	let id = Uuid::new_v4();
-	sqlx::query(
-		"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at) \
-		 VALUES ($1, 'payment', 'open', $2::jsonb, $3, $4, $5, 3, 2, now() + interval '72 hours')",
+	let payment_terms = PaymentTerms::new(
+		Party::Piggybank,
+		PaymentDestination::Internal(Party::Revenue),
+		usdt("250"),
+		PaymentReason::new("settle the quarterly management fee").unwrap(),
 	)
-	.bind(id)
-	.bind(serde_json::to_string(&subject).unwrap())
-	// NOT `'fee'`. The per-source index keys on this, so a payment out of the fund's pooled
-	// capital must not queue behind the payout opened above — which is the whole point of
-	// 0029 naming the claim, and is asserted by this insert succeeding at all.
-	.bind(subject.terms.source_claim().logical_key())
-	.bind(vec![7u8; 32])
-	.bind(roster[0].raw())
-	.execute(&h.pool)
-	.await
-	.expect("the CHECK must admit the kind the domain can parse");
+	.unwrap();
+	let order = payments_app::open(&ports(&h).payment_ports(), roster[0], payment_terms, now()).await.expect("open the payment");
+	let payment_id = order.order.id();
+	let consilium = order.consilium_id.expect("fund-owned money is decided by the quorum");
+	assert!(order.consent.is_none());
 
-	let loaded = h.consilia.find(ConsiliumId::from_raw(id)).await.unwrap().expect("the payment consilium reads back");
+	let loaded = h.consilia.find(consilium).await.unwrap().expect("the payment consilium reads back");
 	assert_eq!(loaded.consilium.kind(), domain::consilium::ConsiliumKind::Payment);
-	assert_eq!(loaded.consilium.terms(), &domain::consilium::ConsiliumTerms::Payment(subject.clone()));
-	assert_eq!(loaded.consilium.source_claim(), subject.terms.source_claim());
+	assert_eq!(
+		loaded.consilium.source_claim(),
+		LedgerAccountKey::Fund,
+		"NOT `fee`: the per-source index keys on the order's claim"
+	);
+	assert_eq!(loaded.voters.len(), 2, "the initiator holds no seat");
+	let kinds: Vec<String> = sqlx::query_scalar("SELECT kind FROM consilium_mail WHERE consilium_id = $1 ORDER BY kind")
+		.bind(consilium.raw())
+		.fetch_all(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(kinds, vec!["payment_approval".to_owned(); 2], "each seat is asked with the PAYMENT template");
+	let payload: String = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 LIMIT 1")
+		.bind(consilium.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	let mail: serde_json::Value = serde_json::from_str(&payload).unwrap();
+	assert_eq!(mail["payment_id"], payment_id.to_string());
+	assert_eq!(mail["tier"], "internal");
+	assert_eq!(mail["source"], "the fund's pooled capital");
+
+	// A second order against the same source is refused — and the consilium it would have
+	// opened is withdrawn with it rather than left collecting votes over nothing.
+	let open_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium WHERE state = 'open'").fetch_one(&h.pool).await.unwrap();
+	let duplicate = PaymentTerms::new(Party::Piggybank, PaymentDestination::Internal(Party::Revenue), usdt("1"), PaymentReason::new("again").unwrap()).unwrap();
+	assert!(matches!(
+		payments_app::open(&ports(&h).payment_ports(), roster[0], duplicate, now()).await,
+		Err(DomainError::Conflict(_))
+	));
+	let open_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium WHERE state = 'open'").fetch_one(&h.pool).await.unwrap();
+	assert_eq!(open_after, open_before, "the compensating cancel closed the orphan consilium");
+
+	// The quorum carries; the carrying vote approves the order and reserves the source.
+	assert!(!vote(&h, consilium, roster[1], VoteDecision::Approve).await.unwrap());
+	assert!(vote(&h, consilium, roster[2], VoteDecision::Approve).await.unwrap());
+	// The vote's inline execution recorded the approval; the settlement waits for the relay.
+	let executed = consilium_app::execute(&ports(&h), consilium, now()).await.unwrap();
+	assert_eq!(executed.consilium.state(), ConsiliumState::Executed);
+	assert_eq!(executed.consilium.executed_payment_id(), Some(payment_id));
+	let order = h.payments.find(payment_id).await.unwrap().unwrap();
+	assert_eq!(order.order.state(), PaymentState::Approved, "reserved, not yet settled: the relay has not run");
+	h.relay.drain().await;
+	// `fund` is a global singleton shared with every other suite, so this is a DELTA.
+	assert_eq!(h.ledger.balance(&LedgerAccountKey::Fund).await.unwrap().locked - fund_locked_before, usdt("250").base_units());
+
+	let report = payments_app::sweep(&ports(&h).payment_ports(), now()).await.unwrap();
+	assert_eq!(report.executed, 1);
+	assert_eq!(h.payments.find(payment_id).await.unwrap().unwrap().order.state(), PaymentState::Executed);
+	h.relay.drain().await;
+	assert_eq!(h.ledger.balance(&LedgerAccountKey::FeeRevenue).await.unwrap().posted - revenue_before, usdt("250").base_units());
 
 	// The history read — the one 0029 said a second kind would break if the vocabularies
 	// ever differed in size.
 	let history = consilium_app::list(h.consilia.as_ref(), 50).await.expect("a second kind must not break the history read");
-	assert!(history.iter().any(|view| view.consilium.id().raw() == id));
+	assert!(history.iter().any(|view| view.consilium.id() == consilium));
 	assert!(history.iter().any(|view| view.consilium.id() == payout.consilium.id()));
+}
 
-	sqlx::query("DELETE FROM consilium WHERE id = $1").bind(id).execute(&h.pool).await.unwrap();
+/// The owners' mails name the RECIPIENT, a duplicate order is refused before a quorum is
+/// seated, and a quorum's refusal closes the order it was over in the same transaction.
+#[tokio::test]
+async fn a_refused_payment_consilium_closes_its_order_and_its_mails_name_the_recipient() {
+	use domain::{
+		balance::Party,
+		payments::{PaymentDestination, PaymentReason, PaymentState, PaymentTerms},
+		users::mask_email,
+	};
+
+	let _guard = exclusive_governance().await;
+	let Some(h) = harness().await else {
+		eprintln!("DATABASE_URL unset — skipping the consilium suite");
+		return;
+	};
+	reset_governance(&h).await;
+	let roster = owners(&h, 3).await;
+	fund_revenue(&h, "100").await;
+	h.relay.drain().await;
+	// The receiving investor, whose masked mailbox is what the owners must be shown.
+	let mailbox = format!("recipient-{}@example.com", Uuid::new_v4().simple());
+	let recipient = h
+		.users
+		.provision(AuthSubject::parse(&format!("itest-{}", Uuid::new_v4())).unwrap(), Email::parse(&mailbox).unwrap(), true)
+		.await
+		.unwrap()
+		.id();
+	let payment_terms = PaymentTerms::new(
+		Party::Revenue,
+		PaymentDestination::Internal(Party::User(recipient)),
+		usdt("10"),
+		PaymentReason::new("a referral bonus").unwrap(),
+	)
+	.unwrap();
+	let order = payments_app::open(&ports(&h).payment_ports(), roster[0], payment_terms.clone(), now())
+		.await
+		.expect("open the payment");
+	let payment_id = order.order.id();
+	let consilium = order.consilium_id.expect("decided by the quorum");
+
+	let payloads: Vec<String> = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 AND kind = 'payment_approval'")
+		.bind(consilium.raw())
+		.fetch_all(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(payloads.len(), 2);
+	for payload in &payloads {
+		let mail: serde_json::Value = serde_json::from_str(payload).unwrap();
+		let destination = mail["destination"].as_str().unwrap();
+		assert!(destination.contains(&mask_email(&mailbox)), "the owners are told who receives: {destination}");
+		assert!(!destination.contains(&mailbox), "…but never the unmasked address: {destination}");
+	}
+
+	// A second order against the same source is refused BEFORE a quorum is seated: no
+	// consilium row, no approval mails, no withdrawal notices.
+	let mails_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium_mail").fetch_one(&h.pool).await.unwrap();
+	let consilia_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium").fetch_one(&h.pool).await.unwrap();
+	let duplicate = payments_app::open(&ports(&h).payment_ports(), roster[0], payment_terms, now()).await;
+	assert!(matches!(duplicate, Err(DomainError::Conflict(ref why)) if why.contains("already open")), "{duplicate:?}");
+	let mails_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium_mail").fetch_one(&h.pool).await.unwrap();
+	let consilia_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM consilium").fetch_one(&h.pool).await.unwrap();
+	assert_eq!((mails_after, consilia_after), (mails_before, consilia_before), "the refusal touched nothing");
+
+	// One rejection makes the threshold (2 of 3) unreachable: the consilium closes, and the
+	// order closes with it rather than sitting pending until the sweeper expires it.
+	assert!(vote(&h, consilium, roster[1], VoteDecision::Reject).await.unwrap());
+	assert_eq!(state_of(&h, consilium).await, ConsiliumState::Rejected);
+	assert_eq!(h.payments.find(payment_id).await.unwrap().unwrap().order.state(), PaymentState::Rejected);
+	let outcome: String = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 AND kind = 'payout_outcome' LIMIT 1")
+		.bind(consilium.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	let mail: serde_json::Value = serde_json::from_str(&outcome).unwrap();
+	assert_eq!(mail["outcome"], "REJECTED");
+	assert!(mail["destination"].as_str().unwrap().contains(&mask_email(&mailbox)), "{outcome}");
+	let expired = h.payments.expire_due(now() + domain::payments::TTL_SECS + 1).await.unwrap();
+	assert_eq!(expired, 0, "the order was closed with the verdict, so nothing is left for the sweeper to expire");
 }
 
 /// THE RE-READ AFTER A REFUSED APPROVAL ASKS FOR THE POSITIVE FACT.
@@ -1229,10 +1387,8 @@ async fn a_payment_consilium_round_trips_and_leaves_the_history_readable() {
 /// that never moved. Only `approved` (or a state past it) proves the approval landed; every
 /// other closer must come back as `Failed`, naming the order's state.
 ///
-/// Driven directly rather than through `execute`, because the outcome is only ever
-/// observable through `record_execution`, whose owner mail is refused for the payment kind
-/// until concierge ships it (`no_payment_approval_mail`) — the same closed seam
-/// `a_payment_consilium_round_trips_and_leaves_the_history_readable` works around.
+/// Driven directly rather than through `execute` so each closer's outcome can be read off
+/// the returned value rather than off the consilium row it would be recorded on.
 #[tokio::test]
 async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() {
 	use domain::{
@@ -1278,13 +1434,21 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 			initiator,
 			now(),
 		);
-		h.payments.open(&mut order, ApprovalSeat::Consilium(consilium)).await.expect("open the order");
+		h.payments.open(&mut order, ApprovalSeat::Consilium(consilium), CONSENT_URL_BASE).await.expect("open the order");
 		(subject, consilium)
 	}
 
+	// The money facts go too: a `reserved` row left in the outbox would be applied by the
+	// next test's relay drain against the global `fund` claim and skew every delta after it.
 	async fn remove(h: &Harness, subject: &PaymentSubject, consilium: ConsiliumId) {
 		sqlx::query("DELETE FROM payments WHERE id = $1").bind(subject.payment_id.raw()).execute(&h.pool).await.unwrap();
 		sqlx::query("DELETE FROM consilium WHERE id = $1").bind(consilium.raw()).execute(&h.pool).await.unwrap();
+		for statement in [
+			"DELETE FROM outbox WHERE aggregate = 'payment' AND aggregate_id = $1",
+			"DELETE FROM event_log WHERE aggregate = 'payment' AND aggregate_id = $1",
+		] {
+			sqlx::query(statement).bind(subject.payment_id.raw()).execute(&h.pool).await.unwrap();
+		}
 	}
 
 	// One order per closer, each over its own fund-owned source so none queues behind
@@ -1313,7 +1477,8 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 		};
 		assert_eq!(h.payments.find(id).await.unwrap().unwrap().order.state(), expected);
 
-		match consilium_app::execute_payment(&ports(&h), subject.clone(), now()).await.unwrap() {
+		let view = h.consilia.find(consilium).await.unwrap().unwrap();
+		match consilium_app::execute_payment(&ports(&h), &view.consilium, subject.clone(), now()).await.unwrap() {
 			ExecutionOutcome::Failed(why) => assert!(why.contains(closer), "the refusal names the order's state: {why}"),
 			ExecutionOutcome::Executed(_) => panic!("a consilium over a {closer} order was filed as having authorized it"),
 		}
@@ -1326,9 +1491,10 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 	// this one got the row lock — is believed, and so is a repeat, because `record_approval`
 	// is idempotent on an approved order.
 	let (subject, consilium) = a_linked_order(&h, initiator, Party::Piggybank, PaymentDestination::Internal(Party::Revenue)).await;
-	h.payments.record_approval(subject.payment_id, now()).await.unwrap();
+	h.payments.record_approval(subject.payment_id, consilium, now()).await.unwrap();
+	let view = h.consilia.find(consilium).await.unwrap().unwrap();
 	for _ in 0..2 {
-		match consilium_app::execute_payment(&ports(&h), subject.clone(), now()).await.unwrap() {
+		match consilium_app::execute_payment(&ports(&h), &view.consilium, subject.clone(), now()).await.unwrap() {
 			ExecutionOutcome::Executed(ConsiliumEffect::Payment(id)) => assert_eq!(id, subject.payment_id),
 			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_)) => panic!("a payment consilium produces no withdrawal"),
 			ExecutionOutcome::Failed(why) => panic!("an approved order must be believed: {why}"),

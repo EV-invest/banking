@@ -18,6 +18,7 @@ use domain::{
 	consilium::{ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
+	users::mask_email,
 };
 use evbanking_contracts::banking::v1::{self as pb, consilium_approval_service_server::ConsiliumApprovalService, consilium_service_server::ConsiliumService};
 use tonic::{Request, Response, Status};
@@ -27,7 +28,7 @@ use crate::{
 	AppState,
 	application::consilium as consilium_app,
 	ports::consilium::{ConsiliumView, InvitationView, VoteAudit},
-	services::support::{caller_id, map_err, require_permission, unix_now},
+	services::support::{MAX_AUDIT_IP_BYTES, MAX_AUDIT_USER_AGENT_BYTES, caller_id, clamp, map_err, require_permission, unix_now},
 };
 
 /// The default page size for the governance history.
@@ -62,11 +63,16 @@ impl AppState {
 			consilia: self.consilia.as_ref(),
 			withdrawals: self.withdrawals.as_ref(),
 			payments: self.payments.as_ref(),
+			users: self.users.as_ref(),
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
+			policy: self.outflow.as_ref(),
+			allocations: self.allocations.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
+			kyc: self.kyc_gate,
 			approval_url_base: &self.consilium_approval_url_base,
+			consent_url_base: &self.payment_consent_url_base,
 			governance_mail_wired: crate::infrastructure::governance_mail::is_wired(),
 		}
 	}
@@ -155,18 +161,6 @@ fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPayment
 			amount: subject.terms.amount().to_decimal_string(),
 			reason: subject.terms.reason().as_str().to_owned(),
 		}),
-	}
-}
-
-/// `alice@example.com` → `a***@example.com`. Used on every surface a non-owner can reach:
-/// an emailed owner needs to recognise their own address, not learn anyone else's.
-fn mask_email(email: &str) -> String {
-	let Some((local, domain)) = email.split_once('@') else {
-		return String::new();
-	};
-	match local.chars().next() {
-		Some(first) => format!("{first}***@{domain}"),
-		None => format!("***@{domain}"),
 	}
 }
 
@@ -304,8 +298,8 @@ impl ConsiliumApprovalService for ConsiliumApprovalSvc {
 		let req = request.into_inner();
 		let decision = decision_from_proto(req.decision)?;
 		let audit = VoteAudit {
-			client_ip: req.client_ip,
-			user_agent: req.user_agent,
+			client_ip: clamp(req.client_ip, MAX_AUDIT_IP_BYTES),
+			user_agent: clamp(req.user_agent, MAX_AUDIT_USER_AGENT_BYTES),
 		};
 		let now = unix_now();
 		let outcome = consilium_app::submit_decision(self.state.consilia.as_ref(), &req.token, &req.code, decision, &audit, now)
@@ -330,17 +324,6 @@ impl ConsiliumApprovalService for ConsiliumApprovalSvc {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn an_email_is_masked_to_its_first_letter_and_domain() {
-		// What an emailed owner needs is to recognise their own seat, not to learn anyone
-		// else's address.
-		assert_eq!(mask_email("alice@example.com"), "a***@example.com");
-		assert_eq!(mask_email("@example.com"), "***@example.com");
-		// A value that is not an address discloses nothing at all rather than passing through.
-		assert_eq!(mask_email("not-an-email"), "");
-		assert_eq!(mask_email(""), "");
-	}
 
 	#[test]
 	fn pending_is_not_an_acceptable_vote() {

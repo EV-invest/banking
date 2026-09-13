@@ -32,6 +32,8 @@ pub fn mail_kind_str(mail: &GovernanceMail) -> &'static str {
 		GovernanceMail::PayoutApproval(_) => "PAYOUT_APPROVAL",
 		GovernanceMail::PayoutOutcome(_) => "PAYOUT_OUTCOME",
 		GovernanceMail::TokenBurned(_) => "APPROVAL_TOKEN_BURNED",
+		GovernanceMail::PaymentConsent(_) => "PAYMENT_CONSENT",
+		GovernanceMail::PaymentApproval(_) => "PAYMENT_APPROVAL",
 	}
 }
 
@@ -50,12 +52,13 @@ pub const fn is_wired() -> bool {
 #[cfg(feature = "concierge_governance_mail")]
 pub mod wired {
 	use async_trait::async_trait;
-	use domain::error::DomainError;
-	use evconcierge_contracts::concierge::v1::{GovernanceMailKind, PayoutApprovalMail, PayoutOutcomeMail, SendGovernanceMailRequest, mail_relay_service_client::MailRelayServiceClient};
-	use tonic::{Request, metadata::MetadataValue, transport::Channel};
+	use evconcierge_contracts::concierge::v1::{
+		GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PayoutApprovalMail, PayoutOutcomeMail, SendGovernanceMailRequest, mail_relay_service_client::MailRelayServiceClient,
+	};
+	use tonic::{Code, Request, metadata::MetadataValue, transport::Channel};
 	use uuid::Uuid;
 
-	use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer};
+	use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError};
 
 	/// Calls concierge's mail relay, authenticated with the shared banking↔concierge service
 	/// secret — the same `BRIDGE_SERVICE_TOKEN` the one-way lifecycle bridge presents, on the
@@ -73,7 +76,7 @@ pub mod wired {
 
 	#[async_trait]
 	impl GovernanceMailer for ConciergeGovernanceMailer {
-		async fn send(&self, concierge_user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
+		async fn send(&self, concierge_user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
 			let mut payload = SendGovernanceMailRequest {
 				kind: GovernanceMailKind::Unspecified as i32,
 				user_id: concierge_user_id.to_string(),
@@ -81,6 +84,7 @@ pub mod wired {
 				payout_approval: None,
 				payout_outcome: None,
 				payment_consent: None,
+				payment_approval: None,
 			};
 			match mail {
 				GovernanceMail::PayoutApproval(approval) => {
@@ -116,19 +120,64 @@ pub mod wired {
 						address: outcome.address.clone(),
 						amount: outcome.amount.clone(),
 						detail: outcome.detail.clone(),
+						tier: outcome.tier.clone(),
+						source: outcome.source.clone(),
+						destination: outcome.destination.clone(),
+						reason: outcome.reason.clone(),
+					});
+				}
+				GovernanceMail::PaymentConsent(consent) => {
+					payload.kind = GovernanceMailKind::PaymentConsent as i32;
+					payload.payment_consent = Some(PaymentConsentMail {
+						payment_id: consent.payment_id.clone(),
+						subject_user_id: consent.subject_user_id.clone(),
+						initiator_email: consent.initiator_email.clone(),
+						tier: consent.tier.clone(),
+						source: consent.source.clone(),
+						destination: consent.destination.clone(),
+						amount: consent.amount.clone(),
+						reason: consent.reason.clone(),
+						payload_hash: consent.payload_hash.clone(),
+						expires_at: consent.expires_at,
+						approval_url: consent.approval_url.clone(),
+						code: consent.code.clone(),
+					});
+				}
+				GovernanceMail::PaymentApproval(approval) => {
+					payload.kind = GovernanceMailKind::PaymentApproval as i32;
+					payload.payment_approval = Some(PaymentApprovalMail {
+						consilium_id: approval.consilium_id.clone(),
+						payment_id: approval.payment_id.clone(),
+						initiator_email: approval.initiator_email.clone(),
+						tier: approval.tier.clone(),
+						source: approval.source.clone(),
+						destination: approval.destination.clone(),
+						amount: approval.amount.clone(),
+						reason: approval.reason.clone(),
+						payload_hash: approval.payload_hash.clone(),
+						threshold: approval.threshold,
+						owner_count: approval.owner_count,
+						expires_at: approval.expires_at,
+						approval_url: approval.approval_url.clone(),
+						code: approval.code.clone(),
 					});
 				}
 			}
 			let mut request = Request::new(payload);
 			let token: MetadataValue<_> = format!("Bearer {}", self.service_token)
 				.parse()
-				.map_err(|_| DomainError::Repository("malformed governance mail service token".into()))?;
+				.map_err(|_| MailDeliveryError::Failed("malformed governance mail service token".into()))?;
 			request.metadata_mut().insert("authorization", token);
 			MailRelayServiceClient::new(self.channel.clone())
 				.send_governance_mail(request)
 				.await
 				.map(|_| ())
-				.map_err(|status| DomainError::Repository(format!("governance mail relay: {status}")))
+				.map_err(|status| match status.code() {
+					// The recipient is being rate-limited, or the relay is down: nothing about
+					// THIS message was refused, so nothing about it is charged.
+					Code::ResourceExhausted | Code::Unavailable => MailDeliveryError::Deferred(format!("governance mail relay: {status}")),
+					_ => MailDeliveryError::Failed(format!("governance mail relay: {status}")),
+				})
 		}
 	}
 }

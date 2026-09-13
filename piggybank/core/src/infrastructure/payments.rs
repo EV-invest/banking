@@ -17,6 +17,8 @@
 //! independent of a live database; sqlx 0.9 takes only a `&'static str`, so every column list
 //! is spliced in with `concat!` rather than built with `format!`.
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use domain::{
 	balance::Party,
@@ -24,7 +26,7 @@ use domain::{
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
 	payments::{PaymentApproval, PaymentDestination, PaymentEffect, PaymentEvent, PaymentId, PaymentOrder, PaymentReason, PaymentState, PaymentTerms},
-	users::UserId,
+	users::{UserId, mask_email},
 	withdrawals::WithdrawalId,
 };
 use sqlx::{PgConnection, PgPool, Row, postgres::PgRow};
@@ -32,10 +34,16 @@ use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
 use crate::{
-	infrastructure::outbox,
-	ports::payments::{
-		ApprovalSeat, ConsentAudit, ConsentDecision, ConsentInvitation, ConsentOutcome, ConsentView, DIGEST_BYTES, ExecutionOutcome, MAX_CODE_ATTEMPTS, PaymentFeed, PaymentFilter,
-		PaymentRepository, PaymentView, consent_not_found,
+	infrastructure::{
+		consilium_mailer::{MailSubject, enqueue},
+		outbox, withdrawals,
+	},
+	ports::{
+		governance_mail::{GovernanceMail, PaymentConsent},
+		payments::{
+			ApprovalSeat, ConsentAudit, ConsentDecision, ConsentInvitation, ConsentOutcome, ConsentView, DIGEST_BYTES, EndDetail, ExecutionOutcome, MAX_CODE_ATTEMPTS, PaymentFeed,
+			PaymentFilter, PaymentRepository, PaymentView, ReservationStatus, already_open, consent_not_found,
+		},
 	},
 };
 
@@ -263,6 +271,41 @@ async fn consilium_of(conn: &mut PgConnection, payment: Uuid) -> Result<Option<C
 	Ok(id.map(ConsiliumId::from_raw))
 }
 
+/// The receiving end's recognisable detail — an investor's mirrored mailbox, a product's
+/// title — or `None` for a singleton claim, an address, or a row that is not there (a
+/// product deregistered after the order was opened still has a label; it just has no title).
+/// Crate-visible so the consilium adapter states the same detail on the owners' mails.
+pub(crate) async fn detail_of(conn: &mut PgConnection, to: &PaymentDestination) -> Result<Option<EndDetail>, DomainError> {
+	Ok(match to.party() {
+		Some(Party::User(user)) => sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
+			.bind(user.raw())
+			.fetch_optional(&mut *conn)
+			.await
+			.map_err(repo_err)?
+			.map(EndDetail::Mailbox),
+		Some(Party::Service(service)) => sqlx::query_scalar::<_, String>("SELECT title FROM allocations WHERE service = $1")
+			.bind(service.as_str())
+			.fetch_optional(&mut *conn)
+			.await
+			.map_err(repo_err)?
+			.map(EndDetail::ProductTitle),
+		Some(Party::Piggybank | Party::Revenue) | None => None,
+	})
+}
+
+/// The destination as a MAIL states it: the canonical label, plus the recognisable detail
+/// when there is one. The label alone is what the digest binds; the detail is what keeps
+/// "investor 8f3e…" from being approved for the wrong person. A mailbox is masked here
+/// because this string goes to someone who is not its owner.
+pub(crate) fn mail_destination(terms: &PaymentTerms, detail: Option<&EndDetail>) -> String {
+	let label = terms.destination_label();
+	match detail {
+		Some(EndDetail::Mailbox(email)) => format!("{label} ({})", mask_email(email)),
+		Some(EndDetail::ProductTitle(title)) => format!("{label} ({title})"),
+		None => label,
+	}
+}
+
 async fn consent_of_payment(conn: &mut PgConnection, payment: Uuid) -> Result<Option<ConsentRow>, DomainError> {
 	sqlx::query(consent_of_payment_query!())
 		.bind(payment)
@@ -281,12 +324,60 @@ async fn view_of(conn: &mut PgConnection, order: PaymentOrder) -> Result<Payment
 	let initiator_email = email_of(conn, order.initiator()).await?;
 	let consilium_id = consilium_of(conn, order.id().raw()).await?;
 	let consent = consent_of_payment(conn, order.id().raw()).await?.as_ref().map(ConsentRow::view).transpose()?;
+	let destination_detail = detail_of(conn, order.terms().to()).await?;
 	Ok(PaymentView {
 		order,
 		initiator_email,
 		consilium_id,
 		consent,
+		destination_detail,
 	})
+}
+
+/// The `payment_approval` link, read under whatever lock the caller holds, so a quorum can
+/// only ever carry the order it was opened for.
+async fn require_linked(conn: &mut PgConnection, payment: PaymentId, consilium: ConsiliumId) -> Result<(), DomainError> {
+	match consilium_of(conn, payment.raw()).await? {
+		Some(linked) if linked == consilium => Ok(()),
+		Some(_) => Err(DomainError::Conflict("this consilium does not decide this payment".into())),
+		None => Err(DomainError::Conflict("this payment is not decided by a consilium".into())),
+	}
+}
+
+/// Reject a still-pending order on the caller's open transaction — the cascade of a
+/// consilium verdict that is not an approval. Crate-visible so the consilium adapter closes
+/// the order in the SAME transaction that records the quorum's refusal, expiry or
+/// withdrawal: an order left `pending` under a dead consilium would sit for the rest of its
+/// 72 hours looking answerable, and the sweeper would then expire what was in fact refused.
+///
+/// A no-op on an order that is already decided: the initiator's own withdrawal reaches the
+/// order first and the consilium second, and the second must not fail over the first.
+/// LOCK ORDER: the consilium row, then the order's — the only place the two nest, and
+/// always in this direction.
+pub(crate) async fn reject_on(conn: &mut PgConnection, id: PaymentId, at: i64) -> Result<PaymentOrder, DomainError> {
+	let mut order = locked(conn, id).await?;
+	if order.state().is_pending() {
+		order.reject(at)?;
+		persist(conn, &mut order).await?;
+	}
+	Ok(order)
+}
+
+/// Share-lock the consent subject's `users` row before the pins are read.
+///
+/// A revoke or a mailbox change is an UPDATE on `users`, held as a row lock until its
+/// transaction commits. A pin read that does not wait on that lock can see the OLD version,
+/// commit the effect, and be overtaken by a revocation that was already issued. `FOR SHARE`
+/// waits for the writer and reads what it wrote. Taken AFTER the order's lock, as every
+/// lock here is, so the `payments` row stays the first lock and the order total. A no-op
+/// for a consilium-decided order, which has no seat row to join.
+async fn lock_subject(conn: &mut PgConnection, payment: PaymentId) -> Result<(), DomainError> {
+	sqlx::query("SELECT 1 FROM users u JOIN payment_consent c ON c.subject_user_id = u.id WHERE c.payment_id = $1 FOR SHARE OF u")
+		.bind(payment.raw())
+		.execute(&mut *conn)
+		.await
+		.map_err(repo_err)?;
+	Ok(())
 }
 
 /// Load an order `FOR UPDATE` — the opening move of every transition here. The `payments` row
@@ -358,7 +449,7 @@ fn destination_columns(to: &PaymentDestination) -> (Option<String>, Option<Strin
 
 #[async_trait]
 impl PaymentRepository for PgPayments {
-	async fn open(&self, order: &mut PaymentOrder, seat: ApprovalSeat) -> Result<(), DomainError> {
+	async fn open(&self, order: &mut PaymentOrder, seat: ApprovalSeat, consent_url_base: &str) -> Result<(), DomainError> {
 		require_seat_matches(&seat, order.requirement())?;
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		// A payment spends the same claims a withdrawal or a subscription does. Skipping this
@@ -391,7 +482,7 @@ impl PaymentRepository for PgPayments {
 		{
 			// The partial unique index spoke: one open order per fund-owned source claim. A
 			// refusal, not a retry — the operator has a live request to finish or withdraw.
-			return Err(DomainError::Conflict("a payment is already open against this claim — close it before opening another".into()));
+			return Err(already_open());
 		}
 		inserted.map_err(repo_err)?;
 
@@ -425,6 +516,42 @@ impl PaymentRepository for PgPayments {
 				.execute(&mut *tx)
 				.await
 				.map_err(repo_err)?;
+
+				// THE INVITATION, IN THIS SAME TRANSACTION. An order that commits with no
+				// record of the mail asking its subject is the silent stall an unmailed
+				// consilium is: it looks open for 72h and was unanswerable from the first
+				// instant. The recipient is addressed by their id in the plane that OWNS
+				// identities — concierge refuses the mail unless that id is the payment's
+				// subject — and without the mirrored id there is no safe address at all.
+				let subject_concierge_id: Option<Uuid> = sqlx::query_scalar("SELECT concierge_user_id FROM users WHERE id = $1")
+					.bind(credential.subject.raw())
+					.fetch_optional(&mut *tx)
+					.await
+					.map_err(repo_err)?
+					.flatten();
+				let Some(subject_concierge_id) = subject_concierge_id else {
+					return Err(DomainError::Conflict(
+						"the investor whose consent this payment needs has no mirrored identity-plane id, so no consent mail could be addressed to them".into(),
+					));
+				};
+				let initiator_email = email_of(&mut tx, order.initiator()).await?;
+				let detail = detail_of(&mut tx, order.terms().to()).await?;
+				let mail = GovernanceMail::PaymentConsent(PaymentConsent {
+					payment_id: order.id().to_string(),
+					subject_user_id: subject_concierge_id.to_string(),
+					initiator_email,
+					tier: order.tier().as_str().to_owned(),
+					source: order.terms().source_label(),
+					destination: mail_destination(order.terms(), detail.as_ref()),
+					amount: order.terms().amount().to_decimal_string(),
+					reason: order.terms().reason().as_str().to_owned(),
+					payload_hash: order.payload_hash_hex(),
+					expires_at: order.expires_at(),
+					approval_url: format!("{}/{}", consent_url_base.trim_end_matches('/'), credential.token),
+					code: credential.code,
+				});
+				let key = format!("payment:{}:consent:{}", order.id(), credential.subject);
+				enqueue(&mut tx, MailSubject::Payment(order.id().raw()), credential.subject.raw(), &key, &mail).await?;
 			}
 		}
 
@@ -446,9 +573,19 @@ impl PaymentRepository for PgPayments {
 		Ok(Some(view_of(&mut conn, rehydrate(&row)?).await?))
 	}
 
-	async fn record_approval(&self, id: PaymentId, at: i64) -> Result<PaymentView, DomainError> {
+	async fn has_open_against(&self, source: &Party) -> Result<bool, DomainError> {
+		sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM payments WHERE from_kind = $1 AND from_id IS NOT DISTINCT FROM $2 AND state IN ('pending', 'approved'))")
+			.bind(source.kind_str())
+			.bind(source.id_str())
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)
+	}
+
+	async fn record_approval(&self, id: PaymentId, consilium: ConsiliumId, at: i64) -> Result<PaymentView, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let mut order = locked(&mut tx, id).await?;
+		require_linked(&mut tx, id, consilium).await?;
 		order.approve(at)?;
 		persist(&mut tx, &mut order).await?;
 		let view = view_of(&mut tx, order).await?;
@@ -458,9 +595,7 @@ impl PaymentRepository for PgPayments {
 
 	async fn record_rejection(&self, id: PaymentId, at: i64) -> Result<PaymentView, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let mut order = locked(&mut tx, id).await?;
-		order.reject(at)?;
-		persist(&mut tx, &mut order).await?;
+		let order = reject_on(&mut tx, id, at).await?;
 		let view = view_of(&mut tx, order).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(view)
@@ -502,7 +637,8 @@ impl PaymentRepository for PgPayments {
 			return Err(consent_not_found());
 		}
 		let initiator_email = email_of(&mut conn, order.initiator()).await?;
-		invitation_of(order, initiator_email, &seat, ConsentDecision::Pending)
+		let detail = detail_of(&mut conn, order.terms().to()).await?;
+		Ok(invitation_of(order, initiator_email, &seat, ConsentDecision::Pending, detail))
 	}
 
 	async fn submit(&self, token_hash: &[u8; DIGEST_BYTES], code: &str, decision: ConsentDecision, audit: &ConsentAudit, at: i64) -> Result<ConsentOutcome, DomainError> {
@@ -690,6 +826,24 @@ impl PaymentRepository for PgPayments {
 		Ok(ids.into_iter().map(PaymentId::from_raw).collect())
 	}
 
+	async fn reservation_status(&self, id: PaymentId, reserve_tid: u128) -> Result<ReservationStatus, DomainError> {
+		let applied: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM saga_steps WHERE tb_transfer_id = $1)")
+			.bind(&reserve_tid.to_be_bytes()[..])
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		if applied {
+			return Ok(ReservationStatus::Applied);
+		}
+		let parked: bool =
+			sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM outbox WHERE aggregate = 'payment' AND aggregate_id = $1 AND parked_at IS NOT NULL AND payload::jsonb ->> 'type' = 'reserved')")
+				.bind(id.raw())
+				.fetch_one(&self.pool)
+				.await
+				.map_err(repo_err)?;
+		Ok(if parked { ReservationStatus::Parked } else { ReservationStatus::Pending })
+	}
+
 	async fn record_execution(&self, id: PaymentId, outcome: ExecutionOutcome, at: i64) -> Result<PaymentView, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let mut order = locked(&mut tx, id).await?;
@@ -699,15 +853,45 @@ impl PaymentRepository for PgPayments {
 		// repeat naming an effect that already exists is the idempotent retry and must stay
 		// one. The failure is committed and then reported as an error, so a caller that
 		// only checks for `Ok` cannot mistake it for success.
-		if matches!(outcome, ExecutionOutcome::Executed(_))
+		if let ExecutionOutcome::Executed(effect) = outcome
 			&& order.state() == PaymentState::Approved
-			&& let Some(seat) = consent_of_payment(&mut tx, id.raw()).await?
-			&& let Some(why) = seat.invalidation()
 		{
-			order.mark_execution_failed(why.clone(), at)?;
-			persist(&mut tx, &mut order).await?;
-			tx.commit().await.map_err(repo_err)?;
-			return Err(DomainError::Conflict(why));
+			lock_subject(&mut tx, id).await?;
+			if let Some(seat) = consent_of_payment(&mut tx, id.raw()).await?
+				&& let Some(why) = seat.invalidation()
+			{
+				// THE L1 WINDOW. The execution path reads `invalidated` before it creates the
+				// withdrawal, but a revocation can land between that read and this lock; by
+				// then the withdrawal exists and, left alone, ships. Voiding it HERE, under the
+				// order's lock and in the failure's own transaction, is what closes the window
+				// — the one place two aggregates move together, because the alternative is
+				// money leaving under a consent that no longer stands. A payment's withdrawal
+				// is always created `Queued` (never dispatched on creation) precisely so that
+				// the void is possible here.
+				if let PaymentEffect::Withdrawal(withdrawal) = effect {
+					match withdrawals::cancel_on(&mut tx, withdrawal).await {
+						Ok(_) => {}
+						// Past `Queued` the broadcast may have landed and the cardinal rule
+						// forbids the void. The effect then EXISTS whatever the pins say, and
+						// the honest record is that it does; a failure written over a shipped
+						// withdrawal would be the lie that sticks. Logged at error so an
+						// operator sees the one case the pins could not stop.
+						Err(DomainError::Conflict(state)) => {
+							tracing::error!(payment_id = %id, %withdrawal, %why, "payments: the consent pins moved after the withdrawal was already dispatched ({state}); recording the effect that exists");
+							order.mark_executed(effect, at)?;
+							persist(&mut tx, &mut order).await?;
+							let view = view_of(&mut tx, order).await?;
+							tx.commit().await.map_err(repo_err)?;
+							return Ok(view);
+						}
+						Err(err) => return Err(err),
+					}
+				}
+				order.mark_execution_failed(why.clone(), at)?;
+				persist(&mut tx, &mut order).await?;
+				tx.commit().await.map_err(repo_err)?;
+				return Err(DomainError::Conflict(why));
+			}
 		}
 		match outcome {
 			ExecutionOutcome::Executed(effect) => order.mark_executed(effect, at)?,
@@ -757,7 +941,7 @@ impl PaymentFeed for PgPayments {
 		let ids: Vec<Uuid> = orders.iter().map(|order| order.id().raw()).collect();
 		let initiators: Vec<Uuid> = orders.iter().map(|order| order.initiator().raw()).collect();
 
-		let mut consilium_by_payment = std::collections::HashMap::new();
+		let mut consilium_by_payment = HashMap::new();
 		for row in &sqlx::query("SELECT payment_id, consilium_id FROM payment_approval WHERE payment_id = ANY($1)")
 			.bind(&ids)
 			.fetch_all(&mut *conn)
@@ -768,7 +952,7 @@ impl PaymentFeed for PgPayments {
 			consilium_by_payment.insert(payment, ConsiliumId::from_raw(row.try_get::<Uuid, _>("consilium_id").map_err(repo_err)?));
 		}
 
-		let mut consent_by_payment = std::collections::HashMap::new();
+		let mut consent_by_payment = HashMap::new();
 		for row in &sqlx::query(concat!(
 			"SELECT ",
 			consent_columns!(),
@@ -783,14 +967,36 @@ impl PaymentFeed for PgPayments {
 			consent_by_payment.insert(seat.payment_id, seat.view()?);
 		}
 
-		let mut email_by_user = std::collections::HashMap::new();
+		// One users read serves both the initiators' addresses and the receiving investors'
+		// (the destination detail); one allocations read serves the receiving products'.
+		let mut user_ids = initiators;
+		let mut services: Vec<String> = Vec::new();
+		for order in &orders {
+			match order.terms().to().party() {
+				Some(Party::User(user)) => user_ids.push(user.raw()),
+				Some(Party::Service(service)) => services.push(service.as_str().to_owned()),
+				Some(Party::Piggybank | Party::Revenue) | None => {}
+			}
+		}
+		let mut email_by_user = HashMap::new();
 		for row in &sqlx::query("SELECT id, email FROM users WHERE id = ANY($1)")
-			.bind(&initiators)
+			.bind(&user_ids)
 			.fetch_all(&mut *conn)
 			.await
 			.map_err(repo_err)?
 		{
 			email_by_user.insert(row.try_get::<Uuid, _>("id").map_err(repo_err)?, row.try_get::<String, _>("email").map_err(repo_err)?);
+		}
+		let mut title_by_service = HashMap::new();
+		if !services.is_empty() {
+			for row in &sqlx::query("SELECT service, title FROM allocations WHERE service = ANY($1)")
+				.bind(&services)
+				.fetch_all(&mut *conn)
+				.await
+				.map_err(repo_err)?
+			{
+				title_by_service.insert(row.try_get::<String, _>("service").map_err(repo_err)?, row.try_get::<String, _>("title").map_err(repo_err)?);
+			}
 		}
 
 		orders
@@ -801,10 +1007,16 @@ impl PaymentFeed for PgPayments {
 					.get(&order.initiator().raw())
 					.cloned()
 					.ok_or_else(|| DomainError::Repository(format!("payment initiator {} has no mirrored user row", order.initiator())))?;
+				let destination_detail = match order.terms().to().party() {
+					Some(Party::User(user)) => email_by_user.get(&user.raw()).cloned().map(EndDetail::Mailbox),
+					Some(Party::Service(service)) => title_by_service.get(service.as_str()).cloned().map(EndDetail::ProductTitle),
+					Some(Party::Piggybank | Party::Revenue) | None => None,
+				};
 				Ok(PaymentView {
 					consilium_id: consilium_by_payment.get(&id).copied(),
 					consent: consent_by_payment.remove(&id),
 					initiator_email,
+					destination_detail,
 					order,
 				})
 			})
@@ -823,8 +1035,8 @@ async fn order_of(conn: &mut PgConnection, id: Uuid) -> Result<PaymentOrder, Dom
 	rehydrate(&row)
 }
 
-fn invitation_of(order: PaymentOrder, initiator_email: String, seat: &ConsentRow, decision: ConsentDecision) -> Result<ConsentInvitation, DomainError> {
-	Ok(ConsentInvitation {
+fn invitation_of(order: PaymentOrder, initiator_email: String, seat: &ConsentRow, decision: ConsentDecision, destination_detail: Option<EndDetail>) -> ConsentInvitation {
+	ConsentInvitation {
 		payment_id: order.id(),
 		state: order.state(),
 		payload_hash: order.payload_hash_hex(),
@@ -834,7 +1046,8 @@ fn invitation_of(order: PaymentOrder, initiator_email: String, seat: &ConsentRow
 		subject_email: seat.email.clone(),
 		decision,
 		attempts_remaining: (MAX_CODE_ATTEMPTS - seat.attempts).max(0) as u32,
-	})
+		destination_detail,
+	}
 }
 
 pub(crate) fn digest(bytes: &[u8]) -> [u8; DIGEST_BYTES] {
