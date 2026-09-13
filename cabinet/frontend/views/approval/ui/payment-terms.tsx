@@ -12,7 +12,7 @@
 import { useT } from "@evinvest/i18n/react";
 import { Separator } from "@evinvest/uikit";
 
-import { tierLabel } from "@/entities/payment/lib/format";
+import { tierHint, tierLabel } from "@/entities/payment/lib/format";
 import { PaymentEndSummary } from "@/entities/payment/ui/payment-end";
 import type { ConsiliumPaymentTerms } from "@/shared/contracts/payments";
 import { hashPrefix } from "@/shared/lib/hash";
@@ -33,7 +33,22 @@ export function renderablePayment(terms: PaymentTerms | null | undefined): terms
   return Boolean(to.kind === "external" ? to.address?.trim() : to.label?.trim());
 }
 
-export function PaymentTermsBlock({ terms, payloadHash, reasonLabel }: { terms: PaymentTerms; payloadHash: string; reasonLabel: string }) {
+export function PaymentTermsBlock({
+  terms,
+  payloadHash,
+  reasonLabel,
+  tierAs = "label",
+}: {
+  terms: PaymentTerms;
+  payloadHash: string;
+  reasonLabel: string;
+  /**
+   * `label` names the tier as the console and the owners' room do; `hint` says what it
+   * means for the money instead. The consent page takes the hint: its reader is an
+   * investor, and "Internal" tells them nothing about whether their money leaves the ledger.
+   */
+  tierAs?: "label" | "hint";
+}) {
   const t = useT();
   const external = terms.destination.kind === "external";
   return (
@@ -71,7 +86,7 @@ export function PaymentTermsBlock({ terms, payloadHash, reasonLabel }: { terms: 
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <DetailRow label={t("approval.payment.tier")} value={tierLabel(terms.tier, t)} />
+        <DetailRow label={t("approval.payment.tier")} value={tierAs === "hint" ? tierHint(terms.tier, t) : tierLabel(terms.tier, t)} />
         <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
       </div>
       <p className="text-xs text-muted-foreground">{t("approval.payment.payloadHashHint")}</p>

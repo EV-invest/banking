@@ -47,6 +47,11 @@ export function tierLabel(tier: string, t: Translate): string {
   return KNOWN_TIERS.has(tier) ? t(`payment.tier.${tier}`) : tier;
 }
 
+/** What the tier means for the money, in a sentence — for a reader who is not an operator. */
+export function tierHint(tier: string, t: Translate): string {
+  return KNOWN_TIERS.has(tier) ? t(`payment.tier.hint.${tier}`) : tier;
+}
+
 export function requirementLabel(requirement: string, t: Translate): string {
   return KNOWN_REQUIREMENTS.has(requirement) ? t(`payment.requirement.${requirement}`) : requirement;
 }

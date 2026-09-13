@@ -79,7 +79,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
           <CardDescription className="text-balance">{t("consent.lead", { initiator: invitation.initiator_email })}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          <PaymentTermsBlock terms={invitation} payloadHash={invitation.payload_hash} reasonLabel={t("consent.reasonLabel", { initiator: invitation.initiator_email })} />
+          <PaymentTermsBlock terms={invitation} payloadHash={invitation.payload_hash} reasonLabel={t("consent.reasonLabel", { initiator: invitation.initiator_email })} tierAs="hint" />
           <div className="flex flex-col gap-2.5">
             <DetailRow label={t("consent.askedBy")} value={invitation.initiator_email} />
             <DetailRow label={t("consent.yourMoney")} value={invitation.subject_email} />
