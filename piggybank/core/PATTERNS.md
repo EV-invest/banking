@@ -136,7 +136,9 @@ above, which is a different thing entirely: a product's listing, not a holding).
 **Units ledger (`Ledger::Share`, `= 3`).** `UserShares(service, user)` (60, debit-normal,
 `shares:<svc>:<uuid>`) is a holder's units; `SharesOutstanding(service)` (61, credit-normal,
 `shares_outstanding:<svc>`) is the fund's units in circulation. Per-service invariant
-`SharesOutstanding(svc) == Σ_user UserShares(svc, user)`, by construction. **Mint**
+`SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc) + CompanyShares(svc)`,
+by construction (the two extra holders are introduced under [Fees](#fees--2-and-20-domainfees-feesservice-feesweeper)
+and [In-kind issuance](#in-kind-issuance--the-companys-stake-domainissuance-allocationsserviceissueunits)). **Mint**
 `Dr UserShares / Cr SharesOutstanding`; **burn** `Dr SharesOutstanding / Cr UserShares`.
 A burn that exceeds the holder's minted units is rejected **by TigerBeetle's flag — even as
 a pending reserve** (this is the over-redeem backstop; the PG row-lock only serializes).
@@ -199,6 +201,64 @@ overstated basis. The auto-settle inside `Redeem` degrades that `Conflict` to re
 returning the redemption's actual state (queued, or a raced terminal) instead of an error. The
 per-investor `high_water_mark` column reserved here is now live — see [Fees](#fees--2-and-20-domainfees-feesservice-feesweeper).
 
+## In-kind issuance — the company's stake (`domain::issuance`, `AllocationsService.IssueUnits`)
+
+A subscription is cash-for-units. It has no honest shape for a product registered against
+an asset that **already has owners**: `service_arb` is valued at $16 250 with 80 % of the
+units the company's and 20 % a named investor's, and nobody wires cash into a fund claim
+to make that true. `IssueUnits` (`AllocationManage`) is the second supply path: a mint
+**with no cash leg**, to a `UnitHolder` that is a user or **the company itself**, at a
+cost basis the operator states (`units × NAV` when they do not — the same figure a
+subscription for those units would have cost at the mark). It lives on the registry
+service, not `FundsService`, because it is a decision about who holds what, made by the
+operator who sizes the product, not an investor dealing at NAV.
+
+**A third unit holder.** `CompanyShares(service)` (63, debit-normal,
+`shares_company:<svc>`) is a holder exactly like a user or the fee account, so the
+Share-ledger invariant becomes `SharesOutstanding == Σ UserShares + FeeShares +
+CompanyShares` and the issued units count against the allocation's cap as any mint does.
+The company is a holder in its own right rather than a user with a well-known id: it has no
+`users` row, no `fund_positions` projection and no P&L, and a synthetic user would drag
+every investor-facing read into special-casing one UUID. `ListUnitHolders` reports the
+split — `company_units`, `fee_units`, `investor_units = outstanding − company − fee` —
+read straight from TB; `FundNav.company_units` shows an investor the company's share on
+the card. The mint posts under its own `TransferCode::UnitIssue` (46), not `ShareMint`,
+so supply growth the fund's cash never paid for is distinguishable from a subscription's
+on the Share ledger alone.
+
+**Same path as a subscription, minus the cash.** The use case (`application::issuance`)
+resolves the allocation (registered in **any** state — a product is normally seeded before
+it opens, and a closed one may still need its cap table corrected; access is not consulted,
+this is an operator command), requires a user holder to **exist** (units minted to a UUID
+nobody can sign in as are units nobody can redeem — the DB reference on
+`unit_issuances.holder_id` backs the same rule), prices at the fresh dealing NAV (the mark
+is recorded on the row and blended into the holder's high-water mark, so a stale one is
+refused as it is for a subscription), and runs `ensure_capacity` against the ledger's
+issued supply — an operator sizing a product below what they mean to issue raises the cap
+first. The control-plane row (`unit_issuances`, migration `0031`) and the `Issued` event
+commit together; the relay posts `Dr <holder shares> / Cr SharesOutstanding` with a
+transfer id derived from the **issuance id** (`tid(issuance, "issue:mint")`), then — after
+the leg lands, never on the open path — stamps the row `queued → applied` and, for a user
+holder, adds the cost basis to `fund_positions` under the same per-event `saga_steps`
+marker discipline as the subscribe projection (`leg = 100`, `role = 'issue_applied'`). A
+parked mint therefore leaves a `queued` row and no basis, never a row claiming units it
+did not get.
+
+**Idempotent by an operator-supplied key**, unique per service (`1..64` chars): the
+console generates one per form submission and re-sends the same one on a timeout, so a
+double click lands one mint. The use case reads the key **before** pricing (a retry must
+succeed after the mark went stale); the adapter's `INSERT … ON CONFLICT DO NOTHING` settles
+the concurrent case and hands the loser the winner's row, and the event is drained only
+when the insert landed. A repeat asking for the same holder and units returns the row as it
+stands now; the same key for a **different** request is `Conflict` → ALREADY_EXISTS — the
+retry is what the key exists for, the reuse is the mistake it has to catch.
+
+**The service_arb recipe.** Register → `IssueUnits` 20 % to the investor and 80 % to the
+company at the seed NAV with the agreed bases → `PostFundValuation` at the asset's value
+(NAV needs units outstanding, so the issuance comes first) → `SetAllocationUnitCap` to
+exactly the issued supply (`remaining_capacity == 0`, so no subscription and no further
+issuance fits) → open. The investor can still redeem: every gate here keeps the exit open.
+
 ## Fees — "2 and 20" (`domain::fees`, `FeesService`, `FeeSweeper`)
 
 A fund charges two things, and they answer different questions. **Management** (2% p.a.)
@@ -251,7 +311,8 @@ properties follow, and each is pinned by a test in
 - **Nobody else pays.** `SharesOutstanding` does not move (a transfer *between holders*,
   not a mint), so NAV per unit is unchanged. This is what makes the per-investor mark
   honest rather than a dilution everyone shares. The Share-ledger invariant becomes
-  `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)`.
+  `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)` (plus
+  `CompanyShares(svc)` once the company holds an in-kind stake — see above).
 
 What cannot be collected — the holder's units are locked by a queued redemption, or the
 charge floors below one base unit of share — is carried as `fund_positions.fee_debt` and
@@ -603,6 +664,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ **not read-only** ∧ (user source) owner not frozen ∧ `kyc_level ≥ 1` — fail-closed, no `force` |
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
+| `IssueUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | (issue) allocation registered ∧ user holder exists ∧ fresh NAV ∧ issued + units ≤ cap; idempotent by `(service, idempotency_key)` |
 | `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ (settle) position projection tracks ≥ the redeemed units |
 | `GetUserBalance` | operator | `require_permission` (RBAC matrix); resolves the CONCIERGE id first via the bridge mirror (`users.concierge_user_id`), then the banking id; unknown ⇒ `NOT_FOUND` | — |
 | `ListParkedEvents` | operator | `require_permission` (RBAC matrix) | — |
@@ -766,7 +828,13 @@ nothing);
 `piggybank/core/tests/allocation_registry.rs` covers the gate against real Postgres +
 TigerBeetle (an unregistered service refused *before* any money moves, a draft taking
 nothing, a closed allocation still redeeming, double registration as a conflict, the
-catalog's listed/unlisted split, and allocation events staying out of the outbox);
+catalog's listed/unlisted split, and allocation events staying out of the outbox), and the
+in-kind issuance (units landing on a user and on the company with no cash leg and
+`ListUnitHolders` / `FundNav.company_units` reporting the split, the idempotency key
+returning the same row and minting once while refusing a different request, the
+defaulted `units × NAV` basis, the registry/holder/cap gates, the 20/80 recipe ending at
+`remaining_capacity == 0` with the investor still able to redeem, and the event reaching
+the relay as its own kind);
 `piggybank/core/tests/balance_allocations.rs` and
 `piggybank/core/tests/wallet_withdrawals.rs` hit **real** Postgres + TigerBeetle
 (deposit idempotency, the non-negative backstop, transfer-id idempotency; the Share-ledger

@@ -54,6 +54,9 @@ pub struct FundNavView {
 	pub aum: Option<Usdt>,
 	/// The **settled** supply — the denominator NAV is derived against.
 	pub units_outstanding: Shares,
+	/// Of `units_outstanding`, the company's own in-kind stake. Shown to an investor so
+	/// the share of the product that is not theirs and not the market's is on the card.
+	pub company_units: Shares,
 	/// The allocation's authorised unit supply.
 	pub unit_cap: Shares,
 	/// Units still issuable, measured the way [`subscribe`] measures them (settled plus
@@ -149,7 +152,7 @@ pub async fn subscribe(ports: &FundPorts<'_>, subscriptions: &dyn SubscriptionRe
 /// to two subscriptions. Pending *burns* (`locked`) are deliberately not subtracted —
 /// those units still exist until the burn settles, and a queued redemption that is later
 /// cancelled would otherwise have briefly re-opened capacity that was never free.
-async fn issued_units(ledger: &dyn Ledger, service: &ServiceId) -> Result<Shares, DomainError> {
+pub(crate) async fn issued_units(ledger: &dyn Ledger, service: &ServiceId) -> Result<Shares, DomainError> {
 	let balance = ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?;
 	Ok(Shares::from_base_units(balance.posted.saturating_add(balance.pending)))
 }
@@ -282,6 +285,7 @@ pub async fn fund_nav_view(allocations: &dyn AllocationRegistry, nav: &dyn NavMa
 	let allocation = allocations_app::get(allocations, &service).await?;
 	let balance = ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?;
 	let units_outstanding = Shares::from_base_units(balance.posted);
+	let company_units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::CompanyShares(service.clone())).await?.posted);
 	let remaining_capacity = allocation.remaining_capacity(Shares::from_base_units(balance.posted.saturating_add(balance.pending)));
 	let (unit_cap, current) = (allocation.unit_cap(), nav.current(&service).await?);
 	Ok(match current {
@@ -290,6 +294,7 @@ pub async fn fund_nav_view(allocations: &dyn AllocationRegistry, nav: &dyn NavMa
 			nav: v.nav,
 			aum: Some(v.aum),
 			units_outstanding,
+			company_units,
 			unit_cap,
 			remaining_capacity,
 			posted_at: v.posted_at_unix,
@@ -300,6 +305,7 @@ pub async fn fund_nav_view(allocations: &dyn AllocationRegistry, nav: &dyn NavMa
 			nav: Nav::SEED,
 			aum: None,
 			units_outstanding,
+			company_units,
 			unit_cap,
 			remaining_capacity,
 			posted_at: 0,

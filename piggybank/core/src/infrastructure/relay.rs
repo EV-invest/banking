@@ -37,6 +37,7 @@ use std::{sync::Arc, time::Duration};
 use domain::{
 	balance::{LedgerAccountKey, LedgerEvent, TransferCode},
 	fees::FeeEvent,
+	issuance::{IssuanceEvent, UnitHolder},
 	money::Usdt,
 	redemptions::RedemptionEvent,
 	subscriptions::SubscriptionEvent,
@@ -80,6 +81,12 @@ const CLEARING_VOID_CANCEL: &[u8] = b"withdraw:clearing:void:cancel";
 const SUBSCRIBE_CASH: &[u8] = b"subscribe:cash";
 const SUBSCRIBE_MINT: &[u8] = b"subscribe:mint";
 
+/// Salt for an in-kind issuance's single posted leg, the mint `Dr <holder shares> / Cr
+/// shares-outstanding`. Derived from the issuance id (not the event id) so an operator
+/// can recompute the transfer from the row alone when reconciling supply against the
+/// issuance table.
+const ISSUE_MINT: &[u8] = b"issue:mint";
+
 /// Salts for a redemption's saga: the reservation locks the units as a pending burn;
 /// settle posts the burn and pays the cash out of the fund's claim; fail/cancel void the
 /// burn (returning the units). A completion references the reservation's id as `pending_id`.
@@ -112,6 +119,8 @@ const OUTBOX_LOCK_KEY: i64 = 0x4556_424b_4f42_585f_u64 as i64;
 /// Salt deriving the subscription projection marker's id, distinct from any TB transfer salt
 /// so the `saga_steps.tb_transfer_id` unique constraint never aliases a real transfer.
 const SUBSCRIBE_POSITION: &[u8] = b"subscribe:position";
+/// The same, for an issuance's `applied` stamp + cost-basis projection.
+const ISSUE_APPLIED: &[u8] = b"issue:applied";
 /// The relay task: drains the outbox to the ledger + custody. Cloneable handles
 /// (`pool`, `ledger`, `custody`, `notify`) so command handlers can `notify` it to
 /// dispatch promptly.
@@ -495,8 +504,74 @@ impl Relay {
 		{
 			return Outcome::Retry(format!("subscribe cost-basis projection: {err}"));
 		}
+		// An issuance's `applied` stamp (and, for a user holder, its cost-basis projection)
+		// follows the same rule: written here, after the mint posted, never on the open
+		// path — a parked mint must leave the row `queued`, not claiming units it never got.
+		if row.kind == "issuances"
+			&& let Err(err) = project_issuance(&self.pool, row).await
+		{
+			return Outcome::Retry(format!("issuance applied projection: {err}"));
+		}
 		Outcome::Done
 	}
+}
+
+/// Stamp an issuance `applied` and, when the holder is a user, add its cost basis to
+/// their `fund_positions` projection — idempotently, under the same per-event
+/// `saga_steps` marker discipline as [`project_subscription`], in one transaction. The
+/// projection carries the issuance's `nav` as the high-water mark blend, exactly as a
+/// subscription at that NAV would: an investor handed units in kind is measured for
+/// performance fees from the price they were handed them at. The company holder gets no
+/// projection — there is no investor to report P&L or charge fees to.
+async fn project_issuance(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error> {
+	const PROJECTION_LEG: i32 = 100;
+	let IssuanceEvent::Issued {
+		holder,
+		service,
+		units,
+		nav,
+		cost_basis,
+		..
+	} = serde_json::from_str(&row.payload).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+	let marker_id = tid(row.aggregate_id, ISSUE_APPLIED);
+	let mut tx = pool.begin().await?;
+	let marked = sqlx::query("INSERT INTO saga_steps (event_id, leg, role, tb_transfer_id) VALUES ($1, $2, 'issue_applied', $3) ON CONFLICT (event_id, leg) DO NOTHING")
+		.bind(row.event_id)
+		.bind(PROJECTION_LEG)
+		.bind(&marker_id.to_be_bytes()[..])
+		.execute(&mut *tx)
+		.await?
+		.rows_affected();
+	if marked == 1 {
+		sqlx::query("UPDATE unit_issuances SET state = 'applied', applied_at = now() WHERE id = $1 AND state = 'queued'")
+			.bind(row.aggregate_id)
+			.execute(&mut *tx)
+			.await?;
+		if let UnitHolder::User(user) = holder {
+			// Same obligation as the subscribe projection: settle what the old basis
+			// accrued before moving it (see [`super::fee_accrual`]).
+			fee_accrual::carry_accrual(&mut tx, user.raw(), service.as_str(), now_unix_i64())
+				.await
+				.map_err(|err| sqlx::Error::Protocol(format!("carry fee accrual before issuance basis change: {err}")))?;
+			sqlx::query(
+				"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
+				 ON CONFLICT (user_id, service) DO UPDATE SET \
+				 cost_basis = (fund_positions.cost_basis::numeric + EXCLUDED.cost_basis::numeric)::text, \
+				 units = (fund_positions.units::numeric + EXCLUDED.units::numeric)::text, \
+				 high_water_mark = GREATEST(fund_positions.high_water_mark::numeric, EXCLUDED.high_water_mark::numeric)::text, \
+				 updated_at = now()",
+			)
+			.bind(user.raw())
+			.bind(service.as_str())
+			.bind(cost_basis.base_units().to_string())
+			.bind(units.base_units().to_string())
+			.bind(nav.base_units().to_string())
+			.execute(&mut *tx)
+			.await?;
+		}
+	}
+	tx.commit().await?;
+	Ok(())
 }
 
 /// Apply a settled subscription's cost-basis projection (`fund_positions.cost_basis +=
@@ -637,6 +712,10 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 			let event: FeeEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
 			Ok(plan_fee(event, row.aggregate_id, event_tid, reference))
 		}
+		"issuances" => {
+			let event: IssuanceEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
+			Ok(vec![plan_issuance(event, row.aggregate_id, reference)])
+		}
 		// A non-money event reached the outbox (shouldn't happen) — a benign no-op.
 		_ => Ok(Vec::new()),
 	}
@@ -704,6 +783,28 @@ fn plan_subscription(event: SubscriptionEvent, aggregate_id: Uuid, reference: u1
 			}),
 		},
 	]
+}
+
+/// An in-kind issuance is a subscription's mint leg with no cash leg in front of it:
+/// one posted transfer `Dr <holder shares> / Cr shares-outstanding`, under its own
+/// [`TransferCode::UnitIssue`] so supply growth the fund's cash never paid for is
+/// distinguishable from a subscription's on the Share ledger alone. The mint cannot
+/// fail for funds (both accounts are supply we control), so the only park is a genuine
+/// conflict.
+fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp {
+	let IssuanceEvent::Issued { holder, service, units, .. } = event;
+	PlannedOp {
+		role: "issue_mint",
+		transfer_id: tid(aggregate_id, ISSUE_MINT),
+		action: LedgerAction::Post(LedgerTransfer {
+			id: tid(aggregate_id, ISSUE_MINT),
+			debit: holder.shares_key(&service),
+			credit: LedgerAccountKey::SharesOutstanding(service),
+			amount: units.base_units(),
+			code: TransferCode::UnitIssue,
+			reference,
+		}),
+	}
 }
 
 /// A redemption's saga in the ledger (accept-and-queue, settle-time priced):

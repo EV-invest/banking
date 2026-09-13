@@ -15,25 +15,28 @@ use domain::{
 	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party, ServiceId},
 	error::DomainError,
-	money::{Network, Shares, TxRef, Usdt},
+	issuance::{IdempotencyKey, IssuanceState, UnitHolder},
+	money::{Nav, Network, Shares, TxRef, Usdt},
 	users::{Email, UserId},
 };
 use piggybank_core::{
-	application::{allocations as allocations_app, balance as balance_app, funds as funds_app},
+	application::{allocations as allocations_app, balance as balance_app, funds as funds_app, issuance as issuance_app},
 	infrastructure::{
 		allocations::PgAllocations,
 		custody::StubCustody,
 		db,
 		deposits::PgDeposits,
+		issuance::PgUnitIssuances,
 		ledger::{self, TbLedger},
 		nav::PgNav,
+		positions::PgFundPositions,
 		redemptions::PgRedemptions,
 		relay::Relay,
 		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
 		users::PgUsers,
 	},
-	ports::{AllocationRegistry, UserRepository, ledger::Ledger},
+	ports::{AllocationRegistry, FundPositionReader, UnitIssuanceRepository, UserRepository, issuance::UnitIssuanceRecord, ledger::Ledger},
 };
 use sqlx::{
 	AssertSqlSafe, PgPool,
@@ -48,6 +51,8 @@ struct Harness {
 	users: PgUsers,
 	subs: PgSubscriptions,
 	reds: PgRedemptions,
+	issuances: PgUnitIssuances,
+	positions: PgFundPositions,
 	nav: PgNav,
 	deposits: PgDeposits,
 	ledger: Arc<dyn Ledger>,
@@ -75,6 +80,8 @@ async fn harness() -> Option<Harness> {
 		users: PgUsers::new(pool.clone()),
 		subs: PgSubscriptions::new(pool.clone()),
 		reds: PgRedemptions::new(pool.clone()),
+		issuances: PgUnitIssuances::new(pool.clone()),
+		positions: PgFundPositions::new(pool.clone()),
 		nav: PgNav::new(pool.clone()),
 		deposits: PgDeposits::new(pool.clone()),
 		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
@@ -146,6 +153,28 @@ async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 
 async fn subscribe(h: &Harness, user: UserId, service: &ServiceId, amount: &str) -> Result<(), domain::error::DomainError> {
 	funds_app::subscribe(&fund_ports(h), &h.subs, user, service.clone(), usdt(amount), now_unix()).await.map(|_| ())
+}
+
+/// An operator's in-kind mint through the use case, keyed by `key`.
+async fn issue(h: &Harness, service: &ServiceId, holder: UnitHolder, units: &str, cost_basis: Option<&str>, key: &str) -> Result<UnitIssuanceRecord, DomainError> {
+	issuance_app::issue_units(
+		&fund_ports(h),
+		&h.issuances,
+		&h.users,
+		issuance_app::IssueUnitsRequest {
+			service: service.clone(),
+			holder,
+			units: shares(units),
+			cost_basis: cost_basis.map(usdt),
+			idempotency_key: IdempotencyKey::parse(key).unwrap(),
+		},
+		now_unix(),
+	)
+	.await
+}
+
+async fn units_of(h: &Harness, key: LedgerAccountKey) -> Shares {
+	Shares::from_base_units(h.ledger.balance(&key).await.unwrap().posted)
 }
 
 #[tokio::test]
@@ -389,6 +418,201 @@ async fn the_cap_defaults_on_registration_persists_and_is_reported_with_the_nav(
 	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), now_unix()).await.unwrap();
 	assert_eq!(view.unit_cap, shares("1000"));
 	assert_eq!(view.remaining_capacity, shares("1000"), "nothing issued yet, so the whole cap is available");
+}
+
+// ── in-kind issuance ────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn units_issued_in_kind_land_on_the_holder_and_in_the_supply_with_no_cash_leg() {
+	// The service_arb shape: 20% to a named investor, 80% to the company, and not a cent
+	// of cash behind either — the product is registered against an asset they already own.
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	let investor = provisioned_user(&h).await;
+	register(&h, &service).await;
+
+	let to_investor = issue(&h, &service, UnitHolder::User(investor), "3250", Some("3250"), "investor").await.unwrap();
+	let to_company = issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "company").await.unwrap();
+	assert_eq!(to_investor.issuance.state(), IssuanceState::Queued, "recorded, not yet on the ledger");
+	assert!(to_investor.applied_at.is_none());
+	h.relay.drain().await;
+
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), investor)).await, shares("3250"));
+	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, shares("13000"));
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await,
+		shares("16250"),
+		"supply is the sum of both holders"
+	);
+	// No cash moved: the fund's claim is untouched and the investor spent nothing.
+	assert_eq!(
+		Usdt::from_base_units(h.ledger.balance(&LedgerAccountKey::ServiceClaim(service.clone())).await.unwrap().posted),
+		Usdt::ZERO
+	);
+	assert_eq!(Usdt::from_base_units(h.ledger.balance(&LedgerAccountKey::UserClaim(investor)).await.unwrap().posted), Usdt::ZERO);
+
+	// The relay stamped both rows applied once the mint posted — never before.
+	for record in [&to_investor, &to_company] {
+		let applied = h.issuances.find_by_id(record.issuance.id()).await.unwrap().unwrap();
+		assert_eq!(applied.issuance.state(), IssuanceState::Applied);
+		assert!(applied.applied_at.is_some());
+	}
+	// The investor's projection carries the stated basis; the company has none.
+	let position = h.positions.find(investor, &service).await.unwrap().expect("a position for the investor");
+	assert_eq!(position.cost_basis, usdt("3250"));
+	assert_eq!(position.high_water_mark, Nav::SEED, "issued at the seed NAV, so the mark is 1.0");
+
+	// The cap table the operator reads before opening the product.
+	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), service.clone()).await.unwrap();
+	assert_eq!(holders.units_outstanding, shares("16250"));
+	assert_eq!(holders.company_units, shares("13000"));
+	assert_eq!(holders.fee_units, Shares::ZERO);
+	assert_eq!(holders.investor_units, shares("3250"));
+	// And what the investor's own screen shows of the company's share.
+	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), now_unix()).await.unwrap();
+	assert_eq!(view.company_units, shares("13000"));
+	assert_eq!(view.units_outstanding, shares("16250"));
+}
+
+#[tokio::test]
+async fn a_repeated_idempotency_key_returns_the_same_issuance_and_mints_once() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+
+	let first = issue(&h, &service, UnitHolder::Company, "100", None, "retry-me").await.unwrap();
+	h.relay.drain().await;
+	// The console re-sends after a timeout: same key, same request — same row, no second mint.
+	let again = issue(&h, &service, UnitHolder::Company, "100", None, "retry-me").await.unwrap();
+	assert_eq!(again.issuance.id(), first.issuance.id());
+	assert_eq!(again.issuance.state(), IssuanceState::Applied, "the repeat reads the row as it stands now");
+	h.relay.drain().await;
+	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, shares("100"), "one mint, not two");
+	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("100"));
+
+	// The same key for a DIFFERENT request is the mistake the key exists to catch.
+	let err = issue(&h, &service, UnitHolder::Company, "101", None, "retry-me").await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
+	// Keys are per product: another service may reuse the string freely.
+	let other = unique_service();
+	register(&h, &other).await;
+	issue(&h, &other, UnitHolder::Company, "5", None, "retry-me").await.unwrap();
+}
+
+#[tokio::test]
+async fn an_issuance_defaults_its_cost_basis_to_units_times_nav() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	let investor = provisioned_user(&h).await;
+	register(&h, &service).await;
+	// Seed the supply so a valuation can be posted, then mark the fund at NAV 1.25.
+	issue(&h, &service, UnitHolder::Company, "800", Some("0"), "seed").await.unwrap();
+	h.relay.drain().await;
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1000"), "itest", false)
+		.await
+		.unwrap();
+
+	let record = issue(&h, &service, UnitHolder::User(investor), "200", None, "at-mark").await.unwrap();
+	assert_eq!(record.issuance.nav(), Nav::parse_decimal("1.25").unwrap());
+	assert_eq!(record.issuance.cost_basis(), usdt("250"), "200 units at 1.25");
+	h.relay.drain().await;
+	let position = h.positions.find(investor, &service).await.unwrap().unwrap();
+	assert_eq!(position.cost_basis, usdt("250"));
+	assert_eq!(position.high_water_mark, Nav::parse_decimal("1.25").unwrap());
+	// The company's explicit zero basis was taken as given.
+	let seed = h.issuances.find_by_key(&service, &IdempotencyKey::parse("seed").unwrap()).await.unwrap().unwrap();
+	assert_eq!(seed.issuance.cost_basis(), Usdt::ZERO);
+}
+
+#[tokio::test]
+async fn an_issuance_is_gated_by_the_registry_the_holder_and_the_cap() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	let investor = provisioned_user(&h).await;
+
+	// Unregistered: refused before the ledger, like a subscription.
+	let err = issue(&h, &service, UnitHolder::Company, "10", None, "unregistered").await.unwrap_err();
+	assert!(matches!(err, DomainError::NotFound { entity: "allocation", .. }), "got {err:?}");
+
+	// Registered in `draft` is enough — a product is normally seeded before it opens.
+	register(&h, &service).await;
+	issue(&h, &service, UnitHolder::Company, "10", None, "draft-ok").await.unwrap();
+
+	// A user nobody can sign in as is refused: units minted to them could never be redeemed.
+	let err = issue(&h, &service, UnitHolder::User(UserId::new()), "10", None, "nobody").await.unwrap_err();
+	assert!(matches!(err, DomainError::NotFound { entity: "user", .. }), "got {err:?}");
+	issue(&h, &service, UnitHolder::User(investor), "10", None, "somebody").await.unwrap();
+	h.relay.drain().await;
+
+	// The cap is the same gate a subscription runs, in-flight mints included: 20 issued
+	// against a cap of 25 leaves room for 5, not 6.
+	h.allocations.set_unit_cap(&service, shares("25")).await.unwrap();
+	let err = issue(&h, &service, UnitHolder::Company, "6", None, "over").await.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("unit cap")), "got {err:?}");
+	issue(&h, &service, UnitHolder::Company, "5", None, "fits").await.unwrap();
+	h.relay.drain().await;
+	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("25"));
+	// The refused issuance left no row behind to retry into.
+	assert!(h.issuances.find_by_key(&service, &IdempotencyKey::parse("over").unwrap()).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn capping_at_the_issued_supply_closes_the_product_to_further_units() {
+	// The service_arb registration end to end: 20/80 issued, then the cap set to exactly
+	// what was issued, so the product is fully subscribed and no one can buy in — not an
+	// investor, and not another issuance.
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	let investor = provisioned_user(&h).await;
+	register(&h, &service).await;
+	issue(&h, &service, UnitHolder::User(investor), "3250", Some("3250"), "investor").await.unwrap();
+	issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "company").await.unwrap();
+	h.relay.drain().await;
+
+	h.allocations.set_unit_cap(&service, shares("16250")).await.unwrap();
+	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), now_unix()).await.unwrap();
+	assert_eq!(view.remaining_capacity, Shares::ZERO, "cap == issued means nothing is left");
+	assert_eq!(view.company_units, shares("13000"));
+
+	// Opened to everyone, and still no subscription fits.
+	open_to_everyone(&h, &service).await;
+	let buyer = UserId::new();
+	fund_user(&h, buyer, "1").await;
+	let err = subscribe(&h, buyer, &service, "1").await.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("unit cap")), "got {err:?}");
+	assert!(issue(&h, &service, UnitHolder::Company, "1", None, "one-more").await.is_err());
+
+	// The asymmetry every gate here has: the investor still gets out.
+	funds_app::request_redemption(&fund_ports(&h), &h.reds, investor, service.clone(), shares("3250"), now_unix())
+		.await
+		.expect("a fully subscribed product must never block a redemption");
+}
+
+#[tokio::test]
+async fn an_issuance_is_logged_and_reaches_the_relay_as_its_own_kind() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+	let record = issue(&h, &service, UnitHolder::Company, "1", None, "logged").await.unwrap();
+	let id = record.issuance.id().raw();
+
+	let (logged, relayed): (i64, i64) = sqlx::query_as(
+		"SELECT (SELECT COUNT(*) FROM event_log WHERE aggregate = 'unit_issuance' AND aggregate_id = $1), \
+		 (SELECT COUNT(*) FROM outbox WHERE aggregate = 'unit_issuance' AND aggregate_id = $1 AND kind = 'issuances')",
+	)
+	.bind(id)
+	.fetch_one(&h.pool)
+	.await
+	.unwrap();
+	assert_eq!(logged, 1, "the issuance is an audit fact");
+	assert_eq!(relayed, 1, "and, unlike a registry event, a money move the relay must post");
+	h.relay.drain().await;
+	let dispatched: bool = sqlx::query_scalar("SELECT dispatched_at IS NOT NULL FROM outbox WHERE aggregate_id = $1")
+		.bind(id)
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	assert!(dispatched, "the relay drained it rather than parking an unknown kind");
 }
 
 #[tokio::test]
