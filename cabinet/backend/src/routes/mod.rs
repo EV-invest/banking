@@ -5,6 +5,7 @@ pub mod governance_ws;
 pub mod identity;
 pub mod money;
 pub mod notifications;
+pub mod payments;
 pub mod platform;
 pub mod system;
 
@@ -125,6 +126,11 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/cabinet/read-only", post(admin::set_read_only))
 		.route("/api/admin/cabinet/announcement", post(admin::set_announcement))
 		.route("/api/admin/cabinet/flag", post(admin::set_flag))
+		// Payments — an order between two named ends. Money plane, Admin|Owner; the plane
+		// seats the one approval it needs (owner consilium or subject consent) on open.
+		.route("/api/admin/payments", get(payments::list).post(payments::open))
+		.route("/api/admin/payments/{id}", get(payments::get))
+		.route("/api/admin/payments/{id}/cancel", post(payments::cancel))
 		// Consilium — the fund's own money leaving, gated on a quorum of owners. Money
 		// plane: the tally is computed and verified where the money is.
 		.route("/api/consilium", get(consilium::list))

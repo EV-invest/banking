@@ -398,6 +398,8 @@ mod route_tests {
 			("GET", "/api/owners/removals"),
 			("GET", "/api/owners/admissions"),
 			("GET", "/api/owners/proposals"),
+			("GET", "/api/admin/payments"),
+			("GET", "/api/admin/payments/p-1"),
 		];
 		for (method, uri) in reads {
 			let (status, _) = send(method, uri, None).await;
@@ -425,6 +427,11 @@ mod route_tests {
 			("/api/owners/proposals/p-1/vote", r#"{"vote":"for"}"#),
 			("/api/owners/proposals/p-1/cancel", "{}"),
 			("/api/owners/resign", r#"{"confirm_email":"ada@example.com"}"#),
+			(
+				"/api/admin/payments",
+				r#"{"source":{"kind":"piggybank","id":""},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10","reason":"rent"}"#,
+			),
+			("/api/admin/payments/p-1/cancel", "{}"),
 		];
 		for (uri, body) in mutations {
 			let (status, _) = send("POST", uri, Some(body)).await;
