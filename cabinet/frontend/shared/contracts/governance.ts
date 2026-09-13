@@ -22,10 +22,16 @@
 // label the states they know and fall back to the wire value, which is legible even when it
 // is new.
 
+import type { ConsiliumPaymentTerms } from "./payments";
+
 /** An amount as it crossed the wire: an exact decimal string, never a number. */
 export type Decimal = string;
 
-/** RFC 3339, as every other timestamp in this cabinet. */
+/**
+ * Unix SECONDS as a decimal string, `"0"` while unset — what the BFF actually sends (see
+ * `shared/lib/datetime.ts`, which is the one place it is parsed). The name is kept for its
+ * meaning, not its encoding.
+ */
 export type Timestamp = string;
 
 // ── The payout being authorized ────────────────────────────────────────────────
@@ -59,7 +65,11 @@ export type PayoutDecision = "approve" | "reject";
 export interface PayoutApproval {
   consilium_id: string;
   state: string;
+  /** Present for a revenue payout; empty-stringed by the BFF for a payment consilium. */
   revenue_payout: RevenuePayout;
+  /** Present for a payment consilium — the sibling of `revenue_payout`, and what the page
+   *  renders when it is set (docs/CONSILIUM.md § Payments). */
+  payment?: ConsiliumPaymentTerms | null;
   /** Full hash; the page shows a short prefix of it. */
   payload_hash: string;
   initiator_email: string;
@@ -253,9 +263,79 @@ export interface OwnerAdmissionList {
 }
 
 /**
- * A consilium as the owners' room sees it. Only the payout kind exists today, so
- * `revenue_payout` is what distinguishes it; a second kind would arrive as a sibling field
- * rather than by widening this one.
+ * What a user proposal decides. Three kinds share one message because all three ask the
+ * same question — "do the owners agree to change this person's standing?" — differing only
+ * in what the verdict writes.
+ */
+export type UserProposalKind = "suspension" | "reinstatement" | "admin_admission";
+
+/**
+ * An answer to a user proposal. Deliberately NEUTRAL, where {@link RemovalVote} says
+ * remove/keep and {@link AdmissionVote} says admit/reject.
+ *
+ * Three kinds share this vote, so a kind-specific verb would only mean something read
+ * against `kind` — and a vocabulary that is correct only when cross-referenced is one that
+ * eventually gets rendered wrong. The kind-specific verb belongs on the SURFACE, which
+ * knows the kind; this is which way the voter pushed.
+ */
+export type ProposalVote = "for" | "against";
+
+/** One eligible owner voter and their answer. Same wire caveat as {@link RemovalPeer}: an
+ *  unanswered peer arrives as `""` or `"pending"`, never as null. */
+export interface UserProposalPeer {
+  user_id: string;
+  email: string;
+  vote?: string | null;
+  voted_at?: Timestamp | null;
+}
+
+/**
+ * The owners' verdict over one PERSON's standing.
+ *
+ * Two things separate it from {@link OwnerAdmission}, and neither is cosmetic:
+ *
+ *   · `subject_user_id` is ANY user, not necessarily an owner — which is why none of the
+ *     admission's roster checks have an analogue here.
+ *   · It passes on a MAJORITY of the snapshotted voters, not unanimity. Unanimity guards
+ *     the owner roster because a minority able to add owners by majority grows itself into
+ *     a majority; neither thing decided here has that property, and unanimity would COST
+ *     safety — a hold lapses in 24h, so one unreachable owner would not delay a
+ *     ratification, they would decide it by releasing a compromised account at the deadline.
+ *
+ * `threshold` is frozen at open and must be READ, never re-derived from `peers.length` or
+ * the current roster: it is the bar this proposal is actually measured against, and a
+ * roster that moved underneath it does not move the bar.
+ */
+export interface UserProposal {
+  id: string;
+  kind: UserProposalKind | string;
+  state: string;
+  subject_user_id: string;
+  subject_email: string;
+  initiator_user_id: string;
+  initiator_email: string;
+  reason: string;
+  /** Every owner except the initiator, frozen at open. Membership IS the eligibility test. */
+  peers: UserProposalPeer[];
+  owner_count: number;
+  /** How many of `peers` must vote FOR. Frozen at open — read it, do not recompute it. */
+  threshold: number;
+  created_at: Timestamp;
+  expires_at: Timestamp;
+  decided_at?: Timestamp | null;
+  void_reason?: string | null;
+  /** Serialised as a string by the BFF's integer encoding; never do arithmetic on it here. */
+  version: number | string;
+}
+
+export interface UserProposalList {
+  items: UserProposal[];
+}
+
+/**
+ * A consilium as the owners' room sees it. Two kinds: a revenue payout (`revenue_payout`)
+ * and a payment order (`payment`), told apart by which sibling is set — a kind is never
+ * expressed by widening the other one's field.
  *
  * The fields past `expires_at` are the ones the money plane records as a request settles.
  * They are optional because an open request carries none of them, and because a client
@@ -265,6 +345,7 @@ export interface Consilium {
   id: string;
   state: string;
   revenue_payout?: RevenuePayout | null;
+  payment?: ConsiliumPaymentTerms | null;
   payload_hash: string;
   initiator_user_id?: string;
   initiator_email: string;
@@ -277,6 +358,8 @@ export interface Consilium {
   /** Why a request that reached `Approved` did not move money (policy 16). */
   failure_reason?: string | null;
   executed_withdrawal_id?: string | null;
+  /** The payment order a payment consilium carried into execution. */
+  executed_payment_id?: string | null;
 }
 
 export interface ConsiliumList {

@@ -18,6 +18,7 @@ use domain::{
 	consilium::{ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
 	money::{Network, Usdt, WalletAddress},
+	users::mask_email,
 };
 use evbanking_contracts::banking::v1::{self as pb, consilium_approval_service_server::ConsiliumApprovalService, consilium_service_server::ConsiliumService};
 use tonic::{Request, Response, Status};
@@ -27,7 +28,7 @@ use crate::{
 	AppState,
 	application::consilium as consilium_app,
 	ports::consilium::{ConsiliumView, InvitationView, VoteAudit},
-	services::support::{caller_id, map_err, require_permission, unix_now},
+	services::support::{MAX_AUDIT_IP_BYTES, MAX_AUDIT_USER_AGENT_BYTES, caller_id, clamp, map_err, require_permission, unix_now},
 };
 
 /// The default page size for the governance history.
@@ -61,11 +62,17 @@ impl AppState {
 		consilium_app::ConsiliumPorts {
 			consilia: self.consilia.as_ref(),
 			withdrawals: self.withdrawals.as_ref(),
+			payments: self.payments.as_ref(),
+			users: self.users.as_ref(),
 			ledger: self.ledger.as_ref(),
 			custody: self.custody.as_ref(),
+			policy: self.outflow.as_ref(),
+			allocations: self.allocations.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
+			kyc: self.kyc_gate,
 			approval_url_base: &self.consilium_approval_url_base,
+			consent_url_base: &self.payment_consent_url_base,
 			governance_mail_wired: crate::infrastructure::governance_mail::is_wired(),
 		}
 	}
@@ -120,9 +127,10 @@ fn decision_from_proto(raw: i32) -> Result<VoteDecision, Status> {
 
 /// The payout terms as the wire carries them, or `None` for a kind that is not a payout.
 ///
-/// No `_` arm: the day a second kind exists, the contract needs a field of its own and this
-/// stops compiling rather than quietly rendering the new kind as an absent payout.
-fn terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
+/// No `_` arm: a new kind needs a field of its own on the contract, and this stops compiling
+/// rather than quietly rendering it as an absent payout — a request that reads as having no
+/// terms at all on the one screen an owner authorizes money from.
+fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
 	match terms {
 		ConsiliumTerms::RevenuePayout(terms) => Some(pb::RevenuePayoutTerms {
 			network: terms.network.as_str().to_owned(),
@@ -132,18 +140,27 @@ fn terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerms> {
 			amount: terms.amount.to_decimal_string(),
 			memo: terms.memo.clone(),
 		}),
+		ConsiliumTerms::Payment(_) => None,
 	}
 }
 
-/// `alice@example.com` → `a***@example.com`. Used on every surface a non-owner can reach:
-/// an emailed owner needs to recognise their own address, not learn anyone else's.
-fn mask_email(email: &str) -> String {
-	let Some((local, domain)) = email.split_once('@') else {
-		return String::new();
-	};
-	match local.chars().next() {
-		Some(first) => format!("{first}***@{domain}"),
-		None => format!("***@{domain}"),
+/// The payment terms as the wire carries them — the other half of "exactly one of the two
+/// terms fields is set".
+///
+/// The two ends are LABELS, taken from the same [`domain::payments::PaymentTerms`] the
+/// consent mail and the payments screen describe, so the three surfaces cannot come to
+/// disagree about what an owner approved.
+fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPaymentTerms> {
+	match terms {
+		ConsiliumTerms::RevenuePayout(_) => None,
+		ConsiliumTerms::Payment(subject) => Some(pb::ConsiliumPaymentTerms {
+			payment_id: subject.payment_id.to_string(),
+			tier: subject.terms.tier().as_str().to_owned(),
+			source: subject.terms.source_label(),
+			destination: subject.terms.destination_label(),
+			amount: subject.terms.amount().to_decimal_string(),
+			reason: subject.terms.reason().as_str().to_owned(),
+		}),
 	}
 }
 
@@ -152,7 +169,8 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 	pb::Consilium {
 		id: c.id().to_string(),
 		state: state_to_proto(c.state()),
-		revenue_payout: terms_to_proto(c.terms()),
+		revenue_payout: payout_terms_to_proto(c.terms()),
+		payment: payment_terms_to_proto(c.terms()),
 		payload_hash: c.payload_hash_hex(),
 		initiator_user_id: c.initiator().to_string(),
 		initiator_email: view.initiator_email.clone(),
@@ -177,6 +195,7 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 		expires_at: c.expires_at(),
 		decided_at: c.decided_at().unwrap_or_default(),
 		executed_withdrawal_id: c.executed_withdrawal_id().map(|id| id.to_string()).unwrap_or_default(),
+		executed_payment_id: c.executed_payment_id().map(|id| id.to_string()).unwrap_or_default(),
 		failure_reason: c.failure_reason().unwrap_or_default().to_owned(),
 		version: c.version(),
 	}
@@ -186,7 +205,8 @@ fn invitation_to_proto(view: &InvitationView) -> pb::ConsiliumInvitation {
 	pb::ConsiliumInvitation {
 		consilium_id: view.consilium_id.to_string(),
 		state: state_to_proto(view.state),
-		revenue_payout: terms_to_proto(&view.terms),
+		revenue_payout: payout_terms_to_proto(&view.terms),
+		payment: payment_terms_to_proto(&view.terms),
 		payload_hash: view.payload_hash.clone(),
 		initiator_email: mask_email(&view.initiator_email),
 		voter_email: mask_email(&view.voter_email),
@@ -278,8 +298,8 @@ impl ConsiliumApprovalService for ConsiliumApprovalSvc {
 		let req = request.into_inner();
 		let decision = decision_from_proto(req.decision)?;
 		let audit = VoteAudit {
-			client_ip: req.client_ip,
-			user_agent: req.user_agent,
+			client_ip: clamp(req.client_ip, MAX_AUDIT_IP_BYTES),
+			user_agent: clamp(req.user_agent, MAX_AUDIT_USER_AGENT_BYTES),
 		};
 		let now = unix_now();
 		let outcome = consilium_app::submit_decision(self.state.consilia.as_ref(), &req.token, &req.code, decision, &audit, now)
@@ -304,17 +324,6 @@ impl ConsiliumApprovalService for ConsiliumApprovalSvc {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn an_email_is_masked_to_its_first_letter_and_domain() {
-		// What an emailed owner needs is to recognise their own seat, not to learn anyone
-		// else's address.
-		assert_eq!(mask_email("alice@example.com"), "a***@example.com");
-		assert_eq!(mask_email("@example.com"), "***@example.com");
-		// A value that is not an address discloses nothing at all rather than passing through.
-		assert_eq!(mask_email("not-an-email"), "");
-		assert_eq!(mask_email(""), "");
-	}
 
 	#[test]
 	fn pending_is_not_an_acceptable_vote() {

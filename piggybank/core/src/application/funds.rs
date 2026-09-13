@@ -284,11 +284,23 @@ pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Led
 }
 
 /// The current NAV + freshness for a fund (the seed NAV when never marked), plus the
-/// supply headroom left against its allocation's cap. Gated on the allocation existing,
-/// for the same reason the valuation post is: a price quoted for a service no registry
-/// entry backs is a price for a fund that does not exist.
-pub async fn fund_nav_view(allocations: &dyn AllocationRegistry, nav: &dyn NavMarks, ledger: &dyn Ledger, service: ServiceId, now_unix: i64) -> Result<FundNavView, DomainError> {
-	let allocation = allocations_app::get(allocations, &service).await?;
+/// supply headroom left against its allocation's cap, as `caller` may see it. Gated the
+/// same way [`allocations_app::get_for`] is: an unregistered service is `NotFound`, and
+/// so — unless `unrestricted` — is one hidden from this caller. A price is as good a
+/// probe as a title: were the NAV of a hidden product readable, a locked slug would
+/// answer differently from an unregistered one and the catalog could be enumerated
+/// through this route. `unrestricted` is the `AllocationManage` view, gated at the
+/// boundary.
+pub async fn fund_nav_view(
+	allocations: &dyn AllocationRegistry,
+	nav: &dyn NavMarks,
+	ledger: &dyn Ledger,
+	service: ServiceId,
+	caller: UserId,
+	unrestricted: bool,
+	now_unix: i64,
+) -> Result<FundNavView, DomainError> {
+	let allocation = allocations_app::get_for(allocations, &service, caller, unrestricted).await?.allocation;
 	let balance = ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?;
 	let units_outstanding = Shares::from_base_units(balance.posted);
 	let company_units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::CompanyShares(service.clone())).await?.posted);

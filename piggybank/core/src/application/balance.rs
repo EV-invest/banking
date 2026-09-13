@@ -73,6 +73,15 @@ pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxR
 	if amount.is_zero() {
 		return Err(DomainError::Validation("deposit amount must be positive".into()));
 	}
+	// `fee` is the fund's EARNINGS claim: it is credited by settling a fee or retaining a
+	// withdrawal fee, each of which moves a dollar that is already on the ledger. A deposit
+	// credits a claim against NEW custody, so booking one here would invent revenue nobody
+	// earned and put `fee` in the deposit history, where every reader expects an arrival.
+	// The refusal is narrow on purpose — `Party` names it so payments can spend it, not so
+	// anything may pay into it.
+	if matches!(party, Party::Revenue) {
+		return Err(DomainError::Validation("the fee claim is credited by settling a fee, never by a deposit".into()));
+	}
 	let recorded = deposits.record(tx_ref, party, network, amount).await?;
 	if recorded {
 		relay.notify_one();

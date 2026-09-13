@@ -97,7 +97,7 @@ fn fund_ports(h: &Harness) -> funds_app::FundPorts<'_> {
 	}
 }
 
-fn book_ports<'a>(h: &'a Harness, outflow: &'a PgOutflowPolicy<'a>) -> BookPorts<'a> {
+fn book_ports<'a>(h: &'a Harness, outflow: &'a PgOutflowPolicy) -> BookPorts<'a> {
 	BookPorts {
 		allocations: &h.allocations,
 		ledger: h.ledger.as_ref(),
@@ -191,7 +191,7 @@ async fn place(h: &Harness, user: UserId, service: &ServiceId, side: Side, kind:
 // Same, plus the retry key for the idempotency test.
 #[allow(clippy::too_many_arguments)]
 async fn place_keyed(h: &Harness, user: UserId, service: &ServiceId, side: Side, kind: OrderKind, tif: Tif, at: Option<&str>, size: &str, key: &str) -> Result<OrderRecord, DomainError> {
-	let outflow = PgOutflowPolicy::new(&h.pool);
+	let outflow = PgOutflowPolicy::new(h.pool.clone());
 	book_app::place_order(
 		&book_ports(h, &outflow),
 		user,

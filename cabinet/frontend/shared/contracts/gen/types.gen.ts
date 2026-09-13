@@ -415,6 +415,16 @@ export type BankingV1CancelOrderRequest = {
 };
 
 /**
+ * CancelPaymentRequest
+ */
+export type BankingV1CancelPaymentRequest = {
+    /**
+     * payment_id
+     */
+    payment_id?: string;
+};
+
+/**
  * CancelRedemptionRequest
  */
 export type BankingV1CancelRedemptionRequest = {
@@ -514,6 +524,13 @@ export type BankingV1CheckResponse = {
 };
 
 /**
+ * ConsentDecision
+ *
+ * What the emailed investor answered.
+ */
+export type BankingV1ConsentDecision = 'CONSENT_DECISION_UNSPECIFIED' | 'CONSENT_DECISION_PENDING' | 'CONSENT_DECISION_APPROVE' | 'CONSENT_DECISION_REJECT';
+
+/**
  * Consilium
  */
 export type BankingV1Consilium = {
@@ -527,6 +544,10 @@ export type BankingV1Consilium = {
     state?: BankingV1ConsiliumState;
     /**
      * revenue_payout
+     *
+     * EXACTLY ONE of the two terms fields is set, decided by the kind. Two fields rather than
+     * a oneof because the surfaces read them by name and a oneof buys nothing here that the
+     * "exactly one" rule does not already give.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -583,7 +604,9 @@ export type BankingV1Consilium = {
     /**
      * executed_withdrawal_id
      *
-     * Set exactly once, on EXECUTED.
+     * Set exactly once, on EXECUTED — and exactly ONE of the two is, because a consilium has
+     * one effect. `consilium_execution_is_recorded` states that to the database as
+     * `num_nonnulls(...) = 1`.
      */
     executed_withdrawal_id?: string;
     /**
@@ -597,6 +620,16 @@ export type BankingV1Consilium = {
      * the socket carries a version, never a tally.
      */
     version?: number | string;
+    /**
+     * payment
+     */
+    payment?: BankingV1ConsiliumPaymentTerms;
+    /**
+     * executed_payment_id
+     *
+     * The payment order an executed PAYMENT consilium carried.
+     */
+    executed_payment_id?: string;
 };
 
 /**
@@ -616,6 +649,8 @@ export type BankingV1ConsiliumInvitation = {
     state?: BankingV1ConsiliumState;
     /**
      * revenue_payout
+     *
+     * Exactly one of `revenue_payout` and `payment` is set — see `Consilium`.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -667,6 +702,10 @@ export type BankingV1ConsiliumInvitation = {
      * Code attempts left before the token burns.
      */
     attempts_remaining?: number;
+    /**
+     * payment
+     */
+    payment?: BankingV1ConsiliumPaymentTerms;
 };
 
 /**
@@ -677,6 +716,60 @@ export type BankingV1ConsiliumList = {
      * items
      */
     items?: Array<BankingV1Consilium>;
+};
+
+/**
+ * ConsiliumPaymentTerms
+ *
+ * The immutable subject of a PAYMENT consilium — the §3 rule that money belonging to the
+ * fund (`piggybank`, `revenue`, `service:<id>`) moves only on the owners' quorum, at every
+ * tier.
+ *
+ * A PROJECTION OF THE ORDER, not the order. `banking.v1.Payment` (payments.proto) is what
+ * the payments screen reads; this is what an owner needs in order to judge one request:
+ * where the money leaves from, where it lands, how much, and why. The two ends are rendered
+ * as LABELS rather than as `(kind, id)` pairs because the question an owner is answering is
+ * "should this money move", and an account id is not an answer to it.
+ */
+export type BankingV1ConsiliumPaymentTerms = {
+    /**
+     * payment_id
+     *
+     * The order this quorum authorizes. Inside the hashed subject too, so an approval of one
+     * payment is never a valid signature over another with identical terms.
+     */
+    payment_id?: string;
+    /**
+     * tier
+     *
+     * internal | service | external — DERIVED from the destination, never supplied.
+     */
+    tier?: string;
+    /**
+     * source
+     *
+     * Where the money leaves from.
+     */
+    source?: string;
+    /**
+     * destination
+     *
+     * Where it lands. An external destination is rendered in FULL, address and rail: a
+     * truncated address in an approval flow is an invitation to approve the wrong one.
+     */
+    destination?: string;
+    /**
+     * amount
+     *
+     * Decimal USDT string, as everywhere else on this wire.
+     */
+    amount?: string;
+    /**
+     * reason
+     *
+     * Why, in the initiator's words. Required, shown verbatim, never interpreted.
+     */
+    reason?: string;
 };
 
 /**
@@ -840,6 +933,24 @@ export type BankingV1DispatchWithdrawalRequest = {
  */
 export type BankingV1DispatchWithdrawalResponse = {
     [key: string]: never;
+};
+
+/**
+ * ExternalDestination
+ */
+export type BankingV1ExternalDestination = {
+    /**
+     * network
+     *
+     * Rail the payment ships on (BEP20 / POLYGON / TRC20 / TON).
+     */
+    network?: string;
+    /**
+     * address
+     *
+     * Destination address, rendered in FULL wherever a human approves it.
+     */
+    address?: string;
 };
 
 /**
@@ -1213,6 +1324,18 @@ export type BankingV1GetBookRequest = {
 };
 
 /**
+ * GetConsentInvitationRequest
+ */
+export type BankingV1GetConsentInvitationRequest = {
+    /**
+     * token
+     *
+     * The opaque single-use token from the mail. Never the code.
+     */
+    token?: string;
+};
+
+/**
  * GetConsiliumRequest
  */
 export type BankingV1GetConsiliumRequest = {
@@ -1295,6 +1418,16 @@ export type BankingV1GetMeRequest = {
  */
 export type BankingV1GetOperationsModeRequest = {
     [key: string]: never;
+};
+
+/**
+ * GetPaymentRequest
+ */
+export type BankingV1GetPaymentRequest = {
+    /**
+     * payment_id
+     */
+    payment_id?: string;
 };
 
 /**
@@ -1612,6 +1745,36 @@ export type BankingV1ListParkedEventsRequest = {
 };
 
 /**
+ * ListPaymentsRequest
+ */
+export type BankingV1ListPaymentsRequest = {
+    /**
+     * limit
+     *
+     * 0 means the server default.
+     */
+    limit?: number;
+    /**
+     * state
+     *
+     * UNSPECIFIED means every state.
+     */
+    state?: BankingV1PaymentState;
+    /**
+     * party
+     *
+     * Either end. Unset means every party.
+     */
+    party?: BankingV1Party;
+    /**
+     * fund_owned_only
+     *
+     * Only orders whose source is fund-owned — the governance surface.
+     */
+    fund_owned_only?: boolean;
+};
+
+/**
  * ListPositionsRequest
  */
 export type BankingV1ListPositionsRequest = {
@@ -1817,6 +1980,33 @@ export type BankingV1NetworkWithdrawable = {
      * flat network fee retained on a withdrawal
      */
     withdrawal_fee?: string;
+};
+
+/**
+ * OpenPaymentRequest
+ */
+export type BankingV1OpenPaymentRequest = {
+    /**
+     * source
+     */
+    source?: BankingV1Party;
+    /**
+     * destination
+     */
+    destination?: BankingV1PaymentDestination;
+    /**
+     * amount
+     *
+     * Decimal USDT string.
+     */
+    amount?: string;
+    /**
+     * reason
+     *
+     * Required. Bounded at 500 bytes, no control characters; it is INSIDE the hashed
+     * payload the approver signs.
+     */
+    reason?: string;
 };
 
 /**
@@ -2150,6 +2340,322 @@ export type BankingV1ParkedEventList = {
      */
     events?: Array<BankingV1ParkedEvent>;
 };
+
+/**
+ * Party
+ *
+ * One end of a payment, as a REQUEST names it.
+ */
+export type BankingV1Party = {
+    /**
+     * kind
+     *
+     * piggybank | revenue | service | user.
+     */
+    kind?: string;
+    /**
+     * id
+     *
+     * Empty for the two singleton claims. A service slug for `service`. For `user`, the
+     * CONCIERGE user id the console carries (resolved to the money-plane id here; a banking
+     * id is accepted as a fallback, the way UsersService.GetUserBalance resolves one).
+     */
+    id?: string;
+};
+
+/**
+ * Payment
+ */
+export type BankingV1Payment = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * state
+     */
+    state?: BankingV1PaymentState;
+    /**
+     * tier
+     *
+     * internal | service | external — DERIVED from the destination, never supplied.
+     */
+    tier?: string;
+    /**
+     * source
+     */
+    source?: BankingV1PaymentEnd;
+    /**
+     * destination
+     */
+    destination?: BankingV1PaymentEnd;
+    /**
+     * amount
+     *
+     * Decimal USDT string, as everywhere else on this wire.
+     */
+    amount?: string;
+    /**
+     * reason
+     *
+     * Why, in the initiator's words. Required, shown verbatim, never interpreted.
+     */
+    reason?: string;
+    /**
+     * requirement
+     *
+     * owner_consilium | subject_consent — the one requirement, read off the source.
+     */
+    requirement?: string;
+    /**
+     * payload_hash
+     *
+     * Hex SHA-256 over the canonical terms, re-verified at execution.
+     */
+    payload_hash?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * consilium_id
+     *
+     * Set exactly when the requirement is the owner consilium.
+     */
+    consilium_id?: string;
+    /**
+     * consent
+     *
+     * Set exactly when the requirement is the subject's consent.
+     */
+    consent?: BankingV1PaymentConsent;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decided_at
+     *
+     * Unix seconds; 0 while pending.
+     */
+    decided_at?: number | string;
+    /**
+     * executed_withdrawal_id
+     *
+     * Set on EXECUTED for an external order only: an internal one settled as a ledger
+     * transfer and records no id of its own.
+     */
+    executed_withdrawal_id?: string;
+    /**
+     * failure_reason
+     */
+    failure_reason?: string;
+    /**
+     * version
+     *
+     * Monotonic per order.
+     */
+    version?: number | string;
+};
+
+/**
+ * PaymentConsent
+ *
+ * The consent seat of an investor-sourced order, as the owner surface sees it.
+ */
+export type BankingV1PaymentConsent = {
+    /**
+     * subject_email
+     *
+     * Masked (`a***@example.com`).
+     */
+    subject_email?: string;
+    /**
+     * decision
+     */
+    decision?: BankingV1ConsentDecision;
+    /**
+     * notified
+     *
+     * True once the consent mail has actually been handed to concierge.
+     */
+    notified?: boolean;
+    /**
+     * attempts_remaining
+     *
+     * Code attempts left before the token burns.
+     */
+    attempts_remaining?: number;
+    /**
+     * invalidated
+     *
+     * True when one of the pins recorded at open (the subject's token version, their
+     * mailbox) has moved: the seat can no longer be answered or executed.
+     */
+    invalidated?: boolean;
+    /**
+     * invalidation_reason
+     *
+     * Why, when `invalidated` is true.
+     */
+    invalidation_reason?: string;
+};
+
+/**
+ * PaymentConsentInvitation
+ *
+ * What the emailed investor is shown BEFORE they answer. Deliberately narrower than
+ * `Payment`: the terms they are consenting to, and nothing about the operator beyond a
+ * masked address.
+ */
+export type BankingV1PaymentConsentInvitation = {
+    /**
+     * payment_id
+     */
+    payment_id?: string;
+    /**
+     * state
+     */
+    state?: BankingV1PaymentState;
+    /**
+     * tier
+     */
+    tier?: string;
+    /**
+     * source
+     */
+    source?: BankingV1PaymentEnd;
+    /**
+     * destination
+     */
+    destination?: BankingV1PaymentEnd;
+    /**
+     * amount
+     */
+    amount?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+    /**
+     * payload_hash
+     */
+    payload_hash?: string;
+    /**
+     * initiator_email
+     *
+     * Who opened it, masked.
+     */
+    initiator_email?: string;
+    /**
+     * subject_email
+     *
+     * The recipient's own masked address, so they can confirm the mail reached the right
+     * mailbox before typing the code.
+     */
+    subject_email?: string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decision
+     *
+     * This seat's own answer, so a reopened link shows what was already said.
+     */
+    decision?: BankingV1ConsentDecision;
+    /**
+     * attempts_remaining
+     *
+     * Code attempts left before the token burns.
+     */
+    attempts_remaining?: number;
+};
+
+/**
+ * PaymentDestination
+ *
+ * Where a payment lands. An external SOURCE is unrepresentable on purpose: money cannot
+ * arrive from an address by anyone's say-so — that is a deposit, which a chain watcher
+ * attests.
+ */
+export type BankingV1PaymentDestination = {
+    /**
+     * external
+     */
+    external: BankingV1ExternalDestination;
+} | {
+    /**
+     * internal
+     */
+    internal: BankingV1Party;
+};
+
+/**
+ * PaymentEnd
+ *
+ * One end of a payment, as a RESPONSE describes it. `label` is the wording every approval
+ * surface (the owners' mail, the subject's mail, this screen) shares; the structured
+ * fields let a screen link to the account.
+ */
+export type BankingV1PaymentEnd = {
+    /**
+     * label
+     */
+    label?: string;
+    /**
+     * kind
+     *
+     * piggybank | revenue | service | user, or `external` for an address.
+     */
+    kind?: string;
+    /**
+     * id
+     *
+     * The service slug, or the MONEY-PLANE user id (the request accepts a concierge id; the
+     * response carries what the order stored). Empty for singletons and addresses.
+     */
+    id?: string;
+    /**
+     * network
+     *
+     * Set only when `kind` is `external`.
+     */
+    network?: string;
+    /**
+     * address
+     */
+    address?: string;
+    /**
+     * detail
+     *
+     * What a person recognises this end BY, beside the label: the receiving investor's
+     * MASKED mailbox for `user`, the product's title for `service`. Empty otherwise. Never
+     * part of the digest — the label is what an approval binds.
+     */
+    detail?: string;
+};
+
+/**
+ * PaymentList
+ */
+export type BankingV1PaymentList = {
+    /**
+     * items
+     */
+    items?: Array<BankingV1Payment>;
+};
+
+/**
+ * PaymentState
+ *
+ * Where an order stands. Terminal everywhere except PENDING and APPROVED.
+ */
+export type BankingV1PaymentState = 'PAYMENT_STATE_UNSPECIFIED' | 'PAYMENT_STATE_PENDING' | 'PAYMENT_STATE_APPROVED' | 'PAYMENT_STATE_EXECUTED' | 'PAYMENT_STATE_EXECUTION_FAILED' | 'PAYMENT_STATE_REJECTED' | 'PAYMENT_STATE_EXPIRED' | 'PAYMENT_STATE_CANCELLED';
 
 /**
  * PlaceOrderRequest
@@ -3070,6 +3576,56 @@ export type BankingV1SettleWithdrawalResponse = {
 };
 
 /**
+ * SubmitConsentRequest
+ */
+export type BankingV1SubmitConsentRequest = {
+    /**
+     * token
+     */
+    token?: string;
+    /**
+     * code
+     *
+     * The secret code from the same mail. Compared in constant time, as a hash.
+     */
+    code?: string;
+    /**
+     * decision
+     *
+     * APPROVE or REJECT. PENDING is rejected as an invalid argument.
+     */
+    decision?: BankingV1ConsentDecision;
+    /**
+     * client_ip
+     *
+     * Audit only — the edge supplies these; they are never trusted for authorization.
+     */
+    client_ip?: string;
+    /**
+     * user_agent
+     */
+    user_agent?: string;
+};
+
+/**
+ * SubmitConsentResponse
+ */
+export type BankingV1SubmitConsentResponse = {
+    /**
+     * invitation
+     *
+     * The invitation as it stands after the answer.
+     */
+    invitation?: BankingV1PaymentConsentInvitation;
+    /**
+     * decided
+     *
+     * True when this answer carried the order out of PENDING.
+     */
+    decided?: boolean;
+};
+
+/**
  * SubmitDecisionRequest
  */
 export type BankingV1SubmitDecisionRequest = {
@@ -3647,6 +4203,27 @@ export type BankingV1UserProfile = {
      * has no allowlist of its own and never sets it.
      */
     role_is_break_glass?: boolean;
+    /**
+     * suspended_by
+     *
+     * WHY the account is disabled, and therefore who may undo it — concierge splits the
+     * old blocking verb into a lapsing `admin_hold` and a ratified `governance` verdict,
+     * and an empty string is a THIRD case: an account suspended before the field existed,
+     * which keeps the one-act, never-lapsing semantics it was actually suspended under.
+     *
+     * Carried here only for wire parity, like `role_is_break_glass` above: the money plane
+     * learns of a freeze through the one-way lifecycle bridge's SUSPENDED/REINSTATED
+     * events, never by reading this, and never sets it. Absent them the parity round trip
+     * in `cabinet/backend/tests/concierge_parity.rs` re-encodes short and fails, which is
+     * exactly the drift that test exists to catch.
+     */
+    suspended_by?: string;
+    /**
+     * hold_expires_at
+     *
+     * Unix SECONDS an "admin_hold" lapses; 0 when nothing lapses. Parity only, as above.
+     */
+    hold_expires_at?: number | string;
 };
 
 /**
@@ -3922,6 +4499,20 @@ export type ConciergeV1AdminUserSummary = {
      * stops the console listing an "owner" the consilium has never heard of.
      */
     role_is_break_glass?: boolean;
+    /**
+     * suspended_by
+     *
+     * Why the account is disabled; see UserProfile.suspended_by. On the list because a
+     * held account and a suspended one need different action buttons, and a console that
+     * cannot tell them apart offers the wrong one.
+     */
+    suspended_by?: string;
+    /**
+     * hold_expires_at
+     *
+     * Unix SECONDS an "admin_hold" lapses. 0 when nothing lapses.
+     */
+    hold_expires_at?: number | string;
 };
 
 /**
@@ -3973,6 +4564,16 @@ export type ConciergeV1CancelOwnerRemovalRequest = {
      * removal_id
      */
     removal_id?: string;
+};
+
+/**
+ * CancelUserProposalRequest
+ */
+export type ConciergeV1CancelUserProposalRequest = {
+    /**
+     * proposal_id
+     */
+    proposal_id?: string;
 };
 
 /**
@@ -4071,6 +4672,16 @@ export type ConciergeV1GetRemovalInvitationRequest = {
 };
 
 /**
+ * GetUserProposalRequest
+ */
+export type ConciergeV1GetUserProposalRequest = {
+    /**
+     * proposal_id
+     */
+    proposal_id?: string;
+};
+
+/**
  * GetUserRequest
  */
 export type ConciergeV1GetUserRequest = {
@@ -4085,7 +4696,7 @@ export type ConciergeV1GetUserRequest = {
  *
  * The typed governance mails this plane knows how to render.
  */
-export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED';
+export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED' | 'GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT' | 'GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL';
 
 /**
  * GovernanceTick
@@ -4110,6 +4721,35 @@ export type ConciergeV1GovernanceTick = {
      * True for the periodic keepalive, which carries the current revision unchanged.
      */
     heartbeat?: boolean;
+};
+
+/**
+ * HoldUserRequest
+ */
+export type ConciergeV1HoldUserRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * reason
+     *
+     * REQUIRED. A brake that stops someone's money with no stated cause cannot be
+     * reviewed afterwards, and the owners asked to ratify it are reading exactly this.
+     */
+    reason?: string;
+};
+
+/**
+ * HoldUserResponse
+ */
+export type ConciergeV1HoldUserResponse = {
+    /**
+     * hold_expires_at
+     *
+     * Unix SECONDS the hold lapses unless the owners ratify it.
+     */
+    hold_expires_at?: number | string;
 };
 
 /**
@@ -4216,6 +4856,24 @@ export type ConciergeV1ListSessionsResponse = {
 };
 
 /**
+ * ListUserProposalsRequest
+ */
+export type ConciergeV1ListUserProposalsRequest = {
+    /**
+     * limit
+     *
+     * 0 means the server default. Includes closed proposals — nothing is deleted.
+     */
+    limit?: number;
+    /**
+     * kind
+     *
+     * UNSPECIFIED lists every kind.
+     */
+    kind?: ConciergeV1UserProposalKind;
+};
+
+/**
  * ListUsersRequest
  */
 export type ConciergeV1ListUsersRequest = {
@@ -4288,6 +4946,20 @@ export type ConciergeV1LogoutResponse = {
 };
 
 /**
+ * OpenAdminAdmissionRequest
+ */
+export type ConciergeV1OpenAdminAdmissionRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+};
+
+/**
  * OpenOwnerAdmissionRequest
  */
 export type ConciergeV1OpenOwnerAdmissionRequest = {
@@ -4313,6 +4985,36 @@ export type ConciergeV1OpenOwnerRemovalRequest = {
     target_user_id?: string;
     /**
      * reason
+     */
+    reason?: string;
+};
+
+/**
+ * OpenUserReinstatementRequest
+ */
+export type ConciergeV1OpenUserReinstatementRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * reason
+     */
+    reason?: string;
+};
+
+/**
+ * OpenUserSuspensionRequest
+ */
+export type ConciergeV1OpenUserSuspensionRequest = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * reason
+     *
+     * REQUIRED — it is what the other owners are voting on.
      */
     reason?: string;
 };
@@ -4591,6 +5293,186 @@ export type ConciergeV1OwnerRemovalList = {
 export type ConciergeV1OwnerRemovalState = 'OWNER_REMOVAL_STATE_UNSPECIFIED' | 'OWNER_REMOVAL_STATE_OPEN' | 'OWNER_REMOVAL_STATE_EXECUTED' | 'OWNER_REMOVAL_STATE_REJECTED' | 'OWNER_REMOVAL_STATE_EXPIRED' | 'OWNER_REMOVAL_STATE_CANCELLED' | 'OWNER_REMOVAL_STATE_VOID';
 
 /**
+ * PaymentApprovalMail
+ *
+ * An owner asked to approve a payment of fund-owned money.
+ *
+ * WHY NOT PayoutApprovalMail. That template opens with "a request to pay fund revenue
+ * out on-chain" and labels its middle rows Network and Destination address. A payment
+ * is a transfer between two claims the platform holds — `Piggybank → Revenue`, or into a
+ * service's pooled funds, or off the platform — and rendering it through the payout
+ * copy would mail the whole roster a sentence naming the wrong claim and the wrong rail
+ * on a money move they are being asked to authorize. The one thing an approval mail
+ * must do is describe correctly what is being approved, so a payment gets its own.
+ *
+ * The recipient rule is the payout one: a seated owner, resolved from the identity
+ * record, and nobody else. Field rules are PaymentConsentMail's — every string is
+ * bounded in bytes and refused if it carries a control character, `tier` is a closed
+ * set, and `reason` is required and rendered attributed to the operator who typed it.
+ */
+export type ConciergeV1PaymentApprovalMail = {
+    /**
+     * consilium_id
+     */
+    consilium_id?: string;
+    /**
+     * payment_id
+     */
+    payment_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * tier
+     *
+     * internal | service | external.
+     */
+    tier?: string;
+    /**
+     * source
+     *
+     * Where the money leaves from, in words a person recognises (not an account id).
+     */
+    source?: string;
+    /**
+     * destination
+     *
+     * Where it lands, in words a person recognises.
+     */
+    destination?: string;
+    /**
+     * amount
+     */
+    amount?: string;
+    /**
+     * reason
+     *
+     * Why the payment was opened, in the operator's words. Required.
+     */
+    reason?: string;
+    /**
+     * payload_hash
+     */
+    payload_hash?: string;
+    /**
+     * threshold
+     */
+    threshold?: number;
+    /**
+     * owner_count
+     */
+    owner_count?: number;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * approval_url
+     *
+     * Absolute URL of the approval page, carrying the opaque token.
+     */
+    approval_url?: string;
+    /**
+     * code
+     *
+     * The secret code the owner types on that page. Held only until the mail is sent,
+     * then cleared from the delivery row.
+     */
+    code?: string;
+};
+
+/**
+ * PaymentConsentMail
+ *
+ * One user's consent to a payment that moves their own money.
+ *
+ * WHY subject_user_id EXISTS BESIDE SendGovernanceMailRequest.user_id. Every other kind
+ * is addressed to a fund owner, and "is this recipient an owner?" is a fact this plane
+ * holds independently of anything the money plane says. This kind has no such fact to
+ * check against: any user may consent to their own transfer, so "is this the right
+ * recipient?" is unanswerable from the addressing field alone. So the money plane must
+ * state, in the TYPED payload, whose money is moving — and the relay refuses unless the
+ * user it is being asked to write to IS that person. A caller that fans one consent out
+ * to a second mailbox has to contradict itself in the same message to do it.
+ *
+ * It is a redundancy on purpose. The address is still resolved HERE from the identity
+ * record and never taken from either field.
+ */
+export type ConciergeV1PaymentConsentMail = {
+    /**
+     * payment_id
+     */
+    payment_id?: string;
+    /**
+     * subject_user_id
+     *
+     * Concierge canonical id of the user whose money moves. MUST equal the request's
+     * user_id; the relay refuses the mail otherwise.
+     */
+    subject_user_id?: string;
+    /**
+     * initiator_email
+     *
+     * The operator who opened the payment. Shown so the subject knows who is asking.
+     */
+    initiator_email?: string;
+    /**
+     * tier
+     *
+     * internal | service | external. A closed set: an unknown tier is a bug in the money
+     * plane, not a string to render at a person deciding whether to part with money.
+     */
+    tier?: string;
+    /**
+     * source
+     *
+     * Where the money leaves from, in words a person recognises (not an account id).
+     */
+    source?: string;
+    /**
+     * destination
+     *
+     * Where it lands, in words a person recognises.
+     */
+    destination?: string;
+    /**
+     * amount
+     */
+    amount?: string;
+    /**
+     * reason
+     *
+     * Why the payment was opened, written by the operator and shown to the subject
+     * VERBATIM. Required — a consent request with no stated reason is one nobody can
+     * judge. Rendered under its own label so it never reads as a platform statement, and
+     * refused outright if it carries a control character: the text part of a mail is not
+     * escaped, so a newline here would forge the Amount/To lines this mail exists to show.
+     */
+    reason?: string;
+    /**
+     * payload_hash
+     */
+    payload_hash?: string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * approval_url
+     *
+     * Absolute URL of the consent page, carrying the opaque token.
+     */
+    approval_url?: string;
+    /**
+     * code
+     *
+     * The secret code the subject types on that page.
+     */
+    code?: string;
+};
+
+/**
  * PayoutApprovalMail
  */
 export type ConciergeV1PayoutApprovalMail = {
@@ -4651,6 +5533,15 @@ export type ConciergeV1PayoutApprovalMail = {
 
 /**
  * PayoutOutcomeMail
+ *
+ * How a consilium ended — over a revenue payout OR over a payment — and, under
+ * APPROVAL_TOKEN_BURNED, that one of its tokens burned.
+ *
+ * ONE message for both subjects, additively. The burn notice already rides this shape
+ * under its own kind, so a payment consilium's outcome and burn ride it too rather than
+ * each growing a message of their own: `network` + `address` describe a payout,
+ * `source` + `destination` (+ `tier`, `reason`) describe a payment, and the renderer
+ * switches on which pair is filled. A caller sets one pair and leaves the other empty.
  */
 export type ConciergeV1PayoutOutcomeMail = {
     /**
@@ -4660,11 +5551,14 @@ export type ConciergeV1PayoutOutcomeMail = {
     /**
      * outcome
      *
-     * APPROVED / REJECTED / EXPIRED / CANCELLED / EXECUTED / EXECUTION_FAILED.
+     * APPROVED / REJECTED / EXPIRED / CANCELLED / EXECUTED / EXECUTION_FAILED, or
+     * TOKEN_BURNED under the burn kind.
      */
     outcome?: string;
     /**
      * network
+     *
+     * The payout pair. Empty for a payment.
      */
     network?: string;
     /**
@@ -4679,7 +5573,39 @@ export type ConciergeV1PayoutOutcomeMail = {
      * detail
      */
     detail?: string;
+    /**
+     * tier
+     *
+     * The payment tuple. Empty for a payout. Same rules as PaymentApprovalMail: `tier`
+     * is the closed set, `source` and `destination` are words a person recognises, and
+     * `reason` is the operator's own text, shown attributed and refused if it carries a
+     * control character.
+     */
+    tier?: string;
+    /**
+     * source
+     */
+    source?: string;
+    /**
+     * destination
+     */
+    destination?: string;
+    /**
+     * reason
+     */
+    reason?: string;
 };
+
+/**
+ * ProposalVote
+ *
+ * Deliberately NEUTRAL verbs, where the owner consilia use remove/keep and
+ * admit/reject. Three kinds share this vote, so a kind-specific verb would only mean
+ * something read against UserProposal.kind — and a vocabulary that is correct only when
+ * cross-referenced is one that eventually gets rendered wrong. The kind-specific verb
+ * belongs on the SURFACE, which knows the kind; this is which way the voter pushed.
+ */
+export type ConciergeV1ProposalVote = 'PROPOSAL_VOTE_UNSPECIFIED' | 'PROPOSAL_VOTE_PENDING' | 'PROPOSAL_VOTE_FOR' | 'PROPOSAL_VOTE_AGAINST';
 
 /**
  * RefreshRequest
@@ -4699,6 +5625,12 @@ export type ConciergeV1ReinstateUserRequest = {
      * user_id
      */
     user_id?: string;
+    /**
+     * reason
+     *
+     * Recorded verbatim on the audit row.
+     */
+    reason?: string;
 };
 
 /**
@@ -4781,6 +5713,13 @@ export type ConciergeV1RevokeTokensRequest = {
      * user_id
      */
     user_id?: string;
+    /**
+     * reason
+     *
+     * Recorded verbatim on the audit row. Optional here: revoking sessions is the
+     * reflex you want an operator to reach for without composing a sentence first.
+     */
+    reason?: string;
 };
 
 /**
@@ -4824,6 +5763,14 @@ export type ConciergeV1SendGovernanceMailRequest = {
      * payout_outcome
      */
     payout_outcome?: ConciergeV1PayoutOutcomeMail;
+    /**
+     * payment_consent
+     */
+    payment_consent?: ConciergeV1PaymentConsentMail;
+    /**
+     * payment_approval
+     */
+    payment_approval?: ConciergeV1PaymentApprovalMail;
 };
 
 /**
@@ -4884,6 +5831,12 @@ export type ConciergeV1SetKycLevelRequest = {
      * kyc_level
      */
     kyc_level?: number;
+    /**
+     * reason
+     *
+     * Recorded verbatim on the audit row.
+     */
+    reason?: string;
 };
 
 /**
@@ -4910,8 +5863,18 @@ export type ConciergeV1SetRoleRequest = {
      * role
      *
      * The role to grant (snake_case: investor/operator/admin/owner).
+     *
+     * `owner` is refused in both directions and `admin` in the GRANTING direction, each
+     * naming the proposal that does it instead. Taking `admin` away is still one act:
+     * containing a rogue operator must never be the slower path.
      */
     role?: string;
+    /**
+     * reason
+     *
+     * Recorded verbatim on the audit row.
+     */
+    reason?: string;
 };
 
 /**
@@ -4994,6 +5957,20 @@ export type ConciergeV1SubmitSelfDecisionResponse = {
      * decided
      */
     decided?: boolean;
+};
+
+/**
+ * SubmitUserProposalVoteRequest
+ */
+export type ConciergeV1SubmitUserProposalVoteRequest = {
+    /**
+     * proposal_id
+     */
+    proposal_id?: string;
+    /**
+     * vote
+     */
+    vote?: ConciergeV1ProposalVote;
 };
 
 /**
@@ -5164,7 +6141,172 @@ export type ConciergeV1UserProfile = {
      * persisted owner, seating nobody. Render it as a warning, never as ownership.
      */
     role_is_break_glass?: boolean;
+    /**
+     * suspended_by
+     *
+     * WHY the account is disabled — and therefore who may undo it. Empty on an active
+     * user, and also on one suspended before this field existed (those keep the old
+     * one-act, never-lapsing semantics they were actually suspended under).
+     * "admin_hold"  — one operator's brake; lapses at hold_expires_at; ReinstateUser
+     * lifts it in one act.
+     * "governance"  — the owners' ratified verdict; never lapses; ReinstateUser
+     * refuses and names OpenUserReinstatement.
+     */
+    suspended_by?: string;
+    /**
+     * hold_expires_at
+     *
+     * Unix SECONDS an "admin_hold" lapses. 0 when nothing lapses.
+     */
+    hold_expires_at?: number | string;
 };
+
+/**
+ * UserProposal
+ *
+ * The owners' verdict over one PERSON's standing.
+ *
+ * It passes on a MAJORITY of the snapshotted voters, not the unanimity the OWNER
+ * consilia demand, and the difference is deliberate. Unanimity guards the owner roster
+ * because a minority able to add owners by majority grows itself into a majority.
+ * Neither thing decided here has that property: `admin` cannot vote in any consilium
+ * and cannot be granted `owner`, and a suspension is defensive and reversible by the
+ * same body. Against that, unanimity here would COST safety — a hold lapses in 24h, so
+ * ratifying one races a clock, and under unanimity one unreachable owner does not delay
+ * the verdict, they decide it by releasing a compromised account at the deadline.
+ *
+ * What is preserved is the property that matters: the initiator is excluded from the
+ * voter set and the threshold is at least one, so no single actor ever acts alone.
+ */
+export type ConciergeV1UserProposal = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * kind
+     */
+    kind?: ConciergeV1UserProposalKind;
+    /**
+     * state
+     */
+    state?: ConciergeV1UserProposalState;
+    /**
+     * subject_user_id
+     *
+     * Any user — NOT necessarily an owner. That is the difference from OwnerAdmission,
+     * and the reason none of its roster checks have an analogue here.
+     */
+    subject_user_id?: string;
+    /**
+     * subject_email
+     */
+    subject_email?: string;
+    /**
+     * initiator_user_id
+     */
+    initiator_user_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * reason
+     *
+     * Why, in the initiator's words. Required, and shown to every voter.
+     */
+    reason?: string;
+    /**
+     * peers
+     *
+     * Every owner except the initiator, with their answers. Never empty: a proposal with
+     * nobody to agree is refused at open rather than left open and unpassable.
+     */
+    peers?: Array<ConciergeV1UserProposalPeer>;
+    /**
+     * owner_count
+     *
+     * Owners at open. The initiator is counted but does not vote.
+     */
+    owner_count?: number;
+    /**
+     * threshold
+     *
+     * How many of `peers` must vote FOR, frozen at open — so a surface shows the bar this
+     * proposal is actually measured against, not one re-derived from a roster that moved.
+     */
+    threshold?: number;
+    /**
+     * created_at
+     */
+    created_at?: number | string;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * decided_at
+     */
+    decided_at?: number | string;
+    /**
+     * void_reason
+     */
+    void_reason?: string;
+    /**
+     * version
+     */
+    version?: number | string;
+};
+
+/**
+ * UserProposalKind
+ *
+ * What a UserProposal decides. Three kinds share one message because all three are the
+ * same question — "do the owners agree to change this person's standing?" — differing
+ * only in what the verdict writes.
+ */
+export type ConciergeV1UserProposalKind = 'USER_PROPOSAL_KIND_UNSPECIFIED' | 'USER_PROPOSAL_KIND_SUSPENSION' | 'USER_PROPOSAL_KIND_REINSTATEMENT' | 'USER_PROPOSAL_KIND_ADMIN_ADMISSION';
+
+/**
+ * UserProposalList
+ */
+export type ConciergeV1UserProposalList = {
+    /**
+     * items
+     */
+    items?: Array<ConciergeV1UserProposal>;
+};
+
+/**
+ * UserProposalPeer
+ */
+export type ConciergeV1UserProposalPeer = {
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * email
+     */
+    email?: string;
+    /**
+     * vote
+     */
+    vote?: ConciergeV1ProposalVote;
+    /**
+     * voted_at
+     */
+    voted_at?: number | string;
+};
+
+/**
+ * UserProposalState
+ *
+ * The six states, again as their own enum: proto enum VALUES share one namespace per
+ * package, so the identical states have to be spelled three times even though the
+ * domain models them with one type.
+ */
+export type ConciergeV1UserProposalState = 'USER_PROPOSAL_STATE_UNSPECIFIED' | 'USER_PROPOSAL_STATE_OPEN' | 'USER_PROPOSAL_STATE_EXECUTED' | 'USER_PROPOSAL_STATE_REJECTED' | 'USER_PROPOSAL_STATE_EXPIRED' | 'USER_PROPOSAL_STATE_CANCELLED' | 'USER_PROPOSAL_STATE_VOID';
 
 /**
  * UserSummary
@@ -7391,6 +8533,180 @@ export type BankingV1OperationsServiceListOperationsResponses = {
 
 export type BankingV1OperationsServiceListOperationsResponse = BankingV1OperationsServiceListOperationsResponses[keyof BankingV1OperationsServiceListOperationsResponses];
 
+export type BankingV1PaymentConsentServiceGetConsentInvitationData = {
+    body: BankingV1GetConsentInvitationRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.PaymentConsentService/GetConsentInvitation';
+};
+
+export type BankingV1PaymentConsentServiceGetConsentInvitationErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1PaymentConsentServiceGetConsentInvitationError = BankingV1PaymentConsentServiceGetConsentInvitationErrors[keyof BankingV1PaymentConsentServiceGetConsentInvitationErrors];
+
+export type BankingV1PaymentConsentServiceGetConsentInvitationResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1PaymentConsentInvitation;
+};
+
+export type BankingV1PaymentConsentServiceGetConsentInvitationResponse = BankingV1PaymentConsentServiceGetConsentInvitationResponses[keyof BankingV1PaymentConsentServiceGetConsentInvitationResponses];
+
+export type BankingV1PaymentConsentServiceSubmitConsentData = {
+    body: BankingV1SubmitConsentRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.PaymentConsentService/SubmitConsent';
+};
+
+export type BankingV1PaymentConsentServiceSubmitConsentErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1PaymentConsentServiceSubmitConsentError = BankingV1PaymentConsentServiceSubmitConsentErrors[keyof BankingV1PaymentConsentServiceSubmitConsentErrors];
+
+export type BankingV1PaymentConsentServiceSubmitConsentResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1SubmitConsentResponse;
+};
+
+export type BankingV1PaymentConsentServiceSubmitConsentResponse = BankingV1PaymentConsentServiceSubmitConsentResponses[keyof BankingV1PaymentConsentServiceSubmitConsentResponses];
+
+export type BankingV1PaymentsServiceCancelPaymentData = {
+    body: BankingV1CancelPaymentRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.PaymentsService/CancelPayment';
+};
+
+export type BankingV1PaymentsServiceCancelPaymentErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1PaymentsServiceCancelPaymentError = BankingV1PaymentsServiceCancelPaymentErrors[keyof BankingV1PaymentsServiceCancelPaymentErrors];
+
+export type BankingV1PaymentsServiceCancelPaymentResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Payment;
+};
+
+export type BankingV1PaymentsServiceCancelPaymentResponse = BankingV1PaymentsServiceCancelPaymentResponses[keyof BankingV1PaymentsServiceCancelPaymentResponses];
+
+export type BankingV1PaymentsServiceGetPaymentData = {
+    body: BankingV1GetPaymentRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.PaymentsService/GetPayment';
+};
+
+export type BankingV1PaymentsServiceGetPaymentErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1PaymentsServiceGetPaymentError = BankingV1PaymentsServiceGetPaymentErrors[keyof BankingV1PaymentsServiceGetPaymentErrors];
+
+export type BankingV1PaymentsServiceGetPaymentResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Payment;
+};
+
+export type BankingV1PaymentsServiceGetPaymentResponse = BankingV1PaymentsServiceGetPaymentResponses[keyof BankingV1PaymentsServiceGetPaymentResponses];
+
+export type BankingV1PaymentsServiceListPaymentsData = {
+    body: BankingV1ListPaymentsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.PaymentsService/ListPayments';
+};
+
+export type BankingV1PaymentsServiceListPaymentsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1PaymentsServiceListPaymentsError = BankingV1PaymentsServiceListPaymentsErrors[keyof BankingV1PaymentsServiceListPaymentsErrors];
+
+export type BankingV1PaymentsServiceListPaymentsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1PaymentList;
+};
+
+export type BankingV1PaymentsServiceListPaymentsResponse = BankingV1PaymentsServiceListPaymentsResponses[keyof BankingV1PaymentsServiceListPaymentsResponses];
+
+export type BankingV1PaymentsServiceOpenPaymentData = {
+    body: BankingV1OpenPaymentRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.PaymentsService/OpenPayment';
+};
+
+export type BankingV1PaymentsServiceOpenPaymentErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1PaymentsServiceOpenPaymentError = BankingV1PaymentsServiceOpenPaymentErrors[keyof BankingV1PaymentsServiceOpenPaymentErrors];
+
+export type BankingV1PaymentsServiceOpenPaymentResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Payment;
+};
+
+export type BankingV1PaymentsServiceOpenPaymentResponse = BankingV1PaymentsServiceOpenPaymentResponses[keyof BankingV1PaymentsServiceOpenPaymentResponses];
+
 export type BankingV1UsersServiceDisableUserData = {
     body: BankingV1DisableUserRequest;
     headers: {
@@ -7971,6 +9287,35 @@ export type ConciergeV1GovernanceServiceCancelOwnerRemovalResponses = {
 
 export type ConciergeV1GovernanceServiceCancelOwnerRemovalResponse = ConciergeV1GovernanceServiceCancelOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceCancelOwnerRemovalResponses];
 
+export type ConciergeV1GovernanceServiceCancelUserProposalData = {
+    body: ConciergeV1CancelUserProposalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/CancelUserProposal';
+};
+
+export type ConciergeV1GovernanceServiceCancelUserProposalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceCancelUserProposalError = ConciergeV1GovernanceServiceCancelUserProposalErrors[keyof ConciergeV1GovernanceServiceCancelUserProposalErrors];
+
+export type ConciergeV1GovernanceServiceCancelUserProposalResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceCancelUserProposalResponse = ConciergeV1GovernanceServiceCancelUserProposalResponses[keyof ConciergeV1GovernanceServiceCancelUserProposalResponses];
+
 export type ConciergeV1GovernanceServiceGetOwnerAdmissionData = {
     body: ConciergeV1GetOwnerAdmissionRequest;
     headers: {
@@ -8028,6 +9373,35 @@ export type ConciergeV1GovernanceServiceGetOwnerRemovalResponses = {
 };
 
 export type ConciergeV1GovernanceServiceGetOwnerRemovalResponse = ConciergeV1GovernanceServiceGetOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceGetOwnerRemovalResponses];
+
+export type ConciergeV1GovernanceServiceGetUserProposalData = {
+    body: ConciergeV1GetUserProposalRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/GetUserProposal';
+};
+
+export type ConciergeV1GovernanceServiceGetUserProposalErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceGetUserProposalError = ConciergeV1GovernanceServiceGetUserProposalErrors[keyof ConciergeV1GovernanceServiceGetUserProposalErrors];
+
+export type ConciergeV1GovernanceServiceGetUserProposalResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceGetUserProposalResponse = ConciergeV1GovernanceServiceGetUserProposalResponses[keyof ConciergeV1GovernanceServiceGetUserProposalResponses];
 
 export type ConciergeV1GovernanceServiceListOwnerAdmissionsData = {
     body: ConciergeV1ListOwnerAdmissionsRequest;
@@ -8116,6 +9490,64 @@ export type ConciergeV1GovernanceServiceListOwnersResponses = {
 
 export type ConciergeV1GovernanceServiceListOwnersResponse = ConciergeV1GovernanceServiceListOwnersResponses[keyof ConciergeV1GovernanceServiceListOwnersResponses];
 
+export type ConciergeV1GovernanceServiceListUserProposalsData = {
+    body: ConciergeV1ListUserProposalsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/ListUserProposals';
+};
+
+export type ConciergeV1GovernanceServiceListUserProposalsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceListUserProposalsError = ConciergeV1GovernanceServiceListUserProposalsErrors[keyof ConciergeV1GovernanceServiceListUserProposalsErrors];
+
+export type ConciergeV1GovernanceServiceListUserProposalsResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposalList;
+};
+
+export type ConciergeV1GovernanceServiceListUserProposalsResponse = ConciergeV1GovernanceServiceListUserProposalsResponses[keyof ConciergeV1GovernanceServiceListUserProposalsResponses];
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionData = {
+    body: ConciergeV1OpenAdminAdmissionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/OpenAdminAdmission';
+};
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionError = ConciergeV1GovernanceServiceOpenAdminAdmissionErrors[keyof ConciergeV1GovernanceServiceOpenAdminAdmissionErrors];
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceOpenAdminAdmissionResponse = ConciergeV1GovernanceServiceOpenAdminAdmissionResponses[keyof ConciergeV1GovernanceServiceOpenAdminAdmissionResponses];
+
 export type ConciergeV1GovernanceServiceOpenOwnerAdmissionData = {
     body: ConciergeV1OpenOwnerAdmissionRequest;
     headers: {
@@ -8173,6 +9605,64 @@ export type ConciergeV1GovernanceServiceOpenOwnerRemovalResponses = {
 };
 
 export type ConciergeV1GovernanceServiceOpenOwnerRemovalResponse = ConciergeV1GovernanceServiceOpenOwnerRemovalResponses[keyof ConciergeV1GovernanceServiceOpenOwnerRemovalResponses];
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementData = {
+    body: ConciergeV1OpenUserReinstatementRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/OpenUserReinstatement';
+};
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementError = ConciergeV1GovernanceServiceOpenUserReinstatementErrors[keyof ConciergeV1GovernanceServiceOpenUserReinstatementErrors];
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceOpenUserReinstatementResponse = ConciergeV1GovernanceServiceOpenUserReinstatementResponses[keyof ConciergeV1GovernanceServiceOpenUserReinstatementResponses];
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionData = {
+    body: ConciergeV1OpenUserSuspensionRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/OpenUserSuspension';
+};
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionError = ConciergeV1GovernanceServiceOpenUserSuspensionErrors[keyof ConciergeV1GovernanceServiceOpenUserSuspensionErrors];
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceOpenUserSuspensionResponse = ConciergeV1GovernanceServiceOpenUserSuspensionResponses[keyof ConciergeV1GovernanceServiceOpenUserSuspensionResponses];
 
 export type ConciergeV1GovernanceServiceResignOwnershipData = {
     body: ConciergeV1ResignOwnershipRequest;
@@ -8260,6 +9750,35 @@ export type ConciergeV1GovernanceServiceSubmitPeerVoteResponses = {
 };
 
 export type ConciergeV1GovernanceServiceSubmitPeerVoteResponse = ConciergeV1GovernanceServiceSubmitPeerVoteResponses[keyof ConciergeV1GovernanceServiceSubmitPeerVoteResponses];
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteData = {
+    body: ConciergeV1SubmitUserProposalVoteRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.GovernanceService/SubmitUserProposalVote';
+};
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteError = ConciergeV1GovernanceServiceSubmitUserProposalVoteErrors[keyof ConciergeV1GovernanceServiceSubmitUserProposalVoteErrors];
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1UserProposal;
+};
+
+export type ConciergeV1GovernanceServiceSubmitUserProposalVoteResponse = ConciergeV1GovernanceServiceSubmitUserProposalVoteResponses[keyof ConciergeV1GovernanceServiceSubmitUserProposalVoteResponses];
 
 export type ConciergeV1MailRelayServiceSendGovernanceMailData = {
     body: ConciergeV1SendGovernanceMailRequest;
@@ -8434,6 +9953,35 @@ export type ConciergeV1UserDirectoryGetUserResponses = {
 };
 
 export type ConciergeV1UserDirectoryGetUserResponse = ConciergeV1UserDirectoryGetUserResponses[keyof ConciergeV1UserDirectoryGetUserResponses];
+
+export type ConciergeV1UserDirectoryHoldUserData = {
+    body: ConciergeV1HoldUserRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/concierge.v1.UserDirectory/HoldUser';
+};
+
+export type ConciergeV1UserDirectoryHoldUserErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type ConciergeV1UserDirectoryHoldUserError = ConciergeV1UserDirectoryHoldUserErrors[keyof ConciergeV1UserDirectoryHoldUserErrors];
+
+export type ConciergeV1UserDirectoryHoldUserResponses = {
+    /**
+     * Success
+     */
+    200: ConciergeV1HoldUserResponse;
+};
+
+export type ConciergeV1UserDirectoryHoldUserResponse = ConciergeV1UserDirectoryHoldUserResponses[keyof ConciergeV1UserDirectoryHoldUserResponses];
 
 export type ConciergeV1UserDirectoryListUsersData = {
     body: ConciergeV1ListUsersRequest;

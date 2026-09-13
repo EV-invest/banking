@@ -36,7 +36,6 @@ use uuid::Uuid;
 use crate::{
 	AppState,
 	application::book::{self as book_app, BookPorts, BookSnapshotView, PlaceOrderRequest, WatchFrame},
-	infrastructure::outflow::PgOutflowPolicy,
 	ports::book::{BookLevel, BookPolicyRecord, Candle, OrderRecord, TradeRecord, UserTrade},
 	services::support::{caller_id, holds_permission, map_err, optional, require_permission, unfrozen_caller, unix_now},
 };
@@ -59,14 +58,14 @@ impl BookSvc {
 		Self { state }
 	}
 
-	fn ports<'a>(&'a self, outflow: &'a PgOutflowPolicy<'a>) -> BookPorts<'a> {
+	fn ports(&self) -> BookPorts<'_> {
 		BookPorts {
 			allocations: self.state.allocations.as_ref(),
 			ledger: self.state.ledger.as_ref(),
 			nav: self.state.nav.as_ref(),
 			store: self.state.book.as_ref(),
 			engine: self.state.book_engine.as_ref(),
-			outflow,
+			outflow: self.state.outflow.as_ref(),
 			relay: &self.state.relay_notify,
 			feed: &self.state.book_feed,
 		}
@@ -103,9 +102,8 @@ impl BookService for BookSvc {
 		let price = optional(&req.price).map(Price::parse_decimal).transpose().map_err(map_err)?;
 		let size = Shares::parse_decimal(&req.size).map_err(map_err)?;
 		let client_order_id = ClientOrderId::parse(&req.client_order_id).map_err(map_err)?;
-		let outflow = PgOutflowPolicy::new(&self.state.pool);
 		let record = book_app::place_order(
-			&self.ports(&outflow),
+			&self.ports(),
 			user,
 			PlaceOrderRequest {
 				service,
