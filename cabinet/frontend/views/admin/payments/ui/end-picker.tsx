@@ -7,7 +7,7 @@
 // instead of forwarding two resources it never looks at itself.
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
+import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle, FieldLegend, FieldSet, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { adminAllocationsResource } from "@/entities/admin/model/admin-resource";
 import { useResource } from "@/shared/lib/resource";
@@ -33,8 +33,10 @@ export function EndPicker({
   const t = useT();
   const set = (patch: Partial<EndDraft>) => onChange({ ...value, ...patch });
   return (
-    <fieldset className="min-w-0 space-y-2">
-      <legend className="mb-2 text-xs font-medium text-muted-foreground">{label}</legend>
+    <FieldSet className="min-w-0 gap-2">
+      <FieldLegend variant="label" className="mb-0">
+        {label}
+      </FieldLegend>
       {/* The id is cleared with the kind: a product slug is not a user id, and keeping one
           across the switch would send a name on the wrong claim. */}
       <Select value={value.kind} onValueChange={(next) => set({ kind: END_KINDS.find((k) => k === next) ?? value.kind, id: "", name: "" })}>
@@ -52,7 +54,7 @@ export function EndPicker({
       {value.kind === "service" && <ProductSelect value={value.id} onChange={(id, name) => set({ id, name })} />}
       {value.kind === "user" && <UserSearch value={value.id} onChange={(id, name) => set({ id, name })} />}
       {value.kind === "external" && <ExternalFields network={value.network} address={value.address} onChange={set} />}
-    </fieldset>
+    </FieldSet>
   );
 }
 

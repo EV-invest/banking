@@ -7,10 +7,10 @@
 // emails them, and executes only once they have. Every word on this surface has to carry
 // that, because the failure it invites is an operator reading "opened" as "sent".
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Input, Textarea } from "@evinvest/uikit";
+import { Button, Field, FieldDescription, FieldError, FieldLabel, Input, Textarea } from "@evinvest/uikit";
 
 import { openPayment } from "@/entities/payment/model/payment-resource";
 import type { Payment } from "@/shared/contracts/payments";
@@ -36,8 +36,20 @@ export function OpenPaymentForm() {
   const [refusal, setRefusal] = useState<{ detail: ConsiliumRefusal; liftsAt: string | null } | null>(null);
   const [opened, setOpened] = useState<Payment | null>(null);
 
+  const ids = useId();
+  const amountId = `${ids}-amount`;
+  const reasonId = `${ids}-reason`;
+  const reasonHintId = `${ids}-reason-hint`;
+
   const problem = draftProblem(source, destination, amount, reason);
   const touched = amount.trim().length > 0 || reason.trim().length > 0;
+  // A problem is shown beside the field it is about, so the field can point at it
+  // (`aria-describedby`) and flag itself invalid; anything about the two ends has no
+  // single field and stays as the line under the form.
+  const shown = problem && touched ? problem : null;
+  const amountProblem = shown === "admin.payments.err.enterAmount" ? shown : null;
+  const reasonProblem = shown === "admin.payments.err.enterReason" || shown === "admin.payments.err.reasonTooLong" ? shown : null;
+  const endsProblem = shown && !amountProblem && !reasonProblem ? shown : null;
   // Any edit reopens the draft: the review restates the terms, and a review of stale ones
   // would be a confirmation of something the operator is no longer looking at.
   const edit = <T,>(set: (v: T) => void) => (v: T) => {
@@ -81,20 +93,39 @@ export function OpenPaymentForm() {
       <TermsPreview source={source} destination={destination} />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block space-y-1.5">
-          <span className="block text-xs text-muted-foreground">{t("admin.payments.amountUsdt")}</span>
-          <Input value={amount} onChange={(e) => edit(setAmount)(e.target.value)} inputMode="decimal" placeholder="0.00" className="tabular-nums" />
-        </label>
-        <label className="block space-y-1.5 sm:col-span-2">
-          <span className="block text-xs text-muted-foreground">{t("admin.payments.reason")}</span>
-          <Textarea value={reason} onChange={(e) => edit(setReason)(e.target.value)} rows={3} placeholder={t("admin.payments.placeholder.reason")} />
-          <span className="block text-xs tabular-nums text-muted-foreground">
+        <Field data-invalid={amountProblem !== null || undefined}>
+          <FieldLabel htmlFor={amountId}>{t("admin.payments.amountUsdt")}</FieldLabel>
+          <Input
+            id={amountId}
+            value={amount}
+            onChange={(e) => edit(setAmount)(e.target.value)}
+            inputMode="decimal"
+            placeholder="0.00"
+            aria-invalid={amountProblem !== null || undefined}
+            aria-describedby={amountProblem ? `${amountId}-error` : undefined}
+            className="tabular-nums"
+          />
+          {amountProblem && <FieldError id={`${amountId}-error`}>{t(amountProblem)}</FieldError>}
+        </Field>
+        <Field className="sm:col-span-2" data-invalid={reasonProblem !== null || undefined}>
+          <FieldLabel htmlFor={reasonId}>{t("admin.payments.reason")}</FieldLabel>
+          <Textarea
+            id={reasonId}
+            value={reason}
+            onChange={(e) => edit(setReason)(e.target.value)}
+            rows={3}
+            placeholder={t("admin.payments.placeholder.reason")}
+            aria-invalid={reasonProblem !== null || undefined}
+            aria-describedby={reasonProblem ? `${reasonId}-error ${reasonHintId}` : reasonHintId}
+          />
+          <FieldDescription id={reasonHintId} className="text-xs tabular-nums">
             {t("admin.payments.reasonHint", { used: reasonBytes(reason.trim()), max: REASON_MAX_BYTES })}
-          </span>
-        </label>
+          </FieldDescription>
+          {reasonProblem && <FieldError id={`${reasonId}-error`}>{t(reasonProblem)}</FieldError>}
+        </Field>
       </div>
 
-      {problem && touched && <p className="text-xs text-destructive">{t(problem)}</p>}
+      {endsProblem && <p className="text-xs text-destructive">{t(endsProblem)}</p>}
 
       {confirming ? (
         <ReviewPanel source={source} destination={destination} amount={amount} reason={reason} busy={busy} onConfirm={() => void submit()} onBack={() => setConfirming(false)} />
