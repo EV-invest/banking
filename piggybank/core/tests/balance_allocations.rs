@@ -31,6 +31,7 @@ use piggybank_core::{
 		deposits::PgDeposits,
 		ledger::{self, TbLedger},
 		nav::PgNav,
+		outflow::PgOutflowPolicy,
 		positions::PgFundPositions,
 		redemptions::PgRedemptions,
 		relay::Relay,
@@ -666,7 +667,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 	let users = PgUsers::new(h.pool.clone());
 	let subs: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(h.pool.clone()));
 	let withdrawals: Arc<dyn piggybank_core::ports::WithdrawalRepository> = Arc::new(PgWithdrawals::new(h.pool.clone()));
-	let users_dyn: Arc<dyn UserRepository> = Arc::new(PgUsers::new(h.pool.clone()));
+	let policy = PgOutflowPolicy::new(h.pool.clone());
 	let nav_repo = PgNav::new(h.pool.clone());
 	let positions = PgFundPositions::new(h.pool.clone());
 	let user = active_user(&h.pool, &users).await;
@@ -698,7 +699,7 @@ async fn concurrent_withdraw_and_subscribe_never_leave_a_divergent_claim() {
 		relay: &h.notify,
 	};
 	let admission = withdrawal_app::AdmissionGates {
-		users: users_dyn.as_ref(),
+		policy: &policy,
 		configured: &Network::ALL,
 		kyc: KycGate::ENFORCED,
 	};

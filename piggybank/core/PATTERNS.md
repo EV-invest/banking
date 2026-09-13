@@ -581,7 +581,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `GetPosition` / `ListPositions` / `ListRedemptions` / `GetFundNav` | the user | `sub == user` | — |
 | `GetWallet` / `ListWithdrawals` | the user | `sub == user` | — (`GetWallet` serves an address only at `kyc_level ≥ 1`) |
 | `GetDepositAddress` | the user | `sub == user` | `kyc_level ≥ 1` (else `permission_denied`) |
-| `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | active account ∧ `kyc_level ≥ 1` ∧ available claim ≥ gross (TB flag backstop) |
+| `RequestWithdrawal` | the user | `sub == user`, `is_access`, **not frozen** | owner not frozen (`frozen ∨ disabled`, via `OutflowPolicy::standing`) ∧ `kyc_level ≥ 1` ∧ available claim ≥ gross (TB flag backstop) |
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ **not read-only** ∧ (user source) owner not frozen ∧ `kyc_level ≥ 1` — fail-closed, no `force` |
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |

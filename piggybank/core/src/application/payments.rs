@@ -89,7 +89,7 @@ impl PaymentPorts<'_> {
 
 	fn admission_gates(&self) -> AdmissionGates<'_> {
 		AdmissionGates {
-			users: self.users,
+			policy: self.policy,
 			configured: self.configured,
 			kyc: self.kyc,
 		}

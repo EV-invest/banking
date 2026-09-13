@@ -1324,7 +1324,7 @@ async fn a_revocation_inside_the_execution_window_cancels_the_queued_withdrawal(
 			relay: &a.notify,
 		},
 		&piggybank_core::application::withdrawals::AdmissionGates {
-			users: &a.users,
+			policy: &a.outflow,
 			configured: &[Network::Bep20],
 			kyc: KycGate::LIFTED,
 		},

@@ -2,7 +2,9 @@
 //! list (user).
 //!
 //! `request_withdrawal` is a command with a **two-part Read-First**: it gates on the
-//! user being active and KYC-verified (the freeze/verification seam), confirms the **available** unified claim
+//! user's money-out standing — not frozen (a concierge SUSPENDED or a banking
+//! `DisableUser`) and KYC-verified — read through the same [`OutflowPolicy`] the dispatch
+//! re-check uses, confirms the **available** unified claim
 //! (posted − already-reserved) covers the gross (user solvency; the TB non-negative
 //! flag is the backstop), then checks the **chosen rail's liquidity** — the min of the
 //! TB rail accounting balance and the custody adapter's real on-chain treasury view —
@@ -34,7 +36,7 @@ use tracing::warn;
 
 use crate::{
 	config::KycGate,
-	ports::{Custody, OutflowPolicy, UserRepository, WithdrawalRepository, ledger::Ledger},
+	ports::{Custody, OutflowPolicy, WithdrawalRepository, ledger::Ledger, outflow::PayoutStanding},
 };
 
 /// The driven ports the withdrawal write-path borrows: the aggregate's repository, the
@@ -42,7 +44,7 @@ use crate::{
 /// and the relay nudged once the control-plane commit lands. Exactly the set
 /// [`open_withdrawal`] — the shared body of both request paths — needs, so each use-case's
 /// own parameters stay its *request*: which source, which rail, where, how much. The
-/// user-facing entry point's extra gates (the [`UserRepository`] KYC/freeze check, the
+/// user-facing entry point's extra gates (the [`OutflowPolicy`] freeze/KYC standing, the
 /// configured-rail list, the verification switch) are deliberately NOT here but in
 /// [`AdmissionGates`]: the revenue path has no user to gate, and a field it could never
 /// use would only invite one. A plain borrow-holder: it owns nothing and does nothing.
@@ -60,7 +62,7 @@ pub struct WithdrawalPorts<'a> {
 /// The gates the user-facing entry point runs before the shared body — exactly the set
 /// [`WithdrawalPorts`] deliberately leaves out. They travel together because they are
 /// answered together, at admission, about one caller: is this rail run at all, is the
-/// account active, and does the verification floor apply to it ([`KycGate`], enforced
+/// account frozen, and does the verification floor apply to it ([`KycGate`], enforced
 /// unless the deployment lifted it).
 ///
 /// Bundled rather than passed loose for the same reason
@@ -68,8 +70,10 @@ pub struct WithdrawalPorts<'a> {
 /// it keeps the use case's own parameters its *request* — whose withdrawal, which rail,
 /// where, how much.
 pub struct AdmissionGates<'a> {
-	/// The control-plane row the freeze flag and the mirrored KYC tier are read from.
-	pub users: &'a dyn UserRepository,
+	/// Where the freeze flag and the mirrored KYC tier are read from — the SAME port
+	/// [`dispatch_withdrawal`] re-reads at payout, so admission and dispatch cannot disagree
+	/// on what "frozen" means.
+	pub policy: &'a dyn OutflowPolicy,
 	/// The rails with a running on-chain watcher; a withdrawal on any other is refused.
 	pub configured: &'a [Network],
 	/// The deployment's verification gate. The SAME value must reach
@@ -124,8 +128,8 @@ pub async fn queue_withdrawal(
 	open_withdrawal(ports, id, source, network, address, amount, false).await
 }
 
-/// The user-facing admission gates, on their own: the rail is run, the account is active,
-/// and the verification floor admits it. Shared by [`request_withdrawal`] and the payment
+/// The user-facing admission gates, on their own: the rail is run, the account is not
+/// frozen, and the verification floor admits it. Shared by [`request_withdrawal`] and the payment
 /// order's open-time pre-check, so an L1 payment out of an investor's claim is refused at
 /// open for exactly the reasons its execution would refuse it 72 hours later.
 async fn admit_user_withdrawal(gates: &AdmissionGates<'_>, user: UserId, network: Network) -> Result<(), DomainError> {
@@ -139,12 +143,13 @@ async fn admit_user_withdrawal(gates: &AdmissionGates<'_>, user: UserId, network
 /// money on their say-so exactly as a withdrawal is, and an unverified account must not be
 /// able to route around the floor by paying a verified one who then withdraws.
 pub async fn admit_user_account(gates: &AdmissionGates<'_>, user: UserId) -> Result<(), DomainError> {
-	// KYC/freeze gate — a disabled account may not move money out.
-	let account = gates.users.find_by_id(user).await?.ok_or_else(|| DomainError::NotFound {
-		entity: "user",
-		id: user.to_string(),
-	})?;
-	if !account.is_active() {
+	// Freeze gate — `blocked` is the fold of a concierge SUSPENDED (`frozen`) and a
+	// banking-side `DisableUser` (`status = 'disabled'`), the same one `dispatch_withdrawal`
+	// re-reads at payout. Read through the policy port rather than the user aggregate on
+	// purpose: the aggregate never carried the mirrored `frozen` flag, so a check on it
+	// let a suspended account queue withdrawals the dispatcher then had to catch.
+	let standing = policy_standing(gates, user).await?;
+	if standing.blocked {
 		return Err(DomainError::Precondition("account is frozen".into()));
 	}
 	// Verification gate — an unverified account (tier 0 is a registration and a confirmed
@@ -154,10 +159,20 @@ pub async fn admit_user_account(gates: &AdmissionGates<'_>, user: UserId) -> Res
 	// fund's own earned revenue out and has no user behind it to verify. The same `gate`
 	// must reach `dispatch_withdrawal` too — a lifted gate that admits a withdrawal the
 	// dispatch gate then parks forever is worse than no switch at all.
-	if !gates.kyc.admits(account.kyc_level()) {
+	if !gates.kyc.admits(standing.kyc_level) {
 		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));
 	}
 	Ok(())
+}
+
+/// The caller's money-out standing, with a missing row reported as the user not existing —
+/// at admission nothing has been reserved yet, so "no such user" is the honest answer,
+/// unlike the fail-closed refusal [`require_dispatchable`] gives the same `None`.
+async fn policy_standing(gates: &AdmissionGates<'_>, user: UserId) -> Result<PayoutStanding, DomainError> {
+	gates.policy.standing(user).await?.ok_or_else(|| DomainError::NotFound {
+		entity: "user",
+		id: user.to_string(),
+	})
 }
 
 /// Would this user withdrawal be accepted *right now*, without recording anything? The
