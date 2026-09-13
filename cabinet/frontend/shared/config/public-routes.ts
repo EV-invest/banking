@@ -21,12 +21,13 @@
  * Zone-relative paths reachable without a session. Each also covers its `/…` descendants
  * — that is what makes the token routes expressible at all.
  *
- * The two approval entries are the pages an owner reaches from an email, on a device that
- * may never have been signed in. They are safe to expose because the token alone can only
+ * The approval entries are the pages a reader reaches from an email, on a device that may
+ * never have been signed in — the two owner approvals, and `/consent`, where an investor
+ * answers for their own money. They are safe to expose because the token alone can only
  * *read* a redacted summary: casting the vote needs the secret code from the message body,
  * and the token is single-use with a 72h TTL (docs/CONSILIUM.md, policy 5–6).
  */
-export const PUBLIC_PATHS = ["/login", "/loggedout", "/approve", "/owner-removal"] as const;
+export const PUBLIC_PATHS = ["/login", "/loggedout", "/approve", "/owner-removal", "/consent"] as const;
 
 /**
  * The token-addressed approval pages specifically.
@@ -38,7 +39,7 @@ export const PUBLIC_PATHS = ["/login", "/loggedout", "/approve", "/owner-removal
  * proxy logs and third-party assets are not) is one the policy asks us to close
  * (policy 6).
  */
-export const TOKEN_APPROVAL_PATHS = ["/approve", "/owner-removal"] as const;
+export const TOKEN_APPROVAL_PATHS = ["/approve", "/owner-removal", "/consent"] as const;
 
 /**
  * A real request path reduced to the zone-relative one the rules above are written in.

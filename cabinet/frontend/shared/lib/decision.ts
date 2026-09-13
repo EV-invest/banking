@@ -116,3 +116,20 @@ export function proposalVote(raw: unknown): SettledProposal | null {
   if (value === "against") return "against";
   return null;
 }
+
+/**
+ * An investor's answer to a payment consent, once one has actually been given.
+ *
+ * Same vocabulary as {@link SettledPayout} and the same trap: the plane spells an unanswered
+ * seat `"pending"`, the BFF may send `""`, and both are truthy. Kept as its own function
+ * rather than an alias so a consent page never reads a payout's words by accident when the
+ * two vocabularies stop coinciding.
+ */
+export type SettledConsent = "approve" | "reject";
+
+export function settledConsent(raw: unknown): SettledConsent | null {
+  const value = normalise(raw);
+  if (value === "approve" || value === "approved") return "approve";
+  if (value === "reject" || value === "rejected") return "reject";
+  return null;
+}

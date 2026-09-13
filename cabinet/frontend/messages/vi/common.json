@@ -471,6 +471,10 @@
     "en": "Worth at current NAV",
     "t": "Giá trị theo NAV hiện tại"
   },
+  "admin.fundRevenue": {
+    "en": "Fund revenue",
+    "t": "Doanh thu quỹ"
+  },
   "admin.kyc.elevated": {
     "en": "Elevated",
     "t": "Chuyên sâu"
@@ -615,6 +619,210 @@
     "en": "unparked",
     "t": "đã gỡ treo"
   },
+  "admin.payments.address": {
+    "en": "Destination address",
+    "t": "Địa chỉ nhận"
+  },
+  "admin.payments.amountUsdt": {
+    "en": "Amount (USDT)",
+    "t": "Số tiền (USDT)"
+  },
+  "admin.payments.col.amountUsdt": {
+    "en": "Amount, USDT",
+    "t": "Số tiền, USDT"
+  },
+  "admin.payments.col.approval": {
+    "en": "Approval",
+    "t": "Phê duyệt"
+  },
+  "admin.payments.col.ends": {
+    "en": "From → to",
+    "t": "Từ → tới"
+  },
+  "admin.payments.col.opened": {
+    "en": "Opened",
+    "t": "Đã mở"
+  },
+  "admin.payments.confirmOpen": {
+    "en": "Open payment",
+    "t": "Mở thanh toán"
+  },
+  "admin.payments.err.enterAmount": {
+    "en": "Enter an amount.",
+    "t": "Nhập số tiền."
+  },
+  "admin.payments.err.enterReason": {
+    "en": "A reason is required — it is what the approvers read.",
+    "t": "Lý do là bắt buộc — đó là nội dung người phê duyệt đọc."
+  },
+  "admin.payments.err.noRailFromPooled": {
+    "en": "Fund capital and a product's pooled claim cannot ship to an address. Move it to fund revenue or to an investor first.",
+    "t": "Vốn quỹ và tài khoản gộp của sản phẩm không thể gửi tới một địa chỉ. Hãy chuyển sang doanh thu quỹ hoặc tới một nhà đầu tư trước."
+  },
+  "admin.payments.err.pickDestination": {
+    "en": "Complete the destination.",
+    "t": "Hoàn tất điểm đến."
+  },
+  "admin.payments.err.pickSource": {
+    "en": "Choose which product or investor the money comes from.",
+    "t": "Chọn sản phẩm hoặc nhà đầu tư mà tiền được lấy từ đó."
+  },
+  "admin.payments.err.reasonTooLong": {
+    "en": "The reason is over 500 bytes.",
+    "t": "Lý do dài hơn 500 byte."
+  },
+  "admin.payments.err.sameEnds": {
+    "en": "The source and the destination are the same claim.",
+    "t": "Nguồn và điểm đến là cùng một tài khoản."
+  },
+  "admin.payments.formNote": {
+    "en": "Opening a payment moves no money. Fund-owned money is proposed to the owners' consilium; an investor's own money is put to that investor by email. Only once they agree does anything move.",
+    "t": "Mở một khoản thanh toán không chuyển tiền. Tiền của quỹ được đề xuất lên hội đồng chủ sở hữu; tiền riêng của nhà đầu tư được gửi tới chính nhà đầu tư đó qua email. Chỉ khi họ đồng ý thì tiền mới được chuyển."
+  },
+  "admin.payments.investor": {
+    "en": "Investor",
+    "t": "Nhà đầu tư"
+  },
+  "admin.payments.kind.external": {
+    "en": "An external address",
+    "t": "Một địa chỉ bên ngoài"
+  },
+  "admin.payments.kind.piggybank": {
+    "en": "Fund capital (piggybank)",
+    "t": "Vốn quỹ (piggybank)"
+  },
+  "admin.payments.kind.revenue": {
+    "en": "Fund revenue",
+    "t": "Doanh thu quỹ"
+  },
+  "admin.payments.kind.service": {
+    "en": "A product",
+    "t": "Một sản phẩm"
+  },
+  "admin.payments.kind.user": {
+    "en": "An investor",
+    "t": "Một nhà đầu tư"
+  },
+  "admin.payments.list": {
+    "en": "Payments",
+    "t": "Các khoản thanh toán"
+  },
+  "admin.payments.noProducts": {
+    "en": "No product is registered yet.",
+    "t": "Chưa có sản phẩm nào được đăng ký."
+  },
+  "admin.payments.noProductsHint": {
+    "en": "A product appears here once it is registered as an allocation.",
+    "t": "Sản phẩm sẽ xuất hiện ở đây sau khi được đăng ký làm allocation."
+  },
+  "admin.payments.noRail": {
+    "en": "No rail is configured",
+    "t": "Chưa cấu hình rail"
+  },
+  "admin.payments.noRailHint": {
+    "en": "Rails are configured on the treasury; a payment ships only on a chain with a running watcher.",
+    "t": "Rail được cấu hình ở kho bạc; thanh toán chỉ được gửi trên chuỗi có watcher đang chạy."
+  },
+  "admin.payments.noUsers": {
+    "en": "No investor matches.",
+    "t": "Không có nhà đầu tư nào khớp."
+  },
+  "admin.payments.noUsersHint": {
+    "en": "Try another part of the email address.",
+    "t": "Hãy thử một phần khác của địa chỉ email."
+  },
+  "admin.payments.none": {
+    "en": "No payments yet",
+    "t": "Chưa có khoản thanh toán nào"
+  },
+  "admin.payments.noneHint": {
+    "en": "Every order opened here appears with who has to agree and where that stands. An order executes once they have, and shows what it became.",
+    "t": "Mỗi lệnh được mở ở đây sẽ hiện ra cùng với người phải đồng ý và tiến độ. Sau khi họ đồng ý, lệnh được thực hiện và hiển thị kết quả."
+  },
+  "admin.payments.noneInState": {
+    "en": "No payments in this state",
+    "t": "Không có khoản thanh toán nào ở trạng thái này"
+  },
+  "admin.payments.open": {
+    "en": "Open a payment",
+    "t": "Mở một khoản thanh toán"
+  },
+  "admin.payments.openConsilium": {
+    "en": "Open the consilium",
+    "t": "Mở hội đồng"
+  },
+  "admin.payments.openedConsentBody": {
+    "en": "{email} has been emailed a link and a code. Nothing moves until they agree — this is their money, and only they can say so.",
+    "t": "{email} đã được gửi một liên kết và một mã qua email. Không có gì di chuyển cho đến khi họ đồng ý — đây là tiền của họ, và chỉ họ mới có thể quyết định."
+  },
+  "admin.payments.openedConsiliumBody": {
+    "en": "The owners have each been emailed a link. Nothing moves until more than half of them confirm from their own mailboxes; the live tally is in the consilium.",
+    "t": "Mỗi chủ sở hữu đã được gửi một liên kết qua email. Không có gì di chuyển cho đến khi hơn một nửa xác nhận từ hộp thư của họ; số phiếu hiện tại nằm trong hội đồng."
+  },
+  "admin.payments.openedExpires": {
+    "en": "Expires {at} · {left}",
+    "t": "Hết hạn {at} · {left}"
+  },
+  "admin.payments.openedTitle": {
+    "en": "Opened — no money has moved",
+    "t": "Đã mở — chưa có tiền nào được chuyển"
+  },
+  "admin.payments.pickProduct": {
+    "en": "Choose a product",
+    "t": "Chọn một sản phẩm"
+  },
+  "admin.payments.placeholder.address": {
+    "en": "The wallet that receives the payment",
+    "t": "Ví nhận khoản thanh toán"
+  },
+  "admin.payments.placeholder.reason": {
+    "en": "Why this money moves — the approvers read exactly this",
+    "t": "Vì sao chuyển khoản này — người phê duyệt đọc chính xác nội dung này"
+  },
+  "admin.payments.placeholder.userSearch": {
+    "en": "Search investors by email",
+    "t": "Tìm nhà đầu tư theo email"
+  },
+  "admin.payments.reason": {
+    "en": "Reason",
+    "t": "Lý do"
+  },
+  "admin.payments.reasonHint": {
+    "en": "Required. {used} of {max} bytes. Part of what is approved, and covered by the request fingerprint — it cannot be changed afterwards.",
+    "t": "Bắt buộc. {used} trên {max} byte. Là một phần của nội dung được phê duyệt và nằm trong dấu vân tay của yêu cầu — không thể thay đổi sau đó."
+  },
+  "admin.payments.requirement": {
+    "en": "Who must agree",
+    "t": "Ai phải đồng ý"
+  },
+  "admin.payments.review": {
+    "en": "Review payment",
+    "t": "Xem lại thanh toán"
+  },
+  "admin.payments.reviewNote.owner_consilium": {
+    "en": "The terms are fixed once opened. Every owner is emailed exactly these and they are checked again before any money moves — changing anything means cancelling and starting over, and votes are not carried across.",
+    "t": "Các điều khoản được cố định sau khi mở. Mỗi chủ sở hữu nhận email đúng các điều khoản này và chúng được kiểm tra lại trước khi tiền được chuyển — thay đổi bất cứ điều gì nghĩa là huỷ và bắt đầu lại, phiếu bầu không được giữ."
+  },
+  "admin.payments.reviewNote.subject_consent": {
+    "en": "The terms are fixed once opened. This is the investor's own money: they alone are emailed exactly these and must agree with the code from that message. Changing anything means cancelling and starting over.",
+    "t": "Các điều khoản được cố định sau khi mở. Đây là tiền riêng của nhà đầu tư: chỉ họ nhận email đúng các điều khoản này và phải đồng ý bằng mã trong thư đó. Thay đổi bất cứ điều gì nghĩa là huỷ và bắt đầu lại."
+  },
+  "admin.payments.reviewSentence": {
+    "en": "Pay {amount} from {source} to {destination}?",
+    "t": "Chuyển {amount} từ {source} tới {destination}?"
+  },
+  "admin.payments.source": {
+    "en": "Source",
+    "t": "Nguồn"
+  },
+  "admin.payments.subtitle": {
+    "en": "Money between two named ends of the platform — inside the fund, into a product, or out to an address — each authorised by whoever the money belongs to",
+    "t": "Tiền giữa hai đầu được đặt tên của nền tảng — trong quỹ, vào một sản phẩm, hoặc ra ngoài tới một địa chỉ — mỗi khoản đều do chủ sở hữu của số tiền đó cho phép"
+  },
+  "admin.payments.tier": {
+    "en": "Tier",
+    "t": "Cấp"
+  },
   "admin.rail": {
     "en": "Rail",
     "t": "Kênh"
@@ -647,10 +855,6 @@
     "en": "Available to pay out",
     "t": "Khả dụng để chi trả"
   },
-  "admin.revenue.destinationAddress": {
-    "en": "Destination address",
-    "t": "Địa chỉ nhận"
-  },
   "admin.revenue.earned": {
     "en": "Earned",
     "t": "Đã thu được"
@@ -663,18 +867,6 @@
     "en": "fees + settled 2-and-20",
     "t": "phí + phần 2-and-20 đã tất toán"
   },
-  "admin.revenue.err.belowMinimum": {
-    "en": "Below the {min} minimum for this rail.",
-    "t": "Thấp hơn mức tối thiểu {min} của kênh này."
-  },
-  "admin.revenue.err.enterAmount": {
-    "en": "Enter an amount.",
-    "t": "Hãy nhập số tiền."
-  },
-  "admin.revenue.err.overAvailable": {
-    "en": "Only {available} of earned revenue is available.",
-    "t": "Chỉ có {available} doanh thu đã thu là khả dụng."
-  },
   "admin.revenue.footnote": {
     "en": "A payout runs the same saga as a user withdrawal, so it also appears on the Withdrawals queue for dispatch and settle. Only a still-queued payout can be cancelled — once processing, a broadcast may have landed and voiding it would double-pay.",
     "t": "Một khoản chi trả chạy cùng quy trình saga như lệnh rút của người dùng, nên nó cũng xuất hiện trong hàng đợi Rút tiền để gửi lệnh và tất toán. Chỉ khoản chi trả còn đang xếp hàng mới có thể hủy — khi đã chuyển sang xử lý, giao dịch có thể đã lên mạng và việc hủy sẽ dẫn tới trả trùng."
@@ -683,21 +875,13 @@
     "en": "In flight",
     "t": "Đang thực hiện"
   },
-  "admin.revenue.instantSuffix": {
-    "en": "{amount} instant",
-    "t": "{amount} tức thì"
-  },
   "admin.revenue.noPayouts": {
     "en": "No payouts yet",
     "t": "Chưa có khoản chi trả nào"
   },
-  "admin.revenue.noRail": {
-    "en": "No rail is configured",
-    "t": "Chưa cấu hình kênh nào"
-  },
-  "admin.revenue.noRailHint": {
-    "en": "A payout ships on a chain rail with a running watcher. Configure one to enable payouts.",
-    "t": "Khoản chi trả được chuyển qua một kênh blockchain có bộ theo dõi đang chạy. Hãy cấu hình một kênh để bật chức năng chi trả."
+  "admin.revenue.noPayoutsHintConsilium": {
+    "en": "Revenue the fund has earned stays on the ledger until the owners approve a payout. Approved payouts appear here once they execute.",
+    "t": "Doanh thu quỹ kiếm được vẫn nằm trên sổ cái cho đến khi các chủ sở hữu phê duyệt một khoản chi trả. Các khoản chi trả đã được phê duyệt sẽ xuất hiện ở đây sau khi thực hiện."
   },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
@@ -715,13 +899,21 @@
     "en": "Pending payout",
     "t": "Chi trả đang chờ"
   },
-  "admin.revenue.placeholder.address": {
-    "en": "The wallet that receives the payout",
-    "t": "Ví nhận khoản chi trả"
+  "admin.revenue.subtitle": {
+    "en": "What the fund earned — fees and the settled 2-and-20 — and the payouts it has made of it",
+    "t": "Quỹ đã kiếm được gì — phí và 2-và-20 đã quyết toán — và các khoản chi trả đã thực hiện từ đó"
   },
-  "admin.revenue.placeholder.minAmount": {
-    "en": "min {n}",
-    "t": "tối thiểu {n}"
+  "admin.revenue.toPayments": {
+    "en": "Paying revenue out — to an address, into a product, or to an investor — is a payment order the owners authorise. Open one there.",
+    "t": "Chi trả doanh thu — tới một địa chỉ, vào một sản phẩm, hoặc cho một nhà đầu tư — là một lệnh thanh toán do chủ sở hữu phê duyệt. Mở lệnh ở đó."
+  },
+  "admin.revenue.toTreasury": {
+    "en": "The revenue claim beside the fund's other balances: custody per rail, client claims, seed capital.",
+    "t": "Tài khoản doanh thu bên cạnh các số dư khác của quỹ: lưu ký theo rail, tài khoản khách hàng, vốn hạt giống."
+  },
+  "admin.revenue.whereNext": {
+    "en": "Move or inspect it",
+    "t": "Chuyển hoặc xem"
   },
   "admin.role.admin": {
     "en": "Admin",
@@ -1307,6 +1499,74 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Gửi lệnh, tất toán hoặc báo lỗi các lệnh rút — của nhà đầu tư và của chính quỹ"
   },
+  "approval.payment.approve": {
+    "en": "Approve this payment",
+    "t": "Phê duyệt khoản thanh toán này"
+  },
+  "approval.payment.decided.approvedTitle": {
+    "en": "You approved this payment",
+    "t": "Bạn đã phê duyệt khoản thanh toán này"
+  },
+  "approval.payment.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payment goes ahead once enough owners have agreed.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Không cần làm gì thêm ở đây — khoản thanh toán sẽ được thực hiện khi đủ chủ sở hữu đồng ý."
+  },
+  "approval.payment.decided.rejectedTitle": {
+    "en": "You rejected this payment",
+    "t": "Bạn đã từ chối khoản thanh toán này"
+  },
+  "approval.payment.from": {
+    "en": "From",
+    "t": "Từ"
+  },
+  "approval.payment.lead": {
+    "en": "{initiator} has asked to move money the fund owns, as set out below. Moving the fund's own money is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} yêu cầu chuyển tiền thuộc sở hữu của quỹ như mô tả bên dưới. Việc chuyển tiền của quỹ không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
+  },
+  "approval.payment.payloadHashHint": {
+    "en": "The fingerprint is taken over the amount, both ends and the reason above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
+    "t": "Dấu vân tay được tính trên số tiền, hai đầu và lý do ở trên. Nó được kiểm tra lại trước khi tiền được chuyển, nên yêu cầu không thể bị chỉnh sửa sau khi bạn đã đồng ý."
+  },
+  "approval.payment.reasonLabel": {
+    "en": "Reason given",
+    "t": "Lý do đưa ra"
+  },
+  "approval.payment.tier": {
+    "en": "Tier",
+    "t": "Cấp"
+  },
+  "approval.payment.title": {
+    "en": "Approve a fund payment",
+    "t": "Phê duyệt một khoản thanh toán của quỹ"
+  },
+  "approval.payment.to": {
+    "en": "To",
+    "t": "Tới"
+  },
+  "approval.payout.approve": {
+    "en": "Approve this payout",
+    "t": "Phê duyệt khoản chi trả này"
+  },
+  "approval.payout.decided.approvedTitle": {
+    "en": "You approved this payout",
+    "t": "Bạn đã phê duyệt khoản chi trả này"
+  },
+  "approval.payout.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Không còn gì phải làm ở đây — khoản chi trả sẽ được thực hiện khi có đủ chủ sở hữu đồng ý."
+  },
+  "approval.payout.decided.rejectedTitle": {
+    "en": "You rejected this payout",
+    "t": "Bạn đã từ chối khoản chi trả này"
+  },
+  "approval.payout.lead": {
+    "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} đề nghị chi trả số tiền quỹ đã kiếm được. Chi trả tiền của chính quỹ không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
+  },
+  "approval.payout.title": {
+    "en": "Approve a fund payout",
+    "t": "Phê duyệt một khoản chi trả của quỹ"
+  },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
     "t": "Tiếp cận theo chuẩn tổ chức tới các quỹ bất động sản ven biển và hạ tầng đã được thẩm định — quản lý trọn vẹn từ đầu đến cuối."
@@ -1379,9 +1639,109 @@
     "en": "Welcome back",
     "t": "Chào mừng trở lại"
   },
+  "consent.approve": {
+    "en": "Approve — move my money",
+    "t": "Đồng ý — chuyển tiền của tôi"
+  },
+  "consent.askedBy": {
+    "en": "Asked by",
+    "t": "Yêu cầu bởi"
+  },
+  "consent.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed. Nothing was approved and your money has not moved. Whoever asked can open a new request.",
+    "t": "Mã đã bị nhập sai quá nhiều lần nên liên kết đã bị đóng. Không có gì được phê duyệt và tiền của bạn chưa được chuyển. Người yêu cầu có thể mở một yêu cầu mới."
+  },
+  "consent.decided.approvedFresh": {
+    "en": "Your answer has been recorded and the payment goes ahead. There is nothing further to do here.",
+    "t": "Câu trả lời của bạn đã được ghi nhận và khoản thanh toán sẽ được thực hiện. Không cần làm gì thêm ở đây."
+  },
+  "consent.decided.approvedTitle": {
+    "en": "You approved this payment",
+    "t": "Bạn đã đồng ý khoản thanh toán này"
+  },
+  "consent.decided.rejectedFresh": {
+    "en": "Your answer has been recorded. Your money stays exactly where it is, and whoever asked has been told.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Tiền của bạn vẫn ở nguyên chỗ cũ, và người yêu cầu đã được thông báo."
+  },
+  "consent.decided.rejectedTitle": {
+    "en": "You rejected this payment",
+    "t": "Bạn đã từ chối khoản thanh toán này"
+  },
+  "consent.decisionLead": {
+    "en": "Both answers need the code from your email. Enter it once, then choose. Rejecting keeps your money exactly where it is.",
+    "t": "Cả hai câu trả lời đều cần mã trong email của bạn. Nhập một lần rồi chọn. Từ chối sẽ giữ nguyên tiền của bạn ở nơi hiện tại."
+  },
+  "consent.decisionTitle": {
+    "en": "Your decision",
+    "t": "Quyết định của bạn"
+  },
+  "consent.lead": {
+    "en": "{initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.",
+    "t": "{initiator} yêu cầu chuyển số tiền này như mô tả bên dưới. Không có gì xảy ra nếu bạn không đồng ý — không ai khác được hỏi, và không ai có thể trả lời thay bạn."
+  },
+  "consent.leadOwn": {
+    "en": "This is your money.",
+    "t": "Đây là tiền của bạn."
+  },
+  "consent.reasonLabel": {
+    "en": "Reason given by {initiator}",
+    "t": "Lý do do {initiator} đưa ra"
+  },
+  "consent.reject": {
+    "en": "Reject — keep my money",
+    "t": "Từ chối — giữ lại tiền của tôi"
+  },
+  "consent.title": {
+    "en": "Your money is asked to move",
+    "t": "Có yêu cầu chuyển tiền của bạn"
+  },
+  "consent.unavailableBody": {
+    "en": "The terms of this payment didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.",
+    "t": "Các điều khoản của khoản thanh toán này chưa tải được, nên ở đây không có gì để đồng ý và không có quyết định nào được đưa ra. Đây là sự cố phía chúng tôi, không phải do liên kết của bạn. Hãy thử lại sau giây lát."
+  },
+  "consent.yourMoney": {
+    "en": "Whose money",
+    "t": "Tiền của ai"
+  },
   "consilium.admit.genesis": {
     "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
     "t": "Quỹ này có {n, plural, other {# chủ sở hữu có ghế}}. Một đề nghị kết nạp cần ít nhất một chủ sở hữu ngoài người đề xuất, nên nó không thể đưa những người sáng lập vào ghế: những ghế đó do chính dịch vụ ghi lại lúc khởi động, từ danh sách khởi thủy, và chỉ khi sổ đăng ký còn trống. Lần khởi động đó đóng cửa sổ này vĩnh viễn, và từ đó biểu mẫu này là lối vào duy nhất."
+  },
+  "consilium.payment.from": {
+    "en": "From",
+    "t": "Từ"
+  },
+  "consilium.payment.reason": {
+    "en": "Reason given",
+    "t": "Lý do đưa ra"
+  },
+  "consilium.payment.tier": {
+    "en": "Tier · {tier}",
+    "t": "Cấp · {tier}"
+  },
+  "consilium.payment.to": {
+    "en": "To",
+    "t": "Tới"
+  },
+  "consilium.payout.emptyAction": {
+    "en": "Go to payments",
+    "t": "Đi tới thanh toán"
+  },
+  "consilium.payout.emptyBody": {
+    "en": "When someone opens a payment of the fund's money, it appears here with its running tally, and every owner is emailed a link to answer from.",
+    "t": "Khi ai đó mở một khoản thanh toán bằng tiền của quỹ, nó sẽ xuất hiện ở đây cùng số phiếu hiện tại, và mỗi chủ sở hữu nhận email chứa liên kết để trả lời."
+  },
+  "consilium.payout.emptyTitle": {
+    "en": "No request is open",
+    "t": "Không có yêu cầu nào đang mở"
+  },
+  "consilium.payout.sub": {
+    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
+    "t": "Chuyển tiền thuộc sở hữu của quỹ — chi trả doanh thu, hoặc một lệnh thanh toán giữa hai đầu của nền tảng. Mỗi lần một yêu cầu, và không bao giờ là quyết định của một người."
+  },
+  "consilium.payout.title": {
+    "en": "Fund payouts and payments",
+    "t": "Chi trả và thanh toán của quỹ"
   },
   "consilium.roster.emptyBody": {
     "en": "Genesis has not run yet. At start-up the service seats everyone on the OWNER_SUBJECTS list who already has an account — but only if at least two of them resolve. A sole owner could never admit the second, so seating one is refused outright rather than left as a dead end.",
@@ -2015,9 +2375,13 @@
     "en": "Overview",
     "t": "Tổng quan"
   },
+  "nav.payments": {
+    "en": "Payments",
+    "t": "Thanh toán"
+  },
   "nav.revenue": {
-    "en": "Fund revenue",
-    "t": "Doanh thu"
+    "en": "Revenue stats",
+    "t": "Thống kê doanh thu"
   },
   "nav.settings": {
     "en": "Settings",
@@ -2478,6 +2842,98 @@
   "ops.truncatedNote": {
     "en": "Showing your most recent operations — older activity isn't listed here yet.",
     "t": "Đang hiển thị các giao dịch gần nhất — hoạt động cũ hơn chưa được liệt kê ở đây."
+  },
+  "payment.consent.approve": {
+    "en": "Consented",
+    "t": "Đã đồng ý"
+  },
+  "payment.consent.invalidated": {
+    "en": "Consent void",
+    "t": "Sự đồng ý đã vô hiệu"
+  },
+  "payment.consent.pending": {
+    "en": "Awaiting the investor",
+    "t": "Đang chờ nhà đầu tư"
+  },
+  "payment.consent.reject": {
+    "en": "Declined",
+    "t": "Đã từ chối"
+  },
+  "payment.consent.unsent": {
+    "en": "Email not yet sent",
+    "t": "Email chưa được gửi"
+  },
+  "payment.end.fullAddress": {
+    "en": "Show the full address",
+    "t": "Hiện địa chỉ đầy đủ"
+  },
+  "payment.requirement.hint.owner_consilium": {
+    "en": "Fund-owned money: more than half of the owners must confirm from their mailboxes.",
+    "t": "Tiền của quỹ: hơn một nửa chủ sở hữu phải xác nhận từ hộp thư của họ."
+  },
+  "payment.requirement.hint.subject_consent": {
+    "en": "An investor's own money: that investor alone is emailed and must agree.",
+    "t": "Tiền riêng của nhà đầu tư: chỉ nhà đầu tư đó nhận email và phải đồng ý."
+  },
+  "payment.requirement.owner_consilium": {
+    "en": "Owners' consilium",
+    "t": "Hội đồng chủ sở hữu"
+  },
+  "payment.requirement.subject_consent": {
+    "en": "The investor's consent",
+    "t": "Sự đồng ý của nhà đầu tư"
+  },
+  "payment.state.approved": {
+    "en": "Approved",
+    "t": "Đã duyệt"
+  },
+  "payment.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Đã huỷ"
+  },
+  "payment.state.executed": {
+    "en": "Executed",
+    "t": "Đã thực hiện"
+  },
+  "payment.state.execution_failed": {
+    "en": "Execution failed",
+    "t": "Thực hiện thất bại"
+  },
+  "payment.state.expired": {
+    "en": "Expired",
+    "t": "Đã hết hạn"
+  },
+  "payment.state.pending": {
+    "en": "Pending",
+    "t": "Đang chờ"
+  },
+  "payment.state.rejected": {
+    "en": "Rejected",
+    "t": "Bị từ chối"
+  },
+  "payment.tier.external": {
+    "en": "External",
+    "t": "Bên ngoài"
+  },
+  "payment.tier.hint.external": {
+    "en": "Out to an on-chain address. Ships as a withdrawal once approved.",
+    "t": "Ra ngoài tới một địa chỉ on-chain. Được gửi như một lệnh rút sau khi duyệt."
+  },
+  "payment.tier.hint.internal": {
+    "en": "Between two claims inside the fund. No money leaves the ledger.",
+    "t": "Giữa hai tài khoản trong quỹ. Không có tiền rời khỏi sổ cái."
+  },
+  "payment.tier.hint.service": {
+    "en": "Into one of the fund's products, as its pooled claim.",
+    "t": "Vào một sản phẩm của quỹ, dưới dạng tài khoản gộp của nó."
+  },
+  "payment.tier.internal": {
+    "en": "Internal",
+    "t": "Nội bộ"
+  },
+  "payment.tier.service": {
+    "en": "To a product",
+    "t": "Vào sản phẩm"
   },
   "profile.accountSnapshot": {
     "en": "Account snapshot",

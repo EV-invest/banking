@@ -67,7 +67,7 @@ export function TreasuryView() {
           {/* The fee claim was load-bearing but invisible here: `held_for_clients` is
               derived as total − fund capital − THIS, so without it the figures above
               don't add up. It is also exactly what the Fund revenue screen pays out. */}
-          <MoneyCard label={t("nav.revenue")} value={treasury?.fee_revenue} hint={t("admin.treasury.feeRevenueHint")} loading={loading && !treasury} unavailable={!loading && !treasury} />
+          <MoneyCard label={t("admin.fundRevenue")} value={treasury?.fee_revenue} hint={t("admin.treasury.feeRevenueHint")} loading={loading && !treasury} unavailable={!loading && !treasury} />
           <MoneyCard label={t("admin.treasury.reservedWithdrawals")} value={treasury?.reserved_for_withdrawals} hint={t("admin.treasury.reservedWithdrawalsHint")} loading={loading && !treasury} unavailable={!loading && !treasury} tip="admin.treasury.layer1.reserved-withdrawals" />
         </div>
       </StaggerItem>

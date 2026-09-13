@@ -42,6 +42,8 @@ import { useEffect, useSyncExternalStore } from "react";
 import { refreshGovernance } from "@/entities/governance/model/governance-resource";
 import { apiPath } from "@/shared/config/base-path";
 import type { ConsiliumFrame } from "@/shared/contracts/governance";
+import { TAG } from "@/shared/lib/cache-tags";
+import { revalidateTag } from "@/shared/lib/resource";
 
 /** How often the fallback re-reads while the socket is down. */
 const POLL_MS = 20_000;
@@ -56,6 +58,15 @@ const MAX_ATTEMPTS = 5;
 // application echo of the HTTP statuses. Retrying these fast changes nothing.
 const POLICY_CLOSE_CODES: ReadonlySet<number> = new Set([1008, 4401, 4403]);
 
+/**
+ * Re-read everything a revision can have moved. A payment consilium that carries executes
+ * an order, so the payments list is as stale as the room after a frame — it is named here
+ * rather than folded into `GOVERNANCE_TAGS`, which is the room's own vocabulary.
+ */
+function refreshRoom(): void {
+  refreshGovernance();
+  revalidateTag(TAG.payments);
+}
 
 export type StreamStatus =
   /** Nothing is mounted, or this is the server render. */
@@ -113,7 +124,7 @@ function visible(): boolean {
 function startPolling(): void {
   if (pollTimer !== undefined) return;
   pollTimer = setInterval(() => {
-    if (visible()) refreshGovernance();
+    if (visible()) refreshRoom();
   }, POLL_MS);
 }
 
@@ -155,7 +166,7 @@ function onMessage(event: MessageEvent): void {
   revision = next;
   publish();
   // The frame said "something moved". This is what asks what it was.
-  refreshGovernance();
+  refreshRoom();
 }
 
 function scheduleReconnect(): void {
@@ -192,7 +203,7 @@ function connect(): void {
     publish();
     // The gap between losing the socket and regaining it is exactly when the room moved
     // without telling us. Catch up before trusting the stream again.
-    refreshGovernance();
+    refreshRoom();
     // Deliberately kept running. A socket that is open but silently dead (a proxy holding
     // the connection open, a laptop resumed from sleep) is indistinguishable from a quiet
     // room, and the poll is what makes that case merely slow instead of wrong.
@@ -274,7 +285,7 @@ function onVisibilityChange(): void {
     publish();
     // A backgrounded tab's timers are throttled to nothing, so the room is at its most
     // stale precisely here. Re-read before the socket has even finished opening.
-    refreshGovernance();
+    refreshRoom();
     startPolling();
     connect();
   } else {
