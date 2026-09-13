@@ -161,6 +161,7 @@ fn requests(state: AppState) -> Router {
 		// read: the emailed token in the path is the whole credential. See `approval`.
 		.route("/api/approval/payout/{token}", get(approval::payout_invitation).post(approval::payout_decision))
 		.route("/api/approval/removal/{token}", get(approval::removal_invitation).post(approval::removal_decision))
+		.route("/api/approval/consent/{token}", get(approval::consent_invitation).post(approval::consent_decision))
 		.with_state(state)
 		.layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_DEADLINE))
 }

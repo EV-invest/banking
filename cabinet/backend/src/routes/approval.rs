@@ -1,8 +1,8 @@
 //! The PUBLIC approval surface — `/api/approval/**`, one shape over both planes.
 //!
-//! These four endpoints are reached from an email by someone who may not be signed in.
+//! These six endpoints are reached from an email by someone who may not be signed in.
 //! They carry NO session and require none: the emailed token IS the credential, exactly
-//! as the two approval services are mounted outside their planes' user-auth layers.
+//! as the three approval services are mounted outside their planes' user-auth layers.
 //!
 //! Consequences that shape everything below:
 //!
@@ -47,7 +47,7 @@ const NOT_FOUND: &str = "invitation not found";
 const MAX_IP: usize = 64;
 const MAX_USER_AGENT: usize = 256;
 
-// ── the four endpoints ───────────────────────────────────────────────────────
+// ── the six endpoints ────────────────────────────────────────────────────────
 
 /// `GET /api/approval/payout/{token}` — the redacted payout invitation. Side-effect free.
 pub async fn payout_invitation(State(st): State<AppState>, Path(token): Path<String>) -> Response {
@@ -92,6 +92,29 @@ pub async fn removal_decision(State(st): State<AppState>, Path(token): Path<Stri
 	respond(st.grpc.submit_self_decision(request).await.map(dto::RemovalDecision::from))
 }
 
+/// `GET /api/approval/consent/{token}` — the redacted payment the emailed investor is
+/// asked to consent to. Side-effect free.
+pub async fn consent_invitation(State(st): State<AppState>, Path(token): Path<String>) -> Response {
+	respond(st.grpc.payment_consent_invitation(&token).await.map(dto::PaymentConsentInvitation::from))
+}
+
+/// `POST /api/approval/consent/{token}` — the investor's answer on a payment out of
+/// their own claim.
+pub async fn consent_decision(State(st): State<AppState>, Path(token): Path<String>, peer: Peer, headers: HeaderMap, body: Bytes) -> Response {
+	let (ballot, audit) = match accept(&st, &headers, peer, &body) {
+		Ok(accepted) => accepted,
+		Err(refusal) => return refusal,
+	};
+	let request = bk::SubmitConsentRequest {
+		token,
+		code: ballot.code,
+		decision: ballot.decision.consent() as i32,
+		client_ip: audit.client_ip,
+		user_agent: audit.user_agent,
+	};
+	respond(st.grpc.submit_payment_consent(request).await.map(dto::PaymentConsentDecision::from))
+}
+
 // ── the shared shape ─────────────────────────────────────────────────────────
 
 /// A vote as the browser sends it: the secret code from the mail, plus one of two answers.
@@ -120,6 +143,13 @@ impl Decision {
 		match self {
 			Self::Approve => bk::VoteDecision::Approve,
 			Self::Reject => bk::VoteDecision::Reject,
+		}
+	}
+
+	fn consent(self) -> bk::ConsentDecision {
+		match self {
+			Self::Approve => bk::ConsentDecision::Approve,
+			Self::Reject => bk::ConsentDecision::Reject,
 		}
 	}
 
@@ -307,7 +337,10 @@ mod tests {
 	}
 
 	/// Pitfall 10. Every unusable-token verdict must be one response — same status, same
-	/// bytes — or the endpoint tells a stranger which tokens exist.
+	/// bytes — or the endpoint tells a stranger which tokens exist. The verdicts cover the
+	/// consilium AND the consent vocabulary: both planes' services answer through the one
+	/// fold, and a consent voided by a token-version move must vanish exactly as a burned
+	/// vote token does.
 	#[tokio::test]
 	async fn every_dead_token_produces_the_identical_refusal() {
 		let verdicts = [
@@ -316,6 +349,8 @@ mod tests {
 			Status::failed_precondition("consilium already decided"),
 			Status::already_exists("token already spent"),
 			Status::resource_exhausted("token burned after 5 attempts"),
+			Status::failed_precondition("consent invalidated: subject token version moved"),
+			Status::not_found("payment already cancelled"),
 		];
 		let mut answers = Vec::new();
 		for verdict in verdicts {
@@ -324,15 +359,22 @@ mod tests {
 		for answer in &answers {
 			assert_eq!(answer.0, 404, "every dead token is a 404");
 			assert_eq!(answer.1, answers[0].1, "and every one of them is the SAME body");
-			assert!(!answer.1.contains("burned") && !answer.1.contains("spent"), "no upstream detail may survive: {}", answer.1);
+			for detail in ["burned", "spent", "invalidated", "cancelled"] {
+				assert!(!answer.1.contains(detail), "no upstream detail may survive: {}", answer.1);
+			}
 		}
 	}
 
 	/// Pitfall 6. The token rides in the URL, so no response on this surface may be
-	/// cacheable or leak a `Referer` — the refusals included.
+	/// cacheable or leak a `Referer` — the refusals included, and the consent page as
+	/// much as the vote page.
 	#[tokio::test]
 	async fn every_response_is_sealed_against_leaking_the_token() {
-		for response in [respond(Ok(dto::ConsiliumInvitation::default())), respond::<()>(Err(Status::not_found("")))] {
+		for response in [
+			respond(Ok(dto::ConsiliumInvitation::default())),
+			respond(Ok(dto::PaymentConsentInvitation::default())),
+			respond::<()>(Err(Status::not_found(""))),
+		] {
 			let (_, _, headers) = rendered(response).await;
 			assert!(headers.contains(&("referrer-policy".to_string(), "no-referrer".to_string())), "{headers:?}");
 			assert!(headers.contains(&("cache-control".to_string(), "no-store".to_string())), "{headers:?}");
@@ -374,5 +416,15 @@ mod tests {
 		assert!(matches!(Decision::parse("reject"), Some(Decision::Reject)));
 		assert!(Decision::parse("pending").is_none());
 		assert!(Decision::parse("").is_none());
+	}
+
+	/// The browser's one vocabulary maps onto each plane's own, and never onto the
+	/// "unanswered" variant: a POST cannot un-decide a seat.
+	#[test]
+	fn a_decision_never_maps_to_pending_on_either_wire() {
+		assert_eq!(Decision::Approve.consent(), bk::ConsentDecision::Approve);
+		assert_eq!(Decision::Reject.consent(), bk::ConsentDecision::Reject);
+		assert_eq!(Decision::Approve.vote(), bk::VoteDecision::Approve);
+		assert_eq!(Decision::Reject.vote(), bk::VoteDecision::Reject);
 	}
 }
