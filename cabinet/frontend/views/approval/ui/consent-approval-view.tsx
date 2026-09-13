@@ -76,7 +76,12 @@ export function ConsentApprovalView({ token }: { token: string }) {
       <Card>
         <CardHeader>
           <ApprovalTitle>{t("consent.title")}</ApprovalTitle>
-          <CardDescription className="text-balance">{t("consent.lead", { initiator: invitation.initiator_email })}</CardDescription>
+          <CardDescription className="text-balance">
+            {/* Two keys, one sentence each: the first is the whole point of the page, and it
+                carries its weight in markup rather than in capitals a screen reader spells
+                out letter by letter. */}
+            <strong className="font-semibold text-foreground">{t("consent.leadOwn")}</strong> {t("consent.lead", { initiator: invitation.initiator_email })}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           <PaymentTermsBlock terms={invitation} payloadHash={invitation.payload_hash} reasonLabel={t("consent.reasonLabel", { initiator: invitation.initiator_email })} tierAs="hint" />

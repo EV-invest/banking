@@ -1932,16 +1932,20 @@
     "t": "Ваше решение"
   },
   "consent.lead": {
-    "en": "This is YOUR money. {initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.",
-    "t": "Это ВАШИ деньги. {initiator} просит перевести их, как описано ниже. Ничего не произойдёт без вашего согласия — больше никого не спрашивают, и никто не может ответить за вас."
+    "en": "{initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.",
+    "t": "{initiator} просит перевести их, как описано ниже. Ничего не произойдёт без вашего согласия — больше никого не спрашивают, и никто не может ответить за вас."
+  },
+  "consent.leadOwn": {
+    "en": "This is your money.",
+    "t": "Это ваши деньги."
   },
   "consent.reasonLabel": {
     "en": "Reason given by {initiator}",
     "t": "Причина, указанная {initiator}"
   },
   "consent.reject": {
-    "en": "Reject",
-    "t": "Отказать"
+    "en": "Reject — keep my money",
+    "t": "Отказать — оставить мои деньги"
   },
   "consent.title": {
     "en": "Your money is asked to move",

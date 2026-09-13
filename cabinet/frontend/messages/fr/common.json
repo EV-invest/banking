@@ -1676,16 +1676,20 @@
     "t": "Votre décision"
   },
   "consent.lead": {
-    "en": "This is YOUR money. {initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.",
-    "t": "C'est VOTRE argent. {initiator} demande à le déplacer comme indiqué ci-dessous. Rien ne se passe sans votre accord — personne d'autre n'est consulté, et personne ne peut répondre à votre place."
+    "en": "{initiator} is asking for it to be moved as set out below. Nothing happens unless you agree — nobody else is asked, and nobody else can answer for you.",
+    "t": "{initiator} demande à le déplacer comme indiqué ci-dessous. Rien ne se passe sans votre accord — personne d'autre n'est consulté, et personne ne peut répondre à votre place."
+  },
+  "consent.leadOwn": {
+    "en": "This is your money.",
+    "t": "C'est votre argent."
   },
   "consent.reasonLabel": {
     "en": "Reason given by {initiator}",
     "t": "Motif donné par {initiator}"
   },
   "consent.reject": {
-    "en": "Reject",
-    "t": "Refuser"
+    "en": "Reject — keep my money",
+    "t": "Refuser — garder mon argent"
   },
   "consent.title": {
     "en": "Your money is asked to move",
