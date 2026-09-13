@@ -157,14 +157,12 @@ export const failWithdrawal = (withdrawalId: string, reason: string): Promise<{ 
   postJson("/api/admin/withdrawals/fail", { withdrawal_id: withdrawalId, reason });
 
 // ── revenue (the fund's own earned money) ────────────────────────────────────────
-// The payout is capped at the money plane by the revenue claim's available balance —
-// client balances and the fund's seed capital are separate ledger accounts. Nothing
-// here can widen that; the form's own cap is a courtesy, not the control.
+// Reads, and cancelling a still-queued payout. Paying revenue OUT is a payment order
+// (`entities/payment`) authorised by the owners' consilium; the one-click
+// `RequestRevenuePayout` this client used to post to is closed at the plane.
 export const fetchFundRevenue = (): Promise<FundRevenue> => getJson("/api/admin/revenue");
 
 export const fetchRevenuePayouts = (): Promise<RevenuePayoutList> => getJson("/api/admin/revenue/payouts");
-
-export const requestRevenuePayout = (body: { network: string; address: string; amount: string }): Promise<RevenuePayout> => postJson("/api/admin/revenue/payout", body);
 
 export const cancelRevenuePayout = (withdrawalId: string): Promise<RevenuePayout> => postJson("/api/admin/revenue/cancel", { withdrawal_id: withdrawalId });
 

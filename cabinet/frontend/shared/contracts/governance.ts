@@ -22,10 +22,16 @@
 // label the states they know and fall back to the wire value, which is legible even when it
 // is new.
 
+import type { ConsiliumPaymentTerms } from "./payments";
+
 /** An amount as it crossed the wire: an exact decimal string, never a number. */
 export type Decimal = string;
 
-/** RFC 3339, as every other timestamp in this cabinet. */
+/**
+ * Unix SECONDS as a decimal string, `"0"` while unset — what the BFF actually sends (see
+ * `shared/lib/datetime.ts`, which is the one place it is parsed). The name is kept for its
+ * meaning, not its encoding.
+ */
 export type Timestamp = string;
 
 // ── The payout being authorized ────────────────────────────────────────────────
@@ -59,7 +65,11 @@ export type PayoutDecision = "approve" | "reject";
 export interface PayoutApproval {
   consilium_id: string;
   state: string;
+  /** Present for a revenue payout; empty-stringed by the BFF for a payment consilium. */
   revenue_payout: RevenuePayout;
+  /** Present for a payment consilium — the sibling of `revenue_payout`, and what the page
+   *  renders when it is set (docs/CONSILIUM.md § Payments). */
+  payment?: ConsiliumPaymentTerms | null;
   /** Full hash; the page shows a short prefix of it. */
   payload_hash: string;
   initiator_email: string;
@@ -323,9 +333,9 @@ export interface UserProposalList {
 }
 
 /**
- * A consilium as the owners' room sees it. Only the payout kind exists today, so
- * `revenue_payout` is what distinguishes it; a second kind would arrive as a sibling field
- * rather than by widening this one.
+ * A consilium as the owners' room sees it. Two kinds: a revenue payout (`revenue_payout`)
+ * and a payment order (`payment`), told apart by which sibling is set — a kind is never
+ * expressed by widening the other one's field.
  *
  * The fields past `expires_at` are the ones the money plane records as a request settles.
  * They are optional because an open request carries none of them, and because a client
@@ -335,6 +345,7 @@ export interface Consilium {
   id: string;
   state: string;
   revenue_payout?: RevenuePayout | null;
+  payment?: ConsiliumPaymentTerms | null;
   payload_hash: string;
   initiator_user_id?: string;
   initiator_email: string;
@@ -347,6 +358,8 @@ export interface Consilium {
   /** Why a request that reached `Approved` did not move money (policy 16). */
   failure_reason?: string | null;
   executed_withdrawal_id?: string | null;
+  /** The payment order a payment consilium carried into execution. */
+  executed_payment_id?: string | null;
 }
 
 export interface ConsiliumList {

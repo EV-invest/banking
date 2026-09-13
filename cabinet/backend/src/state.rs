@@ -109,6 +109,14 @@ impl Grpc {
 		bk::consilium_approval_service_client::ConsiliumApprovalServiceClient::new(self.piggybank.clone())
 	}
 
+	fn payments(&self) -> bk::payments_service_client::PaymentsServiceClient<Channel> {
+		bk::payments_service_client::PaymentsServiceClient::new(self.piggybank.clone())
+	}
+
+	fn payment_consent(&self) -> bk::payment_consent_service_client::PaymentConsentServiceClient<Channel> {
+		bk::payment_consent_service_client::PaymentConsentServiceClient::new(self.piggybank.clone())
+	}
+
 	fn platform(&self) -> cc::platform_service_client::PlatformServiceClient<Channel> {
 		cc::platform_service_client::PlatformServiceClient::new(self.concierge.clone())
 	}
@@ -725,6 +733,44 @@ impl Grpc {
 	/// fields only; the plane never treats them as authorization.
 	pub async fn submit_consilium_decision(&self, req: bk::SubmitDecisionRequest) -> Result<bk::SubmitDecisionResponse, Status> {
 		Ok(self.consilium_approval().submit_decision(req).await?.into_inner())
+	}
+
+	// ── payments: the order that moves money between two named ends ──────────
+	// Same plane and same token as the consilium above: the requirement (the owners'
+	// quorum or the subject's consent) is decided and seated by the plane inside
+	// `OpenPayment`, so the BFF only ever forwards the order and reads it back.
+
+	pub async fn list_payments(&self, token: &str, req: bk::ListPaymentsRequest) -> Result<bk::PaymentList, Status> {
+		Ok(self.payments().list_payments(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn get_payment(&self, token: &str, payment_id: &str) -> Result<bk::Payment, Status> {
+		let req = bk::GetPaymentRequest { payment_id: payment_id.to_string() };
+		Ok(self.payments().get_payment(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn open_payment(&self, token: &str, req: bk::OpenPaymentRequest) -> Result<bk::Payment, Status> {
+		Ok(self.payments().open_payment(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_payment(&self, token: &str, payment_id: &str) -> Result<bk::Payment, Status> {
+		let req = bk::CancelPaymentRequest { payment_id: payment_id.to_string() };
+		Ok(self.payments().cancel_payment(bearer(token, req)?).await?.into_inner())
+	}
+
+	// No bearer on the two below, for the same reason as the consilium approval pair: the
+	// emailed token is the credential, and the investor clicking it may not be signed in.
+
+	/// The redacted consent invitation behind an emailed token. Side-effect free.
+	pub async fn payment_consent_invitation(&self, token: &str) -> Result<bk::PaymentConsentInvitation, Status> {
+		let req = bk::GetConsentInvitationRequest { token: token.to_string() };
+		Ok(self.payment_consent().get_consent_invitation(req).await?.into_inner())
+	}
+
+	/// Record the emailed investor's answer. `client_ip`/`user_agent` are AUDIT fields
+	/// only; the plane never treats them as authorization.
+	pub async fn submit_payment_consent(&self, req: bk::SubmitConsentRequest) -> Result<bk::SubmitConsentResponse, Status> {
+		Ok(self.payment_consent().submit_consent(req).await?.into_inner())
 	}
 
 	pub async fn parked_events(&self, token: &str) -> Result<bk::ParkedEventList, Status> {

@@ -398,6 +398,8 @@ mod route_tests {
 			("GET", "/api/owners/removals"),
 			("GET", "/api/owners/admissions"),
 			("GET", "/api/owners/proposals"),
+			("GET", "/api/admin/payments"),
+			("GET", "/api/admin/payments/p-1"),
 		];
 		for (method, uri) in reads {
 			let (status, _) = send(method, uri, None).await;
@@ -425,6 +427,11 @@ mod route_tests {
 			("/api/owners/proposals/p-1/vote", r#"{"vote":"for"}"#),
 			("/api/owners/proposals/p-1/cancel", "{}"),
 			("/api/owners/resign", r#"{"confirm_email":"ada@example.com"}"#),
+			(
+				"/api/admin/payments",
+				r#"{"source":{"kind":"piggybank","id":""},"destination":{"internal":{"kind":"user","id":"u-1"}},"amount":"10","reason":"rent"}"#,
+			),
+			("/api/admin/payments/p-1/cancel", "{}"),
 		];
 		for (uri, body) in mutations {
 			let (status, _) = send("POST", uri, Some(body)).await;
@@ -440,6 +447,8 @@ mod route_tests {
 		let calls = [
 			("GET", "/api/approval/payout/tok-1", None),
 			("POST", "/api/approval/payout/tok-1", Some(r#"{"code":"ABCDE12345","decision":"approve"}"#)),
+			("GET", "/api/approval/consent/tok-1", None),
+			("POST", "/api/approval/consent/tok-1", Some(r#"{"code":"ABCDE12345","decision":"approve"}"#)),
 		];
 		for (method, uri, body) in calls {
 			let (status, headers) = send(method, uri, body).await;
@@ -455,7 +464,9 @@ mod route_tests {
 	/// before it can burn one of the token's five attempts upstream.
 	#[tokio::test]
 	async fn a_vote_without_a_code_never_reaches_the_plane() {
-		let (status, _) = send("POST", "/api/approval/payout/tok-1", Some(r#"{"decision":"approve"}"#)).await;
-		assert_eq!(status, StatusCode::BAD_REQUEST);
+		for uri in ["/api/approval/payout/tok-1", "/api/approval/consent/tok-1"] {
+			let (status, _) = send("POST", uri, Some(r#"{"decision":"approve"}"#)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "POST {uri}");
+		}
 	}
 }
