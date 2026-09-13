@@ -1272,7 +1272,7 @@ async fn an_operator_pause_holds_an_approved_order_without_closing_it() {
 	let report = payments_app::sweep(&ports(&a), now()).await.unwrap();
 	operations::set_read_only(&a.pool, false).await.unwrap();
 
-	assert!(matches!(held, Err(DomainError::Forbidden(ref why)) if why.contains("paused")), "{held:?}");
+	assert!(matches!(held, Err(DomainError::Precondition(ref why)) if why.contains("paused")), "{held:?}");
 	assert_eq!((report.executed, report.execution_failures), (0, 0), "a pause records nothing");
 	assert_eq!(
 		payments_app::find(&a.payments, id).await.unwrap().order.state(),

@@ -145,7 +145,7 @@ pub async fn admit_user_account(gates: &AdmissionGates<'_>, user: UserId) -> Res
 		id: user.to_string(),
 	})?;
 	if !account.is_active() {
-		return Err(DomainError::Forbidden("account is not permitted to withdraw".into()));
+		return Err(DomainError::Precondition("account is frozen".into()));
 	}
 	// Verification gate — an unverified account (tier 0 is a registration and a confirmed
 	// email, nothing more) may not move money off the platform. The tier is the identity
@@ -316,7 +316,7 @@ async fn rail_covers(ports: &WithdrawalPorts<'_>, network: Network, net: Usdt) -
 /// interval instead of N of each.
 pub async fn require_outflows_enabled(policy: &dyn OutflowPolicy) -> Result<(), DomainError> {
 	if policy.outflows_paused().await? {
-		return Err(DomainError::Forbidden("money movements are temporarily paused (read-only mode)".into()));
+		return Err(DomainError::Precondition("money movements are temporarily paused (read-only mode)".into()));
 	}
 	Ok(())
 }
@@ -340,9 +340,9 @@ async fn require_dispatchable(policy: &dyn OutflowPolicy, gate: KycGate, withdra
 	let standing = policy
 		.standing(owner)
 		.await?
-		.ok_or_else(|| DomainError::Forbidden("the withdrawal's owner has no control-plane row — dispatch refused".into()))?;
+		.ok_or_else(|| DomainError::Precondition("the withdrawal's owner has no control-plane row — dispatch refused".into()))?;
 	if standing.blocked {
-		return Err(DomainError::Forbidden("account is frozen".into()));
+		return Err(DomainError::Precondition("account is frozen".into()));
 	}
 	if !gate.admits(standing.kyc_level) {
 		return Err(DomainError::Forbidden("identity verification required to withdraw".into()));

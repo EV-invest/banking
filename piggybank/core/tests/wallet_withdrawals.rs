@@ -355,7 +355,7 @@ async fn a_disabled_user_cannot_withdraw() {
 	)
 	.await
 	.unwrap_err();
-	assert!(matches!(err, DomainError::Forbidden(_)), "a disabled account is forbidden from withdrawing, got {err:?}");
+	assert!(matches!(err, DomainError::Precondition(_)), "a disabled account is refused a withdrawal, got {err:?}");
 }
 
 #[tokio::test]
@@ -868,7 +868,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
-	assert!(matches!(err, DomainError::Forbidden(_)), "a frozen owner refuses the admin dispatch, got {err:?}");
+	assert!(matches!(err, DomainError::Precondition(_)), "a frozen owner refuses the admin dispatch, got {err:?}");
 	sqlx::query("UPDATE users SET frozen = FALSE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
 
 	// 3. The global read-only kill-switch. Cleared before asserting, so a failing
@@ -877,7 +877,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id()).await;
 	operations::set_read_only(&h.pool, false).await.unwrap();
 	assert!(
-		matches!(refused, Err(DomainError::Forbidden(_))),
+		matches!(refused, Err(DomainError::Precondition(_))),
 		"the kill-switch refuses the admin dispatch — permission is not an override, got {refused:?}"
 	);
 
@@ -939,7 +939,7 @@ async fn dispatch_is_refused_when_the_owner_has_no_control_plane_row() {
 	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
-	assert!(matches!(err, DomainError::Forbidden(_)), "a missing owner row fails closed, got {err:?}");
+	assert!(matches!(err, DomainError::Precondition(_)), "a missing owner row fails closed, got {err:?}");
 	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
 	assert_eq!(after.state(), WithdrawalState::Queued, "the refused withdrawal stays queued");
 

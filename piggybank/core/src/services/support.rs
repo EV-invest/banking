@@ -158,6 +158,7 @@ pub(super) fn map_err(err: DomainError) -> Status {
 		DomainError::NotFound { .. } => Status::not_found(err.to_string()),
 		DomainError::Validation(_) => Status::invalid_argument(err.to_string()),
 		DomainError::Forbidden(_) => Status::permission_denied(err.to_string()),
+		DomainError::Precondition(_) => Status::failed_precondition(err.to_string()),
 		DomainError::Conflict(_) => Status::already_exists(err.to_string()),
 		DomainError::Repository(_) => Status::unavailable("internal error"),
 	}

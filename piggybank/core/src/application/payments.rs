@@ -213,7 +213,7 @@ async fn consent_credential(ports: &PaymentPorts<'_>, subject: UserId) -> Result
 		id: subject.to_string(),
 	})?;
 	if !user.is_active() {
-		return Err(DomainError::Forbidden("the investor's account is not active, so their consent cannot be asked for".into()));
+		return Err(DomainError::Precondition("the investor's account is not active, so their consent cannot be asked for".into()));
 	}
 	if !user.email_verified() {
 		return Err(DomainError::Validation("the investor's mailbox is not verified, so no consent can be mailed to it".into()));
@@ -409,7 +409,7 @@ async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Re
 /// and logged where an operator will look for it.
 fn failure_reason(err: &DomainError) -> String {
 	match err {
-		DomainError::Validation(_) | DomainError::Conflict(_) | DomainError::Forbidden(_) | DomainError::NotFound { .. } => err.to_string(),
+		DomainError::Validation(_) | DomainError::Conflict(_) | DomainError::Forbidden(_) | DomainError::Precondition(_) | DomainError::NotFound { .. } => err.to_string(),
 		DomainError::Repository(detail) => {
 			tracing::error!(detail = %detail, "payments: the withdrawal could not be created on an infrastructure error");
 			"the withdrawal could not be created because of an internal error; an operator has been alerted".to_owned()
