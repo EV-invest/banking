@@ -7,6 +7,7 @@
 
 import { Panel, PanelPresence, PanelSwap } from "@/shared/ui/motion";
 import type { OpenAllocationPanel } from "@/views/admin/allocations/lib/panel";
+import { BookPanel } from "@/views/admin/allocations/ui/book-panel";
 import { GrantsPanel } from "@/views/admin/allocations/ui/grants-panel";
 import { IssuancePanel } from "@/views/admin/allocations/ui/issuance-panel";
 
@@ -20,8 +21,10 @@ export function AllocationSidePanel({ panel, onClose }: { panel: OpenAllocationP
           <PanelSwap swapKey={`${panel.kind}:${panel.row.service}`}>
             {panel.kind === "grants" ? (
               <GrantsPanel key={panel.row.service} allocation={panel.row} onClose={onClose} />
-            ) : (
+            ) : panel.kind === "issue" ? (
               <IssuancePanel key={panel.row.service} allocation={panel.row} onClose={onClose} />
+            ) : (
+              <BookPanel key={panel.row.service} allocation={panel.row} onClose={onClose} />
             )}
           </PanelSwap>
         </Panel>
