@@ -692,6 +692,245 @@ impl From<bk::AccruedFees> for AccruedFees {
 	}
 }
 
+// ── piggybank: book (the secondary market in an allocation's units) ──────────
+// Every amount, size and price crosses as the decimal string the hub sent; every int64
+// timestamp and uint64 revision as a string, like the rest of this wire. The string
+// vocabularies (`side`, `kind`, `tif`, `state`, `resolution`) are pinned in
+// `evbanking_contracts::book` and relayed verbatim.
+
+/// One order. `user_id` is populated only on the caller's own orders. `price` is the
+/// limit — for a market order, the one the hub derived from the quote at placement.
+/// `avg_fill_price` is empty until the first fill; `reject_reason` is set only on
+/// `rejected`.
+#[derive(Serialize)]
+pub struct Order {
+	pub id: String,
+	pub service: String,
+	pub user_id: String,
+	/// `buy` | `sell`.
+	pub side: String,
+	/// `limit` | `market`.
+	pub kind: String,
+	/// `gtc` | `ioc` | `alo`.
+	pub tif: String,
+	pub price: String,
+	pub size: String,
+	pub filled: String,
+	pub remaining: String,
+	pub avg_fill_price: String,
+	pub fee_paid: String,
+	/// `open` | `partially_filled` | `filled` | `cancelled` | `rejected`.
+	pub state: String,
+	pub reject_reason: String,
+	pub client_order_id: String,
+	pub created_at: String,
+	pub updated_at: String,
+}
+
+impl From<bk::Order> for Order {
+	fn from(o: bk::Order) -> Self {
+		Self {
+			id: o.id,
+			service: o.service,
+			user_id: o.user_id,
+			side: o.side,
+			kind: o.kind,
+			tif: o.tif,
+			price: o.price,
+			size: o.size,
+			filled: o.filled,
+			remaining: o.remaining,
+			avg_fill_price: o.avg_fill_price,
+			fee_paid: o.fee_paid,
+			state: o.state,
+			reject_reason: o.reject_reason,
+			client_order_id: o.client_order_id,
+			created_at: o.created_at.to_string(),
+			updated_at: o.updated_at.to_string(),
+		}
+	}
+}
+
+list_dto! { OrderList from bk::OrderList { orders: Vec<Order> } }
+
+/// One fill. On the public tape `user_side`, `order_id` and `fee` are empty; on the
+/// caller's own tape they are the caller's side, their order and what they paid as taker
+/// (empty when they were the maker). A counterparty is never disclosed on either.
+#[derive(Serialize)]
+pub struct Trade {
+	pub id: String,
+	pub service: String,
+	pub price: String,
+	pub size: String,
+	/// `buy` | `sell` — the side that crossed the spread.
+	pub taker_side: String,
+	pub executed_at: String,
+	pub user_side: String,
+	pub order_id: String,
+	pub fee: String,
+}
+
+impl From<bk::Trade> for Trade {
+	fn from(t: bk::Trade) -> Self {
+		Self {
+			id: t.id,
+			service: t.service,
+			price: t.price,
+			size: t.size,
+			taker_side: t.taker_side,
+			executed_at: t.executed_at.to_string(),
+			user_side: t.user_side,
+			order_id: t.order_id,
+			fee: t.fee,
+		}
+	}
+}
+
+list_dto! { TradeList from bk::TradeList { trades: Vec<Trade> } }
+
+/// One aggregated price level of one side.
+#[derive(Serialize)]
+pub struct BookLevel {
+	pub price: String,
+	pub size: String,
+	pub orders: u32,
+}
+
+impl From<bk::BookLevel> for BookLevel {
+	fn from(l: bk::BookLevel) -> Self {
+		Self {
+			price: l.price,
+			size: l.size,
+			orders: l.orders,
+		}
+	}
+}
+
+/// The book as of `revision`: `bids` best (highest) first, `asks` best (lowest) first.
+/// `last_price`/`last_side` are empty before the first trade; `mid`/`spread` unless both
+/// sides have a level; `change_24h` when there is no trade a day back. `nav` is the fund's
+/// accounting mark, carried so a ticker can show both prices side by side.
+#[derive(Serialize)]
+pub struct BookSnapshot {
+	pub service: String,
+	pub revision: String,
+	pub bids: Vec<BookLevel>,
+	pub asks: Vec<BookLevel>,
+	pub last_price: String,
+	/// `buy` | `sell` — the taker's side of the last trade.
+	pub last_side: String,
+	pub mid: String,
+	pub spread: String,
+	pub nav: String,
+	pub volume_24h: String,
+	/// Signed decimal percent, e.g. `-2.5`.
+	pub change_24h: String,
+	pub as_of: String,
+}
+
+impl From<bk::BookSnapshot> for BookSnapshot {
+	fn from(s: bk::BookSnapshot) -> Self {
+		Self {
+			service: s.service,
+			revision: s.revision.to_string(),
+			bids: s.bids.into_iter().map(BookLevel::from).collect(),
+			asks: s.asks.into_iter().map(BookLevel::from).collect(),
+			last_price: s.last_price,
+			last_side: s.last_side,
+			mid: s.mid,
+			spread: s.spread,
+			nav: s.nav,
+			volume_24h: s.volume_24h,
+			change_24h: s.change_24h,
+			as_of: s.as_of.to_string(),
+		}
+	}
+}
+
+/// One OHLCV bucket; `time` is the bucket's start. Empty buckets are omitted by the
+/// hub — a chart carries the last close forward itself.
+#[derive(Serialize)]
+pub struct Candle {
+	pub time: String,
+	pub open: String,
+	pub high: String,
+	pub low: String,
+	pub close: String,
+	pub volume: String,
+}
+
+impl From<bk::Candle> for Candle {
+	fn from(c: bk::Candle) -> Self {
+		Self {
+			time: c.time.to_string(),
+			open: c.open,
+			high: c.high,
+			low: c.low,
+			close: c.close,
+			volume: c.volume,
+		}
+	}
+}
+
+list_dto! {
+	CandleList from bk::CandleList as l {
+		candles: Vec<Candle>,
+		service: String = l.service,
+		/// `1m` | `5m` | `15m` | `1h` | `4h` | `1d`.
+		resolution: String = l.resolution,
+	}
+}
+
+/// One allocation's trading terms. `updated_at` is `"0"` when the product has no policy
+/// row — the defaults, and a closed book.
+#[derive(Serialize)]
+pub struct BookPolicy {
+	pub service: String,
+	pub book_open: bool,
+	pub taker_fee_bps: u32,
+	pub price_tick: String,
+	pub lot_size: String,
+	pub market_slippage_bps: u32,
+	pub updated_at: String,
+}
+
+impl From<bk::BookPolicy> for BookPolicy {
+	fn from(p: bk::BookPolicy) -> Self {
+		Self {
+			service: p.service,
+			book_open: p.book_open,
+			taker_fee_bps: p.taker_fee_bps,
+			price_tick: p.price_tick,
+			lot_size: p.lot_size,
+			market_slippage_bps: p.market_slippage_bps,
+			updated_at: p.updated_at.to_string(),
+		}
+	}
+}
+
+/// One frame of the live book feed. `orders_revision` is the book revision at which the
+/// CALLER's own orders on this allocation last changed (`"0"` = never): the client
+/// refetches `/api/book/orders` only when it moves.
+#[derive(Serialize)]
+pub struct BookEvent {
+	/// `None` only if the hub sent a frame without one, which the contract does not allow;
+	/// kept optional rather than invented so a client sees the gap instead of an empty book.
+	pub snapshot: Option<BookSnapshot>,
+	/// The latest public trades, newest first.
+	pub trades: Vec<Trade>,
+	pub orders_revision: String,
+}
+
+impl From<bk::BookEvent> for BookEvent {
+	fn from(e: bk::BookEvent) -> Self {
+		Self {
+			snapshot: e.snapshot.map(BookSnapshot::from),
+			trades: e.trades.into_iter().map(Trade::from).collect(),
+			orders_revision: e.orders_revision.to_string(),
+		}
+	}
+}
+
 // ── admin console ─────────────────────────────────────────────────────────────
 
 /// One fleet-health row (Overview). Backend-sourced where a plane serves it; the
