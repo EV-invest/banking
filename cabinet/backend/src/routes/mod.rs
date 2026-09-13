@@ -14,7 +14,10 @@ use std::time::Duration;
 use axum::{
 	Router,
 	body::Bytes,
+	extract::{Request, State},
 	http::{HeaderMap, StatusCode},
+	middleware::{self, Next},
+	response::Response,
 	routing::{get, post},
 };
 use axum_extra::extract::cookie::CookieJar;
@@ -162,8 +165,41 @@ fn requests(state: AppState) -> Router {
 		.route("/api/approval/payout/{token}", get(approval::payout_invitation).post(approval::payout_decision))
 		.route("/api/approval/removal/{token}", get(approval::removal_invitation).post(approval::removal_decision))
 		.route("/api/approval/consent/{token}", get(approval::consent_invitation).post(approval::consent_decision))
+		.layer(middleware::from_fn_with_state(state.clone(), evict_banking_pair_on_unauthorized))
 		.with_state(state)
 		.layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_DEADLINE))
+}
+
+/// Drop the caller's cached banking pair whenever a request ends in a 401.
+///
+/// The money plane holds a `token_version` floor that "log out of all devices" raises,
+/// and refuses a banking token minted below it with `UNAUTHENTICATED`. [`BankingTokens`]
+/// caches that token for its whole TTL, so without this the frontend's one heal-replay
+/// would present the very same token, be refused again, and the cabinet would read
+/// "could not confirm your session" for up to fifteen minutes after a re-login. Evicting
+/// on the 401 itself is what makes the replay re-mint against the current floor.
+///
+/// One layer here rather than a check inside [`require_money_token`]: that helper hands
+/// out the token BEFORE the RPC, and the verdict comes back through sixty-odd handlers'
+/// `map_err`s, each of which would have to be taught to report it. The status of the
+/// finished response is the one place every verdict passes through.
+///
+/// The identity is re-verified from the cookie rather than trusted from the request, and
+/// only on a 401 — a JWKS-cached local check, so no round trip. When that verification
+/// is itself what failed (no cookie, a bad signature) there is no subject to evict and
+/// nothing happens; when it passes but the handler still said 401, the money plane did,
+/// and the pair goes. A 401 the handler raised for another reason evicts a pair that a
+/// later request re-mints at the cost of one exchange RPC — cheap, and never wrong.
+///
+/// [`BankingTokens`]: crate::session::BankingTokens
+async fn evict_banking_pair_on_unauthorized(State(state): State<AppState>, jar: CookieJar, request: Request, next: Next) -> Response {
+	let response = next.run(request).await;
+	if response.status() == StatusCode::UNAUTHORIZED
+		&& let Ok((_token, claims)) = require_identity(&state, &jar).await
+	{
+		state.banking.evict(&claims.sub).await;
+	}
+	response
 }
 
 /// The verified concierge identity for a request: the shared `ev_access` JWT cookie
