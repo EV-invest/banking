@@ -10,7 +10,8 @@
 //! `authz` (identity + the RBAC matrix), `balance` / `money` (the chart of accounts
 //! and the 18-dp USDT unit), `allocations` (the registry of investable products), `fees`
 //! (the management + performance fee policy), `issuance` (an operator minting units in
-//! kind, to an investor or the company), and
+//! kind, to an investor or the company), `book` (the secondary market in a product's
+//! units — orders, the matching engine, the escrow facts), and
 //! the `users` / `subscriptions` / `redemptions` / `withdrawals` aggregates.
 
 pub mod error;
@@ -19,6 +20,7 @@ pub mod allocations;
 pub mod auth;
 pub mod authz;
 pub mod balance;
+pub mod book;
 pub mod consilium;
 pub mod fees;
 pub mod issuance;

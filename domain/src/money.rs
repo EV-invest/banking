@@ -19,8 +19,9 @@ use crate::error::DomainError;
 /// `10^-18` USDT, so amounts are exact (no floating point ever touches money).
 pub const CANONICAL_DECIMALS: u32 = 18;
 const BASE58_ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-/// `10^18` — the canonical fixed-point scale shared by [`Usdt`], [`Shares`], and [`Nav`].
-const SCALE: u128 = 10u128.pow(CANONICAL_DECIMALS);
+/// `10^18` — the canonical fixed-point scale shared by [`Usdt`], [`Shares`], [`Nav`] and
+/// the book's `Price`.
+pub(crate) const SCALE: u128 = 10u128.pow(CANONICAL_DECIMALS);
 /// The chains the fund custodies USDT on. The on-chain decimal scale differs per
 /// chain, which is the whole reason [`Usdt`] normalizes to a canonical unit.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -464,7 +465,7 @@ const fn widening_mul(a: u128, b: u128) -> (u128, u128) {
 /// Floor of `(a * b) / denom` with a 256-bit intermediate, via binary long division.
 /// `None` on `denom == 0` or when the quotient would exceed `u128::MAX` (`hi >= denom`).
 /// Money math is rare, so the O(128) loop is irrelevant; correctness is the point.
-fn mul_div_floor(a: u128, b: u128, denom: u128) -> Option<u128> {
+pub(crate) fn mul_div_floor(a: u128, b: u128, denom: u128) -> Option<u128> {
 	if denom == 0 {
 		return None;
 	}
@@ -645,7 +646,7 @@ mod tests {
 		// the exact value computed with the same widening multiply.
 		let a = 1u128 << 120;
 		let b = 1u128 << 100; // a*b = 2^220, overflows u128
-		// 2^220 / 2^64 = 2^156 — exceeds u128 → None.
+						// 2^220 / 2^64 = 2^156 — exceeds u128 → None.
 		assert_eq!(mul_div_floor(a, b, 1u128 << 64), None);
 		// 2^220 / 2^100 = 2^120 — fits.
 		assert_eq!(mul_div_floor(a, b, 1u128 << 100), Some(1u128 << 120));
