@@ -56,6 +56,7 @@ pub mod operation_feed;
 pub mod operations;
 pub mod outbox;
 pub mod outflow;
+pub mod payments;
 pub mod positions;
 pub mod rails;
 pub mod reaper;

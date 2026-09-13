@@ -37,6 +37,8 @@ use piggybank_core::{
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		operation_feed::PgOperationFeed,
+		outflow::PgOutflowPolicy,
+		payments::PgPayments,
 		positions::PgFundPositions,
 		reaper::Reaper,
 		reconciliation::Reconciliation,
@@ -60,8 +62,8 @@ use piggybank_core::{
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository,
-		UserRepository, WithdrawalRepository, ledger::Ledger,
+		AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, OutflowPolicy, PaymentFeed, PaymentRepository,
+		RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 	},
 	services,
 };
@@ -214,6 +216,12 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let users: Arc<dyn UserRepository> = Arc::new(PgUsers::new(pool.clone()));
 	let withdrawals: Arc<dyn WithdrawalRepository> = Arc::new(PgWithdrawals::new(pool.clone()));
 	let consilia: Arc<dyn ConsiliumRepository> = Arc::new(PgConsilia::new(pool.clone()));
+	// ONE adapter behind two ports: `PgPayments` implements the write repository and the
+	// admin read model, and they are handed out separately so a surface can be granted the
+	// history without the surface that opens orders.
+	let pg_payments = Arc::new(PgPayments::new(pool.clone()));
+	let payments: Arc<dyn PaymentRepository> = pg_payments.clone();
+	let payment_feed: Arc<dyn PaymentFeed> = pg_payments;
 	let allocations: Arc<dyn AllocationRegistry> = Arc::new(PgAllocations::new(pool.clone()));
 	let subscriptions: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(pool.clone()));
 	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
@@ -438,15 +446,24 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// The sweeper owns the two things the governance aggregate cannot hear on its own: a
 	// 72h window running out, and an approval whose payout never got created (a crash
 	// between the verdict and the money). Both are idempotent.
+	// One outflow-policy handle for every path money leaves through — the sweeper's chained
+	// payment execution reads the same pause the RPC handlers and the dispatcher do.
+	let outflow: Arc<dyn OutflowPolicy> = Arc::new(PgOutflowPolicy::new(pool.clone()));
 	let consilium_sweeper = ConsiliumSweeper {
 		pool: pool.clone(),
 		consilia: consilia.clone(),
 		withdrawals: withdrawals.clone(),
+		payments: payments.clone(),
+		users: users.clone(),
 		ledger: ledger.clone(),
 		custody: custody.clone(),
+		policy: outflow.clone(),
+		allocations: allocations.clone(),
 		notify: relay_notify.clone(),
 		configured: Arc::from(rails.configured_networks()),
+		kyc: kyc_gate,
 		approval_url_base: config.consilium_approval_url_base.clone(),
+		consent_url_base: config.payment_consent_url_base.clone(),
 	};
 	// The mail worker exists only when the seam is compiled in — see
 	// `infrastructure::governance_mail`. Unwired, the queue still fills (nothing is lost)
@@ -466,6 +483,8 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		users.clone(),
 		withdrawals.clone(),
 		consilia.clone(),
+		payments,
+		payment_feed,
 		allocations,
 		subscriptions,
 		redemptions,
@@ -480,7 +499,9 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		kyc_gate,
 		relay_notify,
 		config.consilium_approval_url_base.clone(),
+		config.payment_consent_url_base.clone(),
 		rails.ton.as_ref().is_some_and(|ton| ton.is_testnet),
+		outflow,
 	);
 
 	tracing::info!(core = %config.grpc_addr, auth = %config.auth_grpc_addr, "piggybank listening");

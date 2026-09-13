@@ -123,6 +123,27 @@ where
 	}
 	Ok(())
 }
+/// Drain an aggregate's pending events, asking the EVENT whether each one belongs in the
+/// outbox — the per-event form of [`drain_to_outbox`], whose single flag answers for all of
+/// them at once.
+///
+/// Needed wherever one aggregate raises both money facts and audit facts. A payment order is
+/// the case: `Reserved` and `Settled` move money, while `Opened`, `Approved` and `Executed`
+/// are audit trail, and relaying `Executed` for an external payment would reserve the amount
+/// a second time behind the withdrawal that is already moving it.
+pub async fn drain_to_outbox_by<A, F>(conn: &mut PgConnection, aggregate: &mut A, relays: F) -> Result<(), DomainError>
+where
+	A: EmitsEvents,
+	<A as Entity>::Id: Identifier<Underlying = Uuid>,
+	F: Fn(&A::Event) -> bool, {
+	let aggregate_id = Entity::id(aggregate).underlying();
+	for event in aggregate.drain_events() {
+		let relay = relays(&event);
+		let payload = serde_json::to_string(&event).map_err(|e| DomainError::Repository(e.to_string()))?;
+		insert_event(conn, Uuid::new_v4(), A::NAME, aggregate_id, <A::Event as DomainEvent>::KIND, &payload, relay).await?;
+	}
+	Ok(())
+}
 /// An undispatched outbox row, ready for the relay. `payload` is the event JSON read
 /// back as text (the workspace `sqlx` has no `json` feature, so JSONB is cast to text).
 #[derive(sqlx::FromRow)]

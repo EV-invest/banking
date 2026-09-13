@@ -1,6 +1,7 @@
 "use client";
 
-// The two token-addressed approval endpoints, reached from an owner's mailbox.
+// The token-addressed approval endpoints, reached from a mailbox: the two owner approvals
+// and the investor's payment consent.
 //
 // These deliberately do NOT go through `shared/lib/api-client.ts`, and the reason is the
 // whole character of these pages. `requestJson` is built around a session: it rotates the
@@ -30,6 +31,7 @@ import type {
   RemovalApprovalResult,
   RemovalDecision,
 } from "@/shared/contracts/governance";
+import type { ConsentDecision, PaymentConsentInvitation, PaymentConsentResult } from "@/shared/contracts/payments";
 import { apiPath } from "@/shared/config/base-path";
 import { RequestError } from "@/shared/lib/api-client";
 import { csrfHeader } from "@/shared/lib/csrf-client";
@@ -130,4 +132,17 @@ const REMOVAL_WIRE: Record<RemovalDecision, "approve" | "reject"> = { remove: "a
 
 export function submitRemovalDecision(token: string, code: string, decision: RemovalDecision): Promise<RemovalApprovalResult> {
   return approvalJson<RemovalApprovalResult>(`/api/approval/removal/${seg(token)}`, { code, decision: REMOVAL_WIRE[decision] });
+}
+
+/**
+ * Read the payment an investor is being asked to consent to. Inert on the same terms as
+ * the payout GET — and, like it, every dead token is one identical 404.
+ */
+export function fetchConsentApproval(token: string): Promise<PaymentConsentInvitation> {
+  return approvalJson<PaymentConsentInvitation>(`/api/approval/consent/${seg(token)}`);
+}
+
+/** Answer for one's own money. The wire vocabulary is the domain one here: approve/reject. */
+export function submitConsentDecision(token: string, code: string, decision: ConsentDecision): Promise<PaymentConsentResult> {
+  return approvalJson<PaymentConsentResult>(`/api/approval/consent/${seg(token)}`, { code, decision });
 }

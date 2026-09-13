@@ -43,6 +43,9 @@ export type {
   // What a fund charges, and what the caller's holding owes for it right now.
   BankingV1FeePolicy as FeePolicy,
   BankingV1AccruedFees as AccruedFees,
+  // Payment orders are NOT re-exported from `./gen`: the BFF reshapes them (resolved ends
+  // with a `detail`, a nested consent, lowercase states, string stamps), so the
+  // hand-written `./payments` is the cabinet's contract for that surface.
 } from "./gen";
 
 // The allocation catalog is served to BOTH the investor surface (`/api/allocations`,

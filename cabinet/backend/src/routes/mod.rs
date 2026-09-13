@@ -5,6 +5,7 @@ pub mod governance_ws;
 pub mod identity;
 pub mod money;
 pub mod notifications;
+pub mod payments;
 pub mod platform;
 pub mod system;
 
@@ -87,7 +88,9 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/users", get(admin::list_users))
 		.route("/api/admin/users/detail", get(admin::get_user))
 		.route("/api/admin/users/role", post(admin::set_role))
-		.route("/api/admin/users/suspend", post(admin::suspend_user))
+		// `/hold` and not `/suspend`: the plane split the verb, and the path says which half
+		// this is. Permanent suspension is a proposal, under `/api/owners/proposals`.
+		.route("/api/admin/users/hold", post(admin::hold_user))
 		.route("/api/admin/users/reinstate", post(admin::reinstate_user))
 		.route("/api/admin/users/revoke", post(admin::revoke_sessions))
 		.route("/api/admin/users/kyc", post(admin::set_kyc))
@@ -127,6 +130,11 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/cabinet/read-only", post(admin::set_read_only))
 		.route("/api/admin/cabinet/announcement", post(admin::set_announcement))
 		.route("/api/admin/cabinet/flag", post(admin::set_flag))
+		// Payments — an order between two named ends. Money plane, Admin|Owner; the plane
+		// seats the one approval it needs (owner consilium or subject consent) on open.
+		.route("/api/admin/payments", get(payments::list).post(payments::open))
+		.route("/api/admin/payments/{id}", get(payments::get))
+		.route("/api/admin/payments/{id}/cancel", post(payments::cancel))
 		// Consilium — the fund's own money leaving, gated on a quorum of owners. Money
 		// plane: the tally is computed and verified where the money is.
 		.route("/api/consilium", get(consilium::list))
@@ -141,12 +149,23 @@ fn requests(state: AppState) -> Router {
 		.route("/api/owners/removals/{id}/vote", post(consilium::vote_removal))
 		.route("/api/owners/removals/{id}/cancel", post(consilium::cancel_removal))
 		.route("/api/owners/admissions", get(consilium::list_admissions).post(consilium::open_admission))
+		// User proposals — the owners' verdict over one PERSON's standing: the permanent
+		// half of the split blocking verb, its undo, and the admin seat. Listed, voted and
+		// withdrawn together, because a hold lapses in 24h and a family you can open but
+		// not ratify is a dead end.
+		.route("/api/owners/proposals", get(consilium::list_proposals))
+		.route("/api/owners/proposals/suspension", post(consilium::open_suspension))
+		.route("/api/owners/proposals/reinstatement", post(consilium::open_reinstatement))
+		.route("/api/owners/proposals/admin-admission", post(consilium::open_admin_admission))
+		.route("/api/owners/proposals/{id}/vote", post(consilium::vote_proposal))
+		.route("/api/owners/proposals/{id}/cancel", post(consilium::cancel_proposal))
 		.route("/api/owners/admissions/{id}/vote", post(consilium::vote_admission))
 		.route("/api/owners/admissions/{id}/cancel", post(consilium::cancel_admission))
 		// The public approval surface. NO session, NO CSRF, and no session cookie is even
 		// read: the emailed token in the path is the whole credential. See `approval`.
 		.route("/api/approval/payout/{token}", get(approval::payout_invitation).post(approval::payout_decision))
 		.route("/api/approval/removal/{token}", get(approval::removal_invitation).post(approval::removal_decision))
+		.route("/api/approval/consent/{token}", get(approval::consent_invitation).post(approval::consent_decision))
 		.with_state(state)
 		.layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_DEADLINE))
 }

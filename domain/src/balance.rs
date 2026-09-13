@@ -73,6 +73,17 @@ pub struct ValuationTag;
 /// A holder of value in (or a claim against) the fund — the party a deposit credits
 /// and a claim belongs to. Tagged for a self-describing JSON shape in event payloads
 /// and projections.
+///
+/// **Every variant must map to a [`LedgerAccountKey`]**, which is what keeps this the one
+/// ubiquitous name for "an addressable end of a money move" rather than one vocabulary per
+/// feature. Two deliberate absences follow from that rule:
+///
+/// - **`clearing` gets no variant.** [`LedgerAccountKey::WithdrawalClearing`] is an
+///   *in-flight* account owned by a saga, never a party anyone pays or is paid. Giving it
+///   a variant would make it addressable as one end of a payment, and a payment into
+///   clearing is money parked behind a reservation nobody can complete.
+/// - **an external address is not a party.** It has no claim account at all, so it lives
+///   in `PaymentDestination` (`domain::payments`) beside this type rather than inside it.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "id", rename_all = "snake_case")]
 pub enum Party {
@@ -81,6 +92,11 @@ pub enum Party {
 	Piggybank,
 	User(UserId),
 	Service(ServiceId),
+	/// The fund's **earned** money — retained withdrawal fees plus the settled 2-and-20
+	/// ([`crate::fees`]), all of which lands in the single `fee` claim. Distinct from
+	/// [`Party::Piggybank`] (seed capital) precisely because the two answer different
+	/// questions: what the fund earned, versus what the fund put in.
+	Revenue,
 }
 
 impl Party {
@@ -90,13 +106,14 @@ impl Party {
 			Self::Piggybank => "piggybank",
 			Self::User(_) => "user",
 			Self::Service(_) => "service",
+			Self::Revenue => "revenue",
 		}
 	}
 
-	/// The identity stored in an `*_id` column (`None` for the singleton fund).
+	/// The identity stored in an `*_id` column (`None` for the singleton claims).
 	pub fn id_str(&self) -> Option<String> {
 		match self {
-			Self::Piggybank => None,
+			Self::Piggybank | Self::Revenue => None,
 			Self::User(id) => Some(id.to_string()),
 			Self::Service(id) => Some(id.as_str().to_owned()),
 		}
@@ -106,6 +123,7 @@ impl Party {
 	pub fn from_parts(kind: &str, id: Option<&str>) -> Result<Self, DomainError> {
 		match (kind, id) {
 			("piggybank", _) => Ok(Self::Piggybank),
+			("revenue", _) => Ok(Self::Revenue),
 			("user", Some(raw)) => {
 				let uuid = uuid::Uuid::parse_str(raw).map_err(|_| DomainError::Validation("invalid user party id".into()))?;
 				Ok(Self::User(Id::from_raw(uuid)))
@@ -119,6 +137,20 @@ impl Party {
 		matches!(self, Self::Piggybank)
 	}
 
+	/// Whether this party is the FUND's own money — its capital, its earnings, or a
+	/// product's pooled funds — as opposed to one investor's claim.
+	///
+	/// This is the predicate the payment authorization policy turns on
+	/// ([`crate::payments::PaymentTerms::requirement`]): fund-owned money leaving needs the
+	/// owner consilium, an investor's own money needs that investor's consent. It lives
+	/// here, on the party, so the two can never be classified differently in two places.
+	pub fn is_fund_owned(&self) -> bool {
+		match self {
+			Self::Piggybank | Self::Service(_) | Self::Revenue => true,
+			Self::User(_) => false,
+		}
+	}
+
 	/// The network-agnostic, credit-normal claim account that holds this party's value
 	/// (the fund's own capital for `Piggybank`). The relay credits/debits this when
 	/// moving the party's money; network rides on the custody side of the transfer.
@@ -127,6 +159,7 @@ impl Party {
 			Self::Piggybank => LedgerAccountKey::Fund,
 			Self::User(user) => LedgerAccountKey::UserClaim(*user),
 			Self::Service(service) => LedgerAccountKey::ServiceClaim(service.clone()),
+			Self::Revenue => LedgerAccountKey::FeeRevenue,
 		}
 	}
 }
@@ -237,6 +270,13 @@ pub enum TransferCode {
 	ShareBurn,
 	FeeClawback,
 	FeeSettle,
+	/// A [`crate::payments::PaymentOrder`] moving value between two claims — both the
+	/// reservation into `clearing` and its settlement out of it.
+	///
+	/// ONE CODE, NOT ONE PER TIER. The code is forensic, and the tier is already derivable
+	/// from the claim pair a transfer names: a credit to `service:<id>` IS the service
+	/// tier. Three codes would encode the same fact twice and let the two disagree.
+	PaymentTransfer,
 }
 
 impl TransferCode {
@@ -259,6 +299,7 @@ impl TransferCode {
 			Self::ShareBurn => 43,
 			Self::FeeClawback => 44,
 			Self::FeeSettle => 45,
+			Self::PaymentTransfer => 46,
 		}
 	}
 }
@@ -379,10 +420,24 @@ mod tests {
 	#[test]
 	fn party_round_trips_through_columns() {
 		let uid = UserId::new();
-		for party in [Party::Piggybank, Party::User(uid), Party::Service(ServiceId::parse("trading").unwrap())] {
+		for party in [Party::Piggybank, Party::User(uid), Party::Service(ServiceId::parse("trading").unwrap()), Party::Revenue] {
 			let back = Party::from_parts(party.kind_str(), party.id_str().as_deref()).unwrap();
 			assert_eq!(party, back);
 		}
+	}
+
+	#[test]
+	fn revenue_is_the_fee_claim_and_is_fund_owned() {
+		// The whole reason `Revenue` is a party and not a second type: it maps to a claim
+		// like every other end of a money move.
+		assert_eq!(Party::Revenue.claim_key(), LedgerAccountKey::FeeRevenue);
+		assert_eq!(Party::Revenue.kind_str(), "revenue");
+		assert_eq!(Party::Revenue.id_str(), None);
+		// The §3 split the payment policy turns on: three fund-owned parties, one investor.
+		assert!(Party::Piggybank.is_fund_owned());
+		assert!(Party::Revenue.is_fund_owned());
+		assert!(Party::Service(ServiceId::parse("trading").unwrap()).is_fund_owned());
+		assert!(!Party::User(UserId::new()).is_fund_owned());
 	}
 
 	#[test]
@@ -478,6 +533,7 @@ mod tests {
 			TransferCode::ShareBurn,
 			TransferCode::FeeClawback,
 			TransferCode::FeeSettle,
+			TransferCode::PaymentTransfer,
 		]
 		.map(TransferCode::code);
 		let mut sorted = transfer_codes;

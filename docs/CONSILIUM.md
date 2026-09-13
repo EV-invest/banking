@@ -436,6 +436,134 @@ once, here, and each plane's tests assert against this table:
 
 ---
 
+## Payments
+
+The consilium above authorizes ONE thing: the fund's earned revenue leaving on-chain. A
+**payment order** (`domain/src/payments.rs`, `PaymentsService`) generalizes the money move
+without generalizing the authorization: it names two ends of the platform and an amount, and
+the policy below decides who must agree. The consilium stays exactly what it is — a payment
+out of fund-owned money simply opens one.
+
+### Three tiers, derived from the destination
+
+| destination | tier | effect on execution |
+| --- | --- | --- |
+| an external wallet address | **L1** `external` | a `Withdrawal` (the ordinary saga: queue, dispatch, watchers, reaper) |
+| a product's pooled claim `service:<id>` | **L2** `service` | one posted transfer |
+| any other internal claim (`piggybank`, `revenue`, `user:<id>`) | **L3** `internal` | one posted transfer |
+
+The tier is never supplied. A caller-supplied tier would be a second statement of a fact the
+destination already makes, and the only interesting failure is the one where the two disagree.
+An external *source* is unrepresentable: money cannot arrive from an address by anyone's
+say-so — that is a deposit, which a chain watcher attests.
+
+An **L1 payment leaves only from an investor's claim or from `revenue`.** The withdrawal saga
+has exactly those two sources; the fund's pooled capital and a product's pooled funds cannot
+be paid out on-chain directly and `OpenPayment` refuses rather than teaching the saga two new
+sources for a request nobody has made. Move the money to a claim the saga can pay from first.
+
+### The requirement is a function of the SOURCE, and nothing else
+
+| source | who must agree | how |
+| --- | --- | --- |
+| `piggybank`, `revenue`, `service:<id>` (fund-owned) | the **owner consilium**, at every tier | opened inside `OpenPayment`; `ConsiliumTerms::Payment` carries the order's id inside the hashed subject |
+| `user:<id>` (an investor's own claim) | **that investor**, at every tier | one emailed consent seat — token, code, 72h, five attempts, the table in "One specification for both planes" |
+
+There is deliberately **no cell in which one admin moves fund money alone**. `fee → user:<x>`
+on a single say-so would be the revenue payout the consilium closed, reopened through the back
+door: the recipient can then withdraw under their own authority. The matrix
+(`Permission::PaymentOpen`, Admin and Owner) gates *proposing*; the source decides who
+authorizes.
+
+Everything the execution will check is checked at **open**, so nobody spends 72 hours
+approving an order that fails the moment it is carried: the source covers the amount now
+(posted minus reserved), an external shape is possible on the rail (configured, above the
+minimum, the investor active and verified), and a consent subject holds a verified mailbox
+and a mirrored identity-plane id — without the latter no consent mail can be addressed, and
+an order nobody can be asked about must not exist.
+
+### The consent seat's two pins
+
+A consent is answered by someone who is not signed in, up to 72 hours after it was mailed. Two
+facts are frozen at open beside the seat and re-read, fail-closed, both when the code is
+compared and again under the order's lock at execution:
+
+- the subject's folded revoke floor (`GREATEST(concierge_token_version, token_version)`) — so
+  `RevokeTokens` on **either** plane voids a consent already in flight;
+- SHA-256 of the subject's mirrored `users.email` — so a mailbox change at the identity
+  provider cannot redirect a live token to an address that is no longer theirs.
+
+A pin that has moved rejects a pending order at consent (no attempt is charged; the holder is
+told why, because holding a live token already proves the seat exists) and fails an approved
+one at execution, releasing an L2/L3 reservation on the way out.
+
+**The L1 window.** Execution reads the pins, creates the withdrawal, then records the effect.
+A revocation can land between the first and the last, and by then a withdrawal exists. Two
+things close that window, and neither works without the other:
+
+- **A payment's withdrawal is never dispatched on creation.** A self-service withdrawal on a
+  liquid rail leaves for custody in the same transaction that records it, and past `Queued`
+  nothing may void it (the broadcast may have landed — the cardinal rule). A payment order
+  therefore creates its withdrawal `Queued` whatever the rail holds, and the dispatcher
+  sends it on its next sweep — which also means every payment withdrawal passes
+  `require_dispatchable`: the pause, the freeze and the verification floor are re-read at
+  the moment the money leaves, not only when the order was opened 72 hours earlier.
+- **`record_execution` re-reads the pins under the order's lock**, after share-locking the
+  subject's `users` row so a revocation still committing is waited for rather than read
+  around, and, in that same transaction, **cancels the withdrawal it is refusing**.
+
+What this does NOT cover: a withdrawal the dispatcher has already sent. Between the sweep
+that dispatched it and the record that refuses it, the pins can still move, and then the
+effect that exists is recorded as it is and the movement of the pins is logged at error,
+not lied about. That gap is the dispatcher's cadence, not 72 hours — and the money that
+left in it left through the same policy gate every other withdrawal passes.
+
+### Execution
+
+Only an `approved` order executes. Both approval paths and the sweeper reach `execute`, and
+each of these makes it safe to reach more than once:
+
+- the payload hash is re-taken over the stored terms; for a consilium-backed order the
+  **order row** is re-hashed against the consilium's `payload_hash` too, and the approval is
+  recorded against the consilium's id checked under the order's lock against the
+  `payment_approval` link — a quorum over one order can never carry another;
+- an L2/L3 order's reservation (`Dr <source> / Cr clearing`, raised on approval) must have
+  **actually landed** before the settlement is recorded: `saga_steps` is asked for the
+  reserve's deterministic transfer id and TigerBeetle is asked whether it holds it. Not yet
+  means nothing is recorded and the next sweep asks again. A reservation the ledger
+  **refused** — the outbox row is parked — fails the order rather than waiting forever; the
+  operator sees the row in `/api/admin/outbox/parked`, and unparking it re-drives the relay;
+- an L1 order's withdrawal id is `uuid_v5(payment_id, "payment:withdrawal")`, and a refusal
+  from the withdrawal path is re-read against that id before being believed — the loser of
+  the two-caller race records the withdrawal that exists, not a phantom failure.
+
+`execution_failed` is terminal and retried by nothing: the reason is what the initiator (and,
+for a consilium, every owner) reads.
+
+### Mail
+
+Both approval mails leave through the same `consilium_mail` queue, written in the same
+transaction as the seat they carry a token for, drained by the singleton worker into
+concierge's relay. Three kinds, three templates: `PAYOUT_APPROVAL` (a rail and an address),
+`PAYMENT_APPROVAL` (two ends in words, for the owners) and `PAYMENT_CONSENT` (the same, for the
+one investor whose money it is). A payment is never rendered through the payout template — it
+would name the wrong claim and the wrong rail on the one mail whose job is to state what is
+being approved. The consent mail names the subject's identity-plane id in its typed payload,
+and concierge refuses it unless that id is the addressee, so the money plane cannot fan one
+consent out to a second mailbox. Beside the canonical label the destination carries what a
+person recognises it by — the receiving investor's masked mailbox, the product's title — so
+"investor 8f3e…" is not approved for the wrong person; the label alone is what the digest
+binds.
+
+A consent that burns (five wrong codes) or is voided by a moved pin rejects the order and
+mails **nobody**: the outcome kinds concierge renders are addressed to a seated owner, and a
+consent-decided order's initiator may be an admin who holds no seat. The initiator reads
+the verdict and its reason on the payments screen. Telling them by mail needs a kind
+concierge does not yet have, and is deliberately not faked through `PAYOUT_OUTCOME`, which
+concierge would refuse for a non-owner recipient after ten charged attempts.
+
+---
+
 ## Audit
 
 Every vote records who, when, from which IP and user agent, and against which

@@ -260,9 +260,17 @@ async fn an_unverified_user_cannot_withdraw() {
 	// claim would fail the solvency Read-First instead and prove nothing.
 	deposit(&h, user, network, "100").await;
 
-	let err = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
-		.await
-		.unwrap_err();
+	let err = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap_err();
 	assert!(matches!(err, DomainError::Forbidden(_)), "an unverified account is forbidden from withdrawing, got {err:?}");
 
 	assert_eq!(h.withdrawals.list_by_user(user).await.unwrap().len(), 0, "a refused request must leave no withdrawal behind");
@@ -275,9 +283,17 @@ async fn a_verified_user_can_withdraw() {
 	let network = Network::Bep20;
 	deposit(&h, user, network, "100").await;
 
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
-		.await
-		.expect("a verified account withdraws");
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.expect("a verified account withdraws");
 	assert_eq!(withdrawal.net_amount(), usdt("49"), "the flat 1 USDT fee is retained");
 	h.relay.drain().await;
 
@@ -302,9 +318,17 @@ async fn a_revenue_payout_is_not_gated_on_kyc() {
 	// this test funds the whole amount it then pays out rather than leaning on whatever
 	// the shared `fee` singleton happens to hold.
 	for _ in 0..2 {
-		let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::ENFORCED), user, network, destination(network), usdt("50"))
-			.await
-			.expect("fund the fee claim");
+		let withdrawal = withdrawal_app::request_withdrawal(
+			&withdrawal_ports(&h),
+			&admission(&h, KycGate::ENFORCED),
+			WithdrawalId::new(),
+			user,
+			network,
+			destination(network),
+			usdt("50"),
+		)
+		.await
+		.expect("fund the fee claim");
 		h.relay.drain().await;
 		withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
 			.await
@@ -383,12 +407,20 @@ async fn a_lifted_gate_both_admits_and_dispatches_an_unverified_withdrawal() {
 	let network = Network::Bep20;
 	deposit(&h, user, network, "100").await;
 
-	let withdrawal = withdrawal_app::request_withdrawal(&withdrawal_ports(&h), &admission(&h, KycGate::LIFTED), user, network, destination(network), usdt("50"))
-		.await
-		.expect("a lifted gate admits an unverified withdrawal");
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h),
+		&admission(&h, KycGate::LIFTED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.expect("a lifted gate admits an unverified withdrawal");
 	h.relay.drain().await;
 
-	let policy = PgOutflowPolicy::new(&h.pool);
+	let policy = PgOutflowPolicy::new(h.pool.clone());
 	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy, KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();

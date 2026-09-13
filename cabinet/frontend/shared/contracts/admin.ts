@@ -60,6 +60,28 @@ export interface AdminUserSummary {
   role_is_break_glass: boolean;
   token_version: string;
   created_at: string;
+  /**
+   * WHY the account is disabled — and therefore which control the console may offer.
+   * THREE cases, not two:
+   *
+   *   · `"admin_hold"`  — one operator's brake. Lapses by itself at {@link hold_expires_at},
+   *                       and `/api/admin/users/reinstate` lifts it in one act.
+   *   · `"governance"`  — the owners' ratified verdict. Never lapses; reinstatement is a
+   *                       proposal, and the one-act route refuses it.
+   *   · `""`            — empty on an ACTIVE user, and also on one suspended before this
+   *                       field existed. Those keep the old one-act, never-lapsing
+   *                       semantics they were actually suspended under, so an empty string
+   *                       is not a synonym for "active": read it together with `status`.
+   *
+   * Which is why this is a string and not a boolean. A two-way branch files the third case
+   * under whichever of the other two it happened to be compared against, and the account it
+   * mis-files is the one nobody can act on correctly.
+   */
+  suspended_by: string;
+  /** Unix seconds an `admin_hold` lapses; `"0"` when nothing lapses. Format through
+   *  `shared/lib/datetime`, which is where this wire shape (seconds-as-string, `"0"` for
+   *  absent) is already understood. */
+  hold_expires_at: string;
 }
 
 export interface AdminUserList {
@@ -87,6 +109,28 @@ export interface AdminUserProfile {
   role: string;
   /** @see SessionUser.roleIsBreakGlass — same flag, the BFF's snake_case spelling. */
   role_is_break_glass: boolean;
+  /**
+   * WHY the account is disabled — and therefore which control the console may offer.
+   * THREE cases, not two:
+   *
+   *   · `"admin_hold"`  — one operator's brake. Lapses by itself at {@link hold_expires_at},
+   *                       and `/api/admin/users/reinstate` lifts it in one act.
+   *   · `"governance"`  — the owners' ratified verdict. Never lapses; reinstatement is a
+   *                       proposal, and the one-act route refuses it.
+   *   · `""`            — empty on an ACTIVE user, and also on one suspended before this
+   *                       field existed. Those keep the old one-act, never-lapsing
+   *                       semantics they were actually suspended under, so an empty string
+   *                       is not a synonym for "active": read it together with `status`.
+   *
+   * Which is why this is a string and not a boolean. A two-way branch files the third case
+   * under whichever of the other two it happened to be compared against, and the account it
+   * mis-files is the one nobody can act on correctly.
+   */
+  suspended_by: string;
+  /** Unix seconds an `admin_hold` lapses; `"0"` when nothing lapses. Format through
+   *  `shared/lib/datetime`, which is where this wire shape (seconds-as-string, `"0"` for
+   *  absent) is already understood. */
+  hold_expires_at: string;
 }
 
 export interface UserBalance {

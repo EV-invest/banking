@@ -1,11 +1,12 @@
 //! Postgres adapter for the [`OutflowPolicy`] port — the control-plane facts every
 //! payout path clears before money leaves.
 //!
-//! It borrows the pool rather than owning a clone: the two call sites (the dispatcher
-//! sweep and the admin `DispatchWithdrawal` handler) both already hold one, and a
-//! borrow-holder keeps the adapter out of [`AppState`](crate::AppState) — the policy is
-//! a property of the withdrawal use case, not another shared handle to thread through
-//! twenty constructor arguments.
+//! It owns a pool clone (an `Arc` under the hood) rather than a borrow, so one instance can
+//! sit in [`AppState`](crate::AppState) beside the other adapters and be lent to the
+//! withdrawal, payment and consilium use cases alike — the pause is one fact, read through
+//! one handle, and a use case that could not borrow it would have to be trusted to remember
+//! it. It is built INSIDE `AppState::new` from the pool already passed there rather than
+//! threaded through as a twenty-sixth constructor argument.
 
 use async_trait::async_trait;
 use domain::{error::DomainError, users::UserId};
@@ -16,26 +17,26 @@ use crate::{
 	ports::outflow::{OutflowPolicy, PayoutStanding},
 };
 
-pub struct PgOutflowPolicy<'a> {
-	pool: &'a PgPool,
+pub struct PgOutflowPolicy {
+	pool: PgPool,
 }
 
-impl<'a> PgOutflowPolicy<'a> {
-	pub fn new(pool: &'a PgPool) -> Self {
+impl PgOutflowPolicy {
+	pub fn new(pool: PgPool) -> Self {
 		Self { pool }
 	}
 }
 
 #[async_trait]
-impl OutflowPolicy for PgOutflowPolicy<'_> {
+impl OutflowPolicy for PgOutflowPolicy {
 	async fn outflows_paused(&self) -> Result<bool, DomainError> {
-		operations::is_read_only(self.pool).await.map_err(|err| DomainError::Repository(err.to_string()))
+		operations::is_read_only(&self.pool).await.map_err(|err| DomainError::Repository(err.to_string()))
 	}
 
 	async fn standing(&self, user: UserId) -> Result<Option<PayoutStanding>, DomainError> {
 		let row: Option<(bool, i32)> = sqlx::query_as("SELECT (frozen OR status = 'disabled'), kyc_level FROM users WHERE id = $1")
 			.bind(user.raw())
-			.fetch_optional(self.pool)
+			.fetch_optional(&self.pool)
 			.await
 			.map_err(|err| DomainError::Repository(err.to_string()))?;
 		Ok(row.map(|(blocked, kyc_level)| PayoutStanding {
