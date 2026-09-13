@@ -10,6 +10,9 @@
 
 import type { OpenPaymentRequest, Party, PartyKind, PaymentRequirement, PaymentTier } from "@/shared/contracts/payments";
 
+// Relative on purpose, for the same reason as above — and `money.ts` imports nothing.
+import { USDT_DECIMALS } from "../../../../shared/lib/money.ts";
+
 export const PARTY_KINDS: readonly PartyKind[] = ["piggybank", "revenue", "service", "user"];
 
 /** What the destination picker offers: every internal party, plus an address. */
@@ -63,6 +66,17 @@ function complete(end: EndDraft): boolean {
   return !needsId(end.kind) || end.id.trim().length > 0;
 }
 
+/**
+ * The amount goes on the wire as the decimal string the operator typed, so it is checked
+ * as one: digits, at most one point, at most `USDT_DECIMALS` places. `Number` would wave
+ * through `1e5`, `0x1a` and ` .5` — all of which the plane, parsing a decimal, refuses.
+ */
+const AMOUNT = new RegExp(String.raw`^\d+(\.\d{1,${USDT_DECIMALS}})?$`);
+
+function validAmount(amount: string): boolean {
+  return AMOUNT.test(amount) && Number(amount) > 0;
+}
+
 function sameParty(a: EndDraft, b: EndDraft): boolean {
   if (a.kind === "external" || b.kind === "external" || a.kind !== b.kind) return false;
   return !needsId(a.kind) || a.id.trim() === b.id.trim();
@@ -81,8 +95,7 @@ export function draftProblem(source: EndDraft, destination: EndDraft, amount: st
   if (!complete(destination)) return "admin.payments.err.pickDestination";
   if (sameParty(source, destination)) return "admin.payments.err.sameEnds";
   if (destination.kind === "external" && (source.kind === "piggybank" || source.kind === "service")) return "admin.payments.err.noRailFromPooled";
-  const n = Number(amount.trim());
-  if (!amount.trim() || !Number.isFinite(n) || n <= 0) return "admin.payments.err.enterAmount";
+  if (!validAmount(amount.trim())) return "admin.payments.err.enterAmount";
   if (!reason.trim()) return "admin.payments.err.enterReason";
   if (reasonBytes(reason.trim()) > REASON_MAX_BYTES) return "admin.payments.err.reasonTooLong";
   return null;

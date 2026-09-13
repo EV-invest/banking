@@ -40,6 +40,14 @@ test("a draft is refused in the order the operator would notice", () => {
   assert.equal(draftProblem(end({ kind: "revenue" }), end({ kind: "piggybank" }), "1.5", "ё".repeat(250)), null);
 });
 
+test("the amount is a plain decimal string, not whatever Number would take", () => {
+  const ok = (amount: string) => draftProblem(end({ kind: "revenue" }), end({ kind: "piggybank" }), amount, "r");
+  for (const amount of ["1", "0.5", " 12.50 ", "1." + "0".repeat(17) + "1"]) assert.equal(ok(amount), null, amount);
+  for (const amount of ["", "0", "0.0", "1e5", "0x1a", " .5", "-1", "+1", "1,5", "1." + "0".repeat(19), "Infinity"]) {
+    assert.equal(ok(amount), "admin.payments.err.enterAmount", JSON.stringify(amount));
+  }
+});
+
 test("the wire request drops ids the singletons do not carry and trims everything", () => {
   const request = toRequest(end({ kind: "revenue", id: "stale" }), end({ kind: "external", network: " ton ", address: " EQx " }), " 12.50 ", " why ");
   assert.deepEqual(request, {
