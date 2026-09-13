@@ -5,10 +5,10 @@
 // that is where it appears — whether it was opened as a revenue payout or as an external
 // payment order from the revenue claim.
 
-import { Banknote, Loader2 } from "lucide-react";
+import { Banknote } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
+import { Button, Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton, Spinner } from "@evinvest/uikit";
 
 import type { RevenuePayout } from "@/shared/contracts/admin";
 import { shortAddress } from "@/shared/lib/money";
@@ -105,8 +105,8 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
       <td className="px-5 py-3">
         <div className="flex justify-end">
           {payout.state === "queued" ? (
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onCancel}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={onCancel}>
+              {busy ? <Spinner aria-hidden /> : null}
               {t("ui.cancel")}
             </Button>
           ) : (

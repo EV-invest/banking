@@ -7,10 +7,8 @@
 // because the second one changes WHO reads the reason the operator is typing — every
 // owner, or one investor — and that is worth knowing before the sentence is written.
 
-import { Loader2 } from "lucide-react";
-
 import { useT } from "@evinvest/i18n/react";
-import { Button } from "@evinvest/uikit";
+import { Button, Spinner } from "@evinvest/uikit";
 
 import { requirementLabel, tierLabel } from "@/entities/payment/lib/format";
 import { formatExactUsdt } from "@/shared/lib/money";
@@ -77,8 +75,8 @@ export function ReviewPanel({
       <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-foreground">{reason.trim()}</blockquote>
       <p className="text-xs text-muted-foreground">{t(`admin.payments.reviewNote.${requirement}`)}</p>
       <div className="flex gap-2">
-        <Button type="button" size="sm" disabled={busy} onClick={onConfirm}>
-          {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+        <Button type="button" size="sm" disabled={busy} aria-busy={busy} onClick={onConfirm}>
+          {busy ? <Spinner aria-hidden /> : null}
           {t("admin.payments.confirmOpen")}
         </Button>
         <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onBack}>

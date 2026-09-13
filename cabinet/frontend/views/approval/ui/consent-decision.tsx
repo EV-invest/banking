@@ -7,11 +7,10 @@
 // an attempt is in flight, how many remain, what the last one said — is the parent's,
 // because those are read back from the server and this card never predicts them.
 
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@evinvest/uikit";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Spinner } from "@evinvest/uikit";
 
 import type { ConsentDecision } from "@/shared/contracts/payments";
 import { errorMessage } from "@/shared/lib/api-client";
@@ -62,12 +61,12 @@ export function ConsentDecisionCard({
             here rejecting is the reader keeping their own money where it is, so it is
             never styled as the dangerous one. */}
         <div className="flex flex-col gap-2.5 sm:flex-row">
-          <Button size="lg" className="font-semibold sm:flex-1" disabled={locked} onClick={() => void decide("approve")}>
-            {pending === "approve" && <Loader2 className="size-4 animate-spin" />}
+          <Button size="lg" className="font-semibold sm:flex-1" disabled={locked} aria-busy={pending === "approve"} onClick={() => void decide("approve")}>
+            {pending === "approve" && <Spinner aria-hidden />}
             {t("consent.approve")}
           </Button>
-          <Button size="lg" variant="outline" className="sm:shrink-0" disabled={locked} onClick={() => void decide("reject")}>
-            {pending === "reject" && <Loader2 className="size-4 animate-spin" />}
+          <Button size="lg" variant="outline" className="sm:shrink-0" disabled={locked} aria-busy={pending === "reject"} onClick={() => void decide("reject")}>
+            {pending === "reject" && <Spinner aria-hidden />}
             {t("consent.reject")}
           </Button>
         </div>

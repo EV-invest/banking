@@ -6,10 +6,10 @@
 // plane refuses anyone else, so the button is offered on every pending row and the
 // refusal, if it comes, is shown rather than pre-empted.
 
-import { ArrowDown, Loader2 } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, InfoTip, InfoTipContent, InfoTipTrigger } from "@evinvest/uikit";
+import { Button, InfoTip, InfoTipContent, InfoTipTrigger, Spinner } from "@evinvest/uikit";
 
 import { consentLabel, consentTone, isPaymentOpen, paymentStateLabel, paymentStateTone, requirementLabel, tierLabel } from "@/entities/payment/lib/format";
 import { PaymentEndSummary } from "@/entities/payment/ui/payment-end";
@@ -68,8 +68,8 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
       <td className="px-5 py-3">
         <div className="flex justify-end">
           {open ? (
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onCancel}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+            <Button type="button" variant="outline" size="sm" disabled={busy} aria-busy={busy} onClick={onCancel}>
+              {busy ? <Spinner aria-hidden /> : null}
               {t("ui.cancel")}
             </Button>
           ) : (
