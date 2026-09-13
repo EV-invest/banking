@@ -409,7 +409,7 @@ async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Re
 /// and logged where an operator will look for it.
 fn failure_reason(err: &DomainError) -> String {
 	match err {
-		DomainError::Validation(_) | DomainError::Conflict(_) | DomainError::Forbidden(_) | DomainError::NotFound { .. } => err.to_string(),
+		DomainError::Validation(_) | DomainError::Conflict(_) | DomainError::Forbidden(_) | DomainError::Precondition(_) | DomainError::NotFound { .. } => err.to_string(),
 		DomainError::Repository(detail) => {
 			tracing::error!(detail = %detail, "payments: the withdrawal could not be created on an infrastructure error");
 			"the withdrawal could not be created because of an internal error; an operator has been alerted".to_owned()
