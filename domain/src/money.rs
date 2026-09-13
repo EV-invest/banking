@@ -646,7 +646,7 @@ mod tests {
 		// the exact value computed with the same widening multiply.
 		let a = 1u128 << 120;
 		let b = 1u128 << 100; // a*b = 2^220, overflows u128
-						// 2^220 / 2^64 = 2^156 — exceeds u128 → None.
+		// 2^220 / 2^64 = 2^156 — exceeds u128 → None.
 		assert_eq!(mul_div_floor(a, b, 1u128 << 64), None);
 		// 2^220 / 2^100 = 2^120 — fits.
 		assert_eq!(mul_div_floor(a, b, 1u128 << 100), Some(1u128 << 120));

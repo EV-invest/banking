@@ -26,8 +26,8 @@ use async_trait::async_trait;
 use domain::{
 	balance::ServiceId,
 	book::{
-		BookEvent, BookPolicy, CandleResolution, ClientOrderId, IncomingOrder, Locked, MatchingEngine, Order, OrderId, OrderKind, OrderSnapshot, OrderState, Price, RestingOrder, Side, Tif, Trade,
-		TradeId,
+		BookEvent, BookPolicy, CandleResolution, ClientOrderId, IncomingOrder, Locked, MatchingEngine, Order, OrderId, OrderKind, OrderSnapshot, OrderState, Price, RestingOrder, Side, Tif,
+		Trade, TradeId,
 	},
 	error::DomainError,
 	money::{Nav, Shares, Usdt},
@@ -38,7 +38,7 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::outbox,
-	ports::book::{BookDepth, BookLevel, BookPolicyRecord, BookStore, Candle, CancelOutcome, OrderRecord, PlaceOutcome, TradeRecord, UserTrade},
+	ports::book::{BookDepth, BookLevel, BookPolicyRecord, BookStore, CancelOutcome, Candle, OrderRecord, PlaceOutcome, TradeRecord, UserTrade},
 };
 
 /// The `event_log.aggregate` names the book's facts are filed under — an order's lock and
@@ -269,7 +269,10 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 }
 
 fn order_not_found(id: OrderId) -> DomainError {
-	DomainError::NotFound { entity: "order", id: id.to_string() }
+	DomainError::NotFound {
+		entity: "order",
+		id: id.to_string(),
+	}
 }
 
 /// The book's single write lock. `hashtext` folds the slug into the advisory key space;
@@ -761,13 +764,11 @@ impl BookStore for PgBook {
 			.transpose()?;
 		// The 24h reference: the last trade at or before the window opened — the price the
 		// window "started" at — or, for a book younger than a day, its very first trade.
-		let reference_24h = sqlx::query_scalar::<_, String>(
-			"SELECT price FROM book_trades WHERE service = $1 AND executed_at <= now() - interval '24 hours' ORDER BY seq DESC LIMIT 1",
-		)
-		.bind(service.as_str())
-		.fetch_optional(&self.pool)
-		.await
-		.map_err(repo_err)?;
+		let reference_24h = sqlx::query_scalar::<_, String>("SELECT price FROM book_trades WHERE service = $1 AND executed_at <= now() - interval '24 hours' ORDER BY seq DESC LIMIT 1")
+			.bind(service.as_str())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?;
 		let reference_24h = match reference_24h {
 			Some(price) => Some(price),
 			None => sqlx::query_scalar::<_, String>("SELECT price FROM book_trades WHERE service = $1 ORDER BY seq ASC LIMIT 1")
@@ -860,7 +861,13 @@ mod tests {
 
 	#[test]
 	fn every_order_and_trade_select_reads_the_documented_columns() {
-		for sql in [SELECT_ORDER_BY_ID, SELECT_ORDER_BY_ID_FOR_UPDATE, SELECT_ORDER_BY_CLIENT_ID, SELECT_OPEN_ORDERS, SELECT_ORDER_HISTORY] {
+		for sql in [
+			SELECT_ORDER_BY_ID,
+			SELECT_ORDER_BY_ID_FOR_UPDATE,
+			SELECT_ORDER_BY_CLIENT_ID,
+			SELECT_OPEN_ORDERS,
+			SELECT_ORDER_HISTORY,
+		] {
 			assert!(sql.contains(ORDER_COLUMNS), "an order SELECT drifted from ORDER_COLUMNS: {sql}");
 		}
 		for sql in [SELECT_USER_TRADES, SELECT_TAPE, SELECT_TRADE_BY_ID] {

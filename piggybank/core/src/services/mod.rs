@@ -17,10 +17,10 @@ use std::{future::Future, net::SocketAddr};
 use evbanking_auth::{TokenClass, grpc_auth_layer};
 use evbanking_contracts::banking::v1::{
 	allocations_service_server::AllocationsServiceServer, balance_service_server::BalanceServiceServer, book_service_server::BookServiceServer,
-	consilium_approval_service_server::ConsiliumApprovalServiceServer,
-	consilium_service_server::ConsiliumServiceServer, fees_service_server::FeesServiceServer, funds_service_server::FundsServiceServer, health_service_server::HealthServiceServer,
-	operations_service_server::OperationsServiceServer, payment_consent_service_server::PaymentConsentServiceServer, payments_service_server::PaymentsServiceServer,
-	users_service_server::UsersServiceServer, wallet_service_server::WalletServiceServer,
+	consilium_approval_service_server::ConsiliumApprovalServiceServer, consilium_service_server::ConsiliumServiceServer, fees_service_server::FeesServiceServer,
+	funds_service_server::FundsServiceServer, health_service_server::HealthServiceServer, operations_service_server::OperationsServiceServer,
+	payment_consent_service_server::PaymentConsentServiceServer, payments_service_server::PaymentsServiceServer, users_service_server::UsersServiceServer,
+	wallet_service_server::WalletServiceServer,
 };
 use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;

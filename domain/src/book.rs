@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
 	balance::ServiceId,
 	error::DomainError,
-	money::{mul_div_floor, Nav, Shares, Usdt, SCALE},
+	money::{Nav, SCALE, Shares, Usdt, mul_div_floor},
 	users::UserId,
 };
 

@@ -972,7 +972,11 @@ fn plan_book(event: BookEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp
 	match event {
 		BookEvent::OrderPlaced { service, user, locked, .. } => {
 			let (debit, credit, amount) = match locked {
-				Locked::Units(units) => (LedgerAccountKey::BookShares(service.clone(), user), LedgerAccountKey::UserShares(service, user), units.base_units()),
+				Locked::Units(units) => (
+					LedgerAccountKey::BookShares(service.clone(), user),
+					LedgerAccountKey::UserShares(service, user),
+					units.base_units(),
+				),
 				Locked::Cash(cash) => (LedgerAccountKey::UserClaim(user), LedgerAccountKey::BookCash(user), cash.base_units()),
 			};
 			PlannedOp {
@@ -990,7 +994,11 @@ fn plan_book(event: BookEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp
 		}
 		BookEvent::OrderReleased { service, user, released, .. } => {
 			let (debit, credit, amount) = match released {
-				Locked::Units(units) => (LedgerAccountKey::UserShares(service.clone(), user), LedgerAccountKey::BookShares(service, user), units.base_units()),
+				Locked::Units(units) => (
+					LedgerAccountKey::UserShares(service.clone(), user),
+					LedgerAccountKey::BookShares(service, user),
+					units.base_units(),
+				),
 				Locked::Cash(cash) => (LedgerAccountKey::BookCash(user), LedgerAccountKey::UserClaim(user), cash.base_units()),
 			};
 			PlannedOp {
@@ -1490,20 +1498,35 @@ mod tests {
 		};
 
 		let op = plan_book(event(Side::Sell, "0.003"), trade_id.raw(), trade_id.raw().as_u128());
-		let LedgerAction::PostLinked(legs) = &op.action else { panic!("a trade must be a linked chain") };
+		let LedgerAction::PostLinked(legs) = &op.action else {
+			panic!("a trade must be a linked chain")
+		};
 		assert_eq!(legs.len(), 3);
-		assert_eq!((legs[0].debit.clone(), legs[0].credit.clone()), (LedgerAccountKey::UserShares(service.clone(), buyer), LedgerAccountKey::BookShares(service.clone(), seller)));
-		assert_eq!((legs[1].debit.clone(), legs[1].credit.clone()), (LedgerAccountKey::BookCash(buyer), LedgerAccountKey::UserClaim(seller)));
-		assert_eq!((legs[2].debit.clone(), legs[2].credit.clone()), (LedgerAccountKey::UserClaim(seller), LedgerAccountKey::FeeRevenue));
+		assert_eq!(
+			(legs[0].debit.clone(), legs[0].credit.clone()),
+			(LedgerAccountKey::UserShares(service.clone(), buyer), LedgerAccountKey::BookShares(service.clone(), seller))
+		);
+		assert_eq!(
+			(legs[1].debit.clone(), legs[1].credit.clone()),
+			(LedgerAccountKey::BookCash(buyer), LedgerAccountKey::UserClaim(seller))
+		);
+		assert_eq!(
+			(legs[2].debit.clone(), legs[2].credit.clone()),
+			(LedgerAccountKey::UserClaim(seller), LedgerAccountKey::FeeRevenue)
+		);
 		assert_eq!(op.transfer_id, legs[0].id, "the chain is identified by its first leg");
 
 		let op = plan_book(event(Side::Buy, "0.003"), trade_id.raw(), trade_id.raw().as_u128());
-		let LedgerAction::PostLinked(legs) = &op.action else { panic!("a trade must be a linked chain") };
+		let LedgerAction::PostLinked(legs) = &op.action else {
+			panic!("a trade must be a linked chain")
+		};
 		assert_eq!(legs[2].debit, LedgerAccountKey::BookCash(buyer), "a taking buyer pays the fee out of its escrow");
 
 		// No fee, no third leg — TigerBeetle refuses a zero-amount transfer.
 		let op = plan_book(event(Side::Buy, "0"), trade_id.raw(), trade_id.raw().as_u128());
-		let LedgerAction::PostLinked(legs) = &op.action else { panic!("a trade must be a linked chain") };
+		let LedgerAction::PostLinked(legs) = &op.action else {
+			panic!("a trade must be a linked chain")
+		};
 		assert_eq!(legs.len(), 2);
 	}
 
@@ -1534,9 +1557,14 @@ mod tests {
 			order_id.raw(),
 			order_id.raw().as_u128(),
 		);
-		let (LedgerAction::Post(lock), LedgerAction::Post(release)) = (&lock.action, &release.action) else { panic!("posted legs") };
+		let (LedgerAction::Post(lock), LedgerAction::Post(release)) = (&lock.action, &release.action) else {
+			panic!("posted legs")
+		};
 		assert_eq!((lock.debit.clone(), lock.credit.clone()), (LedgerAccountKey::UserClaim(user), LedgerAccountKey::BookCash(user)));
-		assert_eq!((release.debit.clone(), release.credit.clone()), (LedgerAccountKey::BookCash(user), LedgerAccountKey::UserClaim(user)));
+		assert_eq!(
+			(release.debit.clone(), release.credit.clone()),
+			(LedgerAccountKey::BookCash(user), LedgerAccountKey::UserClaim(user))
+		);
 		assert_ne!(lock.id, release.id, "one order, two distinct deterministic ids");
 	}
 

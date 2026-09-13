@@ -22,7 +22,7 @@
 //! changes hands already existed, so the supply and the NAV are untouched by a trade.
 
 pub use crate::banking::v1::{
-	BookEvent, BookLevel, BookPolicy, BookSnapshot, Candle, CandleList, CancelOrderRequest, GetBookPolicyRequest, GetBookRequest, ListCandlesRequest, ListOpenOrdersRequest,
+	BookEvent, BookLevel, BookPolicy, BookSnapshot, CancelOrderRequest, Candle, CandleList, GetBookPolicyRequest, GetBookRequest, ListCandlesRequest, ListOpenOrdersRequest,
 	ListOrderHistoryRequest, ListTradesRequest, ListUserTradesRequest, Order, OrderList, PlaceOrderRequest, SetBookPolicyRequest, Trade, TradeList, WatchBookRequest,
 	book_service_client::BookServiceClient,
 	book_service_server::{BookService, BookServiceServer},

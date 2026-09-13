@@ -285,7 +285,11 @@ impl Ledger for TbLedger {
 			let (debit_id, credit_id) = self.ensure_pair(&transfer.debit, &transfer.credit).await?;
 			// Every leg but the last carries `Linked`: the flag says "and the next one",
 			// so the chain closes on the first leg without it.
-			let flags = if index + 1 < transfers.len() { tb::TransferFlags::Linked } else { tb::TransferFlags::empty() };
+			let flags = if index + 1 < transfers.len() {
+				tb::TransferFlags::Linked
+			} else {
+				tb::TransferFlags::empty()
+			};
 			rows.push(tb::Transfer {
 				id: transfer.id,
 				debit_account_id: debit_id,

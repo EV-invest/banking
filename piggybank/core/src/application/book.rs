@@ -272,14 +272,20 @@ fn same_request_or_conflict(existing: OrderRecord, request: &PlaceOrderRequest) 
 	if existing.order.matches_request(&request.service, request.side, request.kind, request.tif, request.size) {
 		Ok(existing)
 	} else {
-		Err(DomainError::Conflict(format!("client order id '{}' already names a different order", request.client_order_id.as_str())))
+		Err(DomainError::Conflict(format!(
+			"client order id '{}' already names a different order",
+			request.client_order_id.as_str()
+		)))
 	}
 }
 
 /// Cancel the caller's own resting order; the relay hands its unspent escrow back.
 /// Ownership is checked here; the aggregate refuses to cancel a filled one.
 pub async fn cancel_order(store: &dyn BookStore, relay: &Notify, feed: &BookFeed, id: OrderId, user: UserId) -> Result<OrderRecord, DomainError> {
-	let existing = store.find_order(id).await?.ok_or_else(|| DomainError::NotFound { entity: "order", id: id.to_string() })?;
+	let existing = store.find_order(id).await?.ok_or_else(|| DomainError::NotFound {
+		entity: "order",
+		id: id.to_string(),
+	})?;
 	if existing.order.user() != user {
 		return Err(DomainError::Forbidden("not your order".into()));
 	}
@@ -314,7 +320,9 @@ pub async fn snapshot(store: &dyn BookStore, nav: &dyn NavMarks, service: &Servi
 	let best_ask = depth_view.asks.first().map(|level| level.price);
 	let (mid, spread) = match (best_bid, best_ask) {
 		(Some(bid), Some(ask)) => (
-			Some(Price::from_base_units(bid.base_units() / 2 + ask.base_units() / 2 + (bid.base_units() % 2 + ask.base_units() % 2) / 2)),
+			Some(Price::from_base_units(
+				bid.base_units() / 2 + ask.base_units() / 2 + (bid.base_units() % 2 + ask.base_units() % 2) / 2,
+			)),
 			Some(Price::from_base_units(ask.base_units().saturating_sub(bid.base_units()))),
 		),
 		_ => (None, None),
@@ -344,11 +352,7 @@ pub async fn watch_frame(store: &dyn BookStore, nav: &dyn NavMarks, service: &Se
 	let snapshot = snapshot(store, nav, service, depth, now_unix).await?;
 	let trades = store.list_trades(service, trades).await?;
 	let orders_revision = store.orders_revision(caller, service).await?;
-	Ok(WatchFrame {
-		snapshot,
-		trades,
-		orders_revision,
-	})
+	Ok(WatchFrame { snapshot, trades, orders_revision })
 }
 
 /// OHLCV buckets over `[from, to)`. The window is bounded by [`MAX_CANDLE_BUCKETS`] at
@@ -358,7 +362,10 @@ pub async fn candles(store: &dyn BookStore, service: &ServiceId, resolution: Can
 		return Err(DomainError::Validation("candle window must be non-empty and ordered".into()));
 	}
 	if (to - from) / resolution.seconds() > MAX_CANDLE_BUCKETS {
-		return Err(DomainError::Validation(format!("candle window spans more than {MAX_CANDLE_BUCKETS} buckets at {}", resolution.as_str())));
+		return Err(DomainError::Validation(format!(
+			"candle window spans more than {MAX_CANDLE_BUCKETS} buckets at {}",
+			resolution.as_str()
+		)));
 	}
 	store.candles(service, resolution, from, to).await
 }

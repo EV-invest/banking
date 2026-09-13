@@ -26,21 +26,11 @@ use piggybank_core::{
 	application::{
 		balance as balance_app,
 		book::{self as book_app, BookFeed, BookPorts, PlaceOrderRequest},
-		funds as funds_app,
-		issuance as issuance_app,
+		funds as funds_app, issuance as issuance_app,
 	},
 	infrastructure::{
-		allocations::PgAllocations,
-		book::PgBook,
-		custody::StubCustody,
-		deposits::PgDeposits,
-		issuance::PgUnitIssuances,
-		nav::PgNav,
-		operations,
-		outflow::PgOutflowPolicy,
-		positions::PgFundPositions,
-		relay::Relay,
-		users::PgUsers,
+		allocations::PgAllocations, book::PgBook, custody::StubCustody, deposits::PgDeposits, issuance::PgUnitIssuances, nav::PgNav, operations, outflow::PgOutflowPolicy,
+		positions::PgFundPositions, relay::Relay, users::PgUsers,
 	},
 	ports::{AllocationRegistry, BookStore, OrderRecord, UserRepository, ledger::Ledger},
 };
@@ -301,7 +291,11 @@ async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fe
 	let mine = book_app::list_user_trades(&h.book, buyer, Some(&service), 10).await.unwrap();
 	assert_eq!((mine[0].side, mine[0].order_id, mine[0].fee), (Side::Buy, bid.order.id(), usdt("0.15")));
 	let theirs = book_app::list_user_trades(&h.book, seller, Some(&service), 10).await.unwrap();
-	assert_eq!((theirs[0].side, theirs[0].order_id, theirs[0].fee), (Side::Sell, ask.order.id(), Usdt::ZERO), "the maker paid nothing");
+	assert_eq!(
+		(theirs[0].side, theirs[0].order_id, theirs[0].fee),
+		(Side::Sell, ask.order.id(), Usdt::ZERO),
+		"the maker paid nothing"
+	);
 	let snapshot = book_app::snapshot(&h.book, &h.nav, &service, 20, now_unix()).await.unwrap();
 	assert!(snapshot.bids.is_empty() && snapshot.asks.is_empty());
 	assert_eq!(snapshot.last, Some((price("1.5"), Side::Buy)));
@@ -347,7 +341,10 @@ async fn a_partial_fill_leaves_the_maker_resting_with_the_rest() {
 	let bid = buy(&h, buyer, &service, "1", "4").await;
 	assert_eq!(bid.order.state(), OrderState::Filled);
 	let ask = order(&h, &ask).await;
-	assert_eq!((ask.order.state(), ask.order.filled(), ask.order.remaining()), (OrderState::PartiallyFilled, shares("4"), shares("6")));
+	assert_eq!(
+		(ask.order.state(), ask.order.filled(), ask.order.remaining()),
+		(OrderState::PartiallyFilled, shares("4"), shares("6"))
+	);
 
 	let snapshot = book_app::snapshot(&h.book, &h.nav, &service, 20, now_unix()).await.unwrap();
 	assert_eq!(snapshot.asks.len(), 1);
@@ -371,7 +368,11 @@ async fn an_ioc_fills_what_it_can_and_releases_the_rest() {
 	h.relay.drain().await;
 
 	let bid = place(&h, buyer, &service, Side::Buy, OrderKind::Limit, Tif::Ioc, Some("1"), "8").await.unwrap();
-	assert_eq!((bid.order.state(), bid.order.filled()), (OrderState::Cancelled, shares("5")), "the unfilled 3 are cancelled, never rested");
+	assert_eq!(
+		(bid.order.state(), bid.order.filled()),
+		(OrderState::Cancelled, shares("5")),
+		"the unfilled 3 are cancelled, never rested"
+	);
 	assert!(book_app::list_open_orders(&h.book, buyer, Some(&service)).await.unwrap().is_empty());
 	h.relay.drain().await;
 	// 8 was escrowed, 5 spent, 3 released.
@@ -537,9 +538,18 @@ async fn the_grid_and_the_balance_are_checked_before_anything_is_written() {
 	issue_units(&h, &service, seller, "10").await;
 	fund_user(&h, buyer, "10").await;
 
-	assert!(place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1.005"), "1").await.is_err(), "off the 0.01 tick");
-	assert!(place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1"), "0.00005").await.is_err(), "off the 0.0001 lot");
-	assert!(place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, None, "1").await.is_err(), "a limit order needs a price");
+	assert!(
+		place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1.005"), "1").await.is_err(),
+		"off the 0.01 tick"
+	);
+	assert!(
+		place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1"), "0.00005").await.is_err(),
+		"off the 0.0001 lot"
+	);
+	assert!(
+		place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, None, "1").await.is_err(),
+		"a limit order needs a price"
+	);
 	let err = place(&h, seller, &service, Side::Sell, OrderKind::Limit, Tif::Gtc, Some("1"), "11").await.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("units")), "more units than held: {err:?}");
 	let err = place(&h, buyer, &service, Side::Buy, OrderKind::Limit, Tif::Gtc, Some("1"), "11").await.unwrap_err();
@@ -583,13 +593,20 @@ async fn a_raced_over_lock_is_refused_by_the_ledger_and_the_order_marked_rejecte
 	// The holding's non-negative flag refuses the second escrow; the relay parks the
 	// fact and takes the order off the book so nothing can ever fill against it.
 	h.relay.drain().await;
-	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await, shares("10"), "exactly one lock applied");
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await,
+		shares("10"),
+		"exactly one lock applied"
+	);
 	assert_eq!(order(&h, &first).await.order.state(), OrderState::Open);
 	let rejected = order(&h, &second).await.order;
 	assert_eq!(rejected.state(), OrderState::Rejected);
 	assert!(rejected.reject_reason().is_some_and(|reason| reason.contains("escrow")), "got {:?}", rejected.reject_reason());
 	assert_eq!(parked(&h, second.order.id().raw()).await.len(), 1, "the lock is parked for reconciliation");
-	assert!(book_app::cancel_order(&h.book, &h.notify, &h.feed, second.order.id(), seller).await.is_err(), "nothing to release");
+	assert!(
+		book_app::cancel_order(&h.book, &h.notify, &h.feed, second.order.id(), seller).await.is_err(),
+		"nothing to release"
+	);
 	assert_eq!(book_app::list_open_orders(&h.book, seller, Some(&service)).await.unwrap().len(), 1);
 }
 
@@ -677,7 +694,10 @@ async fn the_policy_is_operator_set_and_bounded() {
 	// The grid can be widened, and the defaults answer for a product with no row.
 	let coarse = BookPolicy::new(true, 0, price("0.1"), shares("1"), 1000).unwrap();
 	let stored = book_app::set_policy(&h.allocations, &h.book, &service, coarse).await.unwrap();
-	assert_eq!((stored.policy.price_tick(), stored.policy.lot_size(), stored.policy.market_slippage_bps()), (price("0.1"), shares("1"), 1000));
+	assert_eq!(
+		(stored.policy.price_tick(), stored.policy.lot_size(), stored.policy.market_slippage_bps()),
+		(price("0.1"), shares("1"), 1000)
+	);
 	let fresh = unique_service();
 	let mut allocation = Allocation::register(AllocationId::new(), fresh.clone(), "Fresh", "", AllocationIcon::default()).unwrap();
 	h.allocations.register(&mut allocation).await.unwrap();

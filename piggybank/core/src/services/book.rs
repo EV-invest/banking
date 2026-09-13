@@ -76,15 +76,15 @@ impl BookSvc {
 	async fn visible<T>(&self, request: &Request<T>, service: &ServiceId) -> Result<UserId, Status> {
 		let caller = caller_id(request)?;
 		let unrestricted = holds_permission(&self.state, request, Permission::AllocationManage).await?;
-		book_app::require_visible(self.state.allocations.as_ref(), service, caller, unrestricted)
-			.await
-			.map_err(map_err)?;
+		book_app::require_visible(self.state.allocations.as_ref(), service, caller, unrestricted).await.map_err(map_err)?;
 		Ok(caller)
 	}
 }
 
 #[tonic::async_trait]
 impl BookService for BookSvc {
+	type WatchBookStream = Pin<Box<dyn Stream<Item = Result<pb::BookEvent, Status>> + Send + 'static>>;
+
 	async fn place_order(&self, request: Request<pb::PlaceOrderRequest>) -> Result<Response<pb::Order>, Status> {
 		let user = unfrozen_caller(&self.state, &request).await?;
 		let req = request.into_inner();
@@ -143,9 +143,7 @@ impl BookService for BookSvc {
 		let req = request.get_ref();
 		let service = parse_service_filter(&req.service)?;
 		let limit = bounded(req.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
-		let records = book_app::list_order_history(self.state.book.as_ref(), user, service.as_ref(), limit)
-			.await
-			.map_err(map_err)?;
+		let records = book_app::list_order_history(self.state.book.as_ref(), user, service.as_ref(), limit).await.map_err(map_err)?;
 		Ok(Response::new(pb::OrderList {
 			orders: records.iter().map(|record| order_to_proto(record, true)).collect(),
 		}))
@@ -156,9 +154,7 @@ impl BookService for BookSvc {
 		let req = request.get_ref();
 		let service = parse_service_filter(&req.service)?;
 		let limit = bounded(req.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
-		let trades = book_app::list_user_trades(self.state.book.as_ref(), user, service.as_ref(), limit)
-			.await
-			.map_err(map_err)?;
+		let trades = book_app::list_user_trades(self.state.book.as_ref(), user, service.as_ref(), limit).await.map_err(map_err)?;
 		Ok(Response::new(pb::TradeList {
 			trades: trades.iter().map(user_trade_to_proto).collect(),
 		}))
@@ -198,8 +194,6 @@ impl BookService for BookSvc {
 		}))
 	}
 
-	type WatchBookStream = Pin<Box<dyn Stream<Item = Result<pb::BookEvent, Status>> + Send + 'static>>;
-
 	async fn watch_book(&self, request: Request<pb::WatchBookRequest>) -> Result<Response<Self::WatchBookStream>, Status> {
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		// Authorized once, at the handshake — the same rule the BFF applies to its socket.
@@ -226,8 +220,16 @@ impl BookService for BookSvc {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		let price_tick = optional(&req.price_tick).map(Price::parse_decimal).transpose().map_err(map_err)?.unwrap_or(BookPolicy::DEFAULT_PRICE_TICK);
-		let lot_size = optional(&req.lot_size).map(Shares::parse_decimal).transpose().map_err(map_err)?.unwrap_or(BookPolicy::DEFAULT_LOT_SIZE);
+		let price_tick = optional(&req.price_tick)
+			.map(Price::parse_decimal)
+			.transpose()
+			.map_err(map_err)?
+			.unwrap_or(BookPolicy::DEFAULT_PRICE_TICK);
+		let lot_size = optional(&req.lot_size)
+			.map(Shares::parse_decimal)
+			.transpose()
+			.map_err(map_err)?
+			.unwrap_or(BookPolicy::DEFAULT_LOT_SIZE);
 		let policy = BookPolicy::new(req.book_open, req.taker_fee_bps, price_tick, lot_size, req.market_slippage_bps).map_err(map_err)?;
 		let record = book_app::set_policy(self.state.allocations.as_ref(), self.state.book.as_ref(), &service, policy)
 			.await
@@ -259,10 +261,7 @@ struct BookWatch {
 
 impl BookWatch {
 	fn new(state: WatchState) -> Self {
-		Self {
-			state: Some(state),
-			pending: None,
-		}
+		Self { state: Some(state), pending: None }
 	}
 }
 
