@@ -27,7 +27,9 @@ export function PaymentList() {
   const items = list.data?.items ?? null;
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
-  const error = actionError ?? (items || !list.error ? null : list.error);
+  // A failed read with nothing to show gets a retry; a failed cancel does not — the row
+  // is still there, and its button is the retry.
+  const readFailed = !items && list.error;
 
   const cancel = async (id: string) => {
     setBusy(id);
@@ -63,11 +65,15 @@ export function PaymentList() {
         </div>
       </div>
 
-      {error !== null && <ResourceError message={errorMessage(error, t)} />}
+      {readFailed ? (
+        <ResourceError error={list.error} onRetry={() => void list.refresh()} retrying={list.isValidating} />
+      ) : (
+        actionError !== null && <ResourceError message={errorMessage(actionError, t)} />
+      )}
 
       {/* No card while the read has failed with nothing to show: a `Settled` with null
           children would leave an empty box under the error. */}
-      {!items && list.error ? null : (
+      {readFailed ? null : (
         <Card>
           <CardContent className="p-0">
             <Settled loading={!items && !list.error} skeleton={<Skeleton className="m-6 h-24" />}>
