@@ -22,7 +22,11 @@ use evbanking_auth::claims_of;
 use tonic::{Request, Status};
 use uuid::Uuid;
 
-use crate::AppState;
+use crate::{
+	AppState,
+	application::withdrawals::{ACCOUNT_FROZEN, OUTFLOWS_PAUSED},
+	ports::IssuanceTarget,
+};
 
 /// The authenticated caller's own user id (from the access-token `sub`).
 ///
@@ -37,26 +41,57 @@ pub(super) fn caller_id<T>(request: &Request<T>) -> Result<UserId, Status> {
 	parse_user_id(&claims.sub)
 }
 
-/// Gate a money-moving RPC on the cross-plane freeze flag: reject if the caller's banking
-/// row was frozen by a concierge SUSPENDED lifecycle event (see
-/// [`infrastructure::bridge`](crate::infrastructure::bridge)). Returns the caller's id on
-/// success so the handler keeps its existing `let user = ...?` shape. A control-plane read
-/// failure fails CLOSED (UNAVAILABLE) — a money op never proceeds when the gate can't be read.
+/// Gate a user-initiated money-moving RPC (`RequestWithdrawal` / `Subscribe` / `Redeem`)
+/// on the caller's standing: the token has not been revoked, outflows are not paused, and
+/// the account is not frozen. Returns the caller's id on success so the handler keeps its
+/// existing `let user = ...?` shape.
+///
+/// Every user-INITIATED money mutation routes through here, so this is the single choke
+/// point for all three. Inbound on-chain deposit crediting (the deposit watchers) is
+/// deliberately NOT gated — funds already on-chain are still credited — and neither are
+/// the cancel/read RPCs, so a frozen user can still unwind queued positions.
+///
+/// The revoke floor is the one `require_permission` already applies to operators: without
+/// it here, a stolen access token kept moving money for its whole TTL after "sign out
+/// everywhere". The freeze is the same `frozen OR disabled` fold issuance and the payout
+/// re-check read ([`IssuanceTarget::disabled`]), and the pause is the same kill-switch the
+/// dispatch path reads through [`OutflowPolicy`](crate::ports::OutflowPolicy). One resolve
+/// per RPC; the decision itself is [`money_caller_gate`]. A control-plane read failure
+/// fails CLOSED (UNAVAILABLE) — a money op never proceeds when the gate can't be read.
 pub(super) async fn unfrozen_caller<T>(state: &AppState, request: &Request<T>) -> Result<UserId, Status> {
-	let user = caller_id(request)?;
-	// Global read-only kill-switch: every user-INITIATED money mutation (withdraw /
-	// subscribe / redeem) routes through here, so this is the single choke point that
-	// pauses outflows. Inbound on-chain deposit crediting (the deposit watchers) is
-	// deliberately NOT gated — funds already on-chain are still credited. Fails CLOSED.
-	match crate::infrastructure::operations::is_read_only(&state.pool).await {
-		Ok(false) => {}
-		Ok(true) => return Err(Status::failed_precondition("money movements are temporarily paused (read-only mode)")),
-		Err(_) => return Err(Status::unavailable("internal error")),
+	let (is_access, sub, token_version) = {
+		let claims = claims_of(request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
+		(claims.is_access(), claims.sub.clone(), claims.token_version)
+	};
+	if !is_access {
+		return Err(Status::permission_denied("access token required"));
 	}
-	match crate::infrastructure::bridge::is_frozen(&state.pool, user).await {
-		Ok(false) => Ok(user),
-		Ok(true) => Err(Status::failed_precondition("account is frozen")),
-		Err(_) => Err(Status::unavailable("internal error")),
+	let user = parse_user_id(&sub)?;
+	let target = state.users.resolve_issuance_by_banking_id(user).await.map_err(|_| Status::unavailable("internal error"))?;
+	let paused = state.outflow.outflows_paused().await.map_err(|_| Status::unavailable("internal error"))?;
+	money_caller_gate(token_version, target.as_ref(), paused)?;
+	Ok(user)
+}
+
+/// The money-path decision over facts already read — pure, so the ordering is testable
+/// without an [`AppState`].
+///
+/// Revocation is answered first: a caller whose tokens were revoked is not authenticated,
+/// and an unauthenticated caller learns nothing about the platform's state — not even that
+/// outflows are paused. A missing row fails CLOSED like a freeze: every caller reaches this
+/// with a minted money token, and minting resolved the same row, so `None` is not the
+/// ordinary "not provisioned yet" but a state the gate cannot evaluate, on a path whose
+/// next step moves money.
+fn money_caller_gate(token_version: u64, target: Option<&IssuanceTarget>, paused: bool) -> Result<(), Status> {
+	if target.is_some_and(|target| token_version < target.token_version) {
+		return Err(Status::unauthenticated("tokens revoked"));
+	}
+	if paused {
+		return Err(Status::failed_precondition(OUTFLOWS_PAUSED));
+	}
+	match target {
+		Some(target) if !target.disabled => Ok(()),
+		Some(_) | None => Err(Status::failed_precondition(ACCOUNT_FROZEN)),
 	}
 }
 
@@ -70,8 +105,10 @@ pub(super) async fn unfrozen_caller<T>(state: &AppState, request: &Request<T>) -
 /// ownership is whatever concierge persisted and nothing else. Every path fails closed:
 /// no local row is [`Role::default`] (holds nothing), a non-UUID subject is
 /// `UNAUTHENTICATED`, and a control-plane read failure is `UNAVAILABLE` — an admin op
-/// never proceeds when the gate can't be read. The disable and revoke gates run first,
-/// so `DisableUser`/`RevokeTokens` bite on the most privileged principals too.
+/// never proceeds when the gate can't be read. The revoke and disable gates run before the
+/// role, so `RevokeTokens`/`DisableUser` bite on the most privileged principals too —
+/// revoke first, as [`money_caller_gate`] answers an investor: a revoked operator is not
+/// authenticated, and learns nothing about their standing, not even that it is disabled.
 pub(super) async fn require_permission<T>(state: &AppState, request: &Request<T>, permission: Permission) -> Result<(), Status> {
 	if holds_permission(state, request, permission).await? {
 		Ok(())
@@ -97,11 +134,11 @@ pub(super) async fn holds_permission<T>(state: &AppState, request: &Request<T>, 
 	let target = state.users.resolve_issuance_by_banking_id(id).await.map_err(|_| Status::unavailable("internal error"))?;
 	let role = match target {
 		Some(target) => {
-			if target.disabled {
-				return Err(Status::permission_denied("account is disabled"));
-			}
 			if token_version < target.token_version {
 				return Err(Status::unauthenticated("tokens revoked"));
+			}
+			if target.disabled {
+				return Err(Status::permission_denied("account is disabled"));
 			}
 			crate::infrastructure::bridge::role_of(&state.pool, id).await.map_err(|_| Status::unavailable("internal error"))?
 		}
@@ -190,8 +227,60 @@ pub(super) fn map_err(err: DomainError) -> Status {
 		DomainError::NotFound { .. } => Status::not_found(err.to_string()),
 		DomainError::Validation(_) => Status::invalid_argument(err.to_string()),
 		DomainError::Forbidden(_) => Status::permission_denied(err.to_string()),
-		DomainError::Conflict(_) => Status::already_exists(err.to_string()),
 		DomainError::Precondition(_) => Status::failed_precondition(err.to_string()),
+		DomainError::Conflict(_) => Status::already_exists(err.to_string()),
 		DomainError::Repository(_) => Status::unavailable("internal error"),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use tonic::Code;
+
+	use super::*;
+
+	fn target(disabled: bool, token_version: u64) -> IssuanceTarget {
+		IssuanceTarget {
+			user_id: UserId::new(),
+			email: "u@example.com".to_owned(),
+			disabled,
+			token_version,
+		}
+	}
+
+	fn code(token_version: u64, target: Option<&IssuanceTarget>, paused: bool) -> Option<Code> {
+		money_caller_gate(token_version, target, paused).err().map(|status| status.code())
+	}
+
+	#[test]
+	fn a_revoked_token_is_unauthenticated_before_anything_else() {
+		let floor = target(false, 5);
+		assert_eq!(code(4, Some(&floor), false), Some(Code::Unauthenticated));
+		// Revocation outranks the pause: an unauthenticated caller learns nothing about
+		// the platform's state.
+		assert_eq!(code(4, Some(&floor), true), Some(Code::Unauthenticated));
+		// ...and outranks the freeze.
+		assert_eq!(code(4, Some(&target(true, 5)), false), Some(Code::Unauthenticated));
+	}
+
+	#[test]
+	fn the_pause_refuses_a_live_token() {
+		assert_eq!(code(5, Some(&target(false, 5)), true), Some(Code::FailedPrecondition));
+	}
+
+	#[test]
+	fn a_frozen_or_disabled_account_is_a_failed_precondition() {
+		assert_eq!(code(5, Some(&target(true, 5)), false), Some(Code::FailedPrecondition));
+	}
+
+	#[test]
+	fn a_missing_row_fails_closed() {
+		assert_eq!(code(5, None, false), Some(Code::FailedPrecondition));
+	}
+
+	#[test]
+	fn a_live_token_on_a_clean_account_passes() {
+		assert_eq!(code(5, Some(&target(false, 5)), false), None, "at the floor");
+		assert_eq!(code(6, Some(&target(false, 5)), false), None, "above the floor");
 	}
 }

@@ -1272,7 +1272,7 @@ async fn an_operator_pause_holds_an_approved_order_without_closing_it() {
 	let report = payments_app::sweep(&ports(&a), now()).await.unwrap();
 	operations::set_read_only(&a.pool, false).await.unwrap();
 
-	assert!(matches!(held, Err(DomainError::Forbidden(ref why)) if why.contains("paused")), "{held:?}");
+	assert!(matches!(held, Err(DomainError::Precondition(ref why)) if why.contains("paused")), "{held:?}");
 	assert_eq!((report.executed, report.execution_failures), (0, 0), "a pause records nothing");
 	assert_eq!(
 		payments_app::find(&a.payments, id).await.unwrap().order.state(),
@@ -1283,6 +1283,56 @@ async fn an_operator_pause_holds_an_approved_order_without_closing_it() {
 
 	let view = payments_app::execute(&ports(&a), id, now()).await.expect("executes once the pause is lifted");
 	assert_eq!(view.order.state(), PaymentState::Executed);
+
+	a.relay.drain().await;
+	reset_payments(&a.pool).await;
+}
+
+/// A freeze on the subject holds an APPROVED L1 order the same way the pause does. A
+/// concierge SUSPENDED is reversible (REINSTATED lifts it) and can land anywhere in the
+/// 72-hour window after the consent; admission now refuses it, and that refusal must keep
+/// the order `approved` for the next sweep — not close it for good and mail a refusal to
+/// both parties over a control the operator meant as a hold.
+#[tokio::test]
+async fn a_frozen_subject_holds_an_approved_order_without_closing_it() {
+	let _guard = exclusive_payments().await;
+	let Some(a) = app("payments frozen subject").await else { return };
+	reset_payments(&a.pool).await;
+	let investor = an_investor(&a.pool).await;
+	fund(&a, LedgerAccountKey::UserClaim(investor), "100").await;
+
+	let id = payments_app::open(&ports(&a), investor, terms(Party::User(investor), external(), "50"), now())
+		.await
+		.unwrap()
+		.order
+		.id();
+	let (token, code) = consent_credentials(&a.pool, id).await;
+	// The consent through the PORT, so nothing executes inline and the freeze lands
+	// inside the window.
+	a.payments.submit(&digest(token.as_bytes()), &code, ConsentDecision::Approve, &audit(), now()).await.unwrap();
+	a.relay.drain().await;
+
+	sqlx::query("UPDATE users SET frozen = TRUE WHERE id = $1").bind(investor.raw()).execute(&a.pool).await.unwrap();
+	let held = payments_app::execute(&ports(&a), id, now()).await;
+	let report = payments_app::sweep(&ports(&a), now()).await.unwrap();
+	sqlx::query("UPDATE users SET frozen = FALSE WHERE id = $1").bind(investor.raw()).execute(&a.pool).await.unwrap();
+
+	assert!(matches!(held, Err(DomainError::Precondition(ref why)) if why.contains("frozen")), "{held:?}");
+	assert_eq!((report.executed, report.execution_failures), (0, 0), "a freeze records nothing");
+	assert_eq!(
+		payments_app::find(&a.payments, id).await.unwrap().order.state(),
+		PaymentState::Approved,
+		"still waiting, not failed"
+	);
+	assert_eq!(a.payments.awaiting_execution().await.unwrap(), vec![id], "the sweeper will come back to it");
+	assert!(
+		a.withdrawals.find_by_id(payments_app::withdrawal_id(id)).await.unwrap().is_none(),
+		"nothing was queued under the freeze"
+	);
+
+	let view = payments_app::execute(&ports(&a), id, now()).await.expect("executes once the subject is reinstated");
+	assert_eq!(view.order.state(), PaymentState::Executed);
+	assert_eq!(view.order.executed_withdrawal_id(), Some(payments_app::withdrawal_id(id)));
 
 	a.relay.drain().await;
 	reset_payments(&a.pool).await;
@@ -1324,7 +1374,7 @@ async fn a_revocation_inside_the_execution_window_cancels_the_queued_withdrawal(
 			relay: &a.notify,
 		},
 		&piggybank_core::application::withdrawals::AdmissionGates {
-			users: &a.users,
+			policy: &a.outflow,
 			configured: &[Network::Bep20],
 			kyc: KycGate::LIFTED,
 		},

@@ -55,6 +55,7 @@ struct Harness {
 	ledger: Arc<dyn Ledger>,
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	users: Arc<dyn UserRepository>,
+	outflow: PgOutflowPolicy,
 	deposit_addresses: Arc<dyn DepositAddresses>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -71,6 +72,7 @@ async fn harness() -> Option<Harness> {
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	Some(Harness {
 		deposits: PgDeposits::new(pool.clone()),
+		outflow: PgOutflowPolicy::new(pool.clone()),
 		pool,
 		ledger,
 		withdrawals,
@@ -98,7 +100,7 @@ fn withdrawal_ports<'a>(h: &'a Harness, custody: &'a dyn Custody) -> withdrawal_
 /// what the switch does.
 fn admission(h: &Harness, kyc: KycGate) -> withdrawal_app::AdmissionGates<'_> {
 	withdrawal_app::AdmissionGates {
-		users: h.users.as_ref(),
+		policy: &h.outflow,
 		configured: &Network::ALL,
 		kyc,
 	}
@@ -355,7 +357,54 @@ async fn a_disabled_user_cannot_withdraw() {
 	)
 	.await
 	.unwrap_err();
-	assert!(matches!(err, DomainError::Forbidden(_)), "a disabled account is forbidden from withdrawing, got {err:?}");
+	assert!(matches!(err, DomainError::Precondition(_)), "a disabled account is refused a withdrawal, got {err:?}");
+}
+
+/// The cross-plane freeze (a concierge SUSPENDED mirrored onto `frozen`, status still
+/// `active`) is refused at ADMISSION, not only caught later by the dispatcher: the gate reads
+/// the same `frozen OR disabled` fold the payout re-check does. Lifting the freeze lets the
+/// identical request through, proving the freeze was the only hold.
+#[tokio::test]
+async fn a_frozen_user_cannot_request_a_withdrawal() {
+	let Some(h) = harness().await else { return };
+	let user = active_user(&h).await;
+	let network = Network::Trc20;
+	deposit(&h, user, network, "100").await;
+
+	sqlx::query("UPDATE users SET frozen = TRUE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+	let err = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &StubCustody),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap_err();
+	assert!(matches!(err, DomainError::Precondition(_)), "a frozen account is refused at admission, got {err:?}");
+
+	sqlx::query("UPDATE users SET frozen = FALSE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h, &StubCustody),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.expect("the same request is admitted once the freeze is lifted");
+	assert_eq!(withdrawal.state(), WithdrawalState::Processing);
+	h.relay.drain().await;
+
+	// Settle so the shared rail isn't left with a dangling in-flight reservation.
+	withdrawal_app::settle_withdrawal(h.withdrawals.as_ref(), &h.notify, withdrawal.id(), unique_tx_ref())
+		.await
+		.unwrap();
+	h.relay.drain().await;
 }
 
 #[tokio::test]
@@ -868,7 +917,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
-	assert!(matches!(err, DomainError::Forbidden(_)), "a frozen owner refuses the admin dispatch, got {err:?}");
+	assert!(matches!(err, DomainError::Precondition(_)), "a frozen owner refuses the admin dispatch, got {err:?}");
 	sqlx::query("UPDATE users SET frozen = FALSE WHERE id = $1").bind(user.raw()).execute(&h.pool).await.unwrap();
 
 	// 3. The global read-only kill-switch. Cleared before asserting, so a failing
@@ -877,7 +926,7 @@ async fn admin_dispatch_is_refused_under_read_only_a_freeze_and_a_revoked_tier()
 	let refused = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id()).await;
 	operations::set_read_only(&h.pool, false).await.unwrap();
 	assert!(
-		matches!(refused, Err(DomainError::Forbidden(_))),
+		matches!(refused, Err(DomainError::Precondition(_))),
 		"the kill-switch refuses the admin dispatch — permission is not an override, got {refused:?}"
 	);
 
@@ -939,7 +988,7 @@ async fn dispatch_is_refused_when_the_owner_has_no_control_plane_row() {
 	let err = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &liquid, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
 		.unwrap_err();
-	assert!(matches!(err, DomainError::Forbidden(_)), "a missing owner row fails closed, got {err:?}");
+	assert!(matches!(err, DomainError::Precondition(_)), "a missing owner row fails closed, got {err:?}");
 	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
 	assert_eq!(after.state(), WithdrawalState::Queued, "the refused withdrawal stays queued");
 

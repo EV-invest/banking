@@ -56,6 +56,7 @@ struct Harness {
 	withdrawals: Arc<dyn WithdrawalRepository>,
 	redemptions: Arc<dyn RedemptionRepository>,
 	users: Arc<dyn UserRepository>,
+	outflow: PgOutflowPolicy,
 	relay: Relay,
 	notify: Arc<Notify>,
 }
@@ -71,6 +72,7 @@ async fn harness() -> Option<Harness> {
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());
 	Some(Harness {
 		deposits: PgDeposits::new(pool.clone()),
+		outflow: PgOutflowPolicy::new(pool.clone()),
 		pool,
 		ledger,
 		withdrawals,
@@ -96,7 +98,7 @@ fn withdrawal_ports(h: &Harness) -> withdrawal_app::WithdrawalPorts<'_> {
 /// what the switch does.
 fn admission(h: &Harness, kyc: KycGate) -> withdrawal_app::AdmissionGates<'_> {
 	withdrawal_app::AdmissionGates {
-		users: h.users.as_ref(),
+		policy: &h.outflow,
 		configured: &Network::ALL,
 		kyc,
 	}

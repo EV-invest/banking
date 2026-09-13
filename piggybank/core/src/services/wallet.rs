@@ -106,7 +106,7 @@ impl WalletService for WalletSvc {
 				relay: &self.state.relay_notify,
 			},
 			&withdrawal_app::AdmissionGates {
-				users: self.state.users.as_ref(),
+				policy: self.state.outflow.as_ref(),
 				configured: &self.state.configured_networks,
 				kyc: self.state.kyc_gate,
 			},
