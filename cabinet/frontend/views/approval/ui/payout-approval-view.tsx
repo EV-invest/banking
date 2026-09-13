@@ -43,6 +43,7 @@ import {
   ApprovalOutcome,
   ApprovalPage,
   ApprovalSkeleton,
+  ApprovalTitle,
   ApprovalUnavailable,
   ApprovalUnreachable,
   ApprovalUnrenderable,
@@ -168,7 +169,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
     <ApprovalPage>
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">{t(`${words}.title`)}</CardTitle>
+          <ApprovalTitle>{t(`${words}.title`)}</ApprovalTitle>
           <CardDescription className="text-balance">
             {t(`${words}.lead`, { initiator: invitation.initiator_email })}
           </CardDescription>

@@ -15,7 +15,7 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@evinvest/uikit";
+import { Card, CardContent, CardDescription, CardHeader } from "@evinvest/uikit";
 
 import { ApprovalUnavailableError } from "@/entities/approval/api/approval-client";
 import { consentApprovalResource } from "@/entities/approval/model/approval-resource";
@@ -29,6 +29,7 @@ import {
   ApprovalOutcome,
   ApprovalPage,
   ApprovalSkeleton,
+  ApprovalTitle,
   ApprovalUnavailable,
   ApprovalUnreachable,
   ApprovalUnrenderable,
@@ -70,7 +71,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
     <ApprovalPage>
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">{t("consent.title")}</CardTitle>
+          <ApprovalTitle>{t("consent.title")}</ApprovalTitle>
           <CardDescription className="text-balance">{t("consent.lead", { initiator: invitation.initiator_email })}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">

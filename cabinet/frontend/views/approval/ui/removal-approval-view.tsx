@@ -37,6 +37,7 @@ import {
   ApprovalOutcome,
   ApprovalPage,
   ApprovalSkeleton,
+  ApprovalTitle,
   ApprovalUnavailable,
   ApprovalUnreachable,
   CodeField,
@@ -132,7 +133,7 @@ export function RemovalApprovalView({ token }: { token: string }) {
     <ApprovalPage>
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">{t("approval.removal.title")}</CardTitle>
+          <ApprovalTitle>{t("approval.removal.title")}</ApprovalTitle>
           <CardDescription className="text-balance">
             {t("approval.removal.lead", { initiator: invitation.initiator_email })}
           </CardDescription>

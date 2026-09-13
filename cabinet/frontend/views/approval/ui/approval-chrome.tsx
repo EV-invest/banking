@@ -16,6 +16,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useT } from "@evinvest/i18n/react";
 import {
   Button,
+  CardTitle,
   Empty,
   EmptyContent,
   EmptyDescription,
@@ -38,15 +39,32 @@ import { cn } from "@/shared/lib/cn";
  *
  * `--ev-shell-offset` is the one contract the cabinet has with the conductor's header, and
  * it is honoured here as everywhere else — these pages are chromeless, not context-free.
+ *
+ * A `<main>` because nothing else on these routes provides one: the `(public)` layout is
+ * a bare `div` by design, and a reader arriving by screen reader with no rail and no nav
+ * has the landmark as the one way to jump to the content.
  */
 export function ApprovalPage({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] justify-center px-4 py-10 lg:py-16">
+    <main className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] justify-center px-4 py-10 lg:py-16">
       <div className="flex w-full max-w-160 flex-col gap-6">
         <Logo className="h-8 w-auto text-main-mist" />
         {children}
       </div>
-    </div>
+    </main>
+  );
+}
+
+/**
+ * The page's one heading. `CardTitle` is a `div`, and a page whose only title is a styled
+ * `div` has no `h1` for a reader to land on — so the heading role is put back here, once,
+ * rather than remembered on each of the three pages.
+ */
+export function ApprovalTitle({ children }: { children: ReactNode }) {
+  return (
+    <CardTitle role="heading" aria-level={1} className="text-xl">
+      {children}
+    </CardTitle>
   );
 }
 
