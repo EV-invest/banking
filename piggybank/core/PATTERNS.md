@@ -136,9 +136,10 @@ above, which is a different thing entirely: a product's listing, not a holding).
 **Units ledger (`Ledger::Share`, `= 3`).** `UserShares(service, user)` (60, debit-normal,
 `shares:<svc>:<uuid>`) is a holder's units; `SharesOutstanding(service)` (61, credit-normal,
 `shares_outstanding:<svc>`) is the fund's units in circulation. Per-service invariant
-`SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc) + CompanyShares(svc)`,
-by construction (the two extra holders are introduced under [Fees](#fees--2-and-20-domainfees-feesservice-feesweeper)
-and [In-kind issuance](#in-kind-issuance--the-companys-stake-domainissuance-allocationsserviceissueunits)). **Mint**
+`SharesOutstanding(svc) == Σ_user UserShares(svc, user) + Σ_user BookShares(svc, user) + FeeShares(svc) + CompanyShares(svc)`,
+by construction (the extra holders are introduced under [Fees](#fees--2-and-20-domainfees-feesservice-feesweeper),
+[In-kind issuance](#in-kind-issuance--the-companys-stake-domainissuance-allocationsserviceissueunits) and
+[The book](#the-book--holders-trading-units-with-each-other-domainbook-bookservice)). **Mint**
 `Dr UserShares / Cr SharesOutstanding`; **burn** `Dr SharesOutstanding / Cr UserShares`.
 A burn that exceeds the holder's minted units is rejected **by TigerBeetle's flag — even as
 a pending reserve** (this is the over-redeem backstop; the PG row-lock only serializes).
@@ -258,6 +259,105 @@ company at the seed NAV with the agreed bases → `PostFundValuation` at the ass
 (NAV needs units outstanding, so the issuance comes first) → `SetAllocationUnitCap` to
 exactly the issued supply (`remaining_capacity == 0`, so no subscription and no further
 issuance fits) → open. The investor can still redeem: every gate here keeps the exit open.
+
+## The book — holders trading units with each other (`domain::book`, `BookService`)
+
+A subscription is a dealing *with the fund* at NAV; a redemption is the reverse. The
+**book** is where holders deal **with each other**: one central limit order book per
+allocation, price-time priority, in the shape of a spot exchange (limit and market
+orders; `gtc` / `ioc` / `alo` post-only; partial fills; cancel). NAV stays the accounting
+price — positions, P&L and the fee high-water mark are still measured at it — and the
+book's last trade is a second, market quote shown beside it (`BookSnapshot.nav`). The
+book never mints or burns: every unit that changes hands already existed, so supply and
+NAV are untouched by a trade. Issue [`#218`](https://github.com/EV-invest/banking/issues/218).
+
+**Who trades.** The registry's *access* axis in full — `require_tradable` refuses a caller
+below `invest` (`Precondition`) and answers `NotFound` for a `hidden` product — but **not
+its lifecycle**: a `closed` product's holders may still trade among themselves. A book
+closes only by its own policy (`book_policies.book_open`, opt-in per product like the fee:
+no row is a closed book). Placing is also refused under the read-only kill-switch and for a
+frozen owner (the [`OutflowPolicy`] facts, checked in the use case as they are at dispatch);
+cancelling never is. The policy — `book_open`, `taker_fee_bps`, `price_tick` (default
+`0.01`), `lot_size` (default `0.0001`), `market_slippage_bps` (default 500) — is set by
+`AllocationManage`.
+
+**An order is an escrow in the ledger.** Two per-user accounts hold what an order has
+committed: `BookShares(service, user)` (64, debit-normal, Share ledger,
+`book_shares:<svc>:<uuid>`) and `BookCash(user)` (65, credit-normal, USDT ledger,
+`book_cash:<uuid>`). A sell locks its size `Dr BookShares / Cr UserShares`
+(`TransferCode::BookLock`, the holding's non-negative flag refuses an over-lock); a buy
+locks its **worst case** — notional at the limit plus the taker fee on it, `Dr UserClaim
+/ Cr BookCash` (the claim's flag does the same). `BookCash` is a claim like any other, so
+the global `sum(custody) == sum(claims)` does not move on a lock; the Share-ledger
+invariant becomes `SharesOutstanding(svc) == Σ UserShares + Σ BookShares + FeeShares +
+CompanyShares`. A holder's position reports the escrowed units as `units_in_orders`
+(still theirs, still valued, not free to redeem or sell twice).
+
+**A fill is delivery versus payment or nothing.** Each trade is ONE linked TigerBeetle
+chain ([`Ledger::post_linked`], `LedgerAction::PostLinked`): `Dr UserShares(buyer) / Cr
+BookShares(seller)` for the units, `Dr BookCash(buyer) / Cr UserClaim(seller)` for the
+cash (`BookFill`), and — when the taker owes one — the fee out of the taker's side into
+`FeeRevenue` (`BookFee`; a taking seller pays it out of the claim the cash leg just
+credited, because linked legs see each other's effect). The chain is idempotent on its
+first leg's id: it applies atomically, so the first id existing means every leg did. Fills
+land at the **maker's** price; whatever the escrow did not spend when the order reaches a
+terminal state — a buy filled below its limit, an IOC remainder, a maker's unused fee
+reserve, a cancel — comes back in one `BookRelease` (`Dr BookCash / Cr UserClaim` or `Dr
+UserShares / Cr BookShares`). Every id is deterministic: the lock and the release from the
+**order** id (`book:lock`, `book:release`), the three legs from the **trade** id
+(`book:fill:units|cash|fee`).
+
+**Single writer, no in-memory book.** `PgBook::place` is one transaction under
+`pg_advisory_xact_lock(hashtext(service))` (a buy also takes the shared per-user claim
+lock, a sell the position row): it reads the opposite side best-first (the partial index
+`book_orders_resting_idx`, sorted on `price::numeric` — the digit strings do not sort —
+then `seq`, the identity column assigned under the lock; `created_at` is the transaction
+START and two queued transactions can carry it in the wrong order), runs the pure
+[`MatchingEngine`] (`PriceTimeEngine`; the trait is the seam for a different rule), and
+records the answer: the taker's row, a `book_trades` row per fill, every maker's new
+state, the bumped `book_revisions` counter, and the [`BookEvent`]s drained to the outbox
+**in the order the relay must apply them** — `OrderPlaced` (the lock) first, then a
+`TradeExecuted` per fill, then an `OrderReleased` for whatever ended. The engine refuses a
+whole order rather than filling part of it for a self-trade (the incoming order would hit
+the caller's own resting one — skipping it would let them jump their own queue) and for a
+post-only order that would take; a market order is priced upstream from the best opposite
+quote ± slippage, rounded *outward* to the tick, and then run as an IOC limit (an empty
+opposite side is `Precondition`). The depth snapshot, the tape and the candles are
+aggregating SQL over the rows; there is nothing to warm up or lose on a restart.
+
+**Read-First, ledger backstop, and the one park that changes state.** The use case checks
+the free holding / claim before writing (the same optimistic read as Subscribe, serialized
+by the same locks). Two placements can still both pass it before the relay moves the first
+— and then the second lock parks on the non-negative flag. Unlike every other park, this
+one **must** change control-plane state: an order standing on the book with nothing behind
+it would keep matching, and every fill against it would park too. So the relay, after
+parking an `OrderPlaced`, marks the order `rejected` (`reject_reason` set) and bumps the
+book revision (`infrastructure::book::mark_rejected`) — the order comes off the book and
+the caller sees why. Its trades, if any raced in between, park under reconciliation like
+any other.
+
+**Cost basis moves on both sides, relay-side.** After the chain posts, `project_trade`
+(marker `saga_steps` leg 100, role `book_trade_position`, once per event) adds what the
+buyer paid — notional plus the fee when they took — to their `fund_positions` basis and
+units, blending the high-water mark at the fund's NAV of the moment (carried on the event:
+performance is measured against NAV, so the mark has to be one), and reduces the seller's
+basis pro rata as a redemption settle does — **clamped at zero rather than refused**: a
+refusal here would be a `Retry` that wedges the single-worker relay, and every unit a
+seller can lock came through this same relay in an earlier `seq`. Both writes settle the
+accrued management fee first (`fee_accrual::carry_accrual`).
+
+**Idempotent by `client_order_id`**, unique per caller (`1..64`), read before pricing and
+again under the lock: a retry lands one order; the same id for a different order is
+`Conflict`.
+
+**The live feed** (`WatchBook`) is an in-process `tokio::sync::watch` per book
+([`application::book::BookFeed`]), told the revision after every commit: a subscriber
+whose wait ends re-reads the book and frames the top-N snapshot, the latest public trades
+and `orders_revision` (the revision at which the CALLER's own orders last changed, from
+`book_orders.revision`, so a client refetches `ListOpenOrders` only when that moves).
+`watch` rather than `broadcast` so a slow socket coalesces to the latest state instead
+of building a backlog; no `LISTEN`/`NOTIFY`, because the hub is one instance. Nobody
+else's orders and no balances ride on a frame.
 
 ## Fees — "2 and 20" (`domain::fees`, `FeesService`, `FeeSweeper`)
 
@@ -665,6 +765,11 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
 | `IssueUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | (issue) allocation registered ∧ user holder exists ∧ fresh NAV ∧ issued + units ≤ cap; idempotent by `(service, idempotency_key)` |
+| `PlaceOrder` | the user | `sub == user`, `is_access`, **not frozen**, **not read-only** | allocation visible ∧ `invest` (state ignored) ∧ `book_open` ∧ on tick/lot ∧ free units / claim ≥ escrow (TB flag backstop → `rejected`); idempotent by `client_order_id` |
+| `CancelOrder` | the user | `sub == user`, `is_access` | owns it ∧ state is resting (idempotent on cancelled) |
+| `ListOpenOrders` / `ListOrderHistory` / `ListUserTrades` | the user | `sub == user` | — |
+| `GetBook` / `ListTrades` / `ListCandles` / `WatchBook` / `GetBookPolicy` | the user | `sub == user`; allocation visible to the caller (`AllocationManage` sees all) | — |
+| `SetBookPolicy` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | allocation registered; bps ≤ 10000, tick and lot > 0 |
 | `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ (settle) position projection tracks ≥ the redeemed units |
 | `GetUserBalance` | operator | `require_permission` (RBAC matrix); resolves the CONCIERGE id first via the bridge mirror (`users.concierge_user_id`), then the banking id; unknown ⇒ `NOT_FOUND` | — |
 | `ListParkedEvents` | operator | `require_permission` (RBAC matrix) | — |
@@ -849,7 +954,18 @@ refused admin dispatch and the `Dispatcher::sweep` both-gates flow, driven by a 
 `Custody` adapter with a configurable treasury view; plus the dispatch-time outflow
 policy — a tier revoked after acceptance stops the sweep, the admin dispatch is refused
 under read-only, under a freeze and at tier 0, and a withdrawal whose owner row is gone
-fails closed). `piggybank/core/tests/fee_policy.rs` hits real Postgres + TigerBeetle for the fee plane's
+fails closed). `piggybank/core/tests/book.rs` hits real Postgres + TigerBeetle for the book: a crossing
+limit buy settling delivery-versus-payment with the taker's fee on `FeeRevenue`, both cost
+bases and `units_in_orders` moving, supply untouched; a buy below its limit getting the
+price improvement back; a partial fill leaving the maker resting; an IOC releasing its
+remainder; post-only and self-trade refused with nothing written; a market order priced off
+the best quote and refused on an empty side; cancel returning the escrow, idempotently; the
+gates (a closed book, `view`, `hidden`, a closed allocation still trading, read-only, a
+frozen owner); tick/lot/balance refusals before any write; `client_order_id` retry vs
+reuse; a raced over-lock parked by the ledger and the order marked `rejected`; candles and
+the 24h change; the feed framing per change with the caller's `orders_revision`; the
+policy's defaults and bounds.
+`piggybank/core/tests/fee_policy.rs` hits real Postgres + TigerBeetle for the fee plane's
 three load-bearing properties — a charge moves **units** and leaves every cash account
 untouched, `SharesOutstanding` is unchanged so no other holder pays, and two investors at
 the same NAV owe different fees when they entered at different prices — plus the bulk
