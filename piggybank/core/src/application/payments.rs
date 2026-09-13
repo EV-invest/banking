@@ -304,7 +304,8 @@ pub async fn submit_consent(ports: &PaymentPorts<'_>, token: &str, code: &str, d
 /// 2. the read-only pause is re-read and, while it holds, the attempt is an `Err` and NOT
 ///    a recorded failure: the order stays `approved` for the sweeper to pick up once the
 ///    operator lifts the pause, rather than being closed for good by a control the
-///    operator meant as a hold;
+///    operator meant as a hold — and a freeze on an L1 order's subject, read at the
+///    withdrawal's admission, holds the order the same way (see [`create_withdrawal`]);
 /// 3. the payload hash is re-taken over the stored terms, so what executes is what was
 ///    approved;
 /// 4. a consent seat whose pins have moved fails the order closed BEFORE anything is
@@ -399,6 +400,16 @@ async fn create_withdrawal(ports: &PaymentPorts<'_>, order: &PaymentOrder) -> Re
 		// leaves `awaiting_execution` never returning the order again.
 		Err(err) => match ports.withdrawals.find_by_id(withdrawal).await? {
 			Some(_) => ExecutionOutcome::Executed(PaymentEffect::Withdrawal(withdrawal)),
+			// A HOLD IS NOT A FAILURE EITHER. `Precondition` out of `queue_withdrawal` has one
+			// source today — `admit_user_account`'s freeze gate (the pause is not read there;
+			// `open_withdrawal` answers `Validation` or `Repository`) — and the freeze is a
+			// concierge SUSPENDED, which a REINSTATED lifts. Raised, as `execute` raises the
+			// pause, so the order stays `approved` for the next sweep instead of being closed
+			// for good over a control meant as a hold. `disabled` folds into the same
+			// `blocked` flag and has no reversal in the domain, yet it is held here too, not
+			// failed: the fold cannot tell the two apart, and the dispatcher keeps a disabled
+			// owner's queued withdrawal queued rather than voiding it, so this matches.
+			None if matches!(err, DomainError::Precondition(_)) => return Err(err),
 			None => ExecutionOutcome::Failed(failure_reason(&err)),
 		},
 	})
