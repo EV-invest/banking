@@ -20,7 +20,7 @@ use crate::{
 	application::{balance as balance_app, funds as funds_app, wallet as wallet_app, withdrawals as withdrawal_app},
 	services::{
 		funds::redemption_to_proto,
-		support::{map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
+		support::{caller_id, map_err, optional, parse_redemption_id, parse_user_id, parse_withdrawal_id, rail_is_testnet, require_permission, unix_now},
 		wallet::withdrawal_to_proto,
 	},
 };
@@ -149,6 +149,7 @@ impl BalanceService for BalanceSvc {
 
 	async fn post_fund_valuation(&self, request: Request<pb::PostFundValuationRequest>) -> Result<Response<pb::FundNav>, Status> {
 		require_permission(&self.state, &request, Permission::ValuationPost).await?;
+		let caller = caller_id(&request)?;
 		let claims = claims_of(&request).ok_or_else(|| Status::unauthenticated("missing claims"))?;
 		let posted_by = claims.sub.clone();
 		let req = request.into_inner();
@@ -167,10 +168,20 @@ impl BalanceService for BalanceSvc {
 		.map_err(map_err)?;
 		// Answer by re-reading the view rather than mapping the mark by hand: the response
 		// carries the allocation's supply headroom too, and one construction path is what
-		// keeps this route and `GetFundNav` from drifting apart field by field.
-		let view = funds_app::fund_nav_view(self.state.allocations.as_ref(), self.state.nav.as_ref(), self.state.ledger.as_ref(), service, unix_now())
-			.await
-			.map_err(map_err)?;
+		// keeps this route and `GetFundNav` from drifting apart field by field. Unrestricted:
+		// ValuationPost already admitted the caller to a product in any state, and the mark
+		// they just wrote must not vanish behind their own (possibly `hidden`) access level.
+		let view = funds_app::fund_nav_view(
+			self.state.allocations.as_ref(),
+			self.state.nav.as_ref(),
+			self.state.ledger.as_ref(),
+			service,
+			caller,
+			true,
+			unix_now(),
+		)
+		.await
+		.map_err(map_err)?;
 		Ok(Response::new(super::funds::fund_nav_to_proto(&view)))
 	}
 

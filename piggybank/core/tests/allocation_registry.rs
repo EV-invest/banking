@@ -386,7 +386,10 @@ async fn the_cap_defaults_on_registration_persists_and_is_reported_with_the_nav(
 
 	// And the read side the screens use reports the headroom, so a client never offers
 	// capacity the subscribe gate would then refuse.
-	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), now_unix()).await.unwrap();
+	let investor = provisioned_user(&h).await;
+	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), investor, false, now_unix())
+		.await
+		.unwrap();
 	assert_eq!(view.unit_cap, shares("1000"));
 	assert_eq!(view.remaining_capacity, shares("1000"), "nothing issued yet, so the whole cap is available");
 }
@@ -850,6 +853,38 @@ async fn a_hidden_product_is_not_found_for_an_investor_but_readable_by_a_manager
 		AllocationAccess::Hidden,
 		"the product's default is reported beside the caller's level"
 	);
+}
+
+#[tokio::test]
+async fn the_nav_of_a_hidden_product_is_not_found_for_an_investor_but_readable_by_a_manager() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+	h.allocations.open(&service).await.unwrap();
+	h.allocations.set_access(&service, AllocationAccess::Hidden).await.unwrap();
+	let investor = provisioned_user(&h).await;
+	let operator = provisioned_user(&h).await;
+
+	// The price route used to resolve the allocation caller-agnostically, so a hidden
+	// product answered with its NAV, cap and headroom to anyone holding the slug — and,
+	// worse, answered differently from an unregistered one. It now runs the same gate
+	// `GetAllocation` does.
+	let err = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), investor, false, now_unix())
+		.await
+		.err()
+		.expect("a hidden product's NAV is not readable without a grant");
+	assert!(matches!(err, DomainError::NotFound { entity: "allocation", .. }), "{err:?}");
+	// `unrestricted` is the AllocationManage view — the manager reads every product's price.
+	funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), investor, true, now_unix())
+		.await
+		.expect("a manager reads the NAV of a hidden product");
+
+	// A `view` grant is enough to read the price: `view` withholds only the subscribe.
+	h.allocations.grant_access(&service, investor, AllocationAccess::View, operator).await.unwrap();
+	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), investor, false, now_unix())
+		.await
+		.expect("a `view` grant reads the NAV without any manager privilege");
+	assert_eq!(view.service, service);
 }
 
 #[tokio::test]
