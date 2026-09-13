@@ -11,10 +11,10 @@
 // person rather than the id (`EndDraft.name`).
 
 import { Check } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Button, Input, Skeleton } from "@evinvest/uikit";
+import { Button, Empty, EmptyDescription, EmptyHeader, EmptyTitle, Field, FieldLabel, Input, Skeleton } from "@evinvest/uikit";
 
 import { usersResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
@@ -26,6 +26,8 @@ const RESULT_LIMIT = 6;
 
 export function UserSearch({ value, onChange }: { value: string; onChange: (id: string, email: string) => void }) {
   const t = useT();
+  const inputId = useId();
+  const listId = `${inputId}-results`;
   const [query, setQuery] = useState("");
   const [pickedEmail, setPickedEmail] = useState("");
   const list = useResource(usersResource, { query: query.trim() || undefined, limit: RESULT_LIMIT });
@@ -46,20 +48,39 @@ export function UserSearch({ value, onChange }: { value: string; onChange: (id: 
   }
 
   return (
-    <div className="space-y-2">
-      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("admin.payments.placeholder.userSearch")} spellCheck={false} />
+    <Field>
+      <FieldLabel htmlFor={inputId}>{t("admin.payments.investor")}</FieldLabel>
+      <Input
+        id={inputId}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t("admin.payments.placeholder.userSearch")}
+        spellCheck={false}
+        autoComplete="off"
+        aria-controls={listId}
+      />
       {!users && list.error ? (
         <ResourceError error={list.error} onRetry={() => void list.refresh()} retrying={list.isValidating} />
       ) : !users ? (
         <Skeleton className="h-16 w-full" />
       ) : users.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{t("admin.payments.noUsers")}</p>
+        <Empty className="border p-4">
+          <EmptyHeader>
+            <EmptyTitle className="text-sm">{t("admin.payments.noUsers")}</EmptyTitle>
+            <EmptyDescription className="text-xs">{t("admin.payments.noUsersHint")}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <ul className="divide-y divide-border rounded-lg border border-border">
+        // Not the uikit `Command`: it filters its items client-side by their `value`, and
+        // these rows are already the server's answer to the query — a match on anything
+        // but the email would vanish from the list. The listbox semantics are kept by hand.
+        <ul id={listId} role="listbox" aria-label={t("admin.payments.investor")} className="divide-y divide-border rounded-lg border border-border">
           {users.map((u) => (
-            <li key={u.user_id}>
+            <li key={u.user_id} role="presentation">
               <button
                 type="button"
+                role="option"
+                aria-selected={false}
                 onClick={() => {
                   setPickedEmail(u.email);
                   onChange(u.user_id, u.email);
@@ -76,6 +97,6 @@ export function UserSearch({ value, onChange }: { value: string; onChange: (id: 
           ))}
         </ul>
       )}
-    </div>
+    </Field>
   );
 }

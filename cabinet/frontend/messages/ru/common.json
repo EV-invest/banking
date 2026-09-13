@@ -679,6 +679,10 @@
     "en": "Opening a payment moves no money. Fund-owned money is proposed to the owners' consilium; an investor's own money is put to that investor by email. Only once they agree does anything move.",
     "t": "Открытие платежа не перемещает деньги. Деньги фонда выносятся на консилиум владельцев; собственные деньги инвестора — на согласие самого инвестора по почте. Средства двигаются только после их согласия."
   },
+  "admin.payments.investor": {
+    "en": "Investor",
+    "t": "Инвестор"
+  },
   "admin.payments.kind.external": {
     "en": "An external address",
     "t": "Внешний адрес"
@@ -722,6 +726,10 @@
   "admin.payments.noUsers": {
     "en": "No investor matches.",
     "t": "Инвесторов не найдено."
+  },
+  "admin.payments.noUsersHint": {
+    "en": "Try another part of the email address.",
+    "t": "Попробуйте другую часть адреса почты."
   },
   "admin.payments.none": {
     "en": "No payments yet",

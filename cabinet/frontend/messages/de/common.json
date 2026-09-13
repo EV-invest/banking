@@ -679,6 +679,10 @@
     "en": "Opening a payment moves no money. Fund-owned money is proposed to the owners' consilium; an investor's own money is put to that investor by email. Only once they agree does anything move.",
     "t": "Das Eröffnen einer Zahlung bewegt kein Geld. Fondseigenes Geld wird dem Konsilium der Eigentümer vorgelegt; das eigene Geld eines Anlegers wird diesem per E-Mail vorgelegt. Erst wenn sie zustimmen, bewegt sich etwas."
   },
+  "admin.payments.investor": {
+    "en": "Investor",
+    "t": "Investor"
+  },
   "admin.payments.kind.external": {
     "en": "An external address",
     "t": "Eine externe Adresse"
@@ -722,6 +726,10 @@
   "admin.payments.noUsers": {
     "en": "No investor matches.",
     "t": "Kein Anleger gefunden."
+  },
+  "admin.payments.noUsersHint": {
+    "en": "Try another part of the email address.",
+    "t": "Versuchen Sie einen anderen Teil der E-Mail-Adresse."
   },
   "admin.payments.none": {
     "en": "No payments yet",
