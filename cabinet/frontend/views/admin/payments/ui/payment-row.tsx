@@ -9,7 +9,7 @@
 import { ArrowDown, Loader2 } from "lucide-react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button } from "@evinvest/uikit";
+import { Button, InfoTip, InfoTipContent, InfoTipTrigger } from "@evinvest/uikit";
 
 import { consentLabel, consentTone, isPaymentOpen, paymentStateLabel, paymentStateTone, requirementLabel, tierLabel } from "@/entities/payment/lib/format";
 import { PaymentEndSummary } from "@/entities/payment/ui/payment-end";
@@ -47,8 +47,16 @@ export function PaymentRow({ payment, busy, onCancel }: { payment: Payment; busy
             {t("admin.payments.openConsilium")}
           </Link>
         ) : payment.consent ? (
-          <p className={consentTone(payment.consent)} title={payment.consent.invalidation_reason || undefined}>
+          <p className={cn("flex items-center gap-1", consentTone(payment.consent))}>
             {consentLabel(payment.consent, t)}
+            {/* The plane's reason for voiding the seat, a tap away rather than in a `title`
+                only a hovering mouse can read. */}
+            {payment.consent.invalidation_reason && (
+              <InfoTip>
+                <InfoTipTrigger label={t("tips.a11y.about", { title: consentLabel(payment.consent, t) })} />
+                <InfoTipContent className="text-muted-foreground">{payment.consent.invalidation_reason}</InfoTipContent>
+              </InfoTip>
+            )}
           </p>
         ) : null}
       </td>

@@ -2831,6 +2831,10 @@
     "en": "Email not yet sent",
     "t": "Email chưa được gửi"
   },
+  "payment.end.fullAddress": {
+    "en": "Show the full address",
+    "t": "Hiện địa chỉ đầy đủ"
+  },
   "payment.requirement.hint.owner_consilium": {
     "en": "Fund-owned money: more than half of the owners must confirm from their mailboxes.",
     "t": "Tiền của quỹ: hơn một nửa chủ sở hữu phải xác nhận từ hộp thư của họ."

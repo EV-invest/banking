@@ -939,6 +939,7 @@
   "payment.consent.pending": "Awaiting the investor",
   "payment.consent.reject": "Declined",
   "payment.consent.unsent": "Email not yet sent",
+  "payment.end.fullAddress": "Show the full address",
   "payment.requirement.hint.owner_consilium": "Fund-owned money: more than half of the owners must confirm from their mailboxes.",
   "payment.requirement.hint.subject_consent": "An investor's own money: that investor alone is emailed and must agree.",
   "payment.requirement.owner_consilium": "Owners' consilium",

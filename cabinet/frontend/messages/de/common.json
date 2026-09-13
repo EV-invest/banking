@@ -2831,6 +2831,10 @@
     "en": "Email not yet sent",
     "t": "E-Mail noch nicht gesendet"
   },
+  "payment.end.fullAddress": {
+    "en": "Show the full address",
+    "t": "Vollständige Adresse anzeigen"
+  },
   "payment.requirement.hint.owner_consilium": {
     "en": "Fund-owned money: more than half of the owners must confirm from their mailboxes.",
     "t": "Fondseigenes Geld: mehr als die Hälfte der Eigentümer muss aus ihrem Postfach bestätigen."

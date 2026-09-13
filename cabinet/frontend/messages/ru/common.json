@@ -3759,6 +3759,10 @@
     "en": "Email not yet sent",
     "t": "Письмо ещё не отправлено"
   },
+  "payment.end.fullAddress": {
+    "en": "Show the full address",
+    "t": "Показать адрес целиком"
+  },
   "payment.requirement.hint.owner_consilium": {
     "en": "Fund-owned money: more than half of the owners must confirm from their mailboxes.",
     "t": "Деньги фонда: больше половины владельцев должны подтвердить из своей почты."
