@@ -26,6 +26,11 @@ pub enum MoneyToken {
 /// until its refresh window lapses, but it is unreachable without a freshly
 /// verified JWT for that same user, so the exposure window is the access TTL.
 ///
+/// The entry is also dropped ([`evict`](Self::evict)) the moment the money plane
+/// answers `UNAUTHENTICATED` to it: the plane holds a `token_version` floor that a
+/// revoke ("log out of all devices") raises, and a cached access token minted below
+/// that floor would otherwise be replayed for the rest of its TTL.
+///
 /// ponytail: in-process, per-replica — parallel replicas each mint their own
 /// banking family, which the plane already tolerates (one per login historically).
 pub struct BankingTokens {
@@ -106,6 +111,18 @@ impl BankingTokens {
 		pair.apply(tokens);
 		MoneyToken::Token(pair.access_token.clone())
 	}
+
+	/// Forget the cached pair for `user_id`, so the next [`token_for`](Self::token_for)
+	/// mints afresh against the plane's current revoke floor.
+	///
+	/// The slot is removed from the map, not zeroed under its lock: zeroing would wait
+	/// on a mint in flight and then discard what it just minted, while removal leaves an
+	/// in-flight `token_for` on its detached slot to finish and hand out the token it
+	/// obtained. Callers that already hold that slot still coalesce on it, so the
+	/// single-flight is undisturbed; only callers arriving afterwards get a fresh slot.
+	pub async fn evict(&self, user_id: &str) {
+		self.entries.lock().await.remove(user_id);
+	}
 }
 
 /// Whether a failed banking refresh is a terminal auth verdict — the family is dead
@@ -135,5 +152,20 @@ mod tests {
 			MoneyToken::NotIssued => {}
 			MoneyToken::Token(t) => panic!("no banking token can exist here, got {t:?}"),
 		}
+	}
+
+	/// An eviction leaves nothing behind for the user — not even the empty slot a
+	/// failed mint parks — and is a no-op for a user the cache never saw. The route-level
+	/// half (a 401 from the money plane triggers it) is pinned in `routes::admin::tests`.
+	#[tokio::test]
+	async fn evict_forgets_the_users_slot() {
+		let cache = BankingTokens::new();
+		let _ = cache.token_for("u-1", &grpc()).await;
+		assert!(cache.entries.lock().await.contains_key("u-1"), "a resolution parks the user's slot");
+
+		cache.evict("u-1").await;
+		cache.evict("never-seen").await;
+
+		assert!(cache.entries.lock().await.is_empty());
 	}
 }

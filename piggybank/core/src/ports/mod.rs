@@ -104,21 +104,26 @@ pub trait UserRepository: Repository<Aggregate = User> + Reader<Aggregate = User
 	/// Disable the account under the row lock (idempotent).
 	async fn disable(&self, id: UserId) -> Result<User, DomainError>;
 }
-/// The minimal slice needed to mint a money-plane token for a user. The money plane never sees
-/// Google's `sub`. Each field FOLDS the two revoke surfaces so EITHER invalidates a money token:
-/// the cross-plane bridge columns (`frozen` from a concierge SUSPENDED, `concierge_token_version`
-/// from a SESSIONS_REVOKED) AND banking's own aggregate columns (`status='disabled'`,
-/// `token_version` from a banking-side "revoke all"). Read by raw SQL, not via the `User`
-/// aggregate (which deliberately doesn't model the bridge columns).
+/// The minimal slice needed to mint a money-plane token for a user — and, re-read per RPC,
+/// the money-path gate (`services::support::unfrozen_caller`) and the operator gate
+/// (`require_permission`): the same two facts decide whether an already-minted token may
+/// still move money. The money plane never sees Google's `sub`. Each field FOLDS the two
+/// revoke surfaces so EITHER invalidates a money token: the cross-plane bridge columns
+/// (`frozen` from a concierge SUSPENDED, `concierge_token_version` from a SESSIONS_REVOKED)
+/// AND banking's own aggregate columns (`status='disabled'`, `token_version` from a
+/// banking-side "revoke all"). Read by raw SQL, not via the `User` aggregate (which
+/// deliberately doesn't model the bridge columns).
 pub struct IssuanceTarget {
 	/// The hub user id — stamped as the minted token's `sub`.
 	pub user_id: UserId,
 	pub email: String,
 	/// True when the user must be refused a money token — a concierge SUSPENDED (`frozen`) OR a
-	/// banking-side disable (`status='disabled'`). Gates both issuance and refresh.
+	/// banking-side disable (`status='disabled'`). Gates issuance, refresh and every
+	/// user-initiated money RPC.
 	pub disabled: bool,
 	/// The effective revoke floor: the GREATER of concierge's revoke version (SESSIONS_REVOKED)
 	/// and banking's own `token_version`. Minted as the token's `token_version` and re-checked on
-	/// refresh, so EITHER a concierge or a banking "revoke all" invalidates the money family.
+	/// refresh AND on every money-moving RPC, so EITHER a concierge or a banking "revoke all"
+	/// invalidates the money family within one request, not one access-token TTL.
 	pub token_version: u64,
 }
