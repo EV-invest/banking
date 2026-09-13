@@ -30,26 +30,36 @@ export function ago(unixSecs: string | undefined, t: Translate): string {
 }
 
 /**
- * The roles this console can actually grant, least→most privileged.
+ * The roles `SetRole` still grants in ONE act, least→most privileged.
  *
- * `owner` is absent, and its absence is the rule rather than an omission. A seat is now a
- * persisted column, and `SetRole` refuses to grant or withdraw it unconditionally — the
- * only routes in are the consilium's admission and the genesis seed the service applies at
- * start-up, and the only routes out are a removal or a resignation. Offering the option
- * anyway is what produced the complaint this list answers: the console proposed a role
- * change and the plane answered `FAILED_PRECONDITION`, so the reader was refused an action
- * the interface had just held out to them.
+ * Two are missing and both absences are rules rather than omissions.
+ *
+ * `owner` is refused in both directions: a seat is a persisted column whose only routes in
+ * are the consilium's admission and the genesis seed, and whose only routes out are a
+ * removal or a resignation.
+ *
+ * `admin` is refused in the GRANTING direction only, and that asymmetry is the whole point
+ * — an operator who can appoint operators can appoint accomplices, so admission is a
+ * proposal (`openAdminAdmission`), while taking the role away stays a single call. Do NOT
+ * "tidy" this by disabling the whole control on an admin's row the way an owner's is
+ * disabled: containing a rogue operator must never become the slower path. Only `admin` as
+ * a TARGET is blocked; an admin demoted to operator or investor goes through this list.
+ *
+ * Offering an option the plane will refuse is what produced the complaint this list
+ * answers: the console proposed a role change, the plane said `FAILED_PRECONDITION`, and
+ * the reader was refused an action the interface had just held out to them.
  */
-export const ASSIGNABLE_ROLES = ["investor", "operator", "admin"] as const;
+export const ASSIGNABLE_ROLES = ["investor", "operator"] as const;
 
 /**
  * The whole role vocabulary (matches the domain `Role`).
  *
- * Derived from {@link ASSIGNABLE_ROLES} so the two cannot drift: this is what a role
- * *filter* offers and what {@link roleLabel} recognises — reading an owner is fine
- * everywhere, it is only writing one that the plane reserves for the consilium.
+ * A superset of {@link ASSIGNABLE_ROLES} rather than a derivation of it, because the two
+ * now differ by more than `owner`: this is what a role *filter* offers and what
+ * {@link roleLabel} recognises, and reading an `admin` is fine everywhere — it is only
+ * granting one that the plane reserves for the owners.
  */
-export const ROLES = [...ASSIGNABLE_ROLES, "owner"] as const;
+export const ROLES = [...ASSIGNABLE_ROLES, "admin", "owner"] as const;
 
 /**
  * The KYC tiers this console can set, least→most verified.
@@ -185,4 +195,54 @@ export function statusTone(status: string): string {
     default:
       return "text-muted-foreground";
   }
+}
+
+/**
+ * WHY an account is blocked, and therefore which control the console may offer.
+ *
+ * `suspended_by` carries THREE cases and the third is the one a two-way branch loses:
+ *
+ *   · `"admin_hold"`  — one operator's brake. It lapses by itself at `hold_expires_at`,
+ *                       and a single `reinstateUser` lifts it.
+ *   · `"governance"`  — the owners' ratified verdict. It never lapses, and the one-act
+ *                       route REFUSES it: lifting it is `openUserReinstatement`. Offering
+ *                       the button anyway would be the `FAILED_PRECONDITION` complaint
+ *                       again, on the surface where it matters most.
+ *   · `""`            — empty on an ACTIVE user, and ALSO on one suspended before the field
+ *                       existed. Those carry the semantics they were actually suspended
+ *                       under: one act to lift, and no lapse. So an empty string is not a
+ *                       synonym for active — it has to be read together with `status`, and
+ *                       a blocked account with no recorded provenance is its own case.
+ *
+ * Returning a union rather than booleans is what stops a caller reconstructing the same
+ * mistake: there is no `isHeld` to compare against, only a `kind` the compiler makes them
+ * handle. `expiresAt` exists on exactly the one case that has a deadline, so no screen can
+ * render a lapse time for a suspension that never lapses.
+ */
+export type AccountStanding =
+  | { kind: "active" }
+  /** Lapses at `expiresAt` (unix seconds as a string) unless the owners ratify it. */
+  | { kind: "hold"; expiresAt: string }
+  /** The owners' verdict. Never lapses; only a proposal lifts it. */
+  | { kind: "governance" }
+  /** Blocked, provenance unrecorded — predates the split. One act lifts it; nothing lapses. */
+  | { kind: "legacy" };
+
+/** The subset of a user row this reading needs — so both the list row and the full profile
+ *  can be passed without either being widened to the other. */
+export interface AccountStandingSource {
+  status: string;
+  suspended_by: string;
+  hold_expires_at: string;
+}
+
+export function accountStanding({ status, suspended_by, hold_expires_at }: AccountStandingSource): AccountStanding {
+  // `"disabled"` is the status word the identity plane uses and the one this console has
+  // always branched on. A status we do not recognise is NOT treated as blocked: the safe
+  // direction is to leave the account readable and let the plane refuse a wrong action,
+  // rather than to hide the controls for an account that is fine.
+  if (status !== "disabled") return { kind: "active" };
+  if (suspended_by === "admin_hold") return { kind: "hold", expiresAt: hold_expires_at };
+  if (suspended_by === "governance") return { kind: "governance" };
+  return { kind: "legacy" };
 }

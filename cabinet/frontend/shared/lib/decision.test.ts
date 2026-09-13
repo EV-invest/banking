@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { admissionVote, peerVote, settledAdmission, settledPayout, settledRemoval } from "./decision.ts";
+import { admissionVote, peerVote, settledAdmission, settledConsent, settledPayout, settledRemoval } from "./decision.ts";
 
 test("an unanswered seat is not a settled answer, however the wire spells it", () => {
   for (const raw of ["pending", "PENDING", "", "   ", null, undefined, "unknown_future_state"]) {
@@ -17,7 +17,15 @@ test("an unanswered seat is not a settled answer, however the wire spells it", (
     assert.equal(peerVote(raw), null, `vote: ${String(raw)}`);
     assert.equal(settledAdmission(raw), null, `admission: ${String(raw)}`);
     assert.equal(admissionVote(raw), null, `admission vote: ${String(raw)}`);
+    assert.equal(settledConsent(raw), null, `consent: ${String(raw)}`);
   }
+});
+
+test("a payment consent is read in either tense, like a payout", () => {
+  assert.equal(settledConsent("approve"), "approve");
+  assert.equal(settledConsent("APPROVED"), "approve");
+  assert.equal(settledConsent("reject"), "reject");
+  assert.equal(settledConsent(" rejected "), "reject");
 });
 
 test("a real payout answer is read, in either tense the wire uses", () => {

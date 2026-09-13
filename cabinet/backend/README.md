@@ -37,13 +37,17 @@ in production.
 | `governance.rs` | the concierge ownership-plane seam — see the pin note below |
 | `dto.rs` | browser-facing JSON DTOs (snake_case; 64-bit values as strings) |
 | `error.rs` | gRPC status → HTTP status + `{ "error": … }` body |
-| `routes/` | one handler per endpoint: `identity`, `money`, `admin`, `notifications`, `platform`, `system`, `consilium`, `approval`, `governance_ws` |
+| `routes/` | one handler per endpoint: `identity`, `money`, `admin`, `notifications`, `platform`, `system`, `consilium`, `payments`, `approval`, `governance_ws` |
 
 ## The governance surface
 
 Two things must never be one person's decision — paying the fund's own revenue out, and
 taking an owner's seat away. Both are gated by a **consilium**; `docs/CONSILIUM.md` is the
-policy and the threat model.
+policy and the threat model. A **payment** — an order between two named ends of the
+platform — is gated the same way: the plane seats the one approval the order needs on
+open (the owners' consilium for a fund-owned source, the investor's own consent for a
+user-owned one), so the payments console has no approve or execute verb; the answer comes
+from a mailbox through `/api/approval/**`.
 
 | Route | Plane | Token |
 | ----- | ----- | ----- |
@@ -53,6 +57,8 @@ policy and the threat model.
 | `GET`/`POST /api/owners/removals`, `POST /api/owners/removals/{id}/vote`, `…/cancel` | ownership | concierge |
 | `GET`/`POST /api/owners/admissions`, `POST /api/owners/admissions/{id}/vote`, `…/cancel` | ownership | concierge |
 | `GET /api/owners/consilium/ws` | ownership | concierge |
+| `GET`/`POST /api/admin/payments`, `GET /api/admin/payments/{id}`, `…/cancel` | money | banking (Admin\|Owner) |
+| `GET`/`POST /api/approval/{payout,removal,consent}/{token}` | money / ownership / money | none — the emailed token |
 
 The split is architectural: the money plane must be able to audit its own authorization, so
 its tally is computed against the owner roster it already mirrors; ownership is a

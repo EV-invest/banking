@@ -52,6 +52,7 @@ import {
   refreshGovernance,
   removalsResource,
   resignOwnership,
+  userProposalsResource,
 } from "@/entities/governance/model/governance-resource";
 import { profileResource } from "@/entities/user/model/profile-resource";
 import type { Consilium, ConsiliumList, OwnerList } from "@/shared/contracts/governance";
@@ -79,8 +80,10 @@ import {
 } from "@/views/consilium/lib/reads";
 import { AdmissionList, ProposeAdmission } from "@/views/consilium/ui/admissions";
 import { PayoutSkeleton, RosterSkeleton } from "@/views/consilium/ui/loading";
+import { PaymentTerms, paymentWords } from "@/views/consilium/ui/payment-terms";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
 import { ProposeRemoval, RemovalList } from "@/views/consilium/ui/removals";
+import { UserProposalList } from "@/views/consilium/ui/user-proposals";
 
 const isForbidden = (error: unknown): boolean => error instanceof RequestError && error.status === 403;
 
@@ -90,13 +93,14 @@ export function ConsiliumView() {
   const owners = useResource(ownersResource);
   const removals = useResource(removalsResource);
   const admissions = useResource(admissionsResource);
+  const proposals = useResource(userProposalsResource);
   const consilia = useResource(consiliumResource);
   const profile = useResource(profileResource);
 
   // Decided before the stream is acquired, not after: a non-owner who opens this URL would
   // otherwise hold a websocket and a 20-second poll against four endpoints that answer 403
   // forever, for a page they are about to be told they cannot see.
-  const forbidden = [owners.error, removals.error, admissions.error, consilia.error].some(isForbidden);
+  const forbidden = [owners.error, removals.error, admissions.error, proposals.error, consilia.error].some(isForbidden);
   const stream = useConsiliumStream(!forbidden);
 
   if (forbidden) {
@@ -141,6 +145,7 @@ export function ConsiliumView() {
   // absent list here means there are none, not that nothing came back.
   const removalsRead = mapRead(readOf(removals), (list) => (list.items ?? []).filter((r) => !isSettled(r.state, r.decided_at)));
   const admissionsRead = mapRead(readOf(admissions), (list) => (list.items ?? []).filter((a) => !isSettled(a.state, a.decided_at)));
+  const proposalsRead = mapRead(readOf(proposals), (list) => (list.items ?? []).filter((p) => !isSettled(p.state, p.decided_at)));
 
   const roster = knownValue(rosterRead);
 
@@ -150,8 +155,9 @@ export function ConsiliumView() {
   // one failure with one retry is the truth. A PARTIAL failure is never folded in here —
   // "the roster loaded but the payouts did not" says which half of the room can be trusted,
   // and that is worth a card of its own.
-  const outage = everyReadFailed([rosterRead, payoutsRead, removalsRead, admissionsRead]);
-  const refreshingAll = owners.isValidating || removals.isValidating || admissions.isValidating || consilia.isValidating;
+  const outage = everyReadFailed([rosterRead, payoutsRead, removalsRead, admissionsRead, proposalsRead]);
+  const refreshingAll =
+    owners.isValidating || removals.isValidating || admissions.isValidating || proposals.isValidating || consilia.isValidating;
 
   return (
     <Stagger
@@ -211,6 +217,12 @@ export function ConsiliumView() {
               retrying={admissions.isValidating}
             />
             <RemovalList read={removalsRead} userId={userId} onRetry={() => void removals.refresh()} retrying={removals.isValidating} />
+            {/* People last of the three lists, and that ordering is a judgement rather than
+                an accident: the two above decide who CONTROLS the fund, this one decides
+                what happens to someone in it. It is not the less urgent of the three — a
+                hold on this list lapses in 24 hours if nobody ratifies it — but an owner
+                scanning the page for "is my own seat in question" should meet that first. */}
+            <UserProposalList read={proposalsRead} userId={userId} onRetry={() => void proposals.refresh()} retrying={proposals.isValidating} />
             <ProposeAdmission roster={rosterRead} onRetry={() => void owners.refresh()} retrying={owners.isValidating} />
             {/* Always rendered, and it is the roster's own `Read` that decides what it
                 shows: gated on `!isLoading` it vanished from the layout while the owners
@@ -401,7 +413,7 @@ function PayoutSection({
               </EmptyHeader>
               <EmptyContent>
                 <Button asChild variant="outline">
-                  <Link href="/admin/revenue">{t("consilium.payout.emptyAction")}</Link>
+                  <Link href="/admin/payments">{t("consilium.payout.emptyAction")}</Link>
                 </Button>
               </EmptyContent>
             </Empty>
@@ -429,7 +441,9 @@ function PayoutSection({
                     <Item size="sm" className="px-0">
                       <ItemContent className="min-w-0 gap-0.5">
                         <ItemTitle className="block w-auto truncate font-medium tabular-nums">
-                          {formatExactUsdt(consilium.revenue_payout?.amount)} USDT · {networkLabel(consilium.revenue_payout?.network)}
+                          {consilium.payment
+                            ? `${formatExactUsdt(consilium.payment.amount)} USDT · ${paymentWords(consilium.payment)}`
+                            : `${formatExactUsdt(consilium.revenue_payout?.amount)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
                         </ItemTitle>
                         <ItemDescription className="truncate text-xs tabular-nums">
                           {/* `??` cannot do this: an undecided consilium carries the STRING "0", which is truthy. */}
@@ -459,6 +473,8 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
   const [error, setError] = useState<unknown>(null);
 
   const payout = consilium.revenue_payout;
+  // A payment consilium carries its terms in `payment`; the payout fields are empty then.
+  const payment = consilium.payment ?? null;
   const threshold = consilium.threshold ?? 0;
   const approvals = consilium.approvals ?? 0;
   const progress = threshold > 0 ? Math.min(100, Math.round((approvals / threshold) * 100)) : 0;
@@ -483,7 +499,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="text-2xl font-semibold leading-none tabular-nums text-foreground">
-          {formatExactUsdt(payout?.amount)}
+          {formatExactUsdt(payment ? payment.amount : payout?.amount)}
           <span className="ml-2 text-sm font-medium text-muted-foreground">USDT</span>
         </p>
         <Badge variant="outline" className={stateTone(consilium.state)}>
@@ -491,15 +507,19 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
         </Badge>
       </div>
 
-      {/* Full, monospace, wrapped rather than truncated — the same rule as the approval
-          email and the approval page. An owner who checks the address here and approves it
-          there must be looking at the same characters (policy 13). */}
-      <p className="break-all rounded-lg border border-border bg-main-surface px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-foreground">
-        {payout?.address || "—"}
-      </p>
+      {payment ? (
+        <PaymentTerms terms={payment} />
+      ) : (
+        // Full, monospace, wrapped rather than truncated — the same rule as the approval
+        // email and the approval page. An owner who checks the address here and approves it
+        // there must be looking at the same characters (policy 13).
+        <p className="break-all rounded-lg border border-border bg-main-surface px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-foreground">
+          {payout?.address || "—"}
+        </p>
+      )}
 
       <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-        <span className="tabular-nums">{t("consilium.payout.network", { network: networkLabel(payout?.network) })}</span>
+        {!payment && <span className="tabular-nums">{t("consilium.payout.network", { network: networkLabel(payout?.network) })}</span>}
         <span className="font-mono-tech">{t("consilium.payout.fingerprint", { hash: hashPrefix(consilium.payload_hash) })}</span>
         <span>{t("consilium.payout.openedBy", { initiator: consilium.initiator_email })}</span>
         <span className="tabular-nums">

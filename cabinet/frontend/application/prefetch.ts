@@ -31,6 +31,7 @@ import {
 import { allocationsResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import { notificationSettingsResource, notificationsResource } from "@/entities/notification/model/notification-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
+import { paymentsResource } from "@/entities/payment/model/payment-resource";
 import { sessionsResource } from "@/entities/session/model/session-resource";
 import { profileResource } from "@/entities/user/model/profile-resource";
 import { depositsResource, walletResource, withdrawalsResource } from "@/entities/wallet/model/wallet-resource";
@@ -55,6 +56,16 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
   },
   { prefix: "/admin/treasury", warm: () => treasuryResource.prefetch() },
   { prefix: "/admin/withdrawals", warm: () => withdrawalQueueResource.prefetch() },
+  {
+    prefix: "/admin/payments",
+    warm: () => {
+      // The unfiltered list, plus what the form's pickers read: the product list and the
+      // configured rails (the revenue read carries them).
+      paymentsResource.prefetch();
+      adminAllocationsResource.prefetch();
+      fundRevenueResource.prefetch();
+    },
+  },
   {
     prefix: "/admin/revenue",
     warm: () => {

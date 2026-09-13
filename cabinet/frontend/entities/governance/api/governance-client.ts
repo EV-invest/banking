@@ -13,7 +13,11 @@ import type {
   OwnerList,
   OwnerRemoval,
   OwnerRemovalList,
+  ProposalVote,
   RemovalVote,
+  UserProposal,
+  UserProposalKind,
+  UserProposalList,
 } from "@/shared/contracts/governance";
 import { getJson, postJson } from "@/shared/lib/api-client";
 
@@ -83,4 +87,59 @@ export function openRevenuePayout(body: { network: string; address: string; amou
 
 export function cancelConsilium(consiliumId: string): Promise<Consilium> {
   return postJson<Consilium>(`/api/consilium/${encodeURIComponent(consiliumId)}/cancel`, {});
+}
+
+// ── user proposals: the owners' verdict over one PERSON's standing ─────────────
+//
+// The permanent half of the split blocking verb, its undo, and the admin seat. A hold
+// (`entities/admin`'s `holdUser`) freezes an account now and lapses in 24h; these are what
+// make it stay, lift it again when the owners themselves imposed it, and grant
+// `Role::Admin` — none of which one actor may do alone.
+
+/** Every user proposal, open and closed; `kind` narrows the listing. */
+export function fetchUserProposals(kind?: UserProposalKind): Promise<UserProposalList> {
+  return getJson<UserProposalList>(`/api/owners/proposals${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`);
+}
+
+/** Make a hold permanent. The reason is required — it is what the other owners vote on. */
+export function openUserSuspension(userId: string, reason: string): Promise<UserProposal> {
+  return postJson<UserProposal>("/api/owners/proposals/suspension", { user_id: userId, reason });
+}
+
+/**
+ * Lift a suspension THE OWNERS imposed.
+ *
+ * A hold needs nothing from here — `reinstateUser` lifts one in a single act. Which of the
+ * two a row needs is read off `suspended_by`, never guessed from `status`.
+ */
+export function openUserReinstatement(userId: string, reason: string): Promise<UserProposal> {
+  return postJson<UserProposal>("/api/owners/proposals/reinstatement", { user_id: userId, reason });
+}
+
+/**
+ * Propose granting `Role::Admin`. `SetRole` refuses that role in the GRANTING direction and
+ * names this: an operator who can appoint operators can appoint accomplices.
+ *
+ * There is deliberately no counterpart for taking the role away — that stays one `setUserRole`
+ * call, because containing a rogue operator must never be the slower path.
+ */
+export function openAdminAdmission(userId: string, reason: string): Promise<UserProposal> {
+  return postJson<UserProposal>("/api/owners/proposals/admin-admission", { user_id: userId, reason });
+}
+
+/**
+ * Vote on a user proposal.
+ *
+ * The body word is the NEUTRAL `for`/`against`, which the BFF parses with its own
+ * `ProposalVote::parse` and which rejects `remove`/`keep` and `admit`/`reject` outright.
+ * The narrow parameter type is the point: this endpoint and the two owner-consilium vote
+ * endpoints take structurally identical arguments, so nothing but the types stops a call
+ * site sending one vocabulary's verb to another's route.
+ */
+export function voteOnUserProposal(proposalId: string, vote: ProposalVote): Promise<UserProposal> {
+  return postJson<UserProposal>(`/api/owners/proposals/${encodeURIComponent(proposalId)}/vote`, { vote });
+}
+
+export function cancelUserProposal(proposalId: string): Promise<UserProposal> {
+  return postJson<UserProposal>(`/api/owners/proposals/${encodeURIComponent(proposalId)}/cancel`, {});
 }

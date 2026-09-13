@@ -19,18 +19,24 @@ import {
   cancelAdmission as cancelAdmissionRequest,
   cancelConsilium as cancelConsiliumRequest,
   cancelRemoval as cancelRemovalRequest,
+  cancelUserProposal as cancelUserProposalRequest,
   fetchAdmissions,
   fetchConsilium,
   fetchOwners,
   fetchRemovals,
+  fetchUserProposals,
+  openAdminAdmission as openAdminAdmissionRequest,
   openRevenuePayout as openRevenuePayoutRequest,
+  openUserReinstatement as openUserReinstatementRequest,
+  openUserSuspension as openUserSuspensionRequest,
   proposeAdmission as proposeAdmissionRequest,
   proposeRemoval as proposeRemovalRequest,
   resignOwnership as resignOwnershipRequest,
   voteOnAdmission as voteOnAdmissionRequest,
   voteOnRemoval as voteOnRemovalRequest,
+  voteOnUserProposal as voteOnUserProposalRequest,
 } from "@/entities/governance/api/governance-client";
-import type { AdmissionVote, Consilium, OwnerAdmission, OwnerRemoval, RemovalVote } from "@/shared/contracts/governance";
+import type { AdmissionVote, Consilium, OwnerAdmission, OwnerRemoval, ProposalVote, RemovalVote, UserProposal } from "@/shared/contracts/governance";
 import { TAG } from "@/shared/lib/cache-tags";
 import { defineResource, revalidateTag } from "@/shared/lib/resource";
 
@@ -55,6 +61,13 @@ export const admissionsResource = defineResource({
   tags: [TAG.admissions],
 });
 
+export const userProposalsResource = defineResource({
+  name: "governance.userProposals",
+  fetch: () => fetchUserProposals(),
+  revalidate: 15,
+  tags: [TAG.userProposals],
+});
+
 export const consiliumResource = defineResource({
   name: "governance.consilium",
   fetch: fetchConsilium,
@@ -71,7 +84,7 @@ export const consiliumResource = defineResource({
  * miss the one that did. Admissions joined this list rather than getting a channel of
  * their own for exactly that reason.
  */
-export const GOVERNANCE_TAGS = [TAG.owners, TAG.removals, TAG.admissions, TAG.consilium] as const;
+export const GOVERNANCE_TAGS = [TAG.owners, TAG.removals, TAG.admissions, TAG.userProposals, TAG.consilium] as const;
 
 /** Re-read the authoritative snapshot of the whole room. */
 export function refreshGovernance(): void {
@@ -148,4 +161,54 @@ export async function cancelConsilium(consiliumId: string): Promise<Consilium> {
   const consilium = await cancelConsiliumRequest(consiliumId);
   revalidateTag(TAG.consilium);
   return consilium;
+}
+
+// ── user proposals ────────────────────────────────────────────────────────────
+//
+// Opened from the operator console's user drawer and voted on in the owners' room, so both
+// tags are named on every write: the console's user list shows the standing a suspension
+// changes and the role an admin admission grants, and the room shows the proposal itself.
+// Routed through here rather than called straight from the client for exactly that reason —
+// a raw call cannot say what it moved.
+
+/** Ask the owners to make a hold permanent. Nothing about the user moves until it carries. */
+export async function openUserSuspension(userId: string, reason: string): Promise<UserProposal> {
+  const proposal = await openUserSuspensionRequest(userId, reason);
+  revalidateTag(TAG.userProposals);
+  return proposal;
+}
+
+/** Ask the owners to undo their own verdict. */
+export async function openUserReinstatement(userId: string, reason: string): Promise<UserProposal> {
+  const proposal = await openUserReinstatementRequest(userId, reason);
+  revalidateTag(TAG.userProposals);
+  return proposal;
+}
+
+/** Ask the owners to grant `Role::Admin`. Taking it away is not here — that is one call. */
+export async function openAdminAdmission(userId: string, reason: string): Promise<UserProposal> {
+  const proposal = await openAdminAdmissionRequest(userId, reason);
+  revalidateTag(TAG.userProposals);
+  return proposal;
+}
+
+/**
+ * Vote on a user proposal.
+ *
+ * Names the governance tags AND the console's user list, because a vote can be the one that
+ * carries and every kind changes something the console renders: a suspension blocks the
+ * account, a reinstatement unblocks it, an admin admission changes the role. As everywhere
+ * else here the response is not written into the cache — the tally is the server's, counted
+ * under a row lock, and a threshold frozen at open is not something a client may re-derive.
+ */
+export async function voteOnUserProposal(proposalId: string, vote: ProposalVote): Promise<UserProposal> {
+  const proposal = await voteOnUserProposalRequest(proposalId, vote);
+  revalidateTag(...GOVERNANCE_TAGS, TAG.adminUsers);
+  return proposal;
+}
+
+export async function cancelUserProposal(proposalId: string): Promise<UserProposal> {
+  const proposal = await cancelUserProposalRequest(proposalId);
+  revalidateTag(TAG.userProposals);
+  return proposal;
 }

@@ -68,6 +68,11 @@ ev::settings! {
 		/// link. A wrong value here sends owners somewhere that cannot take their vote, so
 		/// it is worth checking per environment.
 		consilium_approval_url_base: String = "https://evinvest.ltd/cabinet/approve",
+		/// Base URL of the payment CONSENT page the emailed link points at (`<base>/<token>`)
+		/// — the investor-facing twin of the approval base, served by the cabinet on a
+		/// public route for the same reason: the person clicking holds a token, not a
+		/// session.
+		payment_consent_url_base: String = "https://evinvest.ltd/cabinet/consent",
 	}
 }
 
@@ -689,6 +694,7 @@ mod tests {
 				"BRIDGE_SERVICE_TOKEN",
 				"BRIDGE_POLL_SECS",
 				"CONSILIUM_APPROVAL_URL_BASE",
+				"PAYMENT_CONSENT_URL_BASE",
 			]
 		);
 	}
@@ -728,6 +734,32 @@ mod tests {
 		assert!(
 			base.starts_with("https://"),
 			"an approval link carries a bearer token in its path and must never be sent over http, got {base}"
+		);
+	}
+
+	/// The consent link is held to the same rule: a public route, over https, and never the
+	/// owner-only console — the investor answering it is by definition not an owner.
+	#[test]
+	fn the_default_consent_url_points_at_a_public_route() {
+		let minimal: std::collections::HashMap<&str, &str> = [
+			("DATABASE_URL", "postgres://localhost/banking"),
+			("APP_ENV", "development"),
+			("TIGERBEETLE_ADDRESS", "3033"),
+			("TIGERBEETLE_CLUSTER_ID", "0"),
+			("SIGNER_GRPC_ADDR", "http://127.0.0.1:50053"),
+			("CONCIERGE_BRIDGE_ADDR", "http://127.0.0.1:55670"),
+			("BRIDGE_SERVICE_TOKEN", "test-bridge"),
+		]
+		.into_iter()
+		.collect();
+		let base = AppConfig::from_source(|var| minimal.get(var).map(|v| v.to_string()))
+			.expect("minimal env loads")
+			.payment_consent_url_base;
+		assert!(base.ends_with("/cabinet/consent"), "the consent base must be the public consent route, got {base}");
+		assert!(!base.contains("/cabinet/consilium"), "/cabinet/consilium is the owner-only console");
+		assert!(
+			base.starts_with("https://"),
+			"a consent link carries a bearer token in its path and must never be sent over http, got {base}"
 		);
 	}
 

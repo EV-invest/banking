@@ -88,6 +88,19 @@ message UserProfile {
   // rather than from `users.role`. Carried here only for wire parity — the money plane
   // has no allowlist of its own and never sets it.
   bool role_is_break_glass = 18;
+  // WHY the account is disabled, and therefore who may undo it — concierge splits the
+  // old blocking verb into a lapsing `admin_hold` and a ratified `governance` verdict,
+  // and an empty string is a THIRD case: an account suspended before the field existed,
+  // which keeps the one-act, never-lapsing semantics it was actually suspended under.
+  //
+  // Carried here only for wire parity, like `role_is_break_glass` above: the money plane
+  // learns of a freeze through the one-way lifecycle bridge's SUSPENDED/REINSTATED
+  // events, never by reading this, and never sets it. Absent them the parity round trip
+  // in `cabinet/backend/tests/concierge_parity.rs` re-encodes short and fails, which is
+  // exactly the drift that test exists to catch.
+  string suspended_by = 19;
+  // Unix SECONDS an "admin_hold" lapses; 0 when nothing lapses. Parity only, as above.
+  int64 hold_expires_at = 20;
 }
 
 // The caller's editable profile, full-replace. Same 10 fields as the editable part of

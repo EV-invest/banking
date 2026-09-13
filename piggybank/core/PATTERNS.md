@@ -84,14 +84,14 @@ raises no event.
 `require_redeemable` admits `open` *and* `closed`. Winding a product down must never trap
 an investor's units inside it, so only the *new money* direction is ever blocked.
 
-**Access — closed by default (migration `0030`).** A second axis, orthogonal to the
+**Access — closed by default (migration `0033`).** A second axis, orthogonal to the
 lifecycle: `state` says whether the product deals, `access` says *with whom*. Each
 allocation carries a default level `hidden < view < invest` (`AllocationAccess`, ranked —
 the derived `Ord` is the policy), and `allocation_access_grants` raises individual
 investors above it (`view` | `invest`, never `hidden`: a grant only adds). The level an
 investor effectively holds is `max(default, grant)` — **computed, never stored**: the read
 port `LEFT JOIN`s the caller's grant and the domain folds the two. A registration lands on
-`view` (listed once open, locked); `0030` backfilled every `open` row to `invest` so the
+`view` (listed once open, locked); `0033` backfilled every `open` row to `invest` so the
 release changed nothing for live products. `ListAllocations` shows an investor `open`
 products at `view` or above; `GetAllocation` answers NOT_FOUND for a `hidden` one (as for
 an unregistered slug); `Subscribe` refuses below `invest` with `DomainError::Precondition`

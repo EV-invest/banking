@@ -7,7 +7,7 @@
 
 use domain::{
 	money::{Network, Usdt, WalletAddress},
-	withdrawals::Withdrawal,
+	withdrawals::{Withdrawal, WithdrawalId},
 };
 use evbanking_contracts::banking::v1::{self as pb, wallet_service_server::WalletService};
 use tonic::{Request, Response, Status};
@@ -110,6 +110,7 @@ impl WalletService for WalletSvc {
 				configured: &self.state.configured_networks,
 				kyc: self.state.kyc_gate,
 			},
+			WithdrawalId::new(),
 			user,
 			network,
 			address,

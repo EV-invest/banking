@@ -35,6 +35,7 @@ pub mod ledger;
 pub mod nav;
 pub mod operations;
 pub mod outflow;
+pub mod payments;
 pub mod positions;
 pub mod redemptions;
 pub mod subscriptions;
@@ -59,6 +60,7 @@ pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTrans
 pub use nav::{NavMarks, Valuation};
 pub use operations::OperationFeed;
 pub use outflow::{OutflowPolicy, PayoutStanding};
+pub use payments::{PaymentFeed, PaymentRepository};
 pub use positions::{FundPosition, FundPositionReader};
 pub use redemptions::{QueuedRedemption, RedemptionRepository};
 pub use subscriptions::SubscriptionRepository;
