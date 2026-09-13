@@ -31,7 +31,7 @@ export function PaymentTerms({ terms }: { terms: ConsiliumPaymentTerms }) {
         </div>
       </div>
       {external && (
-        <p className="break-all rounded-lg border border-border bg-main-surface px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-foreground">
+        <p className="break-all rounded-lg border border-border bg-main-surface px-3.5 py-3 font-mono-tech text-base leading-relaxed text-foreground">
           {terms.destination.address || "—"}
         </p>
       )}
