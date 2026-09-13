@@ -879,6 +879,10 @@
     "en": "No payouts yet",
     "t": "Noch keine Ausschüttungen"
   },
+  "admin.revenue.noPayoutsHintConsilium": {
+    "en": "Revenue the fund has earned stays on the ledger until the owners approve a payout. Approved payouts appear here once they execute.",
+    "t": "Vom Fonds verdiente Erträge bleiben im Hauptbuch, bis die Eigentümer eine Auszahlung freigeben. Freigegebene Auszahlungen erscheinen hier, sobald sie ausgeführt sind."
+  },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Das ist das eigene Geld des Fonds. Kundenguthaben und das Seed-Kapital des Fonds sind getrennte Ledger-Ansprüche, sind hier nicht enthalten — und von diesem Bereich aus nicht erreichbar."
@@ -1538,6 +1542,30 @@
   "approval.payment.to": {
     "en": "To",
     "t": "An"
+  },
+  "approval.payout.approve": {
+    "en": "Approve this payout",
+    "t": "Diese Auszahlung freigeben"
+  },
+  "approval.payout.decided.approvedTitle": {
+    "en": "You approved this payout",
+    "t": "Sie haben diese Auszahlung freigegeben"
+  },
+  "approval.payout.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
+    "t": "Ihre Antwort wurde festgehalten. Hier gibt es nichts weiter zu tun — die Auszahlung erfolgt, sobald genügend Eigentümer zugestimmt haben."
+  },
+  "approval.payout.decided.rejectedTitle": {
+    "en": "You rejected this payout",
+    "t": "Sie haben diese Auszahlung abgelehnt"
+  },
+  "approval.payout.lead": {
+    "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} bittet darum, vom Fonds verdientes Geld auszuzahlen. Das eigene Geld des Fonds auszuzahlen ist nie die Entscheidung einer einzelnen Person, deshalb müssen die Eigentümer zustimmen."
+  },
+  "approval.payout.title": {
+    "en": "Approve a fund payout",
+    "t": "Eine Auszahlung des Fonds freigeben"
   },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",

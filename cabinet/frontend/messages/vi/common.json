@@ -879,6 +879,10 @@
     "en": "No payouts yet",
     "t": "Chưa có khoản chi trả nào"
   },
+  "admin.revenue.noPayoutsHintConsilium": {
+    "en": "Revenue the fund has earned stays on the ledger until the owners approve a payout. Approved payouts appear here once they execute.",
+    "t": "Doanh thu quỹ kiếm được vẫn nằm trên sổ cái cho đến khi các chủ sở hữu phê duyệt một khoản chi trả. Các khoản chi trả đã được phê duyệt sẽ xuất hiện ở đây sau khi thực hiện."
+  },
   "admin.revenue.ownMoneyNote": {
     "en": "This is the fund's own money. Client balances and the fund's seed capital are separate ledger claims and are not included here — and cannot be reached from this screen.",
     "t": "Đây là tiền của chính quỹ. Số dư khách hàng và vốn mồi của quỹ là các quyền đòi riêng trên sổ cái, không nằm trong đây — và không thể chạm tới từ màn hình này."
@@ -1538,6 +1542,30 @@
   "approval.payment.to": {
     "en": "To",
     "t": "Tới"
+  },
+  "approval.payout.approve": {
+    "en": "Approve this payout",
+    "t": "Phê duyệt khoản chi trả này"
+  },
+  "approval.payout.decided.approvedTitle": {
+    "en": "You approved this payout",
+    "t": "Bạn đã phê duyệt khoản chi trả này"
+  },
+  "approval.payout.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the payout goes ahead once enough owners have agreed.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Không còn gì phải làm ở đây — khoản chi trả sẽ được thực hiện khi có đủ chủ sở hữu đồng ý."
+  },
+  "approval.payout.decided.rejectedTitle": {
+    "en": "You rejected this payout",
+    "t": "Bạn đã từ chối khoản chi trả này"
+  },
+  "approval.payout.lead": {
+    "en": "{initiator} has asked to pay out money the fund has earned. Paying the fund's own money out is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} đề nghị chi trả số tiền quỹ đã kiếm được. Chi trả tiền của chính quỹ không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
+  },
+  "approval.payout.title": {
+    "en": "Approve a fund payout",
+    "t": "Phê duyệt một khoản chi trả của quỹ"
   },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
