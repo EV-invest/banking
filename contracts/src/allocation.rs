@@ -9,27 +9,34 @@
 //! # The conversation
 //!
 //! ```text
-//! operator ─ RegisterAllocation ─▶ draft    (registered, accepts no money)
+//! operator ─ RegisterAllocation ─▶ draft, access `view` (visible, locked)
 //! operator ─ SetAllocationState ─▶ open     (subscribe + redeem)
-//! investor ─ ListAllocations ────▶ the catalog (open only, unless AllocationManage)
-//! investor ─ FundsService.Subscribe ────▶ refused unless the allocation is open
-//! investor ─ FundsService.Redeem ───────▶ allowed while open OR closed
+//! operator ─ SetAllocationAccess ▶ invest   (anyone may put money in) — or
+//! operator ─ GrantAllocationAccess ▶ one investor raised to `view` | `invest`
+//! investor ─ ListAllocations ────▶ the catalog (open + at least `view` for the caller)
+//! investor ─ FundsService.Subscribe ────▶ refused unless open AND `invest` for the caller
+//! investor ─ FundsService.Redeem ───────▶ allowed while open OR closed, at ANY access
 //! operator ─ SetAllocationUnitCap ▶ supply  (how many units may ever be issued)
+//! operator ─ RevokeAllocationAccess ▶ the investor falls back to the default
 //! operator ─ SetAllocationState ─▶ closed   (redeem only — never traps an investor)
 //! ```
 //!
-//! The registry is the **gate**, twice over. `Subscribe` resolves its `service` against
-//! an allocation and refuses an unregistered or non-`open` one, so an investable product
-//! exists only because an `AllocationManage` holder said so — and then refuses a mint
-//! that would carry the issued supply past [`Allocation::unit_cap`], so a product is
-//! also only ever as large as an operator sized it.
+//! The registry is the **gate**, three times over. `Subscribe` resolves its `service`
+//! against an allocation and refuses an unregistered or non-`open` one, so an investable
+//! product exists only because an `AllocationManage` holder said so; refuses a caller
+//! whose effective [`access`] level is below `invest`, so a product deals only with the
+//! investors an operator let in; and refuses a mint that would carry the issued supply
+//! past [`Allocation::unit_cap`], so a product is also only ever as large as an operator
+//! sized it. The access gate is on the way IN only — `Redeem` never consults it.
 //!
 //! Money is deliberately absent here. Units, NAV, positions and cash all belong to
 //! [`FundsService`](crate::banking::v1::funds_service_client::FundsServiceClient) and
 //! `BalanceService`, keyed by the same `service` slug this registry owns.
 
 pub use crate::banking::v1::{
-	Allocation, AllocationList, GetAllocationRequest, ListAllocationsRequest, RegisterAllocationRequest, SetAllocationStateRequest, SetAllocationUnitCapRequest, UpdateAllocationRequest,
+	Allocation, AllocationAccessGrant, AllocationAccessGrantList, AllocationList, GetAllocationRequest, GrantAllocationAccessRequest, ListAllocationAccessGrantsRequest,
+	ListAllocationsRequest, RegisterAllocationRequest, RevokeAllocationAccessRequest, RevokeAllocationAccessResponse, SetAllocationAccessRequest, SetAllocationStateRequest,
+	SetAllocationUnitCapRequest, UpdateAllocationRequest,
 	allocations_service_client::AllocationsServiceClient,
 	allocations_service_server::{AllocationsService, AllocationsServiceServer},
 };
@@ -75,9 +82,65 @@ pub mod state {
 	}
 }
 
+/// The canonical `Allocation.access` / `Allocation.caller_access` /
+/// `AllocationAccessGrant.level` strings.
+///
+/// The second axis of the contract, orthogonal to [`state`]: the hub's
+/// `domain::allocations::AllocationAccess` serializes to exactly these
+/// (`allocation_access_strings_are_canonical` and
+/// `domain_access_levels_match_the_wire_contract` guard the two sides), and a consumer
+/// matches on these constants rather than its own literals. Adding a level means adding
+/// it here and to [`ALL`], in rank order.
+///
+/// The levels are **ranked**: `hidden < view < invest`. An investor's effective level is
+/// the higher of the product's default and their own grant, which is why a grant can
+/// carry only [`GRANTABLE`] values — a grant only ever adds.
+pub mod access {
+	/// Not in the caller's catalog at all; `GetAllocation` answers NOT_FOUND.
+	pub const HIDDEN: &str = "hidden";
+	/// Listed and readable, but `Subscribe` is refused. What a registration lands on.
+	pub const VIEW: &str = "view";
+	/// Listed, readable and open to new money (subject to `state` and the unit cap).
+	pub const INVEST: &str = "invest";
+
+	/// Every level, lowest first.
+	pub const ALL: [&str; 3] = [HIDDEN, VIEW, INVEST];
+
+	/// The levels a per-investor grant may carry — everything above the floor.
+	pub const GRANTABLE: [&str; 2] = [VIEW, INVEST];
+
+	/// The level a product carries from registration until an operator changes it.
+	/// "Closed by default": visible, so the catalog shows what is coming, but locked.
+	pub const DEFAULT: &str = VIEW;
+
+	/// Whether `level` is one this contract defines.
+	pub fn is_known(level: &str) -> bool {
+		ALL.contains(&level)
+	}
+
+	/// Whether `level` may be carried by a grant. `hidden` is refused: a grant that
+	/// lowered an investor below the default would make "revoke" ambiguous.
+	pub fn is_grantable(level: &str) -> bool {
+		GRANTABLE.contains(&level)
+	}
+
+	/// Whether an allocation at `level` shows in the caller's catalog. The hub applies
+	/// the same rule; this is for a client deciding whether to draw a card it cached.
+	pub fn permits_viewing(level: &str) -> bool {
+		level == VIEW || level == INVEST
+	}
+
+	/// Whether `level` lets the caller put money in — necessary alongside
+	/// [`super::state::accepts_subscriptions`], never sufficient on its own. The
+	/// authoritative check runs hub-side on `Subscribe`.
+	pub fn permits_investing(level: &str) -> bool {
+		level == INVEST
+	}
+}
+
 /// The canonical `Allocation.icon` strings.
 ///
-/// The other half of the vocabulary contract, alongside [`state`]: the hub's
+/// The third vocabulary of the contract, alongside [`state`] and [`access`]: the hub's
 /// `domain::allocations::AllocationIcon` serializes to exactly these, and a client
 /// picks its SVG by matching one of these constants rather than its own literals.
 ///
@@ -125,7 +188,45 @@ pub mod icon {
 
 #[cfg(test)]
 mod tests {
-	use super::{icon, state};
+	use super::{access, icon, state};
+
+	#[test]
+	fn the_access_vocabulary_is_ranked_closed_and_canonical() {
+		// Byte-identical with `domain::allocations::AllocationAccess::as_str`, and in the
+		// rank order the hub compares by (`domain_access_levels_match_the_wire_contract`
+		// guards the other side).
+		assert_eq!(access::ALL, ["hidden", "view", "invest"]);
+		assert!(access::ALL.iter().all(|l| access::is_known(l)));
+		assert!(!access::is_known("public"));
+		assert!(!access::is_known(""));
+		assert!(!access::is_known("Invest"), "the wire form is lowercase");
+	}
+
+	#[test]
+	fn a_registration_lands_visible_but_locked() {
+		// "Closed by default" is the whole feature: the default must let the catalog show
+		// the product and must NOT let money in.
+		assert_eq!(access::DEFAULT, access::VIEW);
+		assert!(access::permits_viewing(access::DEFAULT));
+		assert!(!access::permits_investing(access::DEFAULT));
+	}
+
+	#[test]
+	fn a_grant_can_only_ever_add() {
+		// Every grantable level is a real level, and `hidden` is not among them.
+		assert!(access::GRANTABLE.iter().all(|l| access::is_known(l)));
+		assert!(access::is_grantable(access::VIEW));
+		assert!(access::is_grantable(access::INVEST));
+		assert!(!access::is_grantable(access::HIDDEN));
+	}
+
+	#[test]
+	fn hidden_permits_nothing_and_invest_permits_everything() {
+		assert!(!access::permits_viewing(access::HIDDEN));
+		assert!(!access::permits_investing(access::HIDDEN));
+		assert!(access::permits_viewing(access::INVEST));
+		assert!(access::permits_investing(access::INVEST));
+	}
 
 	#[test]
 	fn closed_allocations_still_let_investors_exit() {

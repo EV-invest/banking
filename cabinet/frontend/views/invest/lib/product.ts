@@ -82,11 +82,18 @@ export function cashForUnits(units: string, nav: string | undefined): bigint | n
  * in-flight mints server-side, so a client that trusts it can never offer headroom the
  * hub would refuse.
  *
+ * Order matters: being locked below `invest` is a gate an operator placed on purpose, so
+ * it is checked ahead of the market-condition reasons (a stale mark, a full cap) that
+ * would otherwise apply to anyone. `hidden` never reaches here — the BFF drops a hidden
+ * product from `/api/allocations` before this module ever sees it — so only `view`
+ * distinguishes a locked product from an investable one.
+ *
  * Returns the catalogue key rather than the sentence: this module is pure and has no
  * translator, and the reason flows into exactly one render site, which does have one.
  */
 export function blockedReasonKey(product: Product, nav: FundNav | null): string | null {
   if (product.allocation === null) return "invest.blocked.closed";
+  if (product.allocation.caller_access === "view") return "invest.blocked.locked";
   if (nav?.stale) return "invest.blocked.staleNav";
   if (nav && toBaseUnits(nav.remaining_capacity) <= 0n) return "invest.blocked.capReached";
   return null;

@@ -91,6 +91,7 @@ export function ProductView({ service }: { service: string }) {
 
   const held = product.position && !isZero(product.position.units) ? product.position : null;
   const closed = product.allocation === null;
+  const locked = product.allocation?.caller_access === "view";
   const stale = nav?.stale ?? false;
   // `posted_at` is 0 until an operator marks the fund, which is exactly when the hub is
   // still pricing at the bootstrap NAV of 1.0.
@@ -113,7 +114,7 @@ export function ProductView({ service }: { service: string }) {
               <ProductIcon icon={product.icon} className="size-5" />
             </span>
             <h1 className="text-3xl font-semibold">{product.title}</h1>
-            <ProductBadges closed={closed} stale={stale} />
+            <ProductBadges closed={closed} locked={locked} stale={stale} />
           </div>
           <p className="font-mono-tech text-xs text-muted-foreground">{product.service}</p>
           {product.summary && <p className="max-w-xl pt-1 text-sm text-muted-foreground">{product.summary}</p>}
