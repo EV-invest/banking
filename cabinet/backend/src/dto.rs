@@ -1129,12 +1129,45 @@ impl From<bk::ConsiliumVoter> for ConsiliumVoter {
 	}
 }
 
+/// The immutable subject of a PAYMENT consilium — a projection of the order, not the
+/// order. The plane renders both ends as LABELS (the wording the approval mail carries),
+/// so each is delivered as a [`PaymentEnd`] with only `label` populated: the consilium
+/// screen and the payments screen then read one shape, and the label is the only part of
+/// it an approval is bound to.
+#[derive(Serialize)]
+pub struct ConsiliumPaymentTerms {
+	pub payment_id: String,
+	pub tier: String,
+	pub source: PaymentEnd,
+	pub destination: PaymentEnd,
+	pub amount: String,
+	pub reason: String,
+}
+
+impl From<bk::ConsiliumPaymentTerms> for ConsiliumPaymentTerms {
+	fn from(t: bk::ConsiliumPaymentTerms) -> Self {
+		Self {
+			payment_id: t.payment_id,
+			tier: t.tier,
+			source: PaymentEnd::labelled(t.source),
+			destination: PaymentEnd::labelled(t.destination),
+			amount: t.amount,
+			reason: t.reason,
+		}
+	}
+}
+
 /// One consilium in full — the owner-only view, with the per-voter breakdown.
+///
+/// Exactly one of `revenue_payout` and `payment` describes the subject. `revenue_payout`
+/// keeps its always-present shape for the screens that predate payments; `payment` is
+/// `null` on a revenue consilium, so a screen can tell the two kinds apart by it.
 #[derive(Serialize)]
 pub struct Consilium {
 	pub id: String,
 	pub state: String,
 	pub revenue_payout: RevenuePayoutTerms,
+	pub payment: Option<ConsiliumPaymentTerms>,
 	pub payload_hash: String,
 	pub initiator_user_id: String,
 	pub initiator_email: String,
@@ -1147,6 +1180,8 @@ pub struct Consilium {
 	pub expires_at: String,
 	pub decided_at: String,
 	pub executed_withdrawal_id: String,
+	/// The order an executed PAYMENT consilium carried; `null` otherwise.
+	pub executed_payment_id: Option<String>,
 	pub failure_reason: String,
 	/// Monotonic per consilium. The live page watches this and refetches when it moves.
 	pub version: String,
@@ -1159,6 +1194,7 @@ impl From<bk::Consilium> for Consilium {
 			id: c.id,
 			state,
 			revenue_payout: c.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
+			payment: c.payment.map(ConsiliumPaymentTerms::from),
 			payload_hash: c.payload_hash,
 			initiator_user_id: c.initiator_user_id,
 			initiator_email: c.initiator_email,
@@ -1171,6 +1207,7 @@ impl From<bk::Consilium> for Consilium {
 			expires_at: c.expires_at.to_string(),
 			decided_at: c.decided_at.to_string(),
 			executed_withdrawal_id: c.executed_withdrawal_id,
+			executed_payment_id: non_empty(c.executed_payment_id),
 			failure_reason: c.failure_reason,
 			version: c.version.to_string(),
 		}
@@ -1187,6 +1224,8 @@ pub struct ConsiliumInvitation {
 	pub consilium_id: String,
 	pub state: String,
 	pub revenue_payout: RevenuePayoutTerms,
+	/// Set exactly when this is a PAYMENT consilium — see [`Consilium`].
+	pub payment: Option<ConsiliumPaymentTerms>,
 	pub payload_hash: String,
 	pub initiator_email: String,
 	pub voter_email: String,
@@ -1207,6 +1246,7 @@ impl From<bk::ConsiliumInvitation> for ConsiliumInvitation {
 			consilium_id: i.consilium_id,
 			state,
 			revenue_payout: i.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
+			payment: i.payment.map(ConsiliumPaymentTerms::from),
 			payload_hash: i.payload_hash,
 			initiator_email: mask_email(&i.initiator_email),
 			voter_email: mask_email(&i.voter_email),
@@ -1232,6 +1272,225 @@ impl From<bk::SubmitDecisionResponse> for ConsiliumDecision {
 	fn from(r: bk::SubmitDecisionResponse) -> Self {
 		Self {
 			invitation: r.invitation.map(ConsiliumInvitation::from).unwrap_or_default(),
+			decided: r.decided,
+		}
+	}
+}
+
+// ── payments: the order that moves money between two named ends ──────────────
+//
+// The one family on this wire whose browser contract was fixed BEFORE the DTOs were
+// written — the payments and consent screens are built to it in parallel — and it differs
+// from the older passthroughs in two ways a reader of the neighbours will notice: unix
+// stamps cross as RFC 3339 strings rather than as unix-seconds strings, and the proto's
+// "empty means unset" sentinels cross as `null`. Both are deliberate: the screen renders
+// what it is given and never has to know which zero means "not yet".
+
+/// Unix seconds → RFC 3339 in UTC (`2025-09-12T09:30:00Z`). Written by hand because this
+/// crate declares `time` without its `formatting` feature: the feature happens to be
+/// unified in through `cookie` and `sentry-types` today, but leaning on a transitive
+/// feature would make one fixed layout hostage to a dependency's own flags.
+fn rfc3339(secs: i64) -> String {
+	let Ok(t) = time::OffsetDateTime::from_unix_timestamp(secs) else {
+		// Unrepresentable stamps cannot come from the plane (it writes `now()`); an
+		// empty string is the honest rendering of one rather than a made-up date.
+		return String::new();
+	};
+	format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", t.year(), u8::from(t.month()), t.day(), t.hour(), t.minute(), t.second())
+}
+
+/// A stamp the proto leaves at 0 while the event has not happened yet.
+fn rfc3339_opt(secs: i64) -> Option<String> {
+	(secs != 0).then(|| rfc3339(secs))
+}
+
+/// A string the proto leaves empty when the field does not apply.
+fn non_empty(value: String) -> Option<String> {
+	(!value.is_empty()).then_some(value)
+}
+
+/// One end of a payment, as every approval surface describes it. `label` is the wording
+/// shared with the mails; the structured fields let a screen link to the account, and
+/// stay EMPTY (not `null`) where they do not apply, exactly as the proto carries them.
+#[derive(Default, Serialize)]
+pub struct PaymentEnd {
+	pub label: String,
+	/// `piggybank` | `revenue` | `service` | `user`, or `external` for an address.
+	pub kind: String,
+	pub id: String,
+	pub network: String,
+	pub address: String,
+	/// What a person recognises this end BY: the receiving investor's masked mailbox, the
+	/// product's title. Never part of the digest.
+	pub detail: String,
+}
+
+impl PaymentEnd {
+	/// An end the plane rendered as words only — the consilium projection.
+	fn labelled(label: String) -> Self {
+		Self { label, ..Default::default() }
+	}
+}
+
+impl From<bk::PaymentEnd> for PaymentEnd {
+	fn from(e: bk::PaymentEnd) -> Self {
+		Self {
+			label: e.label,
+			kind: e.kind,
+			id: e.id,
+			network: e.network,
+			address: e.address,
+			detail: e.detail,
+		}
+	}
+}
+
+/// The consent seat of an investor-sourced order, as the operator surface sees it.
+#[derive(Serialize)]
+pub struct PaymentConsent {
+	/// Masked by the plane (`a***@example.com`).
+	pub subject_email: String,
+	/// `pending` | `approve` | `reject`.
+	pub decision: String,
+	pub notified: bool,
+	pub attempts_remaining: u32,
+	/// True when a pin recorded at open (the subject's token version, their mailbox) has
+	/// moved: the seat can no longer be answered or executed.
+	pub invalidated: bool,
+	pub invalidation_reason: String,
+}
+
+impl From<bk::PaymentConsent> for PaymentConsent {
+	fn from(c: bk::PaymentConsent) -> Self {
+		let decision = enum_label(c.decision().as_str_name(), "CONSENT_DECISION_");
+		Self {
+			subject_email: c.subject_email,
+			decision,
+			notified: c.notified,
+			attempts_remaining: c.attempts_remaining,
+			invalidated: c.invalidated,
+			invalidation_reason: c.invalidation_reason,
+		}
+	}
+}
+
+/// One payment order in full — the Admin/Owner view.
+#[derive(Serialize)]
+pub struct Payment {
+	pub id: String,
+	/// `pending` | `approved` | `executed` | `execution_failed` | `rejected` | `expired` |
+	/// `cancelled`.
+	pub state: String,
+	/// `internal` | `service` | `external` — derived from the destination.
+	pub tier: String,
+	pub source: PaymentEnd,
+	pub destination: PaymentEnd,
+	pub amount: String,
+	pub reason: String,
+	/// `owner_consilium` | `subject_consent` — the one requirement, read off the source.
+	pub requirement: String,
+	pub payload_hash: String,
+	pub initiator_email: String,
+	/// Set exactly when the requirement is the owner consilium.
+	pub consilium_id: Option<String>,
+	/// Set exactly when the requirement is the subject's consent.
+	pub consent: Option<PaymentConsent>,
+	pub created_at: String,
+	pub expires_at: String,
+	/// `null` while pending.
+	pub decided_at: Option<String>,
+	/// Set on EXECUTED for an external order only: an internal one settled as a ledger
+	/// transfer and records no id of its own.
+	pub executed_withdrawal_id: Option<String>,
+	pub failure_reason: Option<String>,
+	/// Monotonic per order.
+	pub version: u64,
+}
+
+impl From<bk::Payment> for Payment {
+	fn from(p: bk::Payment) -> Self {
+		let state = enum_label(p.state().as_str_name(), "PAYMENT_STATE_");
+		Self {
+			id: p.id,
+			state,
+			tier: p.tier,
+			source: p.source.map(PaymentEnd::from).unwrap_or_default(),
+			destination: p.destination.map(PaymentEnd::from).unwrap_or_default(),
+			amount: p.amount,
+			reason: p.reason,
+			requirement: p.requirement,
+			payload_hash: p.payload_hash,
+			initiator_email: p.initiator_email,
+			consilium_id: non_empty(p.consilium_id),
+			consent: p.consent.map(PaymentConsent::from),
+			created_at: rfc3339(p.created_at),
+			expires_at: rfc3339(p.expires_at),
+			decided_at: rfc3339_opt(p.decided_at),
+			executed_withdrawal_id: non_empty(p.executed_withdrawal_id),
+			failure_reason: non_empty(p.failure_reason),
+			version: p.version,
+		}
+	}
+}
+
+list_dto! { PaymentList from bk::PaymentList { items: Vec<Payment> } }
+
+/// What the emailed investor is shown before answering. Deliberately narrower than
+/// [`Payment`]: the terms they are consenting to and nothing about the operator beyond a
+/// masked address — and both addresses are masked here as well as by the plane, because
+/// this is the one payments surface reachable with no session.
+#[derive(Default, Serialize)]
+pub struct PaymentConsentInvitation {
+	pub payment_id: String,
+	pub state: String,
+	pub tier: String,
+	pub source: PaymentEnd,
+	pub destination: PaymentEnd,
+	pub amount: String,
+	pub reason: String,
+	pub payload_hash: String,
+	pub initiator_email: String,
+	pub subject_email: String,
+	pub expires_at: String,
+	/// This seat's own answer, so a reopened link shows what was already said.
+	pub decision: String,
+	pub attempts_remaining: u32,
+}
+
+impl From<bk::PaymentConsentInvitation> for PaymentConsentInvitation {
+	fn from(i: bk::PaymentConsentInvitation) -> Self {
+		let state = enum_label(i.state().as_str_name(), "PAYMENT_STATE_");
+		let decision = enum_label(i.decision().as_str_name(), "CONSENT_DECISION_");
+		Self {
+			payment_id: i.payment_id,
+			state,
+			tier: i.tier,
+			source: i.source.map(PaymentEnd::from).unwrap_or_default(),
+			destination: i.destination.map(PaymentEnd::from).unwrap_or_default(),
+			amount: i.amount,
+			reason: i.reason,
+			payload_hash: i.payload_hash,
+			initiator_email: mask_email(&i.initiator_email),
+			subject_email: mask_email(&i.subject_email),
+			expires_at: rfc3339(i.expires_at),
+			decision,
+			attempts_remaining: i.attempts_remaining,
+		}
+	}
+}
+
+/// The invitation as it stands after an answer, plus whether this answer decided the
+/// order.
+#[derive(Serialize)]
+pub struct PaymentConsentDecision {
+	pub invitation: PaymentConsentInvitation,
+	pub decided: bool,
+}
+
+impl From<bk::SubmitConsentResponse> for PaymentConsentDecision {
+	fn from(r: bk::SubmitConsentResponse) -> Self {
+		Self {
+			invitation: r.invitation.map(PaymentConsentInvitation::from).unwrap_or_default(),
 			decided: r.decided,
 		}
 	}
@@ -1585,5 +1844,88 @@ mod tests {
 		});
 		assert_eq!(invitation.initiator_email, "a***@example.com");
 		assert_eq!(invitation.voter_email, "g***@example.com");
+	}
+
+	/// The same rule on the consent page: the initiator and the subject are the only two
+	/// addresses on it, and a stranger with the link may read neither.
+	#[test]
+	fn the_consent_invitation_masks_both_addresses() {
+		let invitation = PaymentConsentInvitation::from(bk::PaymentConsentInvitation {
+			initiator_email: "ada@example.com".into(),
+			subject_email: "grace@example.com".into(),
+			..Default::default()
+		});
+		assert_eq!(invitation.initiator_email, "a***@example.com");
+		assert_eq!(invitation.subject_email, "g***@example.com");
+	}
+
+	/// The hand-written layout against known dates, including a leap day and the end of a
+	/// year — the two places a homegrown calendar goes wrong.
+	#[test]
+	fn unix_seconds_render_as_rfc3339_utc() {
+		assert_eq!(rfc3339(0), "1970-01-01T00:00:00Z");
+		assert_eq!(rfc3339(951_782_400), "2000-02-29T00:00:00Z");
+		assert_eq!(rfc3339(1_757_669_400), "2025-09-12T09:30:00Z");
+		assert_eq!(rfc3339(4_102_444_799), "2099-12-31T23:59:59Z");
+		assert_eq!(rfc3339_opt(0), None);
+		assert_eq!(rfc3339_opt(1_757_669_400).as_deref(), Some("2025-09-12T09:30:00Z"));
+	}
+
+	/// The proto's "empty means unset" sentinels cross as `null` on this family, so the
+	/// screen never has to know that `0` means "not decided" and `""` means "no consilium".
+	#[test]
+	fn a_pending_payment_carries_nulls_where_nothing_has_happened() {
+		let payment = Payment::from(bk::Payment {
+			state: bk::PaymentState::Pending as i32,
+			created_at: 1_757_669_400,
+			expires_at: 1_757_928_600,
+			..Default::default()
+		});
+		assert_eq!(payment.state, "pending");
+		assert_eq!(payment.created_at, "2025-09-12T09:30:00Z");
+		assert!(payment.decided_at.is_none());
+		assert!(payment.consilium_id.is_none() && payment.consent.is_none());
+		assert!(payment.executed_withdrawal_id.is_none() && payment.failure_reason.is_none());
+		assert_eq!(payment.version, 0);
+
+		let executed = Payment::from(bk::Payment {
+			state: bk::PaymentState::ExecutionFailed as i32,
+			consilium_id: "c-1".into(),
+			decided_at: 1_757_669_400,
+			failure_reason: "rail unconfigured".into(),
+			version: 3,
+			..Default::default()
+		});
+		assert_eq!(executed.state, "execution_failed");
+		assert_eq!(executed.consilium_id.as_deref(), Some("c-1"));
+		assert_eq!(executed.decided_at.as_deref(), Some("2025-09-12T09:30:00Z"));
+		assert_eq!(executed.failure_reason.as_deref(), Some("rail unconfigured"));
+		assert_eq!(executed.version, 3);
+	}
+
+	/// A payment consilium's ends arrive from the plane as words; they land in `label`,
+	/// and the structured fields stay empty rather than invented.
+	#[test]
+	fn a_payment_consilium_carries_its_terms_as_labelled_ends() {
+		let consilium = Consilium::from(bk::Consilium {
+			payment: Some(bk::ConsiliumPaymentTerms {
+				payment_id: "p-1".into(),
+				tier: "external".into(),
+				source: "the fund's pooled capital".into(),
+				destination: "0xabc on BEP20".into(),
+				amount: "10.00".into(),
+				reason: "rent".into(),
+			}),
+			executed_payment_id: "p-1".into(),
+			..Default::default()
+		});
+		let terms = consilium.payment.expect("a payment consilium carries its terms");
+		assert_eq!(terms.source.label, "the fund's pooled capital");
+		assert_eq!(terms.destination.label, "0xabc on BEP20");
+		assert_eq!(terms.destination.kind, "");
+		assert_eq!(consilium.executed_payment_id.as_deref(), Some("p-1"));
+
+		let revenue = Consilium::from(bk::Consilium::default());
+		assert!(revenue.payment.is_none() && revenue.executed_payment_id.is_none());
 	}
 }
