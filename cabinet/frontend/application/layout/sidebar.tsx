@@ -79,6 +79,14 @@ const ADMIN: NavItem[] = [
   { href: "/admin/fees", label: "Fees", key: "nav.fees", icon: Percent, active: (p) => p.startsWith("/admin/fees") },
 ];
 
+// A product's row owns its page AND the surfaces under it — `/invest/<service>/trade` is
+// the terminal over that product, not a different place in the rail. Matched with the
+// trailing slash so `/invest/arb` never lights the row of a product called `arbitrage`.
+function onProduct(pathname: string, service: string): boolean {
+  const href = `/invest/${encodeURIComponent(service)}`;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 // Every rail row is a hand-written Link, so keyboard focus rides on this string. It runs
 // The ring is the solid token, never a tint: at 50% the teal composites to 1.9–2.3:1 against
 // every surface in this theme, under the 3:1 SC 1.4.11 floor, where solid clears it
@@ -111,9 +119,7 @@ export function Sidebar() {
   // Which section owns the current route, and whether getting here crossed a
   // boundary. A product page belongs to no pill-owning section, so it is null and
   // the next move into one counts as a crossing.
-  const activeSection: Section | null = products.some(
-    (p) => pathname === `/invest/${encodeURIComponent(p.service)}`,
-  )
+  const activeSection: Section | null = products.some((p) => onProduct(pathname, p.service))
     ? "products"
     : FUND.some((i) => i.active(pathname))
       ? "fund"
@@ -138,7 +144,7 @@ export function Sidebar() {
               // Every row pointed at `/invest`, so naming a product in the rail took you to
               // the list of all of them. The product's own page is keyed by its service id.
               const href: `/${string}` = `/invest/${encodeURIComponent(p.service)}`;
-              const active = pathname === href;
+              const active = onProduct(pathname, p.service);
               return (
                 <Link
                   key={p.service}

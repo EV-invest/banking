@@ -31,6 +31,7 @@ import { compactUnits, formatSignedUsdt, formatUnits, formatUsdt, isNegative, is
 import { blockedReasonKey, buildProducts, companyStakeBps, type Product } from "@/views/invest/lib/product";
 import { Note, ProductBadges, Stat, SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
 import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-panels";
+import { TradeLink } from "@/views/invest/ui/trade-link";
 
 type Panel = "subscribe" | "redeem" | null;
 
@@ -120,6 +121,9 @@ export function ProductView({ service }: { service: string }) {
           {product.summary && <p className="max-w-xl pt-1 text-sm text-muted-foreground">{product.summary}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* The secondary market, beside the primary one: trading units with other holders
+              is a different act from subscribing, priced by the book rather than the NAV. */}
+          <TradeLink service={product.service} />
           {!closed && (
             <Button type="button" className={cn(TEAL_CTA)} disabled={blocked !== null} onClick={() => setPanel((p) => (p === "subscribe" ? null : "subscribe"))}>
               <Sparkles className="size-4" />

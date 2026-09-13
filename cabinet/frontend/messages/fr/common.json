@@ -27,6 +27,78 @@
     "en": "View only",
     "t": "Lecture seule"
   },
+  "admin.alloc.book.action": {
+    "en": "Book",
+    "t": "Carnet"
+  },
+  "admin.alloc.book.advanced": {
+    "en": "Advanced",
+    "t": "Avancé"
+  },
+  "admin.alloc.book.closedHint": {
+    "en": "Orders are refused; the book stays readable",
+    "t": "Les ordres sont refusés ; le carnet reste consultable"
+  },
+  "admin.alloc.book.field.lot": {
+    "en": "Lot size (units)",
+    "t": "Taille de lot (parts)"
+  },
+  "admin.alloc.book.field.open": {
+    "en": "Book open",
+    "t": "Carnet ouvert"
+  },
+  "admin.alloc.book.field.slippage": {
+    "en": "Market slippage (%)",
+    "t": "Glissement marché (%)"
+  },
+  "admin.alloc.book.field.takerFee": {
+    "en": "Taker fee (%)",
+    "t": "Frais taker (%)"
+  },
+  "admin.alloc.book.field.tick": {
+    "en": "Price tick (USDT)",
+    "t": "Pas de prix (USDT)"
+  },
+  "admin.alloc.book.keepHint": {
+    "en": "Leave empty to keep the current value.",
+    "t": "Laissez vide pour conserver la valeur actuelle."
+  },
+  "admin.alloc.book.note": {
+    "en": "The book is the secondary market in this product's units: holders trade with each other at the book's price, not at NAV. Opening it needs no valuation.",
+    "t": "Le carnet est le marché secondaire des parts de ce produit : les porteurs négocient entre eux au prix du carnet, pas à la VL. L'ouvrir ne demande aucune valorisation."
+  },
+  "admin.alloc.book.openHint": {
+    "en": "Holders can place and fill orders",
+    "t": "Les porteurs peuvent passer et exécuter des ordres"
+  },
+  "admin.alloc.book.problem.decimal": {
+    "en": "Enter a decimal number",
+    "t": "Saisissez un nombre décimal"
+  },
+  "admin.alloc.book.problem.fee": {
+    "en": "Enter a percent between 0 and 100 with up to two decimals",
+    "t": "Saisissez un pourcentage entre 0 et 100 avec au plus deux décimales"
+  },
+  "admin.alloc.book.saved": {
+    "en": "Book terms saved.",
+    "t": "Conditions du carnet enregistrées."
+  },
+  "admin.alloc.book.slippageHint": {
+    "en": "How far past the best level a market order may sweep.",
+    "t": "Jusqu'où un ordre au marché peut balayer au-delà du meilleur niveau."
+  },
+  "admin.alloc.book.submit": {
+    "en": "Save book terms",
+    "t": "Enregistrer les conditions du carnet"
+  },
+  "admin.alloc.book.takerFeeHint": {
+    "en": "Charged to the side that crosses the spread, in USDT on the order value.",
+    "t": "Facturés au côté qui croise l'écart, en USDT sur le montant de l'ordre."
+  },
+  "admin.alloc.book.title": {
+    "en": "Order book",
+    "t": "Carnet d'ordres"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Fermer"
@@ -2439,6 +2511,10 @@
     "en": "Top up",
     "t": "Alimenter"
   },
+  "invest.trade": {
+    "en": "Trade",
+    "t": "Négocier"
+  },
   "invest.units": {
     "en": "Units",
     "t": "Parts"
@@ -4166,6 +4242,338 @@
   "tips.wallet.withdraw.you-receive.title": {
     "en": "You will receive",
     "t": "Vous recevrez"
+  },
+  "trade.book.col.price": {
+    "en": "Price",
+    "t": "Prix"
+  },
+  "trade.book.col.size": {
+    "en": "Size",
+    "t": "Quantité"
+  },
+  "trade.book.col.total": {
+    "en": "Total",
+    "t": "Total"
+  },
+  "trade.book.empty": {
+    "en": "Nothing resting",
+    "t": "Aucun ordre"
+  },
+  "trade.book.emptyHint": {
+    "en": "No holder has quoted yet. The first limit order opens the book.",
+    "t": "Aucun porteur n'a encore coté. Le premier ordre à cours limité ouvre le carnet."
+  },
+  "trade.book.levelOrders": {
+    "en": "{n, plural, one {# order} other {# orders}}",
+    "t": "{n, plural, one {# ordre} many {# ordres} other {# ordres}}"
+  },
+  "trade.book.oneSided": {
+    "en": "One-sided",
+    "t": "Un seul côté"
+  },
+  "trade.book.spread": {
+    "en": "Spread {spread}",
+    "t": "Écart {spread}"
+  },
+  "trade.book.tape": {
+    "en": "Trades",
+    "t": "Transactions"
+  },
+  "trade.book.title": {
+    "en": "Book",
+    "t": "Carnet"
+  },
+  "trade.chart.empty": {
+    "en": "No trades yet — the chart draws from the first fill.",
+    "t": "Aucune transaction pour l'instant — le graphique commence à la première exécution."
+  },
+  "trade.chart.resolution": {
+    "en": "Candle size",
+    "t": "Taille des bougies"
+  },
+  "trade.chart.title": {
+    "en": "Chart",
+    "t": "Graphique"
+  },
+  "trade.form.available": {
+    "en": "Available",
+    "t": "Disponible"
+  },
+  "trade.form.buy": {
+    "en": "Buy",
+    "t": "Acheter"
+  },
+  "trade.form.closed": {
+    "en": "The book is closed. Orders are refused until an operator opens it.",
+    "t": "Le carnet est fermé. Les ordres sont refusés tant qu'un opérateur ne l'ouvre pas."
+  },
+  "trade.form.duplicateTitle": {
+    "en": "Already submitted",
+    "t": "Déjà envoyé"
+  },
+  "trade.form.failedTitle": {
+    "en": "Order failed",
+    "t": "Échec de l'ordre"
+  },
+  "trade.form.fee": {
+    "en": "Taker fee",
+    "t": "Frais taker"
+  },
+  "trade.form.inOrders": {
+    "en": "In orders",
+    "t": "Dans des ordres"
+  },
+  "trade.form.kind": {
+    "en": "Order type",
+    "t": "Type d'ordre"
+  },
+  "trade.form.limit": {
+    "en": "Limit",
+    "t": "Limite"
+  },
+  "trade.form.locked": {
+    "en": "Trading isn't open to you on this product. Ask an operator if you should have access.",
+    "t": "La négociation de ce produit ne vous est pas ouverte. Demandez à un opérateur si vous devriez y avoir accès."
+  },
+  "trade.form.market": {
+    "en": "Market",
+    "t": "Marché"
+  },
+  "trade.form.notional": {
+    "en": "Order value",
+    "t": "Montant de l'ordre"
+  },
+  "trade.form.notionalEstimate": {
+    "en": "Est. value",
+    "t": "Montant estimé"
+  },
+  "trade.form.placed.cancelled": {
+    "en": "Nothing crossed, so the order was cancelled.",
+    "t": "Rien n'a croisé, l'ordre a été annulé."
+  },
+  "trade.form.placed.filled": {
+    "en": "Filled {filled} at an average of {avg} USDT.",
+    "t": "{filled} exécuté à {avg} USDT en moyenne."
+  },
+  "trade.form.placed.partial": {
+    "en": "Filled {filled} of {size} at {avg} USDT; the rest was cancelled.",
+    "t": "{filled} sur {size} exécuté à {avg} USDT ; le reste a été annulé."
+  },
+  "trade.form.placed.rejected": {
+    "en": "The ledger refused the order: {reason}",
+    "t": "Le registre a refusé l'ordre : {reason}"
+  },
+  "trade.form.placed.resting": {
+    "en": "Resting on the book: {filled} of {size} filled so far.",
+    "t": "Dans le carnet : {filled} sur {size} exécuté pour l'instant."
+  },
+  "trade.form.price": {
+    "en": "Price (USDT)",
+    "t": "Prix (USDT)"
+  },
+  "trade.form.problem.funds": {
+    "en": "More than you have available",
+    "t": "Plus que ce dont vous disposez"
+  },
+  "trade.form.problem.lot": {
+    "en": "Size must be a multiple of {lot}",
+    "t": "La quantité doit être un multiple de {lot}"
+  },
+  "trade.form.problem.noQuote": {
+    "en": "Nothing on the other side to trade against — place a limit order instead.",
+    "t": "Rien en face pour exécuter — passez plutôt un ordre à cours limité."
+  },
+  "trade.form.problem.price": {
+    "en": "Enter a price above zero",
+    "t": "Saisissez un prix supérieur à zéro"
+  },
+  "trade.form.problem.size": {
+    "en": "Enter a size above zero",
+    "t": "Saisissez une quantité supérieure à zéro"
+  },
+  "trade.form.problem.tick": {
+    "en": "Price must be a multiple of {tick}",
+    "t": "Le prix doit être un multiple de {tick}"
+  },
+  "trade.form.refusedBody": {
+    "en": "{detail} If you think you should be able to trade this product, ask an operator.",
+    "t": "{detail} Si vous pensez pouvoir négocier ce produit, demandez à un opérateur."
+  },
+  "trade.form.refusedTitle": {
+    "en": "Order refused",
+    "t": "Ordre refusé"
+  },
+  "trade.form.sell": {
+    "en": "Sell",
+    "t": "Vendre"
+  },
+  "trade.form.size": {
+    "en": "Size (units)",
+    "t": "Quantité (parts)"
+  },
+  "trade.form.submitBuy": {
+    "en": "Place buy order",
+    "t": "Passer l'ordre d'achat"
+  },
+  "trade.form.submitSell": {
+    "en": "Place sell order",
+    "t": "Passer l'ordre de vente"
+  },
+  "trade.form.tif": {
+    "en": "Time in force",
+    "t": "Validité"
+  },
+  "trade.form.tifLabel.alo": {
+    "en": "Post-only",
+    "t": "Maker uniquement"
+  },
+  "trade.form.tifLabel.gtc": {
+    "en": "Good till cancelled",
+    "t": "Jusqu'à annulation"
+  },
+  "trade.form.tifLabel.ioc": {
+    "en": "Immediate or cancel",
+    "t": "Immédiat ou annulé"
+  },
+  "trade.orders.col.avgFill": {
+    "en": "Avg fill",
+    "t": "Prix moyen"
+  },
+  "trade.orders.col.fee": {
+    "en": "Fee",
+    "t": "Frais"
+  },
+  "trade.orders.col.filled": {
+    "en": "Filled",
+    "t": "Exécuté"
+  },
+  "trade.orders.col.role": {
+    "en": "Role",
+    "t": "Rôle"
+  },
+  "trade.orders.col.side": {
+    "en": "Side",
+    "t": "Sens"
+  },
+  "trade.orders.col.state": {
+    "en": "Status",
+    "t": "Statut"
+  },
+  "trade.orders.col.time": {
+    "en": "Time",
+    "t": "Heure"
+  },
+  "trade.orders.col.type": {
+    "en": "Type",
+    "t": "Type"
+  },
+  "trade.orders.emptyFills": {
+    "en": "No fills yet",
+    "t": "Aucune exécution pour l'instant"
+  },
+  "trade.orders.emptyHistory": {
+    "en": "No orders yet",
+    "t": "Aucun ordre pour l'instant"
+  },
+  "trade.orders.emptyOpen": {
+    "en": "No open orders",
+    "t": "Aucun ordre ouvert"
+  },
+  "trade.orders.fills": {
+    "en": "Fills",
+    "t": "Exécutions"
+  },
+  "trade.orders.history": {
+    "en": "Order history",
+    "t": "Historique"
+  },
+  "trade.orders.maker": {
+    "en": "Maker",
+    "t": "Maker"
+  },
+  "trade.orders.open": {
+    "en": "Open orders",
+    "t": "Ordres ouverts"
+  },
+  "trade.orders.taker": {
+    "en": "Taker",
+    "t": "Taker"
+  },
+  "trade.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Annulé"
+  },
+  "trade.state.filled": {
+    "en": "Filled",
+    "t": "Exécuté"
+  },
+  "trade.state.open": {
+    "en": "Open",
+    "t": "Ouvert"
+  },
+  "trade.state.partialCancelled": {
+    "en": "Partially filled, rest cancelled",
+    "t": "Partiellement exécuté, reste annulé"
+  },
+  "trade.state.partiallyFilled": {
+    "en": "Partially filled",
+    "t": "Partiellement exécuté"
+  },
+  "trade.state.rejected": {
+    "en": "Rejected",
+    "t": "Refusé"
+  },
+  "trade.stream.live": {
+    "en": "Live",
+    "t": "En direct"
+  },
+  "trade.stream.paused": {
+    "en": "Paused",
+    "t": "En pause"
+  },
+  "trade.stream.polling": {
+    "en": "Polling",
+    "t": "Interrogation"
+  },
+  "trade.stream.reconnecting": {
+    "en": "Reconnecting",
+    "t": "Reconnexion"
+  },
+  "trade.tape.col.time": {
+    "en": "Time",
+    "t": "Heure"
+  },
+  "trade.tape.empty": {
+    "en": "No trades yet",
+    "t": "Aucune transaction pour l'instant"
+  },
+  "trade.ticker.change": {
+    "en": "24h change",
+    "t": "Var. 24 h"
+  },
+  "trade.ticker.last": {
+    "en": "Last",
+    "t": "Dernier"
+  },
+  "trade.ticker.mid": {
+    "en": "Mid",
+    "t": "Milieu"
+  },
+  "trade.ticker.nav": {
+    "en": "NAV",
+    "t": "VL"
+  },
+  "trade.ticker.navHint": {
+    "en": "The book price is what holders trade at; NAV is the fund's own mark.",
+    "t": "Le prix du carnet est celui auquel les porteurs négocient ; la VL est la valorisation propre du fonds."
+  },
+  "trade.ticker.spread": {
+    "en": "Spread",
+    "t": "Écart"
+  },
+  "trade.ticker.volume": {
+    "en": "24h volume",
+    "t": "Volume 24 h"
   },
   "ui.account": {
     "en": "Account",
