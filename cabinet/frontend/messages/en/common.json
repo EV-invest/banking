@@ -486,6 +486,7 @@
   "consent.reasonLabel": "Reason given by {initiator}",
   "consent.reject": "Reject",
   "consent.title": "Your money is asked to move",
+  "consent.unavailableBody": "The terms of this payment didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.",
   "consent.yourMoney": "Whose money",
   "consilium.admission.cancel": "Withdraw this proposal",
   "consilium.admission.expires": "Expires {at} · {left}",

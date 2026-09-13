@@ -729,7 +729,7 @@
   },
   "admin.payments.noUsersHint": {
     "en": "Try another part of the email address.",
-    "t": "Essayez une autre partie de l’adresse e-mail."
+    "t": "Essayez une autre partie de l'adresse e-mail."
   },
   "admin.payments.none": {
     "en": "No payments yet",
@@ -1662,6 +1662,10 @@
   "consent.title": {
     "en": "Your money is asked to move",
     "t": "On demande à déplacer votre argent"
+  },
+  "consent.unavailableBody": {
+    "en": "The terms of this payment didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.",
+    "t": "Les conditions de ce paiement ne sont pas arrivées : il n'y a donc rien à accepter ici et aucune décision n'est proposée. Le problème vient de chez nous, pas de votre lien. Réessayez dans un instant."
   },
   "consent.yourMoney": {
     "en": "Whose money",

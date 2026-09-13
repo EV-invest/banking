@@ -1663,6 +1663,10 @@
     "en": "Your money is asked to move",
     "t": "Có yêu cầu chuyển tiền của bạn"
   },
+  "consent.unavailableBody": {
+    "en": "The terms of this payment didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.",
+    "t": "Các điều khoản của khoản thanh toán này chưa tải được, nên ở đây không có gì để đồng ý và không có quyết định nào được đưa ra. Đây là sự cố phía chúng tôi, không phải do liên kết của bạn. Hãy thử lại sau giây lát."
+  },
   "consent.yourMoney": {
     "en": "Whose money",
     "t": "Tiền của ai"

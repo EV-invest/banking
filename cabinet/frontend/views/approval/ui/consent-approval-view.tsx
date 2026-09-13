@@ -61,7 +61,11 @@ export function ConsentApprovalView({ token }: { token: string }) {
     );
   }
   if (!renderablePayment(invitation)) {
-    return <ApprovalPage><ApprovalUnrenderable onRetry={() => void summary.refresh()} retrying={summary.isValidating} /></ApprovalPage>;
+    return (
+      <ApprovalPage>
+        <ApprovalUnrenderable description={t("consent.unavailableBody")} onRetry={() => void summary.refresh()} retrying={summary.isValidating} />
+      </ApprovalPage>
+    );
   }
 
   const burned = !settled && (invitation.attempts_remaining ?? 0) <= 0;

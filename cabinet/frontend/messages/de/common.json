@@ -1663,6 +1663,10 @@
     "en": "Your money is asked to move",
     "t": "Ihr Geld soll bewegt werden"
   },
+  "consent.unavailableBody": {
+    "en": "The terms of this payment didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.",
+    "t": "Die Bedingungen dieser Zahlung sind nicht angekommen, also gibt es hier nichts, dem Sie zustimmen könnten, und keine Entscheidung wird angeboten. Das Problem liegt bei uns, nicht an Ihrem Link. Versuchen Sie es gleich noch einmal."
+  },
   "consent.yourMoney": {
     "en": "Whose money",
     "t": "Wessen Geld"

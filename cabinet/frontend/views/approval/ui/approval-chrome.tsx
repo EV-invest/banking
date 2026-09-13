@@ -317,11 +317,14 @@ export function ApprovalUnreachable({ onRetry, retrying }: { onRetry: () => void
  * network level, so "try again" is not the whole story — what matters is that no decision
  * is being offered, because there is nothing on screen to decide about. An approval page
  * that cannot show the amount and the address must not show buttons (policy 12–13).
+ *
+ * The consent page passes its own body, as with {@link ApprovalBurned}: the default
+ * speaks of a payout, and the investor's page is about a payment of their own money.
  */
-export function ApprovalUnrenderable({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
+export function ApprovalUnrenderable({ description, onRetry, retrying }: { description?: string; onRetry: () => void; retrying: boolean }) {
   const t = useT();
   return (
-    <ApprovalOutcome icon={<Unplug />} title={t("approval.unavailableTitle")} description={t("approval.unavailableBody")}>
+    <ApprovalOutcome icon={<Unplug />} title={t("approval.unavailableTitle")} description={description ?? t("approval.unavailableBody")}>
       <Button variant="outline" onClick={onRetry} disabled={retrying}>
         {retrying && <Loader2 className="size-4 animate-spin" />}
         {t("status.tryAgain")}

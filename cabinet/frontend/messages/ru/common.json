@@ -1947,6 +1947,10 @@
     "en": "Your money is asked to move",
     "t": "Ваши деньги просят перевести"
   },
+  "consent.unavailableBody": {
+    "en": "The terms of this payment didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.",
+    "t": "Условия этого платежа не загрузились, поэтому здесь не с чем соглашаться и решение не предлагается. Это проблема на нашей стороне, а не с вашей ссылкой. Попробуйте ещё раз через минуту."
+  },
   "consent.yourMoney": {
     "en": "Whose money",
     "t": "Чьи деньги"
