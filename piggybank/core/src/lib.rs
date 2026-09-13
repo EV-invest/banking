@@ -18,17 +18,18 @@
 //!   infrastructure  — driven adapters (Postgres control plane, TigerBeetle ledger,
 //!                     telemetry)
 //!
-//! The money plane (balance, subscriptions, redemptions, withdrawals) is implemented
-//! end to end through these layers; remaining domain areas stay documented
-//! placeholders until a feature explicitly asks.
+//! The money plane (balance, subscriptions, redemptions, withdrawals, the allocation
+//! book) is implemented end to end through these layers; remaining domain areas stay
+//! documented placeholders until a feature explicitly asks.
 
 use std::sync::Arc;
 
-use domain::money::Network;
+use application::book::BookFeed;
+use domain::{book::MatchingEngine, money::Network};
 use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use ports::{
-	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository,
+	AllocationRegistry, BookStore, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, RedemptionRepository, SubscriptionRepository,
 	UnitIssuanceRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 };
 use sqlx::PgPool;
@@ -73,6 +74,14 @@ pub struct AppState {
 	pub issuances: Arc<dyn UnitIssuanceRepository>,
 	/// The `redemptions` aggregate's driven port (the accept-and-queue saga).
 	pub redemptions: Arc<dyn RedemptionRepository>,
+	/// The allocation book — orders, fills and per-product terms (Postgres control
+	/// plane); the escrow and the settlement of every fill go through the relay.
+	pub book: Arc<dyn BookStore>,
+	/// The matching rule the book runs under its write lock. Pure; wired here so the
+	/// composition root, not the store, decides how orders match.
+	pub book_engine: Arc<dyn MatchingEngine>,
+	/// The in-process fan-out every `WatchBook` subscriber hangs on.
+	pub book_feed: Arc<BookFeed>,
 	/// The aggregate-less company-money facts (seed capital, deposit gate) + outbox.
 	pub deposits: Arc<dyn Deposits>,
 	/// Fund valuation marks → the derived NAV (the operator-posted AUM history).
@@ -126,6 +135,9 @@ impl AppState {
 		subscriptions: Arc<dyn SubscriptionRepository>,
 		issuances: Arc<dyn UnitIssuanceRepository>,
 		redemptions: Arc<dyn RedemptionRepository>,
+		book: Arc<dyn BookStore>,
+		book_engine: Arc<dyn MatchingEngine>,
+		book_feed: Arc<BookFeed>,
 		deposits: Arc<dyn Deposits>,
 		nav: Arc<dyn NavMarks>,
 		positions: Arc<dyn FundPositionReader>,
@@ -151,6 +163,9 @@ impl AppState {
 			subscriptions,
 			issuances,
 			redemptions,
+			book,
+			book_engine,
+			book_feed,
 			deposits,
 			nav,
 			positions,

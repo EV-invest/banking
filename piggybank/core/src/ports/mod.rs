@@ -22,8 +22,12 @@
 //!
 //! [`UnitIssuanceRepository`] records an operator's in-kind mint — units to an investor
 //! or to the company with no cash leg — the one supply path beside a subscription.
+//!
+//! [`BookStore`] is the allocation book — orders, fills, the per-product terms — one port
+//! for the one transaction a placement is.
 
 pub mod allocations;
+pub mod book;
 pub mod consilium;
 pub mod custody;
 pub mod deposit_addresses;
@@ -42,6 +46,7 @@ pub mod withdrawals;
 
 pub use allocations::{AllocationAccessGrant, AllocationRecord, AllocationRegistry};
 use async_trait::async_trait;
+pub use book::{BookDepth, BookLevel, BookPolicyRecord, BookStore, Candle, CancelOutcome, OrderRecord, PlaceOutcome, TradeRecord, UserTrade};
 pub use consilium::ConsiliumRepository;
 pub use custody::{BroadcastRequest, Custody, CustodyError};
 pub use deposit_addresses::DepositAddresses;

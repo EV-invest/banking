@@ -32,10 +32,14 @@
 //! [`issuance`] is the operator's in-kind mint — units to an investor or to the company
 //! with no cash leg — the one supply path beside a subscription, run through the same
 //! registry, NAV and cap gates.
+//! [`book`] is the secondary market: holders trading an allocation's units with each
+//! other. It gates on the registry's access axis but not its lifecycle, escrows what an
+//! order commits through the relay, and settles each fill delivery-versus-payment.
 
 pub mod allocations;
 pub mod auth_sync;
 pub mod balance;
+pub mod book;
 pub mod consilium;
 pub mod fees;
 pub mod funds;

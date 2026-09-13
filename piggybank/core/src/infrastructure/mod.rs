@@ -24,6 +24,9 @@
 //!   basis: settle what the old basis accrued before writing the new one.
 //! - [`fee_sweeper`] — the periodic worker that assesses management + performance fees
 //!   against every unit-holding position that is due.
+//! - [`book`] — Postgres adapter for the allocation book: the single-writer placement
+//!   transaction (advisory lock, the pure matcher, orders + trades + outbox facts), the
+//!   depth/tape/candle reads, and the per-product policy.
 //! - [`operation_feed`] — the read-side merge of the four money projections into one
 //!   time-ordered activity timeline (query side only; writes nothing).
 //! - [`outflow`] — the `OutflowPolicy` adapter: the read-only kill-switch plus the
@@ -35,6 +38,7 @@
 //!   network. Per-protocol RPC, node error wording and log prefixes stay in the rail modules.
 
 pub mod allocations;
+pub mod book;
 pub mod bridge;
 pub mod config_drift;
 pub mod consilium;
