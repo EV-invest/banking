@@ -654,13 +654,13 @@ async fn every_access_level_the_domain_knows_is_accepted_by_the_column() {
 	let Some(h) = harness().await else { return };
 	let service = unique_service();
 	register(&h, &service).await;
-	// The CHECK in 0030 spells the same strings as the enum; a level the domain knows
+	// The CHECK in 0033 spells the same strings as the enum; a level the domain knows
 	// but the column refuses would surface as `internal` on an operator's command.
 	for level in [AllocationAccess::Hidden, AllocationAccess::View, AllocationAccess::Invest] {
 		h.allocations
 			.set_access(&service, level)
 			.await
-			.unwrap_or_else(|err| panic!("the column refuses {level:?}, which the domain calls legal — migration 0030 is missing it: {err}"));
+			.unwrap_or_else(|err| panic!("the column refuses {level:?}, which the domain calls legal — migration 0033 is missing it: {err}"));
 		assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().access(), level);
 	}
 	let err = sqlx::query("UPDATE allocations SET access = 'public' WHERE service = $1")
