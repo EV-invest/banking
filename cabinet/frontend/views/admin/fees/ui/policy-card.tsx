@@ -13,7 +13,7 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Button, Card, CardContent } from "@evinvest/uikit";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@evinvest/uikit";
 
 import { scheduleFeePolicy } from "@/entities/admin/api/admin-client";
 import type { FeePolicy, FeePolicyChange } from "@/shared/contracts/admin";
@@ -69,7 +69,7 @@ export function PolicyCard({
   // clock that ticked on every keystroke would move them under the operator. A card lives
   // for one fund's one change, so it is never stale by more than that.
   const [now] = useState(() => Math.floor(Date.now() / 1000));
-  const titleRef = useRef<HTMLParagraphElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!focusTitle) return;
     titleRef.current?.focus();
@@ -125,17 +125,18 @@ export function PolicyCard({
   }
 
   return (
-    <Card className="h-fit">
-      <CardContent className="space-y-4 py-6">
-        <div className="space-y-1">
-          <p ref={titleRef} tabIndex={-1} className="rounded-sm text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            {t("admin.fees.terms")}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {current ? t("admin.fees.inForce", { version: current.version, since: formatMoment(current.effective_from, locale) }) : t("admin.fees.notConfigured")}
-          </p>
-        </div>
-
+    <Card className="h-fit gap-4">
+      <CardHeader className="gap-1">
+        {/* A heading, not a bare title: focus lands here after a cancel, and a screen
+            reader should say what it landed on. `CardTitle` renders a div. */}
+        <CardTitle ref={titleRef} tabIndex={-1} role="heading" aria-level={2} className="rounded-sm text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {t("admin.fees.terms")}
+        </CardTitle>
+        <CardDescription className="text-xs text-muted-foreground">
+          {current ? t("admin.fees.inForce", { version: current.version, since: formatMoment(current.effective_from, locale) }) : t("admin.fees.notConfigured")}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <TermsFields draft={draft} bps={bps} onChange={edit} disabled={blocked} />
         <ScheduleFields
           draft={draft}
