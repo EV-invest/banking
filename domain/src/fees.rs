@@ -244,6 +244,27 @@ impl FeePolicy {
 		self.crystallization
 	}
 
+	/// Rebuild terms READ BACK from storage. Held to the vocabulary and to 100% — never to
+	/// the ceilings [`Self::new`] enforces: a row written before the ceilings existed must
+	/// still be readable, or the one policy #233 is about becomes the one policy the sweeper
+	/// cannot price, the promotion cannot settle at the old rate, and nobody can lower. The
+	/// ceiling is enforced on the way IN (every new change goes through [`Self::new`]), and
+	/// what is already in force is priced as it is until it is superseded.
+	pub fn from_stored(management_bps: u32, performance_bps: u32, hurdle_bps: u32, basis: ManagementBasis, crystallization: CrystallizationPeriod) -> Result<Self, DomainError> {
+		for (label, bps) in [("management", management_bps), ("performance", performance_bps), ("hurdle", hurdle_bps)] {
+			if u128::from(bps) > BPS {
+				return Err(DomainError::Validation(format!("stored {label} rate exceeds 100%: {bps} bps")));
+			}
+		}
+		Ok(Self {
+			management_bps,
+			performance_bps,
+			hurdle_bps,
+			basis,
+			crystallization,
+		})
+	}
+
 	/// Whether this policy charges anything at all.
 	pub const fn is_zero(&self) -> bool {
 		self.management_bps == 0 && self.performance_bps == 0
@@ -303,18 +324,27 @@ impl ChangeRequirement {
 }
 
 /// The one rule deciding who approves a change of terms: the owners, exactly when the
-/// change TIGHTENS the terms AND lands OUTSIDE the house envelope. Everything else — a
-/// loosening, or a tightening that stays within what the prospectus promised — is an
-/// administrator's call. `None` for `current` is a product with no policy yet, which
+/// change TIGHTENS the terms AND lands OUTSIDE the house envelope — or LOWERS the hurdle,
+/// wherever the terms sit. Everything else — a loosening, or a tightening that stays within
+/// what the prospectus promised — is an administrator's call. `None` for `current` is a product with no policy yet, which
 /// charges nothing, so any first policy with a positive rate tightens.
 pub fn requirement_for(current: Option<&FeePolicy>, next: &FeePolicy) -> ChangeRequirement {
 	let current = current.copied().unwrap_or(FeePolicy::NONE);
-	if next.tightens_from(&current) && !next.within_house_envelope() {
+	// A lowered hurdle is the one tightening the envelope does not see — the envelope leaves
+	// the hurdle free because a hurdle only ever helps the investor — so it is named here:
+	// taking a promised hurdle away is a new bargain wherever the other legs sit.
+	let hurdle_lowered = next.hurdle_bps < current.hurdle_bps;
+	if hurdle_lowered || (next.tightens_from(&current) && !next.within_house_envelope()) {
 		ChangeRequirement::OwnerConsilium
 	} else {
 		ChangeRequirement::Admin
 	}
 }
+
+/// The furthest ahead a change may be asked to bind: 366 days. Far enough for any real
+/// notice; near enough that a change cannot sit `scheduled` for years, quietly outliving
+/// the terms it was proposed against.
+pub const MAX_EFFECTIVE_FROM_HORIZON_SECS: i64 = 366 * 24 * 60 * 60;
 
 /// When a change scheduled at `scheduled_at` may bind the holders: never before the
 /// operator's own `requested_effective_from`, and — while anyone actually holds units —
@@ -1092,6 +1122,11 @@ mod tests {
 		assert!(FeePolicy::new(0, 0, 10_001, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual).is_err());
 		// The ceilings themselves, and a full hurdle, are legal terms.
 		assert!(FeePolicy::new(MAX_MANAGEMENT_BPS, MAX_PERFORMANCE_BPS, 10_000, ManagementBasis::MarketValue, CrystallizationPeriod::Monthly).is_ok());
+		// A row written before the ceilings still reads back — the sweeper must price it and
+		// the promotion must settle it — but nothing above 100% ever did or does.
+		let legacy = FeePolicy::from_stored(10_000, 10_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual).unwrap();
+		assert_eq!(legacy.management_bps(), 10_000);
+		assert!(FeePolicy::from_stored(10_001, 0, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual).is_err());
 	}
 
 	fn policy(management: u32, performance: u32, hurdle: u32, basis: ManagementBasis, period: CrystallizationPeriod) -> FeePolicy {
@@ -1169,6 +1204,16 @@ mod tests {
 		assert_eq!(requirement_for(Some(&dear), &policy(400, 4_000, 500, MarketValue, Monthly)), ChangeRequirement::Admin);
 		// Re-stating the same out-of-envelope terms tightens nothing.
 		assert_eq!(requirement_for(Some(&dear), &dear), ChangeRequirement::Admin);
+		// LOWERING A HURDLE is the owners' call wherever the terms sit — inside the envelope,
+		// which is blind to the hurdle, as much as outside it. A promised hurdle taken away is
+		// a new bargain.
+		let hurdled = policy(200, 2_000, 800, InvestedCapital, Annual);
+		assert_eq!(requirement_for(Some(&hurdled), &policy(200, 2_000, 700, InvestedCapital, Annual)), ChangeRequirement::OwnerConsilium);
+		assert_eq!(requirement_for(Some(&hurdled), &policy(100, 1_000, 0, InvestedCapital, Annual)), ChangeRequirement::OwnerConsilium, "even when every other leg loosens");
+		let hurdled_dear = policy(400, 4_000, 500, MarketValue, Monthly);
+		assert_eq!(requirement_for(Some(&hurdled_dear), &dear), ChangeRequirement::OwnerConsilium);
+		// Keeping or raising the hurdle changes nothing about the rule.
+		assert_eq!(requirement_for(Some(&hurdled), &policy(200, 2_000, 900, InvestedCapital, Annual)), ChangeRequirement::Admin);
 	}
 
 	#[test]
