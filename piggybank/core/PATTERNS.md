@@ -357,8 +357,28 @@ closes only by its own policy (`book_policies.book_open`, opt-in per product lik
 no row is a closed book). Placing is also refused under the read-only kill-switch and for a
 frozen owner (the [`OutflowPolicy`] facts, checked in the use case as they are at dispatch);
 cancelling never is. The policy — `book_open`, `taker_fee_bps`, `price_tick` (default
-`0.01`), `lot_size` (default `0.0001`), `market_slippage_bps` (default 500) — is set by
-`AllocationManage`.
+`0.01`), `lot_size` (default `0.0001`), `market_slippage_bps` (default 500),
+`allow_unbacked_trading` (default `false`) — is set by `AllocationManage`.
+
+**Unbacked trading acknowledgement.** On an `in_kind` product (see
+[In-kind issuance](#in-kind-issuance--the-companys-stake-domainissuance-allocationsserviceissueunits))
+a redemption is refused and the book is the holders' only exit — which makes the book the
+place a buyer pays cash for a claim on an asset the fund holds no cash for, one they cannot
+redeem. That is a decision an operator makes knowingly, so the policy carries
+`allow_unbacked_trading` and one domain check, `BookPolicy::ensure_tradable_for(service,
+backing)`, runs at **two** gates: `set_policy` refuses to open the book on an `in_kind`
+product without the flag (`Precondition`, nothing written — the console's early, legible
+refusal), and `place_order` refuses every order on an `in_kind` product's open book without
+it (the backstop). The second gate is not redundant: the backing flips `cash → in_kind` on
+the first in-kind mint, which can land *after* the book opened, and a book that kept
+trading would then sell unbacked units nobody acknowledged — so the order is refused with
+the reason rather than filled quietly. The flag is harmless on a `cash` product (it
+acknowledges in advance) and the terminal shows buyers a notice when it is set. Migration
+`0040` backfills it `true` for every book that was open on an `in_kind` product at the
+deploy (`service_arb` in production): those were trading unbacked units with the operator's
+knowledge, and a deploy must not close a book nobody decided to close. A pre-0040 pod that
+UPSERTs a policy mid-rollout resets the flag; the new pod then refuses that product's orders
+with the reason and the operator sets it again — short and recoverable.
 
 **An order is an escrow in the ledger.** Two per-user accounts hold what an order has
 committed: `BookShares(service, user)` (64, debit-normal, Share ledger,
