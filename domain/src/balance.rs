@@ -316,6 +316,12 @@ pub enum TransferCode {
 	BookFill,
 	/// The taker's fee on a trade, into `FeeRevenue`, in the same linked batch as the fill.
 	BookFee,
+	/// Part of the company's in-kind stake handed to a named holder: `Dr UserShares /
+	/// Cr CompanyShares`, a move *between holders* like a fee clawback in reverse.
+	/// `SharesOutstanding` never moves, so it is neither a [`Self::UnitIssue`] (which
+	/// grows supply) nor a [`Self::BookFill`] (which is paid for) — reconciliation must
+	/// be able to read a company stake shrinking with nothing minted or sold.
+	CompanyStakeTransfer,
 }
 
 impl TransferCode {
@@ -344,6 +350,7 @@ impl TransferCode {
 			Self::BookRelease => 49,
 			Self::BookFill => 50,
 			Self::BookFee => 51,
+			Self::CompanyStakeTransfer => 52,
 		}
 	}
 }
@@ -653,6 +660,7 @@ mod tests {
 			TransferCode::BookRelease,
 			TransferCode::BookFill,
 			TransferCode::BookFee,
+			TransferCode::CompanyStakeTransfer,
 		]
 		.map(TransferCode::code);
 		let mut sorted = transfer_codes;
