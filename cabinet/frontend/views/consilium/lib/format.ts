@@ -82,14 +82,15 @@ export function stateLabel(state: string | undefined, t: Translate): string {
   return KNOWN_STATES.has(key) ? t(`consilium.state.${key}`) : (state ?? "—");
 }
 
-// ── the three kinds of consilium ──────────────────────────────────────────────
+// ── the four kinds of consilium ──────────────────────────────────────────────
 // Told apart by which sibling is set — a kind is never expressed by widening another
-// one's field (`shared/contracts/governance.ts`). The order is the order of introduction,
-// so a row that somehow carries two is read the way older code read it.
+// one's field (`shared/contracts/governance.ts`). The order matches the views' own
+// branches, so a row that somehow carries two is read the same way everywhere.
 
-export type ConsiliumKind = "payment" | "fee_policy" | "revenue_payout";
+export type ConsiliumKind = "valuation_override" | "payment" | "fee_policy" | "revenue_payout";
 
-export function consiliumKind(consilium: Pick<Consilium, "payment" | "fee_policy">): ConsiliumKind {
+export function consiliumKind(consilium: Pick<Consilium, "valuation_override" | "payment" | "fee_policy">): ConsiliumKind {
+  if (consilium.valuation_override) return "valuation_override";
   if (consilium.payment) return "payment";
   if (consilium.fee_policy) return "fee_policy";
   return "revenue_payout";
@@ -101,7 +102,7 @@ export function consiliumKindLabel(kind: ConsiliumKind, t: Translate): string {
 
 /** A state pill that knows what was decided: `executed` on a fee-policy consilium means
  *  the change was SCHEDULED, not that anything was paid out. */
-export function consiliumStateLabel(consilium: Pick<Consilium, "state" | "payment" | "fee_policy">, t: Translate): string {
+export function consiliumStateLabel(consilium: Pick<Consilium, "state" | "valuation_override" | "payment" | "fee_policy">, t: Translate): string {
   if (consiliumKind(consilium) === "fee_policy" && normalise(consilium.state) === "executed") return t("consilium.feePolicy.carried");
   return stateLabel(consilium.state, t);
 }

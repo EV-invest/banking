@@ -1778,7 +1778,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "PostFundValuation",
-        "description": "Post a fund's total AUM; NAV is derived = AUM / units_outstanding (units read live\n from TigerBeetle). Rejects zero units and, unless `override` is set, a NAV move\n beyond the safety threshold vs the last mark (the fat-finger guard on the trust seam).",
+        "description": "Post a fund's total AUM; NAV is derived = AUM / units_outstanding (units read live\n from TigerBeetle). Rejects zero units and a NAV move beyond the safety threshold —\n measured against BOTH the previous mark and the mark that anchored the rolling\n window, so the cap cannot be walked past in steps. There is NO per-request override:\n a move past the cap is put to the owners through\n `ConsiliumService.OpenValuationOverride`, and only an executed consilium records it.",
         "operationId": "banking.v1.BalanceService.PostFundValuation",
         "parameters": [
           {
@@ -2014,7 +2014,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "SeedCapital",
-        "description": "Inject the company's own capital onto a rail (Dr WALLET / Cr FUND).",
+        "description": "Record the company's own capital arriving on a rail (Dr WALLET / Cr FUND), PROVEN\n against the chain. Same verification as RecordDeposit plus the assertion that the\n transfer is fund capital: it must have landed on the rail's treasury address from an\n external sender. A transfer to a user's deposit address is that user's deposit and is\n refused (record it with RecordDeposit); the sweep is refused. Idempotent by `tx_ref`.",
         "operationId": "banking.v1.BalanceService.SeedCapital",
         "parameters": [
           {
@@ -2628,6 +2628,65 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/banking.v1.OpenRevenuePayoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Consilium"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.ConsiliumService/OpenValuationOverride": {
+      "post": {
+        "tags": [
+          "banking.v1.ConsiliumService"
+        ],
+        "summary": "OpenValuationOverride",
+        "description": "Put a NAV mark the move guard refuses to the owners (ValuationPost holders — the\n poster proposes, the owners decide). Executing it records the mark at exactly this\n AUM, guard or no guard; there is no other way past the guard. One open request per\n fund: it shares the fund's `service:\u003cid\u003e` claim with a payment out of that claim.",
+        "operationId": "banking.v1.ConsiliumService.OpenValuationOverride",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.OpenValuationOverrideRequest"
               }
             }
           },
@@ -7459,7 +7518,7 @@
           },
           "revenue_payout": {
             "title": "revenue_payout",
-            "description": "EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `fee_policy`) is set,\n decided by the kind. Named fields rather than a oneof because the surfaces read them by\n name and a oneof buys nothing here that the \"exactly one\" rule does not already give.",
+            "description": "EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,\n `fee_policy`) is set, decided by the kind. Named fields rather than a oneof because the\n surfaces read them by name and a oneof buys nothing here that the \"exactly one\" rule\n does not already give.",
             "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
           },
           "payload_hash": {
@@ -7527,7 +7586,7 @@
           "executed_withdrawal_id": {
             "type": "string",
             "title": "executed_withdrawal_id",
-            "description": "Set exactly once, on EXECUTED — and exactly ONE of the two is, because a consilium has\n one effect. `consilium_execution_is_recorded` states that to the database as\n `num_nonnulls(...) = 1`."
+            "description": "Set exactly once, on EXECUTED — and exactly ONE of the three effect ids is\n (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`), because a\n consilium has one effect. `consilium_execution_is_recorded` states that to the database\n as `num_nonnulls(...) = 1`."
           },
           "failure_reason": {
             "type": "string",
@@ -7551,9 +7610,19 @@
             "title": "executed_payment_id",
             "description": "The payment order an executed PAYMENT consilium carried."
           },
+          "valuation_override": {
+            "title": "valuation_override",
+            "description": "The third terms sibling — see `revenue_payout`.",
+            "$ref": "#/components/schemas/banking.v1.ValuationOverrideTerms"
+          },
+          "executed_valuation_id": {
+            "type": "string",
+            "title": "executed_valuation_id",
+            "description": "The `fund_valuations` row an executed VALUATION-OVERRIDE consilium recorded."
+          },
           "fee_policy": {
             "title": "fee_policy",
-            "description": "Field numbers 20 and 21 are reserved for the valuation-override kind (#232).\n The third of the \"exactly one\" terms fields — set exactly for a FEE_POLICY consilium.",
+            "description": "The fourth terms sibling — set exactly for a FEE_POLICY consilium.",
             "$ref": "#/components/schemas/banking.v1.ConsiliumFeePolicyTerms"
           },
           "executed_fee_policy_change_id": {
@@ -7664,7 +7733,7 @@
           },
           "revenue_payout": {
             "title": "revenue_payout",
-            "description": "Exactly one of `revenue_payout` and `payment` is set — see `Consilium`.",
+            "description": "Exactly one of `revenue_payout`, `payment` and `valuation_override` is set — see\n `Consilium`.",
             "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
           },
           "payload_hash": {
@@ -7723,9 +7792,12 @@
             "title": "payment",
             "$ref": "#/components/schemas/banking.v1.ConsiliumPaymentTerms"
           },
+          "valuation_override": {
+            "title": "valuation_override",
+            "$ref": "#/components/schemas/banking.v1.ValuationOverrideTerms"
+          },
           "fee_policy": {
             "title": "fee_policy",
-            "description": "Field number 15 is reserved for the valuation-override kind (#232).",
             "$ref": "#/components/schemas/banking.v1.ConsiliumFeePolicyTerms"
           }
         },
@@ -9022,6 +9094,17 @@
         "title": "OpenRevenuePayoutRequest",
         "additionalProperties": false
       },
+      "banking.v1.OpenValuationOverrideRequest": {
+        "type": "object",
+        "properties": {
+          "terms": {
+            "title": "terms",
+            "$ref": "#/components/schemas/banking.v1.ValuationOverrideTerms"
+          }
+        },
+        "title": "OpenValuationOverrideRequest",
+        "additionalProperties": false
+      },
       "banking.v1.Operation": {
         "type": "object",
         "properties": {
@@ -9599,11 +9682,6 @@
             "type": "string",
             "title": "aum",
             "description": "decimal USDT — the fund's total assets under management"
-          },
-          "override": {
-            "type": "boolean",
-            "title": "override",
-            "description": "bypass the NAV-move safety guard (operator confirmed)"
           }
         },
         "title": "PostFundValuationRequest",
@@ -10173,17 +10251,35 @@
             "title": "network",
             "description": "bep20 | polygon | trc20 | ton — the rail the capital lands on"
           },
-          "amount": {
+          "tx_ref": {
             "type": "string",
-            "title": "amount",
-            "description": "decimal USDT"
+            "title": "tx_ref",
+            "description": "`txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key"
+          },
+          "expected_amount": {
+            "type": "string",
+            "title": "expected_amount",
+            "description": "Optional operator assertion in decimal USDT. When set it must equal what the chain\n reports or the call is refused, so a mistyped reference fails loudly instead of\n silently crediting some other transfer."
           }
         },
         "title": "SeedCapitalRequest",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Record fund capital that reached a rail's treasury, PROVEN against the chain.\n\n Like RecordDepositRequest the caller supplies only a pointer to a fact: the amount is\n read back from the chain and the recipient decides whether it is capital at all. The\n transfer must have landed on the rail's treasury address from a sender outside every\n wallet we control. A transfer to a user's deposit address is that user's deposit, not\n capital — refused, use RecordDeposit. The sweep consolidating a user's address into\n the treasury is money already on the ledger — refused."
       },
       "banking.v1.SeedCapitalResponse": {
         "type": "object",
+        "properties": {
+          "recorded": {
+            "type": "boolean",
+            "title": "recorded",
+            "description": "false if `tx_ref` was already recorded (idempotent no-op)"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "what the CHAIN reported, decimal USDT — never the caller's number"
+          }
+        },
         "title": "SeedCapitalResponse",
         "additionalProperties": false
       },
@@ -10900,6 +10996,24 @@
         "title": "UserSummary",
         "additionalProperties": false,
         "description": "Minimal principal snapshot returned with a freshly issued token pair, so the BFF\n can populate a session without a second round trip."
+      },
+      "banking.v1.ValuationOverrideTerms": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "The fund/service id being marked."
+          },
+          "aum": {
+            "type": "string",
+            "title": "aum",
+            "description": "The fund's total AUM to mark it at — decimal USDT string, as everywhere on this wire."
+          }
+        },
+        "title": "ValuationOverrideTerms",
+        "additionalProperties": false,
+        "description": "The immutable subject of a VALUATION-OVERRIDE consilium — a NAV mark the move guard\n refuses (banking#232). The direct `PostFundValuation` caps a move at `MAX_NAV_MOVE_PCT`\n against the previous mark AND the mark anchoring a rolling window, and carries no flag\n to lift it; a genuine re-mark past the cap is put to the owners instead. Executing the\n consilium derives NAV from the LIVE unit supply at that moment and records the mark with\n the initiator as `posted_by`, so the redeem cooldown binds them exactly as a direct post\n would."
       },
       "banking.v1.VoteDecision": {
         "type": "string",

@@ -1323,6 +1323,20 @@ impl From<bk::ConsiliumPaymentTerms> for ConsiliumPaymentTerms {
 	}
 }
 
+/// The immutable subject of a VALUATION-OVERRIDE consilium (banking#232): the fund and the
+/// AUM to mark it at, past the NAV-move guard. Both are covered by `payload_hash`.
+#[derive(Serialize)]
+pub struct ValuationOverrideTerms {
+	pub service: String,
+	pub aum: String,
+}
+
+impl From<bk::ValuationOverrideTerms> for ValuationOverrideTerms {
+	fn from(t: bk::ValuationOverrideTerms) -> Self {
+		Self { service: t.service, aum: t.aum }
+	}
+}
+
 /// One set of fee terms as a consilium states them.
 #[derive(Serialize)]
 pub struct FeeTerms {
@@ -1378,16 +1392,18 @@ impl From<bk::ConsiliumFeePolicyTerms> for ConsiliumFeePolicyTerms {
 
 /// One consilium in full — the owner-only view, with the per-voter breakdown.
 ///
-/// Exactly one of `revenue_payout`, `payment` and `fee_policy` describes the subject.
-/// `revenue_payout` keeps its always-present shape for the screens that predate the other
-/// kinds; `payment` and `fee_policy` are `null` except on their own kind, so a screen can
-/// tell the kinds apart by them.
+/// Exactly one of `revenue_payout`, `payment`, `valuation_override` and `fee_policy`
+/// describes the subject. `revenue_payout` keeps its always-present shape for the screens
+/// that predate the other kinds; the other three are `null` on any other kind — never an
+/// empty object, which the invitation page treats as unrenderable — so a screen tells the
+/// kinds apart by which sibling is set.
 #[derive(Serialize)]
 pub struct Consilium {
 	pub id: String,
 	pub state: String,
 	pub revenue_payout: RevenuePayoutTerms,
 	pub payment: Option<ConsiliumPaymentTerms>,
+	pub valuation_override: Option<ValuationOverrideTerms>,
 	pub fee_policy: Option<ConsiliumFeePolicyTerms>,
 	pub payload_hash: String,
 	pub initiator_user_id: String,
@@ -1403,6 +1419,8 @@ pub struct Consilium {
 	pub executed_withdrawal_id: String,
 	/// The order an executed PAYMENT consilium carried; `null` otherwise.
 	pub executed_payment_id: Option<String>,
+	/// The mark an executed VALUATION-OVERRIDE consilium recorded; `null` otherwise.
+	pub executed_valuation_id: Option<String>,
 	/// The change an executed FEE_POLICY consilium scheduled; `null` otherwise.
 	pub executed_fee_policy_change_id: Option<String>,
 	pub failure_reason: String,
@@ -1418,6 +1436,7 @@ impl From<bk::Consilium> for Consilium {
 			state,
 			revenue_payout: c.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
 			payment: c.payment.map(ConsiliumPaymentTerms::from),
+			valuation_override: c.valuation_override.map(ValuationOverrideTerms::from),
 			fee_policy: c.fee_policy.map(ConsiliumFeePolicyTerms::from),
 			payload_hash: c.payload_hash,
 			initiator_user_id: c.initiator_user_id,
@@ -1432,6 +1451,7 @@ impl From<bk::Consilium> for Consilium {
 			decided_at: c.decided_at.to_string(),
 			executed_withdrawal_id: c.executed_withdrawal_id,
 			executed_payment_id: non_empty(c.executed_payment_id),
+			executed_valuation_id: non_empty(c.executed_valuation_id),
 			executed_fee_policy_change_id: non_empty(c.executed_fee_policy_change_id),
 			failure_reason: c.failure_reason,
 			version: c.version.to_string(),
@@ -1451,6 +1471,8 @@ pub struct ConsiliumInvitation {
 	pub revenue_payout: RevenuePayoutTerms,
 	/// Set exactly when this is a PAYMENT consilium — see [`Consilium`].
 	pub payment: Option<ConsiliumPaymentTerms>,
+	/// Set exactly when this is a VALUATION-OVERRIDE consilium — see [`Consilium`].
+	pub valuation_override: Option<ValuationOverrideTerms>,
 	/// Set exactly when this is a FEE_POLICY consilium — see [`Consilium`].
 	pub fee_policy: Option<ConsiliumFeePolicyTerms>,
 	pub payload_hash: String,
@@ -1474,6 +1496,7 @@ impl From<bk::ConsiliumInvitation> for ConsiliumInvitation {
 			state,
 			revenue_payout: i.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
 			payment: i.payment.map(ConsiliumPaymentTerms::from),
+			valuation_override: i.valuation_override.map(ValuationOverrideTerms::from),
 			fee_policy: i.fee_policy.map(ConsiliumFeePolicyTerms::from),
 			payload_hash: i.payload_hash,
 			initiator_email: mask_email(&i.initiator_email),
@@ -2155,5 +2178,36 @@ mod tests {
 
 		let revenue = Consilium::from(bk::Consilium::default());
 		assert!(revenue.payment.is_none() && revenue.executed_payment_id.is_none());
+	}
+
+	/// The third sibling: set on a valuation override, `null` — never an empty object, which
+	/// the invitation page treats as unrenderable — on every other kind, on the room's view
+	/// and on the public invitation alike.
+	#[test]
+	fn a_valuation_override_consilium_carries_its_terms_and_nulls_elsewhere() {
+		let consilium = Consilium::from(bk::Consilium {
+			valuation_override: Some(bk::ValuationOverrideTerms {
+				service: "svc-arb".into(),
+				aum: "16250".into(),
+			}),
+			executed_valuation_id: "v-1".into(),
+			..Default::default()
+		});
+		let terms = consilium.valuation_override.expect("a valuation override carries its terms");
+		assert_eq!((terms.service.as_str(), terms.aum.as_str()), ("svc-arb", "16250"));
+		assert_eq!(consilium.executed_valuation_id.as_deref(), Some("v-1"));
+		assert!(consilium.payment.is_none());
+
+		let other = Consilium::from(bk::Consilium::default());
+		assert!(other.valuation_override.is_none() && other.executed_valuation_id.is_none());
+		let invitation = ConsiliumInvitation::from(bk::ConsiliumInvitation {
+			valuation_override: Some(bk::ValuationOverrideTerms {
+				service: "svc-arb".into(),
+				aum: "1".into(),
+			}),
+			..Default::default()
+		});
+		assert_eq!(invitation.valuation_override.map(|t| t.service).as_deref(), Some("svc-arb"));
+		assert!(ConsiliumInvitation::from(bk::ConsiliumInvitation::default()).valuation_override.is_none());
 	}
 }

@@ -178,6 +178,11 @@ pub enum LedgerEvent {
 	/// Ledger: `Dr WALLET:<net> / Cr <party claim>`.
 	Deposited { party: Party, network: Network, amount: Usdt },
 	/// The company injected its own capital. Ledger: `Dr WALLET:<net> / Cr FUND`.
+	///
+	/// No producer any more (issue #234 removed the free-amount `SeedCapital`); the variant
+	/// stays so historical outbox events and their TigerBeetle transfers can still be read,
+	/// replayed and reconciled. New capital arrives as [`Deposited`](Self::Deposited) with
+	/// `party: Piggybank`, proven against the chain like any other arrival.
 	CapitalSeeded { network: Network, amount: Usdt },
 }
 

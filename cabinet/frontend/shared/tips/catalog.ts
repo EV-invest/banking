@@ -135,7 +135,7 @@ export const tips = {
   "admin.valuation.post.aum": { type: "input", roles: OPS },
   "admin.valuation.post.derived-nav": { type: "input", roles: OPS },
   "admin.valuation.post.nav-guard": { type: "section", roles: OPS },
-  "admin.valuation.post.override": { type: "input", roles: OPS },
+  "admin.valuation.post.propose": { type: "input", roles: OPS },
   "admin.valuation.queue.settle-fail": { type: "section", roles: OPS },
   "admin.valuation.queue.est-cash": { type: "input", roles: OPS },
   "admin.valuation.queue.settle": { type: "input", roles: OPS },

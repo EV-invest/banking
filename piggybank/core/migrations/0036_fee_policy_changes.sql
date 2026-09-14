@@ -111,22 +111,23 @@ ALTER TABLE fee_policy_changes ADD CONSTRAINT fee_policy_changes_management_ceil
 ALTER TABLE fee_policy_changes ADD CONSTRAINT fee_policy_changes_performance_ceiling
     CHECK (state IN ('superseded', 'rejected', 'cancelled') OR performance_bps <= 5000) NOT VALID;
 
--- (5) The third consilium kind. ONE COMMIT WITH THE RUST ARM, for the reason 0029 and 0031
--- state: `kind` decides how `terms` is read, and a row of a kind the binary cannot parse
--- fails every read of the governance history.
+-- (5) The fourth consilium kind, after 0035's `valuation_override`. ONE COMMIT WITH THE RUST
+-- ARM, for the reason 0029 and 0031 state: `kind` decides how `terms` is read, and a row of
+-- a kind the binary cannot parse fails every read of the governance history.
 ALTER TABLE consilium DROP CONSTRAINT consilium_kind_check;
-ALTER TABLE consilium ADD CONSTRAINT consilium_kind_check CHECK (kind IN ('revenue_payout', 'payment', 'fee_policy'));
+ALTER TABLE consilium ADD CONSTRAINT consilium_kind_check CHECK (kind IN ('revenue_payout', 'payment', 'valuation_override', 'fee_policy'));
 
 -- Its effect: the change it scheduled. RESTRICT (the default) on delete, as the payment
 -- link is — a consilium must not lose the record of what it carried.
 ALTER TABLE consilium ADD COLUMN executed_fee_policy_change_id UUID REFERENCES fee_policy_changes (id);
 
--- EXACTLY ONE EFFECT ON AN EXECUTED ROW, over the FULL list of effect columns. Recomputed
--- here in one DROP + ADD rather than patched, so any sibling migration adding an effect
--- column of its own conflicts here visibly and the list is reconciled by hand.
+-- EXACTLY ONE EFFECT ON AN EXECUTED ROW, over the FULL list of effect columns — the two
+-- 0029/0031 knew, 0035's `executed_valuation_id`, and this one. Recomputed here in one
+-- DROP + ADD rather than patched, so any sibling migration adding an effect column of its
+-- own conflicts here visibly and the list is reconciled by hand.
 ALTER TABLE consilium DROP CONSTRAINT consilium_execution_is_recorded;
 ALTER TABLE consilium ADD CONSTRAINT consilium_execution_is_recorded
-    CHECK ((state = 'executed') = (num_nonnulls(executed_withdrawal_id, executed_payment_id, executed_fee_policy_change_id) = 1));
+    CHECK ((state = 'executed') = (num_nonnulls(executed_withdrawal_id, executed_payment_id, executed_valuation_id, executed_fee_policy_change_id) = 1));
 
 -- `consilium_payout_spends_the_fee_claim` (0029) is left alone: it constrains only
 -- `revenue_payout`, and a fee-policy row carries the product's `shares_fee:<service>` —

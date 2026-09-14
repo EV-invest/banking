@@ -644,10 +644,11 @@ impl Grpc {
 		Ok(self.balance().get_treasury(bearer(token, bk::GetTreasuryRequest {})?).await?.into_inner())
 	}
 
-	/// Record an out-of-band on-chain arrival against the ledger, idempotent by `tx_ref`.
-	/// The operator funds a rail's treasury hot wallet directly, which moves real USDT
-	/// without producing any ledger fact — this is how that fact gets written. Prefer it
-	/// over `SeedCapital`, which has no dedup key and double-credits on a retry.
+	/// Record an out-of-band on-chain arrival against the ledger, chain-proven and
+	/// idempotent by `tx_ref`. The operator funds a rail's treasury hot wallet directly,
+	/// which moves real USDT without producing any ledger fact — this is how that fact gets
+	/// written. It is the general path (the chain decides whose money it is); `SeedCapital`
+	/// is the same verification with the added assertion that it is the fund's own capital.
 	pub async fn record_deposit(&self, token: &str, req: bk::RecordDepositRequest) -> Result<bk::RecordDepositResponse, Status> {
 		Ok(self.balance().record_deposit(bearer(token, req)?).await?.into_inner())
 	}
@@ -752,6 +753,13 @@ impl Grpc {
 	pub async fn open_revenue_payout(&self, token: &str, terms: bk::RevenuePayoutTerms) -> Result<bk::Consilium, Status> {
 		let req = bk::OpenRevenuePayoutRequest { terms: Some(terms) };
 		Ok(self.consilium().open_revenue_payout(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Put a NAV mark past the move guard to the owners (banking#232). Same plane and same
+	/// token as the payout above: the mark reprices fund-owned money.
+	pub async fn open_valuation_override(&self, token: &str, terms: bk::ValuationOverrideTerms) -> Result<bk::Consilium, Status> {
+		let req = bk::OpenValuationOverrideRequest { terms: Some(terms) };
+		Ok(self.consilium().open_valuation_override(bearer(token, req)?).await?.into_inner())
 	}
 
 	pub async fn cancel_consilium(&self, token: &str, consilium_id: &str) -> Result<bk::Consilium, Status> {

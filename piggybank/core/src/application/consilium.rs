@@ -9,10 +9,11 @@
 //! governance exists.
 
 use domain::{
-	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
+	balance::{LedgerAccountKey, ValuationId},
+	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
 	fees::FeePolicySubject,
-	money::Network,
+	money::{Nav, Network, Shares},
 	payments::{PaymentState, PaymentSubject},
 	users::UserId,
 	withdrawals::WithdrawalId,
@@ -22,8 +23,9 @@ use uuid::Uuid;
 
 use crate::{
 	application::{
+		allocations as allocations_app,
 		credentials::{self, token_digest},
-		payments as payments_app,
+		funds as funds_app, payments as payments_app,
 		withdrawals::{self as withdrawal_app, WithdrawalPorts},
 	},
 	config::KycGate,
@@ -32,11 +34,14 @@ use crate::{
 		AllocationRegistry, Custody, FeePolicyChanges, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumRepository, ConsiliumView, ExecutionOutcome, InvitationView, SubmitOutcome, VoteAudit, VoterCredential},
 		ledger::Ledger,
+		nav::NavMarks,
 	},
 };
 
 /// The salt that makes the payout id a pure function of the consilium.
 const PAYOUT_SALT: &[u8] = b"consilium:revenue-payout";
+/// The salt that makes a valuation override's mark id a pure function of the consilium.
+const VALUATION_SALT: &[u8] = b"consilium:valuation-override";
 
 /// The driven ports the consilium write-path borrows. The withdrawal-side handles are here
 /// only for the execution step — opening and voting touch no money at all.
@@ -54,9 +59,12 @@ pub struct ConsiliumPorts<'a> {
 	pub custody: &'a dyn Custody,
 	/// The read-only kill-switch, for the same chained execution.
 	pub policy: &'a dyn OutflowPolicy,
-	/// The product registry — carried so the payment ports can be borrowed from here whole,
-	/// though nothing on this path opens an order.
+	/// The product registry — the valuation override's open gate, and carried so the payment
+	/// ports can be borrowed from here whole.
 	pub allocations: &'a dyn AllocationRegistry,
+	/// The valuation marks a `ConsiliumKind::ValuationOverride` quorum writes to. Read at
+	/// open (is there a price to vote over?) and written at execution.
+	pub nav: &'a dyn NavMarks,
 	/// The fee-policy changes a `ConsiliumKind::FeePolicy` quorum schedules. Only the
 	/// execution step touches it.
 	pub fee_changes: &'a dyn FeePolicyChanges,
@@ -115,6 +123,14 @@ impl ConsiliumPorts<'_> {
 /// between an at-least-once execution path and a double payout.
 pub fn payout_id(consilium: ConsiliumId) -> WithdrawalId {
 	WithdrawalId::from_raw(Uuid::new_v5(&consilium.raw(), PAYOUT_SALT))
+}
+
+/// The mark a valuation-override consilium will record:
+/// `uuid_v5(consilium_id, "consilium:valuation-override")`. Deterministic for the same
+/// reason as [`payout_id`]: `fund_valuations` is append-only, and a retried execution
+/// must find the mark it already wrote rather than append a second one.
+pub fn valuation_id(consilium: ConsiliumId) -> ValuationId {
+	ValuationId::from_raw(Uuid::new_v5(&consilium.raw(), VALUATION_SALT))
 }
 
 /// Open a consilium over a proposed revenue payout.
@@ -195,6 +211,36 @@ pub async fn open_revenue_payout(ports: &ConsiliumPorts<'_>, initiator: UserId, 
 	// One token and one code per ELIGIBLE seat. The initiator is not among them, which is
 	// what makes "the initiator cannot vote" a fact about what exists rather than a check
 	// somewhere that could be forgotten.
+	let credentials = consilium.eligible().iter().map(|voter| mint_credential(*voter)).collect::<Result<Vec<_>, _>>()?;
+	ports.consilia.open(&mut consilium, &credentials, ports.approval_url_base).await?;
+	find(ports.consilia, consilium.id()).await
+}
+
+/// Open a consilium over a NAV mark the move guard refuses (banking#232).
+///
+/// The same two gates a revenue payout applies — a wired mailer, a settled roster — because
+/// a mark moves the price every redemption settles at, which is the same class of decision
+/// as paying the fund's money out. Then the two facts execution will need, checked now so
+/// nobody spends 72 hours approving a mark that cannot be recorded: the allocation exists
+/// (any state — a closed product is still marked so its queued redemptions price), and the
+/// fund has units outstanding, so `Nav::from_aum` yields a price the owners are actually
+/// voting over. The NAV itself is NOT frozen into the terms: it is re-derived from the live
+/// supply at execution, because units can be minted or burned during the vote.
+///
+/// No move guard is applied here, by definition — this is the path for moves the guard
+/// refuses. The initiator's own standing is what the domain checks (`Consilium::open`
+/// refuses a non-owner), and the RPC boundary gates on `ValuationPost`: the poster
+/// proposes, the owners decide.
+pub async fn open_valuation_override(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: ValuationOverrideTerms, now: i64) -> Result<ConsiliumView, DomainError> {
+	require_governance_mail(ports.governance_mail_wired)?;
+	require_settled_roster(ports.consilia, now).await?;
+	allocations_app::get(ports.allocations, &terms.service).await?;
+	let units = Shares::from_base_units(ports.ledger.balance(&LedgerAccountKey::SharesOutstanding(terms.service.clone())).await?.posted);
+	Nav::from_aum(terms.aum, units)?;
+	let owners = ports.consilia.owner_roster().await?;
+	let terms = ConsiliumTerms::ValuationOverride(terms);
+	let payload_hash = digest(&terms.canonical_bytes());
+	let mut consilium = Consilium::open(ConsiliumId::new(), terms, payload_hash, initiator, &owners, now)?;
 	let credentials = consilium.eligible().iter().map(|voter| mint_credential(*voter)).collect::<Result<Vec<_>, _>>()?;
 	ports.consilia.open(&mut consilium, &credentials, ports.approval_url_base).await?;
 	find(ports.consilia, consilium.id()).await
@@ -320,9 +366,36 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 	let outcome = match consilium.terms().clone() {
 		ConsiliumTerms::RevenuePayout(terms) => execute_revenue_payout(ports, id, terms).await?,
 		ConsiliumTerms::Payment(subject) => execute_payment(ports, consilium, subject, now).await?,
+		ConsiliumTerms::ValuationOverride(terms) => execute_valuation_override(ports, consilium, terms).await?,
 		ConsiliumTerms::FeePolicy(subject) => execute_fee_policy(ports, id, &subject, now).await?,
 	};
 	ports.consilia.record_execution(id, outcome, now).await
+}
+
+/// Record the mark an approved valuation override authorizes, and say how it went.
+///
+/// The mark is written through the SAME writer as a direct post (`funds::record_valuation`)
+/// with the move guard simply not consulted — that is the whole of what the quorum bought.
+/// `posted_by` is the initiator's id in the spelling `claims.sub` has on the direct path,
+/// so the redeem cooldown binds the proposer exactly as it binds a direct poster. NAV is
+/// derived from the LIVE supply now, not the supply at open.
+///
+/// The id is derived from the consilium, so a retried execution finds the mark already
+/// there; and a refusal from the writer is re-read against that id before being believed,
+/// for the same two-caller race `execute_revenue_payout` describes.
+async fn execute_valuation_override(ports: &ConsiliumPorts<'_>, consilium: &Consilium, terms: ValuationOverrideTerms) -> Result<ExecutionOutcome, DomainError> {
+	let mark = valuation_id(consilium.id());
+	if ports.nav.find(mark).await?.is_some() {
+		return Ok(ExecutionOutcome::Executed(ConsiliumEffect::Valuation(mark)));
+	}
+	let posted_by = consilium.initiator().to_string();
+	Ok(match funds_app::record_valuation(ports.nav, ports.ledger, mark, terms.service, terms.aum, &posted_by).await {
+		Ok(_) => ExecutionOutcome::Executed(ConsiliumEffect::Valuation(mark)),
+		Err(err) => match ports.nav.find(mark).await? {
+			Some(_) => ExecutionOutcome::Executed(ConsiliumEffect::Valuation(mark)),
+			None => ExecutionOutcome::Failed(failure_reason(&err)),
+		},
+	})
 }
 
 /// Carry an approved change of fee terms: schedule it, fix the moment it binds, and tell the

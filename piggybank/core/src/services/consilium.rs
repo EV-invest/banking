@@ -15,7 +15,8 @@
 
 use domain::{
 	authz::Permission,
-	consilium::{ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
+	balance::ServiceId,
+	consilium::{ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
 	fees::FeePolicy,
 	money::{Network, Usdt, WalletAddress},
@@ -69,6 +70,7 @@ impl AppState {
 			custody: self.custody.as_ref(),
 			policy: self.outflow.as_ref(),
 			allocations: self.allocations.as_ref(),
+			nav: self.nav.as_ref(),
 			fee_changes: self.fees.changes.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
@@ -94,6 +96,16 @@ fn parse_terms(terms: Option<pb::RevenuePayoutTerms>) -> Result<RevenuePayoutTer
 	let address = WalletAddress::parse(network, &terms.address).map_err(map_err)?;
 	let amount = Usdt::parse_decimal(&terms.amount).map_err(map_err)?;
 	RevenuePayoutTerms::new(network, address, amount, terms.memo).map_err(map_err)
+}
+
+/// The valuation-override terms, validated into their domain form. The fund's existence
+/// and its unit supply are the application's gates; this is only the wire's shape.
+fn parse_valuation_override_terms(terms: Option<pb::ValuationOverrideTerms>) -> Result<ValuationOverrideTerms, Status> {
+	let terms = terms.ok_or_else(|| Status::invalid_argument("terms are required"))?;
+	Ok(ValuationOverrideTerms {
+		service: ServiceId::parse(&terms.service).map_err(map_err)?,
+		aum: Usdt::parse_decimal(&terms.aum).map_err(map_err)?,
+	})
 }
 
 fn state_to_proto(state: ConsiliumState) -> i32 {
@@ -142,7 +154,21 @@ fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerm
 			amount: terms.amount.to_decimal_string(),
 			memo: terms.memo.clone(),
 		}),
-		ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) => None,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) => None,
+	}
+}
+
+/// The valuation-override terms as the wire carries them — the third of the "exactly one
+/// terms field is set" siblings. `None` for the other kinds, and NEVER an empty message:
+/// the cabinet treats an empty object as unrenderable, and `Option` is what the generated
+/// DTO folds to `null`.
+fn valuation_override_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ValuationOverrideTerms> {
+	match terms {
+		ConsiliumTerms::ValuationOverride(terms) => Some(pb::ValuationOverrideTerms {
+			service: terms.service.to_string(),
+			aum: terms.aum.to_decimal_string(),
+		}),
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) => None,
 	}
 }
 
@@ -154,7 +180,7 @@ fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerm
 /// disagree about what an owner approved.
 fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPaymentTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::FeePolicy(_) => None,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) | ConsiliumTerms::FeePolicy(_) => None,
 		ConsiliumTerms::Payment(subject) => Some(pb::ConsiliumPaymentTerms {
 			payment_id: subject.payment_id.to_string(),
 			tier: subject.terms.tier().as_str().to_owned(),
@@ -170,7 +196,7 @@ fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPayment
 /// presentation (product title, holder count) the repository reads beside it.
 fn fee_policy_terms_to_proto(terms: &ConsiliumTerms, detail: Option<&FeePolicyDetail>) -> Option<pb::ConsiliumFeePolicyTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) => None,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) => None,
 		ConsiliumTerms::FeePolicy(subject) => {
 			let from = subject.from.unwrap_or(FeePolicy::NONE);
 			Some(pb::ConsiliumFeePolicyTerms {
@@ -203,6 +229,7 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 		state: state_to_proto(c.state()),
 		revenue_payout: payout_terms_to_proto(c.terms()),
 		payment: payment_terms_to_proto(c.terms()),
+		valuation_override: valuation_override_terms_to_proto(c.terms()),
 		fee_policy: fee_policy_terms_to_proto(c.terms(), view.fee_policy.as_ref()),
 		payload_hash: c.payload_hash_hex(),
 		initiator_user_id: c.initiator().to_string(),
@@ -229,6 +256,7 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 		decided_at: c.decided_at().unwrap_or_default(),
 		executed_withdrawal_id: c.executed_withdrawal_id().map(|id| id.to_string()).unwrap_or_default(),
 		executed_payment_id: c.executed_payment_id().map(|id| id.to_string()).unwrap_or_default(),
+		executed_valuation_id: c.executed_valuation_id().map(|id| id.to_string()).unwrap_or_default(),
 		executed_fee_policy_change_id: c.executed_fee_policy_change_id().map(|id| id.to_string()).unwrap_or_default(),
 		failure_reason: c.failure_reason().unwrap_or_default().to_owned(),
 		version: c.version(),
@@ -241,6 +269,7 @@ fn invitation_to_proto(view: &InvitationView) -> pb::ConsiliumInvitation {
 		state: state_to_proto(view.state),
 		revenue_payout: payout_terms_to_proto(&view.terms),
 		payment: payment_terms_to_proto(&view.terms),
+		valuation_override: valuation_override_terms_to_proto(&view.terms),
 		fee_policy: fee_policy_terms_to_proto(&view.terms, view.fee_policy.as_ref()),
 		payload_hash: view.payload_hash.clone(),
 		initiator_email: mask_email(&view.initiator_email),
@@ -287,6 +316,31 @@ impl ConsiliumService for ConsiliumSvc {
 			threshold = view.consilium.threshold(),
 			owner_count = view.consilium.owner_count(),
 			"opened a revenue-payout consilium"
+		);
+		Ok(Response::new(consilium_to_proto(&view)))
+	}
+
+	async fn open_valuation_override(&self, request: Request<pb::OpenValuationOverrideRequest>) -> Result<Response<pb::Consilium>, Status> {
+		// Gated on `ValuationPost`, the capability that posts a mark — NOT on a second
+		// permission. The second actor here is the vote: the poster proposes, the owners
+		// decide, and the domain refuses an initiator who holds no seat. Granting the
+		// override to a different permission would only recreate the flag one role over.
+		require_permission(&self.state, &request, Permission::ValuationPost).await?;
+		let initiator = caller_id(&request)?;
+		let terms = parse_valuation_override_terms(request.into_inner().terms)?;
+		let view = consilium_app::open_valuation_override(&self.state.consilium_ports(), initiator, terms.clone(), unix_now())
+			.await
+			.map_err(map_err)?;
+		// WARN on success, as the payout does: a request to reprice a fund past the guard is
+		// worth an audit line that stands out.
+		tracing::warn!(
+			consilium_id = %view.consilium.id(),
+			initiator = %initiator,
+			service = %terms.service,
+			aum = %terms.aum,
+			threshold = view.consilium.threshold(),
+			owner_count = view.consilium.owner_count(),
+			"opened a valuation-override consilium"
 		);
 		Ok(Response::new(consilium_to_proto(&view)))
 	}

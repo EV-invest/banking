@@ -18,7 +18,8 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use domain::{
-	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, ConsiliumVote, RevenuePayoutTerms, VoteDecision},
+	balance::{ServiceId, ValuationId},
+	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, ConsiliumVote, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
 	fees::FeePolicyChangeId,
 	money::{Network, Usdt, WalletAddress},
@@ -53,8 +54,8 @@ macro_rules! consilium_columns {
 	() => {
 		"c.id, c.kind, c.state, c.terms::text AS terms, c.payload_hash, c.initiator_user_id, c.owner_count, c.threshold, \
 		 EXTRACT(EPOCH FROM c.created_at)::bigint AS created_at, EXTRACT(EPOCH FROM c.expires_at)::bigint AS expires_at, \
-		 EXTRACT(EPOCH FROM c.decided_at)::bigint AS decided_at, c.executed_withdrawal_id, c.executed_payment_id, c.executed_fee_policy_change_id, \
-		 c.failure_reason, c.version"
+		 EXTRACT(EPOCH FROM c.decided_at)::bigint AS decided_at, c.executed_withdrawal_id, c.executed_payment_id, c.executed_valuation_id, \
+		 c.executed_fee_policy_change_id, c.failure_reason, c.version"
 	};
 }
 
@@ -185,31 +186,61 @@ struct StoredTerms {
 
 /// The stored JSONB for the terms, per kind. A payout keeps the [`StoredTerms`] shape its rows
 /// predate the enum with; a payment stores the subject's OWN serde shape, the same bytes
-/// `PaymentEvent::Opened` carries into `event_log`. `rehydrate` reads by `kind`, so the two
-/// must agree with it and with nothing else.
+/// `PaymentEvent::Opened` carries into `event_log`; a valuation override stores
+/// [`StoredValuationOverride`], the money-plane convention of an exact base-unit string.
+/// `rehydrate` reads by `kind`, so the three must agree with it and with nothing else.
 fn stored_terms(terms: &ConsiliumTerms) -> Result<String, DomainError> {
 	match terms {
 		ConsiliumTerms::RevenuePayout(payout) => serde_json::to_string(&StoredTerms::of(payout)),
 		ConsiliumTerms::Payment(subject) => serde_json::to_string(subject),
+		ConsiliumTerms::ValuationOverride(terms) => serde_json::to_string(&StoredValuationOverride::of(terms)),
 		// The subject's own serde shape, as a payment's is.
 		ConsiliumTerms::FeePolicy(subject) => serde_json::to_string(subject),
 	}
 	.map_err(|e| DomainError::Repository(e.to_string()))
 }
 
+/// The stored JSONB shape of a valuation override's terms — `aum` as an exact base-unit
+/// string, like every other money figure Postgres holds.
+#[derive(Deserialize, Serialize)]
+struct StoredValuationOverride {
+	service: String,
+	aum: String,
+}
+
+impl StoredValuationOverride {
+	fn of(terms: &ValuationOverrideTerms) -> Self {
+		Self {
+			service: terms.service.as_str().to_owned(),
+			aum: terms.aum.base_units().to_string(),
+		}
+	}
+
+	fn into_domain(self) -> Result<ValuationOverrideTerms, DomainError> {
+		Ok(ValuationOverrideTerms {
+			service: ServiceId::parse(&self.service)?,
+			aum: Usdt::from_base_units(self.aum.parse::<u128>().map_err(|_| DomainError::Repository("malformed consilium aum".into()))?),
+		})
+	}
+}
+
 /// What a surface states beside the hashed subject, per kind: nothing for a payout (it
-/// names an address), the receiving end's recognisable detail for a payment, the product's
-/// title and holder count for a change of fee terms.
+/// names an address), the receiving end's recognisable detail for a payment, the product
+/// being marked for a valuation override, the product's title and holder count for a change
+/// of fee terms.
 enum SubjectDetail {
 	Payout,
 	Payment(Option<EndDetail>),
+	ValuationOverride(Option<EndDetail>),
 	FeePolicy(FeePolicyDetail),
 }
 
 impl SubjectDetail {
-	fn payment(&self) -> Option<&EndDetail> {
+	/// The recognisable end for the kinds that name one — the same detail the consent mail
+	/// and the console show.
+	fn end_detail(&self) -> Option<&EndDetail> {
 		match self {
-			Self::Payment(detail) => detail.as_ref(),
+			Self::Payment(detail) | Self::ValuationOverride(detail) => detail.as_ref(),
 			Self::Payout | Self::FeePolicy(_) => None,
 		}
 	}
@@ -217,7 +248,7 @@ impl SubjectDetail {
 	fn fee_policy(&self) -> Option<FeePolicyDetail> {
 		match self {
 			Self::FeePolicy(detail) => Some(detail.clone()),
-			Self::Payout | Self::Payment(_) => None,
+			Self::Payout | Self::Payment(_) | Self::ValuationOverride(_) => None,
 		}
 	}
 }
@@ -226,11 +257,54 @@ async fn subject_detail(conn: &mut PgConnection, consilium: &Consilium) -> Resul
 	Ok(match consilium.terms() {
 		ConsiliumTerms::RevenuePayout(_) => SubjectDetail::Payout,
 		ConsiliumTerms::Payment(subject) => SubjectDetail::Payment(payments::detail_of(conn, subject.terms.to()).await?),
+		ConsiliumTerms::ValuationOverride(terms) => SubjectDetail::ValuationOverride(
+			sqlx::query_scalar::<_, String>("SELECT title FROM allocations WHERE service = $1")
+				.bind(terms.service.as_str())
+				.fetch_optional(&mut *conn)
+				.await
+				.map_err(repo_err)?
+				.map(EndDetail::ProductTitle),
+		),
 		ConsiliumTerms::FeePolicy(subject) => SubjectDetail::FeePolicy(FeePolicyDetail {
 			allocation_name: fee_policy_changes::allocation_title(conn, &subject.service).await?.unwrap_or_default(),
 			holder_count: fee_policy_changes::holder_count(conn, &subject.service).await?,
 		}),
 	})
+}
+
+/// The relay's bound on one mail line (`line(.., 160, ..)` in concierge's governance
+/// handler). A product title is up to 120 CHARACTERS, so a Cyrillic one alone can pass
+/// this in bytes; a label over the bound is not a long mail but a refused one — and a
+/// refused invitation leaves the consilium open with nobody able to vote.
+const MAIL_LINE_BYTES: usize = 160;
+
+/// How a valuation override names the fund in a mail: the product's title when the
+/// registry has one, else the slug — never blank, because the owners are approving a
+/// price on THIS fund and must be able to tell which. The slug and the suffix always
+/// survive; only the title is clipped to keep the line inside [`MAIL_LINE_BYTES`].
+fn valuation_mail_source(terms: &ValuationOverrideTerms, detail: Option<&EndDetail>) -> String {
+	const SUFFIX: &str = " — NAV valuation";
+	let slug = terms.service.to_string();
+	let Some(EndDetail::ProductTitle(title)) = detail else {
+		return format!("{slug}{SUFFIX}");
+	};
+	let tail = format!(" ({slug}){SUFFIX}");
+	let title = clip_utf8(title, MAIL_LINE_BYTES.saturating_sub(tail.len()));
+	format!("{title}{tail}")
+}
+
+/// `s` when it fits in `max_bytes`, else its longest char-boundary prefix that leaves
+/// room for an ellipsis inside the budget.
+fn clip_utf8(s: &str, max_bytes: usize) -> String {
+	const ELLIPSIS: &str = "…";
+	if s.len() <= max_bytes {
+		return s.to_owned();
+	}
+	let mut end = max_bytes.saturating_sub(ELLIPSIS.len());
+	while end > 0 && !s.is_char_boundary(end) {
+		end -= 1;
+	}
+	format!("{}{ELLIPSIS}", &s[..end])
 }
 
 /// The approval invitation for one seat, per kind.
@@ -240,8 +314,17 @@ async fn subject_detail(conn: &mut PgConnection, consilium: &Consilium) -> Resul
 /// payment is a transfer between two claims the platform holds, and rendering
 /// `Piggybank → Revenue` through that copy would mail the whole roster a sentence naming the
 /// wrong claim and the wrong rail on a money move they are being asked to authorize. A
-/// change of fee terms is not a money move at all. The match has no `_` arm, so a further
-/// kind has to say what its owners read.
+/// change of fee terms is not a money move at all and has its own kind. The match has no
+/// `_` arm, so a further kind has to say what its owners read.
+///
+/// THE VALUATION KIND BORROWS THE PAYMENT TEMPLATE, for now. A valuation override is not a
+/// money move, and the honest mail is a kind concierge does not have yet — adding one means
+/// a release of the other plane and a pin bump. Until then the owners are rung through
+/// `PAYMENT_APPROVAL` with every label spelled out (the fund, the AUM, the reason), which is
+/// enough to get them to the approval page — and the page, which renders the real terms, is
+/// the truth. The consilium id stands in for `payment_id` (the field is required by shape
+/// and there is no order), and `tier` is `service`, the tier of the claim a mark reprices.
+// TODO(banking#232 follow-up): a dedicated `VALUATION_APPROVAL` mail kind in concierge.
 fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str, detail: &SubjectDetail) -> GovernanceMail {
 	let approval_url = format!("{}/{}", approval_url_base.trim_end_matches('/'), credential.token);
 	match consilium.terms() {
@@ -267,7 +350,7 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 			source: subject.terms.source_label(),
 			// The label plus what a person recognises it by (a masked mailbox, a product
 			// title): an owner approving "investor 8f3e…" must be able to tell who that is.
-			destination: payments::mail_destination(&subject.terms, detail.payment()),
+			destination: payments::mail_destination(&subject.terms, detail.end_detail()),
 			amount: subject.terms.amount().to_decimal_string(),
 			reason: subject.terms.reason().as_str().to_owned(),
 			payload_hash: consilium.payload_hash_hex(),
@@ -297,6 +380,22 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 			approval_url,
 			code: credential.code.clone(),
 		}),
+		ConsiliumTerms::ValuationOverride(terms) => GovernanceMail::PaymentApproval(PaymentApproval {
+			consilium_id: consilium.id().to_string(),
+			payment_id: consilium.id().to_string(),
+			initiator_email: initiator_email.to_owned(),
+			tier: VALUATION_MAIL_TIER.to_owned(),
+			source: valuation_mail_source(terms, detail.end_detail()),
+			destination: format!("AUM {} USDT", terms.aum.to_decimal_string()),
+			amount: terms.aum.to_decimal_string(),
+			reason: VALUATION_MAIL_REASON.to_owned(),
+			payload_hash: consilium.payload_hash_hex(),
+			threshold: consilium.threshold(),
+			owner_count: consilium.owner_count(),
+			expires_at: consilium.expires_at(),
+			approval_url,
+			code: credential.code.clone(),
+		}),
 	}
 }
 
@@ -308,13 +407,21 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 // ships a template for it.
 fn announces_by_mail(consilium: &Consilium) -> bool {
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) => true,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) => true,
 		ConsiliumTerms::FeePolicy(_) => false,
 	}
 }
 
-/// The outcome shape for a payout or a payment: the payout pair or the payment tuple, the
-/// other left empty — the renderer switches on which is filled.
+/// What the borrowed payment template says a valuation override is FOR. Fixed wording
+/// rather than the initiator's, because the terms carry no memo: the digest binds the fund
+/// and the AUM and nothing else.
+const VALUATION_MAIL_REASON: &str = "Valuation beyond the NAV-move guard; executing records the mark regardless of the guard.";
+/// The tier the borrowed template is told: the claim a mark reprices is the product's.
+const VALUATION_MAIL_TIER: &str = "service";
+
+/// The outcome shape for every mailed kind: the payout pair, the payment tuple, or — for a
+/// valuation override — the same tuple the approval mail used, the rest left empty; the
+/// renderer switches on which is filled.
 fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destination_detail: Option<&EndDetail>) -> PayoutOutcome {
 	let base = PayoutOutcome {
 		consilium_id: consilium.id().to_string(),
@@ -341,6 +448,14 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destinatio
 			source: subject.terms.source_label(),
 			destination: payments::mail_destination(&subject.terms, destination_detail),
 			reason: subject.terms.reason().as_str().to_owned(),
+			..base
+		},
+		ConsiliumTerms::ValuationOverride(terms) => PayoutOutcome {
+			amount: terms.aum.to_decimal_string(),
+			tier: VALUATION_MAIL_TIER.to_owned(),
+			source: valuation_mail_source(terms, destination_detail),
+			destination: format!("AUM {} USDT", terms.aum.to_decimal_string()),
+			reason: VALUATION_MAIL_REASON.to_owned(),
 			..base
 		},
 		// Never mailed — see `announces_by_mail`. The bare shape is returned rather than a
@@ -433,6 +548,10 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 		// history, and `PaymentEvent::Opened` already carries these exact bytes into
 		// `event_log`, so one encoding serves the store and the log.
 		ConsiliumKind::Payment => ConsiliumTerms::Payment(serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?),
+		ConsiliumKind::ValuationOverride => {
+			let stored: StoredValuationOverride = serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?;
+			ConsiliumTerms::ValuationOverride(stored.into_domain()?)
+		}
 		ConsiliumKind::FeePolicy => ConsiliumTerms::FeePolicy(serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?),
 	};
 	let hash_bytes: Vec<u8> = row.try_get("payload_hash").map_err(repo_err)?;
@@ -452,20 +571,6 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 			})
 		})
 		.collect::<Result<Vec<_>, DomainError>>()?;
-	// `consilium_execution_is_recorded` guarantees at most one of the effect columns is set,
-	// so the first `Some` is the effect.
-	let executed = row
-		.try_get::<Option<Uuid>, _>("executed_withdrawal_id")
-		.map_err(repo_err)?
-		.map(|id| ConsiliumEffect::Withdrawal(WithdrawalId::from_raw(id)))
-		.or(row
-			.try_get::<Option<Uuid>, _>("executed_payment_id")
-			.map_err(repo_err)?
-			.map(|id| ConsiliumEffect::Payment(PaymentId::from_raw(id))))
-		.or(row
-			.try_get::<Option<Uuid>, _>("executed_fee_policy_change_id")
-			.map_err(repo_err)?
-			.map(|id| ConsiliumEffect::FeePolicy(FeePolicyChangeId::from_raw(id))));
 	Ok(Consilium::rehydrate(
 		ConsiliumId::from_raw(row.try_get("id").map_err(repo_err)?),
 		terms,
@@ -479,10 +584,29 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 		row.try_get("created_at").map_err(repo_err)?,
 		row.try_get("expires_at").map_err(repo_err)?,
 		row.try_get("decided_at").map_err(repo_err)?,
-		executed,
+		executed_effect(row)?,
 		row.try_get("failure_reason").map_err(repo_err)?,
 		row.try_get::<i64, _>("version").map_err(repo_err)? as u64,
 	))
+}
+
+/// The one effect an executed row recorded, read off whichever of the three effect columns
+/// is set. `consilium_execution_is_recorded` promises at most one is, so the first match is
+/// the only match.
+fn executed_effect(row: &PgRow) -> Result<Option<ConsiliumEffect>, DomainError> {
+	if let Some(id) = row.try_get::<Option<Uuid>, _>("executed_withdrawal_id").map_err(repo_err)? {
+		return Ok(Some(ConsiliumEffect::Withdrawal(WithdrawalId::from_raw(id))));
+	}
+	if let Some(id) = row.try_get::<Option<Uuid>, _>("executed_payment_id").map_err(repo_err)? {
+		return Ok(Some(ConsiliumEffect::Payment(PaymentId::from_raw(id))));
+	}
+	if let Some(id) = row.try_get::<Option<Uuid>, _>("executed_valuation_id").map_err(repo_err)? {
+		return Ok(Some(ConsiliumEffect::Valuation(ValuationId::from_raw(id))));
+	}
+	Ok(row
+		.try_get::<Option<Uuid>, _>("executed_fee_policy_change_id")
+		.map_err(repo_err)?
+		.map(|id| ConsiliumEffect::FeePolicy(FeePolicyChangeId::from_raw(id))))
 }
 
 /// The initiator's address. A missing row is an error, not an empty string: every consilium
@@ -533,8 +657,8 @@ async fn fee_policy_detail_of(conn: &mut PgConnection, consilium: &Consilium) ->
 /// bumps rather than a second one maintained here.
 async fn persist(conn: &mut PgConnection, consilium: &mut Consilium) -> Result<(), DomainError> {
 	let affected = sqlx::query(
-		"UPDATE consilium SET state = $2, decided_at = to_timestamp($3), executed_withdrawal_id = $4, executed_payment_id = $5, executed_fee_policy_change_id = $6, \
-		 failure_reason = $7, version = $8 WHERE id = $1",
+		"UPDATE consilium SET state = $2, decided_at = to_timestamp($3), executed_withdrawal_id = $4, executed_payment_id = $5, executed_valuation_id = $6, \
+		 executed_fee_policy_change_id = $7, failure_reason = $8, version = $9 WHERE id = $1",
 	)
 	.bind(consilium.id().raw())
 	.bind(consilium.state().as_str())
@@ -545,6 +669,7 @@ async fn persist(conn: &mut PgConnection, consilium: &mut Consilium) -> Result<(
 	// call site's habit.
 	.bind(consilium.executed_withdrawal_id().map(|id| id.raw()))
 	.bind(consilium.executed_payment_id().map(|id| id.raw()))
+	.bind(consilium.executed_valuation_id().map(|id| id.raw()))
 	.bind(consilium.executed_fee_policy_change_id().map(|id| id.raw()))
 	.bind(consilium.failure_reason())
 	.bind(consilium.version() as i64)
@@ -565,11 +690,12 @@ fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
 }
 
 /// Close the SUBJECT a consilium decided against — the cascade for every verdict that is not
-/// an approval, in the verdict's own transaction. Nothing to do for a payout, whose consilium
-/// IS the request; a payment order is rejected, a fee-policy change is closed as rejected.
+/// an approval, in the verdict's own transaction. Nothing to do for a payout or a valuation
+/// override, whose consilium IS the request; a payment order is rejected, a fee-policy change
+/// is closed as rejected.
 async fn close_decided_subject(conn: &mut PgConnection, consilium: &Consilium, at: i64) -> Result<(), DomainError> {
 	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_) => Ok(()),
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) => Ok(()),
 		ConsiliumTerms::Payment(subject) => payments::reject_on(conn, subject.payment_id, at).await.map(|_| ()),
 		ConsiliumTerms::FeePolicy(subject) => {
 			let reason = format!("the owners' consilium ended {}", consilium.state().as_str());
@@ -584,7 +710,7 @@ async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) 
 		return Ok(());
 	}
 	let destination = subject_detail(conn, consilium).await?;
-	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned(), destination.payment()));
+	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned(), destination.end_detail()));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:outcome:{}:{recipient}", consilium.id(), consilium.state().as_str());
 		enqueue(conn, MailSubject::Consilium(consilium.id().raw()), recipient.raw(), &key, &mail).await?;
@@ -604,7 +730,7 @@ async fn announce_burn(conn: &mut PgConnection, consilium: &Consilium, voter: Us
 		consilium,
 		"TOKEN_BURNED".to_owned(),
 		format!("five failed code attempts burned the approval token for seat {voter}"),
-		destination.payment(),
+		destination.end_detail(),
 	));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:burn:{voter}:{recipient}", consilium.id());
@@ -1127,6 +1253,7 @@ impl ConsiliumRepository for PgConsilia {
 				match effect {
 					ConsiliumEffect::Withdrawal(withdrawal) => format!("payout {withdrawal} created"),
 					ConsiliumEffect::Payment(payment) => format!("payment {payment} approved"),
+					ConsiliumEffect::Valuation(valuation) => format!("valuation {valuation} recorded"),
 					ConsiliumEffect::FeePolicy(change) => format!("fee-policy change {change} scheduled"),
 				}
 			}
@@ -1147,5 +1274,50 @@ impl ConsiliumRepository for PgConsilia {
 		let fee_policy = fee_policy_detail_of(&mut tx, &consilium).await?;
 		tx.commit().await.map_err(repo_err)?;
 		view_of(consilium, initiator_email, &seats, fee_policy)
+	}
+}
+
+#[cfg(test)]
+mod mail_line_tests {
+	use domain::{balance::ServiceId, consilium::ValuationOverrideTerms, money::Usdt};
+
+	use super::{EndDetail, MAIL_LINE_BYTES, clip_utf8, valuation_mail_source};
+
+	fn terms() -> ValuationOverrideTerms {
+		ValuationOverrideTerms {
+			service: ServiceId::parse("service_arb").unwrap(),
+			aum: Usdt::parse_decimal("16250").unwrap(),
+		}
+	}
+
+	#[test]
+	fn a_short_title_is_carried_whole() {
+		let source = valuation_mail_source(&terms(), Some(&EndDetail::ProductTitle("Arb desk".to_owned())));
+		assert_eq!(source, "Arb desk (service_arb) — NAV valuation");
+		assert_eq!(valuation_mail_source(&terms(), None), "service_arb — NAV valuation");
+	}
+
+	#[test]
+	fn a_long_cyrillic_title_is_clipped_inside_the_relay_bound_and_keeps_the_slug() {
+		// 120 chars of Cyrillic — the longest title the registry admits — is past the bound in bytes on its own.
+		let title: String = "Арбитражный портфель по стейблкоинам на пяти биржах с ежедневной переоценкой "
+			.repeat(2)
+			.chars()
+			.take(120)
+			.collect();
+		assert!(title.len() > MAIL_LINE_BYTES);
+		let source = valuation_mail_source(&terms(), Some(&EndDetail::ProductTitle(title)));
+		assert!(source.len() <= MAIL_LINE_BYTES, "{} bytes", source.len());
+		assert!(source.ends_with("… (service_arb) — NAV valuation"), "{source}");
+	}
+
+	#[test]
+	fn clipping_never_splits_a_character() {
+		let s = "ёёёёё";
+		for budget in 0..=s.len() {
+			let out = clip_utf8(s, budget);
+			assert!(out.len() <= budget.max("…".len()), "budget {budget} → {} bytes", out.len());
+		}
+		assert_eq!(clip_utf8("abc", 3), "abc");
 	}
 }

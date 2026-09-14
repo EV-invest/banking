@@ -136,6 +136,7 @@ fn consilium_ports(h: &Harness) -> consilium_app::ConsiliumPorts<'_> {
 		policy: &h.outflow,
 		allocations: &h.allocations,
 		fee_changes: &h.changes,
+		nav: &h.nav,
 		relay: &h.notify,
 		configured: &CONFIGURED,
 		kyc: KycGate::LIFTED,

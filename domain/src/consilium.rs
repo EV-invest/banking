@@ -24,7 +24,7 @@ use ev::architecture::{AggregateRoot, DomainEvent, EmitsEvents, Entity, Id};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-	balance::LedgerAccountKey,
+	balance::{LedgerAccountKey, ServiceId, ValuationId},
 	error::DomainError,
 	fees::{FeePolicyChangeId, FeePolicySubject},
 	hex32,
@@ -71,6 +71,10 @@ pub enum ConsiliumKind {
 	/// A [`crate::payments::PaymentOrder`] whose source is fund-owned money — §3's rule
 	/// that the owners' money moves only on the owners' quorum, at every tier.
 	Payment,
+	/// A NAV mark the move guard refuses (banking#232). The price every redemption settles
+	/// at is fund-owned money by another name, so a move past the cap is the owners' call.
+	/// `0035_consilium_valuation_override.sql` widens the CHECK in this same commit.
+	ValuationOverride,
 	/// A change of a product's fee TERMS that tightens them beyond the house envelope
 	/// (`docs/FEES.md` § "Changing the terms"). Not a money move: carrying it schedules the
 	/// change; the sweeper promotes it once the holders' notice period has run.
@@ -82,6 +86,7 @@ impl ConsiliumKind {
 		match self {
 			Self::RevenuePayout => "revenue_payout",
 			Self::Payment => "payment",
+			Self::ValuationOverride => "valuation_override",
 			Self::FeePolicy => "fee_policy",
 		}
 	}
@@ -90,6 +95,7 @@ impl ConsiliumKind {
 		match raw {
 			"revenue_payout" => Ok(Self::RevenuePayout),
 			"payment" => Ok(Self::Payment),
+			"valuation_override" => Ok(Self::ValuationOverride),
 			"fee_policy" => Ok(Self::FeePolicy),
 			other => Err(DomainError::Validation(format!("unknown consilium kind: {other}"))),
 		}
@@ -223,6 +229,32 @@ impl RevenuePayoutTerms {
 	}
 }
 
+/// The immutable subject of a valuation-override consilium: mark `service` at `aum`, past
+/// the NAV-move guard. Only the AUM is frozen — the NAV itself is derived from the LIVE
+/// unit supply at execution, because units can be minted or burned during the 72h vote and
+/// a NAV frozen at open would then misprice the fund the owners approved marking.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ValuationOverrideTerms {
+	pub service: ServiceId,
+	pub aum: Usdt,
+}
+
+impl ValuationOverrideTerms {
+	/// The domain-separation prefix — see [`RevenuePayoutTerms::DOMAIN`]. FROZEN for the
+	/// same reason.
+	pub const DOMAIN: &'static [u8] = b"banking.v1.ValuationOverrideTerms\x00";
+
+	/// The bytes the payload hash is taken over: the prefix, the length-prefixed service,
+	/// the AUM's base units big-endian.
+	pub fn canonical_bytes(&self) -> Vec<u8> {
+		let mut out = Vec::with_capacity(Self::DOMAIN.len() + 96);
+		out.extend_from_slice(Self::DOMAIN);
+		push_field(&mut out, self.service.as_str().as_bytes());
+		out.extend_from_slice(&self.aum.base_units().to_be_bytes());
+		out
+	}
+}
+
 /// What a consilium is deciding, by value.
 ///
 /// It exists so a second governance subject is a variant here rather than a parallel
@@ -237,6 +269,8 @@ pub enum ConsiliumTerms {
 	/// the hashed subject (see [`PaymentSubject`]), so an approval of one payment is not a
 	/// valid signature over another with identical terms.
 	Payment(PaymentSubject),
+	/// A NAV mark past the move guard — see [`ValuationOverrideTerms`].
+	ValuationOverride(ValuationOverrideTerms),
 	/// The fee-policy change this quorum authorizes. The CHANGE'S id is inside the hashed
 	/// subject for the same reason the payment's is.
 	FeePolicy(FeePolicySubject),
@@ -247,6 +281,7 @@ impl ConsiliumTerms {
 		match self {
 			Self::RevenuePayout(_) => ConsiliumKind::RevenuePayout,
 			Self::Payment(_) => ConsiliumKind::Payment,
+			Self::ValuationOverride(_) => ConsiliumKind::ValuationOverride,
 			Self::FeePolicy(_) => ConsiliumKind::FeePolicy,
 		}
 	}
@@ -263,6 +298,7 @@ impl ConsiliumTerms {
 		match self {
 			Self::RevenuePayout(terms) => terms.canonical_bytes(),
 			Self::Payment(subject) => subject.canonical_bytes(),
+			Self::ValuationOverride(terms) => terms.canonical_bytes(),
 			Self::FeePolicy(subject) => subject.canonical_bytes(),
 		}
 	}
@@ -278,6 +314,11 @@ impl ConsiliumTerms {
 			// governance surfaces over one claim serialize against each other rather than
 			// each holding its own idea of what is being spent.
 			Self::Payment(subject) => subject.terms.source_claim(),
+			// A mark moves no cash, but it reprices every redemption the fund's claim will pay,
+			// so it "spends" that claim: one open override per fund, and it queues behind (or
+			// blocks) a payment out of the same `service:<id>` claim rather than racing it —
+			// the owners must not be voting on the price and on a drain of the pool at once.
+			Self::ValuationOverride(terms) => LedgerAccountKey::ServiceClaim(terms.service.clone()),
 			// The account the new terms will collect INTO. It spends nothing, but it is the
 			// one claim a fee-policy change is unambiguously about, so keying the per-source
 			// "one open request" index on it yields exactly one open fee-policy consilium per
@@ -299,6 +340,12 @@ impl From<PaymentSubject> for ConsiliumTerms {
 	}
 }
 
+impl From<ValuationOverrideTerms> for ConsiliumTerms {
+	fn from(terms: ValuationOverrideTerms) -> Self {
+		Self::ValuationOverride(terms)
+	}
+}
+
 impl From<FeePolicySubject> for ConsiliumTerms {
 	fn from(subject: FeePolicySubject) -> Self {
 		Self::FeePolicy(subject)
@@ -317,6 +364,8 @@ pub enum ConsiliumEffect {
 	/// The payment order this quorum carried. The order, not its money: what the payment
 	/// then settles as (a withdrawal, or one posted transfer) is the order's own business.
 	Payment(PaymentId),
+	/// The `fund_valuations` mark a valuation-override quorum recorded.
+	Valuation(ValuationId),
 	/// The fee-policy change this quorum scheduled. Promoting it into the live terms once
 	/// the notice period has run is the fee sweeper's business.
 	FeePolicy(FeePolicyChangeId),
@@ -331,6 +380,12 @@ impl From<WithdrawalId> for ConsiliumEffect {
 impl From<PaymentId> for ConsiliumEffect {
 	fn from(id: PaymentId) -> Self {
 		Self::Payment(id)
+	}
+}
+
+impl From<ValuationId> for ConsiliumEffect {
+	fn from(id: ValuationId) -> Self {
+		Self::Valuation(id)
 	}
 }
 
@@ -728,26 +783,35 @@ impl Consilium {
 		// leave the column blank on a row that did execute.
 		match effect {
 			ConsiliumEffect::Withdrawal(id) => Some(id),
-			ConsiliumEffect::Payment(_) | ConsiliumEffect::FeePolicy(_) => None,
+			ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) => None,
 		}
 	}
 
 	/// The executed effect NARROWED to a payment order — the `executed_payment_id` column's
-	/// projection, and one more of `consilium_execution_is_recorded`'s
-	/// `num_nonnulls(...) = 1`: exactly one of the effect accessors answers on an executed row.
+	/// projection, and another leg of `consilium_execution_is_recorded`'s
+	/// `num_nonnulls(...) = 1`: exactly one of the four accessors answers on an executed row.
 	pub fn executed_payment_id(&self) -> Option<PaymentId> {
 		match self.executed? {
 			ConsiliumEffect::Payment(id) => Some(id),
-			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::FeePolicy(_) => None,
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_) | ConsiliumEffect::FeePolicy(_) => None,
+		}
+	}
+
+	/// The executed effect NARROWED to a valuation mark — the `executed_valuation_id`
+	/// column's projection, the third leg of the same `num_nonnulls(...) = 1`.
+	pub fn executed_valuation_id(&self) -> Option<ValuationId> {
+		match self.executed? {
+			ConsiliumEffect::Valuation(id) => Some(id),
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::FeePolicy(_) => None,
 		}
 	}
 
 	/// The executed effect NARROWED to a fee-policy change — the
-	/// `executed_fee_policy_change_id` column's projection.
+	/// `executed_fee_policy_change_id` column's projection, the fourth leg.
 	pub fn executed_fee_policy_change_id(&self) -> Option<FeePolicyChangeId> {
 		match self.executed? {
 			ConsiliumEffect::FeePolicy(id) => Some(id),
-			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) => None,
+			ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Payment(_) | ConsiliumEffect::Valuation(_) => None,
 		}
 	}
 
@@ -1167,6 +1231,50 @@ mod tests {
 		let subject = payment_subject();
 		assert!(subject.canonical_bytes().starts_with(crate::payments::PaymentSubject::DOMAIN));
 		assert_ne!(ConsiliumTerms::Payment(subject).canonical_bytes(), payout.canonical_bytes());
+		// And the third: a mark's encoding opens with its own frozen prefix and can collide
+		// with neither of the other two.
+		let mark = valuation_override("250");
+		assert!(mark.canonical_bytes().starts_with(ValuationOverrideTerms::DOMAIN));
+		assert_eq!(ValuationOverrideTerms::DOMAIN, b"banking.v1.ValuationOverrideTerms\x00");
+		assert_ne!(ConsiliumTerms::ValuationOverride(mark.clone()).canonical_bytes(), payout.canonical_bytes());
+		assert_ne!(
+			ConsiliumTerms::ValuationOverride(mark).canonical_bytes(),
+			ConsiliumTerms::Payment(payment_subject()).canonical_bytes()
+		);
+	}
+
+	/// A NAV mark past the move guard on one fund.
+	fn valuation_override(aum: &str) -> ValuationOverrideTerms {
+		ValuationOverrideTerms {
+			service: ServiceId::parse("svc-arb").unwrap(),
+			aum: Usdt::parse_decimal(aum).unwrap(),
+		}
+	}
+
+	#[test]
+	fn a_valuation_override_hashes_both_fields_and_spends_the_funds_claim() {
+		let terms = ConsiliumTerms::ValuationOverride(valuation_override("16250"));
+		assert_eq!(terms.kind(), ConsiliumKind::ValuationOverride);
+		// The AUM is what the owners approve, so editing it invalidates every approval; so
+		// does pointing the same AUM at another fund.
+		assert_ne!(valuation_override("16250").canonical_bytes(), valuation_override("16251").canonical_bytes());
+		let other_fund = ValuationOverrideTerms {
+			service: ServiceId::parse("svc-other").unwrap(),
+			aum: Usdt::parse_decimal("16250").unwrap(),
+		};
+		assert_ne!(valuation_override("16250").canonical_bytes(), other_fund.canonical_bytes());
+		assert_eq!(valuation_override("16250").canonical_bytes(), valuation_override("16250").canonical_bytes());
+		// One open override per fund, serialized against a payment out of that fund's claim.
+		assert_eq!(terms.source_claim(), LedgerAccountKey::ServiceClaim(ServiceId::parse("svc-arb").unwrap()));
+		// The effect narrows to the valuation column and to no other.
+		let roster = owners(3);
+		let mut c = Consilium::open(ConsiliumId::new(), terms, [1u8; 32], roster[0], &roster, NOW).unwrap();
+		c.record_vote(roster[1], VoteDecision::Approve, NOW).unwrap();
+		c.record_vote(roster[2], VoteDecision::Approve, NOW).unwrap();
+		let mark = ValuationId::new();
+		c.mark_executed(ConsiliumEffect::Valuation(mark), NOW).unwrap();
+		assert_eq!(c.executed_valuation_id(), Some(mark));
+		assert!(c.executed_withdrawal_id().is_none() && c.executed_payment_id().is_none());
 	}
 
 	/// A payment subject over the fund's own pooled capital — the §3 case that needs a quorum.
@@ -1259,14 +1367,15 @@ mod tests {
 		for decision in [VoteDecision::Pending, VoteDecision::Approve, VoteDecision::Reject] {
 			assert_eq!(VoteDecision::parse(decision.as_str()).unwrap(), decision);
 		}
-		for kind in [ConsiliumKind::RevenuePayout, ConsiliumKind::Payment, ConsiliumKind::FeePolicy] {
-			// THE DATABASE ADMITS EXACTLY THESE. `0031_consilium_payment_kind.sql` and
-			// `0036_fee_policy_changes.sql` widen the CHECK to the same strings, and a value on
-			// one side only is a row that fails EVERY read of the governance history rather
-			// than just its own.
+		for kind in [ConsiliumKind::RevenuePayout, ConsiliumKind::Payment, ConsiliumKind::ValuationOverride, ConsiliumKind::FeePolicy] {
+			// THE DATABASE ADMITS EXACTLY THESE. `0031_consilium_payment_kind.sql`,
+			// `0035_consilium_valuation_override.sql` and `0036_fee_policy_changes.sql` widen the
+			// CHECK to the same four strings, and a value on one side only is a row that fails
+			// EVERY read of the governance history rather than just its own.
 			assert_eq!(ConsiliumKind::parse(kind.as_str()).unwrap(), kind);
 		}
 		assert_eq!(ConsiliumKind::Payment.as_str(), "payment");
+		assert_eq!(ConsiliumKind::ValuationOverride.as_str(), "valuation_override");
 		assert_eq!(ConsiliumKind::FeePolicy.as_str(), "fee_policy");
 		assert!(ConsiliumState::parse("done").is_err());
 		assert!(VoteDecision::parse("maybe").is_err());

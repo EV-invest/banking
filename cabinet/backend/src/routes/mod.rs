@@ -120,6 +120,7 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/fees/assessments", get(admin::fund_fee_assessments))
 		.route("/api/admin/valuation/queue", get(admin::redemption_queue))
 		.route("/api/admin/valuation/post", post(admin::post_valuation))
+		.route("/api/admin/valuation/override", post(admin::propose_valuation_override))
 		.route("/api/admin/valuation/settle", post(admin::settle_redemption))
 		.route("/api/admin/valuation/fail", post(admin::fail_redemption))
 		.route("/api/admin/withdrawals/queue", get(admin::withdrawal_queue))

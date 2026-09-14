@@ -85,6 +85,7 @@ import { PaymentTerms, paymentWords } from "@/views/consilium/ui/payment-terms";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
 import { ProposeRemoval, RemovalList } from "@/views/consilium/ui/removals";
 import { UserProposalList } from "@/views/consilium/ui/user-proposals";
+import { ValuationOverrideTerms, valuationWords } from "@/views/consilium/ui/valuation-terms";
 
 const isForbidden = (error: unknown): boolean => error instanceof RequestError && error.status === 403;
 
@@ -442,10 +443,12 @@ function PayoutSection({
                     <Item size="sm" className="px-0">
                       <ItemContent className="min-w-0 gap-0.5">
                         <ItemTitle className="block w-auto truncate font-medium tabular-nums">
-                          {consilium.payment
-                            ? `${formatExactUsdt(consilium.payment.amount)} USDT · ${paymentWords(consilium.payment)}`
-                            : consilium.fee_policy
-                              ? feePolicyWords(consilium.fee_policy)
+                          {consilium.valuation_override
+                            ? `${formatExactUsdt(consilium.valuation_override.aum)} USDT · ${valuationWords(consilium.valuation_override, t)}`
+                            : consilium.payment
+                              ? `${formatExactUsdt(consilium.payment.amount)} USDT · ${paymentWords(consilium.payment)}`
+                              : consilium.fee_policy
+                                ? feePolicyWords(consilium.fee_policy)
                               : `${formatExactUsdt(consilium.revenue_payout?.amount)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
                         </ItemTitle>
                         <ItemDescription className="truncate text-xs tabular-nums">
@@ -476,9 +479,11 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
   const [error, setError] = useState<unknown>(null);
 
   const payout = consilium.revenue_payout;
-  // A payment consilium carries its terms in `payment`, a change of terms in `fee_policy`;
-  // the payout fields are empty then.
+  // A payment consilium carries its terms in `payment`, a NAV mark past the move guard in
+  // `valuation_override`, a change of terms in `fee_policy`; the payout fields are empty
+  // in every one of those cases.
   const payment = consilium.payment ?? null;
+  const valuation = consilium.valuation_override ?? null;
   const feePolicy = consilium.fee_policy ?? null;
   const kind = consiliumKind(consilium);
   const threshold = consilium.threshold ?? 0;
@@ -511,7 +516,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
             <p className="text-2xl font-semibold leading-none text-foreground">{feePolicy.allocation_name || feePolicy.service}</p>
           ) : (
             <p className="text-2xl font-semibold leading-none tabular-nums text-foreground">
-              {formatExactUsdt(payment ? payment.amount : payout?.amount)}
+              {formatExactUsdt(valuation ? valuation.aum : payment ? payment.amount : payout?.amount)}
               <span className="ml-2 text-sm font-medium text-muted-foreground">USDT</span>
             </p>
           )}
@@ -521,7 +526,9 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
         </Badge>
       </div>
 
-      {payment ? (
+      {valuation ? (
+        <ValuationOverrideTerms terms={valuation} />
+      ) : payment ? (
         <PaymentTerms terms={payment} />
       ) : feePolicy ? (
         <FeePolicyTerms terms={feePolicy} />

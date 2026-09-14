@@ -14,7 +14,7 @@ use std::sync::Arc;
 use domain::{
 	allocations::AllocationAccess,
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId, TransferCode},
+	balance::{LedgerAccountKey, Party, ServiceId, TransferCode, ValuationId},
 	error::DomainError,
 	money::{Nav, Network, Shares, TxRef, Usdt, WalletAddress},
 	redemptions::RedemptionState,
@@ -349,7 +349,7 @@ async fn fund_valuation_derives_nav_and_guards_fat_finger() {
 	assert_eq!(nav_repo.current(&service).await.unwrap().map(|v| v.nav).unwrap_or(Nav::SEED), Nav::SEED);
 	// Posting AUM with zero units outstanding is rejected — NAV is undefined.
 	assert!(
-		funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("100"), "op", false)
+		funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("100"), "op", now_unix())
 			.await
 			.is_err()
 	);
@@ -366,23 +366,73 @@ async fn fund_valuation_derives_nav_and_guards_fat_finger() {
 	h.ledger.post(&mint).await.unwrap();
 
 	// AUM 150 over 100 units → NAV 1.5, and it becomes the current price.
-	let v = funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("150"), "op", false)
+	let v = funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("150"), "op", now_unix())
 		.await
 		.unwrap();
 	assert_eq!(v.nav, Nav::parse_decimal("1.5").unwrap());
 	assert_eq!(nav_repo.current(&service).await.unwrap().map(|v| v.nav).unwrap_or(Nav::SEED), Nav::parse_decimal("1.5").unwrap());
 
-	// A 10x fat-finger (AUM 1500 → NAV 15, +900%) is rejected without override…
-	assert!(
-		funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", false)
-			.await
-			.is_err()
+	// A 10x fat-finger (AUM 1500 → NAV 15, +900%) is rejected, and the refusal names the
+	// only way past the guard. There is no flag on this path that lifts it (banking#232).
+	let err = funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", now_unix())
+		.await
+		.unwrap_err();
+	assert!(matches!(&err, DomainError::Validation(reason) if reason.contains("valuation-override consilium")), "got {err:?}");
+	assert_eq!(
+		nav_repo.current(&service).await.unwrap().unwrap().nav,
+		Nav::parse_decimal("1.5").unwrap(),
+		"the refused mark was not recorded"
 	);
-	// …and accepted with it.
-	let forced = funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("1500"), "op", true)
+}
+
+/// The cap is measured against the rolling window's anchor as well as the previous mark,
+/// so it cannot be walked past in steps that are each inside it.
+#[tokio::test]
+async fn the_nav_move_cap_cannot_be_stepped_past_inside_the_window() {
+	let Some(h) = harness().await else { return };
+	let nav_repo = PgNav::new(h.pool.clone());
+	let service = registered_service(&h).await;
+	let now = now_unix();
+	h.ledger
+		.post(&LedgerTransfer {
+			id: Uuid::new_v4().as_u128(),
+			debit: LedgerAccountKey::UserShares(service.clone(), UserId::new()),
+			credit: LedgerAccountKey::SharesOutstanding(service.clone()),
+			amount: shares("100").base_units(),
+			code: TransferCode::ShareMint,
+			reference: 0,
+		})
 		.await
 		.unwrap();
-	assert_eq!(forced.nav, Nav::parse_decimal("15").unwrap());
+	let post = |aum: &'static str, at: i64| funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt(aum), "op", at);
+
+	// The first mark anchors the window: NAV 1.0.
+	post("100", now).await.unwrap();
+	// +45% against both the previous mark and the anchor: fine.
+	assert_eq!(post("145", now).await.unwrap().nav, Nav::parse_decimal("1.45").unwrap());
+	// Another +45% is inside the cap against the previous mark (1.45 → 2.10, +44.8%) and
+	// was the whole of the stepping attack; against the anchor it is +110%, and refused.
+	let err = post("210", now).await.unwrap_err();
+	assert!(matches!(&err, DomainError::Validation(reason) if reason.contains("anchoring the rolling window")), "got {err:?}");
+	// A small move that stays inside the cap against BOTH still lands: 1.48 is +2% on the
+	// previous mark and +48% on the anchor.
+	assert_eq!(post("148", now).await.unwrap().nav, Nav::parse_decimal("1.48").unwrap());
+	assert_eq!(nav_repo.current(&service).await.unwrap().unwrap().nav, Nav::parse_decimal("1.48").unwrap());
+
+	// The window slides. Once every mark so far is older than the window, the anchor is
+	// the newest of them (1.48), and the same +42% that was refused above now passes.
+	sqlx::query("UPDATE fund_valuations SET posted_at = posted_at - interval '8 days' WHERE service = $1")
+		.bind(service.as_str())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	let anchor = nav_repo.anchor(&service, now - funds_app::NAV_MOVE_WINDOW_SECS).await.unwrap().unwrap();
+	assert_eq!(anchor.nav, Nav::parse_decimal("1.48").unwrap(), "the newest mark outside the window anchors it");
+	assert_eq!(post("210", now).await.unwrap().nav, Nav::parse_decimal("2.1").unwrap());
+	// And a fund younger than the window is anchored by its first mark, never by nothing:
+	// the earliest mark is the fallback, so a fresh fund cannot be stepped either.
+	let young = registered_service(&h).await;
+	assert!(nav_repo.anchor(&young, now).await.unwrap().is_none(), "never marked: no anchor and no previous mark either");
 }
 
 #[tokio::test]
@@ -418,7 +468,7 @@ async fn subscribe_mints_units_moves_cash_and_prices_at_nav() {
 	assert_eq!(units(&h, &outstanding).await, shares("200"), "supply grew with the mint");
 
 	// Operator marks the fund up to NAV 2.0 (AUM 400 over 200 units).
-	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", false)
+	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", now_unix())
 		.await
 		.unwrap();
 
@@ -536,9 +586,10 @@ async fn queued_short_redemption(
 	h.relay.drain().await;
 	funds_app::subscribe(&fund_ports, subs, user, service.clone(), usdt("100"), now).await.unwrap();
 	h.relay.drain().await;
-	// Any AUM over the 100-unit supply moves the NAV ≥ the fat-finger threshold here, so
-	// the operator forces the mark.
-	funds_app::post_fund_valuation(&h.allocations, nav_repo, h.ledger.as_ref(), service.clone(), usdt(aum), "op", true)
+	// Any AUM over the 100-unit supply moves the NAV past the guard here, and the guarded
+	// post has no flag to lift it any more — the mark is written through the shared writer
+	// the owners' override uses, which is exactly what an executed override would do.
+	funds_app::record_valuation(nav_repo, h.ledger.as_ref(), ValuationId::new(), service.clone(), usdt(aum), "op")
 		.await
 		.unwrap();
 	let r = funds_app::request_redemption(&fund_ports, reds, user, service.clone(), shares(units), now).await.unwrap();
@@ -786,9 +837,10 @@ async fn back_to_back_settles_compound_the_cost_basis_reduction() {
 	assert_eq!(cost_basis(&positions, user, &service).await, Some(usdt("100")), "basis seeded by the subscribe");
 	assert_eq!(tracked_units(&h.pool, user, &service).await, Some(shares("100")), "units tracked on the projection");
 
-	// Mark NAV to 4 (AUM 400 / 100 units, a forced +300% move) so each 30-unit redemption prices
-	// to 120 cash — above the fund's 100 claim — and stays Queued (no auto-settle).
-	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("400"), "op", true)
+	// Mark NAV to 4 (AUM 400 / 100 units, a +300% move written through the shared writer —
+	// what an executed owners' override records) so each 30-unit redemption prices to 120
+	// cash — above the fund's 100 claim — and stays Queued (no auto-settle).
+	funds_app::record_valuation(&nav_repo, h.ledger.as_ref(), ValuationId::new(), service.clone(), usdt("400"), "op")
 		.await
 		.unwrap();
 	let r1 = funds_app::request_redemption(&fund_ports, &reds, user, service.clone(), shares("30"), now).await.unwrap();
@@ -1050,4 +1102,120 @@ async fn an_invest_default_admits_anyone_and_lowering_it_never_traps_a_holder() 
 	assert_eq!(redemption.state(), RedemptionState::Completed, "the fund's own claim covers it, so it settles at once");
 	h.relay.drain().await;
 	assert_eq!(claim(&h, &LedgerAccountKey::UserClaim(user)).await, usdt("100"), "the investor's cash came back");
+}
+
+/// The redeem cooldown at REQUEST: whoever posted the fund's mark cannot redeem from it
+/// for `VALUATION_REDEEM_COOLDOWN_SECS`, while another investor redeems at that price.
+///
+/// The mark is recorded with `posted_by` spelled exactly as the RPC records it: the token's
+/// `sub`, a hyphenated UUID that `caller_id` parses back into this same `UserId` — so this
+/// also pins that the direct path's spelling and the cooldown's comparison agree.
+#[tokio::test]
+async fn a_valuation_poster_cannot_redeem_from_that_fund_inside_the_cooldown() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let fund_ports = funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &nav_repo,
+		relay: &h.notify,
+	};
+	let poster = UserId::new();
+	let other = UserId::new();
+	let service = registered_service(&h).await;
+	let now = now_unix();
+	for user in [poster, other] {
+		balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+			.await
+			.unwrap();
+		h.relay.drain().await;
+		funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
+		h.relay.drain().await;
+	}
+	// 200 units outstanding; AUM 240 marks the fund at 1.2, inside the guard.
+	let sub = poster.raw().to_string();
+	assert_eq!(sub, poster.to_string(), "the cooldown compares the UserId's own spelling against the recorded sub");
+	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("240"), &sub, now)
+		.await
+		.unwrap();
+
+	let err = funds_app::request_redemption(&fund_ports, &reds, poster, service.clone(), shares("10"), now).await.unwrap_err();
+	assert!(matches!(&err, DomainError::Precondition(reason) if reason.contains("posted a valuation")), "got {err:?}");
+	assert_eq!(
+		units_available(&h, &LedgerAccountKey::UserShares(service.clone(), poster)).await,
+		shares("100"),
+		"refused before anything was reserved"
+	);
+	// The other investor redeems at the poster's price, and the fund covers it at once.
+	let r = funds_app::request_redemption(&fund_ports, &reds, other, service.clone(), shares("10"), now).await.unwrap();
+	assert_eq!(r.state(), RedemptionState::Completed);
+	// Past the cooldown the refusal is no longer the cooldown's: what stands in the way then
+	// is the ordinary staleness guard on a week-old mark, a different error on purpose.
+	// Measured from the mark's DB-stamped `posted_at`, not from `now` — the mark landed some
+	// seconds after `now` was taken, and the cooldown is measured from the mark.
+	let posted_at = nav_repo.current(&service).await.unwrap().unwrap().posted_at_unix;
+	let later = posted_at + funds_app::VALUATION_REDEEM_COOLDOWN_SECS + 1;
+	let err = funds_app::request_redemption(&fund_ports, &reds, poster, service.clone(), shares("10"), later).await.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(_)), "the cooldown lifted; got {err:?}");
+}
+
+/// The redeem cooldown at SETTLE: a redemption queued BEFORE its owner marked the fund is
+/// refused when the settle comes — settle is where the cash is priced, and the queue must
+/// not be a way to get in ahead of one's own mark.
+#[tokio::test]
+async fn a_queued_redemption_is_refused_at_settle_once_its_owner_has_marked_the_fund() {
+	let Some(h) = harness().await else { return };
+	let subs = PgSubscriptions::new(h.pool.clone());
+	let reds = PgRedemptions::new(h.pool.clone());
+	let nav_repo = PgNav::new(h.pool.clone());
+	let fund_ports = funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &nav_repo,
+		relay: &h.notify,
+	};
+	let poster = UserId::new();
+	let other = UserId::new();
+	let service = registered_service(&h).await;
+	let now = now_unix();
+	for user in [poster, other] {
+		balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), Network::Bep20, usdt("100"))
+			.await
+			.unwrap();
+		h.relay.drain().await;
+		funds_app::subscribe(&fund_ports, &subs, user, service.clone(), usdt("100"), now).await.unwrap();
+		h.relay.drain().await;
+	}
+	// Someone else marks the fund at 10 (AUM 2000 / 200 units — past the guard, through the
+	// shared writer), so a 50-unit redemption prices to 500 against a 200 claim and queues.
+	funds_app::record_valuation(&nav_repo, h.ledger.as_ref(), ValuationId::new(), service.clone(), usdt("2000"), "op")
+		.await
+		.unwrap();
+	let queued_by_poster = funds_app::request_redemption(&fund_ports, &reds, poster, service.clone(), shares("50"), now).await.unwrap();
+	let queued_by_other = funds_app::request_redemption(&fund_ports, &reds, other, service.clone(), shares("50"), now).await.unwrap();
+	assert_eq!(queued_by_poster.state(), RedemptionState::Queued);
+	assert_eq!(queued_by_other.state(), RedemptionState::Queued);
+	h.relay.drain().await;
+
+	// Now the poster marks the fund themselves (10 → 10.5, inside the guard) and the fund is
+	// topped up so either settle could pay.
+	funds_app::post_fund_valuation(&h.allocations, &nav_repo, h.ledger.as_ref(), service.clone(), usdt("2100"), &poster.to_string(), now)
+		.await
+		.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Service(service.clone()), Network::Bep20, usdt("1000"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+
+	let err = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, queued_by_poster.id(), now).await.unwrap_err();
+	assert!(matches!(&err, DomainError::Precondition(reason) if reason.contains("posted a valuation")), "got {err:?}");
+	assert_eq!(
+		reds.find_by_id(queued_by_poster.id()).await.unwrap().unwrap().state(),
+		RedemptionState::Queued,
+		"refused, not failed: it settles once the cooldown ages out"
+	);
+	let settled = funds_app::settle_redemption(&reds, &nav_repo, &h.notify, queued_by_other.id(), now).await.unwrap();
+	assert_eq!(settled.state(), RedemptionState::Completed, "the other investor's redemption settles at the poster's price");
 }
