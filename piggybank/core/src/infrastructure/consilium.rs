@@ -276,7 +276,7 @@ async fn subject_detail(conn: &mut PgConnection, consilium: &Consilium) -> Resul
 /// handler). A product title is up to 120 CHARACTERS, so a Cyrillic one alone can pass
 /// this in bytes; a label over the bound is not a long mail but a refused one — and a
 /// refused invitation leaves the consilium open with nobody able to vote.
-const MAIL_LINE_BYTES: usize = 160;
+pub(crate) const MAIL_LINE_BYTES: usize = 160;
 
 /// How a valuation override names the fund in a mail: the product's title when the
 /// registry has one, else the slug — never blank, because the owners are approving a
@@ -295,7 +295,7 @@ fn valuation_mail_source(terms: &ValuationOverrideTerms, detail: Option<&EndDeta
 
 /// `s` when it fits in `max_bytes`, else its longest char-boundary prefix that leaves
 /// room for an ellipsis inside the budget.
-fn clip_utf8(s: &str, max_bytes: usize) -> String {
+pub(crate) fn clip_utf8(s: &str, max_bytes: usize) -> String {
 	const ELLIPSIS: &str = "…";
 	if s.len() <= max_bytes {
 		return s.to_owned();
@@ -363,13 +363,9 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 		ConsiliumTerms::FeePolicy(subject) => GovernanceMail::FeePolicyApproval(FeePolicyApproval {
 			consilium_id: consilium.id().to_string(),
 			initiator_email: initiator_email.to_owned(),
-			// The display name, falling back to the slug only for a product deregistered
-			// under its own consilium — the owners still need to be able to name it.
-			fund: detail
-				.fee_policy()
-				.map(|detail| detail.allocation_name)
-				.filter(|name| !name.is_empty())
-				.unwrap_or_else(|| subject.service.to_string()),
+			// The display name inside the relay's line bound, with the slug — the owners
+			// still need to be able to name a product deregistered under its own consilium.
+			fund: fee_policy_changes::fee_mail_fund(detail.fee_policy().map(|detail| detail.allocation_name).as_deref(), &subject.service),
 			current: subject.from.as_ref().map(fee_policy_changes::mail_terms),
 			proposed: fee_policy_changes::mail_terms(&subject.to),
 			reason: subject.reason.clone(),

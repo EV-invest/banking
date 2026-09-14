@@ -79,6 +79,38 @@ pub(crate) fn mail_terms(policy: &FeePolicy) -> FeePolicyTerms {
 	}
 }
 
+/// How a mail names the product whose terms are changing: the title, clipped to the relay's
+/// line bound, with the slug in brackets — or the slug alone when the registry has no title
+/// or the title would read as a link.
+///
+/// The slug always survives: a holder or an owner is told about THIS product and must be
+/// able to tell which. A title alone can be refused by the relay — 120 characters of
+/// Cyrillic overrun the 160-BYTE bound, and concierge's `no_link` refuses anything a mail
+/// client would linkify (its own needles are repeated here) — and a refused mail is charged
+/// attempt after attempt until it is retired: a notice nobody receives, an approval nobody
+/// can answer. Control characters are folded for the same reason; the relay refuses them.
+pub(crate) fn fee_mail_fund(title: Option<&str>, service: &ServiceId) -> String {
+	const LINK_NEEDLES: [&str; 3] = ["://", "www.", "http"];
+	let slug = service.to_string();
+	let title: String = title
+		.unwrap_or_default()
+		.chars()
+		.map(|c| if c.is_control() { ' ' } else { c })
+		.collect::<String>()
+		.trim()
+		.to_owned();
+	if title.is_empty() {
+		return slug;
+	}
+	let lower = title.to_ascii_lowercase();
+	if LINK_NEEDLES.iter().any(|needle| lower.contains(needle)) {
+		return slug;
+	}
+	let tail = format!(" ({slug})");
+	let title = consilium::clip_utf8(&title, consilium::MAIL_LINE_BYTES.saturating_sub(tail.len()));
+	format!("{title}{tail}")
+}
+
 /// Take the ONE lock every transaction over a product's terms opens with: its row in
 /// `allocations`, `FOR UPDATE`. Scheduling, carrying and promoting a change all read the
 /// live terms and write something derived from them (the requirement, the notice's "from",
@@ -224,10 +256,7 @@ async fn holders(conn: &mut PgConnection, service: &ServiceId) -> Result<Vec<Hol
 /// concierge user id") rather than this path silently skipping someone the notice period
 /// exists to protect.
 async fn enqueue_notices(conn: &mut PgConnection, change: &FeePolicyChange, from: Option<&FeePolicy>, holders: &[Holder]) -> Result<(), DomainError> {
-	let fund = allocation_title(conn, &change.service)
-		.await?
-		.filter(|title| !title.is_empty())
-		.unwrap_or_else(|| change.service.to_string());
+	let fund = fee_mail_fund(allocation_title(conn, &change.service).await?.as_deref(), &change.service);
 	let link = product_page_path(&change.service);
 	for holder in holders {
 		let mail = GovernanceMail::FeePolicyNotice(FeePolicyNotice {
@@ -535,5 +564,50 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			.map_err(repo_err)?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(true)
+	}
+}
+
+#[cfg(test)]
+mod mail_fund_tests {
+	use domain::balance::ServiceId;
+
+	use super::fee_mail_fund;
+	use crate::infrastructure::consilium::MAIL_LINE_BYTES;
+
+	fn service() -> ServiceId {
+		ServiceId::parse("service_arb").unwrap()
+	}
+
+	#[test]
+	fn a_short_title_is_carried_whole_with_the_slug() {
+		assert_eq!(fee_mail_fund(Some("Arb desk"), &service()), "Arb desk (service_arb)");
+		assert_eq!(fee_mail_fund(None, &service()), "service_arb");
+		assert_eq!(fee_mail_fund(Some("   "), &service()), "service_arb");
+	}
+
+	#[test]
+	fn the_longest_cyrillic_title_stays_inside_the_relay_bound_and_keeps_the_slug() {
+		// 120 chars — the longest title the registry admits — is over the bound in bytes alone.
+		let title: String = "Арбитражный портфель по стейблкоинам на пяти биржах с ежедневной переоценкой "
+			.repeat(2)
+			.chars()
+			.take(120)
+			.collect();
+		assert!(title.len() > MAIL_LINE_BYTES);
+		let fund = fee_mail_fund(Some(&title), &service());
+		assert!(fund.len() <= MAIL_LINE_BYTES, "{} bytes", fund.len());
+		assert!(fund.ends_with("… (service_arb)"), "{fund}");
+	}
+
+	#[test]
+	fn a_title_that_reads_as_a_link_is_replaced_by_the_slug() {
+		for title in ["Visit www.example.test", "https://evil.example", "HTTP evil", "ftp://x"] {
+			assert_eq!(fee_mail_fund(Some(title), &service()), "service_arb", "{title}");
+		}
+	}
+
+	#[test]
+	fn control_characters_are_folded() {
+		assert_eq!(fee_mail_fund(Some("Arb\tdesk\n"), &service()), "Arb desk (service_arb)");
 	}
 }

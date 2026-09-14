@@ -431,7 +431,7 @@ async fn a_change_over_a_held_fund_waits_out_the_notice_and_mails_every_holder()
 	assert_eq!(recipients, expected);
 	for (_, mail) in &queued {
 		assert_eq!(mail["kind"], "fee_policy_notice");
-		assert_eq!(mail["fund"], "EV Trading");
+		assert_eq!(mail["fund"], format!("EV Trading ({service})"), "the title, and the slug it is known by");
 		assert_eq!(mail["current"]["management_bps"], 200);
 		assert_eq!(mail["proposed"]["management_bps"], 100);
 		assert_eq!(mail["effective_at"], change.effective_from_unix);
@@ -566,7 +566,7 @@ async fn a_tightening_beyond_the_envelope_is_proposed_by_an_owner_and_carried_by
 	assert_eq!(approvals.len(), 2, "the initiator holds no seat");
 	for payload in &approvals {
 		let mail: serde_json::Value = serde_json::from_str(payload).unwrap();
-		assert_eq!(mail["fund"], "EV Trading");
+		assert_eq!(mail["fund"], format!("EV Trading ({service})"), "the title, and the slug it is known by");
 		assert_eq!(mail["current"]["management_bps"], 200);
 		assert_eq!(mail["proposed"]["management_bps"], 300);
 		assert_eq!(mail["reason"], "the new mandate costs more to run");
