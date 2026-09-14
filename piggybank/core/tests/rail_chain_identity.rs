@@ -17,7 +17,7 @@ mod common;
 
 #[tokio::test]
 async fn chain_identity_binds_once_and_refuses_a_chain_flip() {
-	let Some(url) = common::database_url() else {
+	let Some(url) = common::database_url().await else {
 		eprintln!("DATABASE_URL unset — skipping rail chain-identity test");
 		return;
 	};

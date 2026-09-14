@@ -913,7 +913,7 @@ async fn an_icon_from_a_wider_vocabulary_reads_back_as_the_default_instead_of_fa
 	// enforces anything — a vacuous pass, which is the exact failure this whole area is
 	// about. `LIKE ... INCLUDING DEFAULTS` copies the columns, their NOT NULLs and the
 	// `icon` default, and deliberately not the CHECK.
-	let url = std::env::var("DATABASE_URL").unwrap();
+	let url = common::database_url().await.unwrap();
 	let schema = format!("icon_probe_{}", Uuid::new_v4().simple());
 	sqlx::query(AssertSqlSafe(format!("CREATE SCHEMA {schema}"))).execute(&h.pool).await.unwrap();
 	sqlx::query(AssertSqlSafe(format!("CREATE TABLE {schema}.allocations (LIKE public.allocations INCLUDING DEFAULTS)")))
