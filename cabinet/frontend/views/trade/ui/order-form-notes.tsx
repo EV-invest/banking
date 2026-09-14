@@ -13,7 +13,7 @@ import type { Order } from "@/shared/contracts/book";
 import { RequestError, errorMessage } from "@/shared/lib/api-client";
 import { Note } from "@/views/invest/ui/atoms";
 import { formatUnits, formatUsdt } from "@/views/trade/lib/format";
-import { orderStateKey } from "@/views/trade/lib/order-state";
+import { orderStateKey, placedOutcome } from "@/views/trade/lib/order-state";
 
 export type Outcome = { order: Order; error?: never } | { error: unknown; order?: never };
 
@@ -37,14 +37,14 @@ export function OrderOutcome({ outcome }: { outcome: Outcome }) {
   if (outcome.order) {
     const order = outcome.order;
     const key = orderStateKey(order);
-    const resting = order.state === "open" || order.state === "partially_filled";
+    const placed = placedOutcome(order);
     const args = { filled: formatUnits(order.filled), size: formatUnits(order.size), avg: formatUsdt(order.avg_fill_price), reason: order.reject_reason ?? "" };
     return (
       <div className="px-3 pb-3">
-        <Alert variant={order.state === "rejected" ? "destructive" : undefined}>
-          {resting ? <Clock className="size-4" /> : <CheckCircle2 className="size-4" />}
+        <Alert variant={placed === "rejected" ? "destructive" : undefined}>
+          {placed === "resting" ? <Clock className="size-4" /> : <CheckCircle2 className="size-4" />}
           <AlertTitle>{key ? t(key) : (order.state ?? "")}</AlertTitle>
-          <AlertDescription>{t(`trade.form.placed.${order.state === "rejected" ? "rejected" : key === "trade.state.partialCancelled" ? "partial" : resting ? "resting" : order.state === "filled" ? "filled" : "cancelled"}`, args)}</AlertDescription>
+          <AlertDescription>{t(`trade.form.placed.${placed}`, args)}</AlertDescription>
         </Alert>
       </div>
     );

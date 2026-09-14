@@ -32,6 +32,11 @@ export type OrderKind = "limit" | "market";
  *  `alo` (post-only) is refused rather than crossing the spread. */
 export type OrderTif = "gtc" | "ioc" | "alo";
 
+/** Why a `cancelled` order is cancelled — `""` on every other state. `user` is the owner's
+ *  own cancel; the other two are the hub cancelling what an IOC limit / a market order
+ *  could not fill at once, which is how a cancelled order can still carry `filled > 0`. */
+export type OrderCancelReason = "user" | "ioc_remainder" | "market_remainder";
+
 /** The candle buckets the hub aggregates; the wire's own vocabulary. */
 export type CandleResolution = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
 
