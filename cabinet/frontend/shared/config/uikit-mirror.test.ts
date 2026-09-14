@@ -7,7 +7,8 @@
 //
 // This one exists because `@evinvest/uikit`'s Drawer shipped with no transition at all
 // (EV-invest/lib#96 fixes it upstream). Until that lands on npm, the operations timeline
-// passes the enter classes at its own `DrawerContent` call site.
+// and the allocation side panel's sheet pass the enter classes at their own
+// `DrawerContent` call sites.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -26,6 +27,7 @@ const MIRROR_MARKER = "UIKIT-MIRROR: drawer-animation";
 // with no `data-state`, so nothing at the call site can reach it).
 const MIRRORED = [
   { what: "the panel's enter classes", at: new URL("../../views/operations/ui/operations-view.tsx", import.meta.url) },
+  { what: "the allocation sheet's enter classes", at: new URL("../../views/admin/allocations/ui/allocation-side-panel.tsx", import.meta.url) },
   { what: "the scrim's fade", at: new URL("../../application/styles/globals.css", import.meta.url) },
 ];
 

@@ -239,6 +239,14 @@
     "en": "Units must be a decimal number above zero",
     "t": "Паи должны быть десятичным числом больше нуля"
   },
+  "admin.alloc.issue.reason.holder": {
+    "en": "Pick a holder",
+    "t": "Выберите держателя"
+  },
+  "admin.alloc.issue.reason.units": {
+    "en": "Enter units",
+    "t": "Введите количество паёв"
+  },
   "admin.alloc.issue.resultApplied": {
     "en": "{units} units issued to {holder}.",
     "t": "{units} паёв выпущено: {holder}."
@@ -254,6 +262,26 @@
   "admin.alloc.issue.title": {
     "en": "Issue units",
     "t": "Выпуск паёв"
+  },
+  "admin.alloc.pinCap.action": {
+    "en": "Pin cap to issued",
+    "t": "Закрепить кап по выпущенному"
+  },
+  "admin.alloc.pinCap.alreadyPinned": {
+    "en": "The cap already equals the issued supply.",
+    "t": "Кап уже равен выпущенному объёму."
+  },
+  "admin.alloc.pinCap.confirm": {
+    "en": "Cap {from} → {to}. No further units can be issued until the cap is raised again.",
+    "t": "Кап {from} → {to}. Новые паи нельзя будет выпустить, пока кап не поднимут снова."
+  },
+  "admin.alloc.pinCap.nothingIssued": {
+    "en": "Nothing has settled yet — a queued mint is not on the ledger until the relay posts it.",
+    "t": "Ещё ничего не проведено: выпуск из очереди появится в реестре, когда его проведёт relay."
+  },
+  "admin.alloc.pinCap.submit": {
+    "en": "Pin cap",
+    "t": "Закрепить кап"
   },
   "admin.alloc.open": {
     "en": "Open",

@@ -239,6 +239,14 @@
     "en": "Units must be a decimal number above zero",
     "t": "Đơn vị quỹ phải là số thập phân lớn hơn 0"
   },
+  "admin.alloc.issue.reason.holder": {
+    "en": "Pick a holder",
+    "t": "Chọn người nắm giữ"
+  },
+  "admin.alloc.issue.reason.units": {
+    "en": "Enter units",
+    "t": "Nhập số đơn vị quỹ"
+  },
   "admin.alloc.issue.resultApplied": {
     "en": "{units} units issued to {holder}.",
     "t": "Đã phát hành {units} đơn vị quỹ cho {holder}."
@@ -254,6 +262,26 @@
   "admin.alloc.issue.title": {
     "en": "Issue units",
     "t": "Phát hành đơn vị quỹ"
+  },
+  "admin.alloc.pinCap.action": {
+    "en": "Pin cap to issued",
+    "t": "Ghim trần theo đã phát hành"
+  },
+  "admin.alloc.pinCap.alreadyPinned": {
+    "en": "The cap already equals the issued supply.",
+    "t": "Trần đã bằng lượng đã phát hành."
+  },
+  "admin.alloc.pinCap.confirm": {
+    "en": "Cap {from} → {to}. No further units can be issued until the cap is raised again.",
+    "t": "Trần {from} → {to}. Không thể phát hành thêm đơn vị quỹ cho đến khi trần được nâng lại."
+  },
+  "admin.alloc.pinCap.nothingIssued": {
+    "en": "Nothing has settled yet — a queued mint is not on the ledger until the relay posts it.",
+    "t": "Chưa có gì được ghi sổ — đợt phát hành đang chờ chỉ vào sổ khi relay ghi nhận."
+  },
+  "admin.alloc.pinCap.submit": {
+    "en": "Pin cap",
+    "t": "Ghim trần"
   },
   "admin.alloc.open": {
     "en": "Open",
