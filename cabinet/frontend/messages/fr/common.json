@@ -668,8 +668,8 @@
     "t": "Un motif est obligatoire lorsque les propriétaires doivent approuver."
   },
   "admin.fees.err.reasonTooLong": {
-    "en": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
-    "t": "Le motif est trop long : {used} octets pour au plus {max}. Les lettres hors latin de base comptent pour plus d'un."
+    "en": "The reason is too long: {used, plural, one {# byte} other {# bytes}} of at most {max}. Letters outside plain Latin count as more than one.",
+    "t": "Le motif est trop long : {used, plural, one {# octet} other {# octets}} pour au plus {max}. Les lettres hors latin de base comptent pour plus d'un."
   },
   "admin.fees.err.tooFarAhead": {
     "en": "The moment can be at most {days} days ahead.",

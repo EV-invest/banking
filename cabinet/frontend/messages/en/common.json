@@ -166,7 +166,7 @@
   "admin.fees.err.notPercent": "{field} must be a percentage — 2, or 2.5 / 2,5 for a half.",
   "admin.fees.err.overCeiling": "{field} cannot be more than {ceiling}.",
   "admin.fees.err.reasonRequired": "A reason is required when the owners must approve.",
-  "admin.fees.err.reasonTooLong": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
+  "admin.fees.err.reasonTooLong": "The reason is too long: {used, plural, one {# byte} other {# bytes}} of at most {max}. Letters outside plain Latin count as more than one.",
   "admin.fees.err.tooFarAhead": "The moment can be at most {days} days ahead.",
   "admin.fees.field.hurdle": "Hurdle",
   "admin.fees.field.management": "Management",

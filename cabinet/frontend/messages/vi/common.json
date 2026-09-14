@@ -668,8 +668,8 @@
     "t": "Cần có lý do khi các chủ sở hữu phải chấp thuận."
   },
   "admin.fees.err.reasonTooLong": {
-    "en": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
-    "t": "Lý do quá dài: {used} byte trong khi tối đa là {max}. Các chữ ngoài bảng Latinh cơ bản được tính nhiều hơn một."
+    "en": "The reason is too long: {used, plural, one {# byte} other {# bytes}} of at most {max}. Letters outside plain Latin count as more than one.",
+    "t": "Lý do quá dài: {used, plural, other {# byte}} trong khi tối đa là {max}. Các chữ ngoài bảng Latinh cơ bản được tính nhiều hơn một."
   },
   "admin.fees.err.tooFarAhead": {
     "en": "The moment can be at most {days} days ahead.",

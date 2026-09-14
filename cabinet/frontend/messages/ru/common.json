@@ -668,8 +668,8 @@
     "t": "Когда требуется одобрение владельцев, причина обязательна."
   },
   "admin.fees.err.reasonTooLong": {
-    "en": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
-    "t": "Причина слишком длинная: {used} байт при пределе {max}. Буквы вне базовой латиницы считаются больше чем за один."
+    "en": "The reason is too long: {used, plural, one {# byte} other {# bytes}} of at most {max}. Letters outside plain Latin count as more than one.",
+    "t": "Причина слишком длинная: {used, plural, one {# байт} few {# байта} many {# байт} other {# байт}} при пределе {max}. Буквы вне базовой латиницы считаются больше чем за один."
   },
   "admin.fees.err.tooFarAhead": {
     "en": "The moment can be at most {days} days ahead.",
