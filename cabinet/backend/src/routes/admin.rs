@@ -334,13 +334,15 @@ pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Re
 	Ok(Json(list.into()))
 }
 
-/// `POST /api/admin/fees/policy` — write a fund's terms.
+/// `POST /api/admin/fees/policy` — propose a change of a fund's terms.
 ///
 /// Every rate is required rather than patch-style optional. A fee schedule is read as a
 /// whole — "2 and 20 over a 5% hurdle, annual" is one statement — and letting an operator
 /// change the management rate while leaving an unseen crystallization period in place is
-/// how a fund ends up charging terms nobody chose.
-pub async fn set_fee_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicy>, ApiError> {
+/// how a fund ends up charging terms nobody chose. `effective_from` (unix seconds, omitted
+/// or 0 = as soon as the notice allows) and `reason` (required by the hub when the change
+/// needs the owners) travel as given; the hub decides the requirement and the moment.
+pub async fn schedule_fee_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
 		return Err(ApiError::Csrf);
@@ -356,17 +358,58 @@ pub async fn set_fee_policy(State(st): State<AppState>, jar: CookieJar, headers:
 			"management_bps, performance_bps and hurdle_bps are required, each a whole number of basis points".into(),
 		));
 	};
+	// Optional, but when present it must be a whole number of unix seconds: a moment this
+	// layer cannot read must not become "now" while the operator believes it is next month.
+	let effective_from = match v.get("effective_from") {
+		None | Some(Value::Null) => 0,
+		Some(raw) => raw
+			.as_i64()
+			.filter(|secs| *secs >= 0)
+			.ok_or_else(|| ApiError::BadRequest("effective_from must be a whole number of unix seconds".into()))?,
+	};
 	let token = require_money_token(&st, &jar).await?;
-	let req = bk::SetFeePolicyRequest {
+	let req = bk::ScheduleFeePolicyRequest {
 		service,
 		management_bps,
 		performance_bps,
 		hurdle_bps,
 		basis,
 		crystallization,
+		effective_from,
+		reason: editable(&v, "reason"),
 	};
-	let policy = st.grpc.set_fee_policy(&token, req).await?;
-	Ok(Json(policy.into()))
+	let change = st.grpc.schedule_fee_policy(&token, req).await?;
+	Ok(Json(change.into()))
+}
+
+/// `POST /api/admin/fees/policy/cancel` — withdraw a pending change of terms.
+pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(change_id)) = (required(&v, "service"), required(&v, "change_id")) else {
+		return Err(ApiError::BadRequest("service and change_id are required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let change = st.grpc.cancel_fee_policy_change(&token, &service, &change_id).await?;
+	Ok(Json(change.into()))
+}
+
+/// `GET /api/admin/fees/changes?service=` — a fund's whole history of terms, newest first.
+pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeePolicyChangeList>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let list = st
+		.grpc
+		.fee_policy_changes(&token, &service)
+		.await
+		.map_err(|s| ApiError::read(s, "fee policy history unavailable"))?;
+	Ok(Json(list.into()))
 }
 
 /// `GET /api/admin/fees/shares?service=` — uncollected fee units in one fund, and their value.
@@ -1027,9 +1070,48 @@ mod admin_route_tests {
 
 	/// What the BFF actually forwarded upstream, so a test can assert on the request the
 	/// hub would have seen rather than only on the response the browser gets.
+	/// The change id the stub answers a schedule with.
+	const CHANGE_ID: &str = "6f1c2a3e-0b4d-4c5e-8f9a-1b2c3d4e5f60";
+
+	/// One row of the stub's fee-policy history — the shape the hub answers a schedule, a
+	/// cancel and the history list with.
+	#[allow(clippy::too_many_arguments)]
+	fn stub_change(
+		id: &str,
+		state: &str,
+		management_bps: u32,
+		performance_bps: u32,
+		hurdle_bps: u32,
+		basis: &str,
+		crystallization: &str,
+		effective_from: i64,
+		reason: &str,
+	) -> bk::FeePolicyChange {
+		bk::FeePolicyChange {
+			id: id.into(),
+			service: SERVICE.into(),
+			version: 2,
+			state: state.into(),
+			management_bps,
+			performance_bps,
+			hurdle_bps,
+			basis: basis.into(),
+			crystallization: crystallization.into(),
+			effective_from,
+			requirement: "admin".into(),
+			consilium_id: String::new(),
+			requested_by: "user-1".into(),
+			requested_at: 1_750_000_100,
+			scheduled_at: 1_750_000_100,
+			applied_at: 0,
+			reason: reason.into(),
+		}
+	}
+
 	#[derive(Default)]
 	struct Seen {
-		set_policy: Option<bk::SetFeePolicyRequest>,
+		set_policy: Option<bk::ScheduleFeePolicyRequest>,
+		cancel_change: Option<bk::CancelFeePolicyChangeRequest>,
 		settle: Option<bk::SettleFeeSharesRequest>,
 		set_kyc: Option<cc::SetKycLevelRequest>,
 		set_access: Option<bk::SetAllocationAccessRequest>,
@@ -1234,23 +1316,53 @@ mod admin_route_tests {
 					basis: "invested_capital".into(),
 					crystallization: "annual".into(),
 					updated_at: 1_750_000_000,
+					version: 1,
+					effective_from: 1_750_000_000,
+					pending: Some(stub_change(CHANGE_ID, "scheduled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, "")),
 				}],
 			}))
 		}
 
-		async fn set_fee_policy(&self, request: GrpcRequest<bk::SetFeePolicyRequest>) -> Result<GrpcResponse<bk::FeePolicy>, Status> {
+		async fn schedule_fee_policy(&self, request: GrpcRequest<bk::ScheduleFeePolicyRequest>) -> Result<GrpcResponse<bk::FeePolicyChange>, Status> {
 			self.guard_money_plane(&request)?;
 			let req = request.into_inner();
 			self.seen.lock().unwrap().set_policy = Some(req.clone());
-			Ok(GrpcResponse::new(bk::FeePolicy {
-				service: req.service,
-				configured: true,
-				management_bps: req.management_bps,
-				performance_bps: req.performance_bps,
-				hurdle_bps: req.hurdle_bps,
-				basis: req.basis,
-				crystallization: req.crystallization,
-				updated_at: 1_750_000_100,
+			// The hub decides the moment; the stub echoes the request so a test can see what
+			// was forwarded on the way back as well as in `seen`.
+			Ok(GrpcResponse::new(stub_change(
+				CHANGE_ID,
+				"scheduled",
+				req.management_bps,
+				req.performance_bps,
+				req.hurdle_bps,
+				&req.basis,
+				&req.crystallization,
+				req.effective_from.max(1_750_086_400),
+				&req.reason,
+			)))
+		}
+
+		async fn cancel_fee_policy_change(&self, request: GrpcRequest<bk::CancelFeePolicyChangeRequest>) -> Result<GrpcResponse<bk::FeePolicyChange>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().cancel_change = Some(req.clone());
+			Ok(GrpcResponse::new(stub_change(
+				&req.change_id, "cancelled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, "",
+			)))
+		}
+
+		async fn list_fee_policy_changes(&self, request: GrpcRequest<bk::ListFeePolicyChangesRequest>) -> Result<GrpcResponse<bk::FeePolicyChangeList>, Status> {
+			self.guard_money_plane(&request)?;
+			Ok(GrpcResponse::new(bk::FeePolicyChangeList {
+				changes: vec![
+					stub_change(CHANGE_ID, "scheduled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, ""),
+					bk::FeePolicyChange {
+						version: 1,
+						state: "active".into(),
+						applied_at: 1_750_000_000,
+						..stub_change("0d5f3b7e-7d3c-4a58-9b2d-2c9f0c9f1e01", "active", 200, 2_000, 500, "invested_capital", "annual", 1_750_000_000, "")
+					},
+				],
 			}))
 		}
 
@@ -1520,7 +1632,9 @@ mod admin_route_tests {
 			("GET", "/api/admin/fees/policies", None),
 			("GET", "/api/admin/fees/shares?service=quy-nhon", None),
 			("GET", "/api/admin/fees/assessments?service=quy-nhon", None),
+			("GET", "/api/admin/fees/changes?service=quy-nhon", None),
 			("POST", "/api/admin/fees/policy", Some("{}")),
+			("POST", "/api/admin/fees/policy/cancel", Some("{}")),
 			("POST", "/api/admin/fees/settle", Some("{}")),
 		] {
 			let mut builder = Request::builder().method(method).uri(uri);
@@ -1666,18 +1780,25 @@ mod admin_route_tests {
 	// ── writing ─────────────────────────────────────────────────────────────────
 
 	/// Pricing a fund. Every rate is forwarded as given — the handler must not reorder,
-	/// default, or drop a field, because the tuple IS the fee schedule.
+	/// default, or drop a field, because the tuple IS the fee schedule — and so are the
+	/// requested moment and the reason, which the hub (not this layer) judges.
 	#[tokio::test]
 	async fn pricing_a_fund_forwards_the_whole_schedule() {
 		let hub = Hub::new("admin");
 		let seen = hub.seen.clone();
 		let app = app(serve(hub).await);
 
-		let body = r#"{"service":"quy-nhon","management_bps":150,"performance_bps":1500,"hurdle_bps":500,"basis":"market_value","crystallization":"quarterly"}"#;
+		let body = r#"{"service":"quy-nhon","management_bps":150,"performance_bps":1500,"hurdle_bps":500,"basis":"market_value","crystallization":"quarterly","effective_from":1750200000,"reason":"new mandate"}"#;
 		let (status, response) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
 		assert_eq!(status, StatusCode::OK);
+		// The answer is the CHANGE, not the live policy: the terms bind later.
+		assert_eq!(response["id"], CHANGE_ID);
+		assert_eq!(response["state"], "scheduled");
 		assert_eq!(response["management_bps"], 150);
 		assert_eq!(response["crystallization"], "quarterly");
+		assert_eq!(response["effective_from"], "1750200000");
+		assert_eq!(response["reason"], "new mandate");
+		assert!(response["consilium_id"].is_null(), "an administrator's change waits on no consilium");
 
 		let forwarded = seen.lock().unwrap().set_policy.clone().expect("the hub saw the write");
 		assert_eq!(forwarded.service, SERVICE);
@@ -1686,6 +1807,85 @@ mod admin_route_tests {
 		assert_eq!(forwarded.hurdle_bps, 500);
 		assert_eq!(forwarded.basis, "market_value");
 		assert_eq!(forwarded.crystallization, "quarterly");
+		assert_eq!(forwarded.effective_from, 1_750_200_000);
+		assert_eq!(forwarded.reason, "new mandate");
+	}
+
+	/// `effective_from` and `reason` are optional: omitted, they travel as the hub's "as
+	/// soon as allowed" and "no reason given" — never invented. A moment this layer cannot
+	/// read is refused rather than read as now.
+	#[tokio::test]
+	async fn an_omitted_moment_and_reason_travel_as_defaults_and_a_malformed_moment_is_refused() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let body = r#"{"service":"quy-nhon","management_bps":150,"performance_bps":1500,"hurdle_bps":500,"basis":"invested_capital","crystallization":"annual"}"#;
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		let forwarded = seen.lock().unwrap().set_policy.clone().expect("the hub saw the write");
+		assert_eq!(forwarded.effective_from, 0);
+		assert_eq!(forwarded.reason, "");
+
+		seen.lock().unwrap().set_policy = None;
+		for body in [
+			r#"{"service":"quy-nhon","management_bps":150,"performance_bps":1500,"hurdle_bps":500,"basis":"invested_capital","crystallization":"annual","effective_from":"tomorrow"}"#,
+			r#"{"service":"quy-nhon","management_bps":150,"performance_bps":1500,"hurdle_bps":500,"basis":"invested_capital","crystallization":"annual","effective_from":-5}"#,
+			r#"{"service":"quy-nhon","management_bps":150,"performance_bps":1500,"hurdle_bps":500,"basis":"invested_capital","crystallization":"annual","effective_from":1.5}"#,
+		] {
+			let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "an unreadable moment must be refused: {body}");
+		}
+		assert!(seen.lock().unwrap().set_policy.is_none(), "an unreadable moment must never reach the hub as now");
+	}
+
+	/// Withdrawing a pending change: the fund and the change id are both forwarded, and
+	/// the answer is the change in its new state.
+	#[tokio::test]
+	async fn cancelling_a_change_forwards_the_fund_and_the_change_id() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy/cancel", Some(r#"{"service":"quy-nhon"}"#), true)).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST, "a cancel without a change id is refused before the hub is called");
+		assert!(seen.lock().unwrap().cancel_change.is_none());
+
+		let body = format!(r#"{{"service":"quy-nhon","change_id":"{CHANGE_ID}"}}"#);
+		let (status, response) = send(&app, signed("POST", "/api/admin/fees/policy/cancel", Some(&body), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(response["state"], "cancelled");
+		let forwarded = seen.lock().unwrap().cancel_change.clone().expect("the hub saw the cancel");
+		assert_eq!(forwarded.service, SERVICE);
+		assert_eq!(forwarded.change_id, CHANGE_ID);
+	}
+
+	/// The history screen: newest first, every row carrying its full terms and state, and
+	/// the live policy list carrying the pending change beside each fund.
+	#[tokio::test]
+	async fn the_history_and_the_pending_change_are_read_as_the_hub_states_them() {
+		let app = app(serve(Hub::new("admin")).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/changes?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+		let changes = body["changes"].as_array().expect("a list of changes");
+		assert_eq!(changes.len(), 2);
+		assert_eq!(changes[0]["state"], "scheduled");
+		assert_eq!(changes[0]["management_bps"], 250);
+		assert_eq!(changes[1]["state"], "active");
+		assert_eq!(changes[1]["version"], 1);
+		assert_eq!(changes[1]["applied_at"], "1750000000");
+
+		let (status, _) = send(&app, signed("GET", "/api/admin/fees/changes", None, false)).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST, "the history is per fund");
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+		let policy = &body["policies"][0];
+		assert_eq!(policy["version"], 1);
+		assert_eq!(policy["effective_from"], "1750000000");
+		assert_eq!(policy["pending"]["id"], CHANGE_ID);
+		assert_eq!(policy["pending"]["state"], "scheduled");
 	}
 
 	/// A fee schedule is read as a whole, so the write is all-or-nothing rather than a
