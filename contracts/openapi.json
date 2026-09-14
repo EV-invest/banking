@@ -415,6 +415,65 @@
         }
       }
     },
+    "/banking.v1.AllocationsService/RetireUnits": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "Burn a holder's units with no cash leg (AllocationManage) — the reverse of\n IssueUnits: `units` leave the holder's account (a user's or the company's) and the\n supply shrinks by the same amount. Nothing is paid; this is a cap-table correction,\n the way an in-kind mint was. The holder must have at least `units` AVAILABLE\n (Read-First; units resting on the book or reserved by a redemption do not count) —\n otherwise INVALID_ARGUMENT — and the allocation must be `closed`, because burning a\n holder's units out of a live product is a decision that deserves a closed door\n first; `force` is the explicit override for a live product (FAILED_PRECONDITION\n without it). Priced at the current (fresh) NAV for the record; the default\n `cost_basis` is `units × NAV`, the book value written off.",
+        "description": "Answers a `UnitIssuance` with `source = \"retire\"` and POSITIVE `units`: the row is\n the magnitude, the source is the direction, and the console lists mints, hand-overs\n and retirements as one history. Idempotent by `idempotency_key` in the same key\n space as IssueUnits: the same key naming a mint and then a retirement is\n ALREADY_EXISTS, not a retry.",
+        "operationId": "banking.v1.AllocationsService.RetireUnits",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.RetireUnitsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UnitIssuance"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.AllocationsService/RevokeAllocationAccess": {
       "post": {
         "tags": [
@@ -504,6 +563,65 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/banking.v1.SetAllocationAccessRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Allocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.AllocationsService/SetAllocationBacking": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "SetAllocationBacking",
+        "description": "Declare what stands behind a product's units (AllocationManage): `cash` |\n `in_kind`. Idempotent. `in_kind` is set automatically by the first `IssueUnits`,\n never the reverse: this RPC is how an operator says the fund now holds cash for\n the units and `Redeem` may pay it out again — or corrects a product back to\n `in_kind`. Lifecycle, access and holdings are untouched.",
+        "operationId": "banking.v1.AllocationsService.SetAllocationBacking",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetAllocationBackingRequest"
               }
             }
           },
@@ -7960,6 +8078,11 @@
             "type": "string",
             "title": "caller_access",
             "description": "The level the CALLER effectively holds — the higher of `access` and the caller's\n own grant, if any. Populated honestly for everyone, an `AllocationManage` holder\n included: their permission lets them read and administer the product, it does not\n make them an investor in it, so a manager's `caller_access` says what they would\n get as one. A client renders the card off `access` and the subscribe control off\n this — never off `state` alone."
+          },
+          "backing": {
+            "type": "string",
+            "title": "backing",
+            "description": "What stands behind the units: `cash` | `in_kind`. `cash` — the units were paid for\n into the fund's claim and a redemption pays out of it. `in_kind` — the units stand\n for an asset the holders own; the fund holds no cash for them, so `Redeem` is\n refused (FAILED_PRECONDITION) and holders exit through the book. Set to `in_kind`\n automatically by the first IssueUnits on the product; only SetAllocationBacking\n takes it back to `cash`. A registration lands on `cash`."
           }
         },
         "title": "Allocation",
@@ -11224,6 +11347,71 @@
         "title": "RequestWithdrawalRequest",
         "additionalProperties": false
       },
+      "banking.v1.RetireUnitsRequest": {
+        "type": "object",
+        "allOf": [
+          {
+            "properties": {
+              "service": {
+                "type": "string",
+                "title": "service"
+              },
+              "units": {
+                "type": "string",
+                "title": "units",
+                "description": "decimal units, \u003e 0, at most what the holder has available"
+              },
+              "cost_basis": {
+                "type": "string",
+                "title": "cost_basis",
+                "description": "Decimal USDT of book value written off, recorded on the row. Empty means\n `units × NAV` at the dealing mark, like IssueUnits. No cash moves either way."
+              },
+              "idempotency_key": {
+                "type": "string",
+                "title": "idempotency_key",
+                "description": "required, 1..64 chars, unique per service (shared with IssueUnits)"
+              },
+              "force": {
+                "type": "boolean",
+                "title": "force",
+                "description": "Retiring is allowed on a `closed` allocation only; `force = true` is the operator's\n explicit override to burn units out of a live (draft or open) product."
+              }
+            }
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "company": {
+                    "type": "boolean",
+                    "title": "company"
+                  }
+                },
+                "title": "company",
+                "required": [
+                  "company"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "title": "user_id"
+                  }
+                },
+                "title": "user_id",
+                "required": [
+                  "user_id"
+                ]
+              }
+            ]
+          }
+        ],
+        "title": "RetireUnitsRequest",
+        "additionalProperties": false
+      },
       "banking.v1.RevenuePayoutTerms": {
         "type": "object",
         "properties": {
@@ -11517,6 +11705,22 @@
           }
         },
         "title": "SetAllocationAccessRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.SetAllocationBackingRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "backing": {
+            "type": "string",
+            "title": "backing",
+            "description": "cash | in_kind"
+          }
+        },
+        "title": "SetAllocationBackingRequest",
         "additionalProperties": false
       },
       "banking.v1.SetAllocationStateRequest": {
@@ -12018,7 +12222,7 @@
           "units": {
             "type": "string",
             "title": "units",
-            "description": "decimal units minted or handed over"
+            "description": "decimal units minted, handed over or retired (always positive)"
           },
           "nav": {
             "type": "string",
@@ -12047,12 +12251,12 @@
           "source": {
             "type": "string",
             "title": "source",
-            "description": "Where the units came from: `mint` (IssueUnits — supply grew by `units`) or\n `company` (TransferCompanyStake — moved out of the company's stake, supply\n unchanged). Always populated; a row that predates the field reads as `mint`."
+            "description": "Where the units came from — or went: `mint` (IssueUnits — supply grew by `units`),\n `company` (TransferCompanyStake — moved out of the company's stake, supply\n unchanged) or `retire` (RetireUnits — burnt out of the holder's account, supply\n shrank by `units`). `units` is always the magnitude; the source is the direction.\n Always populated; a row that predates the field reads as `mint`."
           }
         },
         "title": "UnitIssuance",
         "additionalProperties": false,
-        "description": "One in-kind issuance: a mint, or a hand-over out of the company's stake (`source`).\n The holder is flattened to a kind + id pair here, unlike the request's `oneof`,\n because this shape is projected to TypeScript through OpenAPI and a flat message\n survives that pipeline unambiguously (the same trade the operations timeline makes)."
+        "description": "One in-kind issuance: a mint, a hand-over out of the company's stake, or a\n retirement (`source`).\n The holder is flattened to a kind + id pair here, unlike the request's `oneof`,\n because this shape is projected to TypeScript through OpenAPI and a flat message\n survives that pipeline unambiguously (the same trade the operations timeline makes)."
       },
       "banking.v1.UnparkEventRequest": {
         "type": "object",
@@ -14738,7 +14942,7 @@
   "tags": [
     {
       "name": "banking.v1.AllocationsService",
-      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md.\n\n The one place this service touches supply is `IssueUnits`: an operator minting units\n IN KIND — to an investor or to the company — with no cash behind them, for a product\n registered against an asset that already exists and already has owners. It lives here\n rather than on FundsService because it is a registry decision about who holds what,\n made by the same `AllocationManage` holder who sizes the product, not an investor\n dealing at NAV. `TransferCompanyStake` is the same decision in the other direction —\n units the company was seeded with handed to the person they belong to — and touches\n holdings, not supply."
+      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md.\n\n The one place this service touches supply is `IssueUnits`: an operator minting units\n IN KIND — to an investor or to the company — with no cash behind them, for a product\n registered against an asset that already exists and already has owners. It lives here\n rather than on FundsService because it is a registry decision about who holds what,\n made by the same `AllocationManage` holder who sizes the product, not an investor\n dealing at NAV. `TransferCompanyStake` is the same decision in the other direction —\n units the company was seeded with handed to the person they belong to — and touches\n holdings, not supply. `RetireUnits` is the mirror of `IssueUnits`: a holder's units\n burnt with no cash leg, supply shrinking by exactly that. It is Read-First on what the\n holder has AVAILABLE (units resting on the book or reserved by a redemption cannot be\n retired), and the burn shows in `ListUnitHolders` like any other supply change.\n\n Backing is the third axis. Units minted in kind have no cash in the fund's claim\n behind them, so `Redeem` — which pays cash out of that claim — is refused on a product\n whose `backing` is `in_kind` (FAILED_PRECONDITION); holders exit through the book. The\n first `IssueUnits` flips a product from `cash` to `in_kind` on its own; an operator\n flips it back with `SetAllocationBacking` once the fund does hold cash for the units."
     },
     {
       "name": "banking.v1.AuthService",
