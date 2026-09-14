@@ -1,11 +1,11 @@
 //! Postgres adapter for the [`UnitIssuanceRepository`] port.
 //!
-//! `issue` inserts the immutable issuance row and drains its `Issued` event to the
-//! outbox in one transaction. The `queued` → `applied` stamp and, for a user holder,
-//! the `fund_positions` cost-basis projection are **not** written here: the relay
-//! applies both after the mint posts (see [`super::relay::project_issuance`]), so a
-//! parked mint can never leave a row claiming units that were never minted, nor a
-//! phantom basis.
+//! `issue` inserts the immutable issuance row — a mint or a hand-over of the company's
+//! stake, told apart by `source` — and drains its `Issued` event to the outbox in one
+//! transaction. The `queued` → `applied` stamp and, for a user holder, the
+//! `fund_positions` cost-basis projection are **not** written here: the relay applies
+//! both after the leg posts (see [`super::relay::project_issuance`]), so a parked leg
+//! can never leave a row claiming units that never moved, nor a phantom basis.
 //!
 //! Idempotency is the `(service, idempotency_key)` unique constraint, taken with
 //! `ON CONFLICT DO NOTHING`: a lost race writes nothing — the event drain is gated on
@@ -16,7 +16,7 @@ use domain::{
 	architecture::Repository,
 	balance::ServiceId,
 	error::DomainError,
-	issuance::{IdempotencyKey, IssuanceState, UnitHolder, UnitIssuance, UnitIssuanceId, UnitIssuanceSnapshot},
+	issuance::{IdempotencyKey, IssuanceSource, IssuanceState, UnitHolder, UnitIssuance, UnitIssuanceId, UnitIssuanceSnapshot},
 	money::{Nav, Shares, Usdt},
 	users::UserId,
 };
@@ -30,11 +30,11 @@ use crate::{
 
 /// sqlx 0.9 accepts only `&'static str` SQL (its injection guardrail), so the shared
 /// column list is spelled out per query rather than interpolated.
-const SELECT_BY_KEY: &str = "SELECT id, service, holder_kind, holder_id, units, nav, cost_basis, idempotency_key, state, \
+const SELECT_BY_KEY: &str = "SELECT id, service, holder_kind, holder_id, source, units, nav, cost_basis, idempotency_key, state, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM applied_at)::bigint AS applied_at \
 	 FROM unit_issuances WHERE service = $1 AND idempotency_key = $2";
-const SELECT_BY_ID: &str = "SELECT id, service, holder_kind, holder_id, units, nav, cost_basis, idempotency_key, state, \
+const SELECT_BY_ID: &str = "SELECT id, service, holder_kind, holder_id, source, units, nav, cost_basis, idempotency_key, state, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM applied_at)::bigint AS applied_at \
 	 FROM unit_issuances WHERE id = $1";
@@ -59,6 +59,7 @@ struct IssuanceRow {
 	service: String,
 	holder_kind: String,
 	holder_id: Option<Uuid>,
+	source: String,
 	units: String,
 	nav: String,
 	cost_basis: String,
@@ -74,6 +75,7 @@ impl IssuanceRow {
 			id: UnitIssuanceId::from_raw(self.id),
 			service: ServiceId::parse(&self.service)?,
 			holder: UnitHolder::from_parts(&self.holder_kind, self.holder_id.map(UserId::from_raw))?,
+			source: IssuanceSource::parse(&self.source)?,
 			units: Shares::from_base_units(parse_units(&self.units, "issuance units")?),
 			nav: Nav::from_base_units(parse_units(&self.nav, "issuance nav")?),
 			cost_basis: Usdt::from_base_units(parse_units(&self.cost_basis, "issuance cost basis")?),
@@ -112,14 +114,15 @@ impl UnitIssuanceRepository for PgUnitIssuances {
 	async fn issue(&self, issuance: &mut UnitIssuance) -> Result<IssueOutcome, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let inserted = sqlx::query(
-			"INSERT INTO unit_issuances (id, service, holder_kind, holder_id, units, nav, cost_basis, idempotency_key, state) \
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+			"INSERT INTO unit_issuances (id, service, holder_kind, holder_id, source, units, nav, cost_basis, idempotency_key, state) \
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
 			 ON CONFLICT (service, idempotency_key) DO NOTHING",
 		)
 		.bind(issuance.id().raw())
 		.bind(issuance.service().as_str())
 		.bind(issuance.holder().kind_str())
 		.bind(issuance.holder().user_id().map(|user| user.raw()))
+		.bind(issuance.source().as_str())
 		.bind(issuance.units().base_units().to_string())
 		.bind(issuance.nav().base_units().to_string())
 		.bind(issuance.cost_basis().base_units().to_string())

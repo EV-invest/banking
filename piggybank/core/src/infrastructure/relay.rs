@@ -39,7 +39,7 @@ use domain::{
 	balance::{LedgerAccountKey, LedgerEvent, TransferCode},
 	book::{BookEvent, Locked, Side},
 	fees::FeeEvent,
-	issuance::{IssuanceEvent, UnitHolder},
+	issuance::{IssuanceEvent, IssuanceSource, UnitHolder},
 	money::Usdt,
 	payments::PaymentEvent,
 	redemptions::RedemptionEvent,
@@ -89,6 +89,10 @@ const SUBSCRIBE_MINT: &[u8] = b"subscribe:mint";
 /// can recompute the transfer from the row alone when reconciling supply against the
 /// issuance table.
 const ISSUE_MINT: &[u8] = b"issue:mint";
+/// The same, for an issuance out of the company's stake: the hand-over `Dr user shares
+/// / Cr company shares`. A different salt from the mint so a reconciler reading the
+/// transfer id alone knows which leg the row posted.
+const ISSUE_TRANSFER: &[u8] = b"issue:transfer";
 
 /// Salts for a redemption's saga: the reservation locks the units as a pending burn;
 /// settle posts the burn and pays the cash out of the fund's claim; fail/cancel void the
@@ -656,7 +660,9 @@ async fn project_trade(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error
 /// projection carries the issuance's `nav` as the high-water mark blend, exactly as a
 /// subscription at that NAV would: an investor handed units in kind is measured for
 /// performance fees from the price they were handed them at. The company holder gets no
-/// projection — there is no investor to report P&L or charge fees to.
+/// projection — there is no investor to report P&L or charge fees to. The `source` does
+/// not matter here: whether the units were minted or came out of the company's stake,
+/// the recipient's position gains the same units and basis.
 async fn project_issuance(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error> {
 	const PROJECTION_LEG: i32 = 100;
 	let IssuanceEvent::Issued {
@@ -852,7 +858,7 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 		}
 		"issuances" => {
 			let event: IssuanceEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
-			Ok(vec![plan_issuance(event, row.aggregate_id, reference)])
+			plan_issuance(event, row.aggregate_id, reference).map(|op| vec![op])
 		}
 		"book" => {
 			let event: BookEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
@@ -931,26 +937,56 @@ fn plan_subscription(event: SubscriptionEvent, aggregate_id: Uuid, reference: u1
 	]
 }
 
-/// An in-kind issuance is a subscription's mint leg with no cash leg in front of it:
-/// one posted transfer `Dr <holder shares> / Cr shares-outstanding`, under its own
-/// [`TransferCode::UnitIssue`] so supply growth the fund's cash never paid for is
-/// distinguishable from a subscription's on the Share ledger alone. The mint cannot
-/// fail for funds (both accounts are supply we control), so the only park is a genuine
-/// conflict.
-fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp {
-	let IssuanceEvent::Issued { holder, service, units, .. } = event;
-	PlannedOp {
-		role: "issue_mint",
-		transfer_id: tid(aggregate_id, ISSUE_MINT),
+/// An in-kind issuance is one posted transfer on the Share ledger, by `source`:
+/// - **Mint** — a subscription's mint leg with no cash leg in front of it, `Dr <holder
+///   shares> / Cr shares-outstanding`, under its own [`TransferCode::UnitIssue`] so
+///   supply growth the fund's cash never paid for is distinguishable from a
+///   subscription's on the Share ledger alone. It cannot fail for funds (both accounts
+///   are supply we control), so the only park is a genuine conflict.
+/// - **Company** — the company's stake handed to a user, `Dr user shares / Cr company
+///   shares` under [`TransferCode::CompanyStakeTransfer`]: a move between holders, so
+///   `SharesOutstanding` is not touched. `CompanyShares` is debit-normal with the
+///   non-negative flag, so a hand-over of more than the company holds is refused by
+///   TigerBeetle and parks — the backstop under the use case's Read-First.
+///
+/// A `Company` source naming the company as its holder is unplannable rather than a
+/// same-account transfer TigerBeetle would refuse anyway: the aggregate cannot build
+/// one, so the park reason should say "corrupt payload", not "accounts must differ".
+fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> Result<PlannedOp, String> {
+	let IssuanceEvent::Issued { holder, source, service, units, .. } = event;
+	let (role, salt, debit, credit, code) = match source {
+		IssuanceSource::Mint => (
+			"issue_mint",
+			ISSUE_MINT,
+			holder.shares_key(&service),
+			LedgerAccountKey::SharesOutstanding(service),
+			TransferCode::UnitIssue,
+		),
+		IssuanceSource::Company => {
+			let UnitHolder::User(user) = holder else {
+				return Err("company stake transfer names the company as its holder".to_owned());
+			};
+			(
+				"issue_transfer",
+				ISSUE_TRANSFER,
+				LedgerAccountKey::UserShares(service.clone(), user),
+				LedgerAccountKey::CompanyShares(service),
+				TransferCode::CompanyStakeTransfer,
+			)
+		}
+	};
+	Ok(PlannedOp {
+		role,
+		transfer_id: tid(aggregate_id, salt),
 		action: LedgerAction::Post(LedgerTransfer {
-			id: tid(aggregate_id, ISSUE_MINT),
-			debit: holder.shares_key(&service),
-			credit: LedgerAccountKey::SharesOutstanding(service),
+			id: tid(aggregate_id, salt),
+			debit,
+			credit,
 			amount: units.base_units(),
-			code: TransferCode::UnitIssue,
+			code,
 			reference,
 		}),
-	}
+	})
 }
 
 /// The book in the ledger. Every fact is a posted transfer — no two-phase pendings,
@@ -1469,10 +1505,56 @@ mod tests {
 	use domain::{
 		balance::ServiceId,
 		book::{OrderId, TradeId},
+		issuance::UnitIssuanceId,
 		money::{Nav, Shares, Usdt},
 	};
 
 	use super::*;
+
+	// A mint grows supply; a hand-over of the company's stake moves units between two
+	// holders and leaves `SharesOutstanding` alone. Same event, two legs, told apart by
+	// the source — and by the transfer id, so a reconciler can tell them from the row.
+	#[test]
+	fn an_issuance_mints_or_moves_the_companys_stake_by_its_source() {
+		let user = UserId::new();
+		let service = ServiceId::parse("service_arb").unwrap();
+		let issuance_id = UnitIssuanceId::new();
+		let event = |holder, source| IssuanceEvent::Issued {
+			issuance_id,
+			service: service.clone(),
+			holder,
+			source,
+			units: Shares::parse_decimal("13000").unwrap(),
+			nav: Nav::SEED,
+			cost_basis: Usdt::parse_decimal("13000").unwrap(),
+		};
+		let plan = |holder, source| plan_issuance(event(holder, source), issuance_id.raw(), issuance_id.raw().as_u128());
+
+		let mint = plan(UnitHolder::Company, IssuanceSource::Mint).unwrap();
+		let LedgerAction::Post(leg) = &mint.action else { panic!("a mint is one posted leg") };
+		assert_eq!(
+			(leg.debit.clone(), leg.credit.clone()),
+			(LedgerAccountKey::CompanyShares(service.clone()), LedgerAccountKey::SharesOutstanding(service.clone()))
+		);
+		assert_eq!(leg.code, TransferCode::UnitIssue);
+		assert_eq!(mint.transfer_id, tid(issuance_id.raw(), ISSUE_MINT));
+
+		let transfer = plan(UnitHolder::User(user), IssuanceSource::Company).unwrap();
+		let LedgerAction::Post(leg) = &transfer.action else {
+			panic!("a hand-over is one posted leg")
+		};
+		assert_eq!(
+			(leg.debit.clone(), leg.credit.clone()),
+			(LedgerAccountKey::UserShares(service.clone(), user), LedgerAccountKey::CompanyShares(service.clone()))
+		);
+		assert_eq!(leg.code, TransferCode::CompanyStakeTransfer);
+		assert_eq!(leg.amount, Shares::parse_decimal("13000").unwrap().base_units());
+		assert_ne!(transfer.transfer_id, mint.transfer_id, "the two legs of one row must never alias");
+		assert_eq!(transfer.transfer_id, tid(issuance_id.raw(), ISSUE_TRANSFER));
+
+		// The company handing units to itself is not a leg the ledger should even see.
+		assert!(plan(UnitHolder::Company, IssuanceSource::Company).is_err());
+	}
 
 	// A fill is delivery versus payment or nothing: units, cash and the taker's fee are
 	// ONE linked chain, and the fee leg comes off the taker's side — a taking seller pays

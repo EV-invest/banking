@@ -10,10 +10,12 @@
 //! (`AllocationsService::issue_units`) mints units **in kind**, with no cash leg: it is a
 //! registry decision about who holds what, made by the same manager who sizes the
 //! product, so it lives beside the cap rather than on the investor's dealing surface.
-//! It and [`ListUnitHolders`] are the only handlers here that read the ledger or notify
-//! the relay.
+//! [`TransferCompanyStake`] is the same decision in reverse — the company's seeded
+//! units handed to a named user, supply untouched. They and [`ListUnitHolders`] are the
+//! only handlers here that read the ledger or notify the relay.
 //!
 //! [`IssueUnits`]: AllocationsService::issue_units
+//! [`TransferCompanyStake`]: AllocationsService::transfer_company_stake
 //! [`ListUnitHolders`]: AllocationsService::list_unit_holders
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
@@ -39,7 +41,7 @@ use crate::{
 	application::{
 		allocations as allocations_app,
 		funds::FundPorts,
-		issuance::{self as issuance_app, IssueUnitsRequest, UnitHoldersView},
+		issuance::{self as issuance_app, IssueUnitsRequest, TransferCompanyStakeRequest, UnitHoldersView},
 	},
 	ports::{
 		allocations::{AllocationAccessGrant, AllocationRecord},
@@ -243,6 +245,40 @@ impl AllocationsService for AllocationsSvc {
 		Ok(Response::new(issuance_to_proto(&record)))
 	}
 
+	async fn transfer_company_stake(&self, request: Request<pb::TransferCompanyStakeRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let req = request.into_inner();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		// Resolved the way `issue_units` resolves a user holder: the console carries the
+		// concierge id, the units land on the banking row.
+		let user = resolve_target_user(&self.state, &req.user_id).await?;
+		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;
+		let cost_basis = optional(&req.cost_basis).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
+		let idempotency_key = IdempotencyKey::parse(&req.idempotency_key).map_err(map_err)?;
+		let ports = FundPorts {
+			allocations: self.state.allocations.as_ref(),
+			ledger: self.state.ledger.as_ref(),
+			nav: self.state.nav.as_ref(),
+			relay: &self.state.relay_notify,
+		};
+		let record = issuance_app::transfer_company_stake(
+			&ports,
+			self.state.issuances.as_ref(),
+			self.state.users.as_ref(),
+			TransferCompanyStakeRequest {
+				service,
+				user,
+				units,
+				cost_basis,
+				idempotency_key,
+			},
+			unix_now(),
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(issuance_to_proto(&record)))
+	}
+
 	async fn list_unit_holders(&self, request: Request<pb::ListUnitHoldersRequest>) -> Result<Response<pb::UnitHolders>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
@@ -265,6 +301,7 @@ fn issuance_to_proto(record: &UnitIssuanceRecord) -> pb::UnitIssuance {
 		cost_basis: issuance.cost_basis().to_decimal_string(),
 		state: issuance.state().as_str().to_owned(),
 		created_at: record.created_at,
+		source: issuance.source().as_str().to_owned(),
 	}
 }
 
@@ -350,17 +387,17 @@ fn parse_icon_update(raw: Option<&str>) -> Result<Option<AllocationIcon>, Status
 mod tests {
 	use domain::{
 		allocations::{AllocationState, DEFAULT_UNIT_CAP},
-		issuance::IssuanceState,
+		issuance::{IssuanceSource, IssuanceState},
 	};
 	// Only the guards below read these vocabularies — the handlers go through the domain
 	// enums, which are the authority on what a stored value may be.
-	use evbanking_contracts::allocation::{holder as wire_holder, icon as wire_icon, issuance_state as wire_issuance_state};
+	use evbanking_contracts::allocation::{holder as wire_holder, icon as wire_icon, issuance_source as wire_issuance_source, issuance_state as wire_issuance_state};
 
 	use super::*;
 
 	#[test]
 	fn domain_holders_and_issuance_states_match_the_wire_contract() {
-		// The two vocabularies an in-kind issuance crosses the wire with, held to the same
+		// The three vocabularies an in-kind issuance crosses the wire with, held to the same
 		// standard as state/access/icon: the hub stores the domain enum, consumers match on
 		// the wire constants, and drift between them is a test failure, not a mystery.
 		let holders = [UnitHolder::User(UserId::new()), UnitHolder::Company];
@@ -378,6 +415,16 @@ mod tests {
 		);
 		for state in wire_issuance_state::ALL {
 			assert_eq!(IssuanceState::parse(state).unwrap().as_str(), state);
+		}
+		let sources = [IssuanceSource::Mint, IssuanceSource::Company];
+		let as_wire: Vec<&str> = sources.iter().map(|source| source.as_str()).collect();
+		assert_eq!(
+			as_wire.as_slice(),
+			wire_issuance_source::ALL.as_slice(),
+			"the domain issuance sources and the wire vocabulary have drifted"
+		);
+		for source in wire_issuance_source::ALL {
+			assert_eq!(IssuanceSource::parse(source).unwrap().as_str(), source);
 		}
 	}
 
