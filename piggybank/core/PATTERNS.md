@@ -291,7 +291,12 @@ locks its **worst case** — notional at the limit plus the taker fee on it, `Dr
 the global `sum(custody) == sum(claims)` does not move on a lock; the Share-ledger
 invariant becomes `SharesOutstanding(svc) == Σ UserShares + Σ BookShares + FeeShares +
 CompanyShares`. A holder's position reports the escrowed units as `units_in_orders`
-(still theirs, still valued, not free to redeem or sell twice).
+(still theirs, still valued, not free to redeem or sell twice), and the wallet reports the
+escrowed cash as `in_orders` — `BookCash` is a second account of the same user, so
+without that figure `available` would simply drop by the reserve with nothing on the
+wallet explaining where it went. Both escrows stay inside `total` (see
+[User wallet](#user-wallet--deposit--withdraw-domainwithdrawals-walletservice)): an order
+moves money between two of its terms, never out of it.
 
 **A fill is delivery versus payment or nothing.** Each trade is ONE linked TigerBeetle
 chain ([`Ledger::post_linked`], `LedgerAction::PostLinked`): `Dr UserShares(buyer) / Cr
@@ -306,6 +311,19 @@ reserve, a cancel — comes back in one `BookRelease` (`Dr BookCash / Cr UserCla
 UserShares / Cr BookShares`). Every id is deterministic: the lock and the release from the
 **order** id (`book:lock`, `book:release`), the three legs from the **trade** id
 (`book:fill:units|cash|fee`).
+
+**A cancelled order says why.** `cancelled` is reached three ways — the owner's
+`CancelOrder`, an IOC limit whose remainder could not fill at once, a market order whose
+priced limit ran out of depth — and the last two end with `filled > 0` exactly the way a
+user's cancel after a partial fill does. So every cancel carries a
+[`CancelReason`](../../domain/src/book.rs) (`user` | `ioc_remainder` | `market_remainder`;
+wire vocabulary in `evbanking_contracts::book::cancel_reason`), set exactly when the state
+is `cancelled` (`book_orders` checks the pair the way it checks `rejected` ↔
+`reject_reason`), and the first reason stands on the idempotent repeat cancel because it is
+the one that actually ended the order. The two reason columns are disjoint by construction:
+`reject_reason` is the ledger's free text on a `rejected` order, `cancel_reason` a closed
+vocabulary on a `cancelled` one; a refused post-only or self-trade order is never recorded
+at all, so it has neither.
 
 **Single writer, no in-memory book.** `PgBook::place` is one transaction under
 `pg_advisory_xact_lock(hashtext(service))` (a buy also takes the shared per-user claim
@@ -414,12 +432,28 @@ properties follow, and each is pinned by a test in
   `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)` (plus
   `CompanyShares(svc)` once the company holds an in-kind stake — see above).
 
-What cannot be collected — the holder's units are locked by a queued redemption, or the
-charge floors below one base unit of share — is carried as `fund_positions.fee_debt` and
-taken on the next assessment. It is never written off and never becomes a negative
-balance. When **nothing** is collectable the assessment persists nothing at all and
-leaves both clocks where they are, so the accrual simply continues into the next sweep
-(`FeeCharge::is_empty`).
+What cannot be collected — the holder's units are locked by a queued redemption or
+escrowed by a resting sell order on the book, or the charge floors below one base unit of
+share — is carried as `fund_positions.fee_debt` and taken on the next assessment. It is
+never written off and never becomes a negative balance. When **nothing** is collectable
+the assessment persists nothing at all and leaves both clocks where they are, so the
+accrual simply continues into the next sweep (`FeeCharge::is_empty`).
+
+The cap is the holding's **available** balance on `UserShares`, and both escrows already
+fall outside it: a queued redemption is a pending debit (`locked`), a resting sell has
+moved its units into `BookShares` outright (`posted`). So an order changes *which* road
+the fee takes but not the rule — with some units free, the charge takes those and carries
+the rest as debt; with every unit in an order, nothing is charged, nothing is recorded,
+and the elapsed window is still owed: the next assessment after the order ends charges it
+in full, which is the same money as debt would have been (management is a function of
+elapsed time on the basis, and the basis did not move). The escrow itself is never drawn
+on — it belongs to the order until the book releases it — and the holding cannot go
+negative, because the cap floors at what it has. Pinned by the two escrow tests in
+[`tests/fee_policy.rs`](tests/fee_policy.rs). The residual window is the few milliseconds
+between a placement being recorded and the relay applying its lock, during which an
+assessment still sees the units as free: a clawback landing there makes the lock park on
+the non-negative flag and the order is marked `rejected` — the designed backstop, not a
+negative balance.
 
 ### Ordering, clocks, and the atomic write
 
@@ -487,9 +521,16 @@ before a period end escapes the performance fee on that period's gain.
 ## User wallet — deposit & withdraw (`domain::withdrawals`, `WalletService`)
 
 A user's money is **one** network-agnostic claim (`user:<uuid>`). `GetWallet` presents it
-segmented by lifecycle — `available` (`posted − locked`), `invested` (the value of the
-user's fund positions, `Σ units × current NAV`), `pending_withdrawal` (sum of
-queued/in-flight withdrawals), `total` — plus a
+segmented by lifecycle — `available` (`posted − locked`), `in_orders` (the cash the
+book holds for the user's resting buy orders, `BookCash` posted — still theirs, handed
+back as the orders fill or are cancelled), `invested` (the value of the user's fund
+positions, `Σ (units + units_in_orders) × current NAV` — the units a resting sell escrowed
+are still the holder's and still valued, exactly as the position reports them),
+`pending_withdrawal` (the claim's `locked`: queued/in-flight withdrawals), and `total =
+available + in_orders + invested + pending_withdrawal`. The cash terms come off two
+posted balances read in one pass (the claim's `posted` is `available + pending_withdrawal`
+by construction, `BookCash` is the third term), so placing or cancelling an order moves
+money between terms without moving the sum — plus a
 per-rail deposit address and a per-rail **withdrawable** view (`instant = min(available,
 rail liquidity)`, the accept-and-queue hint — it discloses a rail's liquidity only up to
 the user's own balance; bucket/round it if that must stay private).
@@ -971,13 +1012,21 @@ gates (a closed book, `view`, `hidden`, a closed allocation still trading, read-
 frozen owner); tick/lot/balance refusals before any write; `client_order_id` retry vs
 reuse; a raced over-lock parked by the ledger and the order marked `rejected`; candles and
 the 24h change; the feed framing per change with the caller's `orders_revision`; the
-policy's defaults and bounds.
+policy's defaults and bounds; the wallet showing a resting buy's reserve as `in_orders`
+(available down by exactly that, `total` unmoved, a resting sell still inside `invested`)
+and every figure back after the cancel; and the three `cancel_reason`s landing on the
+row — `ioc_remainder`, `market_remainder`, `user`.
 `piggybank/core/tests/fee_policy.rs` hits real Postgres + TigerBeetle for the fee plane's
 three load-bearing properties — a charge moves **units** and leaves every cash account
 untouched, `SharesOutstanding` is unchanged so no other holder pays, and two investors at
 the same NAV owe different fees when they entered at different prices — plus the bulk
 settlement (the only moment a fee becomes cash), its refusal when the fund's claim is
-short, the sweeper end to end, and a fund with no policy never being charged. Note that
+short, the sweeper end to end, a fund with no policy never being charged, and the book's
+escrow against the clawback — every unit in a resting sell charges nothing and moves no
+clock, the year being collected once the order is cancelled; most units in one caps the
+charge at the free holding, carries the rest as debt, and collects it on the next
+assessment after the cancel, with the holding exactly empty and the escrow untouched
+either way. Note that
 the accrual clocks are DB-stamped while `now` is caller-supplied, so those tests overshoot
 a period boundary by an hour and compare amounts with a tolerance rather than for equality;
 the sub-second jitter is 3e-8 of a year's fee and never accumulates. `piggybank/core/tests/kyc_gating.rs` covers the verification floor against real Postgres +
