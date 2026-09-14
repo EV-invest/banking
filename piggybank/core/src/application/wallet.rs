@@ -6,7 +6,9 @@
 //! all come live from the **same** TigerBeetle claim balance (the authoritative data
 //! plane) — `available = posted − reserved`, `pending_withdrawal = reserved`, so
 //! `available + pending_withdrawal == posted` by construction and the figures cannot
-//! drift. `invested` is the sum of active stakes (a Postgres projection valued at NAV).
+//! drift. `in_orders` is the cash the book holds in escrow for the user's resting buy
+//! orders (`BookCash`, a second claim account of theirs); `invested` is the sum of
+//! active stakes valued at NAV, the units escrowed by resting sell orders included.
 //! Network re-enters only as a transaction attribute: a per-rail deposit address and a
 //! per-rail withdrawable view
 //! (`instant = min(available, rail liquidity)`, the accept-and-queue degradation hint).
@@ -38,20 +40,29 @@ use crate::{
 };
 
 /// A user's single, network-agnostic balance, segmented by lifecycle. Every figure is
-/// non-negative; `total = available + invested + pending_withdrawal`. `available` and
-/// `pending_withdrawal` are two views of the same claim (`posted − reserved` and
-/// `reserved`), so their sum is the claim's `posted` by construction — never a moment
-/// where they diverge and `total` double-counts an in-flight withdrawal.
+/// non-negative; `total = available + in_orders + invested + pending_withdrawal`.
+/// `available` and `pending_withdrawal` are two views of the same claim (`posted −
+/// reserved` and `reserved`), so their sum is the claim's `posted` by construction —
+/// never a moment where they diverge and `total` double-counts an in-flight withdrawal.
+/// `in_orders` is a second account of the same user (`BookCash`), read in the same
+/// pass: a buy order moves cash `Dr UserClaim / Cr BookCash`, so without it `available`
+/// would simply drop by the reserve with nothing on the wallet explaining where it went.
 pub struct WalletBalance {
 	/// Free, spendable now (claim posted − reserved).
 	pub available: Usdt,
-	/// Held in fund units, valued at the current NAV (`Σ units × NAV`).
+	/// Escrowed by the user's resting buy orders on the book (`BookCash` posted): the
+	/// worst-case notional plus taker fee of each, handed back as the orders fill or are
+	/// cancelled. Still the user's money — it counts toward `total`.
+	pub in_orders: Usdt,
+	/// Held in fund units, valued at the current NAV (`Σ units × NAV`), counting the
+	/// units a resting sell order has escrowed (`BookShares`) beside the free holding —
+	/// they are still the holder's and still valued, exactly as a position reports them.
 	pub invested: Usdt,
 	/// Reserved by in-flight withdrawals (the claim's `reserved` = Σ gross the relay has
 	/// locked). Read from the ledger, not the `withdrawals` projection, so it stays in
 	/// lockstep with `available` off one balance read.
 	pub pending_withdrawal: Usdt,
-	/// `available + invested + pending_withdrawal` — the user's whole position.
+	/// `available + in_orders + invested + pending_withdrawal` — the user's whole position.
 	pub total: Usdt,
 }
 
@@ -151,28 +162,40 @@ pub async fn get_wallet(ports: &WalletPorts<'_>, configured: &[Network], gate: K
 	// two summed as if simultaneously consistent and `total` transiently (or permanently,
 	// if a reserve parked) overstated the claim by the gross.
 	let pending_withdrawal = Usdt::from_base_units(claim.locked);
+	// The book's cash escrow is a separate account, so it is a separate read; posted,
+	// because a lock and a release are both posted transfers (nothing pends on it).
+	let in_orders = Usdt::from_base_units(ledger.balance(&LedgerAccountKey::BookCash(user)).await?.posted);
 
-	// invested = the value of the user's fund positions: live units × current NAV.
+	// invested = the value of the user's fund positions: live units × current NAV, the
+	// units a resting sell escrowed included — a sell order moves them `Dr BookShares /
+	// Cr UserShares`, and a wallet that read only the holding would show the stake
+	// shrinking the moment an order rests.
 	let mut invested = Usdt::ZERO;
 	for position in positions.list(user).await? {
 		let held = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(position.service.clone(), user)).await?.posted);
-		if held.is_zero() {
+		let escrowed = Shares::from_base_units(ledger.balance(&LedgerAccountKey::BookShares(position.service.clone(), user)).await?.posted);
+		let owned = held.checked_add(escrowed).ok_or_else(|| DomainError::Repository("position units overflow".into()))?;
+		if owned.is_zero() {
 			continue;
 		}
 		let price = nav.current(&position.service).await?.map(|v| v.nav).unwrap_or(Nav::SEED);
-		let value = price.value(held)?;
+		let value = price.value(owned)?;
 		invested = invested.checked_add(value).ok_or_else(|| DomainError::Repository("invested total overflow".into()))?;
 	}
 
 	// total is the whole claim (its settled `posted`, which still carries the reserved
-	// gross as a pending debit until the withdrawal settles) plus invested — one balance
-	// read, so `total == available + pending_withdrawal + invested` by construction.
+	// gross as a pending debit until the withdrawal settles) plus the book's cash escrow
+	// plus invested — so `total == available + pending_withdrawal + in_orders + invested`
+	// by construction, and a buy order moves cash between two of its terms without
+	// moving the sum.
 	let total = Usdt::from_base_units(claim.posted)
-		.checked_add(invested)
+		.checked_add(in_orders)
+		.and_then(|sum| sum.checked_add(invested))
 		.ok_or_else(|| DomainError::Repository("wallet total overflow".into()))?;
 
 	let balance = WalletBalance {
 		available,
+		in_orders,
 		invested,
 		pending_withdrawal,
 		total,
