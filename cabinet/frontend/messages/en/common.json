@@ -183,6 +183,8 @@
   "admin.fees.field.hurdle": "Hurdle",
   "admin.fees.field.management": "Management",
   "admin.fees.field.performance": "Performance",
+  "admin.fees.forbidden.body": "Pricing a product changes what investors pay, so only an administrator or an owner can view and schedule fee terms. The rest of the console is yours as usual.",
+  "admin.fees.forbidden.title": "Fee terms are set by administrators and owners",
   "admin.fees.hint.ofTheGain": "of the gain",
   "admin.fees.hint.perYear": "per year",
   "admin.fees.hint.zeroForNone": "0 for none",

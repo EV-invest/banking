@@ -13,6 +13,7 @@ import { useUnreadCount, useUnreadCountPolling } from "@/entities/notification/m
 import { useCabinetPathname } from "@/shared/lib/cabinet-route";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { visibleFor } from "@/shared/lib/roles";
 import { useSession } from "@/shared/lib/use-session";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { DUR, EASE } from "@/shared/ui/motion";
@@ -25,6 +26,12 @@ interface NavItem {
   key: string;
   icon: LucideIcon;
   active: (path: string) => boolean;
+  /**
+   * Session roles the row is shown to; absent means every role that sees the group. Set it
+   * where the BFF answers a narrower set of roles than the group's — otherwise the row
+   * leads to a screen made of 403s.
+   */
+  roles?: readonly string[];
 }
 
 // FUND group — the primary surfaces. "Home" is the portfolio dashboard; "Wallet" is the
@@ -75,8 +82,9 @@ const ADMIN: NavItem[] = [
   { href: "/admin/valuation", label: "Valuation & redemptions", key: "nav.valuation", icon: Receipt, active: (p) => p.startsWith("/admin/valuation") },
   // After Allocations, because a fee is a property OF a product: you register the fund
   // first and then price it. Distinct from Fund revenue, which is where the money ends up
-  // once these terms have been charged and settled.
-  { href: "/admin/fees", label: "Fees", key: "nav.fees", icon: Percent, active: (p) => p.startsWith("/admin/fees") },
+  // once these terms have been charged and settled. Pricing a product is not an operator's
+  // call: the BFF admits only admins and owners to `/api/admin/fees/*` (banking#269).
+  { href: "/admin/fees", label: "Fees", key: "nav.fees", icon: Percent, active: (p) => p.startsWith("/admin/fees"), roles: ["admin", "owner"] },
 ];
 
 // A product's row owns its page AND the surfaces under it — `/invest/<service>/trade` is
@@ -107,6 +115,8 @@ export function Sidebar() {
   const pathname = useCabinetPathname();
   const session = useSession();
   const isAdmin = session?.user?.isAdmin ?? false;
+  const role = session?.user?.role;
+  const admin = ADMIN.filter((item) => visibleFor(item.roles, role));
   // The rail is mounted on every signed-in screen, so it is the one place the unread
   // count is polled from — every other consumer reads the shared store.
   useUnreadCountPolling();
@@ -123,7 +133,7 @@ export function Sidebar() {
     ? "products"
     : FUND.some((i) => i.active(pathname))
       ? "fund"
-      : isAdmin && ADMIN.some((i) => i.active(pathname))
+      : isAdmin && admin.some((i) => i.active(pathname))
         ? "administer"
         : pathname.startsWith("/notifications") || pathname.startsWith("/settings")
           ? "secondary"
@@ -172,7 +182,7 @@ export function Sidebar() {
         )}
         {isAdmin && (
           <Group label={t("admin.eyebrow.administer")}>
-            {ADMIN.map((item) => (
+            {admin.map((item) => (
               <NavLink key={item.label} item={item} active={item.active(pathname)} section="administer" appear={crossed} />
             ))}
           </Group>

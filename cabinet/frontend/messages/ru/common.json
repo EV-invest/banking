@@ -735,6 +735,14 @@
     "en": "Performance",
     "t": "За успех"
   },
+  "admin.fees.forbidden.body": {
+    "en": "Pricing a product changes what investors pay, so only an administrator or an owner can view and schedule fee terms. The rest of the console is yours as usual.",
+    "t": "Тарификация продукта меняет то, что платят инвесторы, поэтому просматривать и назначать условия комиссий могут только администратор или владелец. Остальная консоль доступна вам как обычно."
+  },
+  "admin.fees.forbidden.title": {
+    "en": "Fee terms are set by administrators and owners",
+    "t": "Условия комиссий задают администраторы и владельцы"
+  },
   "admin.fees.hint.ofTheGain": {
     "en": "of the gain",
     "t": "от прибыли"
