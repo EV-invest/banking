@@ -26,20 +26,8 @@ use piggybank_core::{
 	application::{balance as balance_app, funds as funds_app, withdrawals as withdrawal_app},
 	config::KycGate,
 	infrastructure::{
-		allocations::PgAllocations,
-		custody::StubCustody,
-		db,
-		deposits::PgDeposits,
-		ledger::{self, TbLedger},
-		nav::PgNav,
-		outflow::PgOutflowPolicy,
-		positions::PgFundPositions,
-		redemptions::PgRedemptions,
-		relay::Relay,
-		subscriptions::PgSubscriptions,
-		tigerbeetle::TigerBeetle,
-		users::PgUsers,
-		withdrawals::PgWithdrawals,
+		allocations::PgAllocations, custody::StubCustody, deposits::PgDeposits, nav::PgNav, outflow::PgOutflowPolicy, positions::PgFundPositions, redemptions::PgRedemptions, relay::Relay,
+		subscriptions::PgSubscriptions, users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
 		AllocationRegistry, FundPositionReader, RedemptionRepository, SubscriptionRepository, UserRepository,
@@ -63,19 +51,8 @@ struct Harness {
 }
 
 async fn harness() -> Option<Harness> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-
-	let address = std::env::var("TIGERBEETLE_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3033".to_owned());
-	let cluster = std::env::var("TIGERBEETLE_CLUSTER_ID").ok().and_then(|s| s.parse().ok()).unwrap_or(0u128);
-	let tigerbeetle = Arc::new(TigerBeetle::connect(cluster, &address).expect("connect to TigerBeetle"));
-	let ledger: Arc<dyn Ledger> = Arc::new(TbLedger::new(tigerbeetle, pool.clone()));
-	// If TigerBeetle isn't actually reachable, the first real op fails — skip then.
-	if ledger::seed_singletons(ledger.as_ref()).await.is_err() {
-		eprintln!("TigerBeetle unreachable — skipping money-plane test");
-		return None;
-	}
+	let pool = common::pool().await?;
+	let ledger = common::seeded_ledger(&pool, "money-plane test").await?;
 
 	let notify = Arc::new(Notify::new());
 	let relay = Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone());

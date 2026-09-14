@@ -22,19 +22,8 @@ use domain::{
 use piggybank_core::{
 	application::{allocations as allocations_app, balance as balance_app, funds as funds_app, issuance as issuance_app},
 	infrastructure::{
-		allocations::PgAllocations,
-		custody::StubCustody,
-		db,
-		deposits::PgDeposits,
-		issuance::PgUnitIssuances,
-		ledger::{self, TbLedger},
-		nav::PgNav,
-		positions::PgFundPositions,
-		redemptions::PgRedemptions,
-		relay::Relay,
-		subscriptions::PgSubscriptions,
-		tigerbeetle::TigerBeetle,
-		users::PgUsers,
+		allocations::PgAllocations, custody::StubCustody, deposits::PgDeposits, issuance::PgUnitIssuances, nav::PgNav, positions::PgFundPositions, redemptions::PgRedemptions, relay::Relay,
+		subscriptions::PgSubscriptions, users::PgUsers,
 	},
 	ports::{AllocationRegistry, FundPositionReader, UnitIssuanceRepository, UserRepository, issuance::UnitIssuanceRecord, ledger::Ledger},
 };
@@ -44,6 +33,8 @@ use sqlx::{
 };
 use tokio::sync::Notify;
 use uuid::Uuid;
+
+mod common;
 
 struct Harness {
 	pool: PgPool,
@@ -61,18 +52,8 @@ struct Harness {
 }
 
 async fn harness() -> Option<Harness> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-
-	let address = std::env::var("TIGERBEETLE_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3033".to_owned());
-	let cluster = std::env::var("TIGERBEETLE_CLUSTER_ID").ok().and_then(|s| s.parse().ok()).unwrap_or(0u128);
-	let tigerbeetle = Arc::new(TigerBeetle::connect(cluster, &address).expect("connect to TigerBeetle"));
-	let ledger: Arc<dyn Ledger> = Arc::new(TbLedger::new(tigerbeetle, pool.clone()));
-	if ledger::seed_singletons(ledger.as_ref()).await.is_err() {
-		eprintln!("TigerBeetle unreachable — skipping allocation-registry test");
-		return None;
-	}
+	let pool = common::pool().await?;
+	let ledger = common::seeded_ledger(&pool, "allocation-registry test").await?;
 
 	let notify = Arc::new(Notify::new());
 	Some(Harness {

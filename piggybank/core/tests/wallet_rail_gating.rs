@@ -35,7 +35,6 @@ use piggybank_core::{
 	config::KycGate,
 	infrastructure::{
 		custody::StubCustody,
-		db,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		outflow::PgOutflowPolicy,
@@ -53,6 +52,7 @@ use tonic::transport::{Endpoint, Server};
 use uuid::Uuid;
 
 mod common;
+use common::pool;
 
 /// A deterministic, structurally-valid derived-grade address per network.
 const BEP20: &str = "0x52908400098527886E0F7030069857D2E4169EE7";
@@ -119,13 +119,6 @@ impl SignerService for CountingSigner {
 	async fn migrate_address_to_custodian(&self, _request: tonic::Request<MigrateAddressToCustodianRequest>) -> Result<tonic::Response<MigrateAddressToCustodianResponse>, tonic::Status> {
 		Err(tonic::Status::unimplemented("migrate_address_to_custodian is not exercised by the rail-gating test"))
 	}
-}
-
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-	Some(pool)
 }
 
 /// Bind an ephemeral port for the in-process signer, then serve + assert as two
