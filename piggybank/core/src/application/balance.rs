@@ -1,9 +1,15 @@
-//! Balance use cases — seed fund capital, record deposits, read the fund balance.
+//! Balance use cases — record chain-proven arrivals (a user's deposit, the fund's own
+//! capital), read the treasury and the fund's revenue.
 //!
 //! Commands validate and hand the fact to the [`Deposits`] port, whose adapter is
 //! its own atomic unit (one Postgres transaction: the gate row + the outbox event),
 //! then `notify` the relay to move money in TigerBeetle afterwards (Write-Last).
 //! The query reads live, TigerBeetle-authoritative balances (Read-First).
+//!
+//! Every operator write here is a *verification*, never a statement: the caller names a
+//! chain transaction and the amount and the credited party are read back from it. There
+//! is no path that credits a claim from a number an operator typed — the last one
+//! (`SeedCapital` with a free amount and no dedup key) was removed in issue #234.
 
 use domain::{
 	balance::{LedgerAccountKey, Party},
@@ -56,16 +62,6 @@ pub struct Treasury {
 	pub reserved_for_withdrawals: Usdt,
 }
 
-/// Seed the company's own capital on `network` (`Dr WALLET / Cr FUND`). Admin-gated
-/// at the boundary.
-pub async fn seed_fund_capital(deposits: &dyn Deposits, relay: &Notify, network: Network, amount: Usdt) -> Result<(), DomainError> {
-	if amount.is_zero() {
-		return Err(DomainError::Validation("seed amount must be positive".into()));
-	}
-	deposits.seed_capital(network, amount).await?;
-	relay.notify_one();
-	Ok(())
-}
 /// Record an on-chain deposit, **idempotent by `tx_ref`** (see [`Deposits::record`]).
 /// Returns `true` if newly recorded, `false` for a duplicate; the relay is nudged
 /// only when a new event was committed.
@@ -89,6 +85,7 @@ pub async fn record_deposit(deposits: &dyn Deposits, relay: &Notify, tx_ref: TxR
 	Ok(recorded)
 }
 /// What a verified arrival turned out to be, once the chain had its say.
+#[derive(Debug)]
 pub struct VerifiedArrival {
 	pub recorded: bool,
 	pub party: Party,
@@ -97,10 +94,10 @@ pub struct VerifiedArrival {
 
 /// Record an out-of-band arrival, taking every material fact from the CHAIN.
 ///
-/// This is the operator's only way to write a deposit by hand, and it is deliberately not a
-/// way to *state* one. The caller supplies a reference; the amount and the credited party are
-/// read back from the transfer that reference names. So the operator surface cannot mint a
-/// balance — the worst a bad reference achieves is a refusal.
+/// This is the operator's general way to write a deposit by hand, and it is deliberately
+/// not a way to *state* one. The caller supplies a reference; the amount and the credited
+/// party are read back from the transfer that reference names. So the operator surface
+/// cannot mint a balance — the worst a bad reference achieves is a refusal.
 ///
 /// Read-First against the chain, then the ordinary idempotent `record_deposit`, so a
 /// hand-verified arrival and a scanned one collapse onto the same `tx_ref` and one transfer
@@ -114,8 +111,62 @@ pub async fn record_verified_arrival(
 	network: Network,
 	expected_amount: Option<Usdt>,
 ) -> Result<VerifiedArrival, DomainError> {
+	let (party, transfer) = verify_arrival(custody, addresses, network, &tx_ref, expected_amount).await?;
+	let recorded = record_deposit(deposits, relay, tx_ref, party.clone(), network, transfer.amount).await?;
+	Ok(VerifiedArrival {
+		recorded,
+		party,
+		amount: transfer.amount,
+	})
+}
+
+/// Record the fund's own capital, proven against the chain the same way as any arrival.
+///
+/// [`record_verified_arrival`] with one more assertion: the transfer the reference names
+/// must be the fund's money — an external sender paying INTO the rail's treasury. A transfer
+/// that landed on a user's deposit address is that user's deposit, and booking it as
+/// capital would hand the fund a dollar it owes to someone; it is refused here and pointed
+/// at `RecordDeposit` rather than silently recorded under the party the chain names, so an
+/// operator who asserted "capital" learns the assertion was wrong. The sweep is refused by
+/// the shared attribution, as everywhere.
+pub async fn seed_fund_capital(
+	deposits: &dyn Deposits,
+	custody: &dyn Custody,
+	addresses: &dyn DepositAddresses,
+	relay: &Notify,
+	tx_ref: TxRef,
+	network: Network,
+	expected_amount: Option<Usdt>,
+) -> Result<VerifiedArrival, DomainError> {
+	let (party, transfer) = verify_arrival(custody, addresses, network, &tx_ref, expected_amount).await?;
+	if !matches!(party, Party::Piggybank) {
+		return Err(DomainError::Validation(format!(
+			"{} is a user's deposit address, so this transfer is that user's deposit, not fund capital — record it with RecordDeposit",
+			transfer.to
+		)));
+	}
+	let recorded = record_deposit(deposits, relay, tx_ref, party.clone(), network, transfer.amount).await?;
+	Ok(VerifiedArrival {
+		recorded,
+		party,
+		amount: transfer.amount,
+	})
+}
+
+/// The chain's account of a reference: the transfer it names and whose money it is.
+///
+/// One function for both operator write paths so they can never disagree about what counts
+/// as proven — the lookup, the optional assertion and the attribution are the whole of the
+/// evidence, and a path that skipped any of them would be the very hole this closes.
+async fn verify_arrival(
+	custody: &dyn Custody,
+	addresses: &dyn DepositAddresses,
+	network: Network,
+	tx_ref: &TxRef,
+	expected_amount: Option<Usdt>,
+) -> Result<(Party, InboundTransfer), DomainError> {
 	let transfer = custody
-		.inbound_transfer(network, &tx_ref)
+		.inbound_transfer(network, tx_ref)
 		.await
 		.map_err(|e| DomainError::Repository(format!("chain lookup failed: {e}")))?
 		.ok_or_else(|| {
@@ -137,12 +188,7 @@ pub async fn record_verified_arrival(
 		)));
 	}
 	let party = attribute(custody, addresses, network, &transfer).await?;
-	let recorded = record_deposit(deposits, relay, tx_ref, party.clone(), network, transfer.amount).await?;
-	Ok(VerifiedArrival {
-		recorded,
-		party,
-		amount: transfer.amount,
-	})
+	Ok((party, transfer))
 }
 
 /// Decide whose money a confirmed transfer is, from its recipient — and refuse anything that

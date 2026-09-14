@@ -1,9 +1,9 @@
-//! Postgres adapter for the [`Deposits`] port — the aggregate-less company-money
-//! facts (seed capital, on-chain deposits) and their outbox events.
+//! Postgres adapter for the [`Deposits`] port — the aggregate-less on-chain arrival
+//! facts (a user's deposit, the fund's own capital) and their outbox events.
 //!
-//! Each method opens one transaction (the ACID point): the `deposits` gate row and
-//! the outbox event commit together or not at all, so the relay can never move money
-//! for an unrecorded fact — nor record a fact whose event was lost.
+//! The write opens one transaction (the ACID point): the `deposits` gate row and the
+//! outbox event commit together or not at all, so the relay can never move money for
+//! an unrecorded fact — nor record a fact whose event was lost.
 
 use async_trait::async_trait;
 use domain::{
@@ -37,14 +37,6 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 
 #[async_trait]
 impl Deposits for PgDeposits {
-	async fn seed_capital(&self, network: Network, amount: Usdt) -> Result<(), DomainError> {
-		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let aggregate_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, format!("fund:{network}").as_bytes());
-		let payload = serde_json::to_string(&LedgerEvent::CapitalSeeded { network, amount }).map_err(|e| DomainError::Repository(e.to_string()))?;
-		outbox::insert_event(&mut tx, Uuid::new_v4(), "fund", aggregate_id, LedgerEvent::KIND, &payload, true).await?;
-		tx.commit().await.map_err(repo_err)
-	}
-
 	async fn record(&self, tx_ref: TxRef, party: Party, network: Network, amount: Usdt) -> Result<bool, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
 		let event_id = Uuid::new_v4();

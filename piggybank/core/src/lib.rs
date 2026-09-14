@@ -81,7 +81,7 @@ pub struct AppState {
 	pub issuances: Arc<dyn UnitIssuanceRepository>,
 	/// The `redemptions` aggregate's driven port (the accept-and-queue saga).
 	pub redemptions: Arc<dyn RedemptionRepository>,
-	/// The aggregate-less company-money facts (seed capital, deposit gate) + outbox.
+	/// The aggregate-less on-chain arrival facts (the `tx_ref` deposit gate) + outbox.
 	pub deposits: Arc<dyn Deposits>,
 	/// Fund valuation marks → the derived NAV (the operator-posted AUM history).
 	pub nav: Arc<dyn NavMarks>,
