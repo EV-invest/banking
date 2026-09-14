@@ -109,6 +109,113 @@ is Read-First gated on the fund's claim covering the payout and **refuses** when
 rather than queueing: nobody is waiting on it, and a fee that cannot be paid today keeps
 accumulating as units at no cost.
 
+## Changing the terms
+
+A fee policy used to be a single upsert: one `AllocationManage` holder called
+`SetFeePolicy`, the row changed, and the next sweep charged the new rate against every
+holder — with no ceiling, no notice, no record of what the old terms were, and no second
+person involved. Issue #233 closes that. The write path is now `ScheduleFeePolicy`, and a
+policy is a **versioned row that a change is promoted into**, never edited in place.
+
+### The ceiling
+
+`FeePolicy::new` refuses a management rate above **500 bps** (5% p.a.) and a performance
+rate above **5000 bps** (50% of the gain) — `MAX_MANAGEMENT_BPS` and `MAX_PERFORMANCE_BPS`
+in `domain/src/fees.rs`. The hurdle stays capped at 100%: it only ever lowers the fee. The
+schema states the same two ceilings as `CHECK`s on `fee_policies` and `fee_policy_changes`
+(migration `0036`), added `NOT VALID` so a pre-existing row cannot stop the pod from
+booting; every new write is held to them.
+
+### The house envelope, tightening, and who must agree
+
+Two pure functions decide the requirement, and both have their own unit tests:
+
+- **`FeePolicy::within_house_envelope`** — `management ≤ 200 && performance ≤ 2000 &&
+  basis == invested_capital && crystallization == annual`, any hurdle. This is what the
+  prospectus already promised.
+- **`FeePolicy::tightens_from(current)`** — true when ANY leg gets dearer for the investor:
+  either rate up, the hurdle down, the basis moved from invested capital onto the mark, or
+  crystallization made more frequent. A product with no policy is measured as
+  `FeePolicy::NONE` (0/0, invested capital, annual): it charges nothing, so any first
+  positive rate tightens.
+
+`requirement_for(current, next)` is then one line: **the owners' consilium exactly when the
+change tightens the terms and lands outside the envelope; otherwise a single
+`AllocationManage` holder**. Loosening never needs a quorum, however far outside the
+envelope the terms sit; a tightening that stays inside the envelope is an administrator's
+call.
+
+A change that needs the owners is opened as a `ConsiliumKind::FeePolicy` consilium by the
+requester, who must therefore BE an owner — an administrator who is not one is refused
+before anything is written, with a message that says so — and must state a `reason`,
+which the owners read in their approval mail and which is part of what they sign. The
+consilium's subject (`FeePolicySubject`: the change id, the product, the terms moved FROM
+and TO, the reason and the requested effective moment) is domain-separated and hashed
+exactly as a payout's terms are, and its source claim is the product's `FeeShares`, so the
+existing "one open consilium per source claim" index gives one open fee-policy consilium
+per product for free. The change, the consilium, its seats and their approval mails commit
+in ONE transaction. The quorum, the mail, the 72h window and the roster rules are the ones
+in `docs/CONSILIUM.md`.
+
+### Notice
+
+A change binds no earlier than **24 hours** (`MIN_NOTICE_SECS`) after the moment it was
+SCHEDULED, whenever the product has at least one holder with units. A fund with no holders
+has nobody to warn, and the change may take effect at once. The operator may ask for a
+later `effective_from`; an earlier one is lifted to the minimum rather than refused, because
+"as soon as allowed" is a legitimate request.
+
+For a consilium-gated change the clock starts when the owners CARRY it — the moment the
+consilium executes — not when it was proposed. Holders are then mailed
+(`GovernanceMail::FeePolicyNotice`, one per holder, keyed
+`fee-policy-notice:<change>:<holder>`, through the same `consilium_mail` queue every
+governance mail leaves through, in the same transaction as the state change), with the
+fund's name, the current terms (absent when the fund charged nothing), the proposed terms,
+the moment they bind and the cabinet-relative product page (`/invest/<service>`, pinned to
+concierge's own origin). On the administrator's path the same mails go out the moment the
+change is scheduled.
+
+### Versions and states
+
+`fee_policy_changes` is the history. Every row carries the full five-field terms, a
+`version` unique per product, the requirement it was held to, who requested it and when,
+the consilium it waited on (if any), and the timestamps of its scheduling and its
+application. `fee_policies` stays what it always was — the row **in force right now** — and
+grows `version` and `effective_from`; existing rows were backfilled as version 1, `active`.
+
+```
+awaiting_consilium ──carried──▶ scheduled ──promoted──▶ active ──next change lands──▶ superseded
+        │                          │
+        └─rejected / expired /     └─ administrator cancels before it took effect ──▶ cancelled
+          cancelled / voided ──▶ rejected
+```
+
+At most one change per product is `awaiting_consilium` or `scheduled` at a time
+(`fee_policy_changes_single_pending_idx`); a second request is refused with a conflict that
+says to cancel the pending one first. `CancelFeePolicyChange` withdraws a scheduled change
+and, for one still awaiting the owners, withdraws its consilium in the same transaction.
+
+### Promotion, and why the old rate is settled first
+
+The fee sweeper wakes every 60 seconds and promotes every `scheduled` change whose
+`effective_from` has passed. Promotion is one transaction per change: lock the product's
+unit-holding positions; for every holder whose accrual clock stands before
+`effective_from`, call `carry_accrual` **as of `effective_from`** — which reads the OLD row
+from `fee_policies` on the same connection, prices the elapsed window at the old management
+rate, carries it into `fee_debt` and restarts the clock — and only then upsert the new terms
+into `fee_policies`, mark the change `active` and the previous active one `superseded`.
+
+The order is the whole point. § "The elapsed clock" says nobody re-prices time that has
+already passed, and a policy change is exactly a writer of one of the two factors: the
+next assessment must not charge the window before `effective_from` at the new rate, up or
+down. Settling it at the old rate first is what makes the new rate begin at
+`effective_from` and not at whenever a holder was last swept. The performance leg needs no
+such treatment: it is measured from each investor's own mark at the next crystallization,
+under whichever terms are in force then.
+
+A failure on one product warns and moves on; the change stays `scheduled` and is retried on
+the next tick.
+
 ## Still open
 
 **Exit crystallization is not wired.** `Trigger::Redemption` exists and is tested, but
@@ -126,6 +233,7 @@ performance half is the remaining work.
 | Postgres adapters, the charge | `piggybank/core/src/infrastructure/fees.rs` |
 | Settling the accrual before a basis moves | `piggybank/core/src/infrastructure/fee_accrual.rs` |
 | The periodic worker | `piggybank/core/src/infrastructure/fee_sweeper.rs` |
-| Schema | `piggybank/core/migrations/0023_fee_policy.sql` |
+| Changing the terms: history, notice, promotion | `piggybank/core/src/infrastructure/fee_policy_changes.rs` |
+| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql` |
 | Wire contract | `contracts/proto/banking/v1/fees.proto` |
 | Integration tests (real PG + TigerBeetle) | `piggybank/core/tests/fee_policy.rs` |
