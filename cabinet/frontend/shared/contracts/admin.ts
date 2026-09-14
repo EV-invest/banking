@@ -265,6 +265,24 @@ export interface FeePolicyChange extends FeeTerms {
   scheduled_at: string;
   applied_at: string;
   reason: string;
+  /**
+   * The operator who took responsibility for the holders who could not be told
+   * (`/policy/acknowledge-notices`); `null` until someone did. Operators only — blank for
+   * everyone else even once given.
+   */
+  notices_waived_by: string | null;
+  /** Unix seconds as a string the acknowledgement was given; `"0"` until someone gave it. */
+  notices_waived_at: string;
+  /** The banking user ids whose notice was undelivered at that moment — exactly the holders
+   *  the change binds over untold, and nobody who turns out untold later. Operators only. */
+  notices_waived_users: string[];
+  /**
+   * Notices not yet delivered to a CURRENT holder, and how many of those the mailer has
+   * given up on. Counted only while `scheduled` — `0` in every other state, and `0` for
+   * everyone but operators — so a non-zero figure is always about a change still on its way.
+   */
+  undelivered_notices: number;
+  notices_given_up: number;
 }
 
 export interface FeePolicyChangeList {
@@ -282,6 +300,14 @@ export interface ScheduleFeePolicyRequest extends FeeTerms {
 
 /** `POST /api/admin/fees/policy/cancel`. Idempotent on an already-cancelled change. */
 export interface CancelFeePolicyChangeRequest {
+  service: string;
+  change_id: string;
+}
+
+/** `POST /api/admin/fees/policy/acknowledge-notices`. Idempotent on a change already
+ *  acknowledged (the first record stands). 409 when the change is not `scheduled` or every
+ *  notice has been delivered; 403 for a caller who is neither the requester nor an owner. */
+export interface AcknowledgeUndeliveredNoticesRequest {
   service: string;
   change_id: string;
 }

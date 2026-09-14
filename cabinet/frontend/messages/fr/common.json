@@ -947,6 +947,50 @@
     "en": "Worth at current NAV",
     "t": "Valeur à la VL actuelle"
   },
+  "admin.fees.notices.acknowledge": {
+    "en": "Take responsibility and bind anyway",
+    "t": "Prendre la responsabilité et appliquer quand même"
+  },
+  "admin.fees.notices.acknowledgeBack": {
+    "en": "Keep waiting",
+    "t": "Continuer d'attendre"
+  },
+  "admin.fees.notices.acknowledgeConfirm": {
+    "en": "Take responsibility",
+    "t": "Prendre la responsabilité"
+  },
+  "admin.fees.notices.acknowledgeWarning": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
+    "t": "Les conditions s'appliqueront à {n, plural, one {ce détenteur} many {ces # détenteurs} other {ces # détenteurs}} sans avis — des conditions plus strictes dont ils n'ont jamais été informés. Votre nom, le moment et la liste exacte des détenteurs concernés sont consignés sur le changement et restent dans son historique."
+  },
+  "admin.fees.notices.err.forbidden": {
+    "en": "Only the requester of this change or an owner can take responsibility for it.",
+    "t": "Seul l'auteur de la demande ou un propriétaire peut en prendre la responsabilité."
+  },
+  "admin.fees.notices.err.nothing": {
+    "en": "Nothing left to acknowledge: every holder has been told by now, or the change is no longer scheduled.",
+    "t": "Plus rien à confirmer : tous les détenteurs ont été prévenus entre-temps, ou le changement n'est plus planifié."
+  },
+  "admin.fees.notices.givenUp": {
+    "en": "The mailer has given up on {n, plural, one {# of them} other {# of them}}.",
+    "t": "L'envoi a renoncé pour {n, plural, one {# d'entre eux} many {# d'entre eux} other {# d'entre eux}}."
+  },
+  "admin.fees.notices.undelivered": {
+    "en": "{n, plural, one {# holder} other {# holders}} could not be told",
+    "t": "{n, plural, one {# détenteur n'a pas pu être prévenu} many {# détenteurs n'ont pas pu être prévenus} other {# détenteurs n'ont pas pu être prévenus}}"
+  },
+  "admin.fees.notices.waits": {
+    "en": "A change that tightens the terms does not bind over a holder whose notice is undelivered. The mailer keeps trying; a holder it can never reach holds the change up for good.",
+    "t": "Un changement qui durcit les conditions ne s'applique pas à un détenteur dont l'avis n'a pas été remis. L'envoi continue d'essayer ; un détenteur injoignable bloque le changement indéfiniment."
+  },
+  "admin.fees.waiver.acknowledged": {
+    "en": "Notices waived by {by} on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
+    "t": "Avis levés par {by} le {at}, pour {n, plural, one {# détenteur} many {# détenteurs} other {# détenteurs}} qui n'ont pas pu être prévenus."
+  },
+  "admin.fees.waiver.row": {
+    "en": "Notices waived by {by} · {n, plural, one {# holder} other {# holders}}",
+    "t": "Avis levés par {by} · {n, plural, one {# détenteur} many {# détenteurs} other {# détenteurs}}"
+  },
   "admin.fundRevenue": {
     "en": "Fund revenue",
     "t": "Revenus du fonds"

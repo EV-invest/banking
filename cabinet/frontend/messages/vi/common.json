@@ -947,6 +947,50 @@
     "en": "Worth at current NAV",
     "t": "Giá trị theo NAV hiện tại"
   },
+  "admin.fees.notices.acknowledge": {
+    "en": "Take responsibility and bind anyway",
+    "t": "Nhận trách nhiệm và vẫn áp dụng"
+  },
+  "admin.fees.notices.acknowledgeBack": {
+    "en": "Keep waiting",
+    "t": "Tiếp tục chờ"
+  },
+  "admin.fees.notices.acknowledgeConfirm": {
+    "en": "Take responsibility",
+    "t": "Nhận trách nhiệm"
+  },
+  "admin.fees.notices.acknowledgeWarning": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
+    "t": "Điều khoản sẽ có hiệu lực với {n, plural, other {# người nắm giữ này}} mà không có thông báo — những điều khoản chặt hơn mà họ chưa từng được biết. Tên của bạn, thời điểm và chính xác những người nắm giữ liên quan sẽ được ghi vào thay đổi và lưu trong lịch sử của nó."
+  },
+  "admin.fees.notices.err.forbidden": {
+    "en": "Only the requester of this change or an owner can take responsibility for it.",
+    "t": "Chỉ người yêu cầu thay đổi này hoặc chủ sở hữu mới có thể nhận trách nhiệm."
+  },
+  "admin.fees.notices.err.nothing": {
+    "en": "Nothing left to acknowledge: every holder has been told by now, or the change is no longer scheduled.",
+    "t": "Không còn gì để xác nhận: mọi người nắm giữ đã được thông báo, hoặc thay đổi không còn được lên lịch."
+  },
+  "admin.fees.notices.givenUp": {
+    "en": "The mailer has given up on {n, plural, one {# of them} other {# of them}}.",
+    "t": "Hệ thống gửi thư đã bỏ cuộc với {n, plural, other {# người trong số đó}}."
+  },
+  "admin.fees.notices.undelivered": {
+    "en": "{n, plural, one {# holder} other {# holders}} could not be told",
+    "t": "{n, plural, other {# người nắm giữ}} không thể được thông báo"
+  },
+  "admin.fees.notices.waits": {
+    "en": "A change that tightens the terms does not bind over a holder whose notice is undelivered. The mailer keeps trying; a holder it can never reach holds the change up for good.",
+    "t": "Thay đổi siết chặt điều khoản không có hiệu lực với người nắm giữ chưa nhận được thông báo. Hệ thống gửi thư vẫn tiếp tục thử; một người không bao giờ liên lạc được sẽ giữ thay đổi lại mãi."
+  },
+  "admin.fees.waiver.acknowledged": {
+    "en": "Notices waived by {by} on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
+    "t": "Thông báo được miễn bởi {by} vào {at}, cho {n, plural, other {# người nắm giữ}} không thể được thông báo."
+  },
+  "admin.fees.waiver.row": {
+    "en": "Notices waived by {by} · {n, plural, one {# holder} other {# holders}}",
+    "t": "Thông báo được miễn bởi {by} · {n, plural, other {# người nắm giữ}}"
+  },
   "admin.fundRevenue": {
     "en": "Fund revenue",
     "t": "Doanh thu quỹ"

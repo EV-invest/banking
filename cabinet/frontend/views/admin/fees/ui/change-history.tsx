@@ -16,6 +16,7 @@ import { formatMoment, hasStamp } from "@/shared/lib/datetime";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { changeStateLabel, changeStateTone, termsSummary } from "@/views/admin/fees/lib/format";
+import { WaiverNote } from "@/views/admin/fees/ui/notice-waiver";
 
 export function ChangeHistory({ service }: { service: string }) {
   const t = useT();
@@ -63,6 +64,7 @@ export function ChangeHistory({ service }: { service: string }) {
                       <Badge variant="outline" className={cn(changeStateTone(c.state))}>
                         {changeStateLabel(c.state, t)}
                       </Badge>
+                      <WaiverNote change={c} />
                     </td>
                     <td className="py-2 tabular-nums">{termsSummary(c, t)}</td>
                     {/* "0" while a change awaits the owners: the moment is not known until

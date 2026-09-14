@@ -947,6 +947,50 @@
     "en": "Worth at current NAV",
     "t": "Wert zum aktuellen NAV"
   },
+  "admin.fees.notices.acknowledge": {
+    "en": "Take responsibility and bind anyway",
+    "t": "Verantwortung übernehmen und trotzdem anwenden"
+  },
+  "admin.fees.notices.acknowledgeBack": {
+    "en": "Keep waiting",
+    "t": "Weiter warten"
+  },
+  "admin.fees.notices.acknowledgeConfirm": {
+    "en": "Take responsibility",
+    "t": "Verantwortung übernehmen"
+  },
+  "admin.fees.notices.acknowledgeWarning": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
+    "t": "Die Bedingungen werden für {n, plural, one {diesen Anleger} other {diese # Anleger}} ohne Benachrichtigung wirksam — strengere Bedingungen, von denen sie nie erfahren haben. Ihr Name, der Zeitpunkt und genau die betroffenen Anleger werden auf der Änderung festgehalten und bleiben in ihrer Historie."
+  },
+  "admin.fees.notices.err.forbidden": {
+    "en": "Only the requester of this change or an owner can take responsibility for it.",
+    "t": "Nur wer diese Änderung beantragt hat oder ein Eigentümer kann die Verantwortung dafür übernehmen."
+  },
+  "admin.fees.notices.err.nothing": {
+    "en": "Nothing left to acknowledge: every holder has been told by now, or the change is no longer scheduled.",
+    "t": "Nichts mehr zu bestätigen: inzwischen sind alle Anleger benachrichtigt, oder die Änderung ist nicht mehr geplant."
+  },
+  "admin.fees.notices.givenUp": {
+    "en": "The mailer has given up on {n, plural, one {# of them} other {# of them}}.",
+    "t": "Der Versand hat bei {n, plural, one {# davon} other {# davon}} aufgegeben."
+  },
+  "admin.fees.notices.undelivered": {
+    "en": "{n, plural, one {# holder} other {# holders}} could not be told",
+    "t": "{n, plural, one {# Anleger} other {# Anleger}} konnten nicht benachrichtigt werden"
+  },
+  "admin.fees.notices.waits": {
+    "en": "A change that tightens the terms does not bind over a holder whose notice is undelivered. The mailer keeps trying; a holder it can never reach holds the change up for good.",
+    "t": "Eine Änderung, die die Bedingungen verschärft, wird für einen Anleger mit unzugestellter Benachrichtigung nicht wirksam. Der Versand versucht es weiter; ein nie erreichbarer Anleger hält die Änderung dauerhaft auf."
+  },
+  "admin.fees.waiver.acknowledged": {
+    "en": "Notices waived by {by} on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
+    "t": "Benachrichtigungen erlassen von {by} am {at}, für {n, plural, one {# Anleger} other {# Anleger}}, die nicht erreicht werden konnten."
+  },
+  "admin.fees.waiver.row": {
+    "en": "Notices waived by {by} · {n, plural, one {# holder} other {# holders}}",
+    "t": "Benachrichtigungen erlassen von {by} · {n, plural, one {# Anleger} other {# Anleger}}"
+  },
   "admin.fundRevenue": {
     "en": "Fund revenue",
     "t": "Fondseinnahmen"

@@ -947,6 +947,50 @@
     "en": "Worth at current NAV",
     "t": "Стоимость по текущему NAV"
   },
+  "admin.fees.notices.acknowledge": {
+    "en": "Take responsibility and bind anyway",
+    "t": "Взять ответственность и применить"
+  },
+  "admin.fees.notices.acknowledgeBack": {
+    "en": "Keep waiting",
+    "t": "Подождать ещё"
+  },
+  "admin.fees.notices.acknowledgeConfirm": {
+    "en": "Take responsibility",
+    "t": "Взять ответственность"
+  },
+  "admin.fees.notices.acknowledgeWarning": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
+    "t": "Условия вступят в силу для {n, plural, one {этого держателя} few {этих # держателей} many {этих # держателей} other {этих # держателей}} без уведомления — более жёсткие условия, о которых им не сообщили. Ваше имя, момент и точный список держателей будут записаны в изменение и останутся в его истории."
+  },
+  "admin.fees.notices.err.forbidden": {
+    "en": "Only the requester of this change or an owner can take responsibility for it.",
+    "t": "Взять ответственность может только запросивший это изменение или владелец."
+  },
+  "admin.fees.notices.err.nothing": {
+    "en": "Nothing left to acknowledge: every holder has been told by now, or the change is no longer scheduled.",
+    "t": "Подтверждать больше нечего: все держатели уже уведомлены, либо изменение больше не запланировано."
+  },
+  "admin.fees.notices.givenUp": {
+    "en": "The mailer has given up on {n, plural, one {# of them} other {# of them}}.",
+    "t": "Рассылка отказалась от попыток для {n, plural, one {# из них} few {# из них} many {# из них} other {# из них}}."
+  },
+  "admin.fees.notices.undelivered": {
+    "en": "{n, plural, one {# holder} other {# holders}} could not be told",
+    "t": "{n, plural, one {# держателя} few {# держателей} many {# держателей} other {# держателя}} не удалось уведомить"
+  },
+  "admin.fees.notices.waits": {
+    "en": "A change that tightens the terms does not bind over a holder whose notice is undelivered. The mailer keeps trying; a holder it can never reach holds the change up for good.",
+    "t": "Изменение, ужесточающее условия, не вступает в силу для держателя, чьё уведомление не доставлено. Рассылка продолжает попытки; держатель, до которого дойти невозможно, задерживает изменение навсегда."
+  },
+  "admin.fees.waiver.acknowledged": {
+    "en": "Notices waived by {by} on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
+    "t": "Уведомления отменены: {by}, {at}, для {n, plural, one {# держателя} few {# держателей} many {# держателей} other {# держателя}}, которых не удалось уведомить."
+  },
+  "admin.fees.waiver.row": {
+    "en": "Notices waived by {by} · {n, plural, one {# holder} other {# holders}}",
+    "t": "Уведомления отменены: {by} · {n, plural, one {# держатель} few {# держателя} many {# держателей} other {# держателя}}"
+  },
   "admin.fundRevenue": {
     "en": "Fund revenue",
     "t": "Доход фонда"
