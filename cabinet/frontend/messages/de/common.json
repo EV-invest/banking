@@ -3165,15 +3165,15 @@
   },
   "notif.when.days": {
     "en": "{n}d",
-    "t": "{n}d"
+    "t": "{n} T"
   },
   "notif.when.hours": {
     "en": "{n}h",
-    "t": "{n}h"
+    "t": "{n} Std"
   },
   "notif.when.minutes": {
     "en": "{n}m",
-    "t": "{n}m"
+    "t": "{n} Min"
   },
   "notif.when.now": {
     "en": "now",
@@ -4765,7 +4765,7 @@
   },
   "trade.form.market": {
     "en": "Market",
-    "t": "Market"
+    "t": "Markt"
   },
   "trade.form.notional": {
     "en": "Order value",

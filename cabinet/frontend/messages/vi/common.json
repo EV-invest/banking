@@ -1033,7 +1033,7 @@
   },
   "admin.overview.kpi.oldestBacklogValue": {
     "en": "{n}s",
-    "t": "{n}s"
+    "t": "{n} giây"
   },
   "admin.overview.kpi.parkedRows": {
     "en": "Parked rows",
@@ -2513,7 +2513,7 @@
   },
   "dash.range.all": {
     "en": "All",
-    "t": "All"
+    "t": "Tất cả"
   },
   "dash.recentOperations": {
     "en": "Recent operations",
