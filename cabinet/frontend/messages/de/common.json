@@ -935,6 +935,14 @@
     "en": "Fee terms and collection",
     "t": "Gebührenkonditionen und Einzug"
   },
+  "admin.fees.trigger.period": {
+    "en": "Period",
+    "t": "Periode"
+  },
+  "admin.fees.trigger.redemption": {
+    "en": "Redemption",
+    "t": "Rücknahme"
+  },
   "admin.fees.unitsHeld": {
     "en": "Fee units held",
     "t": "Gehaltene Gebührenanteile"

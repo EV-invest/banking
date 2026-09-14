@@ -233,6 +233,8 @@
   "admin.fees.summaryHurdle": "{management} p.a. · {performance} of the gain above {hurdle} · {basis} · {period}",
   "admin.fees.terms": "Terms",
   "admin.fees.title": "Fee terms and collection",
+  "admin.fees.trigger.period": "Period",
+  "admin.fees.trigger.redemption": "Redemption",
   "admin.fees.unitsHeld": "Fee units held",
   "admin.fees.withdrawableFrom": "It is withdrawable on-chain from {screen}.",
   "admin.fees.worthAtNav": "Worth at current NAV",

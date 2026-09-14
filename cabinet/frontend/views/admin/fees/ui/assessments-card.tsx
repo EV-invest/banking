@@ -11,6 +11,7 @@ import { feeAssessmentsResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
+import { triggerLabel } from "@/views/admin/fees/lib/format";
 import { ago, formatUnits, formatUsdt } from "@/views/admin/lib/format";
 
 // The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
@@ -60,7 +61,7 @@ export function AssessmentsCard({ service }: { service: string }) {
               {rows.map((a, i) => (
                 <TableRow key={`${a.assessed_at}-${i}`}>
                   <TableCell className="text-muted-foreground">{ago(a.assessed_at, t)}</TableCell>
-                  <TableCell className="capitalize">{a.trigger}</TableCell>
+                  <TableCell>{triggerLabel(a.trigger, t)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatUsdt(a.management)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatUsdt(a.performance)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatUnits(a.charged_units)}</TableCell>

@@ -935,6 +935,14 @@
     "en": "Fee terms and collection",
     "t": "Điều khoản phí và việc thu phí"
   },
+  "admin.fees.trigger.period": {
+    "en": "Period",
+    "t": "Kỳ hạn"
+  },
+  "admin.fees.trigger.redemption": {
+    "en": "Redemption",
+    "t": "Hoàn vốn"
+  },
   "admin.fees.unitsHeld": {
     "en": "Fee units held",
     "t": "Đơn vị phí đang nắm giữ"

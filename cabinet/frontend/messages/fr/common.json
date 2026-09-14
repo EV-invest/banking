@@ -935,6 +935,14 @@
     "en": "Fee terms and collection",
     "t": "Conditions et collecte des frais"
   },
+  "admin.fees.trigger.period": {
+    "en": "Period",
+    "t": "Période"
+  },
+  "admin.fees.trigger.redemption": {
+    "en": "Redemption",
+    "t": "Rachat"
+  },
   "admin.fees.unitsHeld": {
     "en": "Fee units held",
     "t": "Parts de frais détenues"

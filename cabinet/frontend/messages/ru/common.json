@@ -935,6 +935,14 @@
     "en": "Fee terms and collection",
     "t": "Условия комиссий и их сбор"
   },
+  "admin.fees.trigger.period": {
+    "en": "Period",
+    "t": "Период"
+  },
+  "admin.fees.trigger.redemption": {
+    "en": "Redemption",
+    "t": "Погашение"
+  },
   "admin.fees.unitsHeld": {
     "en": "Fee units held",
     "t": "Удержано паёв в счёт комиссий"

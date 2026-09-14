@@ -15,6 +15,14 @@ export function changeStateLabel(state: string | undefined, t: Translate): strin
   return state && KNOWN_STATES.has(state) ? t(`admin.feeChange.state.${state}`) : state || "—";
 }
 
+// What set a charge off (fees.proto `FeeAssessment.trigger`): the period-end sweep, or an
+// investor's redemption. Same guard-and-fall-back shape as the states above.
+const KNOWN_TRIGGERS: ReadonlySet<string> = new Set(["period", "redemption"]);
+
+export function triggerLabel(trigger: string | undefined, t: Translate): string {
+  return trigger && KNOWN_TRIGGERS.has(trigger) ? t(`admin.fees.trigger.${trigger}`) : trigger || "—";
+}
+
 /** Token classes for a state pill. Neutral unless the state carries real news. */
 export function changeStateTone(state: string | undefined): string {
   if (state === "active") return "text-main-accent-t2";
