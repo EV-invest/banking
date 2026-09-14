@@ -236,8 +236,10 @@ The company is a holder in its own right rather than a user with a well-known id
 `users` row, no `fund_positions` projection and no P&L, and a synthetic user would drag
 every investor-facing read into special-casing one UUID. `ListUnitHolders` reports the
 split — `company_units`, `fee_units`, `investor_units = outstanding − company − fee` —
-read straight from TB; `FundNav.company_units` shows an investor the company's share on
-the card. The mint posts under its own `TransferCode::UnitIssue` (46), not `ShareMint`,
+read straight from TB — plus `queued_units`, the `mint` rows still `queued` in
+`unit_issuances`, because `ensure_capacity` reads the settled supply and an operator
+pinning the cap to it while a mint is in flight pins it below where the supply is about
+to land; `FundNav.company_units` shows an investor the company's share on the card. The mint posts under its own `TransferCode::UnitIssue` (46), not `ShareMint`,
 so supply growth the fund's cash never paid for is distinguishable from a subscription's
 on the Share ledger alone.
 

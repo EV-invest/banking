@@ -61,12 +61,18 @@ pub struct TransferCompanyStakeRequest {
 /// (`outstanding − company − fee`) rather than summed over holders: the ledger keeps
 /// one account per investor and reading them all to answer a three-line summary would
 /// be a scan the invariant already makes unnecessary.
+///
+/// `queued_units` is the one figure not read from the ledger: mints recorded but not yet
+/// posted by the relay. The settled supply is what `ensure_capacity` reads, so an
+/// operator pinning the cap to it while this is non-zero pins it below where the supply
+/// is about to land.
 pub struct UnitHoldersView {
 	pub service: ServiceId,
 	pub units_outstanding: Shares,
 	pub company_units: Shares,
 	pub fee_units: Shares,
 	pub investor_units: Shares,
+	pub queued_units: Shares,
 }
 
 /// Mint `request.units` of `request.service` to `request.holder` with no cash leg.
@@ -225,14 +231,15 @@ impl RequestIdentity<'_> {
 	}
 }
 
-/// The settled supply of `service` by holder class. Gated on the allocation existing,
-/// like the NAV view: a cap table for a product no registry entry backs is a cap table
-/// for a fund that does not exist.
-pub async fn unit_holders(allocations: &dyn AllocationRegistry, ledger: &dyn Ledger, service: ServiceId) -> Result<UnitHoldersView, DomainError> {
+/// The settled supply of `service` by holder class, plus the mints still in flight.
+/// Gated on the allocation existing, like the NAV view: a cap table for a product no
+/// registry entry backs is a cap table for a fund that does not exist.
+pub async fn unit_holders(allocations: &dyn AllocationRegistry, ledger: &dyn Ledger, issuances: &dyn UnitIssuanceRepository, service: ServiceId) -> Result<UnitHoldersView, DomainError> {
 	allocations_app::get(allocations, &service).await?;
 	let outstanding = posted_units(ledger, &LedgerAccountKey::SharesOutstanding(service.clone())).await?;
 	let company = posted_units(ledger, &LedgerAccountKey::CompanyShares(service.clone())).await?;
 	let fee = posted_units(ledger, &LedgerAccountKey::FeeShares(service.clone())).await?;
+	let queued = issuances.queued_mint_units(&service).await?;
 	// Saturating rather than checked: the invariant makes a negative remainder impossible,
 	// and a scan of three accounts that are read at three instants must not fail a
 	// read-only view over a mint landing between two of them.
@@ -243,6 +250,7 @@ pub async fn unit_holders(allocations: &dyn AllocationRegistry, ledger: &dyn Led
 		company_units: company,
 		fee_units: fee,
 		investor_units: investor,
+		queued_units: queued,
 	})
 }
 

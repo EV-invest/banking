@@ -484,7 +484,7 @@ async fn units_issued_in_kind_land_on_the_holder_and_in_the_supply_with_no_cash_
 	assert_eq!(position.high_water_mark, Nav::SEED, "issued at the seed NAV, so the mark is 1.0");
 
 	// The cap table the operator reads before opening the product.
-	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), service.clone()).await.unwrap();
+	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
 	assert_eq!(holders.units_outstanding, shares("16250"));
 	assert_eq!(holders.company_units, shares("13000"));
 	assert_eq!(holders.fee_units, Shares::ZERO);
@@ -681,7 +681,7 @@ async fn the_companys_stake_moves_to_a_user_without_the_supply_moving() {
 		shares("16250"),
 		"a move between holders mints nothing"
 	);
-	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), service.clone()).await.unwrap();
+	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
 	assert_eq!(holders.units_outstanding, shares("16250"));
 	assert_eq!(holders.company_units, Shares::ZERO);
 	assert_eq!(holders.investor_units, shares("16250"), "company −13000, investors +13000");
@@ -1301,4 +1301,26 @@ async fn a_row_written_by_a_pod_that_predates_the_access_column_lands_locked() {
 	fund_user(&h, user, "10").await;
 	let err = subscribe(&h, user, &service, "10").await.unwrap_err();
 	assert!(matches!(err, DomainError::Precondition(_)), "listed but locked: {err:?}");
+}
+
+#[tokio::test]
+async fn a_queued_mint_is_reported_beside_the_settled_supply_until_the_relay_posts_it() {
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	register(&h, &service).await;
+
+	// The operator's console offered "pin cap to issued" off `units_outstanding`, which
+	// is the ledger's settled figure. A mint recorded seconds earlier is not in it yet,
+	// so the pinned cap sat below where the supply landed once the relay caught up.
+	let record = issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "queued-then-applied").await.unwrap();
+	assert_eq!(record.issuance.state(), IssuanceState::Queued);
+	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
+	assert_eq!(holders.units_outstanding, Shares::ZERO, "nothing has posted yet");
+	assert_eq!(holders.queued_units, shares("13000"), "the recorded mint is the signal to wait");
+
+	h.relay.drain().await;
+	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
+	assert_eq!(holders.units_outstanding, shares("13000"));
+	assert_eq!(holders.company_units, shares("13000"));
+	assert_eq!(holders.queued_units, Shares::ZERO, "applied rows drop out of the queue");
 }
