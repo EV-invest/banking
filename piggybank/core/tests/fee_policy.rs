@@ -22,7 +22,7 @@ use std::sync::Arc;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, Party, ServiceId},
+	balance::{LedgerAccountKey, Party, ServiceId, ValuationId},
 	book::{BookPolicy, ClientOrderId, OrderId, OrderKind, Price, PriceTimeEngine, Side, Tif},
 	fees::{self, CrystallizationPeriod, FeeAssessment, FeeAssessmentId, FeePolicy, ManagementBasis, Trigger},
 	money::{Nav, Network, Shares, TxRef, Usdt},
@@ -423,7 +423,7 @@ async fn a_gain_above_the_mark_adds_the_twenty_percent_and_ratchets_it() {
 	subscribe(&h, user, &service, "1000").await;
 
 	// The operator marks the fund up 50%: 1000 units are now worth 1500.
-	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1500"), "itest", false)
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1500"), "itest", now_unix())
 		.await
 		.unwrap();
 
@@ -472,7 +472,7 @@ async fn the_mark_is_per_investor_so_a_late_entrant_pays_less() {
 	subscribe(&h, early, &service, "1000").await;
 
 	// The fund doubles, then the late investor enters at 2.0.
-	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("2000"), "itest", false)
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("2000"), "itest", now_unix())
 		.await
 		.unwrap();
 	fund_user(&h, late, "1000").await;
@@ -506,7 +506,7 @@ async fn a_recovery_below_the_mark_is_never_charged() {
 	// Up to 1.4, crystallize there, then down to 0.9 and back up to 1.3. The investor is
 	// up 44% over the year just past — and owes nothing on it, because they are still
 	// under the mark they already paid at.
-	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1400"), "itest", false)
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1400"), "itest", now_unix())
 		.await
 		.unwrap();
 	backdate(&h, user, &service, YEAR + PERIOD_MARGIN).await;
@@ -522,7 +522,7 @@ async fn a_recovery_below_the_mark_is_never_charged() {
 		service.clone(),
 		Usdt::from_base_units(value_now * 9 / 10),
 		"itest",
-		false,
+		now_unix(),
 	)
 	.await
 	.unwrap();
@@ -533,7 +533,7 @@ async fn a_recovery_below_the_mark_is_never_charged() {
 		service.clone(),
 		Usdt::from_base_units(value_now * 13 / 10),
 		"itest",
-		false,
+		now_unix(),
 	)
 	.await
 	.unwrap();
@@ -735,14 +735,15 @@ async fn a_settlement_the_fund_cannot_cover_is_refused_not_queued() {
 	// Now mark the remainder up hard. The fee units are suddenly worth several times the
 	// cash left in the fund — the one situation a settlement cannot be paid.
 	let remaining = cash_of(&h, LedgerAccountKey::ServiceClaim(service.clone())).await;
-	funds_app::post_fund_valuation(
-		&h.allocations,
+	// A +200% mark, past the guard: written through the shared writer the owners' override
+	// uses, since the guarded post has no flag to lift it any more.
+	funds_app::record_valuation(
 		&h.nav,
 		h.ledger.as_ref(),
+		ValuationId::new(),
 		service.clone(),
 		remaining.checked_add(remaining).and_then(|d| d.checked_add(remaining)).unwrap(),
 		"itest",
-		true,
 	)
 	.await
 	.unwrap();
@@ -778,7 +779,7 @@ async fn a_queued_redemption_is_reserved_before_the_manager_is_paid() {
 	// Mark the fund up first. The units are now worth more than the cash standing behind
 	// them, which is the ordinary state of a fund holding anything other than cash.
 	let claim = cash_of(&h, LedgerAccountKey::ServiceClaim(service.clone())).await;
-	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), claim.checked_add(claim).unwrap(), "itest", true)
+	funds_app::record_valuation(&h.nav, h.ledger.as_ref(), ValuationId::new(), service.clone(), claim.checked_add(claim).unwrap(), "itest")
 		.await
 		.unwrap();
 

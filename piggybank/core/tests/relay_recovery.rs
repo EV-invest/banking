@@ -188,7 +188,9 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 		.unwrap();
 	h.relay.drain().await;
 	// Seed the rail so the request auto-dispatches to `processing`.
-	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("100"))
+		.await
+		.unwrap();
 	h.relay.drain().await;
 	let processing = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h),
@@ -352,7 +354,9 @@ async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 	h.relay.drain().await;
 	// Seed the rail so the request auto-dispatches to `processing` (fail is only legal
 	// from there — the shape of a real broadcast-then-operator-fail incident).
-	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("100")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("100"))
+		.await
+		.unwrap();
 	h.relay.drain().await;
 	let withdrawal = withdrawal_app::request_withdrawal(
 		&withdrawal_ports(&h),

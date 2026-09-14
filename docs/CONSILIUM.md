@@ -564,6 +564,73 @@ concierge would refuse for a non-owner recipient after ten charged attempts.
 
 ---
 
+## Valuation override
+
+The third kind (`valuation_override`, banking#232) authorizes no money move at all: it
+records a **NAV mark the move guard refuses**. It exists because the price is fund-owned
+money by another name — every redemption settles at `units × NAV`, out of the fund's
+pooled `service:<id>` claim — and the guard used to be lifted by a flag on the very
+request it guarded. One admin could inflate NAV, redeem at the inflated price out of other
+investors' cash, and withdraw. The flag is gone from the contract (`PostFundValuationRequest`
+reserves field 3), and there is no other way past the guard.
+
+### What the direct post can still do
+
+`PostFundValuation` caps a move at `MAX_NAV_MOVE_PCT` (50%) against the previous mark AND
+against the mark anchoring a rolling 7-day window — the newest mark at least that old, or
+the fund's first mark while the fund is younger than the window. Against the previous
+mark alone the cap was a rate limit with no rate (+49% seventeen times in an afternoon);
+against the anchor it bounds what one poster can move the price by in a week to the cap
+itself, however many steps they take.
+
+### The terms, and what is deliberately not in them
+
+`ValuationOverrideTerms { service, aum }`, under its own frozen domain prefix
+(`banking.v1.ValuationOverrideTerms\0`) so a hash over a mark can never be a valid
+signature over a payout or a payment. The **NAV is not frozen into the terms**: it is
+derived from the live unit supply at execution, because units can be minted or burned
+during the 72h vote and a NAV frozen at open would misprice the fund the owners approved
+marking. The owners approve an AUM, which is the figure an operator actually knows.
+
+### Gates
+
+| moment | gate | why |
+| --- | --- | --- |
+| open | `ValuationPost` at the RPC boundary; the initiator must hold an owner seat (the domain refuses otherwise) | the poster proposes, the owners decide — the second actor is the vote, not a second permission that would recreate the flag one role over |
+| open | a wired governance mailer; a settled roster (48h cooling-off) | the same two a revenue payout applies: repricing every redemption is the same class of decision as paying the fund out |
+| open | the allocation exists (any state); `units_outstanding > 0` | so the vote is over a computable price, refused now rather than after 72h of approving |
+| open | one open request per `service:<id>` claim | `source_claim()` is the fund's claim, so the override queues behind (or blocks) a payment out of the same claim — the owners must not vote on the price and on a drain of the pool at once |
+| execute | the kind-agnostic checks every consilium passes (hash, live roster, grace, roster change) | unchanged |
+| execute | `funds::record_valuation` — the SAME writer the direct post uses, guard not consulted | one writer, so the two paths cannot drift; the id is `uuid_v5(consilium_id, "consilium:valuation-override")`, so a retried execution finds the mark rather than appending a second |
+
+`posted_by` on the recorded mark is the initiator's user id, in the spelling the direct
+RPC records (`claims.sub`), so the redeem cooldown below binds the proposer exactly as it
+binds a direct poster.
+
+### The redeem cooldown
+
+A subject who posted a mark for a fund within `VALUATION_REDEEM_COOLDOWN_SECS` (7 days)
+cannot redeem from that fund — refused with `failed_precondition` at **request** and
+again at **settle**, because settle is where the cash is priced and a queued redemption
+can outlive a later inflating mark. Fee settlement is deliberately not gated: its cash
+lands in `fee`, whose only exit is already a consilium.
+
+### What was rejected
+
+A hard ceiling `NAV × units_outstanding ≤ cash in the fund's claim`. In-kind products
+(`piggybank/core/PATTERNS.md` § In-kind issuance) are valued at their asset with zero cash
+in the claim; that invariant would make them unmarkable.
+
+### Mail
+
+Until concierge grows a dedicated kind (the follow-up to banking#232), the owners are rung
+through the existing `PAYMENT_APPROVAL` template with every label spelled out — source
+"<product> — NAV valuation", destination "AUM <n> USDT", amount = AUM, and a fixed
+reason naming the guard. The mail is the doorbell; the approval page, which renders the
+real terms, is the truth.
+
+---
+
 ## Audit
 
 Every vote records who, when, from which IP and user agent, and against which

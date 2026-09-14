@@ -26,6 +26,12 @@ service ConsiliumService {
   // overdraw race instead of trying to win it — or when the roster is too small.
   rpc OpenRevenuePayout(OpenRevenuePayoutRequest) returns (Consilium);
 
+  // Put a NAV mark the move guard refuses to the owners (ValuationPost holders — the
+  // poster proposes, the owners decide). Executing it records the mark at exactly this
+  // AUM, guard or no guard; there is no other way past the guard. One open request per
+  // fund: it shares the fund's `service:<id>` claim with a payment out of that claim.
+  rpc OpenValuationOverride(OpenValuationOverrideRequest) returns (Consilium);
+
   // Withdraw an invoice the caller opened, while it is still OPEN.
   rpc CancelConsilium(CancelConsiliumRequest) returns (Consilium);
 
@@ -123,6 +129,20 @@ message ConsiliumPaymentTerms {
   string reason = 6;
 }
 
+// The immutable subject of a VALUATION-OVERRIDE consilium — a NAV mark the move guard
+// refuses (banking#232). The direct `PostFundValuation` caps a move at `MAX_NAV_MOVE_PCT`
+// against the previous mark AND the mark anchoring a rolling window, and carries no flag
+// to lift it; a genuine re-mark past the cap is put to the owners instead. Executing the
+// consilium derives NAV from the LIVE unit supply at that moment and records the mark with
+// the initiator as `posted_by`, so the redeem cooldown binds them exactly as a direct post
+// would.
+message ValuationOverrideTerms {
+  // The fund/service id being marked.
+  string service = 1;
+  // The fund's total AUM to mark it at — decimal USDT string, as everywhere on this wire.
+  string aum = 2;
+}
+
 // One owner's seat in a consilium.
 message ConsiliumVoter {
   string user_id = 1;
@@ -138,9 +158,10 @@ message ConsiliumVoter {
 message Consilium {
   string id = 1;
   ConsiliumState state = 2;
-  // EXACTLY ONE of the two terms fields is set, decided by the kind. Two fields rather than
-  // a oneof because the surfaces read them by name and a oneof buys nothing here that the
-  // "exactly one" rule does not already give.
+  // EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`) is
+  // set, decided by the kind. Named fields rather than a oneof because the surfaces read
+  // them by name and a oneof buys nothing here that the "exactly one" rule does not
+  // already give.
   RevenuePayoutTerms revenue_payout = 3;
   // Hex SHA-256 over the canonical terms. Shown (short prefix) in the mail so an owner
   // can tell that what they approved is what will execute.
@@ -157,9 +178,10 @@ message Consilium {
   int64 created_at = 12;
   int64 expires_at = 13;
   int64 decided_at = 14;
-  // Set exactly once, on EXECUTED — and exactly ONE of the two is, because a consilium has
-  // one effect. `consilium_execution_is_recorded` states that to the database as
-  // `num_nonnulls(...) = 1`.
+  // Set exactly once, on EXECUTED — and exactly ONE of the three effect ids is
+  // (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`), because a
+  // consilium has one effect. `consilium_execution_is_recorded` states that to the database
+  // as `num_nonnulls(...) = 1`.
   string executed_withdrawal_id = 15;
   string failure_reason = 16;
   // Monotonic per consilium. The live page watches this and refetches when it moves —
@@ -168,6 +190,10 @@ message Consilium {
   ConsiliumPaymentTerms payment = 18;
   // The payment order an executed PAYMENT consilium carried.
   string executed_payment_id = 19;
+  // The third terms sibling — see `revenue_payout`.
+  ValuationOverrideTerms valuation_override = 20;
+  // The `fund_valuations` row an executed VALUATION-OVERRIDE consilium recorded.
+  string executed_valuation_id = 21;
 }
 
 message ConsiliumList {
@@ -176,6 +202,10 @@ message ConsiliumList {
 
 message OpenRevenuePayoutRequest {
   RevenuePayoutTerms terms = 1;
+}
+
+message OpenValuationOverrideRequest {
+  ValuationOverrideTerms terms = 1;
 }
 
 message CancelConsiliumRequest {
@@ -201,7 +231,8 @@ message GetInvitationRequest {
 message ConsiliumInvitation {
   string consilium_id = 1;
   ConsiliumState state = 2;
-  // Exactly one of `revenue_payout` and `payment` is set — see `Consilium`.
+  // Exactly one of `revenue_payout`, `payment` and `valuation_override` is set — see
+  // `Consilium`.
   RevenuePayoutTerms revenue_payout = 3;
   string payload_hash = 4;
   // Who opened it, masked.
@@ -219,6 +250,7 @@ message ConsiliumInvitation {
   // Code attempts left before the token burns.
   uint32 attempts_remaining = 13;
   ConsiliumPaymentTerms payment = 14;
+  ValuationOverrideTerms valuation_override = 15;
 }
 
 message SubmitDecisionRequest {

@@ -1640,8 +1640,8 @@
     "t": "AUM / parts"
   },
   "admin.valuation.navGuardNote": {
-    "en": "NAV-move guard — a post is rejected if NAV moves more than 50% from the last mark, unless override is on.",
-    "t": "Garde-fou de variation de VL — une publication est rejetée si la VL s’écarte de plus de 50 % de la dernière valorisation, sauf si la dérogation est active."
+    "en": "NAV-move guard — a post is refused if the NAV moves more than 50% from the last mark or from the mark of a week ago, so stepping there in smaller posts is refused too. Nothing overrides it: a larger move is put to the owners' vote instead.",
+    "t": "Garde-fou de variation de VL — une publication est rejetée si la VL s’écarte de plus de 50 % de la dernière valorisation ou de celle d’il y a une semaine ; s’en approcher par petites étapes est donc rejeté aussi. Il n’y a pas de dérogation : un écart plus grand est soumis au vote des propriétaires."
   },
   "admin.valuation.noAllocations": {
     "en": "No allocations registered",
@@ -1651,13 +1651,9 @@
     "en": "No units outstanding — NAV is {formula}, so it is undefined until someone subscribes. The fund prices at the seed NAV 1.0 until the first subscription; there is nothing to mark yet.",
     "t": "Aucune part en circulation — la VL vaut {formula}, elle est donc indéfinie tant que personne n’a souscrit. Le fonds est valorisé à la VL d’amorçage de 1,0 jusqu’à la première souscription ; il n’y a rien à valoriser pour l’instant."
   },
-  "admin.valuation.overrideGuard": {
-    "en": "Override guard",
-    "t": "Dérogation"
-  },
-  "admin.valuation.overrideGuardHint": {
-    "en": "Allow a >50% NAV move",
-    "t": "Autoriser une variation de VL supérieure à 50 %"
+  "admin.valuation.openConsilium": {
+    "en": "Open the consilium",
+    "t": "Ouvrir le consilium"
   },
   "admin.valuation.pickAFund": {
     "en": "Pick a fund above to see and resize its authorised unit supply.",
@@ -1666,6 +1662,22 @@
   "admin.valuation.postValuation": {
     "en": "Post valuation",
     "t": "Publier la valorisation"
+  },
+  "admin.valuation.propose": {
+    "en": "Propose to the owners",
+    "t": "Proposer aux propriétaires"
+  },
+  "admin.valuation.proposeHint": {
+    "en": "A move past the guard is put to the owners' vote instead of being posted.",
+    "t": "Un écart au-delà du garde-fou est soumis au vote des propriétaires au lieu d’être publié."
+  },
+  "admin.valuation.proposedBody": {
+    "en": "Nothing is marked yet. Every owner has been emailed a link; once more than half of them agree, {service} is marked at {aum} USDT. The live tally is in the consilium.",
+    "t": "Rien n’est encore valorisé. Chaque propriétaire a reçu un lien par e-mail ; dès que plus de la moitié auront donné leur accord, {service} sera valorisé à {aum} USDT. Le décompte en direct est dans le consilium."
+  },
+  "admin.valuation.proposedTitle": {
+    "en": "Proposed to the owners",
+    "t": "Proposé aux propriétaires"
   },
   "admin.valuation.queueEmpty": {
     "en": "The redemption queue is empty.",
@@ -1818,6 +1830,46 @@
   "approval.payout.title": {
     "en": "Approve a fund payout",
     "t": "Approuver un versement du fonds"
+  },
+  "approval.valuation.approve": {
+    "en": "Approve this mark",
+    "t": "Approuver cette valorisation"
+  },
+  "approval.valuation.aum": {
+    "en": "Proposed AUM",
+    "t": "AUM proposé"
+  },
+  "approval.valuation.decided.approvedTitle": {
+    "en": "You approved this mark",
+    "t": "Vous avez approuvé cette valorisation"
+  },
+  "approval.valuation.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the fund is marked once enough owners have agreed.",
+    "t": "Votre réponse a été enregistrée. Il n’y a plus rien à faire ici : le fonds sera valorisé dès qu’assez de propriétaires auront donné leur accord."
+  },
+  "approval.valuation.decided.rejectedTitle": {
+    "en": "You rejected this mark",
+    "t": "Vous avez rejeté cette valorisation"
+  },
+  "approval.valuation.executes": {
+    "en": "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.",
+    "t": "Si elle passe, le fonds est valorisé à cet AUM quoi qu’en aurait dit le garde-fou de variation de VL, et ses rachats en attente sont réglés à la VL qui en découle."
+  },
+  "approval.valuation.lead": {
+    "en": "{initiator} has asked to mark a fund at a value the NAV-move guard refuses. A mark past the guard is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} demande à valoriser un fonds à une valeur que le garde-fou de variation de VL refuse. Une valorisation au-delà du garde-fou n’est jamais la décision d’une seule personne : il faut l’accord des propriétaires."
+  },
+  "approval.valuation.payloadHashHint": {
+    "en": "The fingerprint is taken over the product and the AUM above. It is checked again before the mark is recorded, so a request cannot be edited after you have agreed to it.",
+    "t": "L’empreinte est calculée sur le produit et l’AUM ci-dessus. Elle est revérifiée avant l’enregistrement de la valorisation, de sorte qu’une demande ne peut plus être modifiée après votre accord."
+  },
+  "approval.valuation.product": {
+    "en": "Product",
+    "t": "Produit"
+  },
+  "approval.valuation.title": {
+    "en": "Approve a NAV mark",
+    "t": "Approuver une valorisation de VL"
   },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
@@ -1988,8 +2040,8 @@
     "t": "Aucune demande ouverte"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
-    "t": "Déplacer l'argent du fonds — un versement de revenus, ou un paiement entre deux extrémités de la plateforme. Une demande à la fois, et jamais la décision d'une seule personne."
+    "en": "Moving money the fund owns — a revenue payout or a payment order — and marking a fund past the NAV-move guard. One request at a time, and never one person's decision.",
+    "t": "Déplacer l'argent du fonds — un versement de revenus ou un paiement — et valoriser un fonds au-delà du garde-fou de variation de VL. Une demande à la fois, et jamais la décision d'une seule personne."
   },
   "consilium.payout.title": {
     "en": "Fund payouts and payments",
@@ -2002,6 +2054,18 @@
   "consilium.roster.emptyNext": {
     "en": "Add the missing people to OWNER_SUBJECTS, have each of them sign in once so the account exists, and restart the service. Until the first seat is written, the operators on that list are working under emergency access — temporary by construction: the first successful seeding closes it permanently, and from then on a seat is only ever granted by a consilium of the existing owners.",
     "t": "Ajoutez les personnes manquantes à OWNER_SUBJECTS, faites-les se connecter une fois chacune pour que le compte existe, puis redémarrez le service. Tant que le premier siège n'est pas inscrit, les opérateurs de cette liste agissent en accès d'urgence — temporaire par construction : le premier amorçage réussi le referme définitivement, et dès lors un siège n'est accordé que par un consilium des propriétaires en exercice."
+  },
+  "consilium.valuation.executes": {
+    "en": "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.",
+    "t": "Si elle passe, le fonds est valorisé à cet AUM quoi qu’en aurait dit le garde-fou de variation de VL, et ses rachats en attente sont réglés à la VL qui en découle."
+  },
+  "consilium.valuation.mark": {
+    "en": "NAV mark",
+    "t": "Valorisation de VL"
+  },
+  "consilium.valuation.product": {
+    "en": "Product",
+    "t": "Produit"
   },
   "dash.activeStrategies": {
     "en": "Active strategies",
@@ -3824,20 +3888,20 @@
     "t": "VL dérivée / part"
   },
   "tips.admin.valuation.post.nav-guard.body": {
-    "en": "A post is rejected if the NAV moves more than 50% from the last mark, unless Override guard is on.",
-    "t": "Une publication est rejetée si la VL s’écarte de plus de 50 % de la dernière valorisation, sauf si la Dérogation est active."
+    "en": "A post is refused if the NAV moves more than 50% from the last mark or from the mark of a week ago — stepping there in smaller posts is refused too. There is no override: a larger move is proposed to the owners and recorded only if their vote carries.",
+    "t": "Une publication est rejetée si la VL s’écarte de plus de 50 % de la dernière valorisation ou de celle d’il y a une semaine — par petites étapes aussi. Il n’y a pas de dérogation : un écart plus grand est proposé aux propriétaires et n’est enregistré que si leur vote passe."
   },
   "tips.admin.valuation.post.nav-guard.title": {
     "en": "NAV-move guard",
     "t": "Garde-fou de variation de VL"
   },
-  "tips.admin.valuation.post.override.body": {
-    "en": "Bypasses the NAV-move guard so a post that moves NAV more than 50% is accepted and settles redemptions at that mark. A fat-fingered AUM then over- or under-pays irreversibly.",
-    "t": "Contourne le garde-fou de variation de VL : une publication qui fait bouger la VL de plus de 50 % est alors acceptée et règle les rachats à cette valorisation. Un AUM saisi de travers sur- ou sous-paie alors irréversiblement."
+  "tips.admin.valuation.post.propose.body": {
+    "en": "Opens a consilium instead of posting. The owners answer from their mailboxes; if more than half agree, the fund is marked at this AUM regardless of the NAV-move guard. Nothing changes until then.",
+    "t": "Ouvre un consilium au lieu de publier. Les propriétaires répondent depuis leur messagerie ; si plus de la moitié sont d’accord, le fonds est valorisé à cet AUM quel que soit le garde-fou de variation de VL. Rien ne change d’ici là."
   },
-  "tips.admin.valuation.post.override.title": {
-    "en": "Override guard",
-    "t": "Dérogation"
+  "tips.admin.valuation.post.propose.title": {
+    "en": "Propose to the owners",
+    "t": "Proposer aux propriétaires"
   },
   "tips.admin.valuation.queue.est-cash.body": {
     "en": "A preview only — approximately units × current NAV. The actual payout settles at the settle-time NAV, not this figure.",

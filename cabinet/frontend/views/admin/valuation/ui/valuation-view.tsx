@@ -7,7 +7,7 @@ import type { Translate } from "@evinvest/i18n";
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
-import { failRedemption, postValuation, setAllocationUnitCap, settleRedemption } from "@/entities/admin/api/admin-client";
+import { failRedemption, setAllocationUnitCap, settleRedemption } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource, redemptionQueueResource } from "@/entities/admin/model/admin-resource";
 import { fundNavResource } from "@/entities/fund/model/fund-resource";
 import type { Allocation } from "@/shared/contracts/admin";
@@ -19,7 +19,8 @@ import { Settled, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { TipAnchor } from "@/shared/tips";
 import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, stateLabel, toBaseUnits } from "@/views/admin/lib/format";
-import { AdminHeader, AdminScreen, Toggle } from "@/views/admin/ui/shell";
+import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
+import { ValuationActions } from "@/views/admin/valuation/ui/valuation-actions";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
 
@@ -42,8 +43,6 @@ export function ValuationView() {
   // queued redemptions price correctly.
   const [service, setService] = useState("");
   const [aum, setAum] = useState("");
-  const [override, setOverride] = useState(false);
-  const [posting, setPosting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -80,26 +79,10 @@ export function ValuationView() {
   // A fund nobody has subscribed to has no units, so AUM / units is undefined and the
   // hub rejects the post outright (`nav undefined: no units outstanding`). Say so here
   // instead of letting the operator fill the form and meet a raw domain error — but gate
-  // only the POST. Writing the figure down is not what is impossible, so the AUM field
+  // only the actions. Writing the figure down is not what is impossible, so the AUM field
   // stays usable.
   const noUnits = nav !== null && units === 0;
   const selected = allocations?.find((a) => a.service === service) ?? null;
-
-  const post = async () => {
-    setPosting(true);
-    setActionError(null);
-    try {
-      // The POST answers with the new mark, so it is published straight in rather than
-      // re-read — and every investor surface showing this fund's price follows.
-      fundNavResource.publish(await postValuation({ service, aum, override }), service);
-      setAum("");
-      await queueRead.refresh();
-    } catch (e) {
-      setActionError(errorMessage(e, t));
-    } finally {
-      setPosting(false);
-    }
-  };
 
   const act = async (fn: (id: string) => Promise<unknown>, id: string) => {
     setBusy(id);
@@ -191,22 +174,20 @@ export function ValuationView() {
               </div>
             )}
 
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Toggle on={override} onChange={setOverride} label={t("admin.valuation.overrideGuard")} />
-                <div className="text-sm">
-                  <p className="flex items-center gap-1.5">
-                    {t("admin.valuation.overrideGuard")}
-                    <TipAnchor anchor="admin.valuation.post.override" />
-                  </p>
-                  <p className="text-xs text-muted-foreground">{t("admin.valuation.overrideGuardHint")}</p>
-                </div>
-              </div>
-              <Button type="button" className={cn("ml-auto", TEAL_CTA)} disabled={posting || !aum || !service || noUnits} onClick={post}>
-                {posting ? <Loader2 className="size-4 animate-spin" /> : null}
-                {t("admin.valuation.postValuation")}
-              </Button>
-            </div>
+            <ValuationActions
+              service={service}
+              aum={aum}
+              disabled={!aum || !service || noUnits}
+              onPosted={async (mark) => {
+                // The POST answers with the new mark, so it is published straight in rather
+                // than re-read — and every investor surface showing this fund's price follows.
+                fundNavResource.publish(mark, service);
+                setAum("");
+                await queueRead.refresh();
+              }}
+              onProposed={() => setAum("")}
+              onError={setActionError}
+            />
           </CardContent>
         </Card>
       </StaggerItem>

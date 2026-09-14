@@ -1,6 +1,6 @@
 //! `balance` context — company-money RPCs (all admin-gated): treasury reads,
-//! capital seeding/deposit recording, the operator withdrawal lifecycle, and fund
-//! valuation + redemption settlement.
+//! chain-proven arrival recording (a deposit, or the fund's own capital), the operator
+//! withdrawal lifecycle, and fund valuation + redemption settlement.
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
 //! type we don't control, so the large-err lint does not apply in this module.
@@ -68,12 +68,25 @@ impl BalanceService for BalanceSvc {
 	async fn seed_capital(&self, request: Request<pb::SeedCapitalRequest>) -> Result<Response<pb::SeedCapitalResponse>, Status> {
 		require_permission(&self.state, &request, Permission::CapitalManage).await?;
 		let req = request.into_inner();
+		let tx_ref = TxRef::parse(&req.tx_ref).map_err(map_err)?;
 		let network = Network::parse(&req.network).map_err(map_err)?;
-		let amount = Usdt::parse_decimal(&req.amount).map_err(map_err)?;
-		balance_app::seed_fund_capital(self.state.deposits.as_ref(), &self.state.relay_notify, network, amount)
-			.await
-			.map_err(map_err)?;
-		Ok(Response::new(pb::SeedCapitalResponse {}))
+		// Empty means "whatever the chain says"; a value is an assertion the chain must match.
+		let expected_amount = optional(&req.expected_amount).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
+		let arrival = balance_app::seed_fund_capital(
+			self.state.deposits.as_ref(),
+			self.state.custody.as_ref(),
+			self.state.deposit_addresses.as_ref(),
+			&self.state.relay_notify,
+			tx_ref,
+			network,
+			expected_amount,
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(pb::SeedCapitalResponse {
+			recorded: arrival.recorded,
+			amount: arrival.amount.to_decimal_string(),
+		}))
 	}
 
 	async fn record_deposit(&self, request: Request<pb::RecordDepositRequest>) -> Result<Response<pb::RecordDepositResponse>, Status> {
@@ -162,7 +175,7 @@ impl BalanceService for BalanceSvc {
 			service.clone(),
 			aum,
 			&posted_by,
-			req.r#override,
+			unix_now(),
 		)
 		.await
 		.map_err(map_err)?;

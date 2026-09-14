@@ -551,9 +551,10 @@ export type BankingV1Consilium = {
     /**
      * revenue_payout
      *
-     * EXACTLY ONE of the two terms fields is set, decided by the kind. Two fields rather than
-     * a oneof because the surfaces read them by name and a oneof buys nothing here that the
-     * "exactly one" rule does not already give.
+     * EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`) is
+     * set, decided by the kind. Named fields rather than a oneof because the surfaces read
+     * them by name and a oneof buys nothing here that the "exactly one" rule does not
+     * already give.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -610,9 +611,10 @@ export type BankingV1Consilium = {
     /**
      * executed_withdrawal_id
      *
-     * Set exactly once, on EXECUTED — and exactly ONE of the two is, because a consilium has
-     * one effect. `consilium_execution_is_recorded` states that to the database as
-     * `num_nonnulls(...) = 1`.
+     * Set exactly once, on EXECUTED — and exactly ONE of the three effect ids is
+     * (`executed_withdrawal_id`, `executed_payment_id`, `executed_valuation_id`), because a
+     * consilium has one effect. `consilium_execution_is_recorded` states that to the database
+     * as `num_nonnulls(...) = 1`.
      */
     executed_withdrawal_id?: string;
     /**
@@ -636,6 +638,18 @@ export type BankingV1Consilium = {
      * The payment order an executed PAYMENT consilium carried.
      */
     executed_payment_id?: string;
+    /**
+     * valuation_override
+     *
+     * The third terms sibling — see `revenue_payout`.
+     */
+    valuation_override?: BankingV1ValuationOverrideTerms;
+    /**
+     * executed_valuation_id
+     *
+     * The `fund_valuations` row an executed VALUATION-OVERRIDE consilium recorded.
+     */
+    executed_valuation_id?: string;
 };
 
 /**
@@ -656,7 +670,8 @@ export type BankingV1ConsiliumInvitation = {
     /**
      * revenue_payout
      *
-     * Exactly one of `revenue_payout` and `payment` is set — see `Consilium`.
+     * Exactly one of `revenue_payout`, `payment` and `valuation_override` is set — see
+     * `Consilium`.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -712,6 +727,10 @@ export type BankingV1ConsiliumInvitation = {
      * payment
      */
     payment?: BankingV1ConsiliumPaymentTerms;
+    /**
+     * valuation_override
+     */
+    valuation_override?: BankingV1ValuationOverrideTerms;
 };
 
 /**
@@ -2026,6 +2045,16 @@ export type BankingV1OpenRevenuePayoutRequest = {
 };
 
 /**
+ * OpenValuationOverrideRequest
+ */
+export type BankingV1OpenValuationOverrideRequest = {
+    /**
+     * terms
+     */
+    terms?: BankingV1ValuationOverrideTerms;
+};
+
+/**
  * Operation
  *
  * One row of the timeline. `kind` is the discriminator — it decides which of the
@@ -2806,12 +2835,6 @@ export type BankingV1PostFundValuationRequest = {
      * decimal USDT — the fund's total assets under management
      */
     aum?: string;
-    /**
-     * override
-     *
-     * bypass the NAV-move safety guard (operator confirmed)
-     */
-    override?: boolean;
 };
 
 /**
@@ -3360,6 +3383,15 @@ export type BankingV1RotateDepositAddressResponse = {
 
 /**
  * SeedCapitalRequest
+ *
+ * Record fund capital that reached a rail's treasury, PROVEN against the chain.
+ *
+ * Like RecordDepositRequest the caller supplies only a pointer to a fact: the amount is
+ * read back from the chain and the recipient decides whether it is capital at all. The
+ * transfer must have landed on the rail's treasury address from a sender outside every
+ * wallet we control. A transfer to a user's deposit address is that user's deposit, not
+ * capital — refused, use RecordDeposit. The sweep consolidating a user's address into
+ * the treasury is money already on the ledger — refused.
  */
 export type BankingV1SeedCapitalRequest = {
     /**
@@ -3369,18 +3401,37 @@ export type BankingV1SeedCapitalRequest = {
      */
     network?: string;
     /**
-     * amount
+     * tx_ref
      *
-     * decimal USDT
+     * `txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key
      */
-    amount?: string;
+    tx_ref?: string;
+    /**
+     * expected_amount
+     *
+     * Optional operator assertion in decimal USDT. When set it must equal what the chain
+     * reports or the call is refused, so a mistyped reference fails loudly instead of
+     * silently crediting some other transfer.
+     */
+    expected_amount?: string;
 };
 
 /**
  * SeedCapitalResponse
  */
 export type BankingV1SeedCapitalResponse = {
-    [key: string]: never;
+    /**
+     * recorded
+     *
+     * false if `tx_ref` was already recorded (idempotent no-op)
+     */
+    recorded?: boolean;
+    /**
+     * amount
+     *
+     * what the CHAIN reported, decimal USDT — never the caller's number
+     */
+    amount?: string;
 };
 
 /**
@@ -4283,6 +4334,32 @@ export type BankingV1UserSummary = {
      * serve it, but the field number must not be reused.
      */
     role_is_break_glass?: boolean;
+};
+
+/**
+ * ValuationOverrideTerms
+ *
+ * The immutable subject of a VALUATION-OVERRIDE consilium — a NAV mark the move guard
+ * refuses (banking#232). The direct `PostFundValuation` caps a move at `MAX_NAV_MOVE_PCT`
+ * against the previous mark AND the mark anchoring a rolling window, and carries no flag
+ * to lift it; a genuine re-mark past the cap is put to the owners instead. Executing the
+ * consilium derives NAV from the LIVE unit supply at that moment and records the mark with
+ * the initiator as `posted_by`, so the redeem cooldown binds them exactly as a direct post
+ * would.
+ */
+export type BankingV1ValuationOverrideTerms = {
+    /**
+     * service
+     *
+     * The fund/service id being marked.
+     */
+    service?: string;
+    /**
+     * aum
+     *
+     * The fund's total AUM to mark it at — decimal USDT string, as everywhere on this wire.
+     */
+    aum?: string;
 };
 
 /**
@@ -8027,6 +8104,35 @@ export type BankingV1ConsiliumServiceOpenRevenuePayoutResponses = {
 };
 
 export type BankingV1ConsiliumServiceOpenRevenuePayoutResponse = BankingV1ConsiliumServiceOpenRevenuePayoutResponses[keyof BankingV1ConsiliumServiceOpenRevenuePayoutResponses];
+
+export type BankingV1ConsiliumServiceOpenValuationOverrideData = {
+    body: BankingV1OpenValuationOverrideRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.ConsiliumService/OpenValuationOverride';
+};
+
+export type BankingV1ConsiliumServiceOpenValuationOverrideErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1ConsiliumServiceOpenValuationOverrideError = BankingV1ConsiliumServiceOpenValuationOverrideErrors[keyof BankingV1ConsiliumServiceOpenValuationOverrideErrors];
+
+export type BankingV1ConsiliumServiceOpenValuationOverrideResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Consilium;
+};
+
+export type BankingV1ConsiliumServiceOpenValuationOverrideResponse = BankingV1ConsiliumServiceOpenValuationOverrideResponses[keyof BankingV1ConsiliumServiceOpenValuationOverrideResponses];
 
 export type BankingV1FeesServiceGetAccruedFeesData = {
     body: BankingV1GetAccruedFeesRequest;

@@ -513,7 +513,7 @@ async fn an_issuance_defaults_its_cost_basis_to_units_times_nav() {
 	// Seed the supply so a valuation can be posted, then mark the fund at NAV 1.25.
 	issue(&h, &service, UnitHolder::Company, "800", Some("0"), "seed").await.unwrap();
 	h.relay.drain().await;
-	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1000"), "itest", false)
+	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1000"), "itest", now_unix())
 		.await
 		.unwrap();
 
@@ -628,7 +628,7 @@ async fn a_valuation_cannot_be_posted_for_an_unregistered_service() {
 	let service = unique_service();
 	// The other door into a phantom fund: an AUM post would write a valuation history for
 	// a service no registry entry backs.
-	let err = funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("100"), "op", true)
+	let err = funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("100"), "op", now_unix())
 		.await
 		.unwrap_err();
 	assert!(matches!(err, domain::error::DomainError::NotFound { entity: "allocation", .. }), "got {err:?}");

@@ -27,9 +27,27 @@ use crate::{
 	},
 };
 
-/// A derived NAV that jumps more than this (percent) from the previous mark is rejected
-/// unless the operator passes an override — the fat-finger guard on the AUM trust seam.
+/// A derived NAV that moves more than this (percent) from the previous mark, or from the
+/// mark anchoring the rolling [`NAV_MOVE_WINDOW_SECS`] window, is rejected — the
+/// fat-finger guard on the AUM trust seam, and since banking#232 the ONLY guard a single
+/// poster faces: there is no per-request override. A larger move goes to the owners
+/// (`consilium::open_valuation_override`).
 pub const MAX_NAV_MOVE_PCT: u128 = 50;
+/// The rolling window the move cap is also measured across.
+///
+/// WHY A SECOND MEASUREMENT. Against the previous mark alone, the cap is a rate limit with
+/// no rate: +49% seventeen times in an afternoon compounds to a 900× NAV while every single
+/// post is "within 50%". Measuring the same cap against the newest mark at least this old
+/// (or the fund's first mark, when none is) bounds what one poster can move the price by
+/// in a week to the cap itself, however many steps they take.
+pub const NAV_MOVE_WINDOW_SECS: i64 = 7 * 24 * 60 * 60;
+/// How long after posting a valuation for a fund the poster may not redeem from it.
+///
+/// The redeem settles at the price the poster set; a cooldown means the person who moved
+/// the price is not the person who cashes out at it, within the window the move guard
+/// measures. Fee settlement is deliberately not gated: its cash lands in `fee`, whose only
+/// exit is already a consilium.
+pub const VALUATION_REDEEM_COOLDOWN_SECS: i64 = 7 * 24 * 60 * 60;
 /// A mark older than this (seconds) is stale; subscribe/redeem refuse to deal on it
 /// rather than price off a drifted NAV (the backward-pricing arbitrage guard). 24h for v1.
 pub const MAX_NAV_AGE_SECS: i64 = 24 * 60 * 60;
@@ -182,6 +200,7 @@ pub async fn request_redemption(
 	now_unix: i64,
 ) -> Result<Redemption, DomainError> {
 	allocations_app::require_redeemable(ports.allocations, &service).await?;
+	refuse_recent_poster(ports.nav, &service, user, now_unix).await?;
 	let holding = ports.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?;
 	if Shares::from_base_units(holding.available()) < units {
 		return Err(DomainError::Validation("insufficient units to redeem".into()));
@@ -230,10 +249,27 @@ pub async fn settle_redemption(redemptions: &dyn RedemptionRepository, nav: &dyn
 	if existing.state() == RedemptionState::Completed {
 		return Ok(existing);
 	}
+	// Checked at settle too, not only at request: a queued redemption can outlive a mark
+	// its owner posts later, and settle is where the cash is actually priced.
+	refuse_recent_poster(nav, existing.service(), existing.user(), now_unix).await?;
 	let price = dealing_nav(nav, existing.service(), now_unix).await?;
 	let redemption = redemptions.settle(id, price).await?;
 	relay.notify_one();
 	Ok(redemption)
+}
+
+/// The redeem cooldown: refuse when `user` posted a mark for `service` within
+/// [`VALUATION_REDEEM_COOLDOWN_SECS`]. `posted_by` is compared as the string the direct
+/// RPC records — `claims.sub`, which `caller_id` parses as this same `UserId`, so the two
+/// spellings agree by construction (pinned by an integration test).
+async fn refuse_recent_poster(nav: &dyn NavMarks, service: &ServiceId, user: UserId, now_unix: i64) -> Result<(), DomainError> {
+	if nav.posted_by_since(service, &user.to_string(), now_unix.saturating_sub(VALUATION_REDEEM_COOLDOWN_SECS)).await? {
+		return Err(DomainError::Precondition(format!(
+			"you posted a valuation for this fund within the last {} days — redemption is refused until it ages out",
+			VALUATION_REDEEM_COOLDOWN_SECS / (24 * 60 * 60)
+		)));
+	}
+	Ok(())
 }
 
 /// Cancel a queued redemption (the calling user): the relay voids the burn, returning the
@@ -332,9 +368,12 @@ pub async fn fund_nav_view(
 	})
 }
 /// Operator posts a fund's total AUM; NAV is derived (`AUM / units_outstanding`, read
-/// live from TigerBeetle). Rejects zero units (NAV undefined) and — unless `force` — a
-/// move beyond [`MAX_NAV_MOVE_PCT`] vs the last mark. Records the mark (with `posted_by`)
-/// and returns it.
+/// live from TigerBeetle). Rejects zero units (NAV undefined) and a move beyond
+/// [`MAX_NAV_MOVE_PCT`] measured against BOTH the previous mark and the mark anchoring
+/// the [`NAV_MOVE_WINDOW_SECS`] window. There is no way past the guard on this path: a
+/// larger move is proposed to the owners and recorded by the consilium's execution
+/// through the same [`record_valuation`] writer. Records the mark (with `posted_by`) and
+/// returns it.
 ///
 /// Gated on the allocation *existing* (any state — a closed product still gets marked so
 /// queued redemptions price correctly). Without this an AUM post would write a valuation
@@ -347,22 +386,36 @@ pub async fn post_fund_valuation(
 	service: ServiceId,
 	aum: Usdt,
 	posted_by: &str,
-	force: bool,
+	now_unix: i64,
 ) -> Result<Valuation, DomainError> {
 	allocations_app::get(allocations, &service).await?;
-	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted);
+	let derived = Nav::from_aum(aum, issued_supply(ledger, &service).await?)?;
+	if let Some(prev) = nav.current(&service).await? {
+		if nav_move_exceeds(prev.nav, derived, MAX_NAV_MOVE_PCT) {
+			return Err(move_guard_tripped(prev.nav, derived, "the previous mark"));
+		}
+		// A fund with a current mark always has an anchor (at worst its first mark), so a
+		// missing one is not a pass — it is the same "never marked" case `prev` already
+		// excluded, and the guard simply has nothing older to measure against.
+		if let Some(anchor) = nav.anchor(&service, now_unix.saturating_sub(NAV_MOVE_WINDOW_SECS)).await?
+			&& nav_move_exceeds(anchor.nav, derived, MAX_NAV_MOVE_PCT)
+		{
+			return Err(move_guard_tripped(anchor.nav, derived, "the mark anchoring the rolling window"));
+		}
+	}
+	record_valuation(nav, ledger, ValuationId::new(), service, aum, posted_by).await
+}
+
+/// The one writer of a valuation mark, shared by the cap-checked direct post and the
+/// owners' override (`consilium::execute`): derive NAV from the LIVE unit supply, append
+/// the mark, return it. Applies NO move guard — every caller decides its own admission
+/// before reaching this. The allocation gate is the caller's too: the direct post checks it
+/// per request, the override checked it at open.
+pub async fn record_valuation(nav: &dyn NavMarks, ledger: &dyn Ledger, id: ValuationId, service: ServiceId, aum: Usdt, posted_by: &str) -> Result<Valuation, DomainError> {
+	let units = issued_supply(ledger, &service).await?;
 	// `from_aum` rejects zero units — NAV is undefined with nothing outstanding.
 	let derived = Nav::from_aum(aum, units)?;
-	if let Some(prev) = nav.current(&service).await?
-		&& !force
-		&& nav_move_exceeds(prev.nav, derived, MAX_NAV_MOVE_PCT)
-	{
-		return Err(DomainError::Validation(format!(
-			"nav move {} → {derived} exceeds {MAX_NAV_MOVE_PCT}% — pass override to confirm",
-			prev.nav
-		)));
-	}
-	let posted_at_unix = nav.record(ValuationId::new(), &service, aum, units, derived, posted_by).await?;
+	let posted_at_unix = nav.record(id, &service, aum, units, derived, posted_by).await?;
 	Ok(Valuation {
 		service,
 		aum,
@@ -371,6 +424,18 @@ pub async fn post_fund_valuation(
 		posted_by: posted_by.to_owned(),
 		posted_at_unix,
 	})
+}
+
+/// The settled supply NAV is derived against — posted units only, unlike
+/// [`issued_units`], which also counts in-flight mints for the capacity gate.
+async fn issued_supply(ledger: &dyn Ledger, service: &ServiceId) -> Result<Shares, DomainError> {
+	Ok(Shares::from_base_units(ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await?.posted))
+}
+
+fn move_guard_tripped(from: Nav, to: Nav, against: &str) -> DomainError {
+	DomainError::Validation(format!(
+		"nav move {from} → {to} exceeds {MAX_NAV_MOVE_PCT}% against {against} — open a valuation-override consilium for the owners to approve it"
+	))
 }
 /// Assemble a position view: read the live unit balances — the holding and the book
 /// escrow — and the current NAV, value the two together.
@@ -395,7 +460,8 @@ async fn build_position_view(ledger: &dyn Ledger, nav: &dyn NavMarks, user: User
 }
 
 /// `|new − prev| / prev > pct%`, computed on base units (saturating; a previous NAV of
-/// zero makes any non-zero move "exceed", so recovering a wiped-out fund needs override).
+/// zero makes any non-zero move "exceed", so recovering a wiped-out fund is an owners'
+/// decision — a valuation-override consilium — never a single post).
 fn nav_move_exceeds(prev: Nav, new: Nav, pct: u128) -> bool {
 	let (p, n) = (prev.base_units(), new.base_units());
 	p.abs_diff(n).saturating_mul(100) > p.saturating_mul(pct)
