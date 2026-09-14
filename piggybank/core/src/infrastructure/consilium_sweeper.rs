@@ -28,7 +28,7 @@ use tracing::{error, info, warn};
 use crate::{
 	application::{consilium as consilium_app, payments as payments_app},
 	config::KycGate,
-	ports::{AllocationRegistry, Custody, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository, consilium::ConsiliumRepository, ledger::Ledger},
+	ports::{AllocationRegistry, Custody, FeePolicyChanges, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository, consilium::ConsiliumRepository, ledger::Ledger},
 };
 
 fn unix_now() -> i64 {
@@ -62,6 +62,7 @@ pub struct ConsiliumSweeper {
 	pub custody: Arc<dyn Custody>,
 	pub policy: Arc<dyn OutflowPolicy>,
 	pub allocations: Arc<dyn AllocationRegistry>,
+	pub fee_changes: Arc<dyn FeePolicyChanges>,
 	pub notify: Arc<Notify>,
 	pub configured: Arc<[Network]>,
 	pub kyc: KycGate,
@@ -138,6 +139,7 @@ impl ConsiliumSweeper {
 			custody: self.custody.as_ref(),
 			policy: self.policy.as_ref(),
 			allocations: self.allocations.as_ref(),
+			fee_changes: self.fee_changes.as_ref(),
 			relay: &self.notify,
 			configured: &self.configured,
 			kyc: self.kyc,
@@ -152,7 +154,7 @@ impl ConsiliumSweeper {
 				Ok(view) if view.consilium.state() == domain::consilium::ConsiliumState::Executed => report.executed += 1,
 				Ok(view) => {
 					report.execution_failures += 1;
-					error!(consilium_id = %id, state = view.consilium.state().as_str(), reason = view.consilium.failure_reason().unwrap_or_default(), "consilium: approved payout could not be created");
+					error!(consilium_id = %id, state = view.consilium.state().as_str(), reason = view.consilium.failure_reason().unwrap_or_default(), "consilium: an approved request could not be carried");
 				}
 				Err(err) => warn!(consilium_id = %id, "consilium: execution attempt failed (will retry): {err}"),
 			}

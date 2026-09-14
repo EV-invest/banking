@@ -27,7 +27,8 @@ use piggybank_core::{
 	application::{consilium as consilium_app, payments as payments_app},
 	config::KycGate,
 	infrastructure::{
-		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, outflow::PgOutflowPolicy, payments::PgPayments, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
+		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, fee_policy_changes::PgFeePolicyChanges, outflow::PgOutflowPolicy, payments::PgPayments, relay::Relay,
+		users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
 		ConsiliumRepository, LedgerTransfer, PaymentRepository, UserRepository, WithdrawalRepository,
@@ -66,6 +67,7 @@ struct Harness {
 	users: Arc<dyn UserRepository>,
 	outflow: PgOutflowPolicy,
 	allocations: PgAllocations,
+	fee_changes: PgFeePolicyChanges,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -82,6 +84,7 @@ async fn harness() -> Option<Harness> {
 		users: Arc::new(PgUsers::new(pool.clone())),
 		outflow: PgOutflowPolicy::new(pool.clone()),
 		allocations: PgAllocations::new(pool.clone()),
+		fee_changes: PgFeePolicyChanges::new(pool.clone()),
 		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
 		ledger,
 		notify,
@@ -99,6 +102,7 @@ fn ports(h: &Harness) -> consilium_app::ConsiliumPorts<'_> {
 		custody: &StubCustody,
 		policy: &h.outflow,
 		allocations: &h.allocations,
+		fee_changes: &h.fee_changes,
 		relay: &h.notify,
 		configured: &CONFIGURED,
 		kyc: KycGate::LIFTED,
@@ -1496,7 +1500,7 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 	for _ in 0..2 {
 		match consilium_app::execute_payment(&ports(&h), &view.consilium, subject.clone(), now()).await.unwrap() {
 			ExecutionOutcome::Executed(ConsiliumEffect::Payment(id)) => assert_eq!(id, subject.payment_id),
-			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_)) => panic!("a payment consilium produces no withdrawal"),
+			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::FeePolicy(_)) => panic!("a payment consilium produces no withdrawal and schedules no change"),
 			ExecutionOutcome::Failed(why) => panic!("an approved order must be believed: {why}"),
 		}
 	}
