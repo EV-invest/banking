@@ -358,6 +358,7 @@ mod book_route_tests {
 			fee_paid: "0.25".into(),
 			state: state.into(),
 			reject_reason: String::new(),
+			cancel_reason: if state == "cancelled" { "user".into() } else { String::new() },
 			client_order_id: "cli-1".into(),
 			created_at: 1_750_000_000,
 			updated_at: 1_750_000_100,
@@ -1102,6 +1103,11 @@ mod book_route_tests {
 		assert_eq!(body["state"], "open");
 		assert_eq!(body["client_order_id"], "cli-1");
 		assert_eq!(body["updated_at"], "1750000100");
+		assert_eq!(
+			(body["reject_reason"].as_str(), body["cancel_reason"].as_str()),
+			(Some(""), Some("")),
+			"a resting order carries neither reason"
+		);
 
 		let forwarded = seen.lock().unwrap().place.clone().expect("the hub saw the order");
 		assert_eq!(forwarded.service, SERVICE);
@@ -1175,6 +1181,7 @@ mod book_route_tests {
 		assert_eq!(status, StatusCode::OK);
 		assert_eq!(response["id"], ORDER_ID);
 		assert_eq!(response["state"], "cancelled");
+		assert_eq!(response["cancel_reason"], "user", "the hub's reason crosses verbatim");
 		assert_eq!(seen.lock().unwrap().cancel.as_ref().map(|r| r.order_id.as_str()), Some(ORDER_ID));
 	}
 

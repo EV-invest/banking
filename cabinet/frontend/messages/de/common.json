@@ -311,6 +311,14 @@
     "en": "Units must be a decimal number above zero",
     "t": "Anteile müssen eine Dezimalzahl größer als null sein"
   },
+  "admin.alloc.issue.reason.holder": {
+    "en": "Pick a holder",
+    "t": "Inhaber wählen"
+  },
+  "admin.alloc.issue.reason.units": {
+    "en": "Enter units",
+    "t": "Anteile eingeben"
+  },
   "admin.alloc.issue.resultApplied": {
     "en": "{units} units issued to {holder}.",
     "t": "{units} Anteile an {holder} ausgegeben."
@@ -326,6 +334,26 @@
   "admin.alloc.issue.title": {
     "en": "Issue units",
     "t": "Anteile ausgeben"
+  },
+  "admin.alloc.pinCap.action": {
+    "en": "Pin cap to issued",
+    "t": "Cap auf Ausgegebenes festlegen"
+  },
+  "admin.alloc.pinCap.alreadyPinned": {
+    "en": "The cap already equals the issued supply.",
+    "t": "Das Cap entspricht bereits dem ausgegebenen Bestand."
+  },
+  "admin.alloc.pinCap.confirm": {
+    "en": "Cap {from} → {to}. No further units can be issued until the cap is raised again.",
+    "t": "Cap {from} → {to}. Bis das Cap wieder angehoben wird, können keine weiteren Anteile ausgegeben werden."
+  },
+  "admin.alloc.pinCap.nothingIssued": {
+    "en": "Nothing has settled yet — a queued mint is not on the ledger until the relay posts it.",
+    "t": "Noch nichts verbucht — eine wartende Ausgabe steht erst im Register, wenn das Relay sie bucht."
+  },
+  "admin.alloc.pinCap.submit": {
+    "en": "Pin cap",
+    "t": "Cap festlegen"
   },
   "admin.alloc.open": {
     "en": "Open",

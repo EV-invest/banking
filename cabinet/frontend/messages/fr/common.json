@@ -311,6 +311,14 @@
     "en": "Units must be a decimal number above zero",
     "t": "Les parts doivent être un nombre décimal supérieur à zéro"
   },
+  "admin.alloc.issue.reason.holder": {
+    "en": "Pick a holder",
+    "t": "Choisissez un détenteur"
+  },
+  "admin.alloc.issue.reason.units": {
+    "en": "Enter units",
+    "t": "Saisissez les parts"
+  },
   "admin.alloc.issue.resultApplied": {
     "en": "{units} units issued to {holder}.",
     "t": "{units} parts émises pour {holder}."
@@ -326,6 +334,26 @@
   "admin.alloc.issue.title": {
     "en": "Issue units",
     "t": "Émettre des parts"
+  },
+  "admin.alloc.pinCap.action": {
+    "en": "Pin cap to issued",
+    "t": "Plafonner à l’émis"
+  },
+  "admin.alloc.pinCap.alreadyPinned": {
+    "en": "The cap already equals the issued supply.",
+    "t": "Le plafond est déjà égal aux parts émises."
+  },
+  "admin.alloc.pinCap.confirm": {
+    "en": "Cap {from} → {to}. No further units can be issued until the cap is raised again.",
+    "t": "Plafond {from} → {to}. Aucune part supplémentaire ne pourra être émise tant que le plafond n’est pas relevé."
+  },
+  "admin.alloc.pinCap.nothingIssued": {
+    "en": "Nothing has settled yet — a queued mint is not on the ledger until the relay posts it.",
+    "t": "Rien n’est encore réglé — une émission en attente n’entre au registre que lorsque le relais la comptabilise."
+  },
+  "admin.alloc.pinCap.submit": {
+    "en": "Pin cap",
+    "t": "Plafonner"
   },
   "admin.alloc.open": {
     "en": "Open",

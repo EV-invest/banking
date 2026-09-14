@@ -203,8 +203,8 @@ export type BankingV1AllocationList = {
  * Balance
  *
  * The user's single, network-agnostic balance, segmented by lifecycle. Every figure is
- * a TigerBeetle-authoritative decimal USDT string; total = available + invested +
- * pending_withdrawal.
+ * a TigerBeetle-authoritative decimal USDT string; total = available + in_orders +
+ * invested + pending_withdrawal.
  */
 export type BankingV1Balance = {
     /**
@@ -216,7 +216,7 @@ export type BankingV1Balance = {
     /**
      * invested
      *
-     * staked in fund services (active allocations)
+     * held in fund units at NAV, the units escrowed by resting sell orders included
      */
     invested?: string;
     /**
@@ -228,9 +228,15 @@ export type BankingV1Balance = {
     /**
      * total
      *
-     * available + invested + pending_withdrawal
+     * available + in_orders + invested + pending_withdrawal
      */
     total?: string;
+    /**
+     * in_orders
+     *
+     * cash escrowed by the caller's resting buy orders on the book (still theirs)
+     */
+    in_orders?: string;
 };
 
 /**
@@ -2259,6 +2265,8 @@ export type BankingV1Order = {
     state?: string;
     /**
      * reject_reason
+     *
+     * free text; set exactly when state = rejected
      */
     reject_reason?: string;
     /**
@@ -2277,6 +2285,15 @@ export type BankingV1Order = {
      * unix seconds
      */
     updated_at?: number | string;
+    /**
+     * cancel_reason
+     *
+     * Set exactly when state = cancelled: "" | user | ioc_remainder | market_remainder.
+     * `user` is the owner's own cancel; the other two are the hub cancelling what an IOC
+     * limit / a market order could not fill at once — such an order may still show
+     * `filled > 0`, which is what makes the reason worth carrying.
+     */
+    cancel_reason?: string;
 };
 
 /**

@@ -5,7 +5,7 @@
 // opens its own row drawer — a `Panel` beside the table rather than a modal over it, so an
 // operator can see the row the panel belongs to while they work it.
 
-import { TriangleAlert, X } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
@@ -15,13 +15,15 @@ import { grantAllocationAccess, revokeAllocationAccess } from "@/entities/admin/
 import { allocationAccessGrantsResource } from "@/entities/admin/model/admin-resource";
 import type { Allocation, AllocationGrantLevel } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
+import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { TAG } from "@/shared/lib/cache-tags";
 import { Settled } from "@/shared/ui/motion";
 import { GrantForm } from "@/views/admin/allocations/ui/grant-form";
 import { GrantsTable } from "@/views/admin/allocations/ui/grants-table";
+import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
 
-export function GrantsPanel({ allocation, onClose }: { allocation: Allocation; onClose: () => void }) {
+export function GrantsPanel({ allocation, onClose, className }: { allocation: Allocation; onClose: () => void; className?: string }) {
   const t = useT();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -50,22 +52,10 @@ export function GrantsPanel({ allocation, onClose }: { allocation: Allocation; o
   return (
     // Fixed width, matching `UserDrawer` — the panel is computed once and clipped by the
     // animating wrapper, never itself laid out against the wrapper's own animating width.
-    <Card className="w-85">
+    // `className` lets the bottom-sheet presentation widen it to the sheet instead.
+    <Card className={cn("w-85", className)}>
       <CardContent className="space-y-5 py-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate font-semibold">{allocation.title}</p>
-            <p className="truncate font-mono-tech text-xs text-muted-foreground">{allocation.service}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("ui.close")}
-            className="rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+        <PanelHeader allocation={allocation} onClose={onClose} />
 
         {error && (
           <p className="flex items-center gap-2 text-xs text-destructive">

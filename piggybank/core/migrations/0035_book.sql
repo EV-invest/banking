@@ -74,6 +74,11 @@ CREATE TABLE book_orders (
     reserved        TEXT        NOT NULL CHECK (reserved ~ '^[1-9][0-9]*$'),
     state           TEXT        NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'partially_filled', 'filled', 'cancelled', 'rejected')),
     reject_reason   TEXT,
+    -- Why a cancelled order ended: the owner's own cancel, or the hub cancelling the
+    -- remainder an IOC limit / a market order could not fill at once. Without it a
+    -- partially filled IOC (`cancelled`, `filled > 0`) is indistinguishable from a
+    -- user's cancel after a partial fill.
+    cancel_reason   TEXT        CHECK (cancel_reason IN ('user', 'ioc_remainder', 'market_remainder')),
     -- The book revision at which this row last changed — what WatchBook's
     -- `orders_revision` reports for the caller, so a client refetches its own orders only
     -- when one of them moved, not on every tick of the book.
@@ -81,6 +86,7 @@ CREATE TABLE book_orders (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK ((state = 'rejected') = (reject_reason IS NOT NULL)),
+    CHECK ((state = 'cancelled') = (cancel_reason IS NOT NULL)),
     UNIQUE (user_id, client_order_id)
 );
 
@@ -101,6 +107,8 @@ COMMENT ON COLUMN book_orders.reserved IS
     'Units (sell) or 18-dp USDT (buy) moved to escrow on placement. The unspent part is released when the order ends.';
 COMMENT ON COLUMN book_orders.state IS
     'open | partially_filled (resting) | filled | cancelled | rejected. rejected is written by the relay when the ledger refuses the escrow.';
+COMMENT ON COLUMN book_orders.cancel_reason IS
+    'Set exactly on cancelled: user (the owner''s cancel) | ioc_remainder | market_remainder (the hub cancelled what could not fill at once).';
 
 CREATE TABLE book_trades (
     id            UUID        PRIMARY KEY,

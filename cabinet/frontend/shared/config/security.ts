@@ -130,6 +130,13 @@ export function contentSecurityPolicy(nonce: string, socketOrigin?: string | nul
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob:`,
     `font-src 'self'`,
+    // Sentry Replay (mounted through `@evinvest/error-monitoring`'s provider on every
+    // cabinet page) compresses its recording in a worker it builds from a `blob:` URL —
+    // and it starts recording in buffer mode whenever the error sample rate is above
+    // zero, DSN or not, so this is a production fact and not a dev-overlay one. Stated
+    // here rather than loosened in `script-src`: without a `worker-src` the browser
+    // falls back to `script-src`, and `blob:` there would admit scripts, not just workers.
+    `worker-src 'self' blob:`,
     `connect-src ${connect.join(" ")}`,
     ...(IN_PRODUCTION ? [`upgrade-insecure-requests`] : []),
   ].join("; ");

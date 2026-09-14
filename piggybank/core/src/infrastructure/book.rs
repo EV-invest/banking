@@ -26,8 +26,8 @@ use async_trait::async_trait;
 use domain::{
 	balance::ServiceId,
 	book::{
-		BookEvent, BookPolicy, CandleResolution, ClientOrderId, IncomingOrder, Locked, MatchingEngine, Order, OrderId, OrderKind, OrderSnapshot, OrderState, Price, RestingOrder, Side, Tif,
-		Trade, TradeId,
+		BookEvent, BookPolicy, CancelReason, CandleResolution, ClientOrderId, IncomingOrder, Locked, MatchingEngine, Order, OrderId, OrderKind, OrderSnapshot, OrderState, Price,
+		RestingOrder, Side, Tif, Trade, TradeId,
 	},
 	error::DomainError,
 	money::{Nav, Shares, Usdt},
@@ -50,15 +50,15 @@ const TRADE_AGGREGATE: &str = "book_trade";
 /// column list is spelled out per query rather than interpolated; the test at the bottom
 /// holds every copy to these two.
 #[cfg(test)]
-const ORDER_COLUMNS: &str = "id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, \
+const ORDER_COLUMNS: &str = "id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, cancel_reason, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at";
-const SELECT_ORDER_BY_ID: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, \
+const SELECT_ORDER_BY_ID: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, cancel_reason, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM book_orders WHERE id = $1";
-const SELECT_ORDER_BY_ID_FOR_UPDATE: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, \
+const SELECT_ORDER_BY_ID_FOR_UPDATE: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, cancel_reason, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM book_orders WHERE id = $1 FOR UPDATE";
-const SELECT_ORDER_BY_CLIENT_ID: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, \
+const SELECT_ORDER_BY_CLIENT_ID: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, cancel_reason, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM book_orders WHERE user_id = $1 AND client_order_id = $2";
 /// `$3` is the caller's limit: a buy needs only the asks at or below it, a sell only the
@@ -76,10 +76,10 @@ const SELECT_ASK_LEVELS: &str = "SELECT price, SUM(size::numeric - filled::numer
 	 WHERE service = $1 AND side = 'sell' AND state IN ('open', 'partially_filled') GROUP BY price ORDER BY price::numeric ASC LIMIT $2";
 const SELECT_BID_LEVELS: &str = "SELECT price, SUM(size::numeric - filled::numeric)::text AS size, COUNT(*)::int AS orders FROM book_orders \
 	 WHERE service = $1 AND side = 'buy' AND state IN ('open', 'partially_filled') GROUP BY price ORDER BY price::numeric DESC LIMIT $2";
-const SELECT_OPEN_ORDERS: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, \
+const SELECT_OPEN_ORDERS: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, cancel_reason, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM book_orders WHERE user_id = $1 AND ($2::text IS NULL OR service = $2) AND state IN ('open', 'partially_filled') ORDER BY seq ASC";
-const SELECT_ORDER_HISTORY: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, \
+const SELECT_ORDER_HISTORY: &str = "SELECT id, service, user_id, client_order_id, side, kind, tif, price, size, filled, notional_filled, fee_paid, reserved, state, reject_reason, cancel_reason, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM book_orders WHERE user_id = $1 AND ($2::text IS NULL OR service = $2) ORDER BY seq DESC LIMIT $3";
 #[cfg(test)]
@@ -125,6 +125,7 @@ struct OrderRow {
 	reserved: String,
 	state: String,
 	reject_reason: Option<String>,
+	cancel_reason: Option<String>,
 	created_at: i64,
 	updated_at: i64,
 }
@@ -152,6 +153,7 @@ impl OrderRow {
 			},
 			state: OrderState::parse(&self.state)?,
 			reject_reason: self.reject_reason,
+			cancel_reason: self.cancel_reason.as_deref().map(CancelReason::parse).transpose()?,
 		});
 		Ok(OrderRecord {
 			order,
@@ -343,12 +345,13 @@ async fn insert_order(conn: &mut PgConnection, order: &Order, revision: i64) -> 
 
 /// Persist the mutable fields of an order the caller holds under the book lock.
 async fn update_order(conn: &mut PgConnection, order: &Order, revision: i64) -> Result<(), DomainError> {
-	let result = sqlx::query("UPDATE book_orders SET filled = $2, notional_filled = $3, fee_paid = $4, state = $5, revision = $6, updated_at = now() WHERE id = $1")
+	let result = sqlx::query("UPDATE book_orders SET filled = $2, notional_filled = $3, fee_paid = $4, state = $5, cancel_reason = $6, revision = $7, updated_at = now() WHERE id = $1")
 		.bind(order.id().raw())
 		.bind(order.filled().base_units().to_string())
 		.bind(order.notional_filled().base_units().to_string())
 		.bind(order.fee_paid().base_units().to_string())
 		.bind(order.state().as_str())
+		.bind(order.cancel_reason().map(CancelReason::as_str))
 		.bind(revision)
 		.execute(&mut *conn)
 		.await
@@ -651,7 +654,7 @@ impl BookStore for PgBook {
 		}
 		if !outcome.rests && order.state().is_resting() {
 			// An IOC (or market) remainder: recorded as cancelled, its escrow handed back.
-			order.cancel()?;
+			order.cancel(CancelReason::remainder_of(order.kind()))?;
 		}
 		update_order(&mut tx, &order, revision).await?;
 		record_release(&mut tx, &order).await?;
@@ -675,7 +678,7 @@ impl BookStore for PgBook {
 			let revision = current_revision(&mut tx, &service).await?;
 			return Ok(CancelOutcome { order: record, revision });
 		}
-		record.order.cancel()?;
+		record.order.cancel(CancelReason::User)?;
 		let revision = bump_revision(&mut tx, &service).await?;
 		update_order(&mut tx, &record.order, revision).await?;
 		record_release(&mut tx, &record.order).await?;

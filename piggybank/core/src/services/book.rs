@@ -24,7 +24,7 @@ use std::{
 use domain::{
 	authz::Permission,
 	balance::ServiceId,
-	book::{BookPolicy, CandleResolution, ClientOrderId, OrderId, OrderKind, Price, Side, Tif},
+	book::{BookPolicy, CancelReason, CandleResolution, ClientOrderId, OrderId, OrderKind, Price, Side, Tif},
 	money::Shares,
 	users::UserId,
 };
@@ -346,6 +346,7 @@ fn order_to_proto(record: &OrderRecord, own: bool) -> pb::Order {
 		fee_paid: order.fee_paid().to_decimal_string(),
 		state: order.state().as_str().to_owned(),
 		reject_reason: order.reject_reason().unwrap_or_default().to_owned(),
+		cancel_reason: order.cancel_reason().map(CancelReason::as_str).unwrap_or_default().to_owned(),
 		client_order_id: order.client_order_id().as_str().to_owned(),
 		created_at: record.created_at,
 		updated_at: record.updated_at,
@@ -440,7 +441,7 @@ fn policy_to_proto(record: &BookPolicyRecord) -> pb::BookPolicy {
 #[cfg(test)]
 mod tests {
 	use domain::book::OrderState;
-	use evbanking_contracts::book::{kind as wire_kind, resolution as wire_resolution, side as wire_side, state as wire_state, tif as wire_tif};
+	use evbanking_contracts::book::{cancel_reason as wire_cancel_reason, kind as wire_kind, resolution as wire_resolution, side as wire_side, state as wire_state, tif as wire_tif};
 
 	use super::*;
 
@@ -455,6 +456,10 @@ mod tests {
 			assert_eq!(state.is_resting(), wire_state::is_resting(state.as_str()), "{state:?}");
 		}
 		assert_eq!(CandleResolution::ALL.map(CandleResolution::as_str), wire_resolution::ALL);
+		assert_eq!(
+			[CancelReason::User, CancelReason::IocRemainder, CancelReason::MarketRemainder].map(CancelReason::as_str),
+			wire_cancel_reason::ALL
+		);
 	}
 
 	#[test]

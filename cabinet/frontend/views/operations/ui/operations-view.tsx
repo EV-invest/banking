@@ -40,12 +40,12 @@ import {
 
 import { allocationsResource } from "@/entities/fund/model/fund-resource";
 import { operationsResource } from "@/entities/operation/model/operation-resource";
-import { useIsCompact } from "@/views/operations/lib/use-is-compact";
 import { OperationDetail } from "@/views/operations/ui/operation-detail";
 import type { Operation } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { useIsCompact } from "@/shared/lib/use-is-compact";
 import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import {

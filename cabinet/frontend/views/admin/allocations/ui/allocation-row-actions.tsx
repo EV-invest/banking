@@ -1,6 +1,6 @@
 "use client";
 
-// The registry row's Actions cell: open the access-grants or issuance panel, edit the
+// The registry row's Actions cell: open the grants, issuance or book panel, edit the
 // product's presentation fields, or flip it open/closed. Split out of `AllocationRow` for
 // the same reason `AllocationAccessCell` is — one cell per file keeps the row itself under
 // the component-size ceiling as columns grow.
@@ -11,6 +11,7 @@ import { useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
 
 import type { AllocationState } from "@/shared/contracts/admin";
+import { cn } from "@/shared/lib/cn";
 import type { AllocationPanelKind } from "@/views/admin/allocations/lib/panel";
 
 export function AllocationRowActions({
@@ -20,6 +21,7 @@ export function AllocationRowActions({
   onOpenPanel,
   onEdit,
   onToggle,
+  className,
 }: {
   state: AllocationState;
   busy: boolean;
@@ -27,14 +29,17 @@ export function AllocationRowActions({
   onOpenPanel: (kind: AllocationPanelKind) => void;
   onEdit: () => void;
   onToggle: () => void;
+  className?: string;
 }) {
   const t = useT();
   return (
-    // i18n-max: 12 per verb. Two rows on purpose: the three panel openers above the two
-    // row verbs. Five in one row ran past the card's edge whenever a side panel was open,
-    // and a plain wrap put the break wherever the translation happened to land it.
-    <div className="flex flex-col items-end gap-2">
-      <div className="flex gap-2">
+    // i18n-max: 12 per verb. Five shrink-0 controls share this cell, in two groups: the
+    // three panel openers, then the two row verbs. Each group wraps rather than overflows —
+    // with the side panel open the cell is narrower than five in a row — and the outer
+    // wrap breaks between the groups first, so the line break lands at the semantic seam
+    // rather than wherever the translation happened to put it.
+    <div className={cn("flex flex-wrap justify-end gap-2", className)}>
+      <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onOpenPanel("grants")}>
           <KeyRound className="size-3.5" />
           {t("admin.alloc.grants.action")}
@@ -48,7 +53,7 @@ export function AllocationRowActions({
           {t("admin.alloc.book.action")}
         </Button>
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onEdit}>
           {editing ? t("ui.cancel") : t("ui.edit")}
         </Button>

@@ -6,7 +6,7 @@
 //! module still compiles the rest — hence the blanket `dead_code` allowance.
 #![allow(dead_code)]
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use domain::users::UserId;
 use piggybank_core::{
@@ -18,6 +18,26 @@ use piggybank_core::{
 	ports::ledger::Ledger,
 };
 use sqlx::PgPool;
+
+/// Serializes the tests that own the relay as a *process* would: those that run
+/// [`Relay::run`](piggybank_core::infrastructure::relay::Relay::run) or hold its
+/// session-level outbox advisory lock (`acquire_outbox_lock`). The lock is one per
+/// database, so two such tests in one binary would block each other on it — a driver
+/// polling for "the relay applied my row" then times out while `run` is still queued
+/// behind the sibling's lock. A test that only calls the unfenced `drain()` does not
+/// take this: it never touches the lock.
+///
+/// Scope, honestly: a `LazyLock` lives in one process, and `cargo test` runs test
+/// binaries one after another, so today this guards only tests that share a binary. A
+/// runner that parallelizes binaries (nextest) is outside its reach — which is why
+/// `relay_shutdown` also drains the shared backlog before it starts timing, and waits
+/// far longer than a drain takes.
+static RELAY: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
+
+/// Hold for the duration of a test that runs `Relay::run` or takes the outbox lock.
+pub async fn relay_exclusive() -> tokio::sync::MutexGuard<'static, ()> {
+	RELAY.lock().await
+}
 
 /// A migrated pool, or `None` when `DATABASE_URL` is unset — the signal every suite
 /// uses to skip rather than fail on a machine without `nix run .#db`.

@@ -33,6 +33,10 @@ export function AllocationsView() {
   const read = useResource(adminAllocationsResource);
   const rows = read.data ? (read.data.allocations ?? []) : null;
   const error = actionError ?? (read.data || !read.error ? null : errorMessage(read.error, t));
+  // The panel reads its row as the registry has it NOW, not as it was when the panel
+  // opened: a cap pinned from inside the issuance panel refreshes the registry, and the
+  // panel must see the new figure to know there is nothing left to pin.
+  const openPanel = panel && { ...panel, row: rows?.find((row) => row.service === panel.row.service) ?? panel.row };
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -96,7 +100,7 @@ export function AllocationsView() {
           <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.alloc.footnote", { state: t("admin.state.draft") })}</p>
         </div>
 
-        <AllocationSidePanel panel={panel} onClose={() => setPanel(null)} />
+        <AllocationSidePanel panel={openPanel} onClose={() => setPanel(null)} />
       </StaggerItem>
     </AdminScreen>
   );

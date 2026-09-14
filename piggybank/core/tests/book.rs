@@ -12,14 +12,15 @@ mod common;
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party, ServiceId},
-	book::{BookPolicy, CandleResolution, ClientOrderId, OrderKind, OrderState, Price, PriceTimeEngine, Side, Tif},
+	book::{BookPolicy, CancelReason, CandleResolution, ClientOrderId, Locked, OrderKind, OrderState, Price, PriceTimeEngine, Side, Tif},
 	error::DomainError,
 	issuance::{IdempotencyKey, UnitHolder},
-	money::{Network, Shares, TxRef, Usdt},
+	money::{Network, Shares, TxRef, Usdt, WalletAddress},
 	users::{Email, UserId},
 };
 use piggybank_core::{
@@ -27,12 +28,14 @@ use piggybank_core::{
 		balance as balance_app,
 		book::{self as book_app, BookFeed, BookPorts, PlaceOrderRequest},
 		funds as funds_app, issuance as issuance_app,
+		wallet::{self as wallet_app, WalletBalance, WalletPorts},
 	},
+	config::KycGate,
 	infrastructure::{
 		allocations::PgAllocations, book::PgBook, custody::StubCustody, deposits::PgDeposits, issuance::PgUnitIssuances, nav::PgNav, operations, outflow::PgOutflowPolicy,
 		positions::PgFundPositions, relay::Relay, users::PgUsers,
 	},
-	ports::{AllocationRegistry, BookStore, OrderRecord, UserRepository, ledger::Ledger},
+	ports::{AllocationRegistry, BookStore, DepositAddresses, OrderRecord, UserRepository, ledger::Ledger},
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -222,6 +225,31 @@ async fn position(h: &Harness, user: UserId, service: &ServiceId) -> funds_app::
 	funds_app::get_position(&h.positions, h.ledger.as_ref(), &h.nav, user, service.clone()).await.unwrap()
 }
 
+/// No deposit rails at all: the wallet read here is about the lifecycle figures, and with
+/// no configured network the address gateway is never asked.
+struct NoRails;
+
+impl domain::architecture::Gateway for NoRails {}
+
+#[async_trait]
+impl DepositAddresses for NoRails {
+	async fn address(&self, _user: UserId, _network: Network) -> Result<Option<WalletAddress>, DomainError> {
+		Ok(None)
+	}
+}
+
+/// The caller's wallet as `GetWallet` presents it — the same use case the RPC runs.
+async fn wallet(h: &Harness, user: UserId) -> WalletBalance {
+	let ports = WalletPorts {
+		ledger: h.ledger.as_ref(),
+		positions: &h.positions,
+		nav: &h.nav,
+		deposit_addresses: &NoRails,
+		users: &h.users,
+	};
+	wallet_app::get_wallet(&ports, &[], KycGate::LIFTED, user).await.unwrap().balance
+}
+
 /// The parked outbox rows for one aggregate, with their reasons.
 async fn parked(h: &Harness, aggregate_id: Uuid) -> Vec<String> {
 	sqlx::query_scalar::<_, Option<String>>("SELECT last_error FROM outbox WHERE aggregate_id = $1 AND parked_at IS NOT NULL ORDER BY seq")
@@ -257,6 +285,7 @@ async fn a_crossing_limit_buy_settles_delivery_versus_payment_with_the_takers_fe
 	// The buyer crosses it at the same price and pays 1 % as the taker.
 	let bid = buy(&h, buyer, &service, "1.5", "10").await;
 	assert_eq!(bid.order.state(), OrderState::Filled);
+	assert_eq!(bid.order.cancel_reason(), None, "a filled order ended by filling, not by a cancel");
 	assert_eq!(bid.order.average_fill_price(), Some(price("1.5")));
 	assert_eq!(bid.order.fee_paid(), usdt("0.15"));
 	assert_eq!(order(&h, &ask).await.order.state(), OrderState::Filled, "the maker filled too");
@@ -373,6 +402,10 @@ async fn an_ioc_fills_what_it_can_and_releases_the_rest() {
 		(OrderState::Cancelled, shares("5")),
 		"the unfilled 3 are cancelled, never rested"
 	);
+	// `cancelled` with `filled > 0` is exactly what a user's cancel after a partial fill
+	// looks like — the reason is what tells the two apart, and it is what the row stores.
+	assert_eq!(bid.order.cancel_reason(), Some(CancelReason::IocRemainder));
+	assert_eq!(order(&h, &bid).await.order.cancel_reason(), Some(CancelReason::IocRemainder));
 	assert!(book_app::list_open_orders(&h.book, buyer, Some(&service)).await.unwrap().is_empty());
 	h.relay.drain().await;
 	// 8 was escrowed, 5 spent, 3 released.
@@ -382,6 +415,7 @@ async fn an_ioc_fills_what_it_can_and_releases_the_rest() {
 	// An IOC against an empty side fills nothing and holds nothing.
 	let nothing = place(&h, buyer, &service, Side::Buy, OrderKind::Limit, Tif::Ioc, Some("1"), "1").await.unwrap();
 	assert_eq!((nothing.order.state(), nothing.order.filled()), (OrderState::Cancelled, Shares::ZERO));
+	assert_eq!(nothing.order.cancel_reason(), Some(CancelReason::IocRemainder));
 	h.relay.drain().await;
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("95"));
 }
@@ -439,6 +473,18 @@ async fn a_market_order_is_priced_off_the_best_quote_and_refused_on_an_empty_sid
 	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("91.88"));
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), buyer)).await, shares("8"));
 
+	// Only 2 rest at 1.04 now. A market buy for 5 is priced 1.04 + 5 % → 1.10 (ceiled to
+	// the tick), takes the 2 and ends cancelled for the 3 it could not reach — with the
+	// reason saying so, not a user's cancel.
+	let leftover = place(&h, buyer, &service, Side::Buy, OrderKind::Market, Tif::Ioc, None, "5").await.unwrap();
+	assert_eq!(leftover.order.price(), price("1.1"));
+	assert_eq!((leftover.order.state(), leftover.order.filled()), (OrderState::Cancelled, shares("2")));
+	assert_eq!(leftover.order.cancel_reason(), Some(CancelReason::MarketRemainder));
+	assert_eq!(order(&h, &leftover).await.order.cancel_reason(), Some(CancelReason::MarketRemainder));
+	h.relay.drain().await;
+	assert_eq!(cash_of(&h, LedgerAccountKey::UserClaim(buyer)).await, usdt("89.8"), "2 × 1.04 spent, the rest of the escrow back");
+	assert_eq!(cash_of(&h, LedgerAccountKey::BookCash(buyer)).await, Usdt::ZERO);
+
 	// A market order names no price and is never good-till-cancelled.
 	assert!(place(&h, buyer, &service, Side::Buy, OrderKind::Market, Tif::Ioc, Some("1"), "1").await.is_err());
 	assert!(place(&h, buyer, &service, Side::Buy, OrderKind::Market, Tif::Gtc, None, "1").await.is_err());
@@ -461,6 +507,8 @@ async fn cancelling_returns_the_escrow_and_is_idempotent() {
 
 	let cancelled = book_app::cancel_order(&h.book, &h.notify, &h.feed, ask.order.id(), seller).await.unwrap();
 	assert_eq!(cancelled.order.state(), OrderState::Cancelled);
+	assert_eq!(cancelled.order.cancel_reason(), Some(CancelReason::User));
+	assert_eq!(order(&h, &ask).await.order.cancel_reason(), Some(CancelReason::User));
 	h.relay.drain().await;
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), seller)).await, shares("10"), "every unit came back");
 	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), seller)).await, Shares::ZERO);
@@ -469,9 +517,50 @@ async fn cancelling_returns_the_escrow_and_is_idempotent() {
 	// Again: the documented no-op, and nothing new for the relay.
 	let again = book_app::cancel_order(&h.book, &h.notify, &h.feed, ask.order.id(), seller).await.unwrap();
 	assert_eq!(again.order.state(), OrderState::Cancelled);
+	assert_eq!(again.order.cancel_reason(), Some(CancelReason::User));
 	h.relay.drain().await;
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), seller)).await, shares("10"));
 	assert_eq!(parked(&h, ask.order.id().raw()).await, Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn the_wallet_shows_the_escrow_of_resting_orders_and_total_does_not_move() {
+	let Some(h) = harness().await else { return };
+	// 1 % taker fee: the buy escrows notional PLUS the fee, and both must show as in orders.
+	let service = tradable_product(&h, 100).await;
+	let (seller, buyer) = (provisioned_user(&h).await, provisioned_user(&h).await);
+	issue_units(&h, &service, seller, "10").await;
+	fund_user(&h, buyer, "100").await;
+	let fresh = wallet(&h, buyer).await;
+	assert_eq!((fresh.available, fresh.in_orders, fresh.total), (usdt("100"), Usdt::ZERO, usdt("100")));
+
+	// A bid for 10 at 1.20 with nothing to hit rests: 12 + 0.12 leave `available` for the
+	// book's escrow, and the wallet says so instead of showing an unexplained dip.
+	let bid = buy(&h, buyer, &service, "1.2", "10").await;
+	assert_eq!((bid.order.state(), bid.order.reserved()), (OrderState::Open, Locked::Cash(usdt("12.12"))));
+	h.relay.drain().await;
+	let resting = wallet(&h, buyer).await;
+	assert_eq!(resting.in_orders, usdt("12.12"), "exactly the reserve");
+	assert_eq!(resting.available, usdt("87.88"), "available dropped by exactly the reserve");
+	assert_eq!(resting.total, usdt("100"), "the reserve moved between two of total's terms, not out of it");
+	assert_eq!(resting.pending_withdrawal, Usdt::ZERO, "an order is not a withdrawal");
+
+	// The seller's side: units in a resting sell are still theirs, so `invested` holds.
+	let sellers_before = wallet(&h, seller).await;
+	assert_eq!(sellers_before.invested, usdt("10"), "10 units at the seed NAV");
+	let ask = sell(&h, seller, &service, "1.5", "4").await;
+	h.relay.drain().await;
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), seller)).await, shares("6"));
+	let sellers = wallet(&h, seller).await;
+	assert_eq!((sellers.invested, sellers.total), (usdt("10"), usdt("10")), "the escrowed 4 are still valued as the holder's");
+
+	// Cancelling hands the escrow back and the figures return to where they started.
+	book_app::cancel_order(&h.book, &h.notify, &h.feed, bid.order.id(), buyer).await.unwrap();
+	book_app::cancel_order(&h.book, &h.notify, &h.feed, ask.order.id(), seller).await.unwrap();
+	h.relay.drain().await;
+	let released = wallet(&h, buyer).await;
+	assert_eq!((released.available, released.in_orders, released.total), (usdt("100"), Usdt::ZERO, usdt("100")));
+	assert_eq!(wallet(&h, seller).await.invested, usdt("10"));
 }
 
 #[tokio::test]
