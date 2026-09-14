@@ -4,7 +4,7 @@
 // the last submit. Both stay on screen beside the form — the cabinet mounts no toaster,
 // and an answer that names money that moved must not slide away.
 
-import { CheckCircle2, Clock, Lock, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Clock, Info, Lock, TriangleAlert } from "lucide-react";
 
 import { useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, AlertTitle } from "@evinvest/uikit";
@@ -17,15 +17,27 @@ import { orderStateKey, placedOutcome } from "@/views/trade/lib/order-state";
 
 export type Outcome = { order: Order; error?: never } | { error: unknown; order?: never };
 
-/** Why the form is closed, stated before the action. Nothing when it is open. */
-export function OrderGate({ closed, locked }: { closed: boolean; locked: boolean }) {
+/** Why the form is closed, stated before the action — or, on an open book whose units the
+ *  fund holds no cash for, what a buyer is actually buying. One line either way: a closed
+ *  book already says there is nothing to buy, so the exit warning waits until it opens. */
+export function OrderGate({ closed, locked, unbacked }: { closed: boolean; locked: boolean; unbacked: boolean }) {
   const t = useT();
-  if (!closed && !locked) return null;
+  if (closed || locked) {
+    return (
+      <div className="px-3 pt-3">
+        <Note tone={closed ? "muted" : "amber"}>
+          <Lock className="mr-1.5 inline size-3.5 align-text-bottom" />
+          {t(closed ? "trade.form.closed" : "trade.form.locked")}
+        </Note>
+      </div>
+    );
+  }
+  if (!unbacked) return null;
   return (
     <div className="px-3 pt-3">
-      <Note tone={closed ? "muted" : "amber"}>
-        <Lock className="mr-1.5 inline size-3.5 align-text-bottom" />
-        {t(closed ? "trade.form.closed" : "trade.form.locked")}
+      <Note tone="amber">
+        <Info className="mr-1.5 inline size-3.5 align-text-bottom" />
+        {t("trade.unbackedNotice")}
       </Note>
     </div>
   );

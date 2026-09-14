@@ -135,6 +135,22 @@
     "en": "Order book",
     "t": "Carnet d'ordres"
   },
+  "admin.alloc.book.unbacked.ack": {
+    "en": "Allow trading of units not backed by fund cash",
+    "t": "Autoriser la négociation de parts non adossées au cash du fonds"
+  },
+  "admin.alloc.book.unbacked.acknowledged": {
+    "en": "Unbacked trading acknowledged",
+    "t": "Négociation non adossée reconnue"
+  },
+  "admin.alloc.book.unbacked.required": {
+    "en": "This product is held in kind: tick the acknowledgement before opening its book.",
+    "t": "Ce produit est détenu en nature : cochez la reconnaissance avant d'ouvrir son carnet."
+  },
+  "admin.alloc.book.unbacked.warning": {
+    "en": "Buyers pay cash for a claim on an asset held in kind and cannot redeem it — the book is their only exit",
+    "t": "Les acheteurs paient en cash une créance sur un actif détenu en nature et ne peuvent pas la racheter — le carnet est leur seule sortie"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Fermer"
@@ -5106,6 +5122,10 @@
   "trade.ticker.volume": {
     "en": "24h volume",
     "t": "Volume 24 h"
+  },
+  "trade.unbackedNotice": {
+    "en": "Units of this product are a claim on an off-platform asset and cannot be redeemed for fund cash — the book is the only exit.",
+    "t": "Les parts de ce produit sont une créance sur un actif hors plateforme et ne peuvent pas être rachetées contre le cash du fonds — le carnet est la seule sortie."
   },
   "ui.account": {
     "en": "Account",
