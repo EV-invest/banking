@@ -51,6 +51,20 @@ export type BankingV1AccruedFees = {
 };
 
 /**
+ * AcknowledgeUndeliveredNoticesRequest
+ */
+export type BankingV1AcknowledgeUndeliveredNoticesRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * change_id
+     */
+    change_id?: string;
+};
+
+/**
  * AdminBalanceRequest
  */
 export type BankingV1AdminBalanceRequest = {
@@ -1381,6 +1395,40 @@ export type BankingV1FeePolicyChange = {
      * Why, in the requester's words; empty when none was given.
      */
     reason?: string;
+    /**
+     * notices_waived_by
+     *
+     * The operator's acknowledgement of holders who could not be told (see
+     * AcknowledgeUndeliveredNotices): who took responsibility — governance detail, shown to
+     * operators and blank for everyone else.
+     */
+    notices_waived_by?: string;
+    /**
+     * notices_waived_at
+     *
+     * Unix seconds the acknowledgement was given; 0 when the notices were never waived.
+     * Public like every other moment on the change.
+     */
+    notices_waived_at?: number | string;
+    /**
+     * notices_waived_users
+     *
+     * The ids of the holders whose notice was undelivered at that moment — the holders the
+     * change binds over untold. Operators only; empty for everyone else.
+     */
+    notices_waived_users?: Array<string>;
+    /**
+     * undelivered_notices
+     *
+     * Notices of this change not yet delivered to a CURRENT holder, and how many of those the
+     * mailer has given up on — the figures a tightening waits on. Counted only while
+     * `scheduled` (0 in every other state), and shown to operators only.
+     */
+    undelivered_notices?: number;
+    /**
+     * notices_given_up
+     */
+    notices_given_up?: number;
 };
 
 /**
@@ -8662,6 +8710,35 @@ export type BankingV1ConsiliumServiceOpenValuationOverrideResponses = {
 };
 
 export type BankingV1ConsiliumServiceOpenValuationOverrideResponse = BankingV1ConsiliumServiceOpenValuationOverrideResponses[keyof BankingV1ConsiliumServiceOpenValuationOverrideResponses];
+
+export type BankingV1FeesServiceAcknowledgeUndeliveredNoticesData = {
+    body: BankingV1AcknowledgeUndeliveredNoticesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/AcknowledgeUndeliveredNotices';
+};
+
+export type BankingV1FeesServiceAcknowledgeUndeliveredNoticesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceAcknowledgeUndeliveredNoticesError = BankingV1FeesServiceAcknowledgeUndeliveredNoticesErrors[keyof BankingV1FeesServiceAcknowledgeUndeliveredNoticesErrors];
+
+export type BankingV1FeesServiceAcknowledgeUndeliveredNoticesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeePolicyChange;
+};
+
+export type BankingV1FeesServiceAcknowledgeUndeliveredNoticesResponse = BankingV1FeesServiceAcknowledgeUndeliveredNoticesResponses[keyof BankingV1FeesServiceAcknowledgeUndeliveredNoticesResponses];
 
 export type BankingV1FeesServiceCancelFeePolicyChangeData = {
     body: BankingV1CancelFeePolicyChangeRequest;

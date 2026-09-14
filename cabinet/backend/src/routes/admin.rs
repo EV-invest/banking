@@ -400,6 +400,23 @@ pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar
 	Ok(Json(change.into()))
 }
 
+/// `POST /api/admin/fees/policy/acknowledge-notices` — take responsibility for the holders
+/// of a scheduled change who could not be told, so a tightening binds over them. The hub
+/// decides who may (the requester or an owner) and whether there is anything to acknowledge.
+pub async fn acknowledge_undelivered_notices(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FeePolicyChange>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(change_id)) = (required(&v, "service"), required(&v, "change_id")) else {
+		return Err(ApiError::BadRequest("service and change_id are required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let change = st.grpc.acknowledge_undelivered_notices(&token, &service, &change_id).await?;
+	Ok(Json(change.into()))
+}
+
 /// `GET /api/admin/fees/changes?service=` — a fund's whole history of terms, newest first.
 pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::FeePolicyChangeList>, ApiError> {
 	require_admin(&st, &jar).await?;
@@ -1194,13 +1211,22 @@ mod admin_route_tests {
 			scheduled_at: 1_750_000_100,
 			applied_at: 0,
 			reason: reason.into(),
+			notices_waived_by: String::new(),
+			notices_waived_at: 0,
+			notices_waived_users: Vec::new(),
+			undelivered_notices: 0,
+			notices_given_up: 0,
 		}
 	}
+
+	/// The stub's one holder the identity plane cannot reach.
+	const UNTOLD_HOLDER: &str = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
 	#[derive(Default)]
 	struct Seen {
 		set_policy: Option<bk::ScheduleFeePolicyRequest>,
 		cancel_change: Option<bk::CancelFeePolicyChangeRequest>,
+		acknowledge: Option<bk::AcknowledgeUndeliveredNoticesRequest>,
 		settle: Option<bk::SettleFeeSharesRequest>,
 		set_kyc: Option<cc::SetKycLevelRequest>,
 		set_access: Option<bk::SetAllocationAccessRequest>,
@@ -1438,6 +1464,20 @@ mod admin_route_tests {
 			Ok(GrpcResponse::new(stub_change(
 				&req.change_id, "cancelled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, "",
 			)))
+		}
+
+		async fn acknowledge_undelivered_notices(&self, request: GrpcRequest<bk::AcknowledgeUndeliveredNoticesRequest>) -> Result<GrpcResponse<bk::FeePolicyChange>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().acknowledge = Some(req.clone());
+			Ok(GrpcResponse::new(bk::FeePolicyChange {
+				notices_waived_by: "user-1".into(),
+				notices_waived_at: 1_750_050_000,
+				notices_waived_users: vec![UNTOLD_HOLDER.into()],
+				undelivered_notices: 1,
+				notices_given_up: 1,
+				..stub_change(&req.change_id, "scheduled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, "")
+			}))
 		}
 
 		async fn list_fee_policy_changes(&self, request: GrpcRequest<bk::ListFeePolicyChangesRequest>) -> Result<GrpcResponse<bk::FeePolicyChangeList>, Status> {
@@ -1728,6 +1768,7 @@ mod admin_route_tests {
 			("GET", "/api/admin/fees/changes?service=quy-nhon", None),
 			("POST", "/api/admin/fees/policy", Some("{}")),
 			("POST", "/api/admin/fees/policy/cancel", Some("{}")),
+			("POST", "/api/admin/fees/policy/acknowledge-notices", Some("{}")),
 			("POST", "/api/admin/fees/settle", Some("{}")),
 		] {
 			let mut builder = Request::builder().method(method).uri(uri);
@@ -1949,6 +1990,37 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::OK);
 		assert_eq!(response["state"], "cancelled");
 		let forwarded = seen.lock().unwrap().cancel_change.clone().expect("the hub saw the cancel");
+		assert_eq!(forwarded.service, SERVICE);
+		assert_eq!(forwarded.change_id, CHANGE_ID);
+	}
+
+	/// Taking responsibility for untold holders: the fund and the change id are forwarded,
+	/// and the answer carries the acknowledgement — who, when, whom for — and the figures
+	/// the pending card reads, exactly as the hub states them.
+	#[tokio::test]
+	async fn acknowledging_undelivered_notices_forwards_the_change_and_reads_the_waiver_back() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy/acknowledge-notices", Some(r#"{"service":"quy-nhon"}"#), true)).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST, "an acknowledgement without a change id is refused before the hub is called");
+		assert!(seen.lock().unwrap().acknowledge.is_none());
+
+		let body = format!(r#"{{"service":"quy-nhon","change_id":"{CHANGE_ID}"}}"#);
+		let (status, _) = send(&app, signed("POST", "/api/admin/fees/policy/acknowledge-notices", Some(&body), false)).await;
+		assert_eq!(status, StatusCode::FORBIDDEN, "the CSRF double-submit guards the acknowledgement as it guards every write");
+		assert!(seen.lock().unwrap().acknowledge.is_none());
+
+		let (status, response) = send(&app, signed("POST", "/api/admin/fees/policy/acknowledge-notices", Some(&body), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(response["state"], "scheduled");
+		assert_eq!(response["notices_waived_by"], "user-1");
+		assert_eq!(response["notices_waived_at"], "1750050000");
+		assert_eq!(response["notices_waived_users"], serde_json::json!([UNTOLD_HOLDER]));
+		assert_eq!(response["undelivered_notices"], 1);
+		assert_eq!(response["notices_given_up"], 1);
+		let forwarded = seen.lock().unwrap().acknowledge.clone().expect("the hub saw the acknowledgement");
 		assert_eq!(forwarded.service, SERVICE);
 		assert_eq!(forwarded.change_id, CHANGE_ID);
 	}
