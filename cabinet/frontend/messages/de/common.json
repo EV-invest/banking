@@ -4159,17 +4159,25 @@
     "en": "Available",
     "t": "Verfügbar"
   },
+  "tips.wallet.balance.in-orders.body": {
+    "en": "USDT set aside by your resting buy orders on the book. Still yours: it comes back to available when an order is cancelled, and turns into units when it fills.",
+    "t": "USDT, die Ihre im Buch ruhenden Kauforders reservieren. Weiterhin Ihres: Es wird beim Stornieren einer Order wieder verfügbar und wird bei Ausführung zu Anteilen."
+  },
+  "tips.wallet.balance.in-orders.title": {
+    "en": "In orders",
+    "t": "In Orders"
+  },
   "tips.wallet.balance.invested.body": {
-    "en": "Held in fund units, valued at the current NAV.",
-    "t": "In Fondsanteilen gehalten, bewertet zum aktuellen NAV."
+    "en": "Held in fund units, valued at the current NAV — units offered for sale on the book included.",
+    "t": "In Fondsanteilen gehalten, bewertet zum aktuellen NAV — einschließlich der im Buch zum Verkauf gestellten Anteile."
   },
   "tips.wallet.balance.invested.title": {
     "en": "Invested",
     "t": "Investiert"
   },
   "tips.wallet.balance.model.body": {
-    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + Invested + Pending withdrawal.",
-    "t": "Sie haben ein einziges USDT-Guthaben — Netzwerke sind nur der Weg, auf dem Sie ein- und auszahlen. Diese Karte teilt es auf: Gesamt = Verfügbar + Investiert + Offene Auszahlung."
+    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + In orders + Invested + Pending withdrawal.",
+    "t": "Sie haben ein einziges USDT-Guthaben — Netzwerke sind nur der Weg, auf dem Sie ein- und auszahlen. Diese Karte teilt es auf: Gesamt = Verfügbar + In Orders + Investiert + Offene Auszahlung."
   },
   "tips.wallet.balance.model.title": {
     "en": "One balance, many rails",
@@ -4543,6 +4551,10 @@
     "en": "Partially filled, rest cancelled",
     "t": "Teilweise ausgeführt, Rest storniert"
   },
+  "trade.state.unfilledCancelled": {
+    "en": "Not filled, cancelled",
+    "t": "Nicht ausgeführt, storniert"
+  },
   "trade.state.partiallyFilled": {
     "en": "Partially filled",
     "t": "Teilweise ausgeführt"
@@ -4854,6 +4866,14 @@
   "wallet.chip.availShort": {
     "en": "AVAIL",
     "t": "VERFÜG."
+  },
+  "wallet.chip.inOrders": {
+    "en": "IN ORDERS",
+    "t": "IN ORDERS"
+  },
+  "wallet.chip.inOrdersShort": {
+    "en": "ORDERS",
+    "t": "ORDERS"
   },
   "wallet.chip.invest": {
     "en": "INVESTED",

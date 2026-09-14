@@ -15,6 +15,9 @@
 
 export type {
   BankingV1Wallet as Wallet,
+  // Four terms sum to `total`: `available` + `in_orders` (cash escrowed by resting buy
+  // orders on the book) + `invested` (units at NAV, those escrowed by resting sells
+  // included) + `pending_withdrawal`. A surface that shows the split shows all four.
   BankingV1Balance as Balance,
   BankingV1NetworkWithdrawable as NetworkWithdrawable,
   BankingV1DepositAddress as DepositAddress,

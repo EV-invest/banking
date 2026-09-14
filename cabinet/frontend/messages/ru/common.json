@@ -5059,17 +5059,25 @@
     "en": "Available",
     "t": "Доступно"
   },
+  "tips.wallet.balance.in-orders.body": {
+    "en": "USDT set aside by your resting buy orders on the book. Still yours: it comes back to available when an order is cancelled, and turns into units when it fills.",
+    "t": "USDT, зарезервированные вашими заявками на покупку, стоящими в книге. Они по-прежнему ваши: вернутся в доступные при отмене заявки и превратятся в паи при исполнении."
+  },
+  "tips.wallet.balance.in-orders.title": {
+    "en": "In orders",
+    "t": "В заявках"
+  },
   "tips.wallet.balance.invested.body": {
-    "en": "Held in fund units, valued at the current NAV.",
-    "t": "Размещено в паях фондов и оценено по текущему NAV."
+    "en": "Held in fund units, valued at the current NAV — units offered for sale on the book included.",
+    "t": "Размещено в паях фондов и оценено по текущему NAV — включая паи, выставленные на продажу в книге."
   },
   "tips.wallet.balance.invested.title": {
     "en": "Invested",
     "t": "Инвестировано"
   },
   "tips.wallet.balance.model.body": {
-    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + Invested + Pending withdrawal.",
-    "t": "У вас единый баланс USDT — сети лишь способ пополнения и вывода. Эта карточка раскладывает его так: всего = доступно + инвестировано + в ожидании вывода."
+    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + In orders + Invested + Pending withdrawal.",
+    "t": "У вас единый баланс USDT — сети лишь способ пополнения и вывода. Эта карточка раскладывает его так: всего = доступно + в заявках + инвестировано + в ожидании вывода."
   },
   "tips.wallet.balance.model.title": {
     "en": "One balance, many rails",
@@ -5443,6 +5451,10 @@
     "en": "Partially filled, rest cancelled",
     "t": "Частично исполнена, остаток отменён"
   },
+  "trade.state.unfilledCancelled": {
+    "en": "Not filled, cancelled",
+    "t": "Не исполнена, отменена"
+  },
   "trade.state.partiallyFilled": {
     "en": "Partially filled",
     "t": "Частично исполнена"
@@ -5754,6 +5766,14 @@
   "wallet.chip.availShort": {
     "en": "AVAIL",
     "t": "ДОСТ."
+  },
+  "wallet.chip.inOrders": {
+    "en": "IN ORDERS",
+    "t": "В ЗАЯВКАХ"
+  },
+  "wallet.chip.inOrdersShort": {
+    "en": "ORDERS",
+    "t": "ЗАЯВКИ"
   },
   "wallet.chip.invest": {
     "en": "INVESTED",
