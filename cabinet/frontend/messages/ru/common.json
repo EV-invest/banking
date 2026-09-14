@@ -1572,8 +1572,8 @@
     "t": "AUM / паи"
   },
   "admin.valuation.navGuardNote": {
-    "en": "NAV-move guard — a post is rejected if NAV moves more than 50% from the last mark, unless override is on.",
-    "t": "Защита от скачка NAV — публикация отклоняется, если NAV отклоняется более чем на 50% от последней оценки, пока не включён обход защиты."
+    "en": "NAV-move guard — a post is refused if the NAV moves more than 50% from the last mark or from the mark of a week ago, so stepping there in smaller posts is refused too. Nothing overrides it: a larger move is put to the owners' vote instead.",
+    "t": "Защита от скачка NAV — публикация отклоняется, если NAV отклоняется более чем на 50% от последней оценки или от оценки недельной давности, поэтому подойти к цифре несколькими шагами тоже не выйдет. Обхода нет: больший сдвиг выносится на голосование владельцев."
   },
   "admin.valuation.noAllocations": {
     "en": "No allocations registered",
@@ -1583,13 +1583,9 @@
     "en": "No units outstanding — NAV is {formula}, so it is undefined until someone subscribes. The fund prices at the seed NAV 1.0 until the first subscription; there is nothing to mark yet.",
     "t": "Паёв в обращении нет — NAV равен {formula}, поэтому он не определён, пока никто не подписался. До первой подписки фонд оценивается по начальному NAV 1.0; оценивать пока нечего."
   },
-  "admin.valuation.overrideGuard": {
-    "en": "Override guard",
-    "t": "Обход защиты"
-  },
-  "admin.valuation.overrideGuardHint": {
-    "en": "Allow a >50% NAV move",
-    "t": "Разрешить изменение NAV более чем на 50%"
+  "admin.valuation.openConsilium": {
+    "en": "Open the consilium",
+    "t": "Открыть консилиум"
   },
   "admin.valuation.pickAFund": {
     "en": "Pick a fund above to see and resize its authorised unit supply.",
@@ -1598,6 +1594,22 @@
   "admin.valuation.postValuation": {
     "en": "Post valuation",
     "t": "Опубликовать оценку"
+  },
+  "admin.valuation.propose": {
+    "en": "Propose to the owners",
+    "t": "Предложить владельцам"
+  },
+  "admin.valuation.proposeHint": {
+    "en": "A move past the guard is put to the owners' vote instead of being posted.",
+    "t": "Сдвиг за пределами защиты выносится на голосование владельцев вместо публикации."
+  },
+  "admin.valuation.proposedBody": {
+    "en": "Nothing is marked yet. Every owner has been emailed a link; once more than half of them agree, {service} is marked at {aum} USDT. The live tally is in the consilium.",
+    "t": "Оценка пока не записана. Каждому владельцу отправлена ссылка; когда согласится больше половины, {service} будет оценён в {aum} USDT. Текущий подсчёт — в консилиуме."
+  },
+  "admin.valuation.proposedTitle": {
+    "en": "Proposed to the owners",
+    "t": "Предложено владельцам"
   },
   "admin.valuation.queueEmpty": {
     "en": "The redemption queue is empty.",
@@ -1970,6 +1982,46 @@
   "approval.unavailableTitle": {
     "en": "We can't show this request",
     "t": "Не удаётся показать этот запрос"
+  },
+  "approval.valuation.approve": {
+    "en": "Approve this mark",
+    "t": "Подтвердить оценку"
+  },
+  "approval.valuation.aum": {
+    "en": "Proposed AUM",
+    "t": "Предлагаемый AUM"
+  },
+  "approval.valuation.decided.approvedTitle": {
+    "en": "You approved this mark",
+    "t": "Вы подтвердили эту оценку"
+  },
+  "approval.valuation.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the fund is marked once enough owners have agreed.",
+    "t": "Ваш ответ записан. Больше здесь делать нечего — фонд будет оценён, когда согласится достаточно владельцев."
+  },
+  "approval.valuation.decided.rejectedTitle": {
+    "en": "You rejected this mark",
+    "t": "Вы отклонили эту оценку"
+  },
+  "approval.valuation.executes": {
+    "en": "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.",
+    "t": "Если решение пройдёт, фонд будет оценён в этот AUM, что бы ни сказала защита от скачка NAV, а погашения в очереди исполнятся по получившемуся NAV."
+  },
+  "approval.valuation.lead": {
+    "en": "{initiator} has asked to mark a fund at a value the NAV-move guard refuses. A mark past the guard is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} просит оценить фонд в значение, которое защита от скачка NAV отклоняет. Оценка за пределами защиты никогда не решается одним человеком, поэтому нужно согласие владельцев."
+  },
+  "approval.valuation.payloadHashHint": {
+    "en": "The fingerprint is taken over the product and the AUM above. It is checked again before the mark is recorded, so a request cannot be edited after you have agreed to it.",
+    "t": "Отпечаток считается по продукту и AUM выше. Он проверяется снова перед записью оценки, поэтому запрос нельзя изменить после вашего согласия."
+  },
+  "approval.valuation.product": {
+    "en": "Product",
+    "t": "Продукт"
+  },
+  "approval.valuation.title": {
+    "en": "Approve a NAV mark",
+    "t": "Подтверждение оценки NAV"
   },
   "approval.votingAs": {
     "en": "You are answering as {email}.",
@@ -2352,8 +2404,8 @@
     "t": "Прошлые запросы"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
-    "t": "Движение денег фонда — выплата дохода или платёж между двумя сторонами платформы. По одному запросу за раз и никогда по решению одного человека."
+    "en": "Moving money the fund owns — a revenue payout or a payment order — and marking a fund past the NAV-move guard. One request at a time, and never one person's decision.",
+    "t": "Движение денег фонда — выплата дохода или платёж — и оценка фонда за пределами защиты от скачка NAV. По одному запросу за раз и никогда по решению одного человека."
   },
   "consilium.payout.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",
@@ -2786,6 +2838,18 @@
   "consilium.unavailable.title": {
     "en": "The owners' room could not be loaded",
     "t": "Комнату владельцев не удалось загрузить"
+  },
+  "consilium.valuation.executes": {
+    "en": "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.",
+    "t": "Если решение пройдёт, фонд будет оценён в этот AUM, что бы ни сказала защита от скачка NAV, а погашения в очереди исполнятся по получившемуся NAV."
+  },
+  "consilium.valuation.mark": {
+    "en": "NAV mark",
+    "t": "Оценка NAV"
+  },
+  "consilium.valuation.product": {
+    "en": "Product",
+    "t": "Продукт"
   },
   "consilium.vote.keep": {
     "en": "To keep",
@@ -4620,20 +4684,20 @@
     "t": "Расчётный NAV / пай"
   },
   "tips.admin.valuation.post.nav-guard.body": {
-    "en": "A post is rejected if the NAV moves more than 50% from the last mark, unless Override guard is on.",
-    "t": "Публикация отклоняется, если NAV отклоняется более чем на 50% от последней оценки, пока не включён обход защиты."
+    "en": "A post is refused if the NAV moves more than 50% from the last mark or from the mark of a week ago — stepping there in smaller posts is refused too. There is no override: a larger move is proposed to the owners and recorded only if their vote carries.",
+    "t": "Публикация отклоняется, если NAV отклоняется более чем на 50% от последней оценки или от оценки недельной давности — подойти к цифре шагами тоже не выйдет. Обхода нет: больший сдвиг предлагается владельцам и записывается, только если голосование прошло."
   },
   "tips.admin.valuation.post.nav-guard.title": {
     "en": "NAV-move guard",
     "t": "Защита от скачка NAV"
   },
-  "tips.admin.valuation.post.override.body": {
-    "en": "Bypasses the NAV-move guard so a post that moves NAV more than 50% is accepted and settles redemptions at that mark. A fat-fingered AUM then over- or under-pays irreversibly.",
-    "t": "Обходит защиту от скачка NAV: публикация с изменением более 50% принимается, и погашения исполняются по этой оценке. Опечатка в AUM тогда необратимо приведёт к переплате или недоплате."
+  "tips.admin.valuation.post.propose.body": {
+    "en": "Opens a consilium instead of posting. The owners answer from their mailboxes; if more than half agree, the fund is marked at this AUM regardless of the NAV-move guard. Nothing changes until then.",
+    "t": "Открывает консилиум вместо публикации. Владельцы отвечают из своей почты; если согласится больше половины, фонд будет оценён в этот AUM независимо от защиты от скачка NAV. До тех пор ничего не меняется."
   },
-  "tips.admin.valuation.post.override.title": {
-    "en": "Override guard",
-    "t": "Обход защиты"
+  "tips.admin.valuation.post.propose.title": {
+    "en": "Propose to the owners",
+    "t": "Предложить владельцам"
   },
   "tips.admin.valuation.queue.est-cash.body": {
     "en": "A preview only — approximately units × current NAV. The actual payout settles at the settle-time NAV, not this figure.",
