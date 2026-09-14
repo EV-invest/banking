@@ -202,6 +202,13 @@ export type AllocationAccessLevel = "hidden" | "view" | "invest";
  *  Mirrors `contracts::allocation::access::GRANTABLE`. */
 export type AllocationGrantLevel = "view" | "invest";
 
+/** What stands behind a product's units. `cash` — paid for into the fund's claim, and a
+ *  redemption pays out of it. `in_kind` — the units stand for an asset the holders own
+ *  off-platform; the fund holds no cash for them, so `Redeem` is refused (412) and holders
+ *  exit through the book. The hub flips a product to `in_kind` on its first in-kind mint;
+ *  only `SetAllocationBacking` takes it back. A registration lands on `cash`. */
+export type AllocationBacking = "cash" | "in_kind";
+
 // ── fees ─────────────────────────────────────────────────────────────────────
 
 /** The five-field schedule a fund charges by — one statement, never patched a leg at a
@@ -362,6 +369,14 @@ export interface Allocation {
    * optionality caveat as `access`.
    */
   caller_access?: AllocationAccessLevel;
+  /**
+   * backing
+   *
+   * Optional on READ for the same reason `access` is — a persisted catalog object may
+   * predate the field. Absent reads as `cash`, the hub's own default for an unset product:
+   * `backingOf` in `views/admin/allocations/lib/backing.ts` is the one place that folds it.
+   */
+  backing?: AllocationBacking;
 }
 
 export interface AllocationList {
@@ -394,10 +409,12 @@ export type UnitHolderKind = "user" | "company";
  *  taken straight after the POST still shows the supply as it was. */
 export type UnitIssuanceState = "queued" | "applied";
 
-/** Where the units came from: `mint` (`/allocations/issue` — the supply grew by `units`)
- *  or `company` (`/allocations/transfer-stake` — moved out of the company's stake, the
- *  supply unchanged). Always populated; a row that predates the field reads as `mint`. */
-export type UnitIssuanceSource = "mint" | "company";
+/** Where the units came from: `mint` (`/allocations/issue` — the supply grew by `units`),
+ *  `company` (`/allocations/transfer-stake` — moved out of the company's stake, the
+ *  supply unchanged) or `retire` (`/allocations/retire` — burned out of a holder, the
+ *  supply SHRANK by `units`). Always populated; a row that predates the field reads as
+ *  `mint`. */
+export type UnitIssuanceSource = "mint" | "company" | "retire";
 
 /** One in-kind issuance — a mint or a hand-over of the company's stake — as the hub
  *  recorded it. */
@@ -436,6 +453,24 @@ export interface TransferStakeBody {
    *  retry contract: one key per submission, the same key on a retry of it. */
   idempotency_key: string;
 }
+
+/** The retirement body, exactly as the BFF reads it (`POST /api/admin/allocations/
+ *  retire`). The mirror of a mint: units are burned out of ONE holder — an investor or
+ *  the company — and the supply shrinks by them; no cash moves either way. `cost_basis`
+ *  follows the mint's rule (absent = `units × NAV`, an empty string is malformed).
+ *  `force` is the operator's explicit override to burn out of a live (draft or open)
+ *  product — omitted, not `false`, when the product is closed and needs none.
+ *  `views/admin/allocations/lib/retire.ts` is the one place that builds it. */
+export type RetireUnitsBody = {
+  service: string;
+  /** Decimal units, > 0, at most what the holder has available. */
+  units: string;
+  /** Decimal USDT of book value written off; omitted = `units × NAV`. */
+  cost_basis?: string;
+  /** 1..64 chars, in the same per-product key space as `/allocations/issue`. */
+  idempotency_key: string;
+  force?: true;
+} & ({ user_id: string; company?: never } | { company: true; user_id?: never });
 
 /** A product's settled supply by holder class, all decimal units. `investor_units` is
  *  `units_outstanding − company_units − fee_units`; the supply invariant makes the

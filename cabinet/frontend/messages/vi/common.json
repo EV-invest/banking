@@ -27,6 +27,42 @@
     "en": "View only",
     "t": "Chỉ xem"
   },
+  "admin.alloc.backing.cash": {
+    "en": "Cash-backed",
+    "t": "Bảo chứng bằng tiền mặt"
+  },
+  "admin.alloc.backing.cashHint": {
+    "en": "Units were paid for into the fund's cash, and a redemption pays out of it at NAV.",
+    "t": "Các đơn vị đã được thanh toán vào tiền mặt của quỹ, và việc rút được chi trả từ đó theo NAV."
+  },
+  "admin.alloc.backing.confirmCash": {
+    "en": "Mark {service} as cash-backed. Redeem will pay holders out of the fund's cash at NAV — make sure that cash is actually there.",
+    "t": "Đánh dấu {service} là bảo chứng bằng tiền mặt. Redeem sẽ chi trả cho người nắm giữ từ tiền mặt của quỹ theo NAV — hãy chắc chắn số tiền đó thực sự có."
+  },
+  "admin.alloc.backing.confirmInKind": {
+    "en": "Mark {service} as in-kind. Redeem will be refused, and holders exit by selling their units on the book.",
+    "t": "Đánh dấu {service} là hiện vật. Redeem sẽ bị từ chối, và người nắm giữ thoát bằng cách bán đơn vị trên sổ lệnh."
+  },
+  "admin.alloc.backing.inKind": {
+    "en": "In kind",
+    "t": "Hiện vật"
+  },
+  "admin.alloc.backing.inKindHint": {
+    "en": "Units stand for an asset the holders own off-platform. The fund holds no cash for them, so Redeem is refused and holders exit through the book.",
+    "t": "Các đơn vị đại diện cho một tài sản mà người nắm giữ sở hữu ngoài nền tảng. Quỹ không giữ tiền mặt cho chúng, nên Redeem bị từ chối và lối thoát là qua sổ lệnh."
+  },
+  "admin.alloc.backing.markCash": {
+    "en": "Mark as cash-backed",
+    "t": "Đánh dấu là bảo chứng bằng tiền mặt"
+  },
+  "admin.alloc.backing.markInKind": {
+    "en": "Mark as in-kind",
+    "t": "Đánh dấu là hiện vật"
+  },
+  "admin.alloc.backing.title": {
+    "en": "Backing",
+    "t": "Bảo chứng"
+  },
   "admin.alloc.book.action": {
     "en": "Book",
     "t": "Sổ lệnh"
@@ -271,6 +307,10 @@
     "en": "Yield",
     "t": "Lợi suất"
   },
+  "admin.alloc.issuance.source.retire": {
+    "en": "retired",
+    "t": "đã thu hồi"
+  },
   "admin.alloc.issue.action": {
     "en": "Issue",
     "t": "Phát hành"
@@ -362,6 +402,54 @@
   "admin.alloc.issuance.source.mint": {
     "en": "minted",
     "t": "đã phát hành"
+  },
+  "admin.alloc.retire.action": {
+    "en": "Retire units",
+    "t": "Thu hồi đơn vị"
+  },
+  "admin.alloc.retire.closeFirst": {
+    "en": "Close the product first — units are retired out of a wound-down product.",
+    "t": "Hãy đóng sản phẩm trước — đơn vị được thu hồi khỏi một sản phẩm đã ngừng hoạt động."
+  },
+  "admin.alloc.retire.confirm": {
+    "en": "Retire {units} units from {holder} — the supply shrinks. No cash moves.",
+    "t": "Thu hồi {units} đơn vị từ {holder} — nguồn cung giảm. Không có tiền dịch chuyển."
+  },
+  "admin.alloc.retire.costBasisHint": {
+    "en": "Optional — the book value written off, defaults to units × NAV at the current mark.",
+    "t": "Không bắt buộc — giá trị sổ sách được xóa, mặc định là đơn vị × NAV theo định giá hiện tại."
+  },
+  "admin.alloc.retire.force": {
+    "en": "Retire anyway (force)",
+    "t": "Vẫn thu hồi (force)"
+  },
+  "admin.alloc.retire.forceConfirm": {
+    "en": "Forced: the product is not closed.",
+    "t": "Bắt buộc: sản phẩm chưa đóng."
+  },
+  "admin.alloc.retire.forceWarning": {
+    "en": "The product is still live — units will be burned out of it while it accepts money. The hub records the override.",
+    "t": "Sản phẩm vẫn đang hoạt động — đơn vị sẽ bị hủy trong khi nó còn nhận tiền. Hub ghi lại việc ghi đè này."
+  },
+  "admin.alloc.retire.investorHint": {
+    "en": "Up to what the investor holds — the hub refuses more, and says so.",
+    "t": "Tối đa bằng số nhà đầu tư đang giữ — hub từ chối nếu nhiều hơn và nêu lý do."
+  },
+  "admin.alloc.retire.resultApplied": {
+    "en": "{units} units retired from {holder}.",
+    "t": "Đã thu hồi {units} đơn vị từ {holder}."
+  },
+  "admin.alloc.retire.resultQueued": {
+    "en": "{units} units from {holder} queued for retirement — the relay posts the burn shortly, and the split below follows.",
+    "t": "{units} đơn vị từ {holder} đã xếp hàng thu hồi — relay sẽ ghi việc hủy sớm, và phần chia bên dưới sẽ cập nhật theo."
+  },
+  "admin.alloc.retire.review": {
+    "en": "Review retirement",
+    "t": "Xem lại thu hồi"
+  },
+  "admin.alloc.retire.submit": {
+    "en": "Retire",
+    "t": "Thu hồi"
   },
   "admin.alloc.transfer.action": {
     "en": "Transfer company stake",
@@ -2699,6 +2787,14 @@
     "en": "Awaiting settlement",
     "t": "Chờ tất toán"
   },
+  "invest.backing.inKind": {
+    "en": "In kind",
+    "t": "Hiện vật"
+  },
+  "invest.backing.inKindNote": {
+    "en": "Units of this product represent an asset held off-platform. The fund holds no cash for them, so they are sold on the book rather than redeemed.",
+    "t": "Đơn vị của sản phẩm này đại diện cho một tài sản được giữ ngoài nền tảng. Quỹ không giữ tiền mặt cho chúng, nên chúng được bán trên sổ lệnh thay vì rút."
+  },
   "invest.badge.locked": {
     "en": "Locked",
     "t": "Bị khóa"
@@ -2890,6 +2986,10 @@
   "invest.redeemTimingNote": {
     "en": "Your units are reserved the moment you submit, but the cash is priced when the redemption settles — not now. A figure shown here is an estimate at today's NAV.",
     "t": "Đơn vị quỹ của bạn được giữ ngay khi bạn gửi lệnh, nhưng tiền chỉ được định giá khi lệnh hoàn vốn tất toán — không phải bây giờ. Con số hiển thị ở đây là ước tính theo NAV hôm nay."
+  },
+  "invest.redeemUnbacked": {
+    "en": "Units of this product are not backed by fund cash — sell them on the book instead of redeeming.",
+    "t": "Đơn vị của sản phẩm này không được bảo chứng bằng tiền mặt của quỹ — hãy bán chúng trên sổ lệnh thay vì rút."
   },
   "invest.remainingCapacity": {
     "en": "Remaining capacity",

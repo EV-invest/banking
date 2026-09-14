@@ -9,7 +9,7 @@ import test from "node:test";
 
 import type { Allocation, Position } from "../../../shared/contracts/index.ts";
 
-import { blockedReasonKey, isClosed, isLocked, selectProduct, type ProductReads } from "./product.ts";
+import { blockedReasonKey, isClosed, isInKind, isLocked, selectProduct, type ProductReads } from "./product.ts";
 
 const allocation = (over: Partial<Allocation> = {}): Allocation => ({
   service: "arb",
@@ -93,4 +93,21 @@ test("any other failure falls back to what the catalog and the positions know", 
   const held = selectProduct("arb", reads({ detail: failed, positions: { data: [position], isLoading: false } }));
   assert.equal(held?.allocation, null);
   assert.equal(selectProduct("arb", reads({ detail: failed })), null);
+});
+
+test("a product is in kind only when its allocation says so; absent and held-only read as cash-backed", () => {
+  const detailed = (backing?: "cash" | "in_kind") => selectProduct("arb", reads({ detail: { data: allocation(backing ? { backing } : {}), error: null, isLoading: false }, positions: { data: [position], isLoading: false } }));
+  const inKind = detailed("in_kind");
+  assert.ok(inKind);
+  assert.equal(isInKind(inKind), true);
+  const cash = detailed("cash");
+  assert.ok(cash);
+  assert.equal(isInKind(cash), false);
+  // A catalog object persisted before the field existed carries no backing at all.
+  const unset = detailed();
+  assert.ok(unset);
+  assert.equal(isInKind(unset), false);
+  const heldOnly = selectProduct("arb", reads({ detail: { data: undefined, error: notFound, isLoading: false }, positions: { data: [position], isLoading: false } }));
+  assert.ok(heldOnly);
+  assert.equal(isInKind(heldOnly), false);
 });

@@ -27,6 +27,42 @@
     "en": "View only",
     "t": "Lecture seule"
   },
+  "admin.alloc.backing.cash": {
+    "en": "Cash-backed",
+    "t": "Adossé au cash"
+  },
+  "admin.alloc.backing.cashHint": {
+    "en": "Units were paid for into the fund's cash, and a redemption pays out of it at NAV.",
+    "t": "Les parts ont été payées dans la trésorerie du fonds, et un rachat est réglé à partir d'elle à la VL."
+  },
+  "admin.alloc.backing.confirmCash": {
+    "en": "Mark {service} as cash-backed. Redeem will pay holders out of the fund's cash at NAV — make sure that cash is actually there.",
+    "t": "Marquer « {service} » comme adossé au cash. Redeem paiera les porteurs à partir de la trésorerie du fonds à la VL — assurez-vous que cette trésorerie existe réellement."
+  },
+  "admin.alloc.backing.confirmInKind": {
+    "en": "Mark {service} as in-kind. Redeem will be refused, and holders exit by selling their units on the book.",
+    "t": "Marquer « {service} » comme en nature. Redeem sera refusé, et les porteurs sortent en vendant leurs parts sur le carnet."
+  },
+  "admin.alloc.backing.inKind": {
+    "en": "In kind",
+    "t": "En nature"
+  },
+  "admin.alloc.backing.inKindHint": {
+    "en": "Units stand for an asset the holders own off-platform. The fund holds no cash for them, so Redeem is refused and holders exit through the book.",
+    "t": "Les parts représentent un actif que les porteurs détiennent hors plateforme. Le fonds ne détient pas de cash pour elles : Redeem est refusé et la sortie passe par le carnet."
+  },
+  "admin.alloc.backing.markCash": {
+    "en": "Mark as cash-backed",
+    "t": "Marquer comme adossé au cash"
+  },
+  "admin.alloc.backing.markInKind": {
+    "en": "Mark as in-kind",
+    "t": "Marquer comme en nature"
+  },
+  "admin.alloc.backing.title": {
+    "en": "Backing",
+    "t": "Adossement"
+  },
   "admin.alloc.book.action": {
     "en": "Book",
     "t": "Carnet"
@@ -271,6 +307,10 @@
     "en": "Yield",
     "t": "Rendement"
   },
+  "admin.alloc.issuance.source.retire": {
+    "en": "retired",
+    "t": "retirées"
+  },
   "admin.alloc.issue.action": {
     "en": "Issue",
     "t": "Émettre"
@@ -362,6 +402,54 @@
   "admin.alloc.issuance.source.mint": {
     "en": "minted",
     "t": "émis"
+  },
+  "admin.alloc.retire.action": {
+    "en": "Retire units",
+    "t": "Retirer des parts"
+  },
+  "admin.alloc.retire.closeFirst": {
+    "en": "Close the product first — units are retired out of a wound-down product.",
+    "t": "Fermez d'abord le produit — les parts se retirent d'un produit en liquidation."
+  },
+  "admin.alloc.retire.confirm": {
+    "en": "Retire {units} units from {holder} — the supply shrinks. No cash moves.",
+    "t": "Retirer {units} parts de {holder} — l'encours diminue. Aucun mouvement de cash."
+  },
+  "admin.alloc.retire.costBasisHint": {
+    "en": "Optional — the book value written off, defaults to units × NAV at the current mark.",
+    "t": "Facultatif — la valeur comptable passée en perte, par défaut parts × VL à la valorisation courante."
+  },
+  "admin.alloc.retire.force": {
+    "en": "Retire anyway (force)",
+    "t": "Retirer quand même (force)"
+  },
+  "admin.alloc.retire.forceConfirm": {
+    "en": "Forced: the product is not closed.",
+    "t": "Forcé : le produit n'est pas fermé."
+  },
+  "admin.alloc.retire.forceWarning": {
+    "en": "The product is still live — units will be burned out of it while it accepts money. The hub records the override.",
+    "t": "Le produit est encore actif — des parts en seront détruites alors qu'il accepte de l'argent. Le hub enregistre le forçage."
+  },
+  "admin.alloc.retire.investorHint": {
+    "en": "Up to what the investor holds — the hub refuses more, and says so.",
+    "t": "Au plus ce que l'investisseur détient — le hub refuse davantage et en donne la raison."
+  },
+  "admin.alloc.retire.resultApplied": {
+    "en": "{units} units retired from {holder}.",
+    "t": "{units} parts retirées de {holder}."
+  },
+  "admin.alloc.retire.resultQueued": {
+    "en": "{units} units from {holder} queued for retirement — the relay posts the burn shortly, and the split below follows.",
+    "t": "{units} parts de {holder} mises en file pour retrait — le relais comptabilise la destruction sous peu, et la répartition ci-dessous suit."
+  },
+  "admin.alloc.retire.review": {
+    "en": "Review retirement",
+    "t": "Vérifier le retrait"
+  },
+  "admin.alloc.retire.submit": {
+    "en": "Retire",
+    "t": "Retirer"
   },
   "admin.alloc.transfer.action": {
     "en": "Transfer company stake",
@@ -2699,6 +2787,14 @@
     "en": "Awaiting settlement",
     "t": "En attente de règlement"
   },
+  "invest.backing.inKind": {
+    "en": "In kind",
+    "t": "En nature"
+  },
+  "invest.backing.inKindNote": {
+    "en": "Units of this product represent an asset held off-platform. The fund holds no cash for them, so they are sold on the book rather than redeemed.",
+    "t": "Les parts de ce produit représentent un actif détenu hors plateforme. Le fonds ne détient pas de cash pour elles : elles se vendent sur le carnet au lieu d'être rachetées."
+  },
   "invest.badge.locked": {
     "en": "Locked",
     "t": "Verrouillé"
@@ -2890,6 +2986,10 @@
   "invest.redeemTimingNote": {
     "en": "Your units are reserved the moment you submit, but the cash is priced when the redemption settles — not now. A figure shown here is an estimate at today's NAV.",
     "t": "Vos parts sont réservées dès la soumission, mais le montant en cash est fixé au règlement du rachat, pas maintenant. Tout chiffre affiché ici est une estimation à la VL du jour."
+  },
+  "invest.redeemUnbacked": {
+    "en": "Units of this product are not backed by fund cash — sell them on the book instead of redeeming.",
+    "t": "Les parts de ce produit ne sont pas adossées à la trésorerie du fonds — vendez-les sur le carnet au lieu de les racheter."
   },
   "invest.remainingCapacity": {
     "en": "Remaining capacity",

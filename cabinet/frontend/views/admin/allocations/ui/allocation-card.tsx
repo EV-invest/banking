@@ -9,11 +9,13 @@ import { useT } from "@evinvest/i18n/react";
 
 import { ProductIcon } from "@/shared/ui/icons/products";
 import { compactUnits } from "@/views/admin/lib/format";
+import { backingOf } from "@/views/admin/allocations/lib/backing";
 import { AllocationAccessCell } from "@/views/admin/allocations/ui/allocation-access-cell";
 import { AllocationEditor } from "@/views/admin/allocations/ui/allocation-editor";
 import type { AllocationRowProps } from "@/views/admin/allocations/ui/allocation-row";
 import { AllocationRowActions } from "@/views/admin/allocations/ui/allocation-row-actions";
 import { AllocationStateCell } from "@/views/admin/allocations/ui/allocation-state-cell";
+import { BackingBadge } from "@/views/admin/allocations/ui/backing-badge";
 
 export function AllocationCard({ row, busy, editing, onEdit, onSave, onToggle, onSetAccess, onOpenPanel }: AllocationRowProps) {
   const t = useT();
@@ -29,7 +31,10 @@ export function AllocationCard({ row, busy, editing, onEdit, onSave, onToggle, o
           {row.summary && <p className="text-xs text-muted-foreground">{row.summary}</p>}
           <p className="font-mono-tech text-xs text-muted-foreground">{row.service}</p>
         </div>
-        <AllocationStateCell state={row.state} />
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <AllocationStateCell state={row.state} />
+          <BackingBadge backing={backingOf(row)} />
+        </div>
       </div>
       <dl className="space-y-2 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">

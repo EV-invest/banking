@@ -24,6 +24,7 @@ import { Panel, PanelPresence } from "@/shared/ui/motion";
 import { formatUnits, formatUsdt, fromBaseUnits, toBaseUnits } from "@/views/invest/lib/format";
 import { cashForUnits, unitsForCash } from "@/views/invest/lib/product";
 import { TEAL_CTA } from "@/views/invest/ui/atoms";
+import { TradeLink } from "@/views/invest/ui/trade-link";
 
 export function SubscribePanel({ service, nav }: { service: string; nav: FundNav | null }) {
   const t = useT();
@@ -110,7 +111,9 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
   );
 }
 
-export function RedeemPanel({ service, position, nav }: { service: string; position: Position; nav: FundNav | null }) {
+/** `inKind`: the units are not backed by fund cash, so the hub refuses the redeem (412) —
+ *  the form says so before the click, and offers the book instead. */
+export function RedeemPanel({ service, position, nav, inKind = false }: { service: string; position: Position; nav: FundNav | null; inKind?: boolean }) {
   const t = useT();
   const [units, setUnits] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -163,14 +166,17 @@ export function RedeemPanel({ service, position, nav }: { service: string; posit
         )}
       </PanelPresence>
 
-      {/* The one genuinely surprising rule of this product, stated on the action itself. */}
-      <p className="flex items-start gap-1.5 text-xs text-main-accent-t3">
-        <Clock className="mt-0.5 size-3.5 shrink-0" />
-        <span>
-          {t("invest.redeemTimingNote")}
-          <TipAnchor anchor="invest.redeem.queue" />
-        </span>
-      </p>
+      {/* The one genuinely surprising rule of this product, stated on the action itself —
+          unless the action is refused outright, when the refusal is the rule. */}
+      {!inKind && (
+        <p className="flex items-start gap-1.5 text-xs text-main-accent-t3">
+          <Clock className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            {t("invest.redeemTimingNote")}
+            <TipAnchor anchor="invest.redeem.queue" />
+          </span>
+        </p>
+      )}
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-48 flex-1 flex-col gap-1.5">
@@ -185,11 +191,19 @@ export function RedeemPanel({ service, position, nav }: { service: string; posit
           </span>
           <Input value={units} onChange={(e) => setUnits(e.target.value)} inputMode="decimal" placeholder="0.00" className="w-full" />
         </label>
-        <Button type="button" variant="outline" disabled={submitting || estimate === null || overdraw} onClick={submit}>
+        <Button type="button" variant="outline" disabled={inKind || submitting || estimate === null || overdraw} onClick={submit}>
           {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowDownToLine className="size-4" />}
           {t("invest.redeem")}
         </Button>
       </div>
+
+      {inKind && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-main-accent-t3/30 bg-main-accent-t3/5 px-3 py-2">
+          <p className="text-xs text-main-accent-t3">{t("invest.redeemUnbacked")}</p>
+          {/* Renders only while the book is open — a closed book has no way out to offer. */}
+          <TradeLink service={service} />
+        </div>
+      )}
 
       <p className={cn("text-xs", overdraw ? "text-destructive" : "text-muted-foreground")}>
         {overdraw

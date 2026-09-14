@@ -21,11 +21,13 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
+import { BackingAction } from "@/views/admin/allocations/ui/backing-action";
 import { HoldersTable } from "@/views/admin/allocations/ui/holders-table";
 import { IssuanceResult, type IssuanceOutcome } from "@/views/admin/allocations/ui/issuance-result";
 import { IssueForm } from "@/views/admin/allocations/ui/issue-form";
 import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
 import { PinCapAction } from "@/views/admin/allocations/ui/pin-cap-action";
+import { RetireAction } from "@/views/admin/allocations/ui/retire-action";
 import { TransferStakeAction } from "@/views/admin/allocations/ui/transfer-stake-action";
 
 export function IssuancePanel({ allocation, onClose, className }: { allocation: Allocation; onClose: () => void; className?: string }) {
@@ -78,6 +80,9 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
           <p className="text-xs text-muted-foreground">{t("admin.alloc.issue.note")}</p>
         </div>
 
+        {/* Under the mint, because the mint is what flips a product to `in_kind`. */}
+        <BackingAction allocation={allocation} />
+
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.holders.title")}</p>
           <Settled loading={!read.data} skeleton={<Skeleton className="h-24 w-full" />}>
@@ -86,6 +91,7 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
                 <HoldersTable holders={read.data} />
                 <PinCapAction allocation={allocation} holders={read.data} />
                 <TransferStakeAction allocation={allocation} holders={read.data} />
+                <RetireAction allocation={allocation} holders={read.data} />
               </>
             )}
           </Settled>
