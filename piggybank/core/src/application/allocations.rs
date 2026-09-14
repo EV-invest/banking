@@ -10,10 +10,11 @@
 //! they are the gate the fund use cases run before any money moves, turning "this slug
 //! parses" into "an operator registered and opened this product — and let this
 //! investor in". The two are asymmetric on purpose: the subscribe gate consults the
-//! caller's access, the redeem gate never does.
+//! caller's access, the redeem gate never does — it consults the product's *backing*
+//! instead, because a redemption pays cash the fund has to actually hold.
 
 use domain::{
-	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
+	allocations::{Allocation, AllocationAccess, AllocationBacking, AllocationIcon, AllocationId},
 	balance::ServiceId,
 	error::DomainError,
 	money::Shares,
@@ -60,6 +61,13 @@ pub async fn close(allocations: &dyn AllocationRegistry, service: &ServiceId) ->
 /// untouched: this decides who the product deals with by default, not whether it deals.
 pub async fn set_access(allocations: &dyn AllocationRegistry, service: &ServiceId, access: AllocationAccess) -> Result<Allocation, DomainError> {
 	allocations.set_access(service, access).await
+}
+
+/// Declare what stands behind an allocation's units (idempotent): `cash`, so holders
+/// may redeem, or `in_kind`, so they may not and exit through the book. The operator's
+/// command; the first in-kind mint sets `in_kind` through the same port on its own.
+pub async fn set_backing(allocations: &dyn AllocationRegistry, service: &ServiceId, backing: AllocationBacking) -> Result<Allocation, DomainError> {
+	allocations.set_backing(service, backing).await
 }
 
 /// Raise one investor above the default on `service`. A repeat grant overwrites the
@@ -129,13 +137,21 @@ pub async fn require_subscribable(allocations: &dyn AllocationRegistry, service:
 	Ok(record.allocation)
 }
 
-/// Resolve `service` and assert investors can still exit it. Deliberately laxer than
-/// [`require_subscribable`] on both axes: a `closed` allocation passes, and the caller's
-/// access is not consulted at all — refusing here would lock units inside a wound-down
-/// or locked product. Hence no `user` parameter: there is nothing about the caller to
-/// decide on.
+/// Resolve `service` and assert investors can still exit it **for cash**. Deliberately
+/// laxer than [`require_subscribable`] on the two axes it shares: a `closed` allocation
+/// passes, and the caller's access is not consulted at all — refusing here would lock
+/// units inside a wound-down or locked product. Hence no `user` parameter: there is
+/// nothing about the caller to decide on.
+///
+/// Stricter on the one axis the subscribe gate never sees: the product's backing. A
+/// redemption pays cash out of the fund's claim, and units minted in kind have none
+/// there, so an `in_kind` product refuses ([`Allocation::ensure_cash_backed`],
+/// `Precondition`) and points the holder at the book. One load answers both questions —
+/// state first, so a draft answers "never open" rather than "not backed".
 pub async fn require_redeemable(allocations: &dyn AllocationRegistry, service: &ServiceId) -> Result<(), DomainError> {
-	get(allocations, service).await?.ensure_redeemable()
+	let allocation = get(allocations, service).await?;
+	allocation.ensure_redeemable()?;
+	allocation.ensure_cash_backed()
 }
 
 fn not_found(service: &ServiceId) -> DomainError {

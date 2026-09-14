@@ -24,7 +24,7 @@
 
 use async_trait::async_trait;
 use domain::{
-	allocations::{Allocation, AllocationAccess, AllocationIcon},
+	allocations::{Allocation, AllocationAccess, AllocationBacking, AllocationIcon},
 	architecture::{Reader, Repository},
 	balance::ServiceId,
 	error::DomainError,
@@ -68,6 +68,11 @@ pub trait AllocationRegistry: Repository<Aggregate = Allocation> + Reader<Aggreg
 	/// [`Allocation::set_access`] (idempotent). Grants are untouched. `NotFound` if
 	/// unregistered.
 	async fn set_access(&self, service: &ServiceId, access: AllocationAccess) -> Result<Allocation, DomainError>;
+
+	/// Set what stands behind the units under the row lock, applying
+	/// [`Allocation::set_backing`] (idempotent). Both the first in-kind mint (`in_kind`)
+	/// and the operator's explicit command go through here. `NotFound` if unregistered.
+	async fn set_backing(&self, service: &ServiceId, backing: AllocationBacking) -> Result<Allocation, DomainError>;
 
 	/// Raise `user` to `level` on `service`, recording `granted_by`. A repeat grant for
 	/// the same user overwrites the level; one that changes nothing raises no event.

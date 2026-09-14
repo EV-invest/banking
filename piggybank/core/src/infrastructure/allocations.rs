@@ -20,7 +20,7 @@
 
 use async_trait::async_trait;
 use domain::{
-	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId, AllocationSnapshot, AllocationState},
+	allocations::{Allocation, AllocationAccess, AllocationBacking, AllocationIcon, AllocationId, AllocationSnapshot, AllocationState},
 	architecture::{EmitsEvents, Reader, Repository},
 	balance::ServiceId,
 	error::DomainError,
@@ -38,16 +38,16 @@ use crate::{
 
 /// sqlx 0.9 accepts only `&'static str` SQL (its injection guardrail), so the shared
 /// column list is spelled out per query rather than interpolated.
-const SELECT_BY_SERVICE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, \
+const SELECT_BY_SERVICE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, backing, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM allocations WHERE service = $1";
-const SELECT_BY_SERVICE_FOR_UPDATE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, \
+const SELECT_BY_SERVICE_FOR_UPDATE: &str = "SELECT id, service, title, summary, state, unit_cap, icon, access, backing, \
 	 EXTRACT(EPOCH FROM created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at \
 	 FROM allocations WHERE service = $1 FOR UPDATE";
 /// `$2` is the caller: their grant, if any, rides along as `grant_level`.
-const SELECT_BY_SERVICE_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summary, a.state, a.unit_cap, a.icon, a.access, \
+const SELECT_BY_SERVICE_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summary, a.state, a.unit_cap, a.icon, a.access, a.backing, \
 	 g.level AS grant_level, \
 	 EXTRACT(EPOCH FROM a.created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM a.updated_at)::bigint AS updated_at \
@@ -57,7 +57,7 @@ const SELECT_BY_SERVICE_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.s
 /// `$1` is the caller, `$2` is `include_unlisted`. The visibility filter needs no
 /// ranking: a grant can only carry `view` or `invest`, so its mere presence is "may
 /// view", and the product's own default does the rest.
-const SELECT_CATALOG_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summary, a.state, a.unit_cap, a.icon, a.access, \
+const SELECT_CATALOG_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summary, a.state, a.unit_cap, a.icon, a.access, a.backing, \
 	 g.level AS grant_level, \
 	 EXTRACT(EPOCH FROM a.created_at)::bigint AS created_at, \
 	 EXTRACT(EPOCH FROM a.updated_at)::bigint AS updated_at \
@@ -121,6 +121,7 @@ struct AllocationRow {
 	unit_cap: String,
 	icon: String,
 	access: String,
+	backing: String,
 	created_at: i64,
 	updated_at: i64,
 }
@@ -163,8 +164,9 @@ impl AllocationRow {
 			warn!(service = %self.service, icon = %self.icon, "allocations: stored icon is outside this build's vocabulary — rendering the default");
 			AllocationIcon::default()
 		});
-		// `access` gets no such leniency: it gates money, and a value this build cannot
-		// rank cannot be shown to be below `invest`. Failing the read is the safe answer.
+		// `access` and `backing` get no such leniency: both gate money, and a value this
+		// build cannot rank cannot be shown to be below `invest` — or shown to be cash the
+		// fund actually holds. Failing the read is the safe answer.
 		Ok(Allocation::rehydrate(AllocationSnapshot {
 			id: AllocationId::from_raw(self.id),
 			service: ServiceId::parse(&self.service)?,
@@ -174,6 +176,7 @@ impl AllocationRow {
 			unit_cap,
 			icon,
 			access: AllocationAccess::parse(&self.access)?,
+			backing: AllocationBacking::parse(&self.backing)?,
 		}))
 	}
 }
@@ -228,7 +231,7 @@ async fn load_for_update(conn: &mut PgConnection, service: &ServiceId) -> Result
 /// Persist the mutable fields. We hold the row lock, so exactly one row must update.
 /// `service` and `id` are immutable and deliberately absent from the SET list.
 async fn update_row(conn: &mut PgConnection, allocation: &Allocation) -> Result<(), DomainError> {
-	let result = sqlx::query("UPDATE allocations SET title = $2, summary = $3, state = $4, unit_cap = $5, icon = $6, access = $7, updated_at = now() WHERE id = $1")
+	let result = sqlx::query("UPDATE allocations SET title = $2, summary = $3, state = $4, unit_cap = $5, icon = $6, access = $7, backing = $8, updated_at = now() WHERE id = $1")
 		.bind(allocation.id().raw())
 		.bind(allocation.title())
 		.bind(allocation.summary())
@@ -236,6 +239,7 @@ async fn update_row(conn: &mut PgConnection, allocation: &Allocation) -> Result<
 		.bind(allocation.unit_cap().base_units().to_string())
 		.bind(allocation.icon().as_str())
 		.bind(allocation.access().as_str())
+		.bind(allocation.backing().as_str())
 		.execute(&mut *conn)
 		.await
 		.map_err(repo_err)?;
@@ -249,20 +253,22 @@ async fn update_row(conn: &mut PgConnection, allocation: &Allocation) -> Result<
 impl AllocationRegistry for PgAllocations {
 	async fn register(&self, allocation: &mut Allocation) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let inserted =
-			sqlx::query("INSERT INTO allocations (id, service, title, summary, state, unit_cap, icon, access) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (service) DO NOTHING")
-				.bind(allocation.id().raw())
-				.bind(allocation.service().as_str())
-				.bind(allocation.title())
-				.bind(allocation.summary())
-				.bind(allocation.state().as_str())
-				.bind(allocation.unit_cap().base_units().to_string())
-				.bind(allocation.icon().as_str())
-				.bind(allocation.access().as_str())
-				.execute(&mut *tx)
-				.await
-				.map_err(repo_err)?
-				.rows_affected();
+		let inserted = sqlx::query(
+			"INSERT INTO allocations (id, service, title, summary, state, unit_cap, icon, access, backing) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (service) DO NOTHING",
+		)
+		.bind(allocation.id().raw())
+		.bind(allocation.service().as_str())
+		.bind(allocation.title())
+		.bind(allocation.summary())
+		.bind(allocation.state().as_str())
+		.bind(allocation.unit_cap().base_units().to_string())
+		.bind(allocation.icon().as_str())
+		.bind(allocation.access().as_str())
+		.bind(allocation.backing().as_str())
+		.execute(&mut *tx)
+		.await
+		.map_err(repo_err)?
+		.rows_affected();
 		if inserted != 1 {
 			return Err(DomainError::Conflict(format!("allocation '{}' is already registered", allocation.service())));
 		}
@@ -298,6 +304,14 @@ impl AllocationRegistry for PgAllocations {
 	async fn set_access(&self, service: &ServiceId, access: AllocationAccess) -> Result<Allocation, DomainError> {
 		self.transition(service, |allocation| {
 			allocation.set_access(access);
+			Ok(())
+		})
+		.await
+	}
+
+	async fn set_backing(&self, service: &ServiceId, backing: AllocationBacking) -> Result<Allocation, DomainError> {
+		self.transition(service, |allocation| {
+			allocation.set_backing(backing);
 			Ok(())
 		})
 		.await
