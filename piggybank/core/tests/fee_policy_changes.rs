@@ -1018,3 +1018,104 @@ async fn a_scheduling_queued_behind_a_promotion_is_judged_on_the_promoted_terms(
 		vec![(2, FeePolicyChangeState::Active), (1, FeePolicyChangeState::Superseded)]
 	);
 }
+
+#[tokio::test]
+async fn the_notice_clock_starts_when_the_owners_carry_the_change_not_when_it_was_proposed() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	let investor = holder(&h, &service, "1000").await;
+	let roster = owners(&h, 3).await;
+
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "the new mandate costs more to run").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	// The proposal is made to look three days old, provisional moment included. A clock
+	// started at the proposal would already have run out.
+	sqlx::query("UPDATE fee_policy_changes SET requested_at = now() - interval '3 days', effective_from = now() - interval '3 days' WHERE id = $1")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	assert!(change_of(&h, &change).await.effective_from_unix < now() - 2 * MIN_NOTICE_SECS);
+
+	let carried_at = now();
+	assert!(!vote(&h, consilium, roster[1], VoteDecision::Approve).await);
+	assert!(vote(&h, consilium, roster[2], VoteDecision::Approve).await);
+	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Executed);
+
+	let scheduled = change_of(&h, &change).await;
+	assert_eq!(scheduled.state, FeePolicyChangeState::Scheduled);
+	assert!(scheduled.scheduled_at_unix.is_some_and(|at| at >= carried_at), "the notice clock is stamped at the carrying vote");
+	assert!(
+		scheduled.effective_from_unix >= carried_at + MIN_NOTICE_SECS,
+		"the holder gets a full day from the vote, not from the proposal: {}",
+		scheduled.effective_from_unix
+	);
+	assert!(scheduled.effective_from_unix <= now() + MIN_NOTICE_SECS + CLOCK_SLACK);
+	let queued = notices(&h, &scheduled).await;
+	assert_eq!(queued.len(), 1);
+	assert_eq!(queued[0].0, investor.raw());
+	assert_eq!(queued[0].1["effective_at"], scheduled.effective_from_unix, "the holder is told the real moment");
+	// Not due: the day has not passed.
+	assert!(!h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+}
+
+#[tokio::test]
+async fn a_change_edited_underneath_its_quorum_cannot_spend_the_owners_signature() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let roster = owners(&h, 3).await;
+
+	// The row itself is edited (a rate the ceiling still allows, so the schema lets it
+	// through): the owners signed 300 bps, the row now says 400.
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "signed at three hundred").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	sqlx::query("UPDATE fee_policy_changes SET management_bps = 400 WHERE id = $1")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	assert!(!vote(&h, consilium, roster[1], VoteDecision::Approve).await);
+	assert!(vote(&h, consilium, roster[2], VoteDecision::Approve).await);
+	let view = consilium_app::find(h.consilia.as_ref(), consilium).await.unwrap();
+	assert_eq!(view.consilium.state(), ConsiliumState::ExecutionFailed);
+	assert!(
+		view.consilium.failure_reason().unwrap_or_default().contains("no longer matches"),
+		"reason: {:?}",
+		view.consilium.failure_reason()
+	);
+	// The failed execution closes the change as any verdict short of approval does: never
+	// scheduled, and the product's pending slot is free for an honest proposal.
+	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Rejected);
+	assert!(h.changes.pending(&service).await.unwrap().is_none());
+	assert!(notices(&h, &change).await.is_empty(), "no holder is told of terms the owners did not approve");
+	assert_eq!(h.policies.find(&service).await.unwrap(), None);
+
+	// The SIGNED subject is edited instead — the tamper the payload hash exists for.
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "signed at three hundred").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+	sqlx::query("UPDATE consilium SET terms = jsonb_set(terms, '{to,management_bps}', '350') WHERE id = $1")
+		.bind(consilium.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	assert!(!vote(&h, consilium, roster[1], VoteDecision::Approve).await);
+	assert!(vote(&h, consilium, roster[2], VoteDecision::Approve).await);
+	let view = consilium_app::find(h.consilia.as_ref(), consilium).await.unwrap();
+	assert_eq!(view.consilium.state(), ConsiliumState::ExecutionFailed);
+	assert!(
+		view.consilium.failure_reason().unwrap_or_default().contains("payload hash"),
+		"reason: {:?}",
+		view.consilium.failure_reason()
+	);
+	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Rejected);
+	assert!(notices(&h, &change).await.is_empty());
+	assert_eq!(h.policies.find(&service).await.unwrap(), None);
+}
