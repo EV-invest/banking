@@ -235,6 +235,15 @@ under whichever terms are in force then.
 A failure on one product warns and moves on; the change stays `scheduled` and is retried on
 the next tick.
 
+Promotion also waits for the notices. A holder's notice the mailer has given up on —
+refused by the relay until its attempts ran out, or deferred past the ceiling
+(`docs/CONSILIUM.md`) — is a holder who was never told, and the terms do not bind over
+them: `promote` refuses with a conflict, the change stays `scheduled`, and after ten
+consecutive refusals the sweeper's warning becomes an error. The operator's move is to
+cancel the change and schedule it again once the holders can be reached (a fixed mirror id,
+a relay back up); a notice still being retried does not hold the promotion, only one that
+has been abandoned.
+
 ## Still open
 
 **Exit crystallization is not wired.** `Trigger::Redemption` exists and is tested, but
