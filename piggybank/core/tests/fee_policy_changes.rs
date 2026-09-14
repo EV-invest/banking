@@ -1475,3 +1475,140 @@ async fn a_change_awaiting_the_owners_holds_the_products_single_pending_slot() {
 	assert_eq!(h.changes.pending(&service).await.unwrap().map(|pending| pending.id), Some(awaiting.id));
 	assert_eq!(h.changes.list(&service).await.unwrap().len(), 1, "the refused request left no row");
 }
+
+/// The statement every transaction over a product's terms opens with, exactly as
+/// `lock_product` sends it and `pg_stat_activity` echoes it back.
+const PRODUCT_LOCK_STATEMENT: &str = "SELECT service FROM allocations WHERE service = $1 FOR UPDATE";
+
+/// A promotion in flight, as the lock sees it: a transaction holding the product's row
+/// with nothing committed yet. The caller decides what it changes, then commits it.
+async fn promotion_in_flight(h: &Harness, service: &ServiceId) -> sqlx::Transaction<'static, sqlx::Postgres> {
+	let mut tx = h.pool.begin().await.unwrap();
+	sqlx::query_scalar::<_, String>(PRODUCT_LOCK_STATEMENT).bind(service.as_str()).fetch_one(&mut *tx).await.unwrap();
+	tx
+}
+
+/// What the application would hand to `schedule` after judging `next` against the terms
+/// it read BEFORE any lock — the same decision `schedule_policy` takes, taken here in the
+/// open so the test can hold it stale.
+async fn judged_request(h: &Harness, service: &ServiceId, next: FeePolicy) -> NewFeePolicyChange {
+	let current = h.policies.find(service).await.unwrap();
+	NewFeePolicyChange {
+		id: FeePolicyChangeId::new(),
+		service: service.clone(),
+		policy: next,
+		requirement: domain::fees::requirement_for(current.as_ref(), &next),
+		requested_effective_from_unix: 0,
+		requested_by: UserId::new().to_string(),
+		reason: String::new(),
+		now_unix: now(),
+	}
+}
+
+/// `schedule` on its own task, so the test can watch it from outside: it must not be able
+/// to finish while another transaction holds the product.
+fn spawn_schedule(h: &Harness, change: NewFeePolicyChange) -> tokio::task::JoinHandle<Result<FeePolicyChange, DomainError>> {
+	let changes = PgFeePolicyChanges::new(h.pool.clone());
+	tokio::spawn(async move { changes.schedule(&change, None).await })
+}
+
+/// Block until a backend of THIS database is queued on the product lock, or fail. The
+/// proof that a racing `schedule` waits rather than proceeds is the waiter itself in
+/// `pg_stat_activity` — not a guess at how long the race takes. Scoped to the current
+/// database: a sibling suite on the same server takes the same lock in its own.
+async fn wait_for_the_lock_waiter(pool: &PgPool) {
+	for _ in 0..500 {
+		let waiting: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query = $1)")
+			.bind(PRODUCT_LOCK_STATEMENT)
+			.fetch_one(pool)
+			.await
+			.unwrap();
+		if waiting {
+			return;
+		}
+		tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+	}
+	panic!("no transaction queued on the product lock within 10s");
+}
+
+/// The blocked `schedule` once the promotion has committed — bounded, so a lock that is
+/// never released fails the test instead of hanging the suite.
+async fn released(handle: tokio::task::JoinHandle<Result<FeePolicyChange, DomainError>>) -> Result<FeePolicyChange, DomainError> {
+	tokio::time::timeout(std::time::Duration::from_secs(10), handle)
+		.await
+		.expect("schedule is released once the promotion commits")
+		.expect("schedule did not panic")
+}
+
+#[tokio::test]
+async fn a_schedule_racing_a_promotion_waits_on_the_lock_and_is_refused_once_the_terms_moved() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+
+	// Against the house terms, halving the management rate is a plain loosening: one
+	// administrator, no quorum.
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let request = judged_request(&h, &service, cheaper).await;
+	assert_eq!(request.requirement, ChangeRequirement::Admin);
+
+	// A promotion takes the product before the request reaches the lock ...
+	let mut promotion = promotion_in_flight(&h, &service).await;
+	let schedule = spawn_schedule(&h, request);
+	// ... and the request queues behind it rather than reading the terms of a minute ago.
+	wait_for_the_lock_waiter(&h.pool).await;
+	assert!(!schedule.is_finished(), "schedule finished while another transaction held the product");
+
+	// The promotion grants the holders a 10% hurdle — terms the queued request never saw.
+	// Against THEM the same loosening also takes the hurdle away, which is the owners' call.
+	sqlx::query("UPDATE fee_policies SET hurdle_bps = 1000 WHERE service = $1")
+		.bind(service.as_str())
+		.execute(&mut *promotion)
+		.await
+		.unwrap();
+	promotion.commit().await.unwrap();
+
+	let err = released(schedule).await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
+	assert!(err.to_string().contains("re-submit"), "{err}");
+	assert!(h.changes.pending(&service).await.unwrap().is_none(), "the stale request left no row");
+	assert_eq!(h.changes.list(&service).await.unwrap().len(), 1, "only the installed terms are on record");
+	let with_hurdle = policy(200, 2_000, 1000, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	assert_eq!(
+		fee_app::policy_view(&h.policies, &h.changes, &manager(&h), &service).await.unwrap().current.map(|c| c.policy),
+		Some(with_hurdle),
+		"the terms the promotion committed are the live ones"
+	);
+	// Re-submitted against the live terms, the same request is the owners' to decide.
+	assert_eq!(judged_request(&h, &service, cheaper).await.requirement, ChangeRequirement::OwnerConsilium);
+}
+
+#[tokio::test]
+async fn a_schedule_racing_a_promotion_waits_on_the_lock_and_proceeds_once_the_terms_stayed() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let request = judged_request(&h, &service, cheaper).await;
+	let id = request.id;
+
+	let promotion = promotion_in_flight(&h, &service).await;
+	let schedule = spawn_schedule(&h, request);
+	wait_for_the_lock_waiter(&h.pool).await;
+	assert!(!schedule.is_finished(), "schedule finished while another transaction held the product");
+
+	// The lock is a queue, not a refusal: a transaction that changed nothing lets the
+	// request through exactly as it was judged.
+	promotion.commit().await.unwrap();
+	let scheduled = released(schedule).await.expect("the terms the request was judged against are still the live ones");
+	assert_eq!(scheduled.id, id);
+	assert_eq!(scheduled.state, FeePolicyChangeState::Scheduled);
+	assert_eq!(scheduled.requirement, ChangeRequirement::Admin);
+	assert_eq!(scheduled.policy, cheaper);
+	assert_eq!(h.changes.pending(&service).await.unwrap().map(|pending| pending.id), Some(id));
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE), "nothing binds before the promotion");
+}
