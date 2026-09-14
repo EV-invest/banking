@@ -17,7 +17,7 @@ import { Button, Card, CardContent } from "@evinvest/uikit";
 
 import { scheduleFeePolicy } from "@/entities/admin/api/admin-client";
 import type { FeePolicy, FeePolicyChange } from "@/shared/contracts/admin";
-import { errorMessage } from "@/shared/lib/api-client";
+import { RequestError, errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { formatMoment } from "@/shared/lib/datetime";
 import { revalidateTag } from "@/shared/lib/resource";
@@ -48,6 +48,9 @@ export function PolicyCard({
   const current = policy?.configured ? policy : null;
   const { draft, set, reset } = useTermsDraft(current);
   const [busy, setBusy] = useState(false);
+  // `busy` disables the button, but a state update lands a frame later than the second
+  // click of a double-click does; the ref is read in the same tick and closes the gap.
+  const inFlight = useRef(false);
   const [problem, setProblem] = useState<string | null>(null);
   // The plane's refusal is about the draft as it was sent; the first edit makes it stale,
   // and a red sentence that outlives the mistake it named reads as a second mistake.
@@ -96,7 +99,8 @@ export function PolicyCard({
   const invalid = found !== null;
 
   async function schedule() {
-    if (invalid || blocked) return;
+    if (invalid || blocked || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setProblem(null);
     try {
@@ -109,7 +113,13 @@ export function PolicyCard({
       reset();
     } catch (e) {
       setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feePolicySave"));
+      // "Already pending" means a colleague got there first, and this screen still shows
+      // the fund without their change. The re-read brings their pending card in and
+      // blocks this form for the right reason, instead of leaving a red sentence about a
+      // card the operator cannot see.
+      if (e instanceof RequestError && e.status === 409) revalidateTag(TAG.adminFees);
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
