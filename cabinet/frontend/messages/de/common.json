@@ -355,6 +355,54 @@
     "en": "Pin cap",
     "t": "Cap festlegen"
   },
+  "admin.alloc.issuance.source.company": {
+    "en": "from the company's stake",
+    "t": "aus dem Unternehmensanteil"
+  },
+  "admin.alloc.issuance.source.mint": {
+    "en": "minted",
+    "t": "ausgegeben"
+  },
+  "admin.alloc.transfer.action": {
+    "en": "Transfer company stake",
+    "t": "Unternehmensanteil übertragen"
+  },
+  "admin.alloc.transfer.available": {
+    "en": "The company holds {units} units",
+    "t": "Das Unternehmen hält {units} Anteile"
+  },
+  "admin.alloc.transfer.confirm": {
+    "en": "{units} units: Company → {holder} — the supply does not change.",
+    "t": "{units} Anteile: Unternehmen → {holder} — der Bestand ändert sich nicht."
+  },
+  "admin.alloc.transfer.field.recipient": {
+    "en": "Recipient",
+    "t": "Empfänger"
+  },
+  "admin.alloc.transfer.nothingHeld": {
+    "en": "The company holds no settled units in this product — nothing to transfer.",
+    "t": "Das Unternehmen hält in diesem Produkt keine verbuchten Anteile — nichts zu übertragen."
+  },
+  "admin.alloc.transfer.reason.recipient": {
+    "en": "Pick a recipient",
+    "t": "Empfänger wählen"
+  },
+  "admin.alloc.transfer.resultApplied": {
+    "en": "{units} units moved from the company to {holder}.",
+    "t": "{units} Anteile vom Unternehmen an {holder} übertragen."
+  },
+  "admin.alloc.transfer.resultQueued": {
+    "en": "{units} units from the company to {holder} queued — the relay posts the transfer shortly, and the split below follows.",
+    "t": "{units} Anteile vom Unternehmen an {holder} eingereiht — das Relay bucht die Übertragung in Kürze, und die Aufteilung unten folgt."
+  },
+  "admin.alloc.transfer.review": {
+    "en": "Review transfer",
+    "t": "Übertragung prüfen"
+  },
+  "admin.alloc.transfer.submit": {
+    "en": "Transfer",
+    "t": "Übertragen"
+  },
   "admin.alloc.open": {
     "en": "Open",
     "t": "Öffnen"

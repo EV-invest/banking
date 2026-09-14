@@ -355,6 +355,54 @@
     "en": "Pin cap",
     "t": "Закрепить кап"
   },
+  "admin.alloc.issuance.source.company": {
+    "en": "from the company's stake",
+    "t": "из доли компании"
+  },
+  "admin.alloc.issuance.source.mint": {
+    "en": "minted",
+    "t": "выпущено"
+  },
+  "admin.alloc.transfer.action": {
+    "en": "Transfer company stake",
+    "t": "Передать долю компании"
+  },
+  "admin.alloc.transfer.available": {
+    "en": "The company holds {units} units",
+    "t": "У компании {units} паёв"
+  },
+  "admin.alloc.transfer.confirm": {
+    "en": "{units} units: Company → {holder} — the supply does not change.",
+    "t": "{units} паёв: Компания → {holder} — объём выпуска не меняется."
+  },
+  "admin.alloc.transfer.field.recipient": {
+    "en": "Recipient",
+    "t": "Получатель"
+  },
+  "admin.alloc.transfer.nothingHeld": {
+    "en": "The company holds no settled units in this product — nothing to transfer.",
+    "t": "У компании нет проведённых паёв в этом продукте — передавать нечего."
+  },
+  "admin.alloc.transfer.reason.recipient": {
+    "en": "Pick a recipient",
+    "t": "Выберите получателя"
+  },
+  "admin.alloc.transfer.resultApplied": {
+    "en": "{units} units moved from the company to {holder}.",
+    "t": "{units} паёв передано от компании: {holder}."
+  },
+  "admin.alloc.transfer.resultQueued": {
+    "en": "{units} units from the company to {holder} queued — the relay posts the transfer shortly, and the split below follows.",
+    "t": "{units} паёв от компании для {holder} поставлено в очередь — реле вскоре проведёт передачу, и разбивка ниже обновится."
+  },
+  "admin.alloc.transfer.review": {
+    "en": "Review transfer",
+    "t": "Проверить передачу"
+  },
+  "admin.alloc.transfer.submit": {
+    "en": "Transfer",
+    "t": "Передать"
+  },
   "admin.alloc.open": {
     "en": "Open",
     "t": "Открыть"

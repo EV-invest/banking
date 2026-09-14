@@ -355,6 +355,54 @@
     "en": "Pin cap",
     "t": "Plafonner"
   },
+  "admin.alloc.issuance.source.company": {
+    "en": "from the company's stake",
+    "t": "depuis la part de la société"
+  },
+  "admin.alloc.issuance.source.mint": {
+    "en": "minted",
+    "t": "émis"
+  },
+  "admin.alloc.transfer.action": {
+    "en": "Transfer company stake",
+    "t": "Transférer la part de la société"
+  },
+  "admin.alloc.transfer.available": {
+    "en": "The company holds {units} units",
+    "t": "La société détient {units} parts"
+  },
+  "admin.alloc.transfer.confirm": {
+    "en": "{units} units: Company → {holder} — the supply does not change.",
+    "t": "{units} parts : Société → {holder} — l’encours ne change pas."
+  },
+  "admin.alloc.transfer.field.recipient": {
+    "en": "Recipient",
+    "t": "Bénéficiaire"
+  },
+  "admin.alloc.transfer.nothingHeld": {
+    "en": "The company holds no settled units in this product — nothing to transfer.",
+    "t": "La société ne détient aucune part réglée dans ce produit — rien à transférer."
+  },
+  "admin.alloc.transfer.reason.recipient": {
+    "en": "Pick a recipient",
+    "t": "Choisissez un bénéficiaire"
+  },
+  "admin.alloc.transfer.resultApplied": {
+    "en": "{units} units moved from the company to {holder}.",
+    "t": "{units} parts transférées de la société à {holder}."
+  },
+  "admin.alloc.transfer.resultQueued": {
+    "en": "{units} units from the company to {holder} queued — the relay posts the transfer shortly, and the split below follows.",
+    "t": "{units} parts de la société vers {holder} en attente — le relais comptabilise le transfert sous peu, et la répartition ci-dessous suit."
+  },
+  "admin.alloc.transfer.review": {
+    "en": "Review transfer",
+    "t": "Vérifier le transfert"
+  },
+  "admin.alloc.transfer.submit": {
+    "en": "Transfer",
+    "t": "Transférer"
+  },
   "admin.alloc.open": {
     "en": "Open",
     "t": "Ouvrir"

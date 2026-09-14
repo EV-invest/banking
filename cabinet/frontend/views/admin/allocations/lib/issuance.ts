@@ -37,9 +37,9 @@ export type IssueDraftProblem = "holder" | "units" | "costBasis";
 // parses this with the same strictness, so admitting less here only moves the refusal.
 const DECIMAL = /^\d+(\.\d+)?$/;
 
-const isDecimal = (raw: string): boolean => DECIMAL.test(raw.trim());
+export const isDecimal = (raw: string): boolean => DECIMAL.test(raw.trim());
 
-const isPositive = (raw: string): boolean => isDecimal(raw) && /[1-9]/.test(raw);
+export const isPositive = (raw: string): boolean => isDecimal(raw) && /[1-9]/.test(raw);
 
 export function issueDraftProblem(draft: IssueDraft): IssueDraftProblem | null {
   if (draft.holder === null) return "holder";
@@ -83,7 +83,12 @@ export function submissionFingerprint(service: string, draft: IssueDraft): strin
 }
 
 export function submissionKeyFor(previous: SubmissionKey | null, service: string, draft: IssueDraft, mint: () => string = () => crypto.randomUUID()): SubmissionKey {
-  const fingerprint = submissionFingerprint(service, draft);
+  return keyForFingerprint(previous, submissionFingerprint(service, draft), mint);
+}
+
+/** The retry contract on its own, for any form whose body can be fingerprinted — the
+ *  stake transfer (`./transfer-stake.ts`) shares the mint's key space and its rule. */
+export function keyForFingerprint(previous: SubmissionKey | null, fingerprint: string, mint: () => string = () => crypto.randomUUID()): SubmissionKey {
   if (previous && previous.fingerprint === fingerprint) return previous;
   return { key: mint(), fingerprint };
 }
