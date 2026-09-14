@@ -574,8 +574,9 @@ promotion that settles the old rate first — is in `docs/FEES.md` § "Changing 
 this section covers only how the kind sits in the consilium.
 
 - **When a consilium is needed.** Exactly when the change TIGHTENS the terms AND lands
-  OUTSIDE the house envelope (2-and-20 on invested capital, annual). Everything else is one
-  `AllocationManage` holder's call and never reaches this aggregate.
+  OUTSIDE the house envelope (2-and-20 on invested capital, annual), or LOWERS the hurdle
+  wherever the terms sit. Everything else is one `AllocationManage` holder's call and never
+  reaches this aggregate.
 - **Who may open it.** The requester, who must therefore be an owner. `ScheduleFeePolicy`
   refuses an administrator who is not one before writing anything — the alternative would
   be a consilium opened by a seat that does not exist.

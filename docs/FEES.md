@@ -140,10 +140,13 @@ Two pure functions decide the requirement, and both have their own unit tests:
   positive rate tightens.
 
 `requirement_for(current, next)` is then one line: **the owners' consilium exactly when the
-change tightens the terms and lands outside the envelope; otherwise a single
-`AllocationManage` holder**. Loosening never needs a quorum, however far outside the
-envelope the terms sit; a tightening that stays inside the envelope is an administrator's
-call.
+change tightens the terms and lands outside the envelope — or lowers the hurdle, wherever
+the terms sit; otherwise a single `AllocationManage` holder**. Loosening never needs a
+quorum, however far outside the envelope the terms sit; a tightening that stays inside the
+envelope is an administrator's call. The hurdle is the one exception, and deliberately so:
+the envelope leaves it free because a hurdle only ever helps the investor, which is exactly
+why taking a promised one away — even on otherwise house terms, even while every other leg
+loosens — is a new bargain the owners must strike.
 
 A change that needs the owners is opened as a `ConsiliumKind::FeePolicy` consilium by the
 requester, who must therefore BE an owner — an administrator who is not one is refused
@@ -193,7 +196,23 @@ awaiting_consilium ──carried──▶ scheduled ──promoted──▶ acti
 At most one change per product is `awaiting_consilium` or `scheduled` at a time
 (`fee_policy_changes_single_pending_idx`); a second request is refused with a conflict that
 says to cancel the pending one first. `CancelFeePolicyChange` withdraws a scheduled change
-and, for one still awaiting the owners, withdraws its consilium in the same transaction.
+and, for one still awaiting the owners, withdraws its consilium in the same transaction —
+which is why a consilium-gated change may be withdrawn only by the owner who proposed it or
+by another owner: an administrator who could not open the quorum must not be able to close
+it.
+
+Every transaction over a product's terms — scheduling, the owners carrying, promotion —
+opens by locking the product's `allocations` row. The requirement an operator's request
+was judged by is re-taken under that lock against the live terms, and a disagreement (a
+promotion committed while the request was being recorded) is a conflict asking for a
+re-submit, never a change recorded against terms that no longer hold. The rate ceilings on
+the history table hold only for rows that can still bind; a legacy row above today's
+ceiling is superseded like any other, so an over-the-ceiling policy is precisely the one
+that can always be lowered.
+
+`effective_from` may be asked for at most 366 days ahead. A change over a held product is
+refused while no governance mailer is configured: notices queued into a relay that never
+runs are not notice.
 
 ### Promotion, and why the old rate is settled first
 
