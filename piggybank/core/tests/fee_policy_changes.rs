@@ -1612,3 +1612,211 @@ async fn a_schedule_racing_a_promotion_waits_on_the_lock_and_proceeds_once_the_t
 	assert_eq!(h.changes.pending(&service).await.unwrap().map(|pending| pending.id), Some(id));
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE), "nothing binds before the promotion");
 }
+
+/// The acknowledgement as the operator gives it: through the use case, so the
+/// requester-or-owner rule is exercised on every call.
+async fn acknowledge(h: &Harness, service: &ServiceId, change: &FeePolicyChange, by: UserId) -> Result<FeePolicyChange, DomainError> {
+	fee_app::acknowledge_undelivered_notices(&h.changes, h.consilia.as_ref(), service, change.id, by, now()).await
+}
+
+/// The waiver columns as the row carries them — what the history screen reads.
+async fn waiver_row(h: &Harness, change: &FeePolicyChange) -> (Option<String>, Option<i64>, Option<Vec<Uuid>>) {
+	sqlx::query_as("SELECT notices_waived_by, EXTRACT(EPOCH FROM notices_waived_at)::bigint, notices_waived_users FROM fee_policy_changes WHERE id = $1")
+		.bind(change.id.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap()
+}
+
+#[tokio::test]
+async fn an_acknowledged_notice_lets_a_tightening_bind_and_the_history_says_who_and_for_whom() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	install(&h, &service, cheaper).await;
+	let unreachable = holder(&h, &service, "1000").await;
+	let requester = UserId::new();
+	let change = schedule(&h, requester, &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	assert_eq!((change.undelivered_notices, change.notices_given_up), (1, 0), "one holder, nothing delivered yet");
+	assert_eq!(change.notices_waiver, None);
+	let_the_notice_run(&h, &change).await;
+	retire_notices(&h, &change).await;
+	let retired = change_of(&h, &change).await;
+	assert_eq!((retired.undelivered_notices, retired.notices_given_up), (1, 1), "given up on, and still undelivered");
+
+	// Without the acknowledgement: the refusal #263 pinned, unchanged.
+	let refused = h.changes.promote(change.id, now()).await.unwrap_err();
+	assert!(matches!(refused, DomainError::Conflict(_)), "{refused:?}");
+	assert!(refused.to_string().contains("1 of them given up on"), "{refused}");
+
+	let before = now();
+	let acknowledged = acknowledge(&h, &service, &change, requester).await.unwrap();
+	let waiver = acknowledged.notices_waiver.clone().expect("the acknowledgement is on the change");
+	assert_eq!(waiver.by, requester.to_string());
+	assert!(waiver.at_unix >= before && waiver.at_unix <= now() + CLOCK_SLACK, "{}", waiver.at_unix);
+	assert_eq!(waiver.users, vec![unreachable], "exactly the holder whose notice was undelivered");
+	assert_eq!(acknowledged.state, FeePolicyChangeState::Scheduled, "an acknowledgement is not a promotion");
+	assert_eq!(
+		(acknowledged.undelivered_notices, acknowledged.notices_given_up),
+		(1, 1),
+		"the figures stay honest: the holder is still untold"
+	);
+	let (by, at, users) = waiver_row(&h, &change).await;
+	assert_eq!(by.as_deref(), Some(requester.to_string().as_str()));
+	assert_eq!(at, Some(waiver.at_unix));
+	assert_eq!(users, Some(vec![unreachable.raw()]));
+
+	// The terms bind over the acknowledged holder, and the record survives the promotion.
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+	let active = change_of(&h, &change).await;
+	assert_eq!(active.state, FeePolicyChangeState::Active);
+	assert_eq!(active.notices_waiver, Some(waiver));
+	assert_eq!((active.undelivered_notices, active.notices_given_up), (0, 0), "an active change waits on nobody");
+}
+
+#[tokio::test]
+async fn an_acknowledgement_covers_the_holders_of_its_moment_and_no_one_else() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	install(&h, &service, cheaper).await;
+	let untold = holder(&h, &service, "1000").await;
+	let away = holder(&h, &service, "500").await;
+	let requester = UserId::new();
+	let change = schedule(&h, requester, &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	assert_eq!(change.undelivered_notices, 2);
+	let_the_notice_run(&h, &change).await;
+	retire_notices(&h, &change).await;
+
+	// `away` has redeemed everything at the moment of the acknowledgement: they hold nothing
+	// to be told about, so the acknowledgement names `untold` alone.
+	sqlx::query("UPDATE fund_positions SET units = '0' WHERE user_id = $1 AND service = $2")
+		.bind(away.raw())
+		.bind(service.as_str())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	let acknowledged = acknowledge(&h, &service, &change, requester).await.unwrap();
+	assert_eq!(acknowledged.notices_waiver.as_ref().map(|waiver| waiver.users.clone()), Some(vec![untold]));
+
+	// They buy back in before the promotion: untold, and NOT on the operator's record — the
+	// acknowledgement does not stretch to cover them, and the change waits again.
+	sqlx::query("UPDATE fund_positions SET units = '500' WHERE user_id = $1 AND service = $2")
+		.bind(away.raw())
+		.bind(service.as_str())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	let refused = h.changes.promote(change.id, now()).await.unwrap_err();
+	assert!(matches!(refused, DomainError::Conflict(_)), "{refused:?}");
+	assert!(refused.to_string().contains("1 of them to holders the acknowledgement by"), "{refused}");
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(cheaper));
+
+	// Their notice reaches them after all: the change binds — over `untold` on the record,
+	// over `away` because they were told.
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE fee_policy_change_id = $1 AND user_id = $2")
+		.bind(change.id.raw())
+		.bind(away.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+}
+
+#[tokio::test]
+async fn there_is_nothing_to_acknowledge_on_a_change_that_is_not_scheduled_or_whose_notices_arrived() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let roster = owners(&h, 3).await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	holder(&h, &service, "1000").await;
+
+	// Awaiting the owners: no notice has been queued yet, so there is nothing to waive.
+	let awaiting = schedule(&h, roster[0], &service, dearer(), 0, "for the acknowledgement test").await.unwrap();
+	assert_eq!(awaiting.state, FeePolicyChangeState::AwaitingConsilium);
+	let err = acknowledge(&h, &service, &awaiting, roster[0]).await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "{err:?}");
+	assert!(err.to_string().contains("awaiting_consilium"), "{err}");
+	assert_eq!(waiver_row(&h, &awaiting).await, (None, None, None));
+	fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, awaiting.id, roster[0], now()).await.unwrap();
+
+	// Scheduled, every notice delivered: the figure the operator acted on is no longer true,
+	// and the change binds by itself — a refusal, not a silent no-op.
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let change = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	deliver_notices(&h, &change).await;
+	let err = acknowledge(&h, &service, &change, roster[1]).await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "{err:?}");
+	assert!(err.to_string().contains("nothing to acknowledge"), "{err}");
+	assert_eq!(waiver_row(&h, &change).await, (None, None, None));
+
+	// Promoted: nothing waits on anybody.
+	let_the_notice_run(&h, &change).await;
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	let err = acknowledge(&h, &service, &change, roster[1]).await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "{err:?}");
+	assert!(err.to_string().contains("active"), "{err}");
+
+	// A change of another product is not found under this one, as `cancel` answers.
+	let other = unique_service();
+	open_fund(&h, &other).await;
+	let elsewhere = schedule(&h, UserId::new(), &other, cheaper, 0, "").await.unwrap();
+	let err = acknowledge(&h, &service, &elsewhere, roster[1]).await.unwrap_err();
+	assert!(matches!(err, DomainError::NotFound { .. }), "{err:?}");
+}
+
+#[tokio::test]
+async fn an_acknowledgement_is_the_requesters_or_an_owners_and_the_first_one_stands() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let roster = owners(&h, 2).await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	install(&h, &service, cheaper).await;
+	let unreachable = holder(&h, &service, "1000").await;
+	let requester = UserId::new();
+	let change = schedule(&h, requester, &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	retire_notices(&h, &change).await;
+
+	// Another administrator — `AllocationManage` alone — may not waive the holders' notice
+	// on a change somebody else asked for.
+	let err = acknowledge(&h, &service, &change, UserId::new()).await.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "{err:?}");
+	assert_eq!(waiver_row(&h, &change).await, (None, None, None));
+
+	// An owner may, on anyone's change.
+	let first = acknowledge(&h, &service, &change, roster[0]).await.unwrap();
+	let waiver = first.notices_waiver.clone().expect("acknowledged");
+	assert_eq!(waiver.by, roster[0].to_string());
+	assert_eq!(waiver.users, vec![unreachable]);
+
+	// Repeated — by the requester, by the other owner — the first record stands untouched:
+	// it says who took responsibility, and a retry must not rewrite that.
+	tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+	for again in [requester, roster[1]] {
+		let repeated = acknowledge(&h, &service, &change, again).await.unwrap();
+		assert_eq!(repeated.notices_waiver, Some(waiver.clone()), "idempotent for {again}");
+	}
+	assert_eq!(waiver_row(&h, &change).await, (Some(roster[0].to_string()), Some(waiver.at_unix), Some(vec![unreachable.raw()])));
+
+	// The schema holds the record whole and non-empty, whichever path writes it.
+	let partial = sqlx::query("UPDATE fee_policy_changes SET notices_waived_users = NULL WHERE id = $1")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await;
+	assert!(refused_by(partial, "a partial waiver").contains("fee_policy_change_notice_waiver_is_whole"));
+	let empty = sqlx::query("UPDATE fee_policy_changes SET notices_waived_users = '{}' WHERE id = $1")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await;
+	assert!(refused_by(empty, "a waiver covering nobody").contains("fee_policy_change_notice_waiver_names_someone"));
+}

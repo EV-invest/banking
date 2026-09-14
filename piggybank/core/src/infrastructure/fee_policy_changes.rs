@@ -14,7 +14,8 @@
 //!   connection, which is why it runs strictly BEFORE the upsert), then writes the new
 //!   terms. `docs/FEES.md` § "The elapsed clock": nobody re-prices time that has passed.
 //!   It refuses while a holder's notice has been given up on: the notice period is only
-//!   notice if the notices arrived.
+//!   notice if the notices arrived — unless an operator has taken responsibility for
+//!   exactly those holders ([`FeePolicyChanges::acknowledge_undelivered_notices`]).
 //!
 //! Runtime queries throughout (`sqlx::query*`), so `cargo build` needs no database; the
 //! integration suite in `tests/fee_policy_changes.rs` executes every one of them.
@@ -25,6 +26,7 @@ use domain::{
 	consilium::ConsiliumId,
 	error::DomainError,
 	fees::{self, ChangeRequirement, FeePolicy, FeePolicyChangeId, FeePolicyChangeState, FeePolicySubject},
+	users::UserId,
 };
 use sqlx::{PgConnection, PgPool, Row, postgres::PgRow};
 use uuid::Uuid;
@@ -37,7 +39,7 @@ use crate::{
 		fees::{policy_from_row, repo_err},
 	},
 	ports::{
-		fees::{ConsiliumOpening, FeePolicyChange, FeePolicyChanges, NewFeePolicyChange},
+		fees::{ConsiliumOpening, FeePolicyChange, FeePolicyChanges, NewFeePolicyChange, NoticeWaiver},
 		governance_mail::{FeePolicyNotice, FeePolicyTerms, GovernanceMail},
 	},
 };
@@ -50,7 +52,8 @@ macro_rules! change_columns {
 		"id, service, version, management_bps, performance_bps, hurdle_bps, basis, crystallization, state, requirement, \
 		 EXTRACT(EPOCH FROM effective_from)::bigint AS effective_from_unix, consilium_id, requested_by, reason, \
 		 EXTRACT(EPOCH FROM requested_at)::bigint AS requested_at_unix, EXTRACT(EPOCH FROM scheduled_at)::bigint AS scheduled_at_unix, \
-		 EXTRACT(EPOCH FROM applied_at)::bigint AS applied_at_unix"
+		 EXTRACT(EPOCH FROM applied_at)::bigint AS applied_at_unix, \
+		 notices_waived_by, EXTRACT(EPOCH FROM notices_waived_at)::bigint AS notices_waived_at_unix, notices_waived_users"
 	};
 }
 
@@ -153,32 +156,43 @@ pub(crate) async fn holder_count(conn: &mut PgConnection, service: &ServiceId) -
 	Ok(u32::try_from(count).unwrap_or(u32::MAX))
 }
 
-/// The notices of one change that have not reached a holder: how many in all, and how many
-/// of those the mailer has given up on (pinned at the attempt ceiling, whether they failed
-/// their way there or were deferred past the ceiling).
-struct Undelivered {
-	total: i64,
-	given_up: i64,
+/// One notice of a change that has not reached its holder, and whether the mailer has given
+/// up on it (pinned at the attempt ceiling, whether it failed its way there or was deferred
+/// past the ceiling).
+struct UndeliveredNotice {
+	user_id: UserId,
+	given_up: bool,
 }
 
 /// Counted by DELIVERY, not by attempts: a relay that has been down since the change was
 /// scheduled charges no attempt at all (`defer`), and a deferral ceiling equal to the notice
 /// period would otherwise let a change bind the very minute nobody could have been told.
 /// Counted over the holders of RIGHT NOW: a recipient who has since redeemed every unit has
-/// no terms to be warned about, and must not hold the change for those who stayed.
-async fn undelivered_notices(conn: &mut PgConnection, change: &FeePolicyChange) -> Result<Undelivered, DomainError> {
-	let (total, given_up): (i64, i64) = sqlx::query_as(
-		"SELECT COUNT(*), COUNT(*) FILTER (WHERE m.attempts >= $3) FROM consilium_mail m \
+/// no terms to be warned about, and must not hold the change for those who stayed. The ONE
+/// rule behind the figures on the wire, the tightening gate and the acknowledgement's list.
+async fn undelivered_notices(conn: &mut PgConnection, id: FeePolicyChangeId, service: &ServiceId) -> Result<Vec<UndeliveredNotice>, DomainError> {
+	let rows: Vec<(Uuid, bool)> = sqlx::query_as(
+		"SELECT m.user_id, m.attempts >= $3 FROM consilium_mail m \
 		 JOIN fund_positions p ON p.user_id = m.user_id AND p.service = $2 AND p.units <> '0' \
-		 WHERE m.fee_policy_change_id = $1 AND m.kind = 'fee_policy_notice' AND m.sent_at IS NULL",
+		 WHERE m.fee_policy_change_id = $1 AND m.kind = 'fee_policy_notice' AND m.sent_at IS NULL ORDER BY m.user_id",
 	)
-	.bind(change.id.raw())
-	.bind(change.service.as_str())
+	.bind(id.raw())
+	.bind(service.as_str())
 	.bind(MAX_ATTEMPTS)
-	.fetch_one(&mut *conn)
+	.fetch_all(&mut *conn)
 	.await
 	.map_err(repo_err)?;
-	Ok(Undelivered { total, given_up })
+	Ok(rows
+		.into_iter()
+		.map(|(user_id, given_up)| UndeliveredNotice {
+			user_id: UserId::from_raw(user_id),
+			given_up,
+		})
+		.collect())
+}
+
+fn count(n: usize) -> u32 {
+	u32::try_from(n).unwrap_or(u32::MAX)
 }
 
 /// Close a change whose consilium reached a verdict other than approval, on the verdict's
@@ -212,36 +226,68 @@ fn change_from_row(row: &PgRow) -> Result<FeePolicyChange, DomainError> {
 		reason: row.try_get("reason").map_err(repo_err)?,
 		scheduled_at_unix: row.try_get("scheduled_at_unix").map_err(repo_err)?,
 		applied_at_unix: row.try_get("applied_at_unix").map_err(repo_err)?,
+		// Filled in by `hydrate`, which has the connection this row was read on.
+		undelivered_notices: 0,
+		notices_given_up: 0,
+		notices_waiver: waiver_from_row(row)?,
 	})
 }
 
+/// The three waiver columns are whole or absent — the schema says so — so a name without
+/// the rest is a row this binary does not understand, not a half-acknowledgement.
+fn waiver_from_row(row: &PgRow) -> Result<Option<NoticeWaiver>, DomainError> {
+	let by: Option<String> = row.try_get("notices_waived_by").map_err(repo_err)?;
+	let at_unix: Option<i64> = row.try_get("notices_waived_at_unix").map_err(repo_err)?;
+	let users: Option<Vec<Uuid>> = row.try_get("notices_waived_users").map_err(repo_err)?;
+	match (by, at_unix, users) {
+		(None, None, None) => Ok(None),
+		(Some(by), Some(at_unix), Some(users)) => Ok(Some(NoticeWaiver {
+			by,
+			at_unix,
+			users: users.into_iter().map(UserId::from_raw).collect(),
+		})),
+		_ => Err(DomainError::Repository("fee policy change carries a partial notice waiver".into())),
+	}
+}
+
+/// A row as the wire shows it: with the undelivered-notice figures, which only a scheduled
+/// change has — every other state has nothing left to wait for, and the count is spared.
+async fn hydrate(conn: &mut PgConnection, row: &PgRow) -> Result<FeePolicyChange, DomainError> {
+	let mut change = change_from_row(row)?;
+	if change.state == FeePolicyChangeState::Scheduled {
+		let undelivered = undelivered_notices(conn, change.id, &change.service).await?;
+		change.undelivered_notices = count(undelivered.len());
+		change.notices_given_up = count(undelivered.iter().filter(|notice| notice.given_up).count());
+	}
+	Ok(change)
+}
+
 async fn find_on(conn: &mut PgConnection, id: FeePolicyChangeId) -> Result<Option<FeePolicyChange>, DomainError> {
-	sqlx::query(concat!("SELECT ", change_columns!(), " FROM fee_policy_changes WHERE id = $1"))
+	let row = sqlx::query(concat!("SELECT ", change_columns!(), " FROM fee_policy_changes WHERE id = $1"))
 		.bind(id.raw())
 		.fetch_optional(&mut *conn)
 		.await
-		.map_err(repo_err)?
-		.as_ref()
-		.map(change_from_row)
-		.transpose()
+		.map_err(repo_err)?;
+	match row {
+		Some(row) => hydrate(conn, &row).await.map(Some),
+		None => Ok(None),
+	}
 }
 
 /// Load a change `FOR UPDATE` — the opening move of every transition on it. LOCK ORDER: when
 /// a consilium row is involved it is locked FIRST (see [`FeePolicyChanges::cancel`]), the
 /// order every consilium transition that cascades onto a change already uses.
 async fn locked(conn: &mut PgConnection, id: FeePolicyChangeId) -> Result<FeePolicyChange, DomainError> {
-	sqlx::query(concat!("SELECT ", change_columns!(), " FROM fee_policy_changes WHERE id = $1 FOR UPDATE"))
+	let row = sqlx::query(concat!("SELECT ", change_columns!(), " FROM fee_policy_changes WHERE id = $1 FOR UPDATE"))
 		.bind(id.raw())
 		.fetch_optional(&mut *conn)
 		.await
 		.map_err(repo_err)?
-		.as_ref()
-		.map(change_from_row)
-		.transpose()?
 		.ok_or_else(|| DomainError::NotFound {
 			entity: "fee policy change",
 			id: id.to_string(),
-		})
+		})?;
+	hydrate(conn, &row).await
 }
 
 /// The terms in force for a product right now, or `None` for one that charges nothing —
@@ -399,12 +445,17 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		}
 		inserted.map_err(repo_err)?;
 
-		let stored = find_on(&mut tx, change.id)
+		let mut stored = find_on(&mut tx, change.id)
 			.await?
 			.ok_or_else(|| DomainError::Repository("fee policy change vanished inside its own transaction".into()))?;
 		if state == FeePolicyChangeState::Scheduled {
 			let roster = notice_roster(&mut tx, &change.service).await?;
 			enqueue_notices(&mut tx, &stored, from.as_ref(), &roster).await?;
+			// Re-read AFTER the notices are queued: the row handed back states how many
+			// holders are still to be told, and a moment ago that was nobody.
+			stored = find_on(&mut tx, change.id)
+				.await?
+				.ok_or_else(|| DomainError::Repository("fee policy change vanished inside its own transaction".into()))?;
 		}
 		tx.commit().await.map_err(repo_err)?;
 		Ok(stored)
@@ -446,6 +497,10 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			.ok_or_else(|| DomainError::Repository("fee policy change vanished under lock".into()))?;
 		let roster = notice_roster(&mut tx, &change.service).await?;
 		enqueue_notices(&mut tx, &stored, from.as_ref(), &roster).await?;
+		// Re-read AFTER the notices are queued, for the reason `schedule` does.
+		let stored = find_on(&mut tx, change.id)
+			.await?
+			.ok_or_else(|| DomainError::Repository("fee policy change vanished under lock".into()))?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(stored)
 	}
@@ -496,6 +551,54 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		Ok(stored)
 	}
 
+	async fn acknowledge_undelivered_notices(&self, service: &ServiceId, id: FeePolicyChangeId, by: &str, now_unix: i64) -> Result<FeePolicyChange, DomainError> {
+		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		// The product lock first, as every transition on a change takes it: the list written
+		// here is judged against the holders of the moment, and a promotion must not read a
+		// half-written acknowledgement.
+		lock_product(&mut tx, service).await?;
+		let change = locked(&mut tx, id).await?;
+		if &change.service != service {
+			return Err(DomainError::NotFound {
+				entity: "fee policy change",
+				id: id.to_string(),
+			});
+		}
+		// The first acknowledgement stands, whoever repeats it: it is the record of who took
+		// responsibility, and a retry must not rewrite that.
+		if change.notices_waiver.is_some() {
+			return Ok(change);
+		}
+		if change.state != FeePolicyChangeState::Scheduled {
+			return Err(DomainError::Conflict(format!(
+				"the fee-policy change is {}; only a scheduled change has holder notices to acknowledge",
+				change.state.as_str()
+			)));
+		}
+		let undelivered = undelivered_notices(&mut tx, change.id, service).await?;
+		if undelivered.is_empty() {
+			// Not a no-op: the operator saw a figure that is no longer true (the relay came
+			// back, or the holder left), and the change will bind by itself on the next tick.
+			return Err(DomainError::Conflict(
+				"every holder notice for this change has been delivered — there is nothing to acknowledge".into(),
+			));
+		}
+		let users: Vec<Uuid> = undelivered.iter().map(|notice| notice.user_id.raw()).collect();
+		sqlx::query("UPDATE fee_policy_changes SET notices_waived_by = $2, notices_waived_at = to_timestamp($3), notices_waived_users = $4 WHERE id = $1")
+			.bind(id.raw())
+			.bind(by)
+			.bind(now_unix as f64)
+			.bind(&users)
+			.execute(&mut *tx)
+			.await
+			.map_err(repo_err)?;
+		let stored = find_on(&mut tx, id)
+			.await?
+			.ok_or_else(|| DomainError::Repository("fee policy change vanished under lock".into()))?;
+		tx.commit().await.map_err(repo_err)?;
+		Ok(stored)
+	}
+
 	async fn find(&self, id: FeePolicyChangeId) -> Result<Option<FeePolicyChange>, DomainError> {
 		let mut conn = self.pool.acquire().await.map_err(repo_err)?;
 		find_on(&mut conn, id).await
@@ -507,27 +610,34 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 	}
 
 	async fn pending(&self, service: &ServiceId) -> Result<Option<FeePolicyChange>, DomainError> {
-		sqlx::query(concat!(
+		let mut conn = self.pool.acquire().await.map_err(repo_err)?;
+		let row = sqlx::query(concat!(
 			"SELECT ",
 			change_columns!(),
 			" FROM fee_policy_changes WHERE service = $1 AND state IN ('awaiting_consilium', 'scheduled')"
 		))
 		.bind(service.as_str())
-		.fetch_optional(&self.pool)
+		.fetch_optional(&mut *conn)
 		.await
-		.map_err(repo_err)?
-		.as_ref()
-		.map(change_from_row)
-		.transpose()
+		.map_err(repo_err)?;
+		match row {
+			Some(row) => hydrate(&mut conn, &row).await.map(Some),
+			None => Ok(None),
+		}
 	}
 
 	async fn list(&self, service: &ServiceId) -> Result<Vec<FeePolicyChange>, DomainError> {
+		let mut conn = self.pool.acquire().await.map_err(repo_err)?;
 		let rows = sqlx::query(concat!("SELECT ", change_columns!(), " FROM fee_policy_changes WHERE service = $1 ORDER BY version DESC"))
 			.bind(service.as_str())
-			.fetch_all(&self.pool)
+			.fetch_all(&mut *conn)
 			.await
 			.map_err(repo_err)?;
-		rows.iter().map(change_from_row).collect()
+		let mut changes = Vec::with_capacity(rows.len());
+		for row in &rows {
+			changes.push(hydrate(&mut conn, row).await?);
+		}
+		Ok(changes)
 	}
 
 	async fn due(&self, now_unix: i64) -> Result<Vec<FeePolicyChangeId>, DomainError> {
@@ -556,27 +666,54 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		// Terms that get DEARER for them do not bind over them: the change stays `scheduled`,
 		// a relay coming back delivers and the next tick promotes, a notice given up on needs
 		// the operator, and the sweeper's failure streak turns the refusal into an error.
+		// The operator's move is the acknowledgement: it names the holders whose notice was
+		// undelivered when it was given, and the terms bind over THOSE — a holder it does not
+		// name (one who had redeemed at the time and has since bought back in) still holds
+		// the change, so an acknowledgement never widens by itself.
 		// Terms that only get cheaper bind regardless, on the record: a holder the identity
 		// plane cannot reach (an unverified mailbox, no mirrored id) would otherwise pin a
 		// product's terms forever — the loosening, and the lowering of a legacy rate above
 		// today's ceiling, included. No terms at all are measured as `FeePolicy::NONE`: a
 		// first positive rate tightens.
-		let undelivered = undelivered_notices(&mut tx, &change).await?;
-		if undelivered.total > 0 {
+		let undelivered = undelivered_notices(&mut tx, change.id, &change.service).await?;
+		if !undelivered.is_empty() {
+			let total = undelivered.len();
+			let given_up = undelivered.iter().filter(|notice| notice.given_up).count();
 			let current = current_terms(&mut tx, &change.service).await?;
 			if change.policy.tightens_from(current.as_ref().unwrap_or(&FeePolicy::NONE)) {
-				return Err(DomainError::Conflict(format!(
-					"{} holder notice(s) for this change are undelivered, {} of them given up on — dearer terms bind once every holder has been told",
-					undelivered.total, undelivered.given_up
-				)));
+				let Some(waiver) = &change.notices_waiver else {
+					return Err(DomainError::Conflict(format!(
+						"{total} holder notice(s) for this change are undelivered, {given_up} of them given up on — dearer terms bind once every holder has been told"
+					)));
+				};
+				let unacknowledged = undelivered.iter().filter(|notice| !waiver.users.contains(&notice.user_id)).count();
+				if unacknowledged > 0 {
+					return Err(DomainError::Conflict(format!(
+						"{total} holder notice(s) for this change are undelivered, {unacknowledged} of them to holders the acknowledgement by {} does not cover — dearer terms bind once every holder has been told or acknowledged",
+						waiver.by
+					)));
+				}
+				// WARN on purpose: terms got dearer for holders who were never told, on one
+				// person's word. The line names them by id; the row keeps the same list.
+				tracing::warn!(
+					change_id = %change.id,
+					service = %change.service,
+					undelivered = total,
+					given_up,
+					acknowledged_by = %waiver.by,
+					acknowledged_at = waiver.at_unix,
+					holders = ?waiver.users,
+					"fee policy: binding dearer terms over holders whose notice was not delivered, on the operator's acknowledgement"
+				);
+			} else {
+				tracing::warn!(
+					change_id = %change.id,
+					service = %change.service,
+					undelivered = total,
+					given_up,
+					"fee policy: binding cheaper terms over holders whose notice was not delivered"
+				);
 			}
-			tracing::warn!(
-				change_id = %change.id,
-				service = %change.service,
-				undelivered = undelivered.total,
-				given_up = undelivered.given_up,
-				"fee policy: binding cheaper terms over holders whose notice was not delivered"
-			);
 		}
 
 		// Every holder's row, locked — the same lock a charge and a settle take — so no

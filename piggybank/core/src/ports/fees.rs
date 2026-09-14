@@ -74,6 +74,24 @@ pub struct FeePolicyChange {
 	pub reason: String,
 	pub scheduled_at_unix: Option<i64>,
 	pub applied_at_unix: Option<i64>,
+	/// Notices of this change that have not reached a CURRENT holder, and how many of those
+	/// the mailer has given up on — the figures the tightening gate is decided on. Counted
+	/// only while `scheduled`; zero in every other state, where there is nothing to wait for.
+	pub undelivered_notices: u32,
+	pub notices_given_up: u32,
+	/// The operator's acknowledgement of holders who could not be told, if given — see
+	/// [`FeePolicyChanges::acknowledge_undelivered_notices`].
+	pub notices_waiver: Option<NoticeWaiver>,
+}
+
+/// An operator taking responsibility for holders whose notice never arrived: who, when, and
+/// the banking ids of exactly the holders whose notice was undelivered at that moment. A
+/// tightening then binds over THESE holders and no other.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NoticeWaiver {
+	pub by: String,
+	pub at_unix: i64,
+	pub users: Vec<UserId>,
 }
 
 /// A change as the application proposes it. The id is minted by the caller because a
@@ -120,6 +138,15 @@ pub trait FeePolicyChanges: Send + Sync {
 	/// it. Idempotent on an already-cancelled change; a conflict on any other closed state.
 	async fn cancel(&self, service: &ServiceId, id: FeePolicyChangeId, by: &str, now_unix: i64) -> Result<FeePolicyChange, DomainError>;
 
+	/// Take responsibility for the holders of a scheduled change whose notice has not been
+	/// delivered: record who, when, and the list of those holders on the change, so that
+	/// [`FeePolicyChanges::promote`] binds a tightening over them — and over nobody else.
+	/// Idempotent on a change already acknowledged (the first record stands); a conflict on
+	/// a change that is not `scheduled` or whose every notice has been delivered — there is
+	/// nothing to take responsibility for, and an acknowledgement covering nobody would be
+	/// a misleading line in the history.
+	async fn acknowledge_undelivered_notices(&self, service: &ServiceId, id: FeePolicyChangeId, by: &str, now_unix: i64) -> Result<FeePolicyChange, DomainError>;
+
 	async fn find(&self, id: FeePolicyChangeId) -> Result<Option<FeePolicyChange>, DomainError>;
 
 	/// How many investors hold units of the product right now — who a notice is owed to.
@@ -137,7 +164,9 @@ pub trait FeePolicyChanges: Send + Sync {
 	/// Promote one due change into `fee_policies`, in one transaction: settle every holder's
 	/// accrual at the OLD rate as of `effective_from`, then write the new terms, mark the
 	/// change `active` and the previous active one `superseded`. `Ok(false)` when the change
-	/// is no longer scheduled or not yet due — a sweep racing another is not a failure.
+	/// is no longer scheduled or not yet due — a sweep racing another is not a failure. A
+	/// conflict while a tightening has an undelivered notice to a current holder the
+	/// operator has not acknowledged.
 	async fn promote(&self, id: FeePolicyChangeId, now_unix: i64) -> Result<bool, DomainError>;
 }
 

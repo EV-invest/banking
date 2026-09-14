@@ -296,6 +296,34 @@ pub async fn cancel_change(
 	changes.cancel(service, id, &by.to_string(), now).await
 }
 
+/// Take responsibility for the holders of a scheduled change who could not be told
+/// (operator): a tightening then binds over exactly the holders whose notice is undelivered
+/// at this moment, on the record — who, when, and whom for. The move is refused to anyone
+/// but the one who asked for the change or a fund owner: the holders' notice is the
+/// protection the owners' envelope and the notice period exist for, and waiving it must not
+/// be one `AllocationManage` holder away from a change somebody else proposed. Nothing to
+/// acknowledge (every notice delivered, or a change not scheduled) is a conflict rather than
+/// a no-op — see [`FeePolicyChanges::acknowledge_undelivered_notices`].
+pub async fn acknowledge_undelivered_notices(
+	changes: &dyn FeePolicyChanges,
+	consilia: &dyn ConsiliumRepository,
+	service: &ServiceId,
+	id: FeePolicyChangeId,
+	by: UserId,
+	now: i64,
+) -> Result<FeePolicyChange, DomainError> {
+	let change = changes.find(id).await?.filter(|change| &change.service == service).ok_or_else(|| DomainError::NotFound {
+		entity: "fee policy change",
+		id: id.to_string(),
+	})?;
+	if change.requested_by != by.to_string() && !consilia.owner_roster().await?.contains(&by) {
+		return Err(DomainError::Forbidden(
+			"the holders' notice may be waived only by the one who requested the change or by a fund owner".into(),
+		));
+	}
+	changes.acknowledge_undelivered_notices(service, id, &by.to_string(), now).await
+}
+
 /// Who is reading a product's terms. A product hidden from `caller` answers as unregistered
 /// — `NotFound`, exactly as `GetAllocation` and `GetFundNav` answer — unless `unrestricted`
 /// (an `AllocationManage` holder, decided at the boundary): the terms are part of what the
