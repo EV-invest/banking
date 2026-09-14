@@ -7,9 +7,12 @@
 // reads its own resources, so this view only resolves WHICH product and wires the one
 // piece of state two panes share — the price a click on a book level hands to the form.
 //
-// The product is resolved the way the product page resolves it: from the catalog and the
-// positions, both cached. A slug that is not a registered allocation renders the same
-// not-found state — the hub refuses it too, so a wrong link can never become a book.
+// The product is resolved the way the product page resolves it: from the detail read,
+// with the cached catalog painting the first frame (`selectProduct`). The detail rather
+// than the catalog because a `hidden` product a holder was granted is not listed, and the
+// hub takes their orders all the same. A slug that is not a registered allocation renders
+// the same not-found state — the hub refuses it too, so a wrong link can never become a
+// book.
 
 import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
@@ -19,9 +22,9 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton,
 
 import { bookPolicyResource } from "@/entities/book/model/book-resource";
 import { useBookStream } from "@/entities/book/model/book-socket";
-import { allocationsResource, positionsResource } from "@/entities/fund/model/fund-resource";
+import { allocationDetailResource, allocationsResource, positionsResource } from "@/entities/fund/model/fund-resource";
 import { useResource } from "@/shared/lib/resource";
-import { buildProducts, type Product } from "@/views/invest/lib/product";
+import { isClosed, isLocked, selectProduct } from "@/views/invest/lib/product";
 import { BookPane } from "@/views/trade/ui/book-pane";
 import { ChartPane } from "@/views/trade/ui/chart-pane";
 import { OrderFormPane, type PricePick } from "@/views/trade/ui/order-form-pane";
@@ -30,17 +33,19 @@ import { TickerPane } from "@/views/trade/ui/ticker-pane";
 
 export function TradeView({ service }: { service: string }) {
   const t = useT();
+  const detailRead = useResource(allocationDetailResource, service);
   const catalogList = useResource(allocationsResource);
   const positionList = useResource(positionsResource);
   const policyRead = useResource(bookPolicyResource, service);
   const [pick, setPick] = useState<PricePick | null>(null);
 
-  const resolving = catalogList.isLoading || positionList.isLoading;
-  // `undefined` is still "loading", `null` is "no such product" — collapsing the two would
-  // flash the not-found state on every cold load.
-  const product: Product | null | undefined = resolving
-    ? undefined
-    : (buildProducts(catalogList.data?.allocations ?? [], positionList.data?.positions ?? []).find((p) => p.service === service) ?? null);
+  // `undefined` is still "loading", `null` is "no such product" — `selectProduct` keeps
+  // the two apart so the not-found state never flashes on a cold load.
+  const product = selectProduct(service, {
+    detail: detailRead,
+    catalog: catalogList.data?.allocations,
+    positions: { data: positionList.data?.positions, isLoading: positionList.isLoading },
+  });
 
   // The feed is opened only for a product that exists; hooks run unconditionally, the
   // subscription does not.
@@ -71,10 +76,10 @@ export function TradeView({ service }: { service: string }) {
     );
   }
 
-  // A delisted product (absent from the catalog, still held) and one the caller may only
-  // view are both locked out of the form; the book itself stays readable, since a price
-  // is public information about a product the caller can see.
-  const locked = product.allocation === null || product.allocation.caller_access === "view";
+  // A closed product (delisted but still held, or registered and not open) and one the
+  // caller may only view are both locked out of the form; the book itself stays readable,
+  // since a price is public information about a product the caller can see.
+  const locked = isClosed(product) || isLocked(product);
 
   return (
     <Terminal className="border-t border-border">
