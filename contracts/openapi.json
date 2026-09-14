@@ -11988,6 +11988,11 @@
           "investor_units": {
             "type": "string",
             "title": "investor_units"
+          },
+          "queued_units": {
+            "type": "string",
+            "title": "queued_units",
+            "description": "Decimal units of `mint` issuances still `queued` — recorded, not yet posted by the\n relay. Once they land, `units_outstanding` grows by this much, so an operator\n pinning the cap to what is issued must wait for it to read zero: a cap pinned to\n the settled figure alone leaves the queued mint to land above it. Only `mint`\n counts — a `company` hand-over moves units between holders and leaves the supply\n as it was.\n TODO(#271): retire (PR #278) shrinks supply — subtract queued retires once it lands."
           }
         },
         "title": "UnitHolders",

@@ -4278,6 +4278,18 @@ export type BankingV1UnitHolders = {
      * investor_units
      */
     investor_units?: string;
+    /**
+     * queued_units
+     *
+     * Decimal units of `mint` issuances still `queued` — recorded, not yet posted by the
+     * relay. Once they land, `units_outstanding` grows by this much, so an operator
+     * pinning the cap to what is issued must wait for it to read zero: a cap pinned to
+     * the settled figure alone leaves the queued mint to land above it. Only `mint`
+     * counts — a `company` hand-over moves units between holders and leaves the supply
+     * as it was.
+     * TODO(#271): retire (PR #278) shrinks supply — subtract queued retires once it lands.
+     */
+    queued_units?: string;
 };
 
 /**
