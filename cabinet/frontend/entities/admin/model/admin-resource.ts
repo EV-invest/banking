@@ -23,6 +23,7 @@ import {
   fetchParkedEvents,
   fetchFeeAssessments,
   fetchFeePolicies,
+  fetchFeePolicyChanges,
   fetchFeeShares,
   fetchRedemptionQueue,
   fetchRevenuePayouts,
@@ -125,6 +126,18 @@ export const feeAssessmentsResource = defineResource({
   fetch: fetchFeeAssessments,
   key: (service) => service,
   revalidate: OPERATIONAL,
+  tags: [TAG.adminFees],
+  enabled: (service) => service.trim().length > 0,
+});
+
+// The history moves when an operator schedules or cancels a change — and, once a day at
+// most, when the sweeper promotes one — so it is registry cadence like the policies. It
+// shares their tag: every mutation on this screen names `adminFees` and both re-read.
+export const feePolicyChangesResource = defineResource({
+  name: "admin.feePolicyChanges",
+  fetch: fetchFeePolicyChanges,
+  key: (service) => service,
+  revalidate: 300,
   tags: [TAG.adminFees],
   enabled: (service) => service.trim().length > 0,
 });

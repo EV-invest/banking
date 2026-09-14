@@ -204,21 +204,86 @@ export type AllocationGrantLevel = "view" | "invest";
 
 // ── fees ─────────────────────────────────────────────────────────────────────
 
-/** A fund's terms. `configured` false means no policy row exists, which is a different
- *  fact from a policy whose rates are zero — the first can never charge. */
-export interface FeePolicy {
-  service: string;
-  configured: boolean;
+/** The five-field schedule a fund charges by — one statement, never patched a leg at a
+ *  time. Rates are basis points; `basis` and `crystallization` are the money plane's closed
+ *  vocabularies (`shared/lib/fee-terms.ts` has the words for them). */
+export interface FeeTerms {
   management_bps: number;
   performance_bps: number;
   hurdle_bps: number;
   basis: string;
   crystallization: string;
+}
+
+/** A fund's terms in force. `configured` false means no policy row exists, which is a
+ *  different fact from a policy whose rates are zero — the first can never charge. */
+export interface FeePolicy extends FeeTerms {
+  service: string;
+  configured: boolean;
+  /** Unix seconds as a string; the moment the row was last promoted. */
   updated_at: string;
+  /** Which version of the fund's history these terms are; `0` when unconfigured. */
+  version: number;
+  /** Unix seconds as a string since which they bind; `"0"` when unconfigured. */
+  effective_from: string;
+  /** The change on its way — awaiting the owners or scheduled — or absent. Shown to
+   *  holders and non-holders alike: the terms coming are part of deciding to stay in. */
+  pending?: FeePolicyChange | null;
 }
 
 export interface FeePolicyList {
   policies: FeePolicy[];
+}
+
+/** Where a change stands. Typed as an open string like every other lifecycle on this wire
+ *  (`./governance`): a member the plane grows later must render as its wire word, not
+ *  break the build. The names this build knows are `admin.feeChange.state.*`. */
+export type FeePolicyChangeState = "awaiting_consilium" | "scheduled" | "active" | "superseded" | "rejected" | "cancelled" | string;
+
+/** Who had to agree: one `AllocationManage` holder, or the owners' consilium. */
+export type FeePolicyRequirement = "admin" | "owner_consilium" | string;
+
+/**
+ * One row of a fund's fee-policy history — what `POST /api/admin/fees/policy` and
+ * `/policy/cancel` answer with, and the rows of `GET /api/admin/fees/changes`.
+ *
+ * Timestamps are unix seconds as strings, `"0"` where the moment has not come:
+ * `effective_from` is provisional while the change awaits the owners (the 24h notice is
+ * counted from their approval, not from the request) and fixed once scheduled.
+ */
+export interface FeePolicyChange extends FeeTerms {
+  id: string;
+  service: string;
+  version: number;
+  state: FeePolicyChangeState;
+  effective_from: string;
+  requirement: FeePolicyRequirement;
+  /** The consilium this change waits on; `null` for an administrator's change. */
+  consilium_id?: string | null;
+  requested_by: string;
+  requested_at: string;
+  scheduled_at: string;
+  applied_at: string;
+  reason: string;
+}
+
+export interface FeePolicyChangeList {
+  changes: FeePolicyChange[];
+}
+
+/** `POST /api/admin/fees/policy`. `effective_from` is unix seconds as a NUMBER — the BFF
+ *  reads it with `as_i64` — and `0` asks for the earliest moment the notice allows.
+ *  `reason` is required by the hub exactly when the owners must approve. */
+export interface ScheduleFeePolicyRequest extends FeeTerms {
+  service: string;
+  effective_from: number;
+  reason: string;
+}
+
+/** `POST /api/admin/fees/policy/cancel`. Idempotent on an already-cancelled change. */
+export interface CancelFeePolicyChangeRequest {
+  service: string;
+  change_id: string;
 }
 
 /** Uncollected fee units in one fund. `value` is what a settlement would convert them to

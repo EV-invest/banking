@@ -30,9 +30,11 @@ use piggybank_core::{
 	application::{balance as balance_app, fees as fee_app, funds as funds_app},
 	infrastructure::{
 		allocations::PgAllocations,
+		consilium::PgConsilia,
 		custody::StubCustody,
 		db,
 		deposits::PgDeposits,
+		fee_policy_changes::PgFeePolicyChanges,
 		fee_sweeper::FeeSweeper,
 		fees::{PgFeeAssessments, PgFeePolicies, PgFeeSettlements, PgPositionAccruals},
 		ledger::{self, TbLedger},
@@ -44,7 +46,7 @@ use piggybank_core::{
 	},
 	ports::{
 		AllocationRegistry,
-		fees::{FeeAssessments, FeePolicies, PositionAccruals},
+		fees::{FeeAssessments, FeePolicies, FeePolicyChanges, PositionAccruals},
 		ledger::Ledger,
 	},
 };
@@ -73,6 +75,8 @@ struct Harness {
 	nav: PgNav,
 	deposits: PgDeposits,
 	policies: PgFeePolicies,
+	changes: PgFeePolicyChanges,
+	consilia: PgConsilia,
 	accruals: PgPositionAccruals,
 	assessments: PgFeeAssessments,
 	settlements: PgFeeSettlements,
@@ -103,6 +107,8 @@ async fn harness() -> Option<Harness> {
 		nav: PgNav::new(pool.clone()),
 		deposits: PgDeposits::new(pool.clone()),
 		policies: PgFeePolicies::new(pool.clone()),
+		changes: PgFeePolicyChanges::new(pool.clone()),
+		consilia: PgConsilia::new(pool.clone()),
 		accruals: PgPositionAccruals::new(pool.clone()),
 		assessments: PgFeeAssessments::new(pool.clone()),
 		settlements: PgFeeSettlements::new(pool.clone()),
@@ -185,7 +191,30 @@ async fn open_fund(h: &Harness, service: &ServiceId) {
 	h.allocations.open(service).await.unwrap();
 	// Fees are about holdings, not admission — every investor here is let in.
 	h.allocations.set_access(service, AllocationAccess::Invest).await.unwrap();
-	h.policies.set(service, FeePolicy::HOUSE, "itest").await.unwrap();
+	install_policy(h, service, FeePolicy::HOUSE).await;
+}
+
+/// Install terms the way the operator now does — a scheduled change, promoted — so every
+/// fixture here takes the path production takes. Meant for a fund with no holders yet, where
+/// the notice period is zero and the change binds at once; the full life of a change is the
+/// subject of `tests/fee_policy_changes.rs`.
+async fn install_policy(h: &Harness, service: &ServiceId, policy: FeePolicy) {
+	let ports = fee_app::FeePolicyPorts {
+		policies: &h.policies,
+		changes: &h.changes,
+		allocations: &h.allocations,
+		consilia: &h.consilia,
+		approval_url_base: "https://example.test/approve",
+		governance_mail_wired: true,
+	};
+	let request = fee_app::PolicyChangeRequest {
+		service: service.clone(),
+		policy,
+		requested_effective_from_unix: 0,
+		reason: String::new(),
+	};
+	let change = fee_app::schedule_policy(&ports, UserId::new(), request, now_unix()).await.unwrap();
+	assert!(h.changes.promote(change.id, now_unix()).await.unwrap(), "a fund with no holders takes new terms at once");
 }
 
 async fn fund_user(h: &Harness, user: UserId, amount: &str) {
@@ -649,6 +678,7 @@ async fn the_sweeper_charges_every_due_position_and_records_a_statement() {
 
 	let sweeper = FeeSweeper::new(
 		Arc::new(PgFeePolicies::new(h.pool.clone())),
+		Arc::new(PgFeePolicyChanges::new(h.pool.clone())),
 		Arc::new(PgPositionAccruals::new(h.pool.clone())),
 		Arc::new(PgFeeAssessments::new(h.pool.clone())),
 		h.ledger.clone(),
@@ -686,7 +716,7 @@ async fn a_zero_rate_policy_is_distinct_from_no_policy_and_also_charges_nothing(
 	let service = unique_service();
 	open_fund(&h, &service).await;
 	let free = FeePolicy::new(0, 0, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual).unwrap();
-	h.policies.set(&service, free, "itest").await.unwrap();
+	install_policy(&h, &service, free).await;
 
 	fund_user(&h, user, "1000").await;
 	subscribe(&h, user, &service, "1000").await;

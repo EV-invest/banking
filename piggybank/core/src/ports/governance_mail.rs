@@ -31,6 +31,11 @@ pub enum GovernanceMail {
 	PaymentConsent(PaymentConsent),
 	/// Asking an owner to approve a payment out of fund-owned money. Carries secrets.
 	PaymentApproval(PaymentApproval),
+	/// Asking an owner to approve a change of a product's fee terms. Carries secrets.
+	FeePolicyApproval(FeePolicyApproval),
+	/// Telling ONE unit holder that the terms of a product they hold will change, and when.
+	/// Addressed by identity, like [`Self::PaymentConsent`]; carries no secret.
+	FeePolicyNotice(FeePolicyNotice),
 }
 
 impl GovernanceMail {
@@ -42,16 +47,18 @@ impl GovernanceMail {
 			Self::TokenBurned(_) => "token_burned",
 			Self::PaymentConsent(_) => "payment_consent",
 			Self::PaymentApproval(_) => "payment_approval",
+			Self::FeePolicyApproval(_) => "fee_policy_approval",
+			Self::FeePolicyNotice(_) => "fee_policy_notice",
 		}
 	}
 
 	/// Whether this mail hands its recipient a token to answer with — the kinds whose
-	/// delivery is what a seat's `notified` flag reports. An outcome or burn notice tells the
-	/// recipient nothing about whether they can vote, so it flips nothing.
+	/// delivery is what a seat's `notified` flag reports. An outcome, burn or fee notice
+	/// tells the recipient nothing about whether they can vote, so it flips nothing.
 	pub fn carries_a_token(&self) -> bool {
 		match self {
-			Self::PayoutApproval(_) | Self::PaymentConsent(_) | Self::PaymentApproval(_) => true,
-			Self::PayoutOutcome(_) | Self::TokenBurned(_) => false,
+			Self::PayoutApproval(_) | Self::PaymentConsent(_) | Self::PaymentApproval(_) | Self::FeePolicyApproval(_) => true,
+			Self::PayoutOutcome(_) | Self::TokenBurned(_) | Self::FeePolicyNotice(_) => false,
 		}
 	}
 
@@ -75,9 +82,67 @@ impl GovernanceMail {
 				code: String::new(),
 				..mail.clone()
 			}),
-			Self::PayoutOutcome(_) | Self::TokenBurned(_) => self.clone(),
+			Self::FeePolicyApproval(mail) => Self::FeePolicyApproval(FeePolicyApproval {
+				approval_url: String::new(),
+				code: String::new(),
+				..mail.clone()
+			}),
+			Self::PayoutOutcome(_) | Self::TokenBurned(_) | Self::FeePolicyNotice(_) => self.clone(),
 		}
 	}
+}
+
+/// One set of fee terms as a mail states them — the five fields, in the vocabulary the
+/// policy stores them in (`invested_capital` / `market_value`, `monthly` … `annual`).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FeePolicyTerms {
+	pub management_bps: u32,
+	pub performance_bps: u32,
+	pub hurdle_bps: u32,
+	pub basis: String,
+	pub crystallization: String,
+}
+
+/// The owner-facing approval invitation over a change of fee terms: which fund, what the
+/// terms are now, what they would become, and the initiator's stated reason.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FeePolicyApproval {
+	pub consilium_id: String,
+	pub initiator_email: String,
+	/// The product's DISPLAY name, never its slug — the owner is judging a fund, not a key.
+	pub fund: String,
+	/// The terms in force; `None` when the fund charged nothing, which the template states
+	/// differently from a policy whose rates happen to be zero.
+	pub current: Option<FeePolicyTerms>,
+	pub proposed: FeePolicyTerms,
+	/// Why, in the initiator's words. Required and non-empty — concierge refuses the mail
+	/// without one.
+	pub reason: String,
+	pub payload_hash: String,
+	pub threshold: u32,
+	pub owner_count: u32,
+	pub expires_at: i64,
+	/// Absolute URL of the approval page, carrying the opaque token.
+	pub approval_url: String,
+	/// The secret code. Cleared from the queue row on success.
+	pub code: String,
+}
+
+/// The notice to one holder that the terms of a product they hold will change.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FeePolicyNotice {
+	/// The holder's id IN THE IDENTITY PLANE — the same rule as a consent: concierge refuses
+	/// the mail unless this is the addressee, so a notice cannot be redirected.
+	pub subject_user_id: String,
+	/// The product's display name.
+	pub fund: String,
+	pub current: Option<FeePolicyTerms>,
+	pub proposed: FeePolicyTerms,
+	/// Unix seconds at which the proposed terms bind.
+	pub effective_at: i64,
+	/// Cabinet-relative path of the product page (`/invest/<service>`), single leading `/`.
+	/// Concierge pins it to its own `PUBLIC_ORIGIN`, so this plane never mints a host.
+	pub link: String,
 }
 
 /// The approval invitation. Everything an owner needs to judge the request before typing

@@ -12,6 +12,7 @@ use domain::{
 	balance::{LedgerAccountKey, ValuationId},
 	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
+	fees::FeePolicySubject,
 	money::{Nav, Network, Shares},
 	payments::{PaymentState, PaymentSubject},
 	users::UserId,
@@ -30,7 +31,7 @@ use crate::{
 	config::KycGate,
 	infrastructure::consilium::digest,
 	ports::{
-		AllocationRegistry, Custody, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository,
+		AllocationRegistry, Custody, FeePolicyChanges, OutflowPolicy, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumRepository, ConsiliumView, ExecutionOutcome, InvitationView, SubmitOutcome, VoteAudit, VoterCredential},
 		ledger::Ledger,
 		nav::NavMarks,
@@ -64,6 +65,9 @@ pub struct ConsiliumPorts<'a> {
 	/// The valuation marks a `ConsiliumKind::ValuationOverride` quorum writes to. Read at
 	/// open (is there a price to vote over?) and written at execution.
 	pub nav: &'a dyn NavMarks,
+	/// The fee-policy changes a `ConsiliumKind::FeePolicy` quorum schedules. Only the
+	/// execution step touches it.
+	pub fee_changes: &'a dyn FeePolicyChanges,
 	pub relay: &'a Notify,
 	pub configured: &'a [Network],
 	/// The deployment's verification gate, for the same chained execution.
@@ -363,6 +367,7 @@ pub async fn execute(ports: &ConsiliumPorts<'_>, id: ConsiliumId, now: i64) -> R
 		ConsiliumTerms::RevenuePayout(terms) => execute_revenue_payout(ports, id, terms).await?,
 		ConsiliumTerms::Payment(subject) => execute_payment(ports, consilium, subject, now).await?,
 		ConsiliumTerms::ValuationOverride(terms) => execute_valuation_override(ports, consilium, terms).await?,
+		ConsiliumTerms::FeePolicy(subject) => execute_fee_policy(ports, id, &subject, now).await?,
 	};
 	ports.consilia.record_execution(id, outcome, now).await
 }
@@ -391,6 +396,23 @@ async fn execute_valuation_override(ports: &ConsiliumPorts<'_>, consilium: &Cons
 			None => ExecutionOutcome::Failed(failure_reason(&err)),
 		},
 	})
+}
+
+/// Carry an approved change of fee terms: schedule it, fix the moment it binds, and tell the
+/// holders. No money moves; promoting the change into the live terms once its moment comes
+/// is the fee sweeper's job.
+///
+/// `schedule_approved` is idempotent on a change this consilium already scheduled, which is
+/// what makes a retried execution safe, and re-checks the row against the signed subject so
+/// a change edited underneath its quorum cannot spend the quorum's signature. A conflict
+/// from it (the change was cancelled while the owners voted, or no longer matches) is the
+/// consilium's failure to record; an infrastructure error is retried by the sweeper.
+pub async fn execute_fee_policy(ports: &ConsiliumPorts<'_>, id: ConsiliumId, subject: &FeePolicySubject, now: i64) -> Result<ExecutionOutcome, DomainError> {
+	match ports.fee_changes.schedule_approved(subject, id, now).await {
+		Ok(_) => Ok(ExecutionOutcome::Executed(ConsiliumEffect::FeePolicy(subject.change_id))),
+		Err(err @ DomainError::Repository(_)) => Err(err),
+		Err(err) => Ok(ExecutionOutcome::Failed(failure_reason(&err))),
+	}
 }
 
 /// Carry an approved payment order past its one requirement.

@@ -44,9 +44,18 @@ export function Stat({
   );
 }
 
-export function Note({ tone, children }: { tone: "amber" | "muted"; children: React.ReactNode }) {
+/** `amber` warns, `muted` explains, `accent` announces — a change on its way that the
+ *  reader should know about but nothing is asked of them. */
+export function Note({ tone, children }: { tone: "amber" | "muted" | "accent"; children: React.ReactNode }) {
   return (
-    <p className={cn("rounded-lg border px-3 py-2 text-xs", tone === "amber" ? "border-main-accent-t3/30 bg-main-accent-t3/5 text-main-accent-t3" : "border-border bg-foreground/5 text-muted-foreground")}>
+    <p
+      className={cn(
+        "rounded-lg border px-3 py-2 text-xs leading-relaxed",
+        tone === "amber" && "border-main-accent-t3/30 bg-main-accent-t3/5 text-main-accent-t3",
+        tone === "muted" && "border-border bg-foreground/5 text-muted-foreground",
+        tone === "accent" && "border-main-accent-t1/40 bg-main-accent-t1/10 text-foreground",
+      )}
+    >
       {children}
     </p>
   );

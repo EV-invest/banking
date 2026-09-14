@@ -53,7 +53,10 @@ use domain::{
 	error::DomainError,
 	users::{ConciergeUserId, Email, ProfileFields, User, UserId},
 };
-pub use fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeePorts, FeeSettlements, PositionAccrual, PositionAccruals, SettlementRecord};
+pub use fees::{
+	AssessmentRecord, ConsiliumOpening, FeeAssessments, FeePolicies, FeePolicyChange, FeePolicyChanges, FeePorts, FeeSettlements, NewFeePolicyChange, PolicyRecord, PositionAccrual,
+	PositionAccruals, SettlementRecord,
+};
 pub use governance_mail::GovernanceMailer;
 pub use issuance::{IssueOutcome, UnitIssuanceRecord, UnitIssuanceRepository};
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};

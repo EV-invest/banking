@@ -647,6 +647,13 @@ pub struct FeePolicy {
 	pub basis: String,
 	pub crystallization: String,
 	pub updated_at: String,
+	/// Which version of the fund's history these terms are; `0` when unconfigured.
+	pub version: u32,
+	/// Unix seconds (as a string, like every timestamp here) since which they bind.
+	pub effective_from: String,
+	/// The change on its way — awaiting the owners or scheduled — or `null`. Shown to
+	/// holders and non-holders alike: the terms coming are part of deciding to stay in.
+	pub pending: Option<FeePolicyChange>,
 }
 
 impl From<bk::FeePolicy> for FeePolicy {
@@ -660,9 +667,65 @@ impl From<bk::FeePolicy> for FeePolicy {
 			basis: p.basis,
 			crystallization: p.crystallization,
 			updated_at: p.updated_at.to_string(),
+			version: p.version,
+			effective_from: p.effective_from.to_string(),
+			pending: p.pending.map(FeePolicyChange::from),
 		}
 	}
 }
+
+/// One row of a fund's fee-policy history — the shape `ScheduleFeePolicy` and
+/// `CancelFeePolicyChange` answer with, and the rows of `/api/admin/fees/changes`.
+/// `state` is awaiting_consilium | scheduled | active | superseded | rejected | cancelled;
+/// `requirement` is admin | owner_consilium. Timestamps are unix seconds as strings, `"0"`
+/// where the moment has not come.
+#[derive(Serialize)]
+pub struct FeePolicyChange {
+	pub id: String,
+	pub service: String,
+	pub version: u32,
+	pub state: String,
+	pub management_bps: u32,
+	pub performance_bps: u32,
+	pub hurdle_bps: u32,
+	pub basis: String,
+	pub crystallization: String,
+	pub effective_from: String,
+	pub requirement: String,
+	/// The consilium this change waits on; `null` for an administrator's change.
+	pub consilium_id: Option<String>,
+	pub requested_by: String,
+	pub requested_at: String,
+	pub scheduled_at: String,
+	pub applied_at: String,
+	pub reason: String,
+}
+
+impl From<bk::FeePolicyChange> for FeePolicyChange {
+	fn from(c: bk::FeePolicyChange) -> Self {
+		Self {
+			id: c.id,
+			service: c.service,
+			version: c.version,
+			state: c.state,
+			management_bps: c.management_bps,
+			performance_bps: c.performance_bps,
+			hurdle_bps: c.hurdle_bps,
+			basis: c.basis,
+			crystallization: c.crystallization,
+			effective_from: c.effective_from.to_string(),
+			requirement: c.requirement,
+			consilium_id: non_empty(c.consilium_id),
+			requested_by: c.requested_by,
+			requested_at: c.requested_at.to_string(),
+			scheduled_at: c.scheduled_at.to_string(),
+			applied_at: c.applied_at.to_string(),
+			reason: c.reason,
+		}
+	}
+}
+
+list_dto! { FeePolicyChangeList from bk::FeePolicyChangeList { changes: Vec<FeePolicyChange> } }
 
 /// What a holding owes right now without being charged. `high_water_mark` travels with it
 /// because it is the single number that explains why two investors in the same fund at the
@@ -1274,13 +1337,66 @@ impl From<bk::ValuationOverrideTerms> for ValuationOverrideTerms {
 	}
 }
 
+/// One set of fee terms as a consilium states them.
+#[derive(Serialize)]
+pub struct FeeTerms {
+	pub management_bps: u32,
+	pub performance_bps: u32,
+	pub hurdle_bps: u32,
+	pub basis: String,
+	pub crystallization: String,
+}
+
+/// The immutable subject of a FEE-POLICY consilium: which change, over which fund, from
+/// what terms (`null` when the fund charged nothing) to what terms, and why. `holder_count`
+/// and `allocation_name` are read live beside the hashed subject.
+#[derive(Serialize)]
+pub struct ConsiliumFeePolicyTerms {
+	pub change_id: String,
+	pub service: String,
+	pub allocation_name: String,
+	pub from: Option<FeeTerms>,
+	pub to: FeeTerms,
+	/// Unix seconds the requester asked the change to bind from; `"0"` = as soon as allowed.
+	pub effective_from: String,
+	pub holder_count: u32,
+	pub reason: String,
+}
+
+impl From<bk::ConsiliumFeePolicyTerms> for ConsiliumFeePolicyTerms {
+	fn from(t: bk::ConsiliumFeePolicyTerms) -> Self {
+		Self {
+			change_id: t.change_id,
+			service: t.service,
+			allocation_name: t.allocation_name,
+			from: t.from_configured.then_some(FeeTerms {
+				management_bps: t.from_management_bps,
+				performance_bps: t.from_performance_bps,
+				hurdle_bps: t.from_hurdle_bps,
+				basis: t.from_basis,
+				crystallization: t.from_crystallization,
+			}),
+			to: FeeTerms {
+				management_bps: t.to_management_bps,
+				performance_bps: t.to_performance_bps,
+				hurdle_bps: t.to_hurdle_bps,
+				basis: t.to_basis,
+				crystallization: t.to_crystallization,
+			},
+			effective_from: t.effective_from.to_string(),
+			holder_count: t.holder_count,
+			reason: t.reason,
+		}
+	}
+}
+
 /// One consilium in full — the owner-only view, with the per-voter breakdown.
 ///
-/// Exactly one of `revenue_payout`, `payment` and `valuation_override` describes the
-/// subject. `revenue_payout` keeps its always-present shape for the screens that predate
-/// payments; the other two are `null` on any other kind — never an empty object, which
-/// the invitation page treats as unrenderable — so a screen tells the kinds apart by
-/// which sibling is set.
+/// Exactly one of `revenue_payout`, `payment`, `valuation_override` and `fee_policy`
+/// describes the subject. `revenue_payout` keeps its always-present shape for the screens
+/// that predate the other kinds; the other three are `null` on any other kind — never an
+/// empty object, which the invitation page treats as unrenderable — so a screen tells the
+/// kinds apart by which sibling is set.
 #[derive(Serialize)]
 pub struct Consilium {
 	pub id: String,
@@ -1288,6 +1404,7 @@ pub struct Consilium {
 	pub revenue_payout: RevenuePayoutTerms,
 	pub payment: Option<ConsiliumPaymentTerms>,
 	pub valuation_override: Option<ValuationOverrideTerms>,
+	pub fee_policy: Option<ConsiliumFeePolicyTerms>,
 	pub payload_hash: String,
 	pub initiator_user_id: String,
 	pub initiator_email: String,
@@ -1304,6 +1421,8 @@ pub struct Consilium {
 	pub executed_payment_id: Option<String>,
 	/// The mark an executed VALUATION-OVERRIDE consilium recorded; `null` otherwise.
 	pub executed_valuation_id: Option<String>,
+	/// The change an executed FEE_POLICY consilium scheduled; `null` otherwise.
+	pub executed_fee_policy_change_id: Option<String>,
 	pub failure_reason: String,
 	/// Monotonic per consilium. The live page watches this and refetches when it moves.
 	pub version: String,
@@ -1318,6 +1437,7 @@ impl From<bk::Consilium> for Consilium {
 			revenue_payout: c.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
 			payment: c.payment.map(ConsiliumPaymentTerms::from),
 			valuation_override: c.valuation_override.map(ValuationOverrideTerms::from),
+			fee_policy: c.fee_policy.map(ConsiliumFeePolicyTerms::from),
 			payload_hash: c.payload_hash,
 			initiator_user_id: c.initiator_user_id,
 			initiator_email: c.initiator_email,
@@ -1332,6 +1452,7 @@ impl From<bk::Consilium> for Consilium {
 			executed_withdrawal_id: c.executed_withdrawal_id,
 			executed_payment_id: non_empty(c.executed_payment_id),
 			executed_valuation_id: non_empty(c.executed_valuation_id),
+			executed_fee_policy_change_id: non_empty(c.executed_fee_policy_change_id),
 			failure_reason: c.failure_reason,
 			version: c.version.to_string(),
 		}
@@ -1352,6 +1473,8 @@ pub struct ConsiliumInvitation {
 	pub payment: Option<ConsiliumPaymentTerms>,
 	/// Set exactly when this is a VALUATION-OVERRIDE consilium — see [`Consilium`].
 	pub valuation_override: Option<ValuationOverrideTerms>,
+	/// Set exactly when this is a FEE_POLICY consilium — see [`Consilium`].
+	pub fee_policy: Option<ConsiliumFeePolicyTerms>,
 	pub payload_hash: String,
 	pub initiator_email: String,
 	pub voter_email: String,
@@ -1374,6 +1497,7 @@ impl From<bk::ConsiliumInvitation> for ConsiliumInvitation {
 			revenue_payout: i.revenue_payout.map(RevenuePayoutTerms::from).unwrap_or_default(),
 			payment: i.payment.map(ConsiliumPaymentTerms::from),
 			valuation_override: i.valuation_override.map(ValuationOverrideTerms::from),
+			fee_policy: i.fee_policy.map(ConsiliumFeePolicyTerms::from),
 			payload_hash: i.payload_hash,
 			initiator_email: mask_email(&i.initiator_email),
 			voter_email: mask_email(&i.voter_email),

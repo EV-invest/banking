@@ -21,6 +21,7 @@ use domain::{
 	balance::{ServiceId, ValuationId},
 	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, ConsiliumVote, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
+	fees::FeePolicyChangeId,
 	money::{Network, Usdt, WalletAddress},
 	payments::PaymentId,
 	users::UserId,
@@ -34,13 +35,14 @@ use uuid::Uuid;
 use crate::{
 	infrastructure::{
 		consilium_mailer::{MailSubject, enqueue},
-		outbox, payments,
+		fee_policy_changes, outbox, payments,
 	},
 	ports::{
 		consilium::{
-			ConsiliumRepository, ConsiliumView, DIGEST_BYTES, ExecutionOutcome, InvitationView, MAX_CODE_ATTEMPTS, SubmitOutcome, VoteAudit, VoterCredential, VoterView, invitation_not_found,
+			ConsiliumRepository, ConsiliumView, DIGEST_BYTES, ExecutionOutcome, FeePolicyDetail, InvitationView, MAX_CODE_ATTEMPTS, SubmitOutcome, VoteAudit, VoterCredential, VoterView,
+			invitation_not_found,
 		},
-		governance_mail::{GovernanceMail, PaymentApproval, PayoutApproval, PayoutOutcome},
+		governance_mail::{FeePolicyApproval, GovernanceMail, PaymentApproval, PayoutApproval, PayoutOutcome},
 		payments::EndDetail,
 	},
 };
@@ -52,7 +54,8 @@ macro_rules! consilium_columns {
 	() => {
 		"c.id, c.kind, c.state, c.terms::text AS terms, c.payload_hash, c.initiator_user_id, c.owner_count, c.threshold, \
 		 EXTRACT(EPOCH FROM c.created_at)::bigint AS created_at, EXTRACT(EPOCH FROM c.expires_at)::bigint AS expires_at, \
-		 EXTRACT(EPOCH FROM c.decided_at)::bigint AS decided_at, c.executed_withdrawal_id, c.executed_payment_id, c.executed_valuation_id, c.failure_reason, c.version"
+		 EXTRACT(EPOCH FROM c.decided_at)::bigint AS decided_at, c.executed_withdrawal_id, c.executed_payment_id, c.executed_valuation_id, \
+		 c.executed_fee_policy_change_id, c.failure_reason, c.version"
 	};
 }
 
@@ -121,7 +124,7 @@ impl PgConsilia {
 		}
 		consilium.expire(at)?;
 		persist(&mut tx, &mut consilium).await?;
-		close_decided_payment(&mut tx, &consilium, at).await?;
+		close_decided_subject(&mut tx, &consilium, at).await?;
 		announce(&mut tx, &consilium, "the window closed with no verdict").await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(true)
@@ -138,7 +141,7 @@ impl PgConsilia {
 		}
 		consilium.cancel(at)?;
 		persist(&mut tx, &mut consilium).await?;
-		close_decided_payment(&mut tx, &consilium, at).await?;
+		close_decided_subject(&mut tx, &consilium, at).await?;
 		announce(
 			&mut tx,
 			&consilium,
@@ -148,6 +151,27 @@ impl PgConsilia {
 		tx.commit().await.map_err(repo_err)?;
 		Ok(true)
 	}
+}
+
+/// Withdraw a still-open consilium on the caller's transaction, whoever is asking — the
+/// cascade of its SUBJECT being withdrawn (an administrator cancelling a fee-policy change
+/// still awaiting the owners). The initiator check that `cancel` applies belongs to the
+/// owner-facing RPC; here the subject has already been closed by someone entitled to close
+/// it, and a quorum left collecting votes over nothing would carry into a refusal.
+///
+/// The caller has NOT yet closed the subject when this runs — this is called first, so the
+/// consilium row is the first lock taken, as everywhere else — and `close_decided_subject`
+/// then closes it exactly as an owner's withdrawal would. A no-op on a consilium that has
+/// already reached a verdict.
+pub(crate) async fn withdraw_on(conn: &mut PgConnection, id: ConsiliumId, at: i64) -> Result<(), DomainError> {
+	let (mut consilium, _) = locked(conn, id).await?;
+	if !consilium.state().is_open() {
+		return Ok(());
+	}
+	consilium.cancel(at)?;
+	persist(conn, &mut consilium).await?;
+	close_decided_subject(conn, &consilium, at).await?;
+	announce(conn, &consilium, "withdrawn together with the request it decided").await
 }
 
 /// The stored JSONB shape of the terms. Amounts are exact base-unit strings, as everywhere
@@ -170,6 +194,8 @@ fn stored_terms(terms: &ConsiliumTerms) -> Result<String, DomainError> {
 		ConsiliumTerms::RevenuePayout(payout) => serde_json::to_string(&StoredTerms::of(payout)),
 		ConsiliumTerms::Payment(subject) => serde_json::to_string(subject),
 		ConsiliumTerms::ValuationOverride(terms) => serde_json::to_string(&StoredValuationOverride::of(terms)),
+		// The subject's own serde shape, as a payment's is.
+		ConsiliumTerms::FeePolicy(subject) => serde_json::to_string(subject),
 	}
 	.map_err(|e| DomainError::Repository(e.to_string()))
 }
@@ -198,20 +224,52 @@ impl StoredValuationOverride {
 	}
 }
 
-/// The recognisable detail beside the canonical label: the receiving end of a payment (the
-/// same detail the consent mail and the console show), the product being marked for a
-/// valuation override, or `None` for a payout, which names an address.
-async fn destination_detail(conn: &mut PgConnection, consilium: &Consilium) -> Result<Option<EndDetail>, DomainError> {
-	match consilium.terms() {
-		ConsiliumTerms::RevenuePayout(_) => Ok(None),
-		ConsiliumTerms::Payment(subject) => payments::detail_of(conn, subject.terms.to()).await,
-		ConsiliumTerms::ValuationOverride(terms) => Ok(sqlx::query_scalar::<_, String>("SELECT title FROM allocations WHERE service = $1")
-			.bind(terms.service.as_str())
-			.fetch_optional(&mut *conn)
-			.await
-			.map_err(repo_err)?
-			.map(EndDetail::ProductTitle)),
+/// What a surface states beside the hashed subject, per kind: nothing for a payout (it
+/// names an address), the receiving end's recognisable detail for a payment, the product
+/// being marked for a valuation override, the product's title and holder count for a change
+/// of fee terms.
+enum SubjectDetail {
+	Payout,
+	Payment(Option<EndDetail>),
+	ValuationOverride(Option<EndDetail>),
+	FeePolicy(FeePolicyDetail),
+}
+
+impl SubjectDetail {
+	/// The recognisable end for the kinds that name one — the same detail the consent mail
+	/// and the console show.
+	fn end_detail(&self) -> Option<&EndDetail> {
+		match self {
+			Self::Payment(detail) | Self::ValuationOverride(detail) => detail.as_ref(),
+			Self::Payout | Self::FeePolicy(_) => None,
+		}
 	}
+
+	fn fee_policy(&self) -> Option<FeePolicyDetail> {
+		match self {
+			Self::FeePolicy(detail) => Some(detail.clone()),
+			Self::Payout | Self::Payment(_) | Self::ValuationOverride(_) => None,
+		}
+	}
+}
+
+async fn subject_detail(conn: &mut PgConnection, consilium: &Consilium) -> Result<SubjectDetail, DomainError> {
+	Ok(match consilium.terms() {
+		ConsiliumTerms::RevenuePayout(_) => SubjectDetail::Payout,
+		ConsiliumTerms::Payment(subject) => SubjectDetail::Payment(payments::detail_of(conn, subject.terms.to()).await?),
+		ConsiliumTerms::ValuationOverride(terms) => SubjectDetail::ValuationOverride(
+			sqlx::query_scalar::<_, String>("SELECT title FROM allocations WHERE service = $1")
+				.bind(terms.service.as_str())
+				.fetch_optional(&mut *conn)
+				.await
+				.map_err(repo_err)?
+				.map(EndDetail::ProductTitle),
+		),
+		ConsiliumTerms::FeePolicy(subject) => SubjectDetail::FeePolicy(FeePolicyDetail {
+			allocation_name: fee_policy_changes::allocation_title(conn, &subject.service).await?.unwrap_or_default(),
+			holder_count: fee_policy_changes::holder_count(conn, &subject.service).await?,
+		}),
+	})
 }
 
 /// The relay's bound on one mail line (`line(.., 160, ..)` in concierge's governance
@@ -251,14 +309,15 @@ fn clip_utf8(s: &str, max_bytes: usize) -> String {
 
 /// The approval invitation for one seat, per kind.
 ///
-/// TWO MAILS, NOT ONE WIDENED. The payout template opens with "a request to pay fund revenue
-/// out on-chain" and labels its middle rows Network and Destination address; a payment is a
-/// transfer between two claims the platform holds, and rendering `Piggybank → Revenue`
-/// through that copy would mail the whole roster a sentence naming the wrong claim and the
-/// wrong rail on a money move they are being asked to authorize. The match has no `_` arm,
-/// so a third kind has to say what its owners read.
+/// ONE MAIL PER KIND, NOT ONE WIDENED. The payout template opens with "a request to pay fund
+/// revenue out on-chain" and labels its middle rows Network and Destination address; a
+/// payment is a transfer between two claims the platform holds, and rendering
+/// `Piggybank → Revenue` through that copy would mail the whole roster a sentence naming the
+/// wrong claim and the wrong rail on a money move they are being asked to authorize. A
+/// change of fee terms is not a money move at all and has its own kind. The match has no
+/// `_` arm, so a further kind has to say what its owners read.
 ///
-/// THE THIRD KIND BORROWS THE PAYMENT TEMPLATE, for now. A valuation override is not a
+/// THE VALUATION KIND BORROWS THE PAYMENT TEMPLATE, for now. A valuation override is not a
 /// money move, and the honest mail is a kind concierge does not have yet — adding one means
 /// a release of the other plane and a pin bump. Until then the owners are rung through
 /// `PAYMENT_APPROVAL` with every label spelled out (the fund, the AUM, the reason), which is
@@ -266,7 +325,7 @@ fn clip_utf8(s: &str, max_bytes: usize) -> String {
 /// the truth. The consilium id stands in for `payment_id` (the field is required by shape
 /// and there is no order), and `tier` is `service`, the tier of the claim a mark reprices.
 // TODO(banking#232 follow-up): a dedicated `VALUATION_APPROVAL` mail kind in concierge.
-fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str, detail: Option<&EndDetail>) -> GovernanceMail {
+fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &VoterCredential, approval_url_base: &str, detail: &SubjectDetail) -> GovernanceMail {
 	let approval_url = format!("{}/{}", approval_url_base.trim_end_matches('/'), credential.token);
 	match consilium.terms() {
 		ConsiliumTerms::RevenuePayout(payout) => GovernanceMail::PayoutApproval(PayoutApproval {
@@ -291,9 +350,29 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 			source: subject.terms.source_label(),
 			// The label plus what a person recognises it by (a masked mailbox, a product
 			// title): an owner approving "investor 8f3e…" must be able to tell who that is.
-			destination: payments::mail_destination(&subject.terms, detail),
+			destination: payments::mail_destination(&subject.terms, detail.end_detail()),
 			amount: subject.terms.amount().to_decimal_string(),
 			reason: subject.terms.reason().as_str().to_owned(),
+			payload_hash: consilium.payload_hash_hex(),
+			threshold: consilium.threshold(),
+			owner_count: consilium.owner_count(),
+			expires_at: consilium.expires_at(),
+			approval_url,
+			code: credential.code.clone(),
+		}),
+		ConsiliumTerms::FeePolicy(subject) => GovernanceMail::FeePolicyApproval(FeePolicyApproval {
+			consilium_id: consilium.id().to_string(),
+			initiator_email: initiator_email.to_owned(),
+			// The display name, falling back to the slug only for a product deregistered
+			// under its own consilium — the owners still need to be able to name it.
+			fund: detail
+				.fee_policy()
+				.map(|detail| detail.allocation_name)
+				.filter(|name| !name.is_empty())
+				.unwrap_or_else(|| subject.service.to_string()),
+			current: subject.from.as_ref().map(fee_policy_changes::mail_terms),
+			proposed: fee_policy_changes::mail_terms(&subject.to),
+			reason: subject.reason.clone(),
 			payload_hash: consilium.payload_hash_hex(),
 			threshold: consilium.threshold(),
 			owner_count: consilium.owner_count(),
@@ -306,7 +385,7 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 			payment_id: consilium.id().to_string(),
 			initiator_email: initiator_email.to_owned(),
 			tier: VALUATION_MAIL_TIER.to_owned(),
-			source: valuation_mail_source(terms, detail),
+			source: valuation_mail_source(terms, detail.end_detail()),
 			destination: format!("AUM {} USDT", terms.aum.to_decimal_string()),
 			amount: terms.aum.to_decimal_string(),
 			reason: VALUATION_MAIL_REASON.to_owned(),
@@ -320,6 +399,19 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 	}
 }
 
+/// Whether a consilium's verdicts are announced by mail. A fee-policy consilium's are NOT:
+/// concierge has no outcome template for the kind, and rendering it through the payout one
+/// would mail every owner a sentence about revenue leaving on-chain. The owners read the
+/// verdict in the consilium room; the holders learn of a carried change from their notice.
+// TODO(#233): send an outcome (and a burn notice) for the fee-policy kind once concierge
+// ships a template for it.
+fn announces_by_mail(consilium: &Consilium) -> bool {
+	match consilium.terms() {
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) | ConsiliumTerms::ValuationOverride(_) => true,
+		ConsiliumTerms::FeePolicy(_) => false,
+	}
+}
+
 /// What the borrowed payment template says a valuation override is FOR. Fixed wording
 /// rather than the initiator's, because the terms carry no memo: the digest binds the fund
 /// and the AUM and nothing else.
@@ -327,7 +419,7 @@ const VALUATION_MAIL_REASON: &str = "Valuation beyond the NAV-move guard; execut
 /// The tier the borrowed template is told: the claim a mark reprices is the product's.
 const VALUATION_MAIL_TIER: &str = "service";
 
-/// The outcome shape for any kind: the payout pair, the payment tuple, or — for a
+/// The outcome shape for every mailed kind: the payout pair, the payment tuple, or — for a
 /// valuation override — the same tuple the approval mail used, the rest left empty; the
 /// renderer switches on which is filled.
 fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destination_detail: Option<&EndDetail>) -> PayoutOutcome {
@@ -366,6 +458,9 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destinatio
 			reason: VALUATION_MAIL_REASON.to_owned(),
 			..base
 		},
+		// Never mailed — see `announces_by_mail`. The bare shape is returned rather than a
+		// panic so the caller's guard stays the one place that decides.
+		ConsiliumTerms::FeePolicy(_) => base,
 	}
 }
 
@@ -457,6 +552,7 @@ fn rehydrate(row: &PgRow, seats: &[SeatRow]) -> Result<Consilium, DomainError> {
 			let stored: StoredValuationOverride = serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?;
 			ConsiliumTerms::ValuationOverride(stored.into_domain()?)
 		}
+		ConsiliumKind::FeePolicy => ConsiliumTerms::FeePolicy(serde_json::from_str(&raw_terms).map_err(|e| DomainError::Repository(e.to_string()))?),
 	};
 	let hash_bytes: Vec<u8> = row.try_get("payload_hash").map_err(repo_err)?;
 	let payload_hash: [u8; DIGEST_BYTES] = hash_bytes
@@ -504,10 +600,13 @@ fn executed_effect(row: &PgRow) -> Result<Option<ConsiliumEffect>, DomainError> 
 	if let Some(id) = row.try_get::<Option<Uuid>, _>("executed_payment_id").map_err(repo_err)? {
 		return Ok(Some(ConsiliumEffect::Payment(PaymentId::from_raw(id))));
 	}
+	if let Some(id) = row.try_get::<Option<Uuid>, _>("executed_valuation_id").map_err(repo_err)? {
+		return Ok(Some(ConsiliumEffect::Valuation(ValuationId::from_raw(id))));
+	}
 	Ok(row
-		.try_get::<Option<Uuid>, _>("executed_valuation_id")
+		.try_get::<Option<Uuid>, _>("executed_fee_policy_change_id")
 		.map_err(repo_err)?
-		.map(|id| ConsiliumEffect::Valuation(ValuationId::from_raw(id))))
+		.map(|id| ConsiliumEffect::FeePolicy(FeePolicyChangeId::from_raw(id))))
 }
 
 /// The initiator's address. A missing row is an error, not an empty string: every consilium
@@ -527,7 +626,7 @@ async fn email_of(conn: &mut PgConnection, id: UserId) -> Result<String, DomainE
 /// an operator a seat that has not answered when it may well have approved — the one figure
 /// on this screen that must never be understated. The CHECK constraint makes it
 /// unreachable; if it ever happens, it surfaces.
-fn view_of(consilium: Consilium, initiator_email: String, seats: &[SeatRow]) -> Result<ConsiliumView, DomainError> {
+fn view_of(consilium: Consilium, initiator_email: String, seats: &[SeatRow], fee_policy: Option<FeePolicyDetail>) -> Result<ConsiliumView, DomainError> {
 	let voters = seats
 		.iter()
 		.map(|seat| {
@@ -540,7 +639,17 @@ fn view_of(consilium: Consilium, initiator_email: String, seats: &[SeatRow]) -> 
 			})
 		})
 		.collect::<Result<Vec<_>, DomainError>>()?;
-	Ok(ConsiliumView { consilium, initiator_email, voters })
+	Ok(ConsiliumView {
+		consilium,
+		initiator_email,
+		voters,
+		fee_policy,
+	})
+}
+
+/// The fee-policy presentation for a view, or `None` for the other kinds.
+async fn fee_policy_detail_of(conn: &mut PgConnection, consilium: &Consilium) -> Result<Option<FeePolicyDetail>, DomainError> {
+	Ok(subject_detail(conn, consilium).await?.fee_policy())
 }
 
 /// Persist a transition and drain its events. The version written is the aggregate's own, so
@@ -548,17 +657,20 @@ fn view_of(consilium: Consilium, initiator_email: String, seats: &[SeatRow]) -> 
 /// bumps rather than a second one maintained here.
 async fn persist(conn: &mut PgConnection, consilium: &mut Consilium) -> Result<(), DomainError> {
 	let affected = sqlx::query(
-		"UPDATE consilium SET state = $2, decided_at = to_timestamp($3), executed_withdrawal_id = $4, executed_payment_id = $5, executed_valuation_id = $6, failure_reason = $7, version = $8 WHERE id = $1",
+		"UPDATE consilium SET state = $2, decided_at = to_timestamp($3), executed_withdrawal_id = $4, executed_payment_id = $5, executed_valuation_id = $6, \
+		 executed_fee_policy_change_id = $7, failure_reason = $8, version = $9 WHERE id = $1",
 	)
 	.bind(consilium.id().raw())
 	.bind(consilium.state().as_str())
 	.bind(consilium.decided_at().map(|at| at as f64))
-	// EXACTLY ONE OF THE THREE IS EVER SOME on an executed row — the aggregate narrows the
-	// one effect three ways and `consilium_execution_is_recorded`'s `num_nonnulls(...) = 1`
-	// is what makes that the database's statement rather than this call site's habit.
+	// EXACTLY ONE OF THE EFFECT COLUMNS IS EVER SOME on an executed row — the aggregate
+	// narrows the one effect per column and `consilium_execution_is_recorded`'s
+	// `num_nonnulls(...) = 1` is what makes that the database's statement rather than this
+	// call site's habit.
 	.bind(consilium.executed_withdrawal_id().map(|id| id.raw()))
 	.bind(consilium.executed_payment_id().map(|id| id.raw()))
 	.bind(consilium.executed_valuation_id().map(|id| id.raw()))
+	.bind(consilium.executed_fee_policy_change_id().map(|id| id.raw()))
 	.bind(consilium.failure_reason())
 	.bind(consilium.version() as i64)
 		.execute(&mut *conn)
@@ -577,20 +689,28 @@ fn audience(consilium: &Consilium) -> impl Iterator<Item = UserId> + '_ {
 	core::iter::once(consilium.initiator()).chain(consilium.eligible().iter().copied())
 }
 
-/// Close the payment order a consilium decided against — the cascade for every verdict that
-/// is not an approval, in the verdict's own transaction. Nothing to do for a payout or a
-/// valuation override, whose consilium IS the request.
-async fn close_decided_payment(conn: &mut PgConnection, consilium: &Consilium, at: i64) -> Result<(), DomainError> {
+/// Close the SUBJECT a consilium decided against — the cascade for every verdict that is not
+/// an approval, in the verdict's own transaction. Nothing to do for a payout or a valuation
+/// override, whose consilium IS the request; a payment order is rejected, a fee-policy change
+/// is closed as rejected.
+async fn close_decided_subject(conn: &mut PgConnection, consilium: &Consilium, at: i64) -> Result<(), DomainError> {
 	match consilium.terms() {
 		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::ValuationOverride(_) => Ok(()),
 		ConsiliumTerms::Payment(subject) => payments::reject_on(conn, subject.payment_id, at).await.map(|_| ()),
+		ConsiliumTerms::FeePolicy(subject) => {
+			let reason = format!("the owners' consilium ended {}", consilium.state().as_str());
+			fee_policy_changes::reject_on(conn, subject.change_id, consilium.id(), &reason).await
+		}
 	}
 }
 
 /// Tell that audience how the consilium ended.
 async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) -> Result<(), DomainError> {
-	let destination = destination_detail(conn, consilium).await?;
-	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned(), destination.as_ref()));
+	if !announces_by_mail(consilium) {
+		return Ok(());
+	}
+	let destination = subject_detail(conn, consilium).await?;
+	let mail = GovernanceMail::PayoutOutcome(outcome_of(consilium, consilium.state().as_str().to_uppercase(), detail.to_owned(), destination.end_detail()));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:outcome:{}:{recipient}", consilium.id(), consilium.state().as_str());
 		enqueue(conn, MailSubject::Consilium(consilium.id().raw()), recipient.raw(), &key, &mail).await?;
@@ -601,12 +721,16 @@ async fn announce(conn: &mut PgConnection, consilium: &Consilium, detail: &str) 
 /// Tell that audience a token burned. A brute-force attempt against one seat is a fact the
 /// whole roster needs, not just its holder — who may be the one person who never sees it.
 async fn announce_burn(conn: &mut PgConnection, consilium: &Consilium, voter: UserId) -> Result<(), DomainError> {
-	let destination = destination_detail(conn, consilium).await?;
+	if !announces_by_mail(consilium) {
+		tracing::error!(consilium_id = %consilium.id(), %voter, "consilium: an approval token burned on a fee-policy consilium; no burn notice is mailed for this kind yet");
+		return Ok(());
+	}
+	let destination = subject_detail(conn, consilium).await?;
 	let mail = GovernanceMail::TokenBurned(outcome_of(
 		consilium,
 		"TOKEN_BURNED".to_owned(),
 		format!("five failed code attempts burned the approval token for seat {voter}"),
-		destination.as_ref(),
+		destination.end_detail(),
 	));
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:burn:{voter}:{recipient}", consilium.id());
@@ -631,6 +755,67 @@ async fn announce_burn(conn: &mut PgConnection, consilium: &Consilium, voter: Us
 /// attempt ceiling is what actually guards the code.
 fn wrong_code(message: String) -> DomainError {
 	DomainError::Validation(message)
+}
+
+/// Write a new consilium, its seats and their approval mails on the caller's transaction.
+///
+/// Crate-visible so a subject that must not outlive its quorum — a fee-policy change — can
+/// commit in ONE transaction with it, rather than opening the consilium first and cancelling
+/// it as compensation when the subject's own write fails.
+pub(crate) async fn open_on(conn: &mut PgConnection, consilium: &mut Consilium, credentials: &[VoterCredential], approval_url_base: &str) -> Result<(), DomainError> {
+	let initiator_email = email_of(conn, consilium.initiator()).await?;
+	let detail = subject_detail(conn, consilium).await?;
+	let terms = stored_terms(consilium.terms())?;
+	let inserted = sqlx::query(
+		"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, version) \
+		 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, to_timestamp($10), $11)",
+	)
+	.bind(consilium.id().raw())
+	.bind(consilium.kind().as_str())
+	.bind(consilium.state().as_str())
+	.bind(terms)
+	// The claim this request spends. `consilium_single_open_per_source_idx` is unique over
+	// it among the open rows, so "one open request per source claim" is the database's
+	// statement rather than a convention the write path is trusted to keep.
+	.bind(consilium.source_claim().logical_key())
+	.bind(consilium.payload_hash().as_slice())
+	.bind(consilium.initiator().raw())
+	.bind(consilium.owner_count() as i32)
+	.bind(consilium.threshold() as i32)
+	.bind(consilium.expires_at() as f64)
+	.bind(consilium.version() as i64)
+	.execute(&mut *conn)
+	.await;
+	if let Err(sqlx::Error::Database(err)) = &inserted
+		&& err.code().as_deref() == Some(UNIQUE_VIOLATION)
+	{
+		// The partial unique index spoke. One open consilium per source claim is the whole
+		// of the concurrent-approval overdraw defence, so this is a refusal, not a retry.
+		return Err(DomainError::Conflict("a consilium is already open — cancel it before opening another".into()));
+	}
+	inserted.map_err(repo_err)?;
+
+	for credential in credentials {
+		sqlx::query(
+			"INSERT INTO consilium_voter (consilium_id, user_id, initiator_user_id, token_hash, code_hash, expires_at) \
+			 VALUES ($1, $2, $3, $4, $5, to_timestamp($6))",
+		)
+		.bind(consilium.id().raw())
+		.bind(credential.user_id.raw())
+		.bind(consilium.initiator().raw())
+		.bind(credential.token_hash.as_slice())
+		.bind(credential.code_hash.as_slice())
+		.bind(consilium.expires_at() as f64)
+		.execute(&mut *conn)
+		.await
+		.map_err(repo_err)?;
+
+		let mail = approval_mail(consilium, &initiator_email, credential, approval_url_base, &detail);
+		let key = format!("consilium:{}:approval:{}", consilium.id(), credential.user_id);
+		enqueue(conn, MailSubject::Consilium(consilium.id().raw()), credential.user_id.raw(), &key, &mail).await?;
+	}
+
+	outbox::drain_to_outbox(conn, consilium, false).await
 }
 
 /// Load a consilium `FOR UPDATE` with its seats — the opening move of every transition here.
@@ -679,11 +864,12 @@ fn token_seat_of(row: PgRow) -> Result<TokenSeat, DomainError> {
 	})
 }
 
-fn invitation_of(consilium: &Consilium, initiator_email: String, seat: &TokenSeat, decision: VoteDecision) -> InvitationView {
+fn invitation_of(consilium: &Consilium, initiator_email: String, seat: &TokenSeat, decision: VoteDecision, fee_policy: Option<FeePolicyDetail>) -> InvitationView {
 	InvitationView {
 		consilium_id: consilium.id(),
 		state: consilium.state(),
 		terms: consilium.terms().clone(),
+		fee_policy,
 		payload_hash: consilium.payload_hash_hex(),
 		initiator_email,
 		voter_email: seat.email.clone(),
@@ -713,59 +899,7 @@ impl ConsiliumRepository for PgConsilia {
 
 	async fn open(&self, consilium: &mut Consilium, credentials: &[VoterCredential], approval_url_base: &str) -> Result<(), DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
-		let detail = destination_detail(&mut tx, consilium).await?;
-		let terms = stored_terms(consilium.terms())?;
-		let inserted = sqlx::query(
-			"INSERT INTO consilium (id, kind, state, terms, source_claim, payload_hash, initiator_user_id, owner_count, threshold, expires_at, version) \
-			 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, to_timestamp($10), $11)",
-		)
-		.bind(consilium.id().raw())
-		.bind(consilium.kind().as_str())
-		.bind(consilium.state().as_str())
-		.bind(terms)
-		// The claim this request spends. `consilium_single_open_per_source_idx` is unique over
-		// it among the open rows, so "one open request per source claim" is the database's
-		// statement rather than a convention the write path is trusted to keep.
-		.bind(consilium.source_claim().logical_key())
-		.bind(consilium.payload_hash().as_slice())
-		.bind(consilium.initiator().raw())
-		.bind(consilium.owner_count() as i32)
-		.bind(consilium.threshold() as i32)
-		.bind(consilium.expires_at() as f64)
-		.bind(consilium.version() as i64)
-		.execute(&mut *tx)
-		.await;
-		if let Err(sqlx::Error::Database(err)) = &inserted
-			&& err.code().as_deref() == Some(UNIQUE_VIOLATION)
-		{
-			// The partial unique index spoke. One open consilium per source claim is the whole
-			// of the concurrent-approval overdraw defence, so this is a refusal, not a retry.
-			return Err(DomainError::Conflict("a consilium is already open — cancel it before opening another".into()));
-		}
-		inserted.map_err(repo_err)?;
-
-		for credential in credentials {
-			sqlx::query(
-				"INSERT INTO consilium_voter (consilium_id, user_id, initiator_user_id, token_hash, code_hash, expires_at) \
-				 VALUES ($1, $2, $3, $4, $5, to_timestamp($6))",
-			)
-			.bind(consilium.id().raw())
-			.bind(credential.user_id.raw())
-			.bind(consilium.initiator().raw())
-			.bind(credential.token_hash.as_slice())
-			.bind(credential.code_hash.as_slice())
-			.bind(consilium.expires_at() as f64)
-			.execute(&mut *tx)
-			.await
-			.map_err(repo_err)?;
-
-			let mail = approval_mail(consilium, &initiator_email, credential, approval_url_base, detail.as_ref());
-			let key = format!("consilium:{}:approval:{}", consilium.id(), credential.user_id);
-			enqueue(&mut tx, MailSubject::Consilium(consilium.id().raw()), credential.user_id.raw(), &key, &mail).await?;
-		}
-
-		outbox::drain_to_outbox(&mut tx, consilium, false).await?;
+		open_on(&mut tx, consilium, credentials, approval_url_base).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(())
 	}
@@ -783,7 +917,8 @@ impl ConsiliumRepository for PgConsilia {
 		let seats = seats_of(&mut conn, id.raw()).await?;
 		let consilium = rehydrate(&row, &seats)?;
 		let initiator_email = email_of(&mut conn, consilium.initiator()).await?;
-		Ok(Some(view_of(consilium, initiator_email, &seats)?))
+		let fee_policy = fee_policy_detail_of(&mut conn, &consilium).await?;
+		Ok(Some(view_of(consilium, initiator_email, &seats, fee_policy)?))
 	}
 
 	/// THREE QUERIES, NOT `2N + 1`.
@@ -836,7 +971,10 @@ impl ConsiliumRepository for PgConsilia {
 				.get(&consilium.initiator().raw())
 				.cloned()
 				.ok_or_else(|| DomainError::Repository(format!("consilium initiator {} has no mirrored user row", consilium.initiator())))?;
-			views.push(view_of(consilium, initiator_email, &seats)?);
+			// Two small lookups per FEE-POLICY row only; the other kinds add nothing to the
+			// three queries above.
+			let fee_policy = fee_policy_detail_of(&mut conn, &consilium).await?;
+			views.push(view_of(consilium, initiator_email, &seats, fee_policy)?);
 		}
 		Ok(views)
 	}
@@ -849,11 +987,12 @@ impl ConsiliumRepository for PgConsilia {
 		}
 		consilium.cancel(at)?;
 		persist(&mut tx, &mut consilium).await?;
-		close_decided_payment(&mut tx, &consilium, at).await?;
+		close_decided_subject(&mut tx, &consilium, at).await?;
 		announce(&mut tx, &consilium, "withdrawn by the owner who opened it").await?;
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
+		let fee_policy = fee_policy_detail_of(&mut tx, &consilium).await?;
 		tx.commit().await.map_err(repo_err)?;
-		view_of(consilium, initiator_email, &seats)
+		view_of(consilium, initiator_email, &seats, fee_policy)
 	}
 
 	async fn invitation(&self, token_hash: &[u8; DIGEST_BYTES], at: i64) -> Result<InvitationView, DomainError> {
@@ -879,7 +1018,8 @@ impl ConsiliumRepository for PgConsilia {
 			return Err(invitation_not_found());
 		}
 		let initiator_email = email_of(&mut conn, consilium.initiator()).await?;
-		Ok(invitation_of(&consilium, initiator_email, &seat, VoteDecision::Pending))
+		let fee_policy = fee_policy_detail_of(&mut conn, &consilium).await?;
+		Ok(invitation_of(&consilium, initiator_email, &seat, VoteDecision::Pending, fee_policy))
 	}
 
 	async fn submit(&self, token_hash: &[u8; DIGEST_BYTES], code: &str, decision: VoteDecision, audit: &VoteAudit, at: i64) -> Result<SubmitOutcome, DomainError> {
@@ -920,6 +1060,7 @@ impl ConsiliumRepository for PgConsilia {
 		let voter = UserId::from_raw(seat.user_id);
 		let already = VoteDecision::parse(&seat.decision)?;
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
+		let fee_policy = fee_policy_detail_of(&mut tx, &consilium).await?;
 
 		// A burned token and an expired one are indistinguishable from an unknown one. The
 		// token's OWN deadline is checked here rather than trusting the sweep to have run,
@@ -993,7 +1134,7 @@ impl ConsiliumRepository for PgConsilia {
 			// written. A retried request must not error, and must not double-count.
 			tx.commit().await.map_err(repo_err)?;
 			return Ok(SubmitOutcome {
-				invitation: invitation_of(&consilium, initiator_email, &seat, already),
+				invitation: invitation_of(&consilium, initiator_email, &seat, already, fee_policy),
 				decided: false,
 				approved: false,
 			});
@@ -1024,12 +1165,12 @@ impl ConsiliumRepository for PgConsilia {
 		// An approval is announced by the execution step instead, once there is an outcome
 		// worth reading; announcing both would mail the owners twice about one event.
 		if decided && !approved {
-			close_decided_payment(&mut tx, &consilium, at).await?;
+			close_decided_subject(&mut tx, &consilium, at).await?;
 			announce(&mut tx, &consilium, "the threshold can no longer be reached").await?;
 		}
 		tx.commit().await.map_err(repo_err)?;
 		Ok(SubmitOutcome {
-			invitation: invitation_of(&consilium, initiator_email, &seat, decision),
+			invitation: invitation_of(&consilium, initiator_email, &seat, decision, fee_policy),
 			decided,
 			approved,
 		})
@@ -1113,6 +1254,7 @@ impl ConsiliumRepository for PgConsilia {
 					ConsiliumEffect::Withdrawal(withdrawal) => format!("payout {withdrawal} created"),
 					ConsiliumEffect::Payment(payment) => format!("payment {payment} approved"),
 					ConsiliumEffect::Valuation(valuation) => format!("valuation {valuation} recorded"),
+					ConsiliumEffect::FeePolicy(change) => format!("fee-policy change {change} scheduled"),
 				}
 			}
 			ExecutionOutcome::Failed(reason) => {
@@ -1122,15 +1264,16 @@ impl ConsiliumRepository for PgConsilia {
 		};
 		persist(&mut tx, &mut consilium).await?;
 		// A quorum that carried but could not be spent (a stale approval, a roster change)
-		// is terminal for the consilium, so the order it was over must not stay answerable.
-		// A no-op when the approval did land on the order before the failure.
+		// is terminal for the consilium, so the subject it was over must not stay answerable.
+		// A no-op when the approval did land on the subject before the failure.
 		if consilium.state() == ConsiliumState::ExecutionFailed {
-			close_decided_payment(&mut tx, &consilium, at).await?;
+			close_decided_subject(&mut tx, &consilium, at).await?;
 		}
 		announce(&mut tx, &consilium, &detail).await?;
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
+		let fee_policy = fee_policy_detail_of(&mut tx, &consilium).await?;
 		tx.commit().await.map_err(repo_err)?;
-		view_of(consilium, initiator_email, &seats)
+		view_of(consilium, initiator_email, &seats, fee_policy)
 	}
 }
 

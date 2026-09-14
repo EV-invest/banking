@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::outbox,
-	ports::fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeeSettlements, PositionAccrual, PositionAccruals, SettlementRecord},
+	ports::fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeeSettlements, PolicyRecord, PositionAccrual, PositionAccruals, SettlementRecord},
 };
 
 /// Cap on a returned history page. The fee statement grows by one row per position per
@@ -66,7 +66,7 @@ impl PgFeePolicies {
 
 pub(crate) fn policy_from_row(row: &sqlx::postgres::PgRow) -> Result<(ServiceId, FeePolicy), DomainError> {
 	let service = ServiceId::parse(row.try_get::<String, _>("service").map_err(repo_err)?.as_str())?;
-	let policy = FeePolicy::new(
+	let policy = FeePolicy::from_stored(
 		u32::try_from(row.try_get::<i32, _>("management_bps").map_err(repo_err)?).map_err(|_| DomainError::Repository("negative management rate".into()))?,
 		u32::try_from(row.try_get::<i32, _>("performance_bps").map_err(repo_err)?).map_err(|_| DomainError::Repository("negative performance rate".into()))?,
 		u32::try_from(row.try_get::<i32, _>("hurdle_bps").map_err(repo_err)?).map_err(|_| DomainError::Repository("negative hurdle rate".into()))?,
@@ -74,6 +74,27 @@ pub(crate) fn policy_from_row(row: &sqlx::postgres::PgRow) -> Result<(ServiceId,
 		CrystallizationPeriod::parse(row.try_get::<String, _>("crystallization").map_err(repo_err)?.as_str())?,
 	)?;
 	Ok((service, policy))
+}
+
+/// The live row with its version and clocks — the columns `0036` added beside the terms.
+fn record_from_row(row: &sqlx::postgres::PgRow) -> Result<(ServiceId, PolicyRecord), DomainError> {
+	let (service, policy) = policy_from_row(row)?;
+	Ok((
+		service,
+		PolicyRecord {
+			policy,
+			version: u32::try_from(row.try_get::<i32, _>("version").map_err(repo_err)?).map_err(|_| DomainError::Repository("negative policy version".into()))?,
+			effective_from_unix: row.try_get("effective_from_unix").map_err(repo_err)?,
+			updated_at_unix: row.try_get("updated_at_unix").map_err(repo_err)?,
+		},
+	))
+}
+
+macro_rules! policy_record_columns {
+	() => {
+		"service, management_bps, performance_bps, hurdle_bps, basis, crystallization, version, \
+		 EXTRACT(EPOCH FROM effective_from)::bigint AS effective_from_unix, EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at_unix"
+	};
 }
 
 #[async_trait]
@@ -87,40 +108,21 @@ impl FeePolicies for PgFeePolicies {
 		row.map(|row| policy_from_row(&row).map(|(_, policy)| policy)).transpose()
 	}
 
-	async fn set(&self, service: &ServiceId, policy: FeePolicy, updated_by: &str) -> Result<(), DomainError> {
-		sqlx::query(
-			"INSERT INTO fee_policies (service, management_bps, performance_bps, hurdle_bps, basis, crystallization, updated_by) \
-			 VALUES ($1, $2, $3, $4, $5, $6, $7) \
-			 ON CONFLICT (service) DO UPDATE SET management_bps = EXCLUDED.management_bps, performance_bps = EXCLUDED.performance_bps, \
-			   hurdle_bps = EXCLUDED.hurdle_bps, basis = EXCLUDED.basis, crystallization = EXCLUDED.crystallization, \
-			   updated_by = EXCLUDED.updated_by, updated_at = now()",
-		)
-		.bind(service.as_str())
-		.bind(i32::try_from(policy.management_bps()).unwrap_or(i32::MAX))
-		.bind(i32::try_from(policy.performance_bps()).unwrap_or(i32::MAX))
-		.bind(i32::try_from(policy.hurdle_bps()).unwrap_or(i32::MAX))
-		.bind(policy.basis().as_str())
-		.bind(policy.crystallization().as_str())
-		.bind(updated_by)
-		.execute(&self.pool)
-		.await
-		.map_err(|err| match &err {
-			// The FK to `allocations` — terms for a product that was never registered.
-			sqlx::Error::Database(db) if db.is_foreign_key_violation() => DomainError::NotFound {
-				entity: "allocation",
-				id: service.to_string(),
-			},
-			_ => repo_err(err),
-		})?;
-		Ok(())
+	async fn current(&self, service: &ServiceId) -> Result<Option<PolicyRecord>, DomainError> {
+		let row = sqlx::query(concat!("SELECT ", policy_record_columns!(), " FROM fee_policies WHERE service = $1"))
+			.bind(service.as_str())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		row.map(|row| record_from_row(&row).map(|(_, record)| record)).transpose()
 	}
 
-	async fn list(&self) -> Result<Vec<(ServiceId, FeePolicy)>, DomainError> {
-		let rows = sqlx::query("SELECT service, management_bps, performance_bps, hurdle_bps, basis, crystallization FROM fee_policies ORDER BY service")
+	async fn list(&self) -> Result<Vec<(ServiceId, PolicyRecord)>, DomainError> {
+		let rows = sqlx::query(concat!("SELECT ", policy_record_columns!(), " FROM fee_policies ORDER BY service"))
 			.fetch_all(&self.pool)
 			.await
 			.map_err(repo_err)?;
-		rows.iter().map(policy_from_row).collect()
+		rows.iter().map(record_from_row).collect()
 	}
 }
 

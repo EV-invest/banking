@@ -244,6 +244,20 @@ export type BankingV1CancelConsiliumRequest = {
 };
 
 /**
+ * CancelFeePolicyChangeRequest
+ */
+export type BankingV1CancelFeePolicyChangeRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * change_id
+     */
+    change_id?: string;
+};
+
+/**
  * CancelPaymentRequest
  */
 export type BankingV1CancelPaymentRequest = {
@@ -322,10 +336,10 @@ export type BankingV1Consilium = {
     /**
      * revenue_payout
      *
-     * EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`) is
-     * set, decided by the kind. Named fields rather than a oneof because the surfaces read
-     * them by name and a oneof buys nothing here that the "exactly one" rule does not
-     * already give.
+     * EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,
+     * `fee_policy`) is set, decided by the kind. Named fields rather than a oneof because the
+     * surfaces read them by name and a oneof buys nothing here that the "exactly one" rule
+     * does not already give.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -421,6 +435,114 @@ export type BankingV1Consilium = {
      * The `fund_valuations` row an executed VALUATION-OVERRIDE consilium recorded.
      */
     executed_valuation_id?: string;
+    /**
+     * fee_policy
+     *
+     * The fourth terms sibling — set exactly for a FEE_POLICY consilium.
+     */
+    fee_policy?: BankingV1ConsiliumFeePolicyTerms;
+    /**
+     * executed_fee_policy_change_id
+     *
+     * The fee-policy change an executed FEE_POLICY consilium scheduled.
+     */
+    executed_fee_policy_change_id?: string;
+};
+
+/**
+ * ConsiliumFeePolicyTerms
+ *
+ * The immutable subject of a FEE-POLICY consilium — a change of a product's fee terms
+ * that tightens them beyond the house envelope (docs/FEES.md § "Changing the terms").
+ * Not a money move: carrying it schedules the change, and the fee sweeper promotes it once
+ * the holders' notice period has run.
+ */
+export type BankingV1ConsiliumFeePolicyTerms = {
+    /**
+     * change_id
+     *
+     * The change this quorum authorizes. Inside the hashed subject, so an approval of one
+     * change is never a valid signature over another naming the same numbers.
+     */
+    change_id?: string;
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * allocation_name
+     *
+     * The product's display name, read live from the registry.
+     */
+    allocation_name?: string;
+    /**
+     * from_configured
+     *
+     * The terms in force when the change was proposed. `from_configured` is false when the
+     * fund charged nothing — a different fact from a policy whose rates are zero — and the
+     * `from_*` fields are then zero / default.
+     */
+    from_configured?: boolean;
+    /**
+     * from_management_bps
+     */
+    from_management_bps?: number;
+    /**
+     * from_performance_bps
+     */
+    from_performance_bps?: number;
+    /**
+     * from_hurdle_bps
+     */
+    from_hurdle_bps?: number;
+    /**
+     * from_basis
+     */
+    from_basis?: string;
+    /**
+     * from_crystallization
+     */
+    from_crystallization?: string;
+    /**
+     * to_management_bps
+     */
+    to_management_bps?: number;
+    /**
+     * to_performance_bps
+     */
+    to_performance_bps?: number;
+    /**
+     * to_hurdle_bps
+     */
+    to_hurdle_bps?: number;
+    /**
+     * to_basis
+     */
+    to_basis?: string;
+    /**
+     * to_crystallization
+     */
+    to_crystallization?: string;
+    /**
+     * effective_from
+     *
+     * Unix seconds the requester asked the change to bind from; 0 = as soon as the notice
+     * allows. The moment actually fixed is never earlier than 24h after the carrying vote
+     * while anyone holds units.
+     */
+    effective_from?: number | string;
+    /**
+     * holder_count
+     *
+     * How many investors hold units right now — who the change binds.
+     */
+    holder_count?: number;
+    /**
+     * reason
+     *
+     * Why, in the requester's words. Required for this kind, shown verbatim.
+     */
+    reason?: string;
 };
 
 /**
@@ -502,6 +624,10 @@ export type BankingV1ConsiliumInvitation = {
      * valuation_override
      */
     valuation_override?: BankingV1ValuationOverrideTerms;
+    /**
+     * fee_policy
+     */
+    fee_policy?: BankingV1ConsiliumFeePolicyTerms;
 };
 
 /**
@@ -918,6 +1044,124 @@ export type BankingV1FeePolicy = {
      * unix seconds; 0 when unconfigured
      */
     updated_at?: number | string;
+    /**
+     * version
+     *
+     * Which version of the fund's history these terms are; 0 when unconfigured.
+     */
+    version?: number;
+    /**
+     * effective_from
+     *
+     * Unix seconds since which these terms bind; 0 when unconfigured.
+     */
+    effective_from?: number | string;
+    /**
+     * pending
+     *
+     * The change on its way, if any — awaiting the owners or scheduled. Shown to holders
+     * and non-holders alike: the terms coming are part of deciding whether to stay in.
+     */
+    pending?: BankingV1FeePolicyChange;
+};
+
+/**
+ * FeePolicyChange
+ *
+ * One row of a fund's fee-policy history. `state` is one of awaiting_consilium |
+ * scheduled | active | superseded | rejected | cancelled; `requirement` is admin |
+ * owner_consilium. See docs/FEES.md § "Changing the terms".
+ */
+export type BankingV1FeePolicyChange = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * version
+     */
+    version?: number;
+    /**
+     * state
+     */
+    state?: string;
+    /**
+     * management_bps
+     */
+    management_bps?: number;
+    /**
+     * performance_bps
+     */
+    performance_bps?: number;
+    /**
+     * hurdle_bps
+     */
+    hurdle_bps?: number;
+    /**
+     * basis
+     */
+    basis?: string;
+    /**
+     * crystallization
+     */
+    crystallization?: string;
+    /**
+     * effective_from
+     *
+     * Unix seconds the terms bind from. Provisional while awaiting the owners; fixed when
+     * the change is scheduled.
+     */
+    effective_from?: number | string;
+    /**
+     * requirement
+     */
+    requirement?: string;
+    /**
+     * consilium_id
+     *
+     * The consilium this change waits on (or waited on); empty for an administrator's change.
+     */
+    consilium_id?: string;
+    /**
+     * requested_by
+     */
+    requested_by?: string;
+    /**
+     * requested_at
+     */
+    requested_at?: number | string;
+    /**
+     * scheduled_at
+     *
+     * Unix seconds the notice clock started; 0 while awaiting the owners.
+     */
+    scheduled_at?: number | string;
+    /**
+     * applied_at
+     *
+     * Unix seconds the terms took effect; 0 until they did.
+     */
+    applied_at?: number | string;
+    /**
+     * reason
+     *
+     * Why, in the requester's words; empty when none was given.
+     */
+    reason?: string;
+};
+
+/**
+ * FeePolicyChangeList
+ */
+export type BankingV1FeePolicyChangeList = {
+    /**
+     * changes
+     */
+    changes?: Array<BankingV1FeePolicyChange>;
 };
 
 /**
@@ -1425,6 +1669,16 @@ export type BankingV1ListFeeAssessmentsRequest = {
  */
 export type BankingV1ListFeePoliciesRequest = {
     [key: string]: never;
+};
+
+/**
+ * ListFeePolicyChangesRequest
+ */
+export type BankingV1ListFeePolicyChangesRequest = {
+    /**
+     * service
+     */
+    service?: string;
 };
 
 /**
@@ -2853,6 +3107,50 @@ export type BankingV1RotateDepositAddressResponse = {
 };
 
 /**
+ * ScheduleFeePolicyRequest
+ */
+export type BankingV1ScheduleFeePolicyRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * management_bps
+     */
+    management_bps?: number;
+    /**
+     * performance_bps
+     */
+    performance_bps?: number;
+    /**
+     * hurdle_bps
+     */
+    hurdle_bps?: number;
+    /**
+     * basis
+     */
+    basis?: string;
+    /**
+     * crystallization
+     */
+    crystallization?: string;
+    /**
+     * effective_from
+     *
+     * Unix seconds the change should bind from; 0 = as soon as the notice period allows.
+     * An earlier request than the notice allows is lifted to the minimum, not refused.
+     */
+    effective_from?: number | string;
+    /**
+     * reason
+     *
+     * Why, in the requester's words. Required and non-empty when the owners must approve
+     * (the approval mail is refused without one); optional otherwise. Shown verbatim.
+     */
+    reason?: string;
+};
+
+/**
  * SeedCapitalRequest
  *
  * Record fund capital that reached a rail's treasury, PROVEN against the chain.
@@ -2985,36 +3283,6 @@ export type BankingV1SetAllocationUnitCapRequest = {
      * decimal units, > 0 (e.g. "1000" or "100000000")
      */
     unit_cap?: string;
-};
-
-/**
- * SetFeePolicyRequest
- */
-export type BankingV1SetFeePolicyRequest = {
-    /**
-     * service
-     */
-    service?: string;
-    /**
-     * management_bps
-     */
-    management_bps?: number;
-    /**
-     * performance_bps
-     */
-    performance_bps?: number;
-    /**
-     * hurdle_bps
-     */
-    hurdle_bps?: number;
-    /**
-     * basis
-     */
-    basis?: string;
-    /**
-     * crystallization
-     */
-    crystallization?: string;
 };
 
 /**
@@ -4075,6 +4343,184 @@ export type ConciergeV1ExchangeRequest = {
 };
 
 /**
+ * FeePolicyApprovalMail
+ *
+ * An owner asked to approve new fee terms for a fund.
+ *
+ * Shaped like PaymentApprovalMail — a seated owner, a verified address, the operator's
+ * reason set apart as theirs, a link on our origin and the code that arms it — and it
+ * describes what an owner must actually be able to check: the terms in force NOW beside
+ * the terms PROPOSED, field by field. A fee change is a change to the price of every
+ * investor in the fund, and an approval mail that showed only the new number would have
+ * the owner approve a difference they cannot see.
+ */
+export type ConciergeV1FeePolicyApprovalMail = {
+    /**
+     * consilium_id
+     */
+    consilium_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * fund
+     *
+     * The fund whose terms change, in words a person recognises (not a service id).
+     */
+    fund?: string;
+    /**
+     * current
+     *
+     * The terms in force today. Absent when the fund charges nothing yet — a product with
+     * no policy charges no fee, so "none" is a real current state, not a missing field.
+     */
+    current?: ConciergeV1FeeTerms;
+    /**
+     * proposed
+     *
+     * The terms proposed. Required.
+     */
+    proposed?: ConciergeV1FeeTerms;
+    /**
+     * reason
+     *
+     * Why, in the operator's words. Required, and rendered attributed to them.
+     */
+    reason?: string;
+    /**
+     * payload_hash
+     */
+    payload_hash?: string;
+    /**
+     * threshold
+     */
+    threshold?: number;
+    /**
+     * owner_count
+     */
+    owner_count?: number;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * approval_url
+     *
+     * Absolute URL of the approval page, carrying the opaque token.
+     */
+    approval_url?: string;
+    /**
+     * code
+     *
+     * The secret code the owner types on that page. Held only until the mail is sent,
+     * then cleared from the delivery row.
+     */
+    code?: string;
+};
+
+/**
+ * FeePolicyNoticeMail
+ *
+ * One investor told that the fee terms of a fund they hold are changing.
+ *
+ * `subject_user_id` exists beside SendGovernanceMailRequest.user_id for the reason
+ * PaymentConsentMail gives: no seat is involved, so the only fact this plane can hold
+ * the money plane to is that the person it is writing to IS the person the notice is
+ * about. A caller that fans one investor's notice out to a second mailbox has to
+ * contradict itself in the same message to do it.
+ *
+ * No code and no decision: the terms were set — by the operator within the house terms,
+ * or by the owners' consilium beyond them — and this is the investor being told before
+ * they take effect, with the same notice either way. `link` is a CABINET-RELATIVE path —
+ * the money plane names no host at all; this plane hangs it off its own cabinet origin.
+ */
+export type ConciergeV1FeePolicyNoticeMail = {
+    /**
+     * subject_user_id
+     *
+     * Concierge canonical id of the investor. MUST equal the request's user_id; the relay
+     * refuses the mail otherwise.
+     */
+    subject_user_id?: string;
+    /**
+     * fund
+     *
+     * The fund whose terms change, in words a person recognises.
+     */
+    fund?: string;
+    /**
+     * current
+     *
+     * The terms in force until `effective_at`. Absent when the fund charged nothing.
+     */
+    current?: ConciergeV1FeeTerms;
+    /**
+     * proposed
+     *
+     * The terms that apply from `effective_at`. Required.
+     */
+    proposed?: ConciergeV1FeeTerms;
+    /**
+     * effective_at
+     *
+     * Unix seconds the new terms take effect.
+     */
+    effective_at?: number | string;
+    /**
+     * link
+     *
+     * Cabinet-relative path of the page showing the full terms, e.g. `/funds/qn/fees`.
+     * Must start with a single `/`; empty means the cabinet's front page.
+     */
+    link?: string;
+};
+
+/**
+ * FeeTerms
+ *
+ * One set of fee terms, as the money plane's `FeePolicy` spells them: basis points and
+ * two closed vocabularies. Rendered HERE as percentages and words — the money plane
+ * never hands this plane a pre-rendered "2.5%", because a string it renders is a string
+ * it can make say anything. Every `_bps` is refused above 10 000 (100%), and `basis` and
+ * `crystallization` are refused outside their closed sets: an unknown word means the two
+ * planes disagree about what the terms ARE, which is a rejected call, not a line of mail.
+ */
+export type ConciergeV1FeeTerms = {
+    /**
+     * management_bps
+     *
+     * Annual management fee, in basis points of `basis`.
+     */
+    management_bps?: number;
+    /**
+     * performance_bps
+     *
+     * Performance fee over the high-water mark, in basis points of the gain.
+     */
+    performance_bps?: number;
+    /**
+     * hurdle_bps
+     *
+     * Annual hurdle the gain must clear before the performance fee is due. 0 = none.
+     */
+    hurdle_bps?: number;
+    /**
+     * basis
+     *
+     * invested_capital | market_value — what the management fee is charged on.
+     */
+    basis?: string;
+    /**
+     * crystallization
+     *
+     * monthly | quarterly | semi_annual | annual — how often the performance fee
+     * crystallizes.
+     */
+    crystallization?: string;
+};
+
+/**
  * GetMeRequest
  */
 export type ConciergeV1GetMeRequest = {
@@ -4136,7 +4582,7 @@ export type ConciergeV1GetUserRequest = {
  *
  * The typed governance mails this plane knows how to render.
  */
-export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED' | 'GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT' | 'GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL';
+export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED' | 'GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT' | 'GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_FEE_POLICY_APPROVAL' | 'GOVERNANCE_MAIL_KIND_FEE_POLICY_NOTICE';
 
 /**
  * GovernanceTick
@@ -5211,6 +5657,14 @@ export type ConciergeV1SendGovernanceMailRequest = {
      * payment_approval
      */
     payment_approval?: ConciergeV1PaymentApprovalMail;
+    /**
+     * fee_policy_approval
+     */
+    fee_policy_approval?: ConciergeV1FeePolicyApprovalMail;
+    /**
+     * fee_policy_notice
+     */
+    fee_policy_notice?: ConciergeV1FeePolicyNoticeMail;
 };
 
 /**
@@ -7190,6 +7644,35 @@ export type BankingV1ConsiliumServiceOpenValuationOverrideResponses = {
 
 export type BankingV1ConsiliumServiceOpenValuationOverrideResponse = BankingV1ConsiliumServiceOpenValuationOverrideResponses[keyof BankingV1ConsiliumServiceOpenValuationOverrideResponses];
 
+export type BankingV1FeesServiceCancelFeePolicyChangeData = {
+    body: BankingV1CancelFeePolicyChangeRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/CancelFeePolicyChange';
+};
+
+export type BankingV1FeesServiceCancelFeePolicyChangeErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceCancelFeePolicyChangeError = BankingV1FeesServiceCancelFeePolicyChangeErrors[keyof BankingV1FeesServiceCancelFeePolicyChangeErrors];
+
+export type BankingV1FeesServiceCancelFeePolicyChangeResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeePolicyChange;
+};
+
+export type BankingV1FeesServiceCancelFeePolicyChangeResponse = BankingV1FeesServiceCancelFeePolicyChangeResponses[keyof BankingV1FeesServiceCancelFeePolicyChangeResponses];
+
 export type BankingV1FeesServiceGetAccruedFeesData = {
     body: BankingV1GetAccruedFeesRequest;
     headers: {
@@ -7335,6 +7818,35 @@ export type BankingV1FeesServiceListFeePoliciesResponses = {
 
 export type BankingV1FeesServiceListFeePoliciesResponse = BankingV1FeesServiceListFeePoliciesResponses[keyof BankingV1FeesServiceListFeePoliciesResponses];
 
+export type BankingV1FeesServiceListFeePolicyChangesData = {
+    body: BankingV1ListFeePolicyChangesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/ListFeePolicyChanges';
+};
+
+export type BankingV1FeesServiceListFeePolicyChangesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceListFeePolicyChangesError = BankingV1FeesServiceListFeePolicyChangesErrors[keyof BankingV1FeesServiceListFeePolicyChangesErrors];
+
+export type BankingV1FeesServiceListFeePolicyChangesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeePolicyChangeList;
+};
+
+export type BankingV1FeesServiceListFeePolicyChangesResponse = BankingV1FeesServiceListFeePolicyChangesResponses[keyof BankingV1FeesServiceListFeePolicyChangesResponses];
+
 export type BankingV1FeesServiceListFundFeeAssessmentsData = {
     body: BankingV1ListFundFeeAssessmentsRequest;
     headers: {
@@ -7364,34 +7876,34 @@ export type BankingV1FeesServiceListFundFeeAssessmentsResponses = {
 
 export type BankingV1FeesServiceListFundFeeAssessmentsResponse = BankingV1FeesServiceListFundFeeAssessmentsResponses[keyof BankingV1FeesServiceListFundFeeAssessmentsResponses];
 
-export type BankingV1FeesServiceSetFeePolicyData = {
-    body: BankingV1SetFeePolicyRequest;
+export type BankingV1FeesServiceScheduleFeePolicyData = {
+    body: BankingV1ScheduleFeePolicyRequest;
     headers: {
         'Connect-Protocol-Version': ConnectProtocolVersion;
         'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
     };
     path?: never;
     query?: never;
-    url: '/banking.v1.FeesService/SetFeePolicy';
+    url: '/banking.v1.FeesService/ScheduleFeePolicy';
 };
 
-export type BankingV1FeesServiceSetFeePolicyErrors = {
+export type BankingV1FeesServiceScheduleFeePolicyErrors = {
     /**
      * Error
      */
     default: ConnectError;
 };
 
-export type BankingV1FeesServiceSetFeePolicyError = BankingV1FeesServiceSetFeePolicyErrors[keyof BankingV1FeesServiceSetFeePolicyErrors];
+export type BankingV1FeesServiceScheduleFeePolicyError = BankingV1FeesServiceScheduleFeePolicyErrors[keyof BankingV1FeesServiceScheduleFeePolicyErrors];
 
-export type BankingV1FeesServiceSetFeePolicyResponses = {
+export type BankingV1FeesServiceScheduleFeePolicyResponses = {
     /**
      * Success
      */
-    200: BankingV1FeePolicy;
+    200: BankingV1FeePolicyChange;
 };
 
-export type BankingV1FeesServiceSetFeePolicyResponse = BankingV1FeesServiceSetFeePolicyResponses[keyof BankingV1FeesServiceSetFeePolicyResponses];
+export type BankingV1FeesServiceScheduleFeePolicyResponse = BankingV1FeesServiceScheduleFeePolicyResponses[keyof BankingV1FeesServiceScheduleFeePolicyResponses];
 
 export type BankingV1FeesServiceSettleFeeSharesData = {
     body: BankingV1SettleFeeSharesRequest;

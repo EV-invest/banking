@@ -628,6 +628,55 @@ through the existing `PAYMENT_APPROVAL` template with every label spelled out �
 "<product> — NAV valuation", destination "AUM <n> USDT", amount = AUM, and a fixed
 reason naming the guard. The mail is the doorbell; the approval page, which renders the
 real terms, is the truth.
+---
+
+## Fee policy
+
+The fourth kind, `ConsiliumKind::FeePolicy`, guards a product's fee TERMS rather than a money
+move. It exists because one administrator could set a 100% management rate with no delay,
+no version and no notice, and the sweeper would collect it (#233). The full policy — the
+rate ceilings, the house envelope, what counts as tightening, the 24h notice and the
+promotion that settles the old rate first — is in `docs/FEES.md` § "Changing the terms";
+this section covers only how the kind sits in the consilium.
+
+- **When a consilium is needed.** Exactly when the change TIGHTENS the terms AND lands
+  OUTSIDE the house envelope (2-and-20 on invested capital, annual), or LOWERS the hurdle
+  wherever the terms sit. Everything else is one `AllocationManage` holder's call and never
+  reaches this aggregate.
+- **Who may open it.** The requester, who must therefore be an owner. `ScheduleFeePolicy`
+  refuses an administrator who is not one before writing anything — the alternative would
+  be a consilium opened by a seat that does not exist.
+- **The subject** is `FeePolicySubject { change_id, service, from, to, reason,
+  requested_effective_from }`, domain-separated (`banking.v1.FeePolicySubject\0`) and hashed
+  as every other kind is. The change's id is inside the hash, so an approval of one change
+  is not a signature over another that names the same numbers; so is the requester's
+  `reason` (required, non-empty — the approval mail is refused without one), so an approval
+  given for one justification is not an approval of the same numbers under another. `from`
+  is absent for a product that charged nothing, which the mail states differently from a
+  policy whose rates are zero.
+- **The source claim** is the product's `FeeShares(service)` — the account the new terms
+  will collect into — so `consilium_single_open_per_source_idx` yields one open fee-policy
+  consilium per product, and a payout or a payment over a different claim is not blocked by
+  it. `consilium_payout_spends_the_fee_claim` constrains only `revenue_payout` and leaves
+  this kind alone.
+- **Execution** is not a money move. Carrying the quorum moves the change from
+  `awaiting_consilium` to `scheduled`, fixes `effective_from` at
+  `max(requested, now + 24h)` (or `now` if the product has no holders), and enqueues one
+  `FeePolicyNotice` to every holder — in the transaction that records the effect
+  (`executed_fee_policy_change_id`). The sweeper then promotes the change into
+  `fee_policies` once the moment arrives. The same execution gates apply as to a payout:
+  hash re-verified, quorum re-checked against the live roster, roster change voids,
+  staleness grace.
+- **Every non-approval verdict** — rejection, expiry, withdrawal, voiding after a roster
+  change, a failed execution — closes the change as `rejected` in the verdict's own
+  transaction, exactly as a payment order is closed under its consilium.
+- **Mail.** Owners are asked with `FeePolicyApproval` (`GOVERNANCE_MAIL_KIND_FEE_POLICY_APPROVAL`:
+  the fund's display name, the current and the proposed terms, the reason, and the token).
+  Holders are told with `FeePolicyNotice` (`GOVERNANCE_MAIL_KIND_FEE_POLICY_NOTICE`: the same
+  two sets of terms, the moment they bind, and the cabinet-relative product page
+  `/invest/<service>`, addressed by identity as a consent is). No outcome mail is sent for
+  this kind: the owners read the verdict in the consilium room, and the holders learn of a
+  carried change from their notice. Wiring an outcome template is tracked under #233.
 
 ---
 
