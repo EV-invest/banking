@@ -11,7 +11,17 @@
 
 import type { ScheduleFeePolicyRequest } from "@/shared/contracts/admin";
 
-import { MAX_HURDLE_BPS, MAX_MANAGEMENT_BPS, MAX_PERFORMANCE_BPS, requirementFor, type ChangeRequirement, type FeeTermsLike } from "../../../../shared/lib/fee-terms.ts";
+import {
+  MAX_EFFECTIVE_FROM_HORIZON_SECS,
+  MAX_HURDLE_BPS,
+  MAX_MANAGEMENT_BPS,
+  MAX_PERFORMANCE_BPS,
+  MAX_REASON_BYTES,
+  MIN_NOTICE_SECS,
+  requirementFor,
+  type ChangeRequirement,
+  type FeeTermsLike,
+} from "../../../../shared/lib/fee-terms.ts";
 import { pct, toBps } from "../../../../shared/lib/rate.ts";
 
 /** The five terms as the form holds them: rates in percent, exactly as typed. */
@@ -48,7 +58,27 @@ export const FIELD_LABEL_KEY: Record<RateField, string> = {
 export type DraftProblem =
   | { key: "admin.fees.err.notPercent"; field: RateField }
   | { key: "admin.fees.err.overCeiling"; field: RateField; ceiling: string }
-  | { key: "admin.fees.err.reasonRequired" };
+  | { key: "admin.fees.err.reasonRequired" }
+  | { key: "admin.fees.err.reasonTooLong"; max: number; used: number }
+  | { key: "admin.fees.err.tooFarAhead"; days: number };
+
+/** The horizon in the unit the sentence about it uses. */
+export const MAX_HORIZON_DAYS = MAX_EFFECTIVE_FROM_HORIZON_SECS / 86_400;
+
+/**
+ * The reason as the wire will carry it: one line, trimmed. The plane refuses any control
+ * character outright (`validate_reason` — a line break has every meaning in a mail
+ * header), and the field is single-line, so the only way one arrives is a paste; it is
+ * folded into a space rather than bounced back as a server error about "control characters".
+ */
+export function normalizeReason(reason: string): string {
+  return reason.replace(/\p{Cc}+/gu, " ").trim();
+}
+
+/** How long the plane will measure the reason to be — bytes, not characters. */
+export function reasonBytes(reason: string): number {
+  return new TextEncoder().encode(reason).length;
+}
 
 /** Every rate parsed, or `null` while any of them is not a percent. */
 export function draftBps(draft: TermsDraft): Record<RateField, number | null> {
@@ -81,8 +111,10 @@ export function draftRequirement(current: FeeTermsLike | null, draft: TermsDraft
   return next ? requirementFor(current, next) : null;
 }
 
-/** The first thing wrong with the draft, in field order, or `null` when it can be sent. */
-export function draftProblem(current: FeeTermsLike | null, draft: TermsDraft): DraftProblem | null {
+/** The first thing wrong with the draft, in field order, or `null` when it can be sent.
+ *  `nowSeconds` is the clock the horizon is measured from — the caller's, so a test can
+ *  hold it still and a card can read it once rather than on every keystroke. */
+export function draftProblem(current: FeeTermsLike | null, draft: TermsDraft, nowSeconds: number): DraftProblem | null {
   const bps = draftBps(draft);
   for (const field of RATE_FIELDS) {
     const value = bps[field];
@@ -91,7 +123,15 @@ export function draftProblem(current: FeeTermsLike | null, draft: TermsDraft): D
     if (value === null) return { key: "admin.fees.err.notPercent", field };
     if (value > CEILING_BPS[field]) return { key: "admin.fees.err.overCeiling", field, ceiling: pct(CEILING_BPS[field]) };
   }
-  if (draftRequirement(current, draft) === "owner_consilium" && draft.reason.trim().length === 0) {
+  // Only the far end is an error. An early moment is not one: the plane lifts it to the
+  // notice floor rather than refusing it (`earliest_effective_from`), and the field says
+  // so as a preview (`effectiveFromLifted`) instead of turning red.
+  const moment = effectiveFromSeconds(draft.effectiveFrom);
+  if (moment !== null && moment > nowSeconds + MAX_EFFECTIVE_FROM_HORIZON_SECS) return { key: "admin.fees.err.tooFarAhead", days: MAX_HORIZON_DAYS };
+  const reason = normalizeReason(draft.reason);
+  const used = reasonBytes(reason);
+  if (used > MAX_REASON_BYTES) return { key: "admin.fees.err.reasonTooLong", max: MAX_REASON_BYTES, used };
+  if (draftRequirement(current, draft) === "owner_consilium" && reason.length === 0) {
     return { key: "admin.fees.err.reasonRequired" };
   }
   return null;
@@ -109,6 +149,28 @@ export function effectiveFromSeconds(value: string): number | null {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
 
+/** The earliest a change scheduled now may bind while anyone holds units. */
+export function noticeFloor(nowSeconds: number): number {
+  return nowSeconds + MIN_NOTICE_SECS;
+}
+
+/**
+ * Whether the typed moment is one the plane will lift rather than honour: earlier than the
+ * notice floor. Empty asks for the floor by name and is not "lifted"; unreadable is not a
+ * moment at all.
+ */
+export function effectiveFromLifted(value: string, nowSeconds: number): boolean {
+  const moment = effectiveFromSeconds(value);
+  return moment !== null && moment !== 0 && moment < noticeFloor(nowSeconds);
+}
+
+/** A `datetime-local` value for a moment, in the operator's own zone — the inverse of
+ *  `effectiveFromSeconds`, for the field's `min`/`max` and for tests that type a date. */
+export function localDateTimeValue(at: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
 /** The request the plane receives. Callers check `draftProblem` first; the fallbacks here
  *  only restate for the types what that check has already proved. */
 export function toRequest(service: string, draft: TermsDraft): ScheduleFeePolicyRequest {
@@ -117,6 +179,6 @@ export function toRequest(service: string, draft: TermsDraft): ScheduleFeePolicy
     service,
     ...terms,
     effective_from: effectiveFromSeconds(draft.effectiveFrom) ?? 0,
-    reason: draft.reason.trim(),
+    reason: normalizeReason(draft.reason),
   };
 }

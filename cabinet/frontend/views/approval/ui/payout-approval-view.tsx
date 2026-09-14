@@ -222,13 +222,15 @@ export function PayoutApprovalView({ token }: { token: string }) {
             {/* The sentence above states the tally; a second, unlabelled progressbar in the
                 accessibility tree would only repeat it. */}
             <Progress value={progress} className="h-1.5" aria-hidden />
-            <p className="text-xs text-muted-foreground">{t("approval.tallyHint")}</p>
+            {/* Kind-aware like the title: a change of terms moves no money, and a hint that
+                says it does would tell an owner they are approving the wrong thing. */}
+            <p className="text-xs text-muted-foreground">{t(feePolicy ? "approval.feePolicy.tallyHint" : "approval.tallyHint")}</p>
           </div>
         </CardContent>
       </Card>
 
       {burned ? (
-        <ApprovalBurned />
+        <ApprovalBurned description={feePolicy ? t("approval.feePolicy.burned.body") : undefined} />
       ) : expired ? (
         <ApprovalExpired />
       ) : settled ? (

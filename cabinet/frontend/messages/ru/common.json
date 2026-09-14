@@ -695,9 +695,17 @@
     "en": "Leave empty for the earliest allowed. While anyone holds units, a change binds no earlier than 24 hours after it is scheduled — counted from the owners' approval when they must give it. An earlier moment is lifted to that minimum, never refused.",
     "t": "Оставьте пустым для самого раннего допустимого момента. Пока у кого-то есть юниты, изменение вступает в силу не раньше чем через 24 часа после назначения — от одобрения владельцев, если оно требуется. Более ранний момент поднимается до этого минимума, а не отклоняется."
   },
+  "admin.fees.effectiveFromLifted": {
+    "en": "Earlier than the notice allows: while anyone holds units, this binds no earlier than {floor}.",
+    "t": "Раньше, чем позволяет уведомление: пока у продукта есть держатели, изменение вступит в силу не раньше {floor}."
+  },
+  "admin.fees.effectiveFromLiftedConsilium": {
+    "en": "Earlier than the notice allows: this binds no earlier than 24 hours after the owners approve.",
+    "t": "Раньше, чем позволяет уведомление: изменение вступит в силу не раньше чем через 24 часа после одобрения владельцами."
+  },
   "admin.fees.err.notPercent": {
-    "en": "{field} must be a percentage — 2, or 2.5 for a half.",
-    "t": "{field}: нужны проценты — 2 или 2.5 для половины."
+    "en": "{field} must be a percentage — 2, or 2.5 / 2,5 for a half.",
+    "t": "{field}: нужны проценты — 2 или 2.5 / 2,5 для половины."
   },
   "admin.fees.err.overCeiling": {
     "en": "{field} cannot be more than {ceiling}.",
@@ -706,6 +714,14 @@
   "admin.fees.err.reasonRequired": {
     "en": "A reason is required when the owners must approve.",
     "t": "Когда требуется одобрение владельцев, причина обязательна."
+  },
+  "admin.fees.err.reasonTooLong": {
+    "en": "The reason is too long: {used, plural, one {# byte} other {# bytes}} of at most {max}. Letters outside plain Latin count as more than one.",
+    "t": "Причина слишком длинная: {used, plural, one {# байт} few {# байта} many {# байт} other {# байт}} при пределе {max}. Буквы вне базовой латиницы считаются больше чем за один."
+  },
+  "admin.fees.err.tooFarAhead": {
+    "en": "The moment can be at most {days} days ahead.",
+    "t": "Момент может быть не дальше чем через {days} дней."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
@@ -734,6 +750,14 @@
   "admin.fees.history": {
     "en": "History of terms",
     "t": "История условий"
+  },
+  "admin.fees.immediateBody": {
+    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. Until it is, it can still be cancelled below. The first investor to subscribe reads these terms.",
+    "t": "У этого продукта нет держателей паёв, поэтому уведомление не требовалось: версия {version} вступает в силу сейчас и будет применена в течение минуты. До этого её ещё можно отменить ниже. Первый подписавшийся инвестор увидит уже эти условия."
+  },
+  "admin.fees.immediateTitle": {
+    "en": "In force within a minute — nobody to notify",
+    "t": "Вступает в силу в течение минуты — уведомлять некого"
   },
   "admin.fees.inForce": {
     "en": "Version {version}, in force since {since}. Investors see these on the product page.",
@@ -782,6 +806,10 @@
   "admin.fees.pending.awaiting": {
     "en": "Version {version} awaits the owners' approval. It binds 24 hours after they carry it, while anyone holds units.",
     "t": "Версия {version} ждёт одобрения владельцев. Она вступит в силу через 24 часа после их решения, пока у кого-то есть юниты."
+  },
+  "admin.fees.pending.immediate": {
+    "en": "Version {version} takes effect now and is applied within a minute. Nobody holds units, so no notice was sent.",
+    "t": "Версия {version} вступает в силу сейчас и будет применена в течение минуты. Держателей нет, уведомление не отправлялось."
   },
   "admin.fees.pending.requested": {
     "en": "Requested {when}",
@@ -2071,6 +2099,10 @@
     "en": "Approve this change",
     "t": "Одобрить это изменение"
   },
+  "approval.feePolicy.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and the product's terms are unchanged. Ask whoever opened the request to send a new one.",
+    "t": "Код вводили неверно слишком много раз, поэтому ссылка закрыта, а все владельцы уведомлены. Ничего не подтверждено, условия продукта не изменились. Попросите того, кто открыл запрос, прислать новую ссылку."
+  },
   "approval.feePolicy.decided.approvedTitle": {
     "en": "You approved this change",
     "t": "Вы одобрили это изменение"
@@ -2090,6 +2122,10 @@
   "approval.feePolicy.payloadHashHint": {
     "en": "The fingerprint is taken over the product, the terms now and proposed, the reason and the requested moment above. It is checked again before the change is scheduled, so a request cannot be edited after you have agreed to it.",
     "t": "Отпечаток берётся по продукту, текущим и предлагаемым условиям, причине и запрошенному моменту выше. Он проверяется повторно перед назначением изменения, поэтому запрос нельзя отредактировать после вашего согласия."
+  },
+  "approval.feePolicy.tallyHint": {
+    "en": "More than half of the owners must approve before the terms change. You are one of them.",
+    "t": "Прежде чем условия изменятся, их должны подтвердить больше половины владельцев. Вы — один из них."
   },
   "approval.feePolicy.title": {
     "en": "Approve a change of fee terms",
@@ -5966,6 +6002,10 @@
   "ui.inYourCabinet": {
     "en": "In your cabinet",
     "t": "В вашем кабинете"
+  },
+  "ui.keep": {
+    "en": "Keep it",
+    "t": "Оставить"
   },
   "ui.kycLevel": {
     "en": "KYC level",
