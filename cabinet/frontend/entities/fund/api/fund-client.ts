@@ -9,12 +9,21 @@
 // status is 400 because that is what the BFF would have answered had the call gone out.
 
 import { getJson, postJson, RequestError } from "@/shared/lib/api-client";
-import type { AccruedFees, AllocationList, FeePolicy, FundNav, PositionList, Redemption, RedemptionList, Subscription } from "@/shared/contracts";
+import type { AccruedFees, Allocation, AllocationList, FeePolicy, FundNav, PositionList, Redemption, RedemptionList, Subscription } from "@/shared/contracts";
 
 /// The investor-facing catalog: `open` allocations only. Subscribing to anything else is
 /// refused by the hub, so this is the only honest source for the fund picker.
 export function fetchAllocations(): Promise<AllocationList> {
   return getJson<AllocationList>("/api/allocations");
+}
+
+/// One product in any state, with what THIS caller may do in it. The catalog above drops
+/// a `hidden` product even for a holder the operator has granted access to, so a page
+/// about one product reads this and not the list. A product the caller may not see is a
+/// 404, exactly as an unregistered one is.
+export function fetchAllocation(service: string): Promise<Allocation> {
+  if (!service.trim()) return Promise.reject(new RequestError("fund service required", 400, "err.fundServiceRequired"));
+  return getJson<Allocation>(`/api/allocations/detail?service=${encodeURIComponent(service)}`);
 }
 
 export function fetchPositions(): Promise<PositionList> {

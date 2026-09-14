@@ -355,6 +355,54 @@
     "en": "Pin cap",
     "t": "Ghim trần"
   },
+  "admin.alloc.issuance.source.company": {
+    "en": "from the company's stake",
+    "t": "từ phần nắm giữ của công ty"
+  },
+  "admin.alloc.issuance.source.mint": {
+    "en": "minted",
+    "t": "đã phát hành"
+  },
+  "admin.alloc.transfer.action": {
+    "en": "Transfer company stake",
+    "t": "Chuyển phần nắm giữ của công ty"
+  },
+  "admin.alloc.transfer.available": {
+    "en": "The company holds {units} units",
+    "t": "Công ty đang giữ {units} đơn vị quỹ"
+  },
+  "admin.alloc.transfer.confirm": {
+    "en": "{units} units: Company → {holder} — the supply does not change.",
+    "t": "{units} đơn vị quỹ: Công ty → {holder} — tổng cung không thay đổi."
+  },
+  "admin.alloc.transfer.field.recipient": {
+    "en": "Recipient",
+    "t": "Người nhận"
+  },
+  "admin.alloc.transfer.nothingHeld": {
+    "en": "The company holds no settled units in this product — nothing to transfer.",
+    "t": "Công ty không giữ đơn vị quỹ đã ghi sổ nào trong sản phẩm này — không có gì để chuyển."
+  },
+  "admin.alloc.transfer.reason.recipient": {
+    "en": "Pick a recipient",
+    "t": "Chọn người nhận"
+  },
+  "admin.alloc.transfer.resultApplied": {
+    "en": "{units} units moved from the company to {holder}.",
+    "t": "{units} đơn vị quỹ đã chuyển từ công ty sang {holder}."
+  },
+  "admin.alloc.transfer.resultQueued": {
+    "en": "{units} units from the company to {holder} queued — the relay posts the transfer shortly, and the split below follows.",
+    "t": "{units} đơn vị quỹ từ công ty sang {holder} đang chờ — relay sẽ sớm ghi nhận việc chuyển, và phân bổ bên dưới sẽ cập nhật."
+  },
+  "admin.alloc.transfer.review": {
+    "en": "Review transfer",
+    "t": "Xem lại việc chuyển"
+  },
+  "admin.alloc.transfer.submit": {
+    "en": "Transfer",
+    "t": "Chuyển"
+  },
   "admin.alloc.open": {
     "en": "Open",
     "t": "Mở"

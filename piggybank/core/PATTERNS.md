@@ -274,6 +274,26 @@ company at the seed NAV with the agreed bases → `PostFundValuation` at the ass
 exactly the issued supply (`remaining_capacity == 0`, so no subscription and no further
 issuance fits) → open. The investor can still redeem: every gate here keeps the exit open.
 
+**Out of the company's stake (`TransferCompanyStake`).** The 80 % seeded to the company
+turned out to belong to a named person. There was no road back out of `CompanyShares`:
+the company has no user, so no book order and no escrow, and minting the person a copy of
+what the company holds would inflate supply and break the cap table. `TransferCompanyStake`
+(`AllocationManage`) is the same `unit_issuances` row with `source = 'company'` (migration
+`0038`; a mint is `'mint'`), the same gates (registry in any state, user exists, fresh
+NAV, defaulted `units × NAV` basis, the `(service, idempotency_key)` retry contract in the
+**same** key space — a mint's key reused for a hand-over is `Conflict`) minus the cap, plus
+a Read-First that `CompanyShares(svc).available() ≥ units` (`Validation` otherwise). The
+relay posts `Dr UserShares / Cr CompanyShares` under `TransferCode::CompanyStakeTransfer`
+(52) with its own transfer id (`tid(issuance, "issue:transfer")`) — a move *between
+holders* like a fee clawback in reverse, so `SharesOutstanding` and NAV do not move and
+`ListUnitHolders` shows the shift (company −, investors +). `CompanyShares` is debit-normal
+with the non-negative flag, so an over-transfer that races the read parks. The recipient's
+`fund_positions` projection is the one a mint gets (basis added, high-water mark blended
+at the mark); the company has none to reduce. It is a variant of the issuance aggregate,
+not a second one, because from the recipient's side it *is* an issuance — units they did
+not pay cash for — and the console lists mints and hand-overs as one history
+(`UnitIssuance.source` on the wire).
+
 ## The book — holders trading units with each other (`domain::book`, `BookService`)
 
 A subscription is a dealing *with the fund* at NAV; a redemption is the reverse. The
@@ -821,6 +841,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `PostFundValuation` | operator | `require_permission` (RBAC matrix) | allocation registered ∧ units outstanding > 0 ∧ NAV move ≤ threshold vs the previous mark ∧ vs the rolling-window anchor — **no override**; beyond it: `ConsiliumService.OpenValuationOverride` (same `ValuationPost` permission, initiator must hold an owner seat, owners' quorum executes the mark) |
 | `Redeem` / `SettleRedemption` (cooldown) | the user / operator | as above | the redeeming user posted **no** mark for this fund within `VALUATION_REDEEM_COOLDOWN_SECS` (`failed_precondition` otherwise; checked at request and again at settle) |
 | `IssueUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | (issue) allocation registered ∧ user holder exists ∧ fresh NAV ∧ issued + units ≤ cap; idempotent by `(service, idempotency_key)` |
+| `TransferCompanyStake` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | allocation registered (any state) ∧ user exists ∧ fresh NAV ∧ `CompanyShares.available ≥ units` (TB flag backstop); no cap (supply unchanged); idempotent by `(service, idempotency_key)`, shared with `IssueUnits` |
 | `PlaceOrder` | the user | `sub == user`, `is_access`, **not frozen**, **not read-only** | allocation visible ∧ `invest` (state ignored) ∧ `book_open` ∧ on tick/lot ∧ free units / claim ≥ escrow (TB flag backstop → `rejected`); idempotent by `client_order_id` |
 | `CancelOrder` | the user | `sub == user`, `is_access` | owns it ∧ state is resting (idempotent on cancelled) |
 | `ListOpenOrders` / `ListOrderHistory` / `ListUserTrades` | the user | `sub == user` | — |
@@ -1006,7 +1027,11 @@ in-kind issuance (units landing on a user and on the company with no cash leg an
 returning the same row and minting once while refusing a different request, the
 defaulted `units × NAV` basis, the registry/holder/cap gates, the 20/80 recipe ending at
 `remaining_capacity == 0` with the investor still able to redeem, and the event reaching
-the relay as its own kind);
+the relay as its own kind) and the hand-over out of the company's stake (the 13 000
+moving company → user with `SharesOutstanding` unchanged and `ListUnitHolders` showing
+the shift, the recipient's basis and mark, the shared key space refusing a mint's key
+and returning a repeat, more than the company holds refused before anything is written,
+and an unregistered service refused);
 `piggybank/core/tests/balance_allocations.rs` and
 `piggybank/core/tests/wallet_withdrawals.rs` hit **real** Postgres + TigerBeetle
 (deposit idempotency, the non-negative backstop, transfer-id idempotency; the Share-ledger

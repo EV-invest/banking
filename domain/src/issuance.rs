@@ -15,6 +15,16 @@
 //! subscription's do. The cash plane is untouched: no claim moves, and the global
 //! `sum(custody) == sum(claims)` is not involved at all.
 //!
+//! The same record has a second [`IssuanceSource`]: units handed to a user **out of the
+//! company's stake** ([`UnitIssuance::transfer_company_stake`]). The company cannot deal
+//! on the book (it has no user, so no orders and no escrow), and minting the user a
+//! second copy of what the company holds would inflate supply and break the cap table —
+//! so the relay moves the units *between holders*, `Dr UserShares / Cr CompanyShares`,
+//! and `SharesOutstanding` stays where it is. It is an issuance from the recipient's
+//! side (units they did not pay cash for, at a stated basis, blended into their
+//! high-water mark at the mark) and a transfer from the ledger's, which is why it is a
+//! variant of this aggregate and not a second one.
+//!
 //! Idempotent by an operator-supplied [`IdempotencyKey`], unique per service: an admin
 //! console that retries a timed-out request must land one mint, never two. The
 //! aggregate is an immutable record with one relay-driven transition, `Queued` →
@@ -127,6 +137,43 @@ impl IssuanceState {
 	}
 }
 
+/// Where an issuance's units come from. `Mint` grows supply; `Company` moves units the
+/// company already holds and leaves supply alone — the ledger leg differs, the record
+/// and the recipient's projection do not.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IssuanceSource {
+	/// Minted in kind: `Dr <holder shares> / Cr SharesOutstanding`.
+	#[default]
+	Mint,
+	/// Out of the company's stake: `Dr UserShares / Cr CompanyShares`. The holder is
+	/// always a user — the company handing units to itself is not a request.
+	Company,
+}
+
+impl IssuanceSource {
+	/// The stored/wire discriminant. Keep byte-identical with
+	/// `evbanking_contracts::allocation::issuance_source`
+	/// (`issuance_source_strings_are_canonical` guards this side).
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Mint => "mint",
+			Self::Company => "company",
+		}
+	}
+
+	/// Parse the stored/wire form. An unrecognized value is an error rather than a
+	/// silent default, so a corrupt row never reads as a mint when it moved the
+	/// company's units.
+	pub fn parse(raw: &str) -> Result<Self, DomainError> {
+		match raw {
+			"mint" => Ok(Self::Mint),
+			"company" => Ok(Self::Company),
+			other => Err(DomainError::Validation(format!("unknown issuance source: {other}"))),
+		}
+	}
+}
+
 /// The operator's retry key for one issuance, unique per service. Trimmed, 1..=64
 /// chars: long enough for a UUID, short enough to index.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -153,6 +200,7 @@ pub struct UnitIssuanceSnapshot {
 	pub id: UnitIssuanceId,
 	pub service: ServiceId,
 	pub holder: UnitHolder,
+	pub source: IssuanceSource,
 	pub units: Shares,
 	pub nav: Nav,
 	pub cost_basis: Usdt,
@@ -160,14 +208,16 @@ pub struct UnitIssuanceSnapshot {
 	pub state: IssuanceState,
 }
 
-/// The issuance aggregate — one in-kind mint. Construct via [`UnitIssuance::issue`]
-/// (raises [`IssuanceEvent::Issued`]) or [`UnitIssuance::rehydrate`] (load from the
+/// The issuance aggregate — one in-kind mint, or one hand-over out of the company's
+/// stake. Construct via [`UnitIssuance::issue`] / [`UnitIssuance::transfer_company_stake`]
+/// (both raise [`IssuanceEvent::Issued`]) or [`UnitIssuance::rehydrate`] (load from the
 /// store, no events).
 #[derive(Clone, Debug)]
 pub struct UnitIssuance {
 	id: UnitIssuanceId,
 	service: ServiceId,
 	holder: UnitHolder,
+	source: IssuanceSource,
 	units: Shares,
 	nav: Nav,
 	cost_basis: Usdt,
@@ -191,6 +241,40 @@ impl UnitIssuance {
 		cost_basis: Option<Usdt>,
 		idempotency_key: IdempotencyKey,
 	) -> Result<Self, DomainError> {
+		Self::record(id, service, holder, IssuanceSource::Mint, units, nav, cost_basis, idempotency_key)
+	}
+
+	/// Hand `units` of the company's stake in `service` to `user` at `nav`. Same
+	/// record, same basis rule and same `Issued` event as [`Self::issue`], but the relay
+	/// posts `Dr UserShares / Cr CompanyShares` — supply does not move. Whether the
+	/// company actually holds `units` is a ledger fact the use case reads first
+	/// (Read-First) and TigerBeetle's non-negative flag on `CompanyShares` backstops; the
+	/// aggregate cannot know it. Rejects zero `units`.
+	pub fn transfer_company_stake(
+		id: UnitIssuanceId,
+		service: ServiceId,
+		user: UserId,
+		units: Shares,
+		nav: Nav,
+		cost_basis: Option<Usdt>,
+		idempotency_key: IdempotencyKey,
+	) -> Result<Self, DomainError> {
+		Self::record(id, service, UnitHolder::User(user), IssuanceSource::Company, units, nav, cost_basis, idempotency_key)
+	}
+
+	// One private constructor behind two typed doors; a builder would only rename the
+	// same eight facts.
+	#[allow(clippy::too_many_arguments)]
+	fn record(
+		id: UnitIssuanceId,
+		service: ServiceId,
+		holder: UnitHolder,
+		source: IssuanceSource,
+		units: Shares,
+		nav: Nav,
+		cost_basis: Option<Usdt>,
+		idempotency_key: IdempotencyKey,
+	) -> Result<Self, DomainError> {
 		if units.is_zero() {
 			return Err(DomainError::Validation("issued units must be positive".into()));
 		}
@@ -202,6 +286,7 @@ impl UnitIssuance {
 			id,
 			service: service.clone(),
 			holder,
+			source,
 			units,
 			nav,
 			cost_basis,
@@ -213,6 +298,7 @@ impl UnitIssuance {
 			issuance_id: id,
 			service,
 			holder,
+			source,
 			units,
 			nav,
 			cost_basis,
@@ -226,6 +312,7 @@ impl UnitIssuance {
 			id: snapshot.id,
 			service: snapshot.service,
 			holder: snapshot.holder,
+			source: snapshot.source,
 			units: snapshot.units,
 			nav: snapshot.nav,
 			cost_basis: snapshot.cost_basis,
@@ -235,12 +322,12 @@ impl UnitIssuance {
 		}
 	}
 
-	/// Whether a retry under the same key is asking for the same thing. Holder and
-	/// units are the identity of the request; NAV and the defaulted cost basis are
+	/// Whether a retry under the same key is asking for the same thing. Holder, source
+	/// and units are the identity of the request; NAV and the defaulted cost basis are
 	/// what the hub computed for it, and a retry a minute later must not be refused
 	/// because the mark moved in between.
-	pub fn matches_request(&self, holder: UnitHolder, units: Shares) -> bool {
-		self.holder == holder && self.units == units
+	pub fn matches_request(&self, holder: UnitHolder, source: IssuanceSource, units: Shares) -> bool {
+		self.holder == holder && self.source == source && self.units == units
 	}
 
 	pub fn id(&self) -> UnitIssuanceId {
@@ -253,6 +340,10 @@ impl UnitIssuance {
 
 	pub fn holder(&self) -> UnitHolder {
 		self.holder
+	}
+
+	pub fn source(&self) -> IssuanceSource {
+		self.source
 	}
 
 	pub fn units(&self) -> Shares {
@@ -289,17 +380,24 @@ impl AggregateRoot for UnitIssuance {
 }
 
 /// Facts raised by the [`UnitIssuance`] aggregate. `Issued` carries everything the
-/// relay needs to post the mint and, for a user holder, project the cost basis — no
+/// relay needs to post the leg and, for a user holder, project the cost basis — no
 /// extra read. Internally tagged so the stored JSON is self-describing.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum IssuanceEvent {
-	/// Units minted in kind (relay: `Dr <holder shares> / Cr SharesOutstanding` for
-	/// `units`; then, for a user holder, `fund_positions.cost_basis += cost_basis`).
+	/// Units handed to a holder with no cash leg (relay, by `source`: `Mint` → `Dr
+	/// <holder shares> / Cr SharesOutstanding`, `Company` → `Dr UserShares / Cr
+	/// CompanyShares`, for `units`; then, for a user holder, `fund_positions.cost_basis
+	/// += cost_basis`).
 	Issued {
 		issuance_id: UnitIssuanceId,
 		service: ServiceId,
 		holder: UnitHolder,
+		/// Defaulted on read because payloads written before the field existed — the
+		/// permanent `event_log`, and an outbox row undrained across a deploy — were all
+		/// mints, and a stored fact must not become unreadable when the vocabulary grows.
+		#[serde(default)]
+		source: IssuanceSource,
 		units: Shares,
 		nav: Nav,
 		cost_basis: Usdt,
@@ -355,6 +453,18 @@ mod tests {
 			assert_eq!(serde_json::to_string(&state).unwrap(), format!("\"{}\"", state.as_str()));
 		}
 		assert!(IssuanceState::parse("minted").is_err());
+	}
+
+	#[test]
+	fn issuance_source_strings_are_canonical() {
+		// Wire contract: these must match `evbanking_contracts::allocation::issuance_source`.
+		assert_eq!(IssuanceSource::Mint.as_str(), "mint");
+		assert_eq!(IssuanceSource::Company.as_str(), "company");
+		for source in [IssuanceSource::Mint, IssuanceSource::Company] {
+			assert_eq!(IssuanceSource::parse(source.as_str()).unwrap(), source);
+			assert_eq!(serde_json::to_string(&source).unwrap(), format!("\"{}\"", source.as_str()));
+		}
+		assert!(IssuanceSource::parse("transfer").is_err());
 	}
 
 	#[test]
@@ -424,16 +534,64 @@ mod tests {
 	#[test]
 	fn zero_units_are_rejected() {
 		assert!(UnitIssuance::issue(UnitIssuanceId::new(), svc(), UnitHolder::Company, Shares::ZERO, Nav::SEED, None, key()).is_err());
+		assert!(UnitIssuance::transfer_company_stake(UnitIssuanceId::new(), svc(), UserId::new(), Shares::ZERO, Nav::SEED, None, key()).is_err());
 	}
 
 	#[test]
-	fn a_retry_matches_on_holder_and_units_only() {
+	fn a_company_stake_transfer_is_an_issuance_to_the_user_from_the_company() {
+		let user = UserId::new();
+		let mut transfer = UnitIssuance::transfer_company_stake(
+			UnitIssuanceId::new(),
+			svc(),
+			user,
+			Shares::parse_decimal("13000").unwrap(),
+			Nav::parse_decimal("1.25").unwrap(),
+			None,
+			key(),
+		)
+		.unwrap();
+		assert_eq!(transfer.holder(), UnitHolder::User(user), "the recipient is the holder of record");
+		assert_eq!(transfer.source(), IssuanceSource::Company);
+		assert_eq!(transfer.cost_basis(), Usdt::parse_decimal("16250").unwrap(), "defaults to units × NAV like a mint");
+		assert_eq!(transfer.state(), IssuanceState::Queued);
+		let events = transfer.drain_events();
+		assert!(matches!(
+			events.as_slice(),
+			[IssuanceEvent::Issued {
+				source: IssuanceSource::Company,
+				holder: UnitHolder::User(u),
+				..
+			}] if *u == user
+		));
+		// A mint is still a mint.
+		let mut mint = UnitIssuance::issue(UnitIssuanceId::new(), svc(), UnitHolder::User(user), Shares::parse_decimal("1").unwrap(), Nav::SEED, None, key()).unwrap();
+		assert_eq!(mint.source(), IssuanceSource::Mint);
+		assert!(matches!(mint.drain_events().as_slice(), [IssuanceEvent::Issued { source: IssuanceSource::Mint, .. }]));
+	}
+
+	#[test]
+	fn a_retry_matches_on_holder_source_and_units_only() {
 		let user = UserId::new();
 		let units = Shares::parse_decimal("200").unwrap();
 		let issuance = UnitIssuance::issue(UnitIssuanceId::new(), svc(), UnitHolder::User(user), units, Nav::SEED, None, key()).unwrap();
-		assert!(issuance.matches_request(UnitHolder::User(user), units));
-		assert!(!issuance.matches_request(UnitHolder::Company, units));
-		assert!(!issuance.matches_request(UnitHolder::User(user), Shares::parse_decimal("201").unwrap()));
+		assert!(issuance.matches_request(UnitHolder::User(user), IssuanceSource::Mint, units));
+		assert!(!issuance.matches_request(UnitHolder::Company, IssuanceSource::Mint, units));
+		assert!(!issuance.matches_request(UnitHolder::User(user), IssuanceSource::Mint, Shares::parse_decimal("201").unwrap()));
+		// The same key naming a mint and then a hand-over of the company's stake is a
+		// different request, not a retry: one grows supply, the other does not.
+		assert!(!issuance.matches_request(UnitHolder::User(user), IssuanceSource::Company, units));
+	}
+
+	#[test]
+	fn an_event_written_before_the_source_existed_reads_as_a_mint() {
+		// The permanent event log holds `Issued` payloads with no `source`; every one of
+		// them was a mint, and a stored fact must stay readable as the vocabulary grows.
+		let json = format!(
+			r#"{{"type":"issued","issuance_id":"{}","service":"service_arb","holder":{{"kind":"company"}},"units":"10","nav":"1","cost_basis":"10"}}"#,
+			UnitIssuanceId::new()
+		);
+		let IssuanceEvent::Issued { source, .. } = serde_json::from_str(&json).unwrap();
+		assert_eq!(source, IssuanceSource::Mint);
 	}
 
 	#[test]

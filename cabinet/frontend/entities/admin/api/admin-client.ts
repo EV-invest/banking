@@ -33,6 +33,7 @@ import type {
   RedemptionQueue,
   RevenuePayout,
   RevenuePayoutList,
+  TransferStakeBody,
   Treasury,
   UnitHolders,
   UnitIssuance,
@@ -184,6 +185,11 @@ export type IssueUnitsBody = {
 } & ({ user_id: string; company?: never } | { company: true; user_id?: never });
 
 export const issueUnits = (body: IssueUnitsBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/issue", body);
+
+// Hand part of the company's stake to an investor: the units leave the company's
+// holding and land in theirs, and the supply does not move. Answers the same shape as a
+// mint with `source: "company"`; the key shares the mint's per-product key space.
+export const transferCompanyStake = (body: TransferStakeBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/transfer-stake", body);
 
 export const fetchUnitHolders = (service: string): Promise<UnitHolders> => getJson(`/api/admin/allocations/holders?service=${encodeURIComponent(service)}`);
 

@@ -394,7 +394,13 @@ export type UnitHolderKind = "user" | "company";
  *  taken straight after the POST still shows the supply as it was. */
 export type UnitIssuanceState = "queued" | "applied";
 
-/** One in-kind mint, as the hub recorded it. */
+/** Where the units came from: `mint` (`/allocations/issue` — the supply grew by `units`)
+ *  or `company` (`/allocations/transfer-stake` — moved out of the company's stake, the
+ *  supply unchanged). Always populated; a row that predates the field reads as `mint`. */
+export type UnitIssuanceSource = "mint" | "company";
+
+/** One in-kind issuance — a mint or a hand-over of the company's stake — as the hub
+ *  recorded it. */
 export interface UnitIssuance {
   id: string;
   service: string;
@@ -410,6 +416,25 @@ export interface UnitIssuance {
   state: UnitIssuanceState;
   /** Unix seconds. */
   created_at: string;
+  source: UnitIssuanceSource;
+}
+
+/** The hand-over body, exactly as the BFF reads it (`POST /api/admin/allocations/
+ *  transfer-stake`). Always a user — the company handing units to itself is not a
+ *  request. `cost_basis` present only when the operator typed one: absent means
+ *  `units × NAV` hub-side, and an empty string is NOT the same as absent.
+ *  `views/admin/allocations/lib/transfer-stake.ts` is the one place that builds it. */
+export interface TransferStakeBody {
+  service: string;
+  /** The recipient — the id the console carries. */
+  user_id: string;
+  /** Decimal units, > 0, at most what the company holds. */
+  units: string;
+  /** Decimal USDT the recipient is deemed to have paid; omitted = `units × NAV`. */
+  cost_basis?: string;
+  /** 1..64 chars, in the same per-product key space as `/allocations/issue`. The same
+   *  retry contract: one key per submission, the same key on a retry of it. */
+  idempotency_key: string;
 }
 
 /** A product's settled supply by holder class, all decimal units. `investor_units` is

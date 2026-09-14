@@ -9,7 +9,7 @@
 // a five-minute window and a sessionStorage mirror, so a reload paints the rail's product
 // list before the network answers.
 
-import { cancelRedemption as cancelRedemptionRequest, fetchAccruedFees, fetchAllocations, fetchFeePolicy, fetchFundNav, fetchPositions, fetchRedemptions, submitRedeem as submitRedeemRequest, submitSubscribe as submitSubscribeRequest } from "@/entities/fund/api/fund-client";
+import { cancelRedemption as cancelRedemptionRequest, fetchAccruedFees, fetchAllocation, fetchAllocations, fetchFeePolicy, fetchFundNav, fetchPositions, fetchRedemptions, submitRedeem as submitRedeemRequest, submitSubscribe as submitSubscribeRequest } from "@/entities/fund/api/fund-client";
 import type { Redemption, Subscription } from "@/shared/contracts";
 import { TAG } from "@/shared/lib/cache-tags";
 import { defineResource, revalidateTag } from "@/shared/lib/resource";
@@ -20,6 +20,21 @@ export const allocationsResource = defineResource({
   revalidate: 300,
   tags: [TAG.catalog],
   persist: true,
+});
+
+// One product, as the hub answers for THIS caller — the source the product page and the
+// terminal resolve their product from, with the catalog only painting the first frame
+// while this is in flight. Same window and the same mirror as the catalog: it is the same
+// DTO, and a `hidden` product a holder was granted is no more personal than the
+// `caller_access` the catalog already carries. Cleared with the catalog on `TAG.catalog`.
+export const allocationDetailResource = defineResource({
+  name: "fund.allocation",
+  fetch: fetchAllocation,
+  key: (service) => service,
+  revalidate: 300,
+  tags: [TAG.catalog],
+  persist: true,
+  enabled: (service) => service.trim().length > 0,
 });
 
 export const positionsResource = defineResource({

@@ -133,6 +133,28 @@ wrong-state — produces one identical 404, so the endpoint cannot be used to pr
 which. The POST is bounded by a small in-process per-IP limiter; the real anti-brute-force
 bound is the plane's five-attempt token burn.
 
+## The cap table
+
+An operator's supply surface for one product, over `AllocationsService`. Units cross as
+decimal strings; every `POST` needs the admin session plus CSRF and forwards the banking
+money token. `UnitIssuance` is one shape for both writes — `source` says whether the row
+grew the supply (`mint`) or moved units out of the company's stake (`company`, supply
+unchanged); `state` is `queued` until the hub's relay posts the leg, then `applied`.
+
+| Route | Query / body | Answer | Gates |
+| ----- | ------------ | ------ | ----- |
+| `GET /api/admin/allocations/holders` | `service` | `UnitHolders` — `units_outstanding`, `company_units`, `fee_units`, `investor_units` | admin |
+| `POST /api/admin/allocations/issue` | `{ service, units, idempotency_key, cost_basis?, user_id \| company: true }` | `UnitIssuance` (`source: "mint"`) | admin + CSRF |
+| `POST /api/admin/allocations/transfer-stake` | `{ service, user_id, units, idempotency_key, cost_basis? }` | `UnitIssuance` (`source: "company"`, `holder_kind: "user"`) | admin + CSRF |
+
+`idempotency_key` (1..64 chars) is the retry contract, one key space per product across
+both writes: the console generates one per form submission and re-sends the same one on a
+timeout, so a double click lands one row. A repeat of the same request answers the row
+as it stands (`200`); the same key for a different request — a mint and then a hand-over
+included — is `409`. `cost_basis` absent or empty defaults hub-side to `units × NAV` at
+the dealing mark. A hand-over of more than the company holds, or a mint past the unit
+cap, is `400`; an unknown `service` or `user_id` is `404`.
+
 ## Run
 
 `nix run .#cabinet-backend`. It needs the piggybank hub (`nix run .#piggybank`, or `.#dev`);

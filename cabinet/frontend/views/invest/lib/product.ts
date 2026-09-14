@@ -7,7 +7,9 @@
 
 import type { Allocation, AllocationIcon, FundNav, Position } from "@/shared/contracts";
 
-import { shareBps, toBaseUnits } from "./format";
+// Relative and with the extension, like `views/admin/allocations/lib/pin-cap.ts`: the
+// node test runner resolves no `@/` alias, and `./format` only re-exports this module.
+import { shareBps, toBaseUnits } from "../../../shared/lib/money.ts";
 
 /** 10^18 — the base-unit scale every money and unit amount is carried in. */
 const SCALE = 10n ** 18n;
@@ -42,19 +44,76 @@ export interface Product {
  */
 export function buildProducts(catalog: Allocation[], positions: Position[]): Product[] {
   const byService = new Map<string, Product>();
-  for (const a of catalog) {
-    byService.set(a.service, { service: a.service, title: a.title, summary: a.summary, icon: a.icon, allocation: a, position: null });
-  }
+  for (const a of catalog) byService.set(a.service, listed(a, null));
   for (const p of positions) {
     const service = p.service ?? "";
     if (!service) continue;
     const existing = byService.get(service);
     if (existing) existing.position = p;
-    // A product known only by a holding has left the open catalog, so nothing here knows
-    // its icon — it draws the same default the hub would have given it.
-    else byService.set(service, { service, title: service, summary: "", icon: undefined, allocation: null, position: p });
+    else byService.set(service, heldOnly(service, p));
   }
   return [...byService.values()].sort((a, b) => a.title.localeCompare(b.title));
+}
+
+const listed = (a: Allocation, position: Position | null): Product => ({ service: a.service, title: a.title, summary: a.summary, icon: a.icon, allocation: a, position });
+
+/** A product known only by a holding: nothing here knows its title or icon, so it draws
+ *  the same default the hub would have given it. */
+const heldOnly = (service: string, position: Position): Product => ({ service, title: service, summary: "", icon: undefined, allocation: null, position });
+
+/** What one product's page has read so far. The shape of `ResourceSnapshot`, narrowed to
+ *  the fields the decision needs, so this stays React-free and testable. */
+export interface ProductReads {
+  /** `GET /api/allocations/detail` — the hub's answer for THIS caller, in any state. */
+  detail: { data: Allocation | undefined; error: Error | null; isLoading: boolean };
+  /** The open catalog, `undefined` until it has loaded. */
+  catalog: Allocation[] | undefined;
+  positions: { data: Position[] | undefined; isLoading: boolean };
+}
+
+/**
+ * The product behind `/invest/[service]` and its terminal.
+ *
+ * The detail is the authority: the catalog is the OPEN list, and a `hidden` product an
+ * operator granted this caller is not on it — resolving from the catalog alone locked
+ * such a holder out of a form the hub would have accepted. The catalog still paints the
+ * first frame while the detail is in flight, since a page entered from the list should
+ * not skeleton for a product it was just looking at.
+ *
+ * `undefined` is still "loading" and `null` is "no such product" — collapsing the two
+ * would flash the not-found state on every cold load. A 404 is the hub saying this
+ * caller may not see the product, or that it was never registered; units held in it are
+ * still real money, so a holder keeps a (closed) product rather than a not-found page.
+ * Any other failure falls back to whatever the catalog and the positions know.
+ */
+export function selectProduct(service: string, reads: ProductReads): Product | null | undefined {
+  if (reads.positions.isLoading) return undefined;
+  const position = reads.positions.data?.find((p) => p.service === service) ?? null;
+  const fromCatalog = reads.catalog?.find((a) => a.service === service) ?? null;
+  if (reads.detail.data) return listed(reads.detail.data, position);
+  if (reads.detail.isLoading) return fromCatalog ? listed(fromCatalog, position) : undefined;
+  if (isNotFound(reads.detail.error)) return position ? heldOnly(service, position) : null;
+  if (fromCatalog) return listed(fromCatalog, position);
+  return position ? heldOnly(service, position) : null;
+}
+
+// `RequestError` carries `status`; read structurally, the way `shared/lib/resource.ts`
+// reads a 403, so this module needs no transport import.
+function isNotFound(error: Error | null): boolean {
+  const status: unknown = error ? (error as { status?: unknown }).status : undefined;
+  return status === 404;
+}
+
+/** Closed to new money: delisted (known only by a holding) or registered but not `open`.
+ *  The detail read returns a closed product where the catalog would have dropped it, so
+ *  the state is checked and not just the presence. */
+export function isClosed(product: Product): boolean {
+  return product.allocation === null || product.allocation.state !== "open";
+}
+
+/** Locked below `invest` by an operator — a gate on an otherwise open product. */
+export function isLocked(product: Product): boolean {
+  return !isClosed(product) && product.allocation?.caller_access === "view";
 }
 
 /** `floor(cash / nav)` in exact base units — mirrors `Shares::from_cash` on the hub, so
@@ -84,9 +143,9 @@ export function cashForUnits(units: string, nav: string | undefined): bigint | n
  *
  * Order matters: being locked below `invest` is a gate an operator placed on purpose, so
  * it is checked ahead of the market-condition reasons (a stale mark, a full cap) that
- * would otherwise apply to anyone. `hidden` never reaches here — the BFF drops a hidden
- * product from `/api/allocations` before this module ever sees it — so only `view`
- * distinguishes a locked product from an investable one.
+ * would otherwise apply to anyone. `hidden` never reaches here — the detail read is a 404
+ * for a caller with no grant, and a granted caller's `caller_access` is their grant — so
+ * only `view` distinguishes a locked product from an investable one.
  *
  * Returns the catalogue key rather than the sentence: this module is pure and has no
  * translator, and the reason flows into exactly one render site, which does have one.
@@ -107,8 +166,8 @@ export function companyStakeBps(nav: FundNav | null): number | null {
 }
 
 export function blockedReasonKey(product: Product, nav: FundNav | null): string | null {
-  if (product.allocation === null) return "invest.blocked.closed";
-  if (product.allocation.caller_access === "view") return "invest.blocked.locked";
+  if (isClosed(product)) return "invest.blocked.closed";
+  if (isLocked(product)) return "invest.blocked.locked";
   if (nav?.stale) return "invest.blocked.staleNav";
   if (nav && toBaseUnits(nav.remaining_capacity) <= 0n) return "invest.blocked.capReached";
   return null;

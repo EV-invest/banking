@@ -7,7 +7,7 @@
 // No toast: the cabinet mounts no `Toaster`, and a result that names a queued money
 // movement should stay on screen beside the split it will change, not slide away.
 
-import { CheckCircle2, Clock, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
@@ -15,28 +15,24 @@ import { Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { issueUnits, type IssueUnitsBody } from "@/entities/admin/api/admin-client";
 import { unitHoldersResource } from "@/entities/admin/model/admin-resource";
-import type { Allocation, UnitIssuance } from "@/shared/contracts/admin";
+import type { Allocation } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
-import { formatUnits } from "@/shared/lib/money";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { HoldersTable } from "@/views/admin/allocations/ui/holders-table";
+import { IssuanceResult, type IssuanceOutcome } from "@/views/admin/allocations/ui/issuance-result";
 import { IssueForm } from "@/views/admin/allocations/ui/issue-form";
 import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
 import { PinCapAction } from "@/views/admin/allocations/ui/pin-cap-action";
-
-interface Outcome {
-  issuance: UnitIssuance;
-  holderLabel: string;
-}
+import { TransferStakeAction } from "@/views/admin/allocations/ui/transfer-stake-action";
 
 export function IssuancePanel({ allocation, onClose, className }: { allocation: Allocation; onClose: () => void; className?: string }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [last, setLast] = useState<Outcome | null>(null);
+  const [last, setLast] = useState<IssuanceOutcome | null>(null);
 
   const read = useResource(unitHoldersResource, allocation.service);
   const error = actionError ?? (read.data || !read.error ? null : errorMessage(read.error, t));
@@ -78,7 +74,7 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.issue.title")}</p>
           <IssueForm service={allocation.service} busy={busy} onSubmit={issue} />
-          {last && <Result outcome={last} />}
+          {last && <IssuanceResult outcome={last} kind="issue" />}
           <p className="text-xs text-muted-foreground">{t("admin.alloc.issue.note")}</p>
         </div>
 
@@ -89,25 +85,12 @@ export function IssuancePanel({ allocation, onClose, className }: { allocation: 
               <>
                 <HoldersTable holders={read.data} />
                 <PinCapAction allocation={allocation} holders={read.data} />
+                <TransferStakeAction allocation={allocation} holders={read.data} />
               </>
             )}
           </Settled>
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-/** The last mint, as the hub answered it. `queued` is the ordinary answer — the relay
- *  posts the mint after the POST returns — so it is shown as a state, not as a warning. */
-function Result({ outcome }: { outcome: Outcome }) {
-  const t = useT();
-  const applied = outcome.issuance.state === "applied";
-  const args = { units: formatUnits(outcome.issuance.units), holder: outcome.holderLabel };
-  return (
-    <p className="flex items-start gap-2 text-xs text-main-accent-t2">
-      {applied ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" /> : <Clock className="mt-0.5 size-3.5 shrink-0" />}
-      <span>{t(applied ? "admin.alloc.issue.resultApplied" : "admin.alloc.issue.resultQueued", args)}</span>
-    </p>
   );
 }

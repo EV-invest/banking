@@ -96,8 +96,8 @@ export function SupplyBar({ issued, cap, className }: { issued: string | undefin
 
 /** The badges that qualify a product: closed to new money, locked below `invest` by an
  *  operator, or priced off a stale mark. `closed` and `locked` are mutually exclusive by
- *  construction — a closed (delisted) product has left the catalog entirely, so it has no
- *  `caller_access` to be locked by — but both may join `stale`. */
+ *  construction — `isLocked` in `views/invest/lib/product.ts` only ever holds for an open
+ *  product — but both may join `stale`. */
 export function ProductBadges({ closed, locked, stale }: { closed: boolean; locked: boolean; stale: boolean }) {
   const t = useT();
   if (!closed && !locked && !stale) return null;

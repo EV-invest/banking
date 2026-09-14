@@ -9,7 +9,9 @@
 //
 // A slug that is not a registered allocation is a 404 from the hub — deliberately, since
 // a page that rendered an unregistered service would be the same phantom-fund surface the
-// registry exists to close.
+// registry exists to close. The product is read from the hub's detail route and not from
+// the open catalog, because a `hidden` product this caller was granted is not listed
+// (`selectProduct`).
 
 import { useT } from "@evinvest/i18n/react";
 import { ArrowDownToLine, ArrowLeft, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
@@ -18,16 +20,16 @@ import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
-import { accruedFeesResource, allocationsResource, feePolicyResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
+import { accruedFeesResource, allocationDetailResource, allocationsResource, feePolicyResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import type { FundNav, Position } from "@/shared/contracts";
-import { errorMessage } from "@/shared/lib/api-client";
+import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
-import { blockedReasonKey, buildProducts, type Product } from "@/views/invest/lib/product";
+import { blockedReasonKey, isClosed, isLocked, selectProduct } from "@/views/invest/lib/product";
 import { Note, ProductBadges, Stat, TEAL_CTA } from "@/views/invest/ui/atoms";
 import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-panels";
 import { FeeCard, SupplyCard } from "@/views/invest/ui/product-cards";
@@ -39,11 +41,11 @@ export function ProductView({ service }: { service: string }) {
   const t = useT();
   const [panel, setPanel] = useState<Panel>(null);
 
-  // The catalog and the positions are both needed to decide what this product *is* to this
-  // caller: open-and-unheld, open-and-held, or closed-but-still-held. Both are cached and
-  // both were already read by the list this page is usually entered from, so the product
-  // resolves on the first frame. `undefined` is still "loading" and `null` is "no such
-  // product" — collapsing the two would show a not-found flash on every cold load.
+  // The detail and the positions decide what this product *is* to this caller:
+  // open-and-unheld, open-and-held, closed-but-still-held, or hidden-but-granted. The
+  // catalog and the positions were already read by the list this page is usually entered
+  // from, so the product paints on the first frame while the detail confirms it.
+  const detailRead = useResource(allocationDetailResource, service);
   const catalogList = useResource(allocationsResource);
   const positionList = useResource(positionsResource);
   const navRead = useResource(fundNavResource, service);
@@ -53,12 +55,16 @@ export function ProductView({ service }: { service: string }) {
   const feeRead = useResource(feePolicyResource, service);
   const accruedRead = useResource(accruedFeesResource, service);
 
-  const resolving = catalogList.isLoading || positionList.isLoading;
-  const readFailed = (!catalogList.data && catalogList.error) || (!positionList.data && positionList.error);
+  // A 404 is an answer ("not registered", or not for this caller), not a failed read —
+  // it gets the not-found copy below, never the transport's generic sentence.
+  const detailFailed = !detailRead.data && detailRead.error && !(detailRead.error instanceof RequestError && detailRead.error.status === 404) ? detailRead.error : null;
+  const readFailed = detailFailed || (!catalogList.data && catalogList.error) || (!positionList.data && positionList.error);
   const error = readFailed ? errorMessage(readFailed, t) : null;
-  const product: Product | null | undefined = resolving
-    ? undefined
-    : (buildProducts(catalogList.data?.allocations ?? [], positionList.data?.positions ?? []).find((p) => p.service === service) ?? null);
+  const product = selectProduct(service, {
+    detail: detailRead,
+    catalog: catalogList.data?.allocations,
+    positions: { data: positionList.data?.positions, isLoading: positionList.isLoading },
+  });
 
   const nav = navRead.data ?? null;
   const feePolicy = feeRead.data ?? null;
@@ -91,8 +97,8 @@ export function ProductView({ service }: { service: string }) {
   }
 
   const held = product.position && !isZero(product.position.units) ? product.position : null;
-  const closed = product.allocation === null;
-  const locked = product.allocation?.caller_access === "view";
+  const closed = isClosed(product);
+  const locked = isLocked(product);
   const stale = nav?.stale ?? false;
   // `posted_at` is 0 until an operator marks the fund, which is exactly when the hub is
   // still pricing at the bootstrap NAV of 1.0.

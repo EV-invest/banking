@@ -651,6 +651,65 @@
         }
       }
     },
+    "/banking.v1.AllocationsService/TransferCompanyStake": {
+      "post": {
+        "tags": [
+          "banking.v1.AllocationsService"
+        ],
+        "summary": "Hand part of the company's stake to a user (AllocationManage): `units` leave\n `CompanyShares` and land in the user's holding, and the supply does NOT change —\n this is the only way units come back out of the company, since the company has no\n user and so cannot sell on the book, and minting the user a copy of what the\n company holds would inflate the supply past the cap table. The allocation must be\n registered, in any state; the user must exist; the recipient's access level is not\n consulted (an operator command, like IssueUnits). Priced at the current (fresh) NAV\n for the record and the default cost basis; refused (INVALID_ARGUMENT, as a mint past\n the cap is) when the company holds fewer than `units`.",
+        "description": "Answers a `UnitIssuance` with `holder_kind = \"user\"` and `source = \"company\"`\n rather than a message of its own: from the recipient's side it IS an issuance —\n units they did not pay cash for, a stated basis, the same queued → applied life —\n and the console lists mints and hand-overs as one history. A second message would\n restate the same nine fields to say one word. Idempotent by `idempotency_key`\n exactly as IssueUnits, in the same key space: the same key naming a mint and then a\n hand-over is ALREADY_EXISTS, not a retry.",
+        "operationId": "banking.v1.AllocationsService.TransferCompanyStake",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.TransferCompanyStakeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.UnitIssuance"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.AllocationsService/UpdateAllocation": {
       "post": {
         "tags": [
@@ -11830,6 +11889,37 @@
         "title": "TradeList",
         "additionalProperties": false
       },
+      "banking.v1.TransferCompanyStakeRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id",
+            "description": "The recipient: a banking (or concierge) user id, resolved the way every admin RPC\n resolves a target. Never the company — the company handing units to itself is not\n a request, so there is no `oneof` here."
+          },
+          "units": {
+            "type": "string",
+            "title": "units",
+            "description": "decimal units, \u003e 0, at most what the company holds"
+          },
+          "cost_basis": {
+            "type": "string",
+            "title": "cost_basis",
+            "description": "Decimal USDT the recipient is deemed to have paid — what lands in their position's\n cost basis. Empty means `units × NAV` at the dealing mark, like IssueUnits; an\n explicit value may be anything, zero included."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "title": "idempotency_key",
+            "description": "required, 1..64 chars, unique per service (shared with IssueUnits)"
+          }
+        },
+        "title": "TransferCompanyStakeRequest",
+        "additionalProperties": false
+      },
       "banking.v1.Treasury": {
         "type": "object",
         "properties": {
@@ -11928,12 +12018,12 @@
           "units": {
             "type": "string",
             "title": "units",
-            "description": "decimal units minted"
+            "description": "decimal units minted or handed over"
           },
           "nav": {
             "type": "string",
             "title": "nav",
-            "description": "decimal USDT per unit the mint was recorded at"
+            "description": "decimal USDT per unit the issuance was recorded at"
           },
           "cost_basis": {
             "type": "string",
@@ -11943,7 +12033,7 @@
           "state": {
             "type": "string",
             "title": "state",
-            "description": "`queued` until the relay posts the mint, then `applied`. A client that needs the\n units to be visible on the ledger polls for `applied`; a `queued` row is a mint the\n relay has not reached yet (or one it parked — see BalanceService.ListParkedEvents)."
+            "description": "`queued` until the relay posts the leg, then `applied`. A client that needs the\n units to be visible on the ledger polls for `applied`; a `queued` row is one the\n relay has not reached yet (or one it parked — see BalanceService.ListParkedEvents)."
           },
           "created_at": {
             "type": [
@@ -11953,11 +12043,16 @@
             "title": "created_at",
             "format": "int64",
             "description": "unix seconds"
+          },
+          "source": {
+            "type": "string",
+            "title": "source",
+            "description": "Where the units came from: `mint` (IssueUnits — supply grew by `units`) or\n `company` (TransferCompanyStake — moved out of the company's stake, supply\n unchanged). Always populated; a row that predates the field reads as `mint`."
           }
         },
         "title": "UnitIssuance",
         "additionalProperties": false,
-        "description": "One in-kind mint. The holder is flattened to a kind + id pair here, unlike the\n request's `oneof`, because this shape is projected to TypeScript through OpenAPI and\n a flat message survives that pipeline unambiguously (the same trade the operations\n timeline makes)."
+        "description": "One in-kind issuance: a mint, or a hand-over out of the company's stake (`source`).\n The holder is flattened to a kind + id pair here, unlike the request's `oneof`,\n because this shape is projected to TypeScript through OpenAPI and a flat message\n survives that pipeline unambiguously (the same trade the operations timeline makes)."
       },
       "banking.v1.UnparkEventRequest": {
         "type": "object",
@@ -14643,7 +14738,7 @@
   "tags": [
     {
       "name": "banking.v1.AllocationsService",
-      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md.\n\n The one place this service touches supply is `IssueUnits`: an operator minting units\n IN KIND — to an investor or to the company — with no cash behind them, for a product\n registered against an asset that already exists and already has owners. It lives here\n rather than on FundsService because it is a registry decision about who holds what,\n made by the same `AllocationManage` holder who sizes the product, not an investor\n dealing at NAV."
+      "description": "AllocationsService — the registry of investable products (the Allocation primitive).\n\n An allocation is the control-plane record that makes a service id investable. It is\n the ONLY way one comes into existence: `FundsService.Subscribe` refuses a service\n with no registered, open allocation, so a user can never mint a fund by typing an\n unknown slug. Money never flows through this service — amounts, units and NAV stay\n on FundsService/BalanceService; here live identity, presentation, lifecycle and\n access only.\n\n Lifecycle: `draft` (registered, not yet accepting money) → `open` (subscribe +\n redeem) → `closed` (redeem only, so a closed product never traps an investor).\n `closed` → `open` re-opens. Registration and every transition require\n `AllocationManage` (Admin/Owner) — the same trust seam as posting a valuation.\n\n Access is a second axis, orthogonal to the lifecycle. `state` says whether the\n product takes money at all; `access` says WHO may see it and who may put money in.\n Every allocation carries a default level — `hidden` | `view` | `invest` — and an\n operator may raise one investor above it with a per-user grant (`view` | `invest`).\n The level a caller effectively holds is the higher of the two. A registration lands\n on `view`: visible, but locked until an operator opens it or grants the investor.\n\n Reads are open to any authenticated user, filtered by that effective level:\n `ListAllocations` returns only `open` allocations the caller may at least view, and\n `GetAllocation` answers NOT_FOUND for one the caller may not — unless the caller\n holds `AllocationManage`, who sees everything in every state. `Subscribe` refuses\n (FAILED_PRECONDITION) unless the caller's effective level is `invest`; `Redeem` is\n never gated on access, so locking a product cannot trap an investor. See\n docs/ARCHITECTURE.md.\n\n The one place this service touches supply is `IssueUnits`: an operator minting units\n IN KIND — to an investor or to the company — with no cash behind them, for a product\n registered against an asset that already exists and already has owners. It lives here\n rather than on FundsService because it is a registry decision about who holds what,\n made by the same `AllocationManage` holder who sizes the product, not an investor\n dealing at NAV. `TransferCompanyStake` is the same decision in the other direction —\n units the company was seeded with handed to the person they belong to — and touches\n holdings, not supply."
     },
     {
       "name": "banking.v1.AuthService",

@@ -4160,6 +4160,44 @@ export type BankingV1TradeList = {
 };
 
 /**
+ * TransferCompanyStakeRequest
+ */
+export type BankingV1TransferCompanyStakeRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * user_id
+     *
+     * The recipient: a banking (or concierge) user id, resolved the way every admin RPC
+     * resolves a target. Never the company — the company handing units to itself is not
+     * a request, so there is no `oneof` here.
+     */
+    user_id?: string;
+    /**
+     * units
+     *
+     * decimal units, > 0, at most what the company holds
+     */
+    units?: string;
+    /**
+     * cost_basis
+     *
+     * Decimal USDT the recipient is deemed to have paid — what lands in their position's
+     * cost basis. Empty means `units × NAV` at the dealing mark, like IssueUnits; an
+     * explicit value may be anything, zero included.
+     */
+    cost_basis?: string;
+    /**
+     * idempotency_key
+     *
+     * required, 1..64 chars, unique per service (shared with IssueUnits)
+     */
+    idempotency_key?: string;
+};
+
+/**
  * Treasury
  *
  * The treasury picture: per-rail liquidity (Layer 2) and the claims it backs (Layer 1).
@@ -4245,10 +4283,10 @@ export type BankingV1UnitHolders = {
 /**
  * UnitIssuance
  *
- * One in-kind mint. The holder is flattened to a kind + id pair here, unlike the
- * request's `oneof`, because this shape is projected to TypeScript through OpenAPI and
- * a flat message survives that pipeline unambiguously (the same trade the operations
- * timeline makes).
+ * One in-kind issuance: a mint, or a hand-over out of the company's stake (`source`).
+ * The holder is flattened to a kind + id pair here, unlike the request's `oneof`,
+ * because this shape is projected to TypeScript through OpenAPI and a flat message
+ * survives that pipeline unambiguously (the same trade the operations timeline makes).
  */
 export type BankingV1UnitIssuance = {
     /**
@@ -4274,13 +4312,13 @@ export type BankingV1UnitIssuance = {
     /**
      * units
      *
-     * decimal units minted
+     * decimal units minted or handed over
      */
     units?: string;
     /**
      * nav
      *
-     * decimal USDT per unit the mint was recorded at
+     * decimal USDT per unit the issuance was recorded at
      */
     nav?: string;
     /**
@@ -4292,8 +4330,8 @@ export type BankingV1UnitIssuance = {
     /**
      * state
      *
-     * `queued` until the relay posts the mint, then `applied`. A client that needs the
-     * units to be visible on the ledger polls for `applied`; a `queued` row is a mint the
+     * `queued` until the relay posts the leg, then `applied`. A client that needs the
+     * units to be visible on the ledger polls for `applied`; a `queued` row is one the
      * relay has not reached yet (or one it parked — see BalanceService.ListParkedEvents).
      */
     state?: string;
@@ -4303,6 +4341,14 @@ export type BankingV1UnitIssuance = {
      * unix seconds
      */
     created_at?: number | string;
+    /**
+     * source
+     *
+     * Where the units came from: `mint` (IssueUnits — supply grew by `units`) or
+     * `company` (TransferCompanyStake — moved out of the company's stake, supply
+     * unchanged). Always populated; a row that predates the field reads as `mint`.
+     */
+    source?: string;
 };
 
 /**
@@ -7282,6 +7328,35 @@ export type BankingV1AllocationsServiceSetAllocationUnitCapResponses = {
 };
 
 export type BankingV1AllocationsServiceSetAllocationUnitCapResponse = BankingV1AllocationsServiceSetAllocationUnitCapResponses[keyof BankingV1AllocationsServiceSetAllocationUnitCapResponses];
+
+export type BankingV1AllocationsServiceTransferCompanyStakeData = {
+    body: BankingV1TransferCompanyStakeRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/TransferCompanyStake';
+};
+
+export type BankingV1AllocationsServiceTransferCompanyStakeErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceTransferCompanyStakeError = BankingV1AllocationsServiceTransferCompanyStakeErrors[keyof BankingV1AllocationsServiceTransferCompanyStakeErrors];
+
+export type BankingV1AllocationsServiceTransferCompanyStakeResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1UnitIssuance;
+};
+
+export type BankingV1AllocationsServiceTransferCompanyStakeResponse = BankingV1AllocationsServiceTransferCompanyStakeResponses[keyof BankingV1AllocationsServiceTransferCompanyStakeResponses];
 
 export type BankingV1AllocationsServiceUpdateAllocationData = {
     body: BankingV1UpdateAllocationRequest;
