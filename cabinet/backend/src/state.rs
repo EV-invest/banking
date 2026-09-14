@@ -286,6 +286,10 @@ impl Grpc {
 		Ok(self.allocations().issue_units(bearer(token, req)?).await?.into_inner())
 	}
 
+	pub async fn transfer_company_stake(&self, token: &str, req: bk::TransferCompanyStakeRequest) -> Result<bk::UnitIssuance, Status> {
+		Ok(self.allocations().transfer_company_stake(bearer(token, req)?).await?.into_inner())
+	}
+
 	pub async fn list_unit_holders(&self, token: &str, service: &str) -> Result<bk::UnitHolders, Status> {
 		let req = bk::ListUnitHoldersRequest { service: service.to_string() };
 		Ok(self.allocations().list_unit_holders(bearer(token, req)?).await?.into_inner())

@@ -710,6 +710,34 @@ pub async fn issue_units(State(st): State<AppState>, jar: CookieJar, headers: He
 	Ok(Json(st.grpc.issue_units(&token, req).await?.into()))
 }
 
+/// `POST /api/admin/allocations/transfer-stake` — hand part of the company's stake in a
+/// product to a user: the units leave the company's holding and land in theirs, and the
+/// supply does not move. Body: `service`, `user_id` (the id the console carries,
+/// resolved hub-side like `/allocations/issue`), `units`, `idempotency_key`; `cost_basis`
+/// is optional and defaults hub-side to `units × NAV`. Answers the same `UnitIssuance`
+/// shape as a mint, with `source: "company"`. The key is the same retry contract, in the
+/// same per-product key space as `/allocations/issue`.
+pub async fn transfer_company_stake(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(user_id), Some(units), Some(idempotency_key)) = (required(&v, "service"), required(&v, "user_id"), required(&v, "units"), required(&v, "idempotency_key"))
+	else {
+		return Err(ApiError::BadRequest("service, user_id, units and idempotency_key are required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::TransferCompanyStakeRequest {
+		service,
+		user_id,
+		units,
+		cost_basis: editable(&v, "cost_basis"),
+		idempotency_key,
+	};
+	Ok(Json(st.grpc.transfer_company_stake(&token, req).await?.into()))
+}
+
 /// `GET /api/admin/allocations/holders?service=` — the product's settled supply split
 /// into the company's stake, the fee account's units and what investors hold.
 pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::UnitHolders>, ApiError> {
@@ -1568,6 +1596,10 @@ mod admin_route_tests {
 			Err(Status::unimplemented("not reached by the access routes"))
 		}
 
+		async fn transfer_company_stake(&self, _: GrpcRequest<bk::TransferCompanyStakeRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
 		async fn list_unit_holders(&self, _: GrpcRequest<bk::ListUnitHoldersRequest>) -> Result<GrpcResponse<bk::UnitHolders>, Status> {
 			Err(Status::unimplemented("not reached by the access routes"))
 		}
@@ -2227,9 +2259,13 @@ mod admin_route_tests {
 			("/api/admin/allocations/access", r#"{"service":"quy-nhon","access":"invest"}"#),
 			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","user_id":"investor-7","level":"invest"}"#),
 			("/api/admin/allocations/grants/revoke", r#"{"service":"quy-nhon","user_id":"investor-7"}"#),
+			(
+				"/api/admin/allocations/transfer-stake",
+				r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000","idempotency_key":"k"}"#,
+			),
 		] {
 			let (status, _) = send(&app, signed("POST", uri, Some(body), true)).await;
-			assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not change access: {uri}");
+			assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not change access or holdings: {uri}");
 		}
 
 		let admin = Hub::new("admin");
@@ -2304,6 +2340,11 @@ mod admin_route_tests {
 			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","user_id":"investor-7"}"#),
 			("/api/admin/allocations/grants/grant", r#"{"service":"quy-nhon","level":"invest"}"#),
 			("/api/admin/allocations/grants/revoke", r#"{"service":"quy-nhon"}"#),
+			// A hand-over of the company's stake names a user, an amount and a retry key,
+			// or it is not a request.
+			("/api/admin/allocations/transfer-stake", r#"{"service":"quy-nhon","units":"13000","idempotency_key":"k"}"#),
+			("/api/admin/allocations/transfer-stake", r#"{"service":"quy-nhon","user_id":"investor-7","idempotency_key":"k"}"#),
+			("/api/admin/allocations/transfer-stake", r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000"}"#),
 		] {
 			let (status, response) = send(&app, signed("POST", uri, Some(body), true)).await;
 			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {uri} {body}");

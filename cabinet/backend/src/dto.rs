@@ -469,11 +469,12 @@ impl From<bk::AllocationAccessGrant> for AllocationAccessGrant {
 
 list_dto! { AllocationAccessGrantList from bk::AllocationAccessGrantList { grants: Vec<AllocationAccessGrant> } }
 
-/// One in-kind mint — units an operator issued with no cash behind them. `holder_id`
-/// is a BANKING user id for a `user` holder and empty for `company` (the fund's own
-/// stake, which has no user to resolve). `state` is `queued` until the relay posts the
-/// mint, then `applied`; the console polls for the latter before it shows the holder
-/// their units.
+/// One in-kind issuance — units an operator handed over with no cash behind them:
+/// minted (`source: mint`) or moved out of the company's stake (`source: company`,
+/// supply unchanged). `holder_id` is a BANKING user id for a `user` holder and empty
+/// for `company` (the fund's own stake, which has no user to resolve). `state` is
+/// `queued` until the relay posts the leg, then `applied`; the console polls for the
+/// latter before it shows the holder their units.
 #[derive(Serialize)]
 pub struct UnitIssuance {
 	pub id: String,
@@ -487,6 +488,8 @@ pub struct UnitIssuance {
 	/// `queued` | `applied`.
 	pub state: String,
 	pub created_at: String,
+	/// `mint` | `company`.
+	pub source: String,
 }
 
 impl From<bk::UnitIssuance> for UnitIssuance {
@@ -501,6 +504,7 @@ impl From<bk::UnitIssuance> for UnitIssuance {
 			cost_basis: i.cost_basis,
 			state: i.state,
 			created_at: i.created_at.to_string(),
+			source: i.source,
 		}
 	}
 }
@@ -2335,6 +2339,32 @@ mod tests {
 				balance.total.as_str()
 			),
 			("87.88", "12.12", "50", "0", "150")
+		);
+	}
+
+	/// An issuance crosses with its `source` intact: the console tells a mint (supply
+	/// grew) from a hand-over of the company's stake (it did not) by this field alone.
+	#[test]
+	fn an_issuance_carries_its_source_and_holder() {
+		let issuance = UnitIssuance::from(bk::UnitIssuance {
+			id: "7c1e".into(),
+			service: "service_arb".into(),
+			holder_kind: "user".into(),
+			holder_id: "d4d6".into(),
+			units: "13000".into(),
+			nav: "1.25".into(),
+			cost_basis: "16250".into(),
+			state: "queued".into(),
+			created_at: 1_700_000_000,
+			source: "company".into(),
+		});
+		assert_eq!(
+			(issuance.holder_kind.as_str(), issuance.holder_id.as_str(), issuance.source.as_str(), issuance.state.as_str()),
+			("user", "d4d6", "company", "queued")
+		);
+		assert_eq!(
+			(issuance.units.as_str(), issuance.cost_basis.as_str(), issuance.created_at.as_str()),
+			("13000", "16250", "1700000000")
 		);
 	}
 

@@ -127,6 +127,7 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/allocations/grants/grant", post(admin::grant_allocation_access))
 		.route("/api/admin/allocations/grants/revoke", post(admin::revoke_allocation_access))
 		.route("/api/admin/allocations/issue", post(admin::issue_units))
+		.route("/api/admin/allocations/transfer-stake", post(admin::transfer_company_stake))
 		.route("/api/admin/allocations/holders", get(admin::list_unit_holders))
 		.route("/api/admin/allocations/book", post(admin::set_book_policy))
 		.route("/api/admin/fees/policies", get(admin::list_fee_policies))
