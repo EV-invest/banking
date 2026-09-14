@@ -49,6 +49,7 @@ export function ScheduleFields({
   const ids = useId();
   const whenId = `${ids}-when`;
   const whenHintId = `${whenId}-hint`;
+  const whenPreviewId = `${whenId}-preview`;
   const whenErrorId = `${whenId}-error`;
   const reasonId = `${ids}-reason`;
   const reasonHintId = `${reasonId}-hint`;
@@ -77,14 +78,18 @@ export function ScheduleFields({
           disabled={disabled}
           className="tabular-nums"
           aria-invalid={effectiveFromError !== null || undefined}
-          aria-describedby={effectiveFromError !== null ? `${whenErrorId} ${whenHintId}` : whenHintId}
+          aria-describedby={effectiveFromError !== null ? `${whenErrorId} ${whenPreviewId} ${whenHintId}` : `${whenPreviewId} ${whenHintId}`}
         />
         {effectiveFromError !== null && <FieldError id={whenErrorId}>{effectiveFromError}</FieldError>}
-        {lifted && effectiveFromError === null && (
-          <p role="status" className="text-xs text-main-accent-t3">
-            {consilium ? t("admin.fees.effectiveFromLiftedConsilium") : t("admin.fees.effectiveFromLifted", { floor: formatMoment(String(noticeFloor(now)), locale) })}
-          </p>
-        )}
+        {/* Always mounted: a live region that appears together with its text is not
+            announced, and a description the input names must exist to be read. */}
+        <FieldDescription id={whenPreviewId} role="status" className="text-xs text-main-accent-t3">
+          {lifted && effectiveFromError === null
+            ? consilium
+              ? t("admin.fees.effectiveFromLiftedConsilium")
+              : t("admin.fees.effectiveFromLifted", { floor: formatMoment(String(noticeFloor(now)), locale) })
+            : null}
+        </FieldDescription>
         <FieldDescription id={whenHintId}>{t("admin.fees.effectiveFromHint")}</FieldDescription>
       </Field>
 
