@@ -687,6 +687,14 @@
     "en": "History of terms",
     "t": "Lịch sử điều khoản"
   },
+  "admin.fees.immediateBody": {
+    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. The first investor to subscribe reads these terms.",
+    "t": "Không ai đang nắm giữ đơn vị của sản phẩm này nên không cần thông báo: phiên bản {version} có hiệu lực ngay và được áp dụng trong vòng một phút. Nhà đầu tư đầu tiên đăng ký sẽ đọc chính các điều khoản này."
+  },
+  "admin.fees.immediateTitle": {
+    "en": "In force within a minute — nobody to notify",
+    "t": "Có hiệu lực trong vòng một phút — không có ai để thông báo"
+  },
   "admin.fees.inForce": {
     "en": "Version {version}, in force since {since}. Investors see these on the product page.",
     "t": "Phiên bản {version}, có hiệu lực từ {since}. Nhà đầu tư thấy các điều khoản này trên trang sản phẩm."

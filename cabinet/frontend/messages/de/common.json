@@ -687,6 +687,14 @@
     "en": "History of terms",
     "t": "Historie der Konditionen"
   },
+  "admin.fees.immediateBody": {
+    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. The first investor to subscribe reads these terms.",
+    "t": "Niemand hält Anteile dieses Produkts, daher war keine Benachrichtigung fällig: Version {version} tritt jetzt in Kraft und wird innerhalb einer Minute angewendet. Der erste zeichnende Anleger liest bereits diese Bedingungen."
+  },
+  "admin.fees.immediateTitle": {
+    "en": "In force within a minute — nobody to notify",
+    "t": "Gilt innerhalb einer Minute — niemand zu benachrichtigen"
+  },
   "admin.fees.inForce": {
     "en": "Version {version}, in force since {since}. Investors see these on the product page.",
     "t": "Version {version}, gültig seit {since}. Anleger sehen diese auf der Produktseite."

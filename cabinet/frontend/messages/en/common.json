@@ -171,6 +171,8 @@
   "admin.fees.hint.perYear": "per year",
   "admin.fees.hint.zeroForNone": "0 for none",
   "admin.fees.history": "History of terms",
+  "admin.fees.immediateBody": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. The first investor to subscribe reads these terms.",
+  "admin.fees.immediateTitle": "In force within a minute — nobody to notify",
   "admin.fees.inForce": "Version {version}, in force since {since}. Investors see these on the product page.",
   "admin.fees.lockedIn": "Performance locked in",
   "admin.fees.noCharges": "No charges yet",

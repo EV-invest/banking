@@ -687,6 +687,14 @@
     "en": "History of terms",
     "t": "История условий"
   },
+  "admin.fees.immediateBody": {
+    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. The first investor to subscribe reads these terms.",
+    "t": "У этого продукта нет держателей паёв, поэтому уведомление не требовалось: версия {version} вступает в силу сейчас и будет применена в течение минуты. Первый подписавшийся инвестор увидит уже эти условия."
+  },
+  "admin.fees.immediateTitle": {
+    "en": "In force within a minute — nobody to notify",
+    "t": "Вступает в силу в течение минуты — уведомлять некого"
+  },
   "admin.fees.inForce": {
     "en": "Version {version}, in force since {since}. Investors see these on the product page.",
     "t": "Версия {version}, действует с {since}. Инвесторы видят эти условия на странице продукта."
