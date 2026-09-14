@@ -14,7 +14,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::CookieJar;
 use evbanking_contracts::{
-	allocation::{access as wire_access, icon as wire_icon},
+	allocation::{access as wire_access, backing as wire_backing, icon as wire_icon},
 	banking::v1 as bk,
 };
 use evconcierge_contracts::concierge::v1 as cc;
@@ -623,6 +623,31 @@ pub async fn set_allocation_access(State(st): State<AppState>, jar: CookieJar, h
 	Ok(Json(st.grpc.set_allocation_access(&token, req).await?.into()))
 }
 
+/// `POST /api/admin/allocations/backing` — declare what stands behind a product's units
+/// (`cash` | `in_kind`). Orthogonal to `/state` and `/access`: this decides only whether
+/// `Redeem` may pay cash out for the units. The hub flips a product to `in_kind` on its
+/// own at the first mint; this is how an operator says the fund now holds cash for the
+/// units — or corrects a product back. Idempotent. The vocabulary is checked here, like
+/// an access level, so a typo is refused before a money-plane token is minted for it.
+pub async fn set_allocation_backing(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Allocation>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let Some(service) = required(&v, "service") else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let Some(backing) = required(&v, "backing") else {
+		return Err(ApiError::BadRequest(format!("backing is required — one of {}", wire_backing::ALL.join(", "))));
+	};
+	if !wire_backing::is_known(&backing) {
+		return Err(ApiError::BadRequest(format!("unknown backing '{backing}' — expected one of {}", wire_backing::ALL.join(", "))));
+	}
+	let token = require_money_token(&st, &jar).await?;
+	Ok(Json(st.grpc.set_allocation_backing(&token, &service, &backing).await?.into()))
+}
+
 /// `GET /api/admin/allocations/grants?service=` — every investor raised above the
 /// product's default, with who granted it and when.
 pub async fn list_allocation_access_grants(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::AllocationAccessGrantList>, ApiError> {
@@ -748,6 +773,44 @@ pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query
 	let token = require_money_token(&st, &jar).await?;
 	let holders = st.grpc.list_unit_holders(&token, &service).await.map_err(|s| ApiError::read(s, "unit holders unavailable"))?;
 	Ok(Json(holders.into()))
+}
+
+/// `POST /api/admin/allocations/retire` — burn a holder's units with no cash leg, the
+/// reverse of `/allocations/issue`: the units leave the holder's account and the supply
+/// shrinks by the same amount. Body: `service`, `units`, `idempotency_key`, exactly one
+/// of `user_id` (resolved hub-side like `/allocations/issue`) or `company: true`;
+/// `cost_basis` is optional and defaults hub-side to `units × NAV`; `force` (default
+/// `false`) is the operator's explicit override to burn units out of a live product —
+/// without it the hub answers 412 unless the allocation is `closed`. Answers the same
+/// `UnitIssuance` shape as a mint, with `source: "retire"` and positive `units`. The key
+/// is the same retry contract, in the same per-product key space as `/allocations/issue`.
+pub async fn retire_units(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(units), Some(idempotency_key)) = (required(&v, "service"), required(&v, "units"), required(&v, "idempotency_key")) else {
+		return Err(ApiError::BadRequest("service, units and idempotency_key are required".into()));
+	};
+	// Same shape and same reason as the mint: a burn of nobody's units is a form the
+	// console never filled in, and refusing it here spares the hub a money-plane token.
+	let holder = match (required(&v, "user_id"), bool_field(&v, "company")) {
+		(Some(_), true) => return Err(ApiError::BadRequest("user_id and company are mutually exclusive".into())),
+		(Some(user_id), false) => bk::retire_units_request::Holder::UserId(user_id),
+		(None, true) => bk::retire_units_request::Holder::Company(true),
+		(None, false) => return Err(ApiError::BadRequest("a holder is required: user_id, or company = true".into())),
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::RetireUnitsRequest {
+		service,
+		holder: Some(holder),
+		units,
+		cost_basis: editable(&v, "cost_basis"),
+		idempotency_key,
+		force: bool_field(&v, "force"),
+	};
+	Ok(Json(st.grpc.retire_units(&token, req).await?.into()))
 }
 
 /// `POST /api/admin/allocations/book` — replace a product's trading terms: whether its
@@ -1206,6 +1269,8 @@ mod admin_route_tests {
 		set_access: Option<bk::SetAllocationAccessRequest>,
 		grant: Option<bk::GrantAllocationAccessRequest>,
 		revoke: Option<bk::RevokeAllocationAccessRequest>,
+		set_backing: Option<bk::SetAllocationBackingRequest>,
+		retire: Option<bk::RetireUnitsRequest>,
 		money_tokens_issued: usize,
 	}
 
@@ -1524,6 +1589,7 @@ mod admin_route_tests {
 			icon: "real_estate".into(),
 			access: access.into(),
 			caller_access: "view".into(),
+			backing: "cash".into(),
 		}
 	}
 
@@ -1590,6 +1656,38 @@ mod admin_route_tests {
 
 		async fn set_allocation_unit_cap(&self, _: GrpcRequest<bk::SetAllocationUnitCapRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
 			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn set_allocation_backing(&self, request: GrpcRequest<bk::SetAllocationBackingRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().set_backing = Some(req.clone());
+			Ok(GrpcResponse::new(bk::Allocation {
+				backing: req.backing,
+				..stub_allocation("view")
+			}))
+		}
+
+		async fn retire_units(&self, request: GrpcRequest<bk::RetireUnitsRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
+			self.guard_money_plane(&request)?;
+			let req = request.into_inner();
+			self.seen.lock().unwrap().retire = Some(req.clone());
+			let (holder_kind, holder_id) = match req.holder {
+				Some(bk::retire_units_request::Holder::UserId(id)) => ("user", id),
+				Some(bk::retire_units_request::Holder::Company(_)) | None => ("company", String::new()),
+			};
+			Ok(GrpcResponse::new(bk::UnitIssuance {
+				id: "9e2f".into(),
+				service: req.service,
+				holder_kind: holder_kind.into(),
+				holder_id,
+				units: req.units,
+				nav: "1.25".into(),
+				cost_basis: if req.cost_basis.is_empty() { "16250".into() } else { req.cost_basis },
+				state: "queued".into(),
+				created_at: 1_750_000_500,
+				source: "retire".into(),
+			}))
 		}
 
 		async fn issue_units(&self, _: GrpcRequest<bk::IssueUnitsRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
@@ -2263,6 +2361,8 @@ mod admin_route_tests {
 				"/api/admin/allocations/transfer-stake",
 				r#"{"service":"quy-nhon","user_id":"investor-7","units":"13000","idempotency_key":"k"}"#,
 			),
+			("/api/admin/allocations/retire", r#"{"service":"quy-nhon","company":true,"units":"13000","idempotency_key":"k"}"#),
+			("/api/admin/allocations/backing", r#"{"service":"quy-nhon","backing":"cash"}"#),
 		] {
 			let (status, _) = send(&app, signed("POST", uri, Some(body), true)).await;
 			assert_eq!(status, StatusCode::FORBIDDEN, "an investor must not change access or holdings: {uri}");
@@ -2292,7 +2392,7 @@ mod admin_route_tests {
 		for seen in [seen, admin_seen] {
 			let seen = seen.lock().unwrap();
 			assert!(
-				seen.set_access.is_none() && seen.grant.is_none() && seen.revoke.is_none(),
+				seen.set_access.is_none() && seen.grant.is_none() && seen.revoke.is_none() && seen.retire.is_none() && seen.set_backing.is_none(),
 				"a refused caller must never reach the hub"
 			);
 			assert_eq!(seen.money_tokens_issued, 0, "a refused request must not mint a money-plane token");
@@ -2415,6 +2515,143 @@ mod admin_route_tests {
 		assert_eq!(body["ok"], true);
 		let forwarded = seen.lock().unwrap().revoke.clone().expect("the hub saw the revoke");
 		assert_eq!((forwarded.service.as_str(), forwarded.user_id.as_str()), (SERVICE, "investor-7"));
+	}
+
+	/// A retirement forwards the holder in the request's `oneof` shape — the company here,
+	/// which has no id to carry — together with the `force` override, and relays the row
+	/// the hub wrote with `source: "retire"` and POSITIVE units: the row is the magnitude,
+	/// the source is the direction, and a console summing the history must not be handed a
+	/// negative number to guess at.
+	#[tokio::test]
+	async fn retiring_forwards_the_company_holder_and_the_force_flag_and_relays_the_row() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				"/api/admin/allocations/retire",
+				Some(r#"{"service":"quy-nhon","company":true,"units":"13000","idempotency_key":"k-retire","force":true}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!(body["service"], SERVICE);
+		assert_eq!(body["source"], "retire");
+		assert_eq!(body["holder_kind"], "company");
+		assert_eq!(body["holder_id"], "", "the company has no user id to resolve");
+		assert_eq!(body["units"], "13000", "the magnitude, never signed");
+		assert_eq!(body["cost_basis"], "16250", "the hub's `units × NAV` default when the body named none");
+		assert_eq!(body["state"], "queued");
+		assert_eq!(body["created_at"], "1750000500", "int64s cross as strings");
+
+		let forwarded = seen.lock().unwrap().retire.clone().expect("the hub saw the retirement");
+		assert_eq!(forwarded.service, SERVICE);
+		assert_eq!(forwarded.holder, Some(bk::retire_units_request::Holder::Company(true)));
+		assert_eq!((forwarded.units.as_str(), forwarded.idempotency_key.as_str()), ("13000", "k-retire"));
+		assert!(forwarded.cost_basis.is_empty(), "an absent cost_basis crosses empty so the hub applies its default");
+		assert!(forwarded.force, "the operator's override must reach the hub as given");
+	}
+
+	/// The other holder shape — a named user — crosses as `user_id`, and `force` left out of
+	/// the body is `false`: the console must not be able to burn units out of a live product
+	/// by forgetting a field. A `cost_basis` the operator typed is forwarded verbatim.
+	#[tokio::test]
+	async fn retiring_a_user_defaults_force_to_false_and_keeps_the_typed_cost_basis() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(
+			&app,
+			signed(
+				"POST",
+				"/api/admin/allocations/retire",
+				Some(r#"{"service":"quy-nhon","user_id":"investor-7","units":"100","cost_basis":"120","idempotency_key":"k2"}"#),
+				true,
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!((body["holder_kind"].as_str(), body["holder_id"].as_str()), (Some("user"), Some("investor-7")));
+		assert_eq!(body["cost_basis"], "120");
+
+		let forwarded = seen.lock().unwrap().retire.clone().expect("the hub saw the retirement");
+		assert_eq!(forwarded.holder, Some(bk::retire_units_request::Holder::UserId("investor-7".into())));
+		assert_eq!(forwarded.cost_basis, "120");
+		assert!(!forwarded.force, "force absent from the body must cross as false");
+	}
+
+	/// A retirement names an amount, a retry key and exactly one holder, or it is not a
+	/// request — and none of these malformed bodies may cost a money-token mint.
+	#[tokio::test]
+	async fn a_malformed_retirement_is_refused_before_the_hub_is_called() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		for body in [
+			r#"{"service":"quy-nhon","company":true,"idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","company":true,"units":"1"}"#,
+			r#"{"company":true,"units":"1","idempotency_key":"k"}"#,
+			// Nobody's units, and two holders at once, are both forms nobody filled in.
+			r#"{"service":"quy-nhon","units":"1","idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","company":false,"units":"1","idempotency_key":"k"}"#,
+			r#"{"service":"quy-nhon","user_id":"investor-7","company":true,"units":"1","idempotency_key":"k"}"#,
+		] {
+			let (status, response) = send(&app, signed("POST", "/api/admin/allocations/retire", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {body}");
+			assert!(response["error"].is_string(), "the refusal says why: {response}");
+		}
+
+		let seen = seen.lock().unwrap();
+		assert!(seen.retire.is_none(), "a malformed retirement must never reach the hub");
+		assert_eq!(seen.money_tokens_issued, 0, "a body we are going to refuse must not cost a money-token mint");
+	}
+
+	/// Setting the backing forwards the word verbatim and the row comes back carrying it —
+	/// the field the client draws the redeem control off. A word outside `cash | in_kind`
+	/// is refused here, naming what was expected, before a money token is minted for it.
+	#[tokio::test]
+	async fn setting_the_backing_forwards_it_and_the_allocation_carries_it() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let (status, body) = send(
+			&app,
+			signed("POST", "/api/admin/allocations/backing", Some(r#"{"service":"quy-nhon","backing":"in_kind"}"#), true),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_eq!(body["service"], SERVICE);
+		assert_eq!(body["backing"], "in_kind", "the backing as the hub applied it");
+		assert_eq!(body["access"], "view", "the rest of the row rides along untouched");
+		let forwarded = seen.lock().unwrap().set_backing.clone().expect("the hub saw the write");
+		assert_eq!((forwarded.service.as_str(), forwarded.backing.as_str()), (SERVICE, "in_kind"));
+
+		let minted_before = seen.lock().unwrap().money_tokens_issued;
+		for body in [
+			r#"{"service":"quy-nhon","backing":"asset"}"#,
+			r#"{"service":"quy-nhon","backing":"InKind"}"#,
+			r#"{"service":"quy-nhon","backing":""}"#,
+			r#"{"service":"quy-nhon"}"#,
+			r#"{"backing":"cash"}"#,
+		] {
+			let (status, response) = send(&app, signed("POST", "/api/admin/allocations/backing", Some(body), true)).await;
+			assert_eq!(status, StatusCode::BAD_REQUEST, "must be refused before the hub is called: {body}");
+			let reason = response["error"].as_str().unwrap_or_default();
+			assert!(
+				reason.contains("service") || (reason.contains("cash") && reason.contains("in_kind")),
+				"the refusal names what was expected: {reason}"
+			);
+		}
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.set_backing.as_ref().map(|r| r.backing.as_str()), Some("in_kind"), "no malformed write reached the hub");
+		assert_eq!(seen.money_tokens_issued, minted_before, "a body we are going to refuse must not cost a money-token mint");
 	}
 
 	/// The grant list names its fund in the query string; a missing one is decided here.

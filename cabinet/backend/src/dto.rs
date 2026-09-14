@@ -420,6 +420,11 @@ pub struct Allocation {
 	/// (their permission does not make them an investor), so the console must not read
 	/// it as "what investors get".
 	pub caller_access: String,
+	/// What stands behind the units: `cash` | `in_kind`. Gates money on the way OUT: a
+	/// redemption pays out of the fund's cash claim, and an `in_kind` product has none
+	/// there, so the hub refuses `Redeem` on it (412) and holders exit through the book.
+	/// The client draws the redeem control off this, never off `state` alone.
+	pub backing: String,
 }
 
 impl From<bk::Allocation> for Allocation {
@@ -433,6 +438,7 @@ impl From<bk::Allocation> for Allocation {
 			icon: a.icon,
 			access: a.access,
 			caller_access: a.caller_access,
+			backing: a.backing,
 			created_at: a.created_at.to_string(),
 			updated_at: a.updated_at.to_string(),
 		}
@@ -469,12 +475,14 @@ impl From<bk::AllocationAccessGrant> for AllocationAccessGrant {
 
 list_dto! { AllocationAccessGrantList from bk::AllocationAccessGrantList { grants: Vec<AllocationAccessGrant> } }
 
-/// One in-kind issuance — units an operator handed over with no cash behind them:
-/// minted (`source: mint`) or moved out of the company's stake (`source: company`,
-/// supply unchanged). `holder_id` is a BANKING user id for a `user` holder and empty
-/// for `company` (the fund's own stake, which has no user to resolve). `state` is
-/// `queued` until the relay posts the leg, then `applied`; the console polls for the
-/// latter before it shows the holder their units.
+/// One in-kind issuance — units an operator moved with no cash behind them: minted
+/// (`source: mint`), moved out of the company's stake (`source: company`, supply
+/// unchanged) or burnt out of the holder's account (`source: retire`, supply shrank).
+/// `units` is always the magnitude; `source` is the direction. `holder_id` is a
+/// BANKING user id for a `user` holder and empty for `company` (the fund's own stake,
+/// which has no user to resolve). `state` is `queued` until the relay posts the leg,
+/// then `applied`; the console polls for the latter before it shows the holder their
+/// units.
 #[derive(Serialize)]
 pub struct UnitIssuance {
 	pub id: String,
@@ -488,7 +496,7 @@ pub struct UnitIssuance {
 	/// `queued` | `applied`.
 	pub state: String,
 	pub created_at: String,
-	/// `mint` | `company`.
+	/// `mint` | `company` | `retire`.
 	pub source: String,
 }
 
