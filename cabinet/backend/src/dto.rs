@@ -974,6 +974,9 @@ pub struct BookPolicy {
 	pub price_tick: String,
 	pub lot_size: String,
 	pub market_slippage_bps: u32,
+	/// The operator acknowledged that the units trade unbacked by fund cash; the terminal
+	/// tells buyers the book is their only exit.
+	pub allow_unbacked_trading: bool,
 	pub updated_at: String,
 }
 
@@ -986,6 +989,7 @@ impl From<bk::BookPolicy> for BookPolicy {
 			price_tick: p.price_tick,
 			lot_size: p.lot_size,
 			market_slippage_bps: p.market_slippage_bps,
+			allow_unbacked_trading: p.allow_unbacked_trading,
 			updated_at: p.updated_at.to_string(),
 		}
 	}
