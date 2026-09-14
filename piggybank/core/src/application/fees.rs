@@ -289,7 +289,9 @@ pub async fn cancel_change(
 		id: id.to_string(),
 	})?;
 	if change.requirement == ChangeRequirement::OwnerConsilium && change.requested_by != by.to_string() && !consilia.owner_roster().await?.contains(&by) {
-		return Err(DomainError::Forbidden("a change awaiting the owners' consilium may be withdrawn only by the owner who proposed it or by another owner".into()));
+		return Err(DomainError::Forbidden(
+			"a change awaiting the owners' consilium may be withdrawn only by the owner who proposed it or by another owner".into(),
+		));
 	}
 	changes.cancel(service, id, &by.to_string(), now).await
 }

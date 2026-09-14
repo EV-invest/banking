@@ -270,7 +270,11 @@ enum Audience {
 }
 
 async fn audience_of<T>(state: &AppState, request: &Request<T>) -> Result<Audience, Status> {
-	Ok(if holds_permission(state, request, Permission::AllocationManage).await? { Audience::Operator } else { Audience::Investor })
+	Ok(if holds_permission(state, request, Permission::AllocationManage).await? {
+		Audience::Operator
+	} else {
+		Audience::Investor
+	})
 }
 
 fn policy_to_proto(service: &ServiceId, view: &PolicyView, audience: Audience) -> pb::FeePolicy {

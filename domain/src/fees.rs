@@ -1208,8 +1208,15 @@ mod tests {
 		// which is blind to the hurdle, as much as outside it. A promised hurdle taken away is
 		// a new bargain.
 		let hurdled = policy(200, 2_000, 800, InvestedCapital, Annual);
-		assert_eq!(requirement_for(Some(&hurdled), &policy(200, 2_000, 700, InvestedCapital, Annual)), ChangeRequirement::OwnerConsilium);
-		assert_eq!(requirement_for(Some(&hurdled), &policy(100, 1_000, 0, InvestedCapital, Annual)), ChangeRequirement::OwnerConsilium, "even when every other leg loosens");
+		assert_eq!(
+			requirement_for(Some(&hurdled), &policy(200, 2_000, 700, InvestedCapital, Annual)),
+			ChangeRequirement::OwnerConsilium
+		);
+		assert_eq!(
+			requirement_for(Some(&hurdled), &policy(100, 1_000, 0, InvestedCapital, Annual)),
+			ChangeRequirement::OwnerConsilium,
+			"even when every other leg loosens"
+		);
 		let hurdled_dear = policy(400, 4_000, 500, MarketValue, Monthly);
 		assert_eq!(requirement_for(Some(&hurdled_dear), &dear), ChangeRequirement::OwnerConsilium);
 		// Keeping or raising the hurdle changes nothing about the rule.
