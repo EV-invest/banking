@@ -371,10 +371,19 @@ export interface AllocationList {
 /** One investor raised above a product's default access level. */
 export interface AllocationAccessGrant {
   service: string;
-  /** The investor — a banking user id. */
+  /**
+   * The investor — the id the console carries: concierge-first, banking when no mirror
+   * exists. Revoke sends it back exactly as received; the BFF owns the mapping.
+   */
   user_id: string;
+  /**
+   * The investor's email, for display. `null` when the hub could not match `user_id` to
+   * an identity (a banking-only id with no concierge mirror, or a mirror that has since
+   * gone); absent on a payload serialised before the field existed. Fall back to the id.
+   */
+  email?: string | null;
   level: AllocationGrantLevel;
-  /** The `AllocationManage` holder who granted it. */
+  /** The `AllocationManage` holder who granted it — console-facing id, same rule as `user_id`. */
   granted_by: string;
   /** Unix seconds. */
   granted_at: string;
