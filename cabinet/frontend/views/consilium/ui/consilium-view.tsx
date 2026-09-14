@@ -574,8 +574,9 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
               {busy && <Loader2 className="size-4 animate-spin" />}
               {t("consilium.payout.cancelConfirm")}
             </Button>
+            {/* Not "Cancel": beside "Cancel and void the votes" that word answers both ways. */}
             <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
-              {t("ui.cancel")}
+              {t("ui.keep")}
             </Button>
           </div>
         </div>

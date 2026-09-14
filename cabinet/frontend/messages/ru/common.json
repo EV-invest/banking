@@ -2047,6 +2047,10 @@
     "en": "Approve this change",
     "t": "Одобрить это изменение"
   },
+  "approval.feePolicy.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and the product's terms are unchanged. Ask whoever opened the request to send a new one.",
+    "t": "Код вводили неверно слишком много раз, поэтому ссылка закрыта, а все владельцы уведомлены. Ничего не подтверждено, условия продукта не изменились. Попросите того, кто открыл запрос, прислать новую ссылку."
+  },
   "approval.feePolicy.decided.approvedTitle": {
     "en": "You approved this change",
     "t": "Вы одобрили это изменение"
@@ -2066,6 +2070,10 @@
   "approval.feePolicy.payloadHashHint": {
     "en": "The fingerprint is taken over the product, the terms now and proposed, the reason and the requested moment above. It is checked again before the change is scheduled, so a request cannot be edited after you have agreed to it.",
     "t": "Отпечаток берётся по продукту, текущим и предлагаемым условиям, причине и запрошенному моменту выше. Он проверяется повторно перед назначением изменения, поэтому запрос нельзя отредактировать после вашего согласия."
+  },
+  "approval.feePolicy.tallyHint": {
+    "en": "More than half of the owners must approve before the terms change. You are one of them.",
+    "t": "Прежде чем условия изменятся, их должны подтвердить больше половины владельцев. Вы — один из них."
   },
   "approval.feePolicy.title": {
     "en": "Approve a change of fee terms",
@@ -5942,6 +5950,10 @@
   "ui.inYourCabinet": {
     "en": "In your cabinet",
     "t": "В вашем кабинете"
+  },
+  "ui.keep": {
+    "en": "Keep it",
+    "t": "Оставить"
   },
   "ui.kycLevel": {
     "en": "KYC level",

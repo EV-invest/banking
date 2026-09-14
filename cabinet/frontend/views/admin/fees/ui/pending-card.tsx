@@ -87,8 +87,9 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
                   {busy && <Loader2 className="size-4 animate-spin" />}
                   {t("admin.fees.cancelConfirm")}
                 </Button>
+                {/* Not "Cancel": beside "Cancel the change" that word answers both ways. */}
                 <Button ref={keepRef} variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
-                  {t("ui.cancel")}
+                  {t("ui.keep")}
                 </Button>
               </div>
             </AlertDescription>

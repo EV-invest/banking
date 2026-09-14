@@ -1939,6 +1939,10 @@
     "en": "Approve this change",
     "t": "Approuver ce changement"
   },
+  "approval.feePolicy.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and the product's terms are unchanged. Ask whoever opened the request to send a new one.",
+    "t": "Le code a été saisi incorrectement trop de fois, le lien a donc été fermé et tous les propriétaires en ont été informés. Rien n'a été approuvé et les conditions du produit sont inchangées. Demandez à la personne qui a ouvert la demande d'en envoyer une nouvelle."
+  },
   "approval.feePolicy.decided.approvedTitle": {
     "en": "You approved this change",
     "t": "Vous avez approuvé ce changement"
@@ -1958,6 +1962,10 @@
   "approval.feePolicy.payloadHashHint": {
     "en": "The fingerprint is taken over the product, the terms now and proposed, the reason and the requested moment above. It is checked again before the change is scheduled, so a request cannot be edited after you have agreed to it.",
     "t": "L'empreinte est calculée sur le produit, les conditions actuelles et proposées, le motif et le moment demandé ci-dessus. Elle est vérifiée à nouveau avant la planification du changement, de sorte qu'une demande ne peut plus être modifiée après votre accord."
+  },
+  "approval.feePolicy.tallyHint": {
+    "en": "More than half of the owners must approve before the terms change. You are one of them.",
+    "t": "Plus de la moitié des propriétaires doivent approuver avant que les conditions ne changent. Vous en faites partie."
   },
   "approval.feePolicy.title": {
     "en": "Approve a change of fee terms",
@@ -5042,6 +5050,10 @@
   "ui.inYourCabinet": {
     "en": "In your cabinet",
     "t": "Dans votre espace"
+  },
+  "ui.keep": {
+    "en": "Keep it",
+    "t": "Conserver"
   },
   "ui.kycLevel": {
     "en": "KYC level",

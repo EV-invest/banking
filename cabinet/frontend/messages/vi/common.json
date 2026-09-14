@@ -1939,6 +1939,10 @@
     "en": "Approve this change",
     "t": "Phê duyệt thay đổi này"
   },
+  "approval.feePolicy.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and the product's terms are unchanged. Ask whoever opened the request to send a new one.",
+    "t": "Mã đã bị nhập sai quá nhiều lần nên liên kết đã bị đóng và mọi chủ sở hữu đã được thông báo. Không có gì được chấp thuận và các điều khoản của sản phẩm không thay đổi. Hãy đề nghị người đã mở yêu cầu gửi một yêu cầu mới."
+  },
   "approval.feePolicy.decided.approvedTitle": {
     "en": "You approved this change",
     "t": "Bạn đã phê duyệt thay đổi này"
@@ -1958,6 +1962,10 @@
   "approval.feePolicy.payloadHashHint": {
     "en": "The fingerprint is taken over the product, the terms now and proposed, the reason and the requested moment above. It is checked again before the change is scheduled, so a request cannot be edited after you have agreed to it.",
     "t": "Dấu vân tay được tính trên sản phẩm, điều khoản hiện tại và đề xuất, lý do và thời điểm yêu cầu ở trên. Nó được kiểm tra lại trước khi thay đổi được lên lịch, nên yêu cầu không thể bị sửa sau khi bạn đã đồng ý."
+  },
+  "approval.feePolicy.tallyHint": {
+    "en": "More than half of the owners must approve before the terms change. You are one of them.",
+    "t": "Hơn một nửa số chủ sở hữu phải chấp thuận trước khi các điều khoản thay đổi. Bạn là một trong số họ."
   },
   "approval.feePolicy.title": {
     "en": "Approve a change of fee terms",
@@ -5042,6 +5050,10 @@
   "ui.inYourCabinet": {
     "en": "In your cabinet",
     "t": "Trong tài khoản của bạn"
+  },
+  "ui.keep": {
+    "en": "Keep it",
+    "t": "Giữ lại"
   },
   "ui.kycLevel": {
     "en": "KYC level",
