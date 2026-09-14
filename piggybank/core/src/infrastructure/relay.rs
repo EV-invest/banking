@@ -35,7 +35,9 @@
 use std::{sync::Arc, time::Duration};
 
 use domain::{
+	architecture::DomainEvent,
 	balance::{LedgerAccountKey, LedgerEvent, TransferCode},
+	book::{BookEvent, Locked, Side},
 	fees::FeeEvent,
 	issuance::{IssuanceEvent, UnitHolder},
 	money::Usdt,
@@ -53,7 +55,7 @@ use uuid::Uuid;
 
 use crate::{
 	infrastructure::{
-		fee_accrual,
+		book, fee_accrual,
 		outbox::{self, OutboxRow},
 		rails::now_unix_i64,
 	},
@@ -120,6 +122,16 @@ const PAYMENT_TRANSFER: &[u8] = b"payment:transfer";
 const FEE_SETTLE_BURN: &[u8] = b"fee:settle:burn";
 const FEE_SETTLE_PAYOUT: &[u8] = b"fee:settle:payout";
 
+/// Salts for the book. An order has exactly one lock and at most one release, both
+/// derived from the ORDER id (an operator reconciling the escrow recomputes them from the
+/// row alone); a trade's three legs are derived from the TRADE id and posted as one
+/// linked chain, so the units, the cash and the fee land together or not at all.
+const BOOK_LOCK: &[u8] = b"book:lock";
+const BOOK_RELEASE: &[u8] = b"book:release";
+const BOOK_FILL_UNITS: &[u8] = b"book:fill:units";
+const BOOK_FILL_CASH: &[u8] = b"book:fill:cash";
+const BOOK_FILL_FEE: &[u8] = b"book:fill:fee";
+
 /// Bound on consecutive `RetryBounded` attempts before a never-resolving retryable (a
 /// completion whose pending was itself parked, so it can never be found) is parked
 /// rather than wedging the single-worker queue forever.
@@ -139,6 +151,8 @@ const OUTBOX_LOCK_KEY: i64 = 0x4556_424b_4f42_585f_u64 as i64;
 const SUBSCRIBE_POSITION: &[u8] = b"subscribe:position";
 /// The same, for an issuance's `applied` stamp + cost-basis projection.
 const ISSUE_APPLIED: &[u8] = b"issue:applied";
+/// The same, for a trade's two-sided cost-basis projection.
+const BOOK_TRADE_POSITION: &[u8] = b"book:trade:position";
 /// The relay task: drains the outbox to the ledger + custody. Cloneable handles
 /// (`pool`, `ledger`, `custody`, `notify`) so command handlers can `notify` it to
 /// dispatch promptly.
@@ -361,6 +375,15 @@ impl Relay {
 		if let Err(err) = outbox::mark_parked(&self.pool, row.seq, reason).await {
 			error!(seq = row.seq, "relay: failed to stamp parked_at (event will re-deliver): {err}");
 		}
+		// A parked escrow lock is an order standing on the book with nothing behind it —
+		// the one park that must ALSO change control-plane state, because the matcher
+		// would otherwise keep filling an order whose settlement is bound to park too.
+		if row.kind == BookEvent::KIND
+			&& let Ok(BookEvent::OrderPlaced { order_id, .. }) = serde_json::from_str::<BookEvent>(&row.payload)
+			&& let Err(err) = book::mark_rejected(&self.pool, order_id.raw(), &format!("ledger refused the escrow: {reason}")).await
+		{
+			error!(seq = row.seq, order = %order_id, "relay: failed to mark the order rejected after its lock parked: {err}");
+		}
 		if applied_legs > 0 {
 			error!(seq = row.seq, event_id = %row.event_id, aggregate = %row.aggregate, applied_legs, "relay: PARKED HALF-APPLIED event (compensation owed): {reason}");
 			if let Err(err) = outbox::mark_compensated(&self.pool, row.seq).await {
@@ -478,6 +501,7 @@ impl Relay {
 		for (leg, op) in ops.iter().enumerate() {
 			let result = match &op.action {
 				LedgerAction::Post(transfer) => self.ledger.post(transfer).await,
+				LedgerAction::PostLinked(transfers) => self.ledger.post_linked(transfers).await,
 				LedgerAction::Reserve(transfer) => self.ledger.reserve(transfer).await,
 				LedgerAction::Complete(completion) => self.ledger.complete(completion).await,
 				LedgerAction::Broadcast(request) => self.custody.broadcast(request).await.map_err(custody_to_ledger),
@@ -530,8 +554,100 @@ impl Relay {
 		{
 			return Outcome::Retry(format!("issuance applied projection: {err}"));
 		}
+		// A trade moves cost basis on both sides — the buyer gains what they paid, the
+		// seller loses the pro-rata share of theirs — under the same discipline: after the
+		// linked batch posted, at most once per event.
+		if row.kind == BookEvent::KIND
+			&& let Err(err) = project_trade(&self.pool, row).await
+		{
+			return Outcome::Retry(format!("book trade projection: {err}"));
+		}
 		Outcome::Done
 	}
+}
+
+/// Apply a trade's cost-basis projection to both parties, idempotently under a per-event
+/// `saga_steps` marker, in one transaction. The buyer's basis grows by what they paid —
+/// the notional plus the fee when they were the taker — and their units by the size,
+/// with the high-water mark blended at the fund's NAV of the moment (the accounting
+/// price, not the quote: performance is still measured against NAV, so the mark has to
+/// be one). The seller's basis shrinks pro rata, as a redemption's does.
+///
+/// The seller's reduction clamps at zero rather than refusing (`reduce_cost_basis` on the
+/// redemption path rolls back with `Conflict`, which its synchronous caller can retry):
+/// here a refusal would be a `Retry` that wedges the single-worker relay on a projection
+/// that can never catch up, and every unit a seller can lock came through this same relay
+/// in an earlier `seq` — so a short projection is a fee clawback or a drift already
+/// reconciled elsewhere, and an understated basis is the recoverable side of that.
+async fn project_trade(pool: &PgPool, row: &OutboxRow) -> Result<(), sqlx::Error> {
+	const PROJECTION_LEG: i32 = 100;
+	let event: BookEvent = serde_json::from_str(&row.payload).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+	let BookEvent::TradeExecuted {
+		service,
+		buyer,
+		seller,
+		taker_side,
+		size,
+		notional,
+		fee,
+		nav,
+		..
+	} = event
+	else {
+		return Ok(());
+	};
+	let marker_id = tid(row.aggregate_id, BOOK_TRADE_POSITION);
+	let mut tx = pool.begin().await?;
+	let marked = sqlx::query("INSERT INTO saga_steps (event_id, leg, role, tb_transfer_id) VALUES ($1, $2, 'book_trade_position', $3) ON CONFLICT (event_id, leg) DO NOTHING")
+		.bind(row.event_id)
+		.bind(PROJECTION_LEG)
+		.bind(&marker_id.to_be_bytes()[..])
+		.execute(&mut *tx)
+		.await?
+		.rows_affected();
+	if marked == 1 {
+		let buyer_paid = match taker_side {
+			Side::Buy => notional.checked_add(fee).ok_or_else(|| sqlx::Error::Protocol("trade cost overflows".into()))?,
+			Side::Sell => notional,
+		};
+		// Both positions settle what their old basis accrued before it moves (see
+		// [`super::fee_accrual`]); the buyer's row may not exist yet, which is fine.
+		fee_accrual::carry_accrual(&mut tx, buyer.raw(), service.as_str(), now_unix_i64())
+			.await
+			.map_err(|err| sqlx::Error::Protocol(format!("carry fee accrual before buy basis change: {err}")))?;
+		sqlx::query(
+			"INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, $3, $4, $5) \
+			 ON CONFLICT (user_id, service) DO UPDATE SET \
+			 cost_basis = (fund_positions.cost_basis::numeric + EXCLUDED.cost_basis::numeric)::text, \
+			 units = (fund_positions.units::numeric + EXCLUDED.units::numeric)::text, \
+			 high_water_mark = GREATEST(fund_positions.high_water_mark::numeric, EXCLUDED.high_water_mark::numeric)::text, \
+			 updated_at = now()",
+		)
+		.bind(buyer.raw())
+		.bind(service.as_str())
+		.bind(buyer_paid.base_units().to_string())
+		.bind(size.base_units().to_string())
+		.bind(nav.base_units().to_string())
+		.execute(&mut *tx)
+		.await?;
+		fee_accrual::carry_accrual(&mut tx, seller.raw(), service.as_str(), now_unix_i64())
+			.await
+			.map_err(|err| sqlx::Error::Protocol(format!("carry fee accrual before sell basis change: {err}")))?;
+		sqlx::query(
+			"UPDATE fund_positions SET \
+			 cost_basis = CASE WHEN units::numeric > $3::numeric THEN trunc(cost_basis::numeric * (units::numeric - $3::numeric) / units::numeric)::text ELSE '0' END, \
+			 units = GREATEST(units::numeric - $3::numeric, 0)::text, \
+			 updated_at = now() \
+			 WHERE user_id = $1 AND service = $2",
+		)
+		.bind(seller.raw())
+		.bind(service.as_str())
+		.bind(size.base_units().to_string())
+		.execute(&mut *tx)
+		.await?;
+	}
+	tx.commit().await?;
+	Ok(())
 }
 
 /// Stamp an issuance `applied` and, when the holder is a user, add its cost basis to
@@ -698,6 +814,10 @@ struct PlannedOp {
 
 enum LedgerAction {
 	Post(LedgerTransfer),
+	/// Several posted legs as one TigerBeetle linked chain — all or nothing. Not
+	/// liquidity-gated in the pre-check: the chain's own atomicity is the guarantee a
+	/// gate would otherwise provide, and a refused chain parks with nothing applied.
+	PostLinked(Vec<LedgerTransfer>),
 	Reserve(LedgerTransfer),
 	Complete(PendingCompletion),
 	Broadcast(BroadcastRequest),
@@ -733,6 +853,10 @@ fn plan(row: &OutboxRow) -> Result<Vec<PlannedOp>, String> {
 		"issuances" => {
 			let event: IssuanceEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
 			Ok(vec![plan_issuance(event, row.aggregate_id, reference)])
+		}
+		"book" => {
+			let event: BookEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
+			Ok(vec![plan_book(event, row.aggregate_id, reference)])
 		}
 		"payments" => {
 			let event: PaymentEvent = serde_json::from_str(&row.payload).map_err(|e| e.to_string())?;
@@ -826,6 +950,119 @@ fn plan_issuance(event: IssuanceEvent, aggregate_id: Uuid, reference: u128) -> P
 			code: TransferCode::UnitIssue,
 			reference,
 		}),
+	}
+}
+
+/// The book in the ledger. Every fact is a posted transfer — no two-phase pendings,
+/// because an order's escrow is a real balance in a real account (`BookShares` /
+/// `BookCash`) that a fill draws on, and a pending cannot be partially consumed.
+/// - **OrderPlaced** → lock the escrow: a sell `Dr BookShares / Cr UserShares` (the
+///   holding's non-negative flag refuses an over-lock), a buy `Dr UserClaim / Cr BookCash`
+///   (the claim's flag does the same). A refusal parks, and the relay marks the order
+///   `rejected` so the matcher stops filling an order with nothing behind it.
+/// - **TradeExecuted** → ONE linked chain: `Dr UserShares(buyer) / Cr BookShares(seller)`
+///   for the units, `Dr BookCash(buyer) / Cr UserClaim(seller)` for the cash, and — when
+///   the taker owes one — the fee out of the taker's side into `FeeRevenue`, which for a
+///   taking seller debits the claim the cash leg just credited (linked legs see each
+///   other's effect). Delivery versus payment: units and cash move together or not at
+///   all, and neither party can end up with both or neither.
+/// - **OrderReleased** → hand the unspent escrow back: `Dr UserShares / Cr BookShares`
+///   or `Dr BookCash / Cr UserClaim`.
+fn plan_book(event: BookEvent, aggregate_id: Uuid, reference: u128) -> PlannedOp {
+	match event {
+		BookEvent::OrderPlaced { service, user, locked, .. } => {
+			let (debit, credit, amount) = match locked {
+				Locked::Units(units) => (
+					LedgerAccountKey::BookShares(service.clone(), user),
+					LedgerAccountKey::UserShares(service, user),
+					units.base_units(),
+				),
+				Locked::Cash(cash) => (LedgerAccountKey::UserClaim(user), LedgerAccountKey::BookCash(user), cash.base_units()),
+			};
+			PlannedOp {
+				role: "book_lock",
+				transfer_id: tid(aggregate_id, BOOK_LOCK),
+				action: LedgerAction::Post(LedgerTransfer {
+					id: tid(aggregate_id, BOOK_LOCK),
+					debit,
+					credit,
+					amount,
+					code: TransferCode::BookLock,
+					reference,
+				}),
+			}
+		}
+		BookEvent::OrderReleased { service, user, released, .. } => {
+			let (debit, credit, amount) = match released {
+				Locked::Units(units) => (
+					LedgerAccountKey::UserShares(service.clone(), user),
+					LedgerAccountKey::BookShares(service, user),
+					units.base_units(),
+				),
+				Locked::Cash(cash) => (LedgerAccountKey::BookCash(user), LedgerAccountKey::UserClaim(user), cash.base_units()),
+			};
+			PlannedOp {
+				role: "book_release",
+				transfer_id: tid(aggregate_id, BOOK_RELEASE),
+				action: LedgerAction::Post(LedgerTransfer {
+					id: tid(aggregate_id, BOOK_RELEASE),
+					debit,
+					credit,
+					amount,
+					code: TransferCode::BookRelease,
+					reference,
+				}),
+			}
+		}
+		BookEvent::TradeExecuted {
+			service,
+			buyer,
+			seller,
+			taker_side,
+			size,
+			notional,
+			fee,
+			..
+		} => {
+			let mut legs = vec![
+				LedgerTransfer {
+					id: tid(aggregate_id, BOOK_FILL_UNITS),
+					debit: LedgerAccountKey::UserShares(service.clone(), buyer),
+					credit: LedgerAccountKey::BookShares(service, seller),
+					amount: size.base_units(),
+					code: TransferCode::BookFill,
+					reference,
+				},
+				LedgerTransfer {
+					id: tid(aggregate_id, BOOK_FILL_CASH),
+					debit: LedgerAccountKey::BookCash(buyer),
+					credit: LedgerAccountKey::UserClaim(seller),
+					amount: notional.base_units(),
+					code: TransferCode::BookFill,
+					reference,
+				},
+			];
+			// TB refuses a zero-amount transfer, so a fee-free fill has two legs.
+			if !fee.is_zero() {
+				let debit = match taker_side {
+					Side::Buy => LedgerAccountKey::BookCash(buyer),
+					Side::Sell => LedgerAccountKey::UserClaim(seller),
+				};
+				legs.push(LedgerTransfer {
+					id: tid(aggregate_id, BOOK_FILL_FEE),
+					debit,
+					credit: LedgerAccountKey::FeeRevenue,
+					amount: fee.base_units(),
+					code: TransferCode::BookFee,
+					reference,
+				});
+			}
+			PlannedOp {
+				role: "book_fill",
+				transfer_id: tid(aggregate_id, BOOK_FILL_UNITS),
+				action: LedgerAction::PostLinked(legs),
+			}
+		}
 	}
 }
 
@@ -1231,10 +1468,105 @@ async fn record_saga_step(pool: &PgPool, event_id: Uuid, leg: i32, role: &str, t
 mod tests {
 	use domain::{
 		balance::ServiceId,
+		book::{OrderId, TradeId},
 		money::{Nav, Shares, Usdt},
 	};
 
 	use super::*;
+
+	// A fill is delivery versus payment or nothing: units, cash and the taker's fee are
+	// ONE linked chain, and the fee leg comes off the taker's side — a taking seller pays
+	// it out of the claim the cash leg just credited, a taking buyer out of the escrow.
+	#[test]
+	fn a_trade_is_one_linked_chain_with_the_fee_on_the_takers_side() {
+		let (buyer, seller) = (UserId::new(), UserId::new());
+		let service = ServiceId::parse("service_arb").unwrap();
+		let trade_id = TradeId::new();
+		let event = |taker_side, fee| BookEvent::TradeExecuted {
+			trade_id,
+			service: service.clone(),
+			buyer,
+			seller,
+			buy_order_id: OrderId::new(),
+			sell_order_id: OrderId::new(),
+			taker_side,
+			size: Shares::parse_decimal("2").unwrap(),
+			price: domain::book::Price::parse_decimal("1.5").unwrap(),
+			notional: Usdt::parse_decimal("3").unwrap(),
+			fee: Usdt::parse_decimal(fee).unwrap(),
+			nav: Nav::SEED,
+		};
+
+		let op = plan_book(event(Side::Sell, "0.003"), trade_id.raw(), trade_id.raw().as_u128());
+		let LedgerAction::PostLinked(legs) = &op.action else {
+			panic!("a trade must be a linked chain")
+		};
+		assert_eq!(legs.len(), 3);
+		assert_eq!(
+			(legs[0].debit.clone(), legs[0].credit.clone()),
+			(LedgerAccountKey::UserShares(service.clone(), buyer), LedgerAccountKey::BookShares(service.clone(), seller))
+		);
+		assert_eq!(
+			(legs[1].debit.clone(), legs[1].credit.clone()),
+			(LedgerAccountKey::BookCash(buyer), LedgerAccountKey::UserClaim(seller))
+		);
+		assert_eq!(
+			(legs[2].debit.clone(), legs[2].credit.clone()),
+			(LedgerAccountKey::UserClaim(seller), LedgerAccountKey::FeeRevenue)
+		);
+		assert_eq!(op.transfer_id, legs[0].id, "the chain is identified by its first leg");
+
+		let op = plan_book(event(Side::Buy, "0.003"), trade_id.raw(), trade_id.raw().as_u128());
+		let LedgerAction::PostLinked(legs) = &op.action else {
+			panic!("a trade must be a linked chain")
+		};
+		assert_eq!(legs[2].debit, LedgerAccountKey::BookCash(buyer), "a taking buyer pays the fee out of its escrow");
+
+		// No fee, no third leg — TigerBeetle refuses a zero-amount transfer.
+		let op = plan_book(event(Side::Buy, "0"), trade_id.raw(), trade_id.raw().as_u128());
+		let LedgerAction::PostLinked(legs) = &op.action else {
+			panic!("a trade must be a linked chain")
+		};
+		assert_eq!(legs.len(), 2);
+	}
+
+	#[test]
+	fn a_lock_and_its_release_are_mirror_images_derived_from_the_order() {
+		let user = UserId::new();
+		let service = ServiceId::parse("service_arb").unwrap();
+		let order_id = OrderId::new();
+		let lock = plan_book(
+			BookEvent::OrderPlaced {
+				order_id,
+				service: service.clone(),
+				user,
+				side: Side::Buy,
+				locked: Locked::Cash(Usdt::parse_decimal("10").unwrap()),
+			},
+			order_id.raw(),
+			order_id.raw().as_u128(),
+		);
+		let release = plan_book(
+			BookEvent::OrderReleased {
+				order_id,
+				service: service.clone(),
+				user,
+				side: Side::Buy,
+				released: Locked::Cash(Usdt::parse_decimal("4").unwrap()),
+			},
+			order_id.raw(),
+			order_id.raw().as_u128(),
+		);
+		let (LedgerAction::Post(lock), LedgerAction::Post(release)) = (&lock.action, &release.action) else {
+			panic!("posted legs")
+		};
+		assert_eq!((lock.debit.clone(), lock.credit.clone()), (LedgerAccountKey::UserClaim(user), LedgerAccountKey::BookCash(user)));
+		assert_eq!(
+			(release.debit.clone(), release.credit.clone()),
+			(LedgerAccountKey::BookCash(user), LedgerAccountKey::UserClaim(user))
+		);
+		assert_ne!(lock.id, release.id, "one order, two distinct deterministic ids");
+	}
 
 	// The payment settle's leg order, for the same reason the redemption's is guarded: the
 	// pending must be POSTED before the second leg debits the clearing balance it creates.

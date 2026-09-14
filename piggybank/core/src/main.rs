@@ -11,16 +11,17 @@
 use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use color_eyre::eyre::{Context, ensure, eyre};
-use domain::money::Network;
+use domain::{book::PriceTimeEngine, money::Network};
 use ev::error_monitoring::{self, Config as SentryConfig};
 use evbanking_auth::{AuthConfig, AuthService, ServiceTokenSource, provisioner_channel};
 use evbanking_contracts::signer::v1::signer_service_client::SignerServiceClient;
 use piggybank_core::{
 	AppState,
-	application::auth_sync,
+	application::{auth_sync, book::BookFeed},
 	config::{self, Rails},
 	infrastructure::{
 		allocations::PgAllocations,
+		book::PgBook,
 		bridge::BridgeConsumer,
 		config_drift,
 		consilium::PgConsilia,
@@ -63,8 +64,8 @@ use piggybank_core::{
 		withdrawals::PgWithdrawals,
 	},
 	ports::{
-		AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, OutflowPolicy, PaymentFeed, PaymentRepository,
-		RedemptionRepository, SubscriptionRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
+		AllocationRegistry, BookStore, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, OutflowPolicy, PaymentFeed,
+		PaymentRepository, RedemptionRepository, SubscriptionRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 	},
 	services,
 };
@@ -227,6 +228,11 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let subscriptions: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(pool.clone()));
 	let issuances: Arc<dyn UnitIssuanceRepository> = Arc::new(PgUnitIssuances::new(pool.clone()));
 	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
+	// The allocation book: orders and fills in Postgres under one write lock per product,
+	// escrow and settlement through the relay. Price-time priority is the one matching
+	// rule today; it is a port so another can be wired here without touching the store.
+	let book: Arc<dyn BookStore> = Arc::new(PgBook::new(pool.clone()));
+	let book_feed = BookFeed::new();
 	let deposits: Arc<dyn Deposits> = Arc::new(PgDeposits::new(pool.clone()));
 	let nav: Arc<dyn NavMarks> = Arc::new(PgNav::new(pool.clone()));
 	let positions: Arc<dyn FundPositionReader> = Arc::new(PgFundPositions::new(pool.clone()));
@@ -491,6 +497,9 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		subscriptions,
 		issuances,
 		redemptions,
+		book,
+		Arc::new(PriceTimeEngine),
+		book_feed,
 		deposits,
 		nav,
 		positions,

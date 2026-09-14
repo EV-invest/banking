@@ -33,12 +33,17 @@ pub const MAX_NAV_MOVE_PCT: u128 = 50;
 /// A mark older than this (seconds) is stale; subscribe/redeem refuse to deal on it
 /// rather than price off a drifted NAV (the backward-pricing arbitrage guard). 24h for v1.
 pub const MAX_NAV_AGE_SECS: i64 = 24 * 60 * 60;
-/// A user's position in one fund, assembled from the live unit balance (TigerBeetle),
-/// the current NAV, and the cost-basis projection. `value = units × nav`; P&L is
-/// `value − cost_basis` (computed at the wire boundary, where a signed value is natural).
+/// A user's position in one fund, assembled from the live unit balances (TigerBeetle),
+/// the current NAV, and the cost-basis projection. `value = (units + units_in_orders) ×
+/// nav`; P&L is `value − cost_basis` (computed at the wire boundary, where a signed value
+/// is natural).
 pub struct PositionView {
 	pub service: ServiceId,
+	/// Units free in the holding — redeemable, sellable.
 	pub units: Shares,
+	/// Units committed to the holder's resting sell orders on the book. Still theirs and
+	/// still valued, but not free until the order fills or is cancelled.
+	pub units_in_orders: Shares,
 	pub nav: Nav,
 	pub value: Usdt,
 	pub cost_basis: Usdt,
@@ -265,12 +270,13 @@ pub async fn get_position(positions: &dyn FundPositionReader, ledger: &dyn Ledge
 	build_position_view(ledger, nav, user, service, cost_basis).await
 }
 
-/// All of the caller's fund positions with a non-zero unit balance.
+/// All of the caller's fund positions holding units — free or committed to the book. A
+/// holder whose every unit sits in a resting sell still has a position.
 pub async fn list_positions(positions: &dyn FundPositionReader, ledger: &dyn Ledger, nav: &dyn NavMarks, user: UserId) -> Result<Vec<PositionView>, DomainError> {
 	let mut out = Vec::new();
 	for position in positions.list(user).await? {
 		let view = build_position_view(ledger, nav, user, position.service, position.cost_basis).await?;
-		if !view.units.is_zero() {
+		if !view.units.is_zero() || !view.units_in_orders.is_zero() {
 			out.push(view);
 		}
 	}
@@ -366,17 +372,21 @@ pub async fn post_fund_valuation(
 		posted_at_unix,
 	})
 }
-/// Assemble a position view: read the live unit balance and the current NAV, value it.
+/// Assemble a position view: read the live unit balances — the holding and the book
+/// escrow — and the current NAV, value the two together.
 async fn build_position_view(ledger: &dyn Ledger, nav: &dyn NavMarks, user: UserId, service: ServiceId, cost_basis: Usdt) -> Result<PositionView, DomainError> {
 	let units = Shares::from_base_units(ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await?.posted);
+	let units_in_orders = Shares::from_base_units(ledger.balance(&LedgerAccountKey::BookShares(service.clone(), user)).await?.posted);
 	let (price, nav_as_of) = match nav.current(&service).await? {
 		Some(v) => (v.nav, v.posted_at_unix),
 		None => (Nav::SEED, 0),
 	};
-	let value = price.value(units)?;
+	let owned = units.checked_add(units_in_orders).ok_or_else(|| DomainError::Validation("position units overflow".into()))?;
+	let value = price.value(owned)?;
 	Ok(PositionView {
 		service,
 		units,
+		units_in_orders,
 		nav: price,
 		value,
 		cost_basis,

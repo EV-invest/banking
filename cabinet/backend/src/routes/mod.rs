@@ -1,5 +1,7 @@
 pub mod admin;
 pub mod approval;
+pub mod book;
+pub mod book_ws;
 pub mod consilium;
 pub mod governance_ws;
 pub mod identity;
@@ -8,6 +10,7 @@ pub mod notifications;
 pub mod payments;
 pub mod platform;
 pub mod system;
+pub mod ws;
 
 use std::time::Duration;
 
@@ -41,16 +44,20 @@ const REQUEST_DEADLINE: Duration = Duration::from_secs(15);
 /// Mount every BFF endpoint. Paths and methods mirror the old Next.js route handlers
 /// 1:1 so the frontend's same-origin `/api/*` calls are unchanged.
 ///
-/// The governance websocket is merged in AFTER [`REQUEST_DEADLINE`] is applied, so the
-/// layer wraps every request-shaped route and none of the long-lived one. A deadline is
+/// The websockets are merged in AFTER [`REQUEST_DEADLINE`] is applied, so the layer
+/// wraps every request-shaped route and none of the long-lived ones. A deadline is
 /// exactly right for a request that must finish and exactly wrong for a socket that must
-/// not: inside it, the live consilium page would be dropped every 15 seconds. (The
-/// upstream gRPC channel's own per-RPC timeout does not bound a server-stream either — it
-/// covers the response future, which resolves when the headers arrive, not the body.)
+/// not: inside it, the live consilium page and the live book would be dropped every 15
+/// seconds. (The upstream gRPC channel's own per-RPC timeout does not bound a
+/// server-stream either — it covers the response future, which resolves when the headers
+/// arrive, not the body.)
 pub fn router(state: AppState) -> Router {
-	let websocket = Router::new().route("/api/owners/consilium/ws", get(governance_ws::upgrade)).with_state(state.clone());
+	let websockets = Router::new()
+		.route("/api/owners/consilium/ws", get(governance_ws::upgrade))
+		.route("/api/book/ws", get(book_ws::upgrade))
+		.with_state(state.clone());
 
-	requests(state).merge(websocket).layer(TraceLayer::new_for_http())
+	requests(state).merge(websockets).layer(TraceLayer::new_for_http())
 }
 
 /// Every request-shaped endpoint: served under the outer deadline.
@@ -84,6 +91,16 @@ fn requests(state: AppState) -> Router {
 		.route("/api/funds/redemptions/cancel", post(money::cancel_redemption))
 		.route("/api/funds/subscribe", post(money::subscribe))
 		.route("/api/funds/redeem", post(money::redeem))
+		// The book — holders trading an allocation's units with each other. Money plane;
+		// the live feed is `/api/book/ws`, mounted with the other socket below.
+		.route("/api/book", get(book::get_book))
+		.route("/api/book/trades", get(book::list_trades))
+		.route("/api/book/candles", get(book::list_candles))
+		.route("/api/book/policy", get(book::get_policy))
+		.route("/api/book/orders", get(book::list_open_orders).post(book::place_order))
+		.route("/api/book/orders/cancel", post(book::cancel_order))
+		.route("/api/book/orders/history", get(book::list_order_history))
+		.route("/api/book/fills", get(book::list_fills))
 		// Admin console — role-gated at the BFF (coarse) AND re-checked per-permission by the
 		// owning plane (defense in depth). Identity/platform routes hit concierge; money/
 		// treasury routes hit the piggybank money plane.
@@ -111,6 +128,7 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/allocations/grants/revoke", post(admin::revoke_allocation_access))
 		.route("/api/admin/allocations/issue", post(admin::issue_units))
 		.route("/api/admin/allocations/holders", get(admin::list_unit_holders))
+		.route("/api/admin/allocations/book", post(admin::set_book_policy))
 		.route("/api/admin/fees/policies", get(admin::list_fee_policies))
 		.route("/api/admin/fees/policy", post(admin::set_fee_policy))
 		.route("/api/admin/fees/shares", get(admin::fee_shares))

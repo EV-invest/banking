@@ -63,6 +63,7 @@ fn relay(h: &Harness) -> Relay {
 /// holder can still drain a committed event while it owns the lock.
 #[tokio::test]
 async fn only_one_relay_drains_under_the_outbox_lock() {
+	let _relay_owner = common::relay_exclusive().await;
 	let Some(h) = harness().await else { return };
 	let primary = relay(&h);
 	let standby = relay(&h);

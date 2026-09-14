@@ -179,8 +179,20 @@ impl TbLedger {
 		let results = deadline("create_transfers", call, TB_CALL_TIMEOUT)
 			.await?
 			.map_err(|e| LedgerError::Unavailable(format!("create_transfers: {e:?}")))?;
+		// A linked chain reports the leg that failed with its own status and every other
+		// leg as `LinkedEventFailed`; the cause is the one worth surfacing, so it is
+		// looked for first and the generic chain status only stands in when nothing
+		// more specific was reported.
+		let mut chain_failed = false;
 		for result in results {
+			if result.status == tb::CreateTransferStatus::LinkedEventFailed {
+				chain_failed = true;
+				continue;
+			}
 			map_transfer_status(result.status)?;
+		}
+		if chain_failed {
+			return Err(LedgerError::Conflict("linked transfer chain failed without a reported cause".into()));
 		}
 		Ok(())
 	}
@@ -256,6 +268,41 @@ impl Ledger for TbLedger {
 			..Default::default()
 		};
 		self.create_transfers(&[row]).await
+	}
+
+	async fn post_linked(&self, transfers: &[LedgerTransfer]) -> Result<(), LedgerError> {
+		let Some(first) = transfers.first() else {
+			return Ok(());
+		};
+		// The chain is atomic, so its first id existing means every leg already landed;
+		// re-submitting would make TB answer `Exists` on the first leg and fail the rest
+		// of the chain on it, which the caller could not tell from a genuine failure.
+		if self.transfer_exists(first.id).await? {
+			return Ok(());
+		}
+		let mut rows = Vec::with_capacity(transfers.len());
+		for (index, transfer) in transfers.iter().enumerate() {
+			let (debit_id, credit_id) = self.ensure_pair(&transfer.debit, &transfer.credit).await?;
+			// Every leg but the last carries `Linked`: the flag says "and the next one",
+			// so the chain closes on the first leg without it.
+			let flags = if index + 1 < transfers.len() {
+				tb::TransferFlags::Linked
+			} else {
+				tb::TransferFlags::empty()
+			};
+			rows.push(tb::Transfer {
+				id: transfer.id,
+				debit_account_id: debit_id,
+				credit_account_id: credit_id,
+				amount: transfer.amount,
+				ledger: transfer.debit.ledger().id(),
+				code: transfer.code.code(),
+				user_data_128: transfer.reference,
+				flags,
+				..Default::default()
+			});
+		}
+		self.create_transfers(&rows).await
 	}
 
 	async fn reserve(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError> {

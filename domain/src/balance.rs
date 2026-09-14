@@ -22,6 +22,12 @@
 //! units issued **in kind** (no cash leg) by an operator, so a product registered against
 //! an existing asset can start life with the company holding its share of the supply.
 //!
+//! The secondary market (the allocation **book**) adds two escrow accounts: `BookShares`
+//! holds a holder's units while a sell order rests, `BookCash` holds a user's USDT while a
+//! buy order rests. Both are per user, so what a user has committed to the book is a
+//! balance the ledger keeps, never a figure Postgres reasons about — and a fill is one
+//! linked batch moving units and cash out of the two escrows at once.
+//!
 //! Two layers, one invariant: **`sum(custody) == sum(claims)`** globally on the USDT
 //! ledger. Per-rail backing is a *treasury* concern (a withdrawal on a short rail is
 //! queued, not refused), not a ledger one — which is why the invariant is global, not
@@ -223,6 +229,8 @@ pub enum AccountCode {
 	SharesOutstanding,
 	FeeShares,
 	CompanyShares,
+	BookShares,
+	BookCash,
 }
 
 impl AccountCode {
@@ -239,6 +247,8 @@ impl AccountCode {
 			Self::SharesOutstanding => 61,
 			Self::FeeShares => 62,
 			Self::CompanyShares => 63,
+			Self::BookShares => 64,
+			Self::BookCash => 65,
 		}
 	}
 }
@@ -289,6 +299,18 @@ pub enum TransferCode {
 	/// the service claim, an issuance never is — and reconciliation reading the Share
 	/// ledger alone must be able to tell which mints the fund's cash should account for.
 	UnitIssue,
+	/// A book order committing what it may spend: units into `BookShares` for a sell,
+	/// cash into `BookCash` for a buy.
+	BookLock,
+	/// The unspent part of a book order handed back on cancel, on an unfilled IOC
+	/// remainder, or on the price improvement a buy filled below its limit.
+	BookRelease,
+	/// One trade's units leg (`Dr UserShares(buyer) / Cr BookShares(seller)`) and cash leg
+	/// (`Dr BookCash(buyer) / Cr UserClaim(seller)`) — posted linked, so a fill is
+	/// delivery-versus-payment or nothing.
+	BookFill,
+	/// The taker's fee on a trade, into `FeeRevenue`, in the same linked batch as the fill.
+	BookFee,
 }
 
 impl TransferCode {
@@ -313,6 +335,10 @@ impl TransferCode {
 			Self::FeeSettle => 45,
 			Self::PaymentTransfer => 46,
 			Self::UnitIssue => 47,
+			Self::BookLock => 48,
+			Self::BookRelease => 49,
+			Self::BookFill => 50,
+			Self::BookFee => 51,
 		}
 	}
 }
@@ -346,8 +372,8 @@ pub enum LedgerAccountKey {
 	/// units (its debits) rejected atomically by TigerBeetle — the over-redeem backstop.
 	UserShares(ServiceId, UserId),
 	/// A fund's total units in circulation (credit-normal, Share ledger). One per
-	/// service. `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)
-	/// + CompanyShares(svc)` by construction.
+	/// service. `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + Σ_user
+	/// BookShares(svc, user) + FeeShares(svc) + CompanyShares(svc)` by construction.
 	SharesOutstanding(ServiceId),
 	/// The manager's accumulated fee units in a fund (debit-normal, Share ledger). One per
 	/// service — a holder of units exactly like a user, which is the point: a management or
@@ -366,6 +392,20 @@ pub enum LedgerAccountKey {
 	/// unit cap and dilutes NAV like any other holding; it has no cost-basis projection,
 	/// because there is no investor to report P&L to.
 	CompanyShares(ServiceId),
+	/// A user's units committed to resting sell orders on a fund's book (debit-normal,
+	/// Share ledger). One per `(service, user)`. A sell order moves its size here
+	/// (`Dr BookShares / Cr UserShares` — the holding's non-negative flag refuses an
+	/// over-lock atomically), a fill moves units from here to the buyer's holding, a
+	/// cancel moves the rest back. The user still owns these units — they count in the
+	/// supply invariant and in the position view as "units in orders" — but they cannot
+	/// be redeemed or sold twice while they sit here.
+	BookShares(ServiceId, UserId),
+	/// A user's USDT committed to resting buy orders (credit-normal, USDT ledger, one per
+	/// user across every book). A buy order moves its reserve here (`Dr UserClaim / Cr
+	/// BookCash` — the claim's non-negative flag refuses an over-lock), a fill pays the
+	/// seller out of it, a cancel or a price improvement hands the rest back. A claim like
+	/// any other, so `sum(custody) == sum(claims)` is untouched by a lock.
+	BookCash(UserId),
 }
 
 impl LedgerAccountKey {
@@ -383,13 +423,15 @@ impl LedgerAccountKey {
 			Self::SharesOutstanding(service) => format!("shares_outstanding:{service}"),
 			Self::FeeShares(service) => format!("shares_fee:{service}"),
 			Self::CompanyShares(service) => format!("shares_company:{service}"),
+			Self::BookShares(service, user) => format!("book_shares:{service}:{user}"),
+			Self::BookCash(user) => format!("book_cash:{user}"),
 		}
 	}
 
 	pub fn ledger(&self) -> Ledger {
 		match self {
 			Self::BankCustody => Ledger::UsdMock,
-			Self::UserShares(..) | Self::SharesOutstanding(_) | Self::FeeShares(_) | Self::CompanyShares(_) => Ledger::Share,
+			Self::UserShares(..) | Self::SharesOutstanding(_) | Self::FeeShares(_) | Self::CompanyShares(_) | Self::BookShares(..) => Ledger::Share,
 			_ => Ledger::Usdt,
 		}
 	}
@@ -407,15 +449,18 @@ impl LedgerAccountKey {
 			Self::SharesOutstanding(_) => AccountCode::SharesOutstanding,
 			Self::FeeShares(_) => AccountCode::FeeShares,
 			Self::CompanyShares(_) => AccountCode::CompanyShares,
+			Self::BookShares(..) => AccountCode::BookShares,
+			Self::BookCash(_) => AccountCode::BookCash,
 		}
 	}
 
-	/// Custody (wallet/bank) and every unit holding are debit-normal; every claim and
-	/// the units-outstanding contra are credit-normal.
+	/// Custody (wallet/bank) and every unit holding — the book's unit escrow included —
+	/// are debit-normal; every claim (the book's cash escrow included) and the
+	/// units-outstanding contra are credit-normal.
 	pub fn normal(&self) -> Normal {
 		match self {
-			Self::CryptoWallet(_) | Self::BankCustody | Self::UserShares(..) | Self::FeeShares(_) | Self::CompanyShares(_) => Normal::Debit,
-			Self::Fund | Self::UserClaim(_) | Self::ServiceClaim(_) | Self::FeeRevenue | Self::WithdrawalClearing | Self::SharesOutstanding(_) => Normal::Credit,
+			Self::CryptoWallet(_) | Self::BankCustody | Self::UserShares(..) | Self::FeeShares(_) | Self::CompanyShares(_) | Self::BookShares(..) => Normal::Debit,
+			Self::Fund | Self::UserClaim(_) | Self::ServiceClaim(_) | Self::FeeRevenue | Self::WithdrawalClearing | Self::SharesOutstanding(_) | Self::BookCash(_) => Normal::Credit,
 		}
 	}
 
@@ -532,6 +577,30 @@ mod tests {
 	}
 
 	#[test]
+	fn the_book_escrows_sit_beside_the_accounts_they_lock() {
+		let uid = UserId::from_raw(uuid::Uuid::nil());
+		let svc = ServiceId::parse("service_arb").unwrap();
+		let units = LedgerAccountKey::BookShares(svc.clone(), uid);
+		// Units in a resting sell are still units: same ledger and side as the holding they
+		// left, so the supply invariant keeps summing them and a lock is a plain
+		// holder-to-holder transfer the holding's flag can refuse.
+		assert_eq!(units.ledger(), Ledger::Share);
+		assert_eq!(units.normal(), Normal::Debit);
+		assert_eq!(units.account_code(), AccountCode::BookShares);
+		assert_eq!(units.logical_key(), "book_shares:service_arb:00000000-0000-0000-0000-000000000000");
+		assert_ne!(units.logical_key(), LedgerAccountKey::UserShares(svc, uid).logical_key());
+		// Cash in a resting buy is still a claim: same ledger and side as the user's claim,
+		// so the global custody-vs-claims invariant does not move when an order is placed.
+		let cash = LedgerAccountKey::BookCash(uid);
+		assert_eq!(cash.ledger(), Ledger::Usdt);
+		assert_eq!(cash.normal(), Normal::Credit);
+		assert_eq!(cash.account_code(), AccountCode::BookCash);
+		assert_eq!(cash.logical_key(), "book_cash:00000000-0000-0000-0000-000000000000");
+		assert_eq!(cash.network(), None);
+		assert_ne!(cash.logical_key(), LedgerAccountKey::UserClaim(uid).logical_key());
+	}
+
+	#[test]
 	fn every_account_and_transfer_code_is_unique() {
 		let account_codes = [
 			AccountCode::Fund,
@@ -545,6 +614,8 @@ mod tests {
 			AccountCode::SharesOutstanding,
 			AccountCode::FeeShares,
 			AccountCode::CompanyShares,
+			AccountCode::BookShares,
+			AccountCode::BookCash,
 		]
 		.map(AccountCode::code);
 		let mut sorted = account_codes;
@@ -573,6 +644,10 @@ mod tests {
 			TransferCode::FeeSettle,
 			TransferCode::PaymentTransfer,
 			TransferCode::UnitIssue,
+			TransferCode::BookLock,
+			TransferCode::BookRelease,
+			TransferCode::BookFill,
+			TransferCode::BookFee,
 		]
 		.map(TransferCode::code);
 		let mut sorted = transfer_codes;

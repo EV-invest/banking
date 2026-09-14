@@ -89,6 +89,10 @@ impl Grpc {
 		bk::allocations_service_client::AllocationsServiceClient::new(self.piggybank.clone())
 	}
 
+	fn book(&self) -> bk::book_service_client::BookServiceClient<Channel> {
+		bk::book_service_client::BookServiceClient::new(self.piggybank.clone())
+	}
+
 	fn health(&self) -> bk::health_service_client::HealthServiceClient<Channel> {
 		bk::health_service_client::HealthServiceClient::new(self.piggybank.clone())
 	}
@@ -342,6 +346,82 @@ impl Grpc {
 	pub async fn fund_fee_assessments(&self, token: &str, service: &str) -> Result<bk::FeeAssessmentList, Status> {
 		let req = bk::ListFundFeeAssessmentsRequest { service: service.to_string() };
 		Ok(self.fees().list_fund_fee_assessments(bearer(token, req)?).await?.into_inner())
+	}
+
+	// ── piggybank book (the secondary market in an allocation's units) ─────────
+	pub async fn place_order(&self, token: &str, req: bk::PlaceOrderRequest) -> Result<bk::Order, Status> {
+		Ok(self.book().place_order(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn cancel_order(&self, token: &str, order_id: &str) -> Result<bk::Order, Status> {
+		let req = bk::CancelOrderRequest { order_id: order_id.to_string() };
+		Ok(self.book().cancel_order(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// `service` empty = every allocation.
+	pub async fn list_open_orders(&self, token: &str, service: &str) -> Result<bk::OrderList, Status> {
+		let req = bk::ListOpenOrdersRequest { service: service.to_string() };
+		Ok(self.book().list_open_orders(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// `service` empty = every allocation; `limit` 0 = the hub's default page.
+	pub async fn list_order_history(&self, token: &str, service: &str, limit: u32) -> Result<bk::OrderList, Status> {
+		let req = bk::ListOrderHistoryRequest {
+			service: service.to_string(),
+			limit,
+		};
+		Ok(self.book().list_order_history(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// `service` empty = every allocation; `limit` 0 = the hub's default page.
+	pub async fn list_user_trades(&self, token: &str, service: &str, limit: u32) -> Result<bk::TradeList, Status> {
+		let req = bk::ListUserTradesRequest {
+			service: service.to_string(),
+			limit,
+		};
+		Ok(self.book().list_user_trades(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// `depth` 0 = the hub's default number of levels a side.
+	pub async fn get_book(&self, token: &str, service: &str, depth: u32) -> Result<bk::BookSnapshot, Status> {
+		let req = bk::GetBookRequest {
+			service: service.to_string(),
+			depth,
+		};
+		Ok(self.book().get_book(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// The public tape; `limit` 0 = the hub's default page.
+	pub async fn list_trades(&self, token: &str, service: &str, limit: u32) -> Result<bk::TradeList, Status> {
+		let req = bk::ListTradesRequest {
+			service: service.to_string(),
+			limit,
+		};
+		Ok(self.book().list_trades(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn list_candles(&self, token: &str, req: bk::ListCandlesRequest) -> Result<bk::CandleList, Status> {
+		Ok(self.book().list_candles(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// The live book feed for one allocation: one frame now, then one per change. The
+	/// per-RPC timeout bounds only the response headers, not the body, so the stream
+	/// outlives [`REQUEST_TIMEOUT`] by design.
+	pub async fn watch_book(&self, token: &str, service: &str, depth: u32) -> Result<tonic::Streaming<bk::BookEvent>, Status> {
+		let req = bk::WatchBookRequest {
+			service: service.to_string(),
+			depth,
+		};
+		Ok(self.book().watch_book(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn get_book_policy(&self, token: &str, service: &str) -> Result<bk::BookPolicy, Status> {
+		let req = bk::GetBookPolicyRequest { service: service.to_string() };
+		Ok(self.book().get_book_policy(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn set_book_policy(&self, token: &str, req: bk::SetBookPolicyRequest) -> Result<bk::BookPolicy, Status> {
+		Ok(self.book().set_book_policy(bearer(token, req)?).await?.into_inner())
 	}
 
 	pub async fn readiness(&self) -> Result<bk::ReadinessResponse, Status> {

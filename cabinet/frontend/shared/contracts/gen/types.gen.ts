@@ -203,8 +203,8 @@ export type BankingV1AllocationList = {
  * Balance
  *
  * The user's single, network-agnostic balance, segmented by lifecycle. Every figure is
- * a TigerBeetle-authoritative decimal USDT string; total = available + invested +
- * pending_withdrawal.
+ * a TigerBeetle-authoritative decimal USDT string; total = available + in_orders +
+ * invested + pending_withdrawal.
  */
 export type BankingV1Balance = {
     /**
@@ -216,7 +216,7 @@ export type BankingV1Balance = {
     /**
      * invested
      *
-     * staked in fund services (active allocations)
+     * held in fund units at NAV, the units escrowed by resting sell orders included
      */
     invested?: string;
     /**
@@ -228,9 +228,176 @@ export type BankingV1Balance = {
     /**
      * total
      *
-     * available + invested + pending_withdrawal
+     * available + in_orders + invested + pending_withdrawal
      */
     total?: string;
+    /**
+     * in_orders
+     *
+     * cash escrowed by the caller's resting buy orders on the book (still theirs)
+     */
+    in_orders?: string;
+};
+
+/**
+ * BookEvent
+ *
+ * One frame of WatchBook. `orders_revision` is the book revision at which the caller's
+ * own orders on this allocation last changed (0 = never) — compare it with the previous
+ * frame's to know whether to refetch ListOpenOrders.
+ */
+export type BankingV1BookEvent = {
+    /**
+     * snapshot
+     */
+    snapshot?: BankingV1BookSnapshot;
+    /**
+     * trades
+     *
+     * the latest public trades, newest first
+     */
+    trades?: Array<BankingV1Trade>;
+    /**
+     * orders_revision
+     */
+    orders_revision?: number | string;
+};
+
+/**
+ * BookLevel
+ *
+ * One aggregated price level of one side.
+ */
+export type BankingV1BookLevel = {
+    /**
+     * price
+     *
+     * decimal USDT per unit
+     */
+    price?: string;
+    /**
+     * size
+     *
+     * decimal units resting at this price
+     */
+    size?: string;
+    /**
+     * orders
+     *
+     * how many orders make it up
+     */
+    orders?: number;
+};
+
+/**
+ * BookPolicy
+ *
+ * One allocation's trading terms.
+ */
+export type BankingV1BookPolicy = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * book_open
+     */
+    book_open?: boolean;
+    /**
+     * taker_fee_bps
+     */
+    taker_fee_bps?: number;
+    /**
+     * price_tick
+     *
+     * decimal USDT
+     */
+    price_tick?: string;
+    /**
+     * lot_size
+     *
+     * decimal units
+     */
+    lot_size?: string;
+    /**
+     * market_slippage_bps
+     */
+    market_slippage_bps?: number;
+    /**
+     * updated_at
+     *
+     * unix seconds; 0 when the product has no policy row (the defaults)
+     */
+    updated_at?: number | string;
+};
+
+/**
+ * BookSnapshot
+ *
+ * The book as of `revision`. `bids` are best (highest) first, `asks` best (lowest)
+ * first. `last_price` / `last_side` describe the latest trade (empty before the first);
+ * `mid` and `spread` are empty unless both sides have a level. `volume_24h` is the units
+ * traded in the trailing day and `change_24h` the signed percent move of the last price
+ * against the last trade at or before 24h ago (empty when there is none). `nav` is the
+ * fund's current mark, carried so a ticker can show the two prices side by side.
+ */
+export type BankingV1BookSnapshot = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * revision
+     */
+    revision?: number | string;
+    /**
+     * bids
+     */
+    bids?: Array<BankingV1BookLevel>;
+    /**
+     * asks
+     */
+    asks?: Array<BankingV1BookLevel>;
+    /**
+     * last_price
+     */
+    last_price?: string;
+    /**
+     * last_side
+     *
+     * buy | sell — the taker's side of the last trade
+     */
+    last_side?: string;
+    /**
+     * mid
+     */
+    mid?: string;
+    /**
+     * spread
+     */
+    spread?: string;
+    /**
+     * nav
+     */
+    nav?: string;
+    /**
+     * volume_24h
+     *
+     * decimal units
+     */
+    volume_24h?: string;
+    /**
+     * change_24h
+     *
+     * signed decimal percent, e.g. "-2.5"
+     */
+    change_24h?: string;
+    /**
+     * as_of
+     *
+     * unix seconds the snapshot was taken
+     */
+    as_of?: number | string;
 };
 
 /**
@@ -241,6 +408,16 @@ export type BankingV1CancelConsiliumRequest = {
      * consilium_id
      */
     consilium_id?: string;
+};
+
+/**
+ * CancelOrderRequest
+ */
+export type BankingV1CancelOrderRequest = {
+    /**
+     * order_id
+     */
+    order_id?: string;
 };
 
 /**
@@ -281,6 +458,58 @@ export type BankingV1CancelWithdrawalRequest = {
      * withdrawal_id
      */
     withdrawal_id?: string;
+};
+
+/**
+ * Candle
+ *
+ * One OHLCV bucket. `time` is the bucket's start, unix seconds.
+ */
+export type BankingV1Candle = {
+    /**
+     * time
+     */
+    time?: number | string;
+    /**
+     * open
+     */
+    open?: string;
+    /**
+     * high
+     */
+    high?: string;
+    /**
+     * low
+     */
+    low?: string;
+    /**
+     * close
+     */
+    close?: string;
+    /**
+     * volume
+     *
+     * decimal units
+     */
+    volume?: string;
+};
+
+/**
+ * CandleList
+ */
+export type BankingV1CandleList = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * resolution
+     */
+    resolution?: string;
+    /**
+     * candles
+     */
+    candles?: Array<BankingV1Candle>;
 };
 
 /**
@@ -1075,6 +1304,32 @@ export type BankingV1GetAllocationRequest = {
 };
 
 /**
+ * GetBookPolicyRequest
+ */
+export type BankingV1GetBookPolicyRequest = {
+    /**
+     * service
+     */
+    service?: string;
+};
+
+/**
+ * GetBookRequest
+ */
+export type BankingV1GetBookRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * depth
+     *
+     * price levels a side; 0 = the server default (20); capped at 50
+     */
+    depth?: number;
+};
+
+/**
  * GetConsentInvitationRequest
  */
 export type BankingV1GetConsentInvitationRequest = {
@@ -1376,6 +1631,34 @@ export type BankingV1ListAllocationsRequest = {
 };
 
 /**
+ * ListCandlesRequest
+ */
+export type BankingV1ListCandlesRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * resolution
+     *
+     * 1m | 5m | 15m | 1h | 4h | 1d
+     */
+    resolution?: string;
+    /**
+     * from
+     *
+     * unix seconds, inclusive
+     */
+    from?: number | string;
+    /**
+     * to
+     *
+     * unix seconds, exclusive; 0 = now
+     */
+    to?: number | string;
+};
+
+/**
  * ListConsiliaRequest
  */
 export type BankingV1ListConsiliaRequest = {
@@ -1419,6 +1702,18 @@ export type BankingV1ListFundFeeAssessmentsRequest = {
 };
 
 /**
+ * ListOpenOrdersRequest
+ */
+export type BankingV1ListOpenOrdersRequest = {
+    /**
+     * service
+     *
+     * empty = every allocation
+     */
+    service?: string;
+};
+
+/**
  * ListOperationsRequest
  */
 export type BankingV1ListOperationsRequest = {
@@ -1426,6 +1721,24 @@ export type BankingV1ListOperationsRequest = {
      * limit
      *
      * Rows to return. 0 means the server default (100); the server caps it at 200.
+     */
+    limit?: number;
+};
+
+/**
+ * ListOrderHistoryRequest
+ */
+export type BankingV1ListOrderHistoryRequest = {
+    /**
+     * service
+     *
+     * empty = every allocation
+     */
+    service?: string;
+    /**
+     * limit
+     *
+     * 0 = the server default (100); capped at 200
      */
     limit?: number;
 };
@@ -1518,6 +1831,22 @@ export type BankingV1ListSessionsResponse = {
 };
 
 /**
+ * ListTradesRequest
+ */
+export type BankingV1ListTradesRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * limit
+     *
+     * 0 = the server default (50); capped at 200
+     */
+    limit?: number;
+};
+
+/**
  * ListUnitHoldersRequest
  */
 export type BankingV1ListUnitHoldersRequest = {
@@ -1525,6 +1854,24 @@ export type BankingV1ListUnitHoldersRequest = {
      * service
      */
     service?: string;
+};
+
+/**
+ * ListUserTradesRequest
+ */
+export type BankingV1ListUserTradesRequest = {
+    /**
+     * service
+     *
+     * empty = every allocation
+     */
+    service?: string;
+    /**
+     * limit
+     *
+     * 0 = the server default (100); capped at 200
+     */
+    limit?: number;
 };
 
 /**
@@ -1831,6 +2178,132 @@ export type BankingV1OperationsMode = {
      * read_only
      */
     read_only?: boolean;
+};
+
+/**
+ * Order
+ *
+ * One order. `price` is the limit — for a market order, the limit the hub derived from
+ * the quote at placement. `filled`, `remaining`, `avg_fill_price` and `fee_paid` grow as
+ * fills land; `state` ends in `filled`, `cancelled` or `rejected` (`reject_reason` set —
+ * the ledger refused the escrow after the order was recorded, a raced over-spend the
+ * optimistic balance check could not see). `user_id` is populated only on the caller's
+ * own orders.
+ */
+export type BankingV1Order = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * user_id
+     */
+    user_id?: string;
+    /**
+     * side
+     *
+     * buy | sell
+     */
+    side?: string;
+    /**
+     * kind
+     *
+     * limit | market
+     */
+    kind?: string;
+    /**
+     * tif
+     *
+     * gtc | ioc | alo
+     */
+    tif?: string;
+    /**
+     * price
+     *
+     * decimal USDT per unit
+     */
+    price?: string;
+    /**
+     * size
+     *
+     * decimal units
+     */
+    size?: string;
+    /**
+     * filled
+     *
+     * decimal units
+     */
+    filled?: string;
+    /**
+     * remaining
+     *
+     * decimal units (size − filled)
+     */
+    remaining?: string;
+    /**
+     * avg_fill_price
+     *
+     * decimal USDT per unit; empty until the first fill
+     */
+    avg_fill_price?: string;
+    /**
+     * fee_paid
+     *
+     * decimal USDT the caller paid as taker on this order
+     */
+    fee_paid?: string;
+    /**
+     * state
+     *
+     * open | partially_filled | filled | cancelled | rejected
+     */
+    state?: string;
+    /**
+     * reject_reason
+     *
+     * free text; set exactly when state = rejected
+     */
+    reject_reason?: string;
+    /**
+     * client_order_id
+     */
+    client_order_id?: string;
+    /**
+     * created_at
+     *
+     * unix seconds
+     */
+    created_at?: number | string;
+    /**
+     * updated_at
+     *
+     * unix seconds
+     */
+    updated_at?: number | string;
+    /**
+     * cancel_reason
+     *
+     * Set exactly when state = cancelled: "" | user | ioc_remainder | market_remainder.
+     * `user` is the owner's own cancel; the other two are the hub cancelling what an IOC
+     * limit / a market order could not fill at once — such an order may still show
+     * `filled > 0`, which is what makes the reason worth carrying.
+     */
+    cancel_reason?: string;
+};
+
+/**
+ * OrderList
+ */
+export type BankingV1OrderList = {
+    /**
+     * orders
+     */
+    orders?: Array<BankingV1Order>;
 };
 
 /**
@@ -2202,9 +2675,57 @@ export type BankingV1PaymentList = {
 export type BankingV1PaymentState = 'PAYMENT_STATE_UNSPECIFIED' | 'PAYMENT_STATE_PENDING' | 'PAYMENT_STATE_APPROVED' | 'PAYMENT_STATE_EXECUTED' | 'PAYMENT_STATE_EXECUTION_FAILED' | 'PAYMENT_STATE_REJECTED' | 'PAYMENT_STATE_EXPIRED' | 'PAYMENT_STATE_CANCELLED';
 
 /**
+ * PlaceOrderRequest
+ */
+export type BankingV1PlaceOrderRequest = {
+    /**
+     * service
+     *
+     * the allocation
+     */
+    service?: string;
+    /**
+     * side
+     *
+     * buy | sell
+     */
+    side?: string;
+    /**
+     * kind
+     *
+     * limit | market
+     */
+    kind?: string;
+    /**
+     * tif
+     *
+     * gtc | ioc | alo (post-only); market orders are always ioc
+     */
+    tif?: string;
+    /**
+     * price
+     *
+     * decimal USDT per unit, on the tick; EMPTY for market
+     */
+    price?: string;
+    /**
+     * size
+     *
+     * decimal units, on the lot, > 0
+     */
+    size?: string;
+    /**
+     * client_order_id
+     *
+     * required, 1..64 chars, unique per caller (the retry key)
+     */
+    client_order_id?: string;
+};
+
+/**
  * Position
  *
- * A user's holding in one fund. `value = units × nav`; `pnl = value − cost_basis`
+ * A user's holding in one fund. `value = (units + units_in_orders) × nav`; `pnl = value − cost_basis`
  * (a signed decimal — losses are negative). `nav_as_of` is the unix-seconds timestamp
  * of the NAV mark used (0 when the fund is on the bootstrap seed NAV).
  */
@@ -2216,7 +2737,7 @@ export type BankingV1Position = {
     /**
      * units
      *
-     * units held (decimal)
+     * units held free in the holding (decimal)
      */
     units?: string;
     /**
@@ -2249,6 +2770,14 @@ export type BankingV1Position = {
      * unix seconds of the NAV mark (0 = seed NAV)
      */
     nav_as_of?: number | string;
+    /**
+     * units_in_orders
+     *
+     * Units committed to the holder's resting sell orders on the book (BookService).
+     * Still theirs — `value` and `pnl` price `units + units_in_orders` — but not free to
+     * redeem or sell again until the order fills or is cancelled.
+     */
+    units_in_orders?: string;
 };
 
 /**
@@ -2937,6 +3466,44 @@ export type BankingV1SetAllocationUnitCapRequest = {
 };
 
 /**
+ * SetBookPolicyRequest
+ */
+export type BankingV1SetBookPolicyRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * book_open
+     */
+    book_open?: boolean;
+    /**
+     * taker_fee_bps
+     *
+     * 0..10000
+     */
+    taker_fee_bps?: number;
+    /**
+     * price_tick
+     *
+     * decimal USDT, > 0; empty = 0.01
+     */
+    price_tick?: string;
+    /**
+     * lot_size
+     *
+     * decimal units, > 0; empty = 0.0001
+     */
+    lot_size?: string;
+    /**
+     * market_slippage_bps
+     *
+     * 0..10000; how far past the best quote a market order may fill
+     */
+    market_slippage_bps?: number;
+};
+
+/**
  * SetFeePolicyRequest
  */
 export type BankingV1SetFeePolicyRequest = {
@@ -3200,6 +3767,77 @@ export type BankingV1TokenResponse = {
      * user
      */
     user?: BankingV1UserSummary;
+};
+
+/**
+ * Trade
+ *
+ * One fill. On the public tape only `id`, `service`, `price`, `size`, `taker_side` and
+ * `executed_at` are populated. On the caller's own tape (ListUserTrades) `user_side` is
+ * the caller's side, `order_id` their order on it and `fee` what they paid (empty when
+ * they were the maker); the counterparty is never disclosed.
+ */
+export type BankingV1Trade = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * price
+     *
+     * decimal USDT per unit
+     */
+    price?: string;
+    /**
+     * size
+     *
+     * decimal units
+     */
+    size?: string;
+    /**
+     * taker_side
+     *
+     * buy | sell — the side that crossed the spread
+     */
+    taker_side?: string;
+    /**
+     * executed_at
+     *
+     * unix seconds
+     */
+    executed_at?: number | string;
+    /**
+     * user_side
+     *
+     * the caller's side; empty on the public tape
+     */
+    user_side?: string;
+    /**
+     * order_id
+     *
+     * the caller's order; empty on the public tape
+     */
+    order_id?: string;
+    /**
+     * fee
+     *
+     * decimal USDT the caller paid; empty on the public tape
+     */
+    fee?: string;
+};
+
+/**
+ * TradeList
+ */
+export type BankingV1TradeList = {
+    /**
+     * trades
+     */
+    trades?: Array<BankingV1Trade>;
 };
 
 /**
@@ -3674,6 +4312,22 @@ export type BankingV1Wallet = {
      * per-rail withdraw options
      */
     withdrawable?: Array<BankingV1NetworkWithdrawable>;
+};
+
+/**
+ * WatchBookRequest
+ */
+export type BankingV1WatchBookRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * depth
+     *
+     * as GetBook
+     */
+    depth?: number;
 };
 
 /**
@@ -6909,6 +7563,296 @@ export type BankingV1BalanceServiceUnparkEventResponses = {
 };
 
 export type BankingV1BalanceServiceUnparkEventResponse = BankingV1BalanceServiceUnparkEventResponses[keyof BankingV1BalanceServiceUnparkEventResponses];
+
+export type BankingV1BookServiceCancelOrderData = {
+    body: BankingV1CancelOrderRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/CancelOrder';
+};
+
+export type BankingV1BookServiceCancelOrderErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceCancelOrderError = BankingV1BookServiceCancelOrderErrors[keyof BankingV1BookServiceCancelOrderErrors];
+
+export type BankingV1BookServiceCancelOrderResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Order;
+};
+
+export type BankingV1BookServiceCancelOrderResponse = BankingV1BookServiceCancelOrderResponses[keyof BankingV1BookServiceCancelOrderResponses];
+
+export type BankingV1BookServiceGetBookData = {
+    body: BankingV1GetBookRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/GetBook';
+};
+
+export type BankingV1BookServiceGetBookErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceGetBookError = BankingV1BookServiceGetBookErrors[keyof BankingV1BookServiceGetBookErrors];
+
+export type BankingV1BookServiceGetBookResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1BookSnapshot;
+};
+
+export type BankingV1BookServiceGetBookResponse = BankingV1BookServiceGetBookResponses[keyof BankingV1BookServiceGetBookResponses];
+
+export type BankingV1BookServiceGetBookPolicyData = {
+    body: BankingV1GetBookPolicyRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/GetBookPolicy';
+};
+
+export type BankingV1BookServiceGetBookPolicyErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceGetBookPolicyError = BankingV1BookServiceGetBookPolicyErrors[keyof BankingV1BookServiceGetBookPolicyErrors];
+
+export type BankingV1BookServiceGetBookPolicyResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1BookPolicy;
+};
+
+export type BankingV1BookServiceGetBookPolicyResponse = BankingV1BookServiceGetBookPolicyResponses[keyof BankingV1BookServiceGetBookPolicyResponses];
+
+export type BankingV1BookServiceListCandlesData = {
+    body: BankingV1ListCandlesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/ListCandles';
+};
+
+export type BankingV1BookServiceListCandlesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceListCandlesError = BankingV1BookServiceListCandlesErrors[keyof BankingV1BookServiceListCandlesErrors];
+
+export type BankingV1BookServiceListCandlesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1CandleList;
+};
+
+export type BankingV1BookServiceListCandlesResponse = BankingV1BookServiceListCandlesResponses[keyof BankingV1BookServiceListCandlesResponses];
+
+export type BankingV1BookServiceListOpenOrdersData = {
+    body: BankingV1ListOpenOrdersRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/ListOpenOrders';
+};
+
+export type BankingV1BookServiceListOpenOrdersErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceListOpenOrdersError = BankingV1BookServiceListOpenOrdersErrors[keyof BankingV1BookServiceListOpenOrdersErrors];
+
+export type BankingV1BookServiceListOpenOrdersResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1OrderList;
+};
+
+export type BankingV1BookServiceListOpenOrdersResponse = BankingV1BookServiceListOpenOrdersResponses[keyof BankingV1BookServiceListOpenOrdersResponses];
+
+export type BankingV1BookServiceListOrderHistoryData = {
+    body: BankingV1ListOrderHistoryRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/ListOrderHistory';
+};
+
+export type BankingV1BookServiceListOrderHistoryErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceListOrderHistoryError = BankingV1BookServiceListOrderHistoryErrors[keyof BankingV1BookServiceListOrderHistoryErrors];
+
+export type BankingV1BookServiceListOrderHistoryResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1OrderList;
+};
+
+export type BankingV1BookServiceListOrderHistoryResponse = BankingV1BookServiceListOrderHistoryResponses[keyof BankingV1BookServiceListOrderHistoryResponses];
+
+export type BankingV1BookServiceListTradesData = {
+    body: BankingV1ListTradesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/ListTrades';
+};
+
+export type BankingV1BookServiceListTradesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceListTradesError = BankingV1BookServiceListTradesErrors[keyof BankingV1BookServiceListTradesErrors];
+
+export type BankingV1BookServiceListTradesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1TradeList;
+};
+
+export type BankingV1BookServiceListTradesResponse = BankingV1BookServiceListTradesResponses[keyof BankingV1BookServiceListTradesResponses];
+
+export type BankingV1BookServiceListUserTradesData = {
+    body: BankingV1ListUserTradesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/ListUserTrades';
+};
+
+export type BankingV1BookServiceListUserTradesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceListUserTradesError = BankingV1BookServiceListUserTradesErrors[keyof BankingV1BookServiceListUserTradesErrors];
+
+export type BankingV1BookServiceListUserTradesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1TradeList;
+};
+
+export type BankingV1BookServiceListUserTradesResponse = BankingV1BookServiceListUserTradesResponses[keyof BankingV1BookServiceListUserTradesResponses];
+
+export type BankingV1BookServicePlaceOrderData = {
+    body: BankingV1PlaceOrderRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/PlaceOrder';
+};
+
+export type BankingV1BookServicePlaceOrderErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServicePlaceOrderError = BankingV1BookServicePlaceOrderErrors[keyof BankingV1BookServicePlaceOrderErrors];
+
+export type BankingV1BookServicePlaceOrderResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1Order;
+};
+
+export type BankingV1BookServicePlaceOrderResponse = BankingV1BookServicePlaceOrderResponses[keyof BankingV1BookServicePlaceOrderResponses];
+
+export type BankingV1BookServiceSetBookPolicyData = {
+    body: BankingV1SetBookPolicyRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.BookService/SetBookPolicy';
+};
+
+export type BankingV1BookServiceSetBookPolicyErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1BookServiceSetBookPolicyError = BankingV1BookServiceSetBookPolicyErrors[keyof BankingV1BookServiceSetBookPolicyErrors];
+
+export type BankingV1BookServiceSetBookPolicyResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1BookPolicy;
+};
+
+export type BankingV1BookServiceSetBookPolicyResponse = BankingV1BookServiceSetBookPolicyResponses[keyof BankingV1BookServiceSetBookPolicyResponses];
 
 export type BankingV1ConsiliumApprovalServiceGetInvitationData = {
     body: BankingV1GetInvitationRequest;

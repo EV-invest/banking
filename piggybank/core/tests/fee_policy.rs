@@ -21,15 +21,22 @@ use std::sync::Arc;
 
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
+	auth::AuthSubject,
 	balance::{LedgerAccountKey, Party, ServiceId},
+	book::{BookPolicy, ClientOrderId, OrderId, OrderKind, Price, PriceTimeEngine, Side, Tif},
 	fees::{self, CrystallizationPeriod, FeeAssessment, FeeAssessmentId, FeePolicy, ManagementBasis, Trigger},
 	money::{Nav, Network, Shares, TxRef, Usdt},
-	users::UserId,
+	users::{Email, UserId},
 };
 use piggybank_core::{
-	application::{balance as balance_app, fees as fee_app, funds as funds_app},
+	application::{
+		balance as balance_app,
+		book::{self as book_app, BookFeed, BookPorts, PlaceOrderRequest},
+		fees as fee_app, funds as funds_app,
+	},
 	infrastructure::{
 		allocations::PgAllocations,
+		book::PgBook,
 		custody::StubCustody,
 		db,
 		deposits::PgDeposits,
@@ -37,13 +44,15 @@ use piggybank_core::{
 		fees::{PgFeeAssessments, PgFeePolicies, PgFeeSettlements, PgPositionAccruals},
 		ledger::{self, TbLedger},
 		nav::PgNav,
+		outflow::PgOutflowPolicy,
 		redemptions::PgRedemptions,
 		relay::Relay,
 		subscriptions::PgSubscriptions,
 		tigerbeetle::TigerBeetle,
+		users::PgUsers,
 	},
 	ports::{
-		AllocationRegistry,
+		AllocationRegistry, UserRepository,
 		fees::{FeeAssessments, FeePolicies, PositionAccruals},
 		ledger::Ledger,
 	},
@@ -261,6 +270,75 @@ async fn assess(h: &Harness, user: UserId, service: &ServiceId) -> Option<domain
 	.unwrap();
 	h.relay.drain().await;
 	assessment.map(|a| a.charge())
+}
+
+/// The allocation book beside the fee plane, for the tests that park units in a resting
+/// sell: what the fee can and cannot claw back is decided by where the units are.
+struct Book {
+	store: PgBook,
+	users: PgUsers,
+	outflow: PgOutflowPolicy,
+	feed: Arc<BookFeed>,
+}
+
+impl Book {
+	fn new(h: &Harness) -> Self {
+		Self {
+			store: PgBook::new(h.pool.clone()),
+			users: PgUsers::new(h.pool.clone()),
+			outflow: PgOutflowPolicy::new(h.pool.clone()),
+			feed: BookFeed::new(),
+		}
+	}
+
+	/// Orders reference the `users` table, so the holder here is a real row — unlike the
+	/// bare `UserId::new()` the dealing-only tests get away with.
+	async fn provisioned_user(&self) -> UserId {
+		let subject = AuthSubject::parse(&format!("fee-book-{}", Uuid::new_v4())).unwrap();
+		let email = Email::parse(&format!("fb{}@example.com", Uuid::new_v4().simple())).unwrap();
+		self.users.provision(subject, email, true).await.unwrap().id()
+	}
+
+	async fn open(&self, h: &Harness, service: &ServiceId) {
+		let policy = BookPolicy::new(true, 0, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500).unwrap();
+		book_app::set_policy(&h.allocations, &self.store, service, policy).await.unwrap();
+	}
+
+	/// Rest a sell for `units` at 1.00 and let the relay move them into the book's escrow.
+	async fn rest_sell(&self, h: &Harness, user: UserId, service: &ServiceId, units: &str) -> OrderId {
+		let ports = BookPorts {
+			allocations: &h.allocations,
+			ledger: h.ledger.as_ref(),
+			nav: &h.nav,
+			store: &self.store,
+			engine: &PriceTimeEngine,
+			outflow: &self.outflow,
+			relay: &h.notify,
+			feed: &self.feed,
+		};
+		let request = PlaceOrderRequest {
+			service: service.clone(),
+			side: Side::Sell,
+			kind: OrderKind::Limit,
+			tif: Tif::Gtc,
+			price: Some(Price::parse_decimal("1").unwrap()),
+			size: shares(units),
+			client_order_id: ClientOrderId::parse(&format!("fee-{}", Uuid::new_v4())).unwrap(),
+		};
+		let order = book_app::place_order(&ports, user, request).await.unwrap();
+		h.relay.drain().await;
+		order.order.id()
+	}
+
+	async fn cancel(&self, h: &Harness, user: UserId, order: OrderId) {
+		book_app::cancel_order(&self.store, &h.notify, &self.feed, order, user).await.unwrap();
+		h.relay.drain().await;
+	}
+}
+
+/// When the position's accrual clock last moved.
+async fn accrued_at(h: &Harness, user: UserId, service: &ServiceId) -> i64 {
+	h.accruals.find(user, service).await.unwrap().expect("the position exists").accrued_at_unix
 }
 
 /// Assert two amounts agree to within [`EPSILON`] — see the constant for why an exact
@@ -528,6 +606,109 @@ async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 	// withdrawable on-chain through the ordinary payout pipeline with no further step.
 	assert_eq!(cash_of(&h, LedgerAccountKey::FeeRevenue).await, revenue_before.checked_add(settlement.cash()).unwrap());
 	assert_eq!(cash_of(&h, LedgerAccountKey::ServiceClaim(service)).await, fund_before.checked_sub(settlement.cash()).unwrap());
+}
+
+/// Every unit in a resting sell: the holding reads zero, so the charge has nothing to
+/// take. The assessment then persists NOTHING — no debt, no clock move — and the year
+/// stays owed as elapsed time; the moment the units come home the next assessment
+/// charges it in full. The holding is never pushed negative and the escrow never touched.
+#[tokio::test]
+async fn units_escrowed_by_a_resting_sell_are_not_clawed_back_and_the_period_carries() {
+	let _no_sweeping = no_sweeping().await;
+	let Some(h) = harness().await else { return };
+	let book = Book::new(&h);
+	let user = book.provisioned_user().await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	book.open(&h, &service).await;
+	fund_user(&h, user, "1000").await;
+	subscribe(&h, user, &service, "1000").await;
+
+	let ask = book.rest_sell(&h, user, &service, "1000").await;
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await, Shares::ZERO);
+	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), user)).await, shares("1000"));
+
+	backdate(&h, user, &service, YEAR).await;
+	let owed_since = accrued_at(&h, user, &service).await;
+	assert!(assess(&h, user, &service).await.is_none(), "nothing collectable, so nothing is charged");
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await,
+		Shares::ZERO,
+		"the holding was not pushed negative"
+	);
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::BookShares(service.clone(), user)).await,
+		shares("1000"),
+		"the escrow is the book's, not the fee's"
+	);
+	assert_eq!(accrued_at(&h, user, &service).await, owed_since, "the clock did not move: the year is still owed");
+	assert!(fee_app::list_assessments(&h.assessments, user).await.unwrap().is_empty(), "no assessment was recorded");
+
+	// The order comes off the book and the units come home; the whole year is charged.
+	book.cancel(&h, user, ask).await;
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await, shares("1000"));
+	let charge = assess(&h, user, &service).await.expect("the year is collected once the units are free");
+	assert_close(charge.management, usdt("20"), "a year of management on 1000 invested, deferred by the escrow");
+	assert_eq!((charge.debt_opening, charge.debt_carried), (Usdt::ZERO, Usdt::ZERO));
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await,
+		shares("1000").checked_sub(charge.charged_units).unwrap()
+	);
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await,
+		shares("1000"),
+		"the book and the fee both leave supply alone"
+	);
+}
+
+/// Most of the units in a resting sell: the charge takes what the holding still has, and
+/// the rest is carried as debt — the same road a queued redemption sends it down. The
+/// escrow is never drawn on, the holding never goes negative, and the debt is collected
+/// by the next assessment once the order is cancelled and the units are back.
+#[tokio::test]
+async fn a_partial_escrow_defers_the_uncollectable_fee_into_debt_until_the_units_return() {
+	let _no_sweeping = no_sweeping().await;
+	let Some(h) = harness().await else { return };
+	let book = Book::new(&h);
+	let user = book.provisioned_user().await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	book.open(&h, &service).await;
+	fund_user(&h, user, "1000").await;
+	subscribe(&h, user, &service, "1000").await;
+
+	// 995 of 1000 in the escrow: a year's 2 % is 20 units at the seed NAV, and only 5 are free.
+	let ask = book.rest_sell(&h, user, &service, "995").await;
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await, shares("5"));
+	backdate(&h, user, &service, YEAR).await;
+	let charge = assess(&h, user, &service).await.expect("the free units carry what they can");
+	assert_close(charge.management, usdt("20"), "a year of management on 1000 invested");
+	assert_eq!(charge.charged_units, shares("5"), "capped by the free holding, not by what the book holds");
+	assert_close(charge.debt_carried, usdt("15"), "the rest is debt, not a negative balance");
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await,
+		Shares::ZERO,
+		"the holding is exactly empty, not overdrawn"
+	);
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::BookShares(service.clone(), user)).await,
+		shares("995"),
+		"the escrow was not drawn on"
+	);
+	assert_close(h.accruals.find(user, &service).await.unwrap().unwrap().debt, usdt("15"), "the debt is on the position");
+
+	book.cancel(&h, user, ask).await;
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await, shares("995"));
+	let next = assess(&h, user, &service).await.expect("the carried debt is collected now the units are back");
+	assert_close(next.debt_opening, usdt("15"), "the debt came in");
+	assert_close(next.charged_cash, usdt("15"), "and went out in units, plus the seconds of management since");
+	assert!(
+		next.debt_carried < usdt("0.000001"),
+		"nothing but the sub-unit rounding residue is carried: {}",
+		next.debt_carried
+	);
+	let left = units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await;
+	assert_close(Nav::SEED.value(left).unwrap(), usdt("980"), "995 back, 15 taken");
 }
 
 #[tokio::test]

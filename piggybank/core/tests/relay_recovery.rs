@@ -615,6 +615,10 @@ impl Ledger for FailFeeLegOnce {
 		self.inner.post(transfer).await
 	}
 
+	async fn post_linked(&self, transfers: &[LedgerTransfer]) -> Result<(), LedgerError> {
+		self.inner.post_linked(transfers).await
+	}
+
 	async fn reserve(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError> {
 		self.inner.reserve(transfer).await
 	}
