@@ -647,6 +647,14 @@
     "en": "Leave empty for the earliest allowed. While anyone holds units, a change binds no earlier than 24 hours after it is scheduled — counted from the owners' approval when they must give it. An earlier moment is lifted to that minimum, never refused.",
     "t": "Leer lassen für den frühestmöglichen Zeitpunkt. Solange jemand Anteile hält, gilt eine Änderung frühestens 24 Stunden nach ihrer Planung — gerechnet ab der Zustimmung der Eigentümer, wenn sie nötig ist. Ein früherer Zeitpunkt wird auf dieses Minimum angehoben, nie abgelehnt."
   },
+  "admin.fees.effectiveFromLifted": {
+    "en": "Earlier than the notice allows: while anyone holds units, this binds no earlier than {floor}.",
+    "t": "Früher, als die Ankündigungsfrist erlaubt: solange jemand Anteile hält, gilt dies frühestens ab {floor}."
+  },
+  "admin.fees.effectiveFromLiftedConsilium": {
+    "en": "Earlier than the notice allows: this binds no earlier than 24 hours after the owners approve.",
+    "t": "Früher, als die Ankündigungsfrist erlaubt: dies gilt frühestens 24 Stunden nach der Zustimmung der Eigentümer."
+  },
   "admin.fees.err.notPercent": {
     "en": "{field} must be a percentage — 2, or 2.5 for a half.",
     "t": "{field} muss ein Prozentsatz sein — 2, oder 2,5 für ein halbes Prozent."
@@ -662,6 +670,10 @@
   "admin.fees.err.reasonTooLong": {
     "en": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
     "t": "Die Begründung ist zu lang: {used} Byte bei höchstens {max}. Buchstaben außerhalb des einfachen Lateins zählen mehrfach."
+  },
+  "admin.fees.err.tooFarAhead": {
+    "en": "The moment can be at most {days} days ahead.",
+    "t": "Der Zeitpunkt darf höchstens {days} Tage in der Zukunft liegen."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",

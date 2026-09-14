@@ -9,32 +9,34 @@
 // and the history row render — a textarea here used to invite a paragraph the plane then
 // bounced with a sentence about control characters.
 
-import { useId, useState } from "react";
+import { useId } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Field, FieldDescription, FieldError, FieldLabel, Input } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
-import type { ChangeRequirement } from "@/shared/lib/fee-terms";
-import type { TermsDraft } from "@/views/admin/fees/lib/schedule";
-
-/** A `datetime-local` value for a moment, in the operator's own zone. */
-function localDateTimeValue(at: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
-}
+import { formatMoment } from "@/shared/lib/datetime";
+import { MAX_EFFECTIVE_FROM_HORIZON_SECS, type ChangeRequirement } from "@/shared/lib/fee-terms";
+import { effectiveFromLifted, localDateTimeValue, noticeFloor, type TermsDraft } from "@/views/admin/fees/lib/schedule";
 
 export function ScheduleFields({
   draft,
+  now,
   requirement,
+  effectiveFromError,
   reasonError,
   onChange,
   onReasonTouched,
   disabled,
 }: {
   draft: TermsDraft;
+  /** The clock the floor, the horizon and the preview are measured from — read once by the
+   *  caller, so the picker's bounds do not shift under the operator with every render. */
+  now: number;
   /** `null` while the rates do not parse — the question has no answer yet. */
   requirement: ChangeRequirement | null;
+  /** What is wrong with the moment — only ever "too far ahead"; an early one is previewed. */
+  effectiveFromError: string | null;
   /** What is wrong with the reason, once the operator has been near the field. The
    *  caller decides WHEN it is fair to say so; this only says it under the field. */
   reasonError: string | null;
@@ -43,21 +45,47 @@ export function ScheduleFields({
   disabled: boolean;
 }) {
   const t = useT();
+  const locale = useLocale();
   const ids = useId();
   const whenId = `${ids}-when`;
+  const whenHintId = `${whenId}-hint`;
+  const whenErrorId = `${whenId}-error`;
   const reasonId = `${ids}-reason`;
   const reasonHintId = `${reasonId}-hint`;
   const reasonErrorId = `${reasonId}-error`;
-  // Read once: a floor that moved with every render would shift under the picker.
-  const [floor] = useState(() => localDateTimeValue(new Date()));
   const consilium = requirement === "owner_consilium";
+  // The picker's bounds are the plane's: no earlier than now (earlier is lifted, not
+  // refused, so this is guidance rather than a gate) and no further than the horizon.
+  const min = localDateTimeValue(new Date(now * 1000));
+  const max = localDateTimeValue(new Date((now + MAX_EFFECTIVE_FROM_HORIZON_SECS) * 1000));
+  // Said as a preview, not an error: the plane will lift the moment, and the operator
+  // should read the moment it will actually be before the click. Under the owners' path
+  // the floor is counted from their approval, which nobody can date yet.
+  const lifted = effectiveFromLifted(draft.effectiveFrom, now);
 
   return (
     <>
-      <Field>
+      <Field data-invalid={effectiveFromError !== null || undefined}>
         <FieldLabel htmlFor={whenId}>{t("admin.fees.effectiveFrom")}</FieldLabel>
-        <Input id={whenId} type="datetime-local" min={floor} value={draft.effectiveFrom} onChange={(e) => onChange("effectiveFrom", e.target.value)} disabled={disabled} className="tabular-nums" />
-        <FieldDescription>{t("admin.fees.effectiveFromHint")}</FieldDescription>
+        <Input
+          id={whenId}
+          type="datetime-local"
+          min={min}
+          max={max}
+          value={draft.effectiveFrom}
+          onChange={(e) => onChange("effectiveFrom", e.target.value)}
+          disabled={disabled}
+          className="tabular-nums"
+          aria-invalid={effectiveFromError !== null || undefined}
+          aria-describedby={effectiveFromError !== null ? `${whenErrorId} ${whenHintId}` : whenHintId}
+        />
+        {effectiveFromError !== null && <FieldError id={whenErrorId}>{effectiveFromError}</FieldError>}
+        {lifted && effectiveFromError === null && (
+          <p role="status" className="text-xs text-main-accent-t3">
+            {consilium ? t("admin.fees.effectiveFromLiftedConsilium") : t("admin.fees.effectiveFromLifted", { floor: formatMoment(String(noticeFloor(now)), locale) })}
+          </p>
+        )}
+        <FieldDescription id={whenHintId}>{t("admin.fees.effectiveFromHint")}</FieldDescription>
       </Field>
 
       <Field data-invalid={reasonError !== null || undefined}>

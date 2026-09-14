@@ -35,6 +35,9 @@ export const MAX_HURDLE_BPS = 10_000;
 /** Below which a change of terms, once scheduled, may bind while anyone holds units. */
 export const MIN_NOTICE_SECS = 24 * 60 * 60;
 
+/** `MAX_EFFECTIVE_FROM_HORIZON_SECS`: the furthest ahead a change may be asked to bind. */
+export const MAX_EFFECTIVE_FROM_HORIZON_SECS = 366 * 24 * 60 * 60;
+
 /** `MAX_REASON_BYTES`: the longest reason a change may carry — BYTES, not characters, as
  *  the plane measures it, so a Cyrillic reason runs out at half the letters. */
 export const MAX_REASON_BYTES = 500;

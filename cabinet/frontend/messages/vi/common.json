@@ -647,6 +647,14 @@
     "en": "Leave empty for the earliest allowed. While anyone holds units, a change binds no earlier than 24 hours after it is scheduled — counted from the owners' approval when they must give it. An earlier moment is lifted to that minimum, never refused.",
     "t": "Để trống để áp dụng sớm nhất có thể. Khi còn có người nắm giữ đơn vị, thay đổi có hiệu lực không sớm hơn 24 giờ sau khi được lên lịch — tính từ lúc các chủ sở hữu chấp thuận nếu cần. Thời điểm sớm hơn sẽ được nâng lên mức tối thiểu đó, không bị từ chối."
   },
+  "admin.fees.effectiveFromLifted": {
+    "en": "Earlier than the notice allows: while anyone holds units, this binds no earlier than {floor}.",
+    "t": "Sớm hơn thời hạn thông báo cho phép: khi còn ai đó nắm giữ đơn vị, thay đổi này có hiệu lực không sớm hơn {floor}."
+  },
+  "admin.fees.effectiveFromLiftedConsilium": {
+    "en": "Earlier than the notice allows: this binds no earlier than 24 hours after the owners approve.",
+    "t": "Sớm hơn thời hạn thông báo cho phép: thay đổi này có hiệu lực không sớm hơn 24 giờ sau khi các chủ sở hữu chấp thuận."
+  },
   "admin.fees.err.notPercent": {
     "en": "{field} must be a percentage — 2, or 2.5 for a half.",
     "t": "{field} phải là phần trăm — 2, hoặc 2,5 cho nửa phần trăm."
@@ -662,6 +670,10 @@
   "admin.fees.err.reasonTooLong": {
     "en": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
     "t": "Lý do quá dài: {used} byte trong khi tối đa là {max}. Các chữ ngoài bảng Latinh cơ bản được tính nhiều hơn một."
+  },
+  "admin.fees.err.tooFarAhead": {
+    "en": "The moment can be at most {days} days ahead.",
+    "t": "Thời điểm không được cách quá {days} ngày."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",

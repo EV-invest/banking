@@ -8,7 +8,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { HOUSE_TERMS } from "../../../../shared/lib/fee-terms.ts";
-import { draftProblem, draftRequirement, draftTerms, effectiveFromSeconds, normalizeReason, toRequest, type TermsDraft } from "./schedule.ts";
+import {
+  draftProblem as draftProblemAt,
+  draftRequirement,
+  draftTerms,
+  effectiveFromLifted,
+  effectiveFromSeconds,
+  localDateTimeValue,
+  normalizeReason,
+  toRequest,
+  type TermsDraft,
+} from "./schedule.ts";
+
+// A clock held still, on a whole minute: `datetime-local` has no seconds, so a moment typed
+// back from it must land exactly where it was read.
+const NOW = Math.floor(Date.UTC(2026, 9, 1, 9, 0) / 1000);
+const DAY = 86_400;
+const draftProblem = (current: Parameters<typeof draftProblemAt>[0], draft: TermsDraft) => draftProblemAt(current, draft, NOW);
+const typed = (seconds: number) => localDateTimeValue(new Date(seconds * 1000));
 
 const draft = (over: Partial<TermsDraft> = {}): TermsDraft => ({
   management: "2",
@@ -99,10 +116,31 @@ test("a pasted line break is folded into a space rather than refused by the plan
 test("an empty moment asks for the earliest allowed; a typed one is read in the local zone", () => {
   assert.equal(effectiveFromSeconds(""), 0);
   assert.equal(effectiveFromSeconds("   "), 0);
-  const typed = "2026-10-01T09:30";
-  assert.equal(effectiveFromSeconds(typed), Math.floor(new Date(typed).getTime() / 1000));
+  const value = "2026-10-01T09:30";
+  assert.equal(effectiveFromSeconds(value), Math.floor(new Date(value).getTime() / 1000));
+  // The two directions agree to the minute, whatever zone the test runs in.
+  assert.equal(effectiveFromSeconds(typed(NOW)), NOW);
   // Never a silent zero for something that was typed: "now" is not what they meant.
   assert.equal(effectiveFromSeconds("not a date"), null);
+});
+
+test("a moment more than 366 days ahead is refused here, with the horizon named", () => {
+  assert.equal(draftProblem(HOUSE_TERMS, draft({ effectiveFrom: typed(NOW + 366 * DAY) })), null);
+  assert.deepEqual(draftProblem(HOUSE_TERMS, draft({ effectiveFrom: typed(NOW + 367 * DAY) })), { key: "admin.fees.err.tooFarAhead", days: 366 });
+  // The rate problems still come first.
+  assert.deepEqual(draftProblem(HOUSE_TERMS, draft({ management: "6", effectiveFrom: typed(NOW + 367 * DAY) })), { key: "admin.fees.err.overCeiling", field: "management", ceiling: "5%" });
+});
+
+test("an early moment is not an error — the plane lifts it — but the field says so", () => {
+  // Yesterday, and a moment inside the 24h notice, both go out as typed and come back lifted.
+  assert.equal(draftProblem(HOUSE_TERMS, draft({ effectiveFrom: typed(NOW - DAY) })), null);
+  assert.equal(effectiveFromLifted(typed(NOW - DAY), NOW), true);
+  assert.equal(effectiveFromLifted(typed(NOW + DAY - 60), NOW), true);
+  assert.equal(effectiveFromLifted(typed(NOW + DAY), NOW), false);
+  assert.equal(effectiveFromLifted(typed(NOW + 30 * DAY), NOW), false);
+  // Empty asks for the floor by name; it is not "lifted" from anything.
+  assert.equal(effectiveFromLifted("", NOW), false);
+  assert.equal(effectiveFromLifted("not a date", NOW), false);
 });
 
 test("the request carries the parsed terms, the moment and the trimmed reason", () => {

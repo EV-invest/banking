@@ -62,6 +62,10 @@ export function PolicyCard({
   // the operator has been anywhere near the field — so "required" is said as a label at
   // once and as an ERROR only after they have touched it.
   const [reasonTouched, setReasonTouched] = useState(false);
+  // Read once per card: the horizon and the picker's bounds are measured from it, and a
+  // clock that ticked on every keystroke would move them under the operator. A card lives
+  // for one fund's one change, so it is never stale by more than that.
+  const [now] = useState(() => Math.floor(Date.now() / 1000));
   const titleRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (!focusTitle) return;
@@ -77,16 +81,17 @@ export function PolicyCard({
   // the operator is shown before scheduling is the same integer the request carries.
   const bps = useMemo(() => draftBps(draft), [draft]);
   const requirement = useMemo(() => draftRequirement(current, draft), [current, draft]);
-  const found = useMemo(() => draftProblem(current, draft), [current, draft]);
+  const found = useMemo(() => draftProblem(current, draft, now), [current, draft, now]);
   const reasonMissing = found?.key === "admin.fees.err.reasonRequired";
   // Too long is said at once, unlike "required": it is about text they have typed.
   const reasonTooLong = found?.key === "admin.fees.err.reasonTooLong" ? t(found.key, { max: found.max, used: found.used }) : null;
+  const tooFarAhead = found?.key === "admin.fees.err.tooFarAhead" ? t(found.key, { days: found.days }) : null;
   // The rate problems, in words. The field name is interpolated rather than concatenated
   // onto the front: which end of the sentence it belongs at is a per-language decision.
   const rateProblem = useMemo(() => {
-    if (!found || found.key === "admin.fees.err.reasonRequired" || found.key === "admin.fees.err.reasonTooLong") return null;
-    if (found.key === "admin.fees.err.overCeiling") return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]), ceiling: found.ceiling });
-    return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]) });
+    if (found?.key === "admin.fees.err.overCeiling") return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]), ceiling: found.ceiling });
+    if (found?.key === "admin.fees.err.notPercent") return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]) });
+    return null;
   }, [found, t]);
   const invalid = found !== null;
 
@@ -124,7 +129,9 @@ export function PolicyCard({
         <TermsFields draft={draft} bps={bps} onChange={edit} disabled={blocked} />
         <ScheduleFields
           draft={draft}
+          now={now}
           requirement={requirement}
+          effectiveFromError={tooFarAhead}
           reasonError={reasonMissing && reasonTouched ? t("admin.fees.err.reasonRequired") : reasonTooLong}
           onChange={edit}
           onReasonTouched={() => setReasonTouched(true)}
