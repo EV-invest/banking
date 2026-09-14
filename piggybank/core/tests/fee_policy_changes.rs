@@ -290,6 +290,15 @@ async fn backdate(h: &Harness, user: UserId, service: &ServiceId, secs: i64) {
 	.unwrap();
 }
 
+/// Stand in for the mailer having handed every notice of a change to the relay.
+async fn deliver_notices(h: &Harness, change: &FeePolicyChange) {
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE fee_policy_change_id = $1 AND sent_at IS NULL")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+}
+
 /// Stand in for the notice period having run: pull a scheduled change's moment into the past.
 async fn let_the_notice_run(h: &Harness, change: &FeePolicyChange) {
 	sqlx::query("UPDATE fee_policy_changes SET effective_from = now() - interval '1 hour' WHERE id = $1")
@@ -471,8 +480,9 @@ async fn a_change_over_a_held_fund_waits_out_the_notice_and_mails_every_holder()
 	assert!(!h.changes.due(now()).await.unwrap().contains(&change.id));
 	assert!(!h.changes.promote(change.id, now()).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
-	// Once the moment has come, it is promoted and becomes version 2.
+	// Once the moment has come and the holders have been told, it is promoted and becomes version 2.
 	assert!(h.changes.due(change.effective_from_unix + 1).await.unwrap().contains(&change.id));
+	deliver_notices(&h, &change).await;
 	assert!(h.changes.promote(change.id, change.effective_from_unix + 1).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(cheaper));
 	assert_eq!(h.policies.current(&service).await.unwrap().unwrap().version, 2);
@@ -501,8 +511,17 @@ async fn a_change_does_not_bind_while_a_holder_notice_has_been_given_up_on() {
 	assert_eq!(notices(&h, &change).await.len(), 1);
 	let_the_notice_run(&h, &change).await;
 
+	// The relay has been down since the change was scheduled: the notice sits deferred with
+	// not one attempt charged. Nobody has been told, and the terms do not bind.
+	let deferred = h.changes.promote(change.id, now()).await.unwrap_err();
+	assert!(matches!(deferred, DomainError::Conflict(_)), "{deferred:?}");
+	assert!(
+		deferred.to_string().contains("1 holder notice(s) for this change are undelivered, 0 of them given up on"),
+		"{deferred}"
+	);
+
 	// The relay refused the notice on every attempt until the mailer retired it (ten is the
-	// mailer's ceiling, `tests/consilium_mailer.rs` pins it): a holder who was never told.
+	// mailer's ceiling, `tests/consilium_mailer.rs` pins it): still a holder never told.
 	sqlx::query("UPDATE consilium_mail SET attempts = 10, last_error = 'governance mail relay: status: InvalidArgument' WHERE fee_policy_change_id = $1 AND sent_at IS NULL")
 		.bind(change.id.raw())
 		.execute(&h.pool)
@@ -510,19 +529,17 @@ async fn a_change_does_not_bind_while_a_holder_notice_has_been_given_up_on() {
 		.unwrap();
 	let refused = h.changes.promote(change.id, now()).await.unwrap_err();
 	assert!(matches!(refused, DomainError::Conflict(_)), "{refused:?}");
+	assert!(refused.to_string().contains("1 of them given up on"), "{refused}");
 	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Scheduled, "the change waits; nothing was written");
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE), "the old terms stay live");
 	assert!(h.changes.due(now()).await.unwrap().contains(&change.id), "still due: the sweeper keeps retrying, and escalating");
 	let mut failures = std::collections::HashMap::new();
-	assert_eq!(fee_app::promote_due(&h.changes, now(), &mut failures).await.unwrap(), 0);
+	fee_app::promote_due(&h.changes, now(), &mut failures).await.unwrap();
 	assert_eq!(failures.get(&change.id), Some(&1), "the sweeper counts the refusal towards its error streak");
 
-	// Delivered after all: the terms bind.
-	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE fee_policy_change_id = $1")
-		.bind(change.id.raw())
-		.execute(&h.pool)
-		.await
-		.unwrap();
+	// Delivered after all (the relay came back, or the operator reached the holder): the
+	// terms bind on the next tick, with nobody's help.
+	deliver_notices(&h, &change).await;
 	assert!(h.changes.promote(change.id, now()).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(cheaper));
 	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Active);
@@ -739,6 +756,7 @@ async fn a_tightening_beyond_the_envelope_is_proposed_by_an_owner_and_carried_by
 	// source claim is free for the next change over this product.
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
 	let_the_notice_run(&h, &scheduled).await;
+	deliver_notices(&h, &scheduled).await;
 	assert!(h.changes.promote(change.id, now()).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(dearer()));
 	assert_eq!(h.policies.current(&service).await.unwrap().unwrap().version, 2);
@@ -811,6 +829,7 @@ async fn promotion_settles_the_elapsed_window_at_the_old_rate_before_the_new_one
 	let halved = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
 	let change = schedule(&h, UserId::new(), &service, halved, 0, "").await.unwrap();
 	let_the_notice_run(&h, &change).await;
+	deliver_notices(&h, &change).await;
 	assert!(h.changes.promote(change.id, now()).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(halved));
 
@@ -922,6 +941,7 @@ async fn a_legacy_policy_above_the_ceiling_can_still_be_lowered() {
 	assert_eq!(change.requirement, ChangeRequirement::Admin);
 	assert_eq!(notices(&h, &change).await.len(), 1);
 	let_the_notice_run(&h, &change).await;
+	deliver_notices(&h, &change).await;
 	// The promotion supersedes the legacy row — an UPDATE the ceiling must not refuse.
 	assert!(
 		h.changes.promote(change.id, now()).await.unwrap(),

@@ -238,14 +238,17 @@ under whichever terms are in force then.
 A failure on one product warns and moves on; the change stays `scheduled` and is retried on
 the next tick.
 
-Promotion also waits for the notices. A holder's notice the mailer has given up on —
-refused by the relay until its attempts ran out, or deferred past the ceiling
-(`docs/CONSILIUM.md`) — is a holder who was never told, and the terms do not bind over
-them: `promote` refuses with a conflict, the change stays `scheduled`, and after ten
-consecutive refusals the sweeper's warning becomes an error. The operator's move is to
-cancel the change and schedule it again once the holders can be reached (a fixed mirror id,
-a relay back up); a notice still being retried does not hold the promotion, only one that
-has been abandoned.
+Promotion also waits for the notices. A holder's notice that has not been DELIVERED —
+still deferred behind a relay outage, refused until its attempts ran out, or deferred past
+the ceiling (`docs/CONSILIUM.md`) — is a holder who was never told, and the terms do not
+bind over them: `promote` refuses with a conflict naming how many are undelivered and how
+many of those the mailer has given up on, the change stays `scheduled`, and after ten
+consecutive refusals the sweeper's warning becomes an error. Delivery is the test, not
+attempts: a relay down since the change was scheduled charges no attempt at all, and the
+deferral ceiling equals the notice period, so counting only abandoned rows would let a
+change bind the very minute nobody could have been told. A relay coming back therefore
+promotes the change by itself on the next tick; a notice given up on needs the operator to
+cancel the change and schedule it again once the holder can be reached.
 
 ## Still open
 

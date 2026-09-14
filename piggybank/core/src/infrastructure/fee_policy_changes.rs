@@ -32,7 +32,7 @@ use uuid::Uuid;
 use crate::{
 	infrastructure::{
 		consilium,
-		consilium_mailer::{self, MailSubject, enqueue},
+		consilium_mailer::{MAX_ATTEMPTS, MailSubject, enqueue},
 		fee_accrual::carry_accrual,
 		fees::{policy_from_row, repo_err},
 	},
@@ -151,6 +151,28 @@ pub(crate) async fn holder_count(conn: &mut PgConnection, service: &ServiceId) -
 		.await
 		.map_err(repo_err)?;
 	Ok(u32::try_from(count).unwrap_or(u32::MAX))
+}
+
+/// The notices of one change that have not reached a holder: how many in all, and how many
+/// of those the mailer has given up on (pinned at the attempt ceiling, whether they failed
+/// their way there or were deferred past the ceiling).
+struct Undelivered {
+	total: i64,
+	given_up: i64,
+}
+
+/// Counted by DELIVERY, not by attempts: a relay that has been down since the change was
+/// scheduled charges no attempt at all (`defer`), and a deferral ceiling equal to the notice
+/// period would otherwise let a change bind the very minute nobody could have been told.
+async fn undelivered_notices(conn: &mut PgConnection, change: FeePolicyChangeId) -> Result<Undelivered, DomainError> {
+	let (total, given_up): (i64, i64) =
+		sqlx::query_as("SELECT COUNT(*), COUNT(*) FILTER (WHERE attempts >= $2) FROM consilium_mail 		 WHERE fee_policy_change_id = $1 AND kind = 'fee_policy_notice' AND sent_at IS NULL")
+			.bind(change.raw())
+			.bind(MAX_ATTEMPTS)
+			.fetch_one(&mut *conn)
+			.await
+			.map_err(repo_err)?;
+	Ok(Undelivered { total, given_up })
 }
 
 /// Close a change whose consilium reached a verdict other than approval, on the verdict's
@@ -523,15 +545,16 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		if change.state != FeePolicyChangeState::Scheduled || change.effective_from_unix > now_unix {
 			return Ok(false);
 		}
-		// A notice the mailer gave up on — refused by the relay until its attempts ran out, or
-		// deferred past the ceiling — is a holder the notice period exists to warn who was
-		// never warned, and the terms do not bind over them. The change stays `scheduled`:
-		// the sweeper's failure streak turns the refusal into an error, and the operator
-		// cancels and schedules it again once the holders can be reached.
-		let undelivered = consilium_mailer::retired_count(&mut tx, MailSubject::FeePolicyChange(id.raw()), "fee_policy_notice").await?;
-		if undelivered > 0 {
+		// A notice that has not reached its holder — still deferred behind a relay outage, or
+		// given up on — is a holder the notice period exists to warn who was never warned,
+		// and the terms do not bind over them. The change stays `scheduled`: a relay coming
+		// back delivers and the next tick promotes; a notice given up on needs the operator,
+		// and the sweeper's failure streak turns the refusal into an error.
+		let undelivered = undelivered_notices(&mut tx, id).await?;
+		if undelivered.total > 0 {
 			return Err(DomainError::Conflict(format!(
-				"{undelivered} holder notice(s) for this change could not be delivered — cancel it and schedule it again once the holders can be reached"
+				"{} holder notice(s) for this change are undelivered, {} of them given up on — the terms bind once every holder has been told",
+				undelivered.total, undelivered.given_up
 			)));
 		}
 
