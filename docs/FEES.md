@@ -104,6 +104,16 @@ hidden from the caller is `NOT_FOUND` (and absent from `ListFeePolicies`), unles
 - **The operation detail panel** breaks the charge into its two legs, the units taken, and
   the price they were taken at.
 
+An **operator** sees none of the console side of this. Every `/api/admin/fees/*` route is
+gated at the BFF to the `admin` and `owner` roles (`require_fee_admin` beside
+`require_admin` in `cabinet/backend/src/routes/mod.rs`), the `Fees` entry is absent from
+their rail, and opening `/admin/fees` by URL lands on a "not available to your role" notice
+rather than a page of silent 403s. This is the coarse gate only: the money plane still
+decides `AllocationManage` per call, and what an operator could always read as an
+investor — one fund's terms and its pending change through `GET /api/funds/fee-policy` —
+they still can. `/admin/allocations` is still a partial page for an
+operator — some of its reads answer, the management calls do not — and is out of scope here.
+
 ## Settlement
 
 `SettleFeeShares` is the one operation in the plane that moves cash. It runs once per period
