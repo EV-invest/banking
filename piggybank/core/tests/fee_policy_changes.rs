@@ -146,6 +146,24 @@ fn consilium_ports(h: &Harness) -> consilium_app::ConsiliumPorts<'_> {
 	}
 }
 
+/// The terms as an `AllocationManage` holder reads them: every product, hidden or not.
+fn manager(h: &Harness) -> fee_app::PolicyReader<'_> {
+	fee_app::PolicyReader {
+		allocations: &h.allocations,
+		caller: UserId::new(),
+		unrestricted: true,
+	}
+}
+
+/// The terms as one investor reads them: only the products they can see.
+fn reader(h: &Harness, caller: UserId) -> fee_app::PolicyReader<'_> {
+	fee_app::PolicyReader {
+		allocations: &h.allocations,
+		caller,
+		unrestricted: false,
+	}
+}
+
 fn fund_ports(h: &Harness) -> funds_app::FundPorts<'_> {
 	funds_app::FundPorts {
 		allocations: &h.allocations,
@@ -501,6 +519,41 @@ async fn a_change_does_not_bind_while_a_holder_notice_has_been_given_up_on() {
 }
 
 #[tokio::test]
+async fn the_terms_of_a_hidden_product_are_kept_from_an_investor_who_cannot_see_it() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	h.allocations.set_access(&service, AllocationAccess::Hidden).await.unwrap();
+	let outsider = investor(&h).await;
+	let listed = |views: Vec<(ServiceId, fee_app::PolicyView)>| views.into_iter().any(|(listed, _)| listed == service);
+
+	// A direct read answers as `GetAllocation` does for a product hidden from the caller:
+	// as if it were not registered. The catalog of terms simply omits it.
+	let Err(view) = fee_app::policy_view(&h.policies, &h.changes, &reader(&h, outsider), &service).await else {
+		panic!("the terms of a hidden product were shown to an outsider")
+	};
+	assert!(matches!(view, DomainError::NotFound { .. }), "{view:?}");
+	let history = fee_app::list_changes(&h.changes, &reader(&h, outsider), &service).await.unwrap_err();
+	assert!(matches!(history, DomainError::NotFound { .. }), "{history:?}");
+	assert!(!listed(fee_app::list_policies(&h.policies, &h.changes, &reader(&h, outsider)).await.unwrap()));
+
+	// A manager reads every product's terms, hidden or not.
+	let view = fee_app::policy_view(&h.policies, &h.changes, &manager(&h), &service).await.unwrap();
+	assert_eq!(view.current.map(|current| current.policy), Some(FeePolicy::HOUSE));
+	assert_eq!(fee_app::list_changes(&h.changes, &manager(&h), &service).await.unwrap().len(), 1);
+	assert!(listed(fee_app::list_policies(&h.policies, &h.changes, &manager(&h)).await.unwrap()));
+
+	// Raised to `view` by name, the same investor reads the same terms as anyone listed.
+	h.allocations.grant_access(&service, outsider, AllocationAccess::View, outsider).await.unwrap();
+	let view = fee_app::policy_view(&h.policies, &h.changes, &reader(&h, outsider), &service).await.unwrap();
+	assert_eq!(view.current.map(|current| current.policy), Some(FeePolicy::HOUSE));
+	assert_eq!(fee_app::list_changes(&h.changes, &reader(&h, outsider), &service).await.unwrap().len(), 1);
+	assert!(listed(fee_app::list_policies(&h.policies, &h.changes, &reader(&h, outsider)).await.unwrap()));
+}
+
+#[tokio::test]
 async fn one_change_is_on_its_way_per_product_until_it_is_cancelled() {
 	let _lock = exclusive().await;
 	let Some(h) = harness().await else { return };
@@ -850,7 +903,7 @@ async fn a_requirement_decided_against_stale_terms_is_refused_under_the_lock() {
 	assert!(h.changes.pending(&service).await.unwrap().is_none(), "nothing was recorded");
 	// The same terms with the requirement the live terms call for are not stale.
 	assert_eq!(
-		fee_app::policy_view(&h.policies, &h.changes, &service).await.unwrap().current.map(|c| c.policy),
+		fee_app::policy_view(&h.policies, &h.changes, &manager(&h), &service).await.unwrap().current.map(|c| c.policy),
 		Some(FeePolicy::HOUSE)
 	);
 }

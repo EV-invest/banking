@@ -88,8 +88,11 @@ has no such lock. It does not need one now.
 ## What the investor sees
 
 The proto marks `GetFeePolicy` readable by any authenticated user: an investor is entitled
-to know what they are paying before they subscribe, not after the first charge. The cabinet
-surfaces it in three places.
+to know what they are paying before they subscribe, not after the first charge. Any user
+who can see the product, that is — the terms, their history and the catalog of policies
+follow the product's visibility exactly as `GetAllocation` and `GetFundNav` do: a product
+hidden from the caller is `NOT_FOUND` (and absent from `ListFeePolicies`), unless they hold
+`AllocationManage`. The cabinet surfaces it in three places.
 
 - **The product page** shows the terms in a `Fees` card beside the unit supply, for holders
   and non-holders alike, and adds the caller's own accrued figures (management, performance
