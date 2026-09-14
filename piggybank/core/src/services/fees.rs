@@ -350,3 +350,6 @@ fn assessment_to_proto(record: &AssessmentRecord) -> pb::FeeAssessment {
 		assessed_at: record.assessed_at_unix,
 	}
 }
+
+#[cfg(test)]
+mod tests;
