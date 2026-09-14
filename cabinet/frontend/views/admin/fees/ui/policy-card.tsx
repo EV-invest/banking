@@ -34,6 +34,10 @@ export function PolicyCard({ service, policy, onScheduled }: { service: string; 
   const { draft, set, reset } = useTermsDraft(current);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // The reason becomes required the moment a rate crosses the envelope, which is before
+  // the operator has been anywhere near the field — so "required" is said as a label at
+  // once and as an ERROR only after they have touched it.
+  const [reasonTouched, setReasonTouched] = useState(false);
 
   // One change per product at a time: the plane refuses a second until the first is
   // cancelled, so the form says so instead of offering a click that will be refused.
@@ -43,15 +47,16 @@ export function PolicyCard({ service, policy, onScheduled }: { service: string; 
   // the operator is shown before scheduling is the same integer the request carries.
   const bps = useMemo(() => draftBps(draft), [draft]);
   const requirement = useMemo(() => draftRequirement(current, draft), [current, draft]);
-  const invalid = useMemo(() => {
-    const found = draftProblem(current, draft);
-    if (!found) return null;
-    // The field name is interpolated rather than concatenated onto the front: which end
-    // of the sentence it belongs at is a per-language decision.
-    if (found.key === "admin.fees.err.reasonRequired") return t(found.key);
+  const found = useMemo(() => draftProblem(current, draft), [current, draft]);
+  const reasonMissing = found?.key === "admin.fees.err.reasonRequired";
+  // The rate problems, in words. The field name is interpolated rather than concatenated
+  // onto the front: which end of the sentence it belongs at is a per-language decision.
+  const rateProblem = useMemo(() => {
+    if (!found || found.key === "admin.fees.err.reasonRequired") return null;
     if (found.key === "admin.fees.err.overCeiling") return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]), ceiling: found.ceiling });
     return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]) });
-  }, [current, draft, t]);
+  }, [found, t]);
+  const invalid = found !== null;
 
   async function schedule() {
     if (invalid || blocked) return;
@@ -83,13 +88,20 @@ export function PolicyCard({ service, policy, onScheduled }: { service: string; 
         </div>
 
         <TermsFields draft={draft} bps={bps} onChange={set} disabled={blocked} />
-        <ScheduleFields draft={draft} requirement={requirement} onChange={set} disabled={blocked} />
+        <ScheduleFields
+          draft={draft}
+          requirement={requirement}
+          reasonError={reasonMissing && reasonTouched ? t("admin.fees.err.reasonRequired") : null}
+          onChange={set}
+          onReasonTouched={() => setReasonTouched(true)}
+          disabled={blocked}
+        />
 
         {blocked && <p className="text-xs text-muted-foreground">{t("admin.fees.pendingBlocks")}</p>}
-        {invalid && !blocked && <p className="text-xs text-destructive">{invalid}</p>}
+        {rateProblem && !blocked && <p className="text-xs text-destructive">{rateProblem}</p>}
         {problem && <p className="text-xs text-destructive">{problem}</p>}
 
-        <Button type="button" onClick={schedule} disabled={busy || blocked || invalid !== null}>
+        <Button type="button" onClick={schedule} disabled={busy || blocked || invalid}>
           {busy && <Loader2 className="size-4 animate-spin" />}
           {requirement === "owner_consilium" ? t("admin.fees.askOwners") : current ? t("admin.fees.scheduleChange") : t("admin.fees.startCharging")}
         </Button>

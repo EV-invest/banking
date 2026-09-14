@@ -8,10 +8,10 @@
 // `window.confirm`, whose text no catalogue can translate.
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Badge, Button, Card, CardContent } from "@evinvest/uikit";
+import { Alert, AlertDescription, Badge, Button, Card, CardContent } from "@evinvest/uikit";
 
 import { cancelFeePolicyChange } from "@/entities/admin/api/admin-client";
 import type { FeePolicyChange } from "@/shared/contracts/admin";
@@ -31,6 +31,13 @@ export function PendingCard({ change }: { change: FeePolicyChange }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const awaiting = change.state === "awaiting_consilium";
+  // The button that opened the confirmation is gone the moment it opens, and focus would
+  // fall to `body`. It lands on the SAFE answer instead: Enter from there backs out, and a
+  // keyboard user has to aim at the destructive one deliberately.
+  const keepRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (confirming) keepRef.current?.focus();
+  }, [confirming]);
 
   async function cancel() {
     setBusy(true);
@@ -71,18 +78,20 @@ export function PendingCard({ change }: { change: FeePolicyChange }) {
         {problem && <p className="text-xs text-destructive">{problem}</p>}
 
         {confirming ? (
-          <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3.5">
-            <p className="text-sm leading-relaxed">{t(awaiting ? "admin.fees.cancelWarningAwaiting" : "admin.fees.cancelWarning")}</p>
-            <div className="flex flex-col gap-2.5 sm:flex-row">
-              <Button variant="destructive" size="sm" disabled={busy} onClick={() => void cancel()}>
-                {busy && <Loader2 className="size-4 animate-spin" />}
-                {t("admin.fees.cancelConfirm")}
-              </Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
-                {t("ui.cancel")}
-              </Button>
-            </div>
-          </div>
+          <Alert variant="destructive" role="status">
+            <AlertDescription className="gap-3">
+              <p className="text-sm leading-relaxed">{t(awaiting ? "admin.fees.cancelWarningAwaiting" : "admin.fees.cancelWarning")}</p>
+              <div className="flex flex-col gap-2.5 sm:flex-row">
+                <Button variant="destructive" size="sm" disabled={busy} onClick={() => void cancel()}>
+                  {busy && <Loader2 className="size-4 animate-spin" />}
+                  {t("admin.fees.cancelConfirm")}
+                </Button>
+                <Button ref={keepRef} variant="ghost" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
+                  {t("ui.cancel")}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
         ) : (
           <div className="flex flex-wrap gap-2">
             {awaiting && (

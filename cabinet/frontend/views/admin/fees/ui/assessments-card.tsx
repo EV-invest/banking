@@ -8,7 +8,9 @@ import { useT } from "@evinvest/i18n/react";
 import { Card, CardContent, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
 
 import { feeAssessmentsResource } from "@/entities/admin/model/admin-resource";
+import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { ago, formatUnits, formatUsd } from "@/views/admin/lib/format";
 
 export function AssessmentsCard({ service }: { service: string }) {
@@ -22,6 +24,10 @@ export function AssessmentsCard({ service }: { service: string }) {
         <p className="text-sm font-semibold">{t("admin.fees.charges")}</p>
         {list.isLoading ? (
           <Skeleton className="h-24 w-full" />
+        ) : !list.data && list.error ? (
+          // In place of the zero state, never as it: "nobody has been billed" is a claim a
+          // read that did not arrive has not earned.
+          <ResourceError error={list.error} onRetry={() => void list.refresh()} retrying={list.isValidating} />
         ) : rows.length === 0 ? (
           <Empty className="border">
             <EmptyHeader>
@@ -58,7 +64,7 @@ export function AssessmentsCard({ service }: { service: string }) {
                     {/* Non-zero means the holding could not cover the charge and the rest
                         rides to the next one. Worth its own column: it is the only reason
                         a charge collects less than it assessed. */}
-                    <td className={`py-2 text-right tabular-nums ${Number(a.debt_carried) > 0 ? "text-main-accent-t3" : "text-muted-foreground"}`}>
+                    <td className={cn("py-2 text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-main-accent-t3" : "text-muted-foreground")}>
                       {formatUsd(a.debt_carried)}
                     </td>
                   </tr>

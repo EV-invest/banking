@@ -14,6 +14,7 @@ import type { FeePolicy } from "@/shared/contracts";
 import { formatMoment } from "@/shared/lib/datetime";
 import { basisLabel, crystallizationLabel } from "@/shared/lib/fee-terms";
 import { pct } from "@/shared/lib/rate";
+import { Note } from "@/views/invest/ui/atoms";
 
 export function FeePendingNote({ pending }: { pending: FeePolicy["pending"] }) {
   const t = useT();
@@ -29,11 +30,11 @@ export function FeePendingNote({ pending }: { pending: FeePolicy["pending"] }) {
   };
   const terms = t((pending.hurdle_bps ?? 0) > 0 ? "admin.fees.summaryHurdle" : "admin.fees.summary", words);
   return (
-    <p className="rounded-lg border border-main-accent-t1/40 bg-main-accent-t1/10 px-3 py-2.5 text-xs leading-relaxed text-foreground">
+    <Note tone="accent">
       {pending.state === "scheduled"
         ? // The generated type admits a number for an int64; the wire carries a string.
           t("invest.feeChangeScheduled", { at: formatMoment(String(pending.effective_from ?? "0"), locale), terms })
         : t("invest.feeChangeProposed", { terms })}
-    </p>
+    </Note>
   );
 }
