@@ -1,4 +1,4 @@
--- 0032: the allocation book — holders trading a product's units with each other.
+-- 0037: the allocation book — holders trading a product's units with each other.
 --
 -- Until now a unit changed hands only against the fund: a subscription minted it at NAV,
 -- a redemption burned it at NAV. These four tables are the control plane of a secondary

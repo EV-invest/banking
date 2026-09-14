@@ -129,6 +129,41 @@ message ConsiliumPaymentTerms {
   string reason = 6;
 }
 
+// The immutable subject of a FEE-POLICY consilium — a change of a product's fee terms
+// that tightens them beyond the house envelope (docs/FEES.md § "Changing the terms").
+// Not a money move: carrying it schedules the change, and the fee sweeper promotes it once
+// the holders' notice period has run.
+message ConsiliumFeePolicyTerms {
+  // The change this quorum authorizes. Inside the hashed subject, so an approval of one
+  // change is never a valid signature over another naming the same numbers.
+  string change_id = 1;
+  string service = 2;
+  // The product's display name, read live from the registry.
+  string allocation_name = 3;
+  // The terms in force when the change was proposed. `from_configured` is false when the
+  // fund charged nothing — a different fact from a policy whose rates are zero — and the
+  // `from_*` fields are then zero / default.
+  bool from_configured = 17;
+  uint32 from_management_bps = 4;
+  uint32 from_performance_bps = 5;
+  uint32 from_hurdle_bps = 6;
+  string from_basis = 7;
+  string from_crystallization = 8;
+  uint32 to_management_bps = 9;
+  uint32 to_performance_bps = 10;
+  uint32 to_hurdle_bps = 11;
+  string to_basis = 12;
+  string to_crystallization = 13;
+  // Unix seconds the requester asked the change to bind from; 0 = as soon as the notice
+  // allows. The moment actually fixed is never earlier than 24h after the carrying vote
+  // while anyone holds units.
+  int64 effective_from = 14;
+  // How many investors hold units right now — who the change binds.
+  uint32 holder_count = 15;
+  // Why, in the requester's words. Required for this kind, shown verbatim.
+  string reason = 16;
+}
+
 // The immutable subject of a VALUATION-OVERRIDE consilium — a NAV mark the move guard
 // refuses (banking#232). The direct `PostFundValuation` caps a move at `MAX_NAV_MOVE_PCT`
 // against the previous mark AND the mark anchoring a rolling window, and carries no flag
@@ -158,10 +193,10 @@ message ConsiliumVoter {
 message Consilium {
   string id = 1;
   ConsiliumState state = 2;
-  // EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`) is
-  // set, decided by the kind. Named fields rather than a oneof because the surfaces read
-  // them by name and a oneof buys nothing here that the "exactly one" rule does not
-  // already give.
+  // EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `valuation_override`,
+  // `fee_policy`) is set, decided by the kind. Named fields rather than a oneof because the
+  // surfaces read them by name and a oneof buys nothing here that the "exactly one" rule
+  // does not already give.
   RevenuePayoutTerms revenue_payout = 3;
   // Hex SHA-256 over the canonical terms. Shown (short prefix) in the mail so an owner
   // can tell that what they approved is what will execute.
@@ -194,6 +229,10 @@ message Consilium {
   ValuationOverrideTerms valuation_override = 20;
   // The `fund_valuations` row an executed VALUATION-OVERRIDE consilium recorded.
   string executed_valuation_id = 21;
+  // The fourth terms sibling — set exactly for a FEE_POLICY consilium.
+  ConsiliumFeePolicyTerms fee_policy = 22;
+  // The fee-policy change an executed FEE_POLICY consilium scheduled.
+  string executed_fee_policy_change_id = 23;
 }
 
 message ConsiliumList {
@@ -251,6 +290,7 @@ message ConsiliumInvitation {
   uint32 attempts_remaining = 13;
   ConsiliumPaymentTerms payment = 14;
   ValuationOverrideTerms valuation_override = 15;
+  ConsiliumFeePolicyTerms fee_policy = 16;
 }
 
 message SubmitDecisionRequest {

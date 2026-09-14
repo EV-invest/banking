@@ -12,25 +12,25 @@
 // registry exists to close.
 
 import { useT } from "@evinvest/i18n/react";
-import { ArrowDownToLine, ArrowLeft, Loader2, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle, Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { accruedFeesResource, allocationsResource, feePolicyResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
-import type { AccruedFees, FeePolicy, FundNav, Position } from "@/shared/contracts";
+import type { FundNav, Position } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
-import { pct } from "@/shared/lib/rate";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
-import { compactUnits, formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
-import { blockedReasonKey, buildProducts, companyStakeBps, type Product } from "@/views/invest/lib/product";
-import { Note, ProductBadges, Stat, SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
+import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
+import { blockedReasonKey, buildProducts, type Product } from "@/views/invest/lib/product";
+import { Note, ProductBadges, Stat, TEAL_CTA } from "@/views/invest/ui/atoms";
 import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-panels";
+import { FeeCard, SupplyCard } from "@/views/invest/ui/product-cards";
 import { TradeLink } from "@/views/invest/ui/trade-link";
 
 type Panel = "subscribe" | "redeem" | null;
@@ -182,129 +182,6 @@ function BackLink() {
       <ArrowLeft className="size-4" />
       {t("invest.allProducts")}
     </Link>
-  );
-}
-
-/**
- * The product's supply, as a fact about the fund rather than about the holder.
- *
- * This is the visible half of the unit cap: a fund is sized by an operator, and once the
- * authorised units are issued it stops minting. Saying so here means "subscription
- * refused" is never the first time a holder hears about it.
- */
-function SupplyCard({ nav }: { nav: FundNav | null }) {
-  const t = useT();
-  if (!nav) {
-    return (
-      <Card>
-        <CardContent className="py-6">
-          <Loader2 className="size-4 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
-  const stake = companyStakeBps(nav);
-  return (
-    <Card className="h-fit">
-      <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">{t("admin.valuation.unitSupply")}</p>
-        <SupplyBar issued={nav.units_outstanding} cap={nav.unit_cap} />
-        <dl className="space-y-2.5 border-t border-border pt-4 text-sm">
-          <Row
-            label={t("invest.remainingCapacity")}
-            value={t("dash.unitsAmount", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity) })}
-          />
-          {/* The share of the issued supply that is neither this holder's nor the market's —
-              stated here, beside the figures it is a share OF, and only when there is one:
-              a "0%" row would read as a fact about most funds that is really an absence. */}
-          {stake !== null && <Row label={t("invest.companyStake")} value={t("invest.companyStakeValue", { pct: pct(stake), units: compactUnits(nav.company_units) })} />}
-          <Row label={t("invest.navPerUnit")} value={`${formatUsdt(nav.nav)} USDT`} />
-          <Row label={t("invest.fundAum")} value={nav.aum ? `${formatUsdt(nav.aum)} USDT` : t("invest.notYetValued")} />
-        </dl>
-        <p className="text-xs text-muted-foreground">{t("invest.supplyNote")}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * What this fund charges, and what the caller's own holding has run up against it.
- *
- * It sits beside the supply card rather than inside the holding block because the terms
- * apply to a product whether or not the caller is in it — somebody deciding whether to
- * subscribe needs to read the fee before they act, not discover it on the first charge.
- *
- * A product with no policy renders nothing at all. That is deliberate: an absent policy
- * and a policy of zeros are different facts, and a card of zeros reads like a fee that was
- * generously waived rather than a fund that never had one.
- *
- * The accrued figures are shown only to a holder, because they are a statement about a
- * position. `total` is what would be taken if the fee were charged this instant — the
- * number the `Value` stat opposite has NOT been reduced by — so the card says so plainly
- * instead of leaving the two to be reconciled by the reader.
- */
-function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: AccruedFees | null }) {
-  const t = useT();
-  if (!policy?.configured) return null;
-  const owed = accrued?.configured ? accrued : null;
-  const basisKey = BASIS_LABEL_KEYS[policy.basis ?? ""];
-  const periodKey = PERIOD_LABEL_KEYS[policy.crystallization ?? ""];
-  return (
-    <Card className="h-fit">
-      <CardContent className="space-y-4 py-6">
-        <p className="text-sm font-semibold">{t("nav.fees")}</p>
-        <dl className="space-y-2.5 text-sm">
-          <Row label={t("admin.fees.field.management")} value={t("invest.perAnnum", { pct: pct(policy.management_bps) })} />
-          <Row label={t("admin.fees.field.performance")} value={t("invest.ofTheGain", { pct: pct(policy.performance_bps) })} />
-          {policy.hurdle_bps ? <Row label={t("admin.fees.field.hurdle")} value={t("invest.hurdleFirst", { pct: pct(policy.hurdle_bps) })} /> : null}
-          {/* An unmapped basis/period falls back to the wire identifier — a value the hub
-              added that this build has no word for, shown rather than swallowed. */}
-          <Row label={t("admin.fees.chargedOn")} value={basisKey ? t(basisKey) : (policy.basis ?? "—")} />
-          <Row label={t("invest.lockedIn")} value={periodKey ? t(periodKey) : (policy.crystallization ?? "—")} />
-        </dl>
-
-        {owed && (
-          <div className="space-y-2.5 border-t border-border pt-4">
-            {/* Its own heading, so the rows can be labelled `Management` and `Performance`
-                without colliding with the identically-named terms above. Long enough labels
-                to disambiguate inline would wrap onto two lines in this column. */}
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("invest.accruedOnHolding")}</p>
-            <dl className="space-y-2.5 text-sm">
-              <Row label={t("admin.fees.field.management")} value={`${formatUsdt(owed.management)} USDT`} />
-              <Row label={t("admin.fees.field.performance")} value={`${formatUsdt(owed.performance)} USDT`} />
-              {isZero(owed.debt) ? null : <Row label={t("invest.carriedOver")} value={`${formatUsdt(owed.debt)} USDT`} />}
-              <Row label={t("ui.total")} value={`${formatUsdt(owed.total)} USDT`} />
-              <Row label={t("invest.yourMark")} value={`${formatUsdt(owed.high_water_mark)} USDT`} />
-            </dl>
-          </div>
-        )}
-
-        <p className="text-xs text-muted-foreground">{t(owed ? "invest.feeNoteHolder" : "invest.feeNoteProspect")}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// The same two vocabularies the admin fee console writes, read here — one wire value has
-// one name across the cabinet, so both surfaces point at the same catalogue entries.
-const BASIS_LABEL_KEYS: Record<string, string> = {
-  invested_capital: "admin.fees.basis.investedCapital",
-  market_value: "admin.fees.basis.marketValue",
-};
-
-const PERIOD_LABEL_KEYS: Record<string, string> = {
-  monthly: "admin.fees.period.monthly",
-  quarterly: "admin.fees.period.quarterly",
-  semi_annual: "admin.fees.period.semiAnnual",
-  annual: "admin.fees.period.annual",
-};
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium tabular-nums">{value}</dd>
-    </div>
   );
 }
 

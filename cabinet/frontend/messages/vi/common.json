@@ -531,6 +531,42 @@
     "en": "Fail",
     "t": "Báo lỗi"
   },
+  "admin.feeChange.state.active": {
+    "en": "In force",
+    "t": "Đang hiệu lực"
+  },
+  "admin.feeChange.state.awaiting_consilium": {
+    "en": "Awaiting owners",
+    "t": "Chờ chủ sở hữu"
+  },
+  "admin.feeChange.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Đã hủy"
+  },
+  "admin.feeChange.state.rejected": {
+    "en": "Rejected",
+    "t": "Bị từ chối"
+  },
+  "admin.feeChange.state.scheduled": {
+    "en": "Scheduled",
+    "t": "Đã lên lịch"
+  },
+  "admin.feeChange.state.superseded": {
+    "en": "Superseded",
+    "t": "Đã bị thay thế"
+  },
+  "admin.fees.askOwners": {
+    "en": "Ask the owners",
+    "t": "Hỏi các chủ sở hữu"
+  },
+  "admin.fees.awaitingBody": {
+    "en": "The owners have each been emailed a link. Version {version} is scheduled only once more than half of them approve, and binds 24 hours after that while anyone holds units. The live tally is in the consilium.",
+    "t": "Mỗi chủ sở hữu đã được gửi một liên kết qua email. Phiên bản {version} chỉ được lên lịch khi hơn một nửa trong số họ chấp thuận, và có hiệu lực 24 giờ sau đó khi còn người nắm giữ đơn vị. Kết quả kiểm phiếu trực tiếp nằm trong consilium."
+  },
+  "admin.fees.awaitingTitle": {
+    "en": "Sent to the owners — nothing has changed yet",
+    "t": "Đã gửi các chủ sở hữu — chưa có gì thay đổi"
+  },
   "admin.fees.basis.investedCapital": {
     "en": "Invested capital",
     "t": "Vốn đã đầu tư"
@@ -542,6 +578,22 @@
   "admin.fees.basisNote": {
     "en": "Invested capital is the house default: it does not swell with a mark you posted, so what the manager earns stays independent of the input the manager supplies.",
     "t": "Vốn đã đầu tư là lựa chọn mặc định của công ty: nó không phình lên theo mức định giá do chính bạn đăng, nên phần nhà quản lý được hưởng vẫn độc lập với dữ liệu do nhà quản lý cung cấp."
+  },
+  "admin.fees.cancelChange": {
+    "en": "Cancel this change",
+    "t": "Hủy thay đổi này"
+  },
+  "admin.fees.cancelConfirm": {
+    "en": "Cancel the change",
+    "t": "Hủy thay đổi"
+  },
+  "admin.fees.cancelWarning": {
+    "en": "Cancelling withdraws the change. The fund keeps its current terms, and the holders who were notified will not see the new ones.",
+    "t": "Hủy sẽ rút lại thay đổi. Quỹ giữ nguyên điều khoản hiện tại, và những người nắm giữ đã được thông báo sẽ không thấy điều khoản mới."
+  },
+  "admin.fees.cancelWarningAwaiting": {
+    "en": "Cancelling withdraws the change and takes its consilium down with it, voiding every approval collected so far. The owners who have already answered would each have to answer again.",
+    "t": "Hủy sẽ rút lại thay đổi và đóng consilium của nó, vô hiệu mọi chấp thuận đã thu được. Các chủ sở hữu đã trả lời sẽ phải trả lời lại."
   },
   "admin.fees.chargedOn": {
     "en": "Charged on",
@@ -555,6 +607,14 @@
     "en": "Deferred",
     "t": "Hoãn lại"
   },
+  "admin.fees.col.effective": {
+    "en": "Effective",
+    "t": "Hiệu lực"
+  },
+  "admin.fees.col.reason": {
+    "en": "Reason",
+    "t": "Lý do"
+  },
   "admin.fees.col.trigger": {
     "en": "Trigger",
     "t": "Kích hoạt"
@@ -562,6 +622,10 @@
   "admin.fees.col.unitsTaken": {
     "en": "Units taken",
     "t": "Đơn vị đã thu"
+  },
+  "admin.fees.col.version": {
+    "en": "Version",
+    "t": "Phiên bản"
   },
   "admin.fees.collected": {
     "en": "Collected, not yet converted",
@@ -575,13 +639,25 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Đây là một mức giá, không phải chi tiết nhỏ — chốt phí càng thường xuyên thì tổng chi phí nhà đầu tư trả trong vòng đời quỹ càng cao rõ rệt, vì mỗi lần đặt lại đều chốt cứng phần lãi mà khoản lỗ sau đó không còn bù trừ được."
   },
+  "admin.fees.effectiveFrom": {
+    "en": "Takes effect",
+    "t": "Có hiệu lực"
+  },
+  "admin.fees.effectiveFromHint": {
+    "en": "Leave empty for the earliest allowed. While anyone holds units, a change binds no earlier than 24 hours after it is scheduled — counted from the owners' approval when they must give it. An earlier moment is lifted to that minimum, never refused.",
+    "t": "Để trống để áp dụng sớm nhất có thể. Khi còn có người nắm giữ đơn vị, thay đổi có hiệu lực không sớm hơn 24 giờ sau khi được lên lịch — tính từ lúc các chủ sở hữu chấp thuận nếu cần. Thời điểm sớm hơn sẽ được nâng lên mức tối thiểu đó, không bị từ chối."
+  },
   "admin.fees.err.notPercent": {
     "en": "{field} must be a percentage — 2, or 2.5 for a half.",
     "t": "{field} phải là phần trăm — 2, hoặc 2.5 cho nửa phần trăm."
   },
-  "admin.fees.err.overHundred": {
-    "en": "{field} cannot be more than 100%.",
-    "t": "{field} không được vượt quá 100%."
+  "admin.fees.err.overCeiling": {
+    "en": "{field} cannot be more than {ceiling}.",
+    "t": "{field} không thể vượt quá {ceiling}."
+  },
+  "admin.fees.err.reasonRequired": {
+    "en": "A reason is required when the owners must approve.",
+    "t": "Cần có lý do khi các chủ sở hữu phải chấp thuận."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
@@ -607,9 +683,13 @@
     "en": "0 for none",
     "t": "0 nếu không thu"
   },
-  "admin.fees.lastChanged": {
-    "en": "Last changed {when}. Investors see these on the product page.",
-    "t": "Thay đổi lần cuối {when}. Nhà đầu tư nhìn thấy các mức này trên trang sản phẩm."
+  "admin.fees.history": {
+    "en": "History of terms",
+    "t": "Lịch sử điều khoản"
+  },
+  "admin.fees.inForce": {
+    "en": "Version {version}, in force since {since}. Investors see these on the product page.",
+    "t": "Phiên bản {version}, có hiệu lực từ {since}. Nhà đầu tư thấy các điều khoản này trên trang sản phẩm."
   },
   "admin.fees.lockedIn": {
     "en": "Performance locked in",
@@ -635,13 +715,45 @@
     "en": "A fee is a property of a product. Register an allocation first, then price it here.",
     "t": "Phí là thuộc tính của một sản phẩm. Hãy đăng ký khoản phân bổ trước, rồi định mức phí ở đây."
   },
+  "admin.fees.noHistory": {
+    "en": "No changes yet",
+    "t": "Chưa có thay đổi"
+  },
+  "admin.fees.noHistoryHint": {
+    "en": "Every version of this fund's terms will be listed here — what was scheduled, when it bound, and why.",
+    "t": "Mọi phiên bản điều khoản của quỹ này sẽ được liệt kê ở đây — điều gì được lên lịch, khi nào có hiệu lực, và vì sao."
+  },
   "admin.fees.notConfigured": {
-    "en": "This fund charges nothing today. Saving these terms starts the clock on every holding in it.",
-    "t": "Hiện quỹ này không thu khoản phí nào. Lưu các điều khoản này sẽ bắt đầu tính phí trên mọi khoản nắm giữ trong quỹ."
+    "en": "This fund charges nothing today. Scheduling terms starts the clock on every holding in it from the moment they take effect.",
+    "t": "Hiện quỹ này không thu khoản phí nào. Lên lịch điều khoản sẽ bắt đầu tính phí trên mọi khoản nắm giữ trong quỹ kể từ khi chúng có hiệu lực."
   },
   "admin.fees.nothingToSettle": {
     "en": "Nothing to settle — no fee has been charged in this fund yet.",
     "t": "Không có gì để tất toán — quỹ này chưa thu khoản phí nào."
+  },
+  "admin.fees.pending.awaiting": {
+    "en": "Version {version} awaits the owners' approval. It binds 24 hours after they carry it, while anyone holds units.",
+    "t": "Phiên bản {version} đang chờ các chủ sở hữu chấp thuận. Nó có hiệu lực 24 giờ sau khi họ thông qua, khi còn người nắm giữ đơn vị."
+  },
+  "admin.fees.pending.requested": {
+    "en": "Requested {when}",
+    "t": "Yêu cầu {when}"
+  },
+  "admin.fees.pending.scheduled": {
+    "en": "Version {version} takes effect on {at}. Holders have been notified.",
+    "t": "Phiên bản {version} có hiệu lực vào {at}. Người nắm giữ đã được thông báo."
+  },
+  "admin.fees.pendingBlocks": {
+    "en": "One change at a time: cancel the pending one to schedule another.",
+    "t": "Mỗi lần một thay đổi: hủy thay đổi đang chờ để lên lịch thay đổi khác."
+  },
+  "admin.fees.pendingChip": {
+    "en": "Change pending",
+    "t": "Có thay đổi đang chờ"
+  },
+  "admin.fees.pendingTitle": {
+    "en": "Change on its way",
+    "t": "Thay đổi đang chờ"
   },
   "admin.fees.period.annual": {
     "en": "Annually",
@@ -659,9 +771,41 @@
     "en": "Every 6 months",
     "t": "Mỗi 6 tháng"
   },
-  "admin.fees.saved": {
-    "en": "Saved. Investors see the new terms immediately.",
-    "t": "Đã lưu. Nhà đầu tư thấy điều khoản mới ngay lập tức."
+  "admin.fees.reason": {
+    "en": "Reason",
+    "t": "Lý do"
+  },
+  "admin.fees.reasonHint": {
+    "en": "Optional. Kept with this version in the history.",
+    "t": "Không bắt buộc. Được lưu cùng phiên bản này trong lịch sử."
+  },
+  "admin.fees.reasonRequiredHint": {
+    "en": "The owners read this in their approval mail, and it is part of what they sign.",
+    "t": "Các chủ sở hữu sẽ đọc điều này trong thư phê duyệt, và nó là một phần của những gì họ ký."
+  },
+  "admin.fees.reasonRequiredLabel": {
+    "en": "Reason (required)",
+    "t": "Lý do (bắt buộc)"
+  },
+  "admin.fees.requirement.admin": {
+    "en": "No vote needed: one administrator may make this change. Holders are mailed the notice when it is scheduled.",
+    "t": "Không cần bỏ phiếu: một quản trị viên có thể thực hiện thay đổi này. Người nắm giữ sẽ nhận thông báo qua email khi thay đổi được lên lịch."
+  },
+  "admin.fees.requirement.consilium": {
+    "en": "Needs the owners' approval: these terms tighten the current ones beyond the house 2 and 20, or lower the hurdle. You must be an owner to open the request.",
+    "t": "Cần các chủ sở hữu chấp thuận: các điều khoản này siết chặt hơn mức 2 và 20 mặc định, hoặc hạ ngưỡng vượt. Chỉ chủ sở hữu mới có thể mở yêu cầu."
+  },
+  "admin.fees.scheduleChange": {
+    "en": "Schedule the change",
+    "t": "Lên lịch thay đổi"
+  },
+  "admin.fees.scheduledBody": {
+    "en": "Version {version} takes effect on {at}. Every holder is being emailed the notice; until then the fund charges its current terms.",
+    "t": "Phiên bản {version} có hiệu lực vào {at}. Mọi người nắm giữ đang được gửi thông báo; cho đến lúc đó quỹ vẫn thu theo điều khoản hiện tại."
+  },
+  "admin.fees.scheduledTitle": {
+    "en": "Scheduled — nothing has changed yet",
+    "t": "Đã lên lịch — chưa có gì thay đổi"
   },
   "admin.fees.settleAll": {
     "en": "Settle all units",
@@ -699,6 +843,14 @@
     "en": "What each fund charges its investors, and converting what it has already earned into cash.",
     "t": "Mức phí mỗi quỹ thu của nhà đầu tư, và việc chuyển phần đã thu được thành tiền mặt."
   },
+  "admin.fees.summary": {
+    "en": "{management} p.a. · {performance} of the gain · {basis} · {period}",
+    "t": "{management} mỗi năm · {performance} lợi nhuận · {basis} · {period}"
+  },
+  "admin.fees.summaryHurdle": {
+    "en": "{management} p.a. · {performance} of the gain above {hurdle} · {basis} · {period}",
+    "t": "{management} mỗi năm · {performance} lợi nhuận trên {hurdle} · {basis} · {period}"
+  },
   "admin.fees.terms": {
     "en": "Terms",
     "t": "Điều khoản"
@@ -710,10 +862,6 @@
   "admin.fees.unitsHeld": {
     "en": "Fee units held",
     "t": "Đơn vị phí đang nắm giữ"
-  },
-  "admin.fees.updateTerms": {
-    "en": "Update terms",
-    "t": "Cập nhật điều khoản"
   },
   "admin.fees.withdrawableFrom": {
     "en": "It is withdrawable on-chain from {screen}.",
@@ -1763,6 +1911,34 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Gửi lệnh, tất toán hoặc báo lỗi các lệnh rút — của nhà đầu tư và của chính quỹ"
   },
+  "approval.feePolicy.approve": {
+    "en": "Approve this change",
+    "t": "Phê duyệt thay đổi này"
+  },
+  "approval.feePolicy.decided.approvedTitle": {
+    "en": "You approved this change",
+    "t": "Bạn đã phê duyệt thay đổi này"
+  },
+  "approval.feePolicy.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the change is scheduled once enough owners have agreed, and binds 24 hours after that while anyone holds units.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Không còn gì phải làm ở đây — thay đổi được lên lịch khi đủ chủ sở hữu đồng ý, và có hiệu lực 24 giờ sau đó khi còn người nắm giữ đơn vị."
+  },
+  "approval.feePolicy.decided.rejectedTitle": {
+    "en": "You rejected this change",
+    "t": "Bạn đã từ chối thay đổi này"
+  },
+  "approval.feePolicy.lead": {
+    "en": "{initiator} has asked to change what a product charges its investors, as set out below. Tightening the terms beyond what the prospectus promised is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} đã yêu cầu thay đổi mức phí một sản phẩm thu từ nhà đầu tư, như nêu dưới đây. Siết chặt điều khoản vượt quá những gì bản cáo bạch đã hứa không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
+  },
+  "approval.feePolicy.payloadHashHint": {
+    "en": "The fingerprint is taken over the product, the terms now and proposed, the reason and the requested moment above. It is checked again before the change is scheduled, so a request cannot be edited after you have agreed to it.",
+    "t": "Dấu vân tay được tính trên sản phẩm, điều khoản hiện tại và đề xuất, lý do và thời điểm yêu cầu ở trên. Nó được kiểm tra lại trước khi thay đổi được lên lịch, nên yêu cầu không thể bị sửa sau khi bạn đã đồng ý."
+  },
+  "approval.feePolicy.title": {
+    "en": "Approve a change of fee terms",
+    "t": "Phê duyệt thay đổi điều khoản phí"
+  },
   "approval.payment.approve": {
     "en": "Approve this payment",
     "t": "Phê duyệt khoản thanh toán này"
@@ -2011,6 +2187,66 @@
     "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
     "t": "Quỹ này có {n, plural, other {# chủ sở hữu có ghế}}. Một đề nghị kết nạp cần ít nhất một chủ sở hữu ngoài người đề xuất, nên nó không thể đưa những người sáng lập vào ghế: những ghế đó do chính dịch vụ ghi lại lúc khởi động, từ danh sách khởi thủy, và chỉ khi sổ đăng ký còn trống. Lần khởi động đó đóng cửa sổ này vĩnh viễn, và từ đó biểu mẫu này là lối vào duy nhất."
   },
+  "consilium.feePolicy.asSoonAsAllowed": {
+    "en": "As soon as allowed — 24 hours after the owners carry it, while anyone holds units",
+    "t": "Sớm nhất có thể — 24 giờ sau khi các chủ sở hữu thông qua, khi còn người nắm giữ đơn vị"
+  },
+  "consilium.feePolicy.carried": {
+    "en": "Carried",
+    "t": "Đã thông qua"
+  },
+  "consilium.feePolicy.effectiveFrom": {
+    "en": "Takes effect · {at}",
+    "t": "Có hiệu lực · {at}"
+  },
+  "consilium.feePolicy.effectiveFromLabel": {
+    "en": "Takes effect",
+    "t": "Có hiệu lực"
+  },
+  "consilium.feePolicy.fund": {
+    "en": "Product",
+    "t": "Sản phẩm"
+  },
+  "consilium.feePolicy.holders": {
+    "en": "{n, plural, one {# holder will be notified} other {# holders will be notified}}",
+    "t": "{n, plural, other {# người nắm giữ sẽ được thông báo}}"
+  },
+  "consilium.feePolicy.holdersLabel": {
+    "en": "Holders to notify",
+    "t": "Người nắm giữ cần thông báo"
+  },
+  "consilium.feePolicy.nothingCharged": {
+    "en": "Nothing charged",
+    "t": "Không thu phí"
+  },
+  "consilium.feePolicy.now": {
+    "en": "Now",
+    "t": "Hiện tại"
+  },
+  "consilium.feePolicy.proposed": {
+    "en": "Proposed",
+    "t": "Đề xuất"
+  },
+  "consilium.feePolicy.reason": {
+    "en": "Reason given",
+    "t": "Lý do đưa ra"
+  },
+  "consilium.kind.fee_policy": {
+    "en": "Fee terms",
+    "t": "Điều khoản phí"
+  },
+  "consilium.kind.payment": {
+    "en": "Payment",
+    "t": "Thanh toán"
+  },
+  "consilium.kind.revenue_payout": {
+    "en": "Revenue payout",
+    "t": "Chi trả doanh thu"
+  },
+  "consilium.kind.valuation_override": {
+    "en": "NAV mark",
+    "t": "Định giá NAV"
+  },
   "consilium.payment.from": {
     "en": "From",
     "t": "Từ"
@@ -2040,8 +2276,8 @@
     "t": "Không có yêu cầu nào đang mở"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout or a payment order — and marking a fund past the NAV-move guard. One request at a time, and never one person's decision.",
-    "t": "Chuyển tiền thuộc sở hữu của quỹ — chi trả doanh thu hoặc một lệnh thanh toán — và định giá một quỹ vượt chốt chặn biến động NAV. Mỗi lần một yêu cầu, và không bao giờ là quyết định của một người."
+    "en": "Moving money the fund owns — a revenue payout or a payment order — marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
+    "t": "Chuyển tiền thuộc quỹ — chi trả doanh thu hoặc lệnh thanh toán —, định giá một quỹ vượt chốt chặn biến động NAV và thay đổi mức phí một sản phẩm thu. Mỗi lần một yêu cầu, và không bao giờ là quyết định của một người."
   },
   "consilium.payout.title": {
     "en": "Fund payouts and payments",
@@ -2434,6 +2670,14 @@
   "invest.dustHint": {
     "en": "Too small to buy a whole unit at {nav} — increase the amount.",
     "t": "Quá nhỏ để mua trọn một đơn vị quỹ ở mức {nav} — hãy tăng số tiền."
+  },
+  "invest.feeChangeProposed": {
+    "en": "A change is proposed and awaits the owners: {terms}.",
+    "t": "Một thay đổi được đề xuất và đang chờ các chủ sở hữu: {terms}."
+  },
+  "invest.feeChangeScheduled": {
+    "en": "Terms change on {at}: {terms}.",
+    "t": "Điều khoản thay đổi vào {at}: {terms}."
   },
   "invest.feeNoteHolder": {
     "en": "Fees are taken in units, never in cash — your wallet balance is untouched, and the value shown opposite is before them. The performance fee applies only to gains above your own high-water mark, so a recovery back to it costs nothing.",

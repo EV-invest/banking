@@ -320,10 +320,26 @@ impl Grpc {
 		Ok(self.fees().list_fee_policies(bearer(token, bk::ListFeePoliciesRequest {})?).await?.into_inner())
 	}
 
-	/// Write a fund's terms. Upsert — a fund with no policy charges nothing, which is a
-	/// different fact from a policy whose rates are zero.
-	pub async fn set_fee_policy(&self, token: &str, req: bk::SetFeePolicyRequest) -> Result<bk::FeePolicy, Status> {
-		Ok(self.fees().set_fee_policy(bearer(token, req)?).await?.into_inner())
+	/// Propose a change of a fund's terms. Never an in-place write: the hub records a
+	/// versioned change that binds after the holders' notice period — and after the owners'
+	/// quorum when it tightens the terms beyond the house envelope.
+	pub async fn schedule_fee_policy(&self, token: &str, req: bk::ScheduleFeePolicyRequest) -> Result<bk::FeePolicyChange, Status> {
+		Ok(self.fees().schedule_fee_policy(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// Withdraw a pending change of terms.
+	pub async fn cancel_fee_policy_change(&self, token: &str, service: &str, change_id: &str) -> Result<bk::FeePolicyChange, Status> {
+		let req = bk::CancelFeePolicyChangeRequest {
+			service: service.to_string(),
+			change_id: change_id.to_string(),
+		};
+		Ok(self.fees().cancel_fee_policy_change(bearer(token, req)?).await?.into_inner())
+	}
+
+	/// A fund's whole history of terms, newest version first.
+	pub async fn fee_policy_changes(&self, token: &str, service: &str) -> Result<bk::FeePolicyChangeList, Status> {
+		let req = bk::ListFeePolicyChangesRequest { service: service.to_string() };
+		Ok(self.fees().list_fee_policy_changes(bearer(token, req)?).await?.into_inner())
 	}
 
 	/// The manager's uncollected fee units in one fund, and what they are worth now.

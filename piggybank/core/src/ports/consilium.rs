@@ -46,12 +46,23 @@ pub struct VoterView {
 	pub notified: bool,
 }
 
+/// What a surface says about a fee-policy consilium beside the hashed subject: the product's
+/// title and how many holders the change binds. Read live, not frozen — an owner judging a
+/// request wants today's count.
+#[derive(Clone, Debug)]
+pub struct FeePolicyDetail {
+	pub allocation_name: String,
+	pub holder_count: u32,
+}
+
 /// A consilium and the identity slice a surface needs beside it.
 #[derive(Debug)]
 pub struct ConsiliumView {
 	pub consilium: Consilium,
 	pub initiator_email: String,
 	pub voters: Vec<VoterView>,
+	/// Set exactly for a `ConsiliumKind::FeePolicy` row.
+	pub fee_policy: Option<FeePolicyDetail>,
 }
 
 /// What the emailed owner is shown. Deliberately narrower than [`ConsiliumView`]: no other
@@ -61,6 +72,8 @@ pub struct InvitationView {
 	pub consilium_id: ConsiliumId,
 	pub state: ConsiliumState,
 	pub terms: ConsiliumTerms,
+	/// Set exactly for a `ConsiliumKind::FeePolicy` row.
+	pub fee_policy: Option<FeePolicyDetail>,
 	pub payload_hash: String,
 	pub initiator_email: String,
 	pub voter_email: String,

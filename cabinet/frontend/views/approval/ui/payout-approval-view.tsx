@@ -15,9 +15,10 @@
 //     something else.
 //
 // A consilium carries one of three things — a revenue payout, a payment order
-// (`invitation.payment`, docs/CONSILIUM.md § Payments) or a NAV mark past the move guard
-// (`invitation.valuation_override`, banking#232). The page is the same in every case; only
-// the terms card and the words naming what is approved change.
+// (`invitation.payment`, docs/CONSILIUM.md § Payments), a NAV mark past the move guard
+// (`invitation.valuation_override`, banking#232) or a change of a product's fee terms
+// (`invitation.fee_policy`, docs/FEES.md § Changing the terms). The page is the same in
+// every case; only the terms card and the words naming what is approved change.
 //
 // The tally, the attempt counter and the settled decision are all read back from the
 // server. This page never decrements, increments or predicts any of them: a wrong code is
@@ -51,6 +52,7 @@ import {
   CodeField,
   DetailRow,
 } from "@/views/approval/ui/approval-chrome";
+import { FeePolicyTermsBlock, renderableFeePolicy } from "@/views/approval/ui/fee-policy-terms";
 import { PaymentTermsBlock, renderablePayment } from "@/views/approval/ui/payment-terms";
 import { PayoutTerms } from "@/views/approval/ui/payout-terms";
 import { ValuationTermsBlock, renderableValuation } from "@/views/approval/ui/valuation-terms";
@@ -144,6 +146,7 @@ export function PayoutApprovalView({ token }: { token: string }) {
 
   const payment = invitation.payment ?? null;
   const valuation = invitation.valuation_override ?? null;
+  const feePolicy = invitation.fee_policy ?? null;
   const payout = invitation.revenue_payout;
   // The terms an owner is agreeing to must actually be on screen. The BFF fills a missing
   // payout with `unwrap_or_default()`, which is empty strings — and an empty string is not
@@ -154,8 +157,10 @@ export function PayoutApprovalView({ token }: { token: string }) {
     ? renderableValuation(valuation)
     : payment
       ? renderablePayment(payment)
-      : Boolean(payout?.amount?.trim()) && Boolean(payout?.address?.trim());
-  const words = valuation ? "approval.valuation" : payment ? "approval.payment" : "approval.payout";
+      : feePolicy
+        ? renderableFeePolicy(feePolicy)
+        : Boolean(payout?.amount?.trim()) && Boolean(payout?.address?.trim());
+  const words = valuation ? "approval.valuation" : payment ? "approval.payment" : feePolicy ? "approval.feePolicy" : "approval.payout";
   const burned = !settled && (invitation.attempts_remaining ?? 0) <= 0;
   const expired = !settled && hasExpired(invitation.expires_at);
   const threshold = invitation.threshold ?? 0;
@@ -187,6 +192,8 @@ export function PayoutApprovalView({ token }: { token: string }) {
             <ValuationTermsBlock terms={valuation} payloadHash={invitation.payload_hash} />
           ) : payment ? (
             <PaymentTermsBlock terms={payment} payloadHash={invitation.payload_hash} reasonLabel={t("approval.payment.reasonLabel")} />
+          ) : feePolicy ? (
+            <FeePolicyTermsBlock terms={feePolicy} payloadHash={invitation.payload_hash} />
           ) : (
             <PayoutTerms payout={payout} payloadHash={invitation.payload_hash} />
           )}

@@ -34,6 +34,8 @@ pub fn mail_kind_str(mail: &GovernanceMail) -> &'static str {
 		GovernanceMail::TokenBurned(_) => "APPROVAL_TOKEN_BURNED",
 		GovernanceMail::PaymentConsent(_) => "PAYMENT_CONSENT",
 		GovernanceMail::PaymentApproval(_) => "PAYMENT_APPROVAL",
+		GovernanceMail::FeePolicyApproval(_) => "FEE_POLICY_APPROVAL",
+		GovernanceMail::FeePolicyNotice(_) => "FEE_POLICY_NOTICE",
 	}
 }
 
@@ -53,12 +55,25 @@ pub const fn is_wired() -> bool {
 pub mod wired {
 	use async_trait::async_trait;
 	use evconcierge_contracts::concierge::v1::{
-		GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PayoutApprovalMail, PayoutOutcomeMail, SendGovernanceMailRequest, mail_relay_service_client::MailRelayServiceClient,
+		FeePolicyApprovalMail, FeePolicyNoticeMail, FeeTerms, GovernanceMailKind, PaymentApprovalMail, PaymentConsentMail, PayoutApprovalMail, PayoutOutcomeMail, SendGovernanceMailRequest,
+		mail_relay_service_client::MailRelayServiceClient,
 	};
 	use tonic::{Code, Request, metadata::MetadataValue, transport::Channel};
 	use uuid::Uuid;
 
-	use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError};
+	use crate::ports::governance_mail::{FeePolicyTerms, GovernanceMail, GovernanceMailer, MailDeliveryError};
+
+	/// One set of fee terms, queue shape to wire shape. Field by field on purpose: a renamed
+	/// or renumbered wire field becomes a compile error here, not a mail rendering wrong.
+	fn fee_terms(terms: &FeePolicyTerms) -> FeeTerms {
+		FeeTerms {
+			management_bps: terms.management_bps,
+			performance_bps: terms.performance_bps,
+			hurdle_bps: terms.hurdle_bps,
+			basis: terms.basis.clone(),
+			crystallization: terms.crystallization.clone(),
+		}
+	}
 
 	/// Calls concierge's mail relay, authenticated with the shared banking↔concierge service
 	/// secret — the same `BRIDGE_SERVICE_TOKEN` the one-way lifecycle bridge presents, on the
@@ -85,6 +100,8 @@ pub mod wired {
 				payout_outcome: None,
 				payment_consent: None,
 				payment_approval: None,
+				fee_policy_approval: None,
+				fee_policy_notice: None,
 			};
 			match mail {
 				GovernanceMail::PayoutApproval(approval) => {
@@ -160,6 +177,36 @@ pub mod wired {
 						expires_at: approval.expires_at,
 						approval_url: approval.approval_url.clone(),
 						code: approval.code.clone(),
+					});
+				}
+				GovernanceMail::FeePolicyApproval(approval) => {
+					payload.kind = GovernanceMailKind::FeePolicyApproval as i32;
+					payload.fee_policy_approval = Some(FeePolicyApprovalMail {
+						consilium_id: approval.consilium_id.clone(),
+						initiator_email: approval.initiator_email.clone(),
+						fund: approval.fund.clone(),
+						// Absent when the fund charged nothing: the template says so in words,
+						// which a zero-rate `FeeTerms` would not.
+						current: approval.current.as_ref().map(fee_terms),
+						proposed: Some(fee_terms(&approval.proposed)),
+						reason: approval.reason.clone(),
+						payload_hash: approval.payload_hash.clone(),
+						threshold: approval.threshold,
+						owner_count: approval.owner_count,
+						expires_at: approval.expires_at,
+						approval_url: approval.approval_url.clone(),
+						code: approval.code.clone(),
+					});
+				}
+				GovernanceMail::FeePolicyNotice(notice) => {
+					payload.kind = GovernanceMailKind::FeePolicyNotice as i32;
+					payload.fee_policy_notice = Some(FeePolicyNoticeMail {
+						subject_user_id: notice.subject_user_id.clone(),
+						fund: notice.fund.clone(),
+						current: notice.current.as_ref().map(fee_terms),
+						proposed: Some(fee_terms(&notice.proposed)),
+						effective_at: notice.effective_at,
+						link: notice.link.clone(),
 					});
 				}
 			}

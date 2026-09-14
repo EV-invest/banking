@@ -32,6 +32,7 @@ use piggybank_core::{
 		deposit_watcher::DepositWatcher,
 		deposits::PgDeposits,
 		dispatcher::Dispatcher,
+		fee_policy_changes::PgFeePolicyChanges,
 		fee_sweeper::FeeSweeper,
 		fees::{PgFeeAssessments, PgFeePolicies, PgFeeSettlements, PgPositionAccruals},
 		governance_mail,
@@ -240,6 +241,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// these touch cash; only `settlements` ever crosses into it, once per period per fund.
 	let fees = FeePorts {
 		policies: Arc::new(PgFeePolicies::new(pool.clone())),
+		changes: Arc::new(PgFeePolicyChanges::new(pool.clone())),
 		accruals: Arc::new(PgPositionAccruals::new(pool.clone())),
 		assessments: Arc::new(PgFeeAssessments::new(pool.clone())),
 		settlements: Arc::new(PgFeeSettlements::new(pool.clone())),
@@ -341,6 +343,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// recovery jobs' cadence and their per-item warn-and-continue discipline.
 	let fee_sweeper = FeeSweeper::new(
 		fees.policies.clone(),
+		fees.changes.clone(),
 		fees.accruals.clone(),
 		fees.assessments.clone(),
 		ledger.clone(),
@@ -467,6 +470,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		custody: custody.clone(),
 		policy: outflow.clone(),
 		allocations: allocations.clone(),
+		fee_changes: fees.changes.clone(),
 		nav: nav.clone(),
 		notify: relay_notify.clone(),
 		configured: Arc::from(rails.configured_networks()),

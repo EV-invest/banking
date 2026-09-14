@@ -28,6 +28,8 @@ use crate::ports::governance_mail::{GovernanceMail, GovernanceMailer, MailDelive
 pub enum MailSubject {
 	Consilium(Uuid),
 	Payment(Uuid),
+	/// A change of fee terms whose holders are being notified.
+	FeePolicyChange(Uuid),
 }
 
 /// Queue one mail on the caller's open transaction, so the notification commits with the
@@ -38,20 +40,25 @@ pub enum MailSubject {
 /// send time, because the relay addresses identities in the plane that owns them.
 pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uuid, dedupe_key: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
 	let payload = serde_json::to_string(mail).map_err(|e| DomainError::Repository(e.to_string()))?;
-	let (consilium_id, payment_id) = match subject {
-		MailSubject::Consilium(id) => (Some(id), None),
-		MailSubject::Payment(id) => (None, Some(id)),
+	let (consilium_id, payment_id, fee_policy_change_id) = match subject {
+		MailSubject::Consilium(id) => (Some(id), None, None),
+		MailSubject::Payment(id) => (None, Some(id), None),
+		MailSubject::FeePolicyChange(id) => (None, None, Some(id)),
 	};
-	sqlx::query("INSERT INTO consilium_mail (consilium_id, payment_id, user_id, kind, dedupe_key, payload) VALUES ($1, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (dedupe_key) DO NOTHING")
-		.bind(consilium_id)
-		.bind(payment_id)
-		.bind(user_id)
-		.bind(mail.as_str())
-		.bind(dedupe_key)
-		.bind(payload)
-		.execute(&mut *conn)
-		.await
-		.map_err(repo_err)?;
+	sqlx::query(
+		"INSERT INTO consilium_mail (consilium_id, payment_id, fee_policy_change_id, user_id, kind, dedupe_key, payload) \
+		 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) ON CONFLICT (dedupe_key) DO NOTHING",
+	)
+	.bind(consilium_id)
+	.bind(payment_id)
+	.bind(fee_policy_change_id)
+	.bind(user_id)
+	.bind(mail.as_str())
+	.bind(dedupe_key)
+	.bind(payload)
+	.execute(&mut *conn)
+	.await
+	.map_err(repo_err)?;
 	Ok(())
 }
 

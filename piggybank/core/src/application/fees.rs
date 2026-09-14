@@ -14,20 +14,32 @@
 //! charge the operator sets, prices, and collects, so it gets the same guard as an
 //! investor's own dealing.
 
+use std::collections::HashMap;
+
 use domain::{
 	balance::{LedgerAccountKey, ServiceId},
+	consilium::{Consilium, ConsiliumId, ConsiliumTerms},
 	error::DomainError,
-	fees::{self, FeeAssessment, FeeAssessmentId, FeeCharge, FeePolicy, FeeSettlement, FeeSettlementId, PositionSnapshot, Trigger},
+	fees::{self, ChangeRequirement, FeeAssessment, FeeAssessmentId, FeeCharge, FeePolicy, FeePolicyChangeId, FeePolicySubject, FeeSettlement, FeeSettlementId, PositionSnapshot, Trigger},
 	money::{Nav, Shares, Usdt},
 	users::UserId,
 };
 use tokio::sync::Notify;
 
 use crate::{
-	application::{allocations as allocations_app, funds::dealing_nav},
+	application::{
+		allocations as allocations_app,
+		consilium::{mint_credential, require_governance_mail, require_settled_roster},
+		funds::dealing_nav,
+	},
+	infrastructure::consilium::digest,
 	ports::{
 		allocations::AllocationRegistry,
-		fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeeSettlements, PositionAccruals, SettlementRecord},
+		consilium::ConsiliumRepository,
+		fees::{
+			AssessmentRecord, ConsiliumOpening, FeeAssessments, FeePolicies, FeePolicyChange, FeePolicyChanges, FeeSettlements, NewFeePolicyChange, PolicyRecord, PositionAccruals,
+			SettlementRecord,
+		},
 		ledger::Ledger,
 		nav::NavMarks,
 		redemptions::RedemptionRepository,
@@ -157,13 +169,150 @@ async fn load_assessment_inputs(
 	Ok(Some((policy, snapshot, price)))
 }
 
-/// Install or replace a fund's fee terms (operator). The allocation must exist — terms
-/// for an unregistered product are always a typo, and the registry is the same gate
-/// subscribe runs through.
-pub async fn set_policy(policies: &dyn FeePolicies, allocations: &dyn AllocationRegistry, service: ServiceId, policy: FeePolicy, updated_by: &str) -> Result<FeePolicy, DomainError> {
-	allocations_app::get(allocations, &service).await?;
-	policies.set(&service, policy, updated_by).await?;
-	Ok(policy)
+/// The driven ports a change of terms borrows. Only [`schedule_policy`] needs the consilium
+/// side; reading and cancelling touch the fee plane alone.
+pub struct FeePolicyPorts<'a> {
+	pub policies: &'a dyn FeePolicies,
+	pub changes: &'a dyn FeePolicyChanges,
+	pub allocations: &'a dyn AllocationRegistry,
+	pub consilia: &'a dyn ConsiliumRepository,
+	/// Base URL the owners' emailed approval link is built on.
+	pub approval_url_base: &'a str,
+	/// Whether a governance mailer is wired — see
+	/// [`require_governance_mail`](crate::application::consilium::require_governance_mail).
+	pub governance_mail_wired: bool,
+}
+
+/// A change of terms as the operator asks for it.
+pub struct PolicyChangeRequest {
+	pub service: ServiceId,
+	pub policy: FeePolicy,
+	/// `0` = as soon as the notice period allows.
+	pub requested_effective_from_unix: i64,
+	/// Why, in the requester's words. Required when the owners must approve.
+	pub reason: String,
+}
+
+/// Propose a change of a fund's fee terms (operator).
+///
+/// The requirement is decided by the pure rule in [`fees::requirement_for`]: the owners'
+/// consilium exactly when the change tightens the terms beyond the house envelope, one
+/// `AllocationManage` holder otherwise. An administrator's change is scheduled at once and
+/// the holders are notified; a change needing the owners opens a consilium the requester
+/// must be an owner to open, and the holders are notified when the owners carry it. Either
+/// way the terms bind no earlier than the notice period while anyone holds units — see
+/// `docs/FEES.md` § "Changing the terms".
+pub async fn schedule_policy(ports: &FeePolicyPorts<'_>, requester: UserId, request: PolicyChangeRequest, now: i64) -> Result<FeePolicyChange, DomainError> {
+	// The registry is the same gate subscribe runs through: terms for an unregistered
+	// product are always a typo.
+	allocations_app::get(ports.allocations, &request.service).await?;
+	if request.requested_effective_from_unix > now.saturating_add(fees::MAX_EFFECTIVE_FROM_HORIZON_SECS) {
+		return Err(DomainError::Validation("effective_from may be at most 366 days ahead".into()));
+	}
+	let current = ports.policies.find(&request.service).await?;
+	let requirement = fees::requirement_for(current.as_ref(), &request.policy);
+	fees::validate_reason(&request.reason, requirement == ChangeRequirement::OwnerConsilium)?;
+	// The notice IS the protection, on either path. A change over a held product with no
+	// mailer would be scheduled, its notices queued into a relay that never runs, and bind
+	// 24h later on holders who were told nothing — the guardrail looking healthy the whole
+	// time. A product nobody holds owes nobody a notice and may proceed.
+	if !ports.governance_mail_wired && ports.changes.holder_count(&request.service).await? > 0 {
+		return Err(DomainError::Conflict(
+			"governance mail is not configured, so the holders of this product could not be given notice of a change of terms. Build with the `concierge_governance_mail` feature and configure the concierge mail relay first.".into(),
+		));
+	}
+	let change = NewFeePolicyChange {
+		id: FeePolicyChangeId::new(),
+		service: request.service.clone(),
+		policy: request.policy,
+		requirement,
+		requested_effective_from_unix: request.requested_effective_from_unix,
+		requested_by: requester.to_string(),
+		reason: request.reason.clone(),
+		now_unix: now,
+	};
+	match requirement {
+		ChangeRequirement::Admin => ports.changes.schedule(&change, None).await,
+		ChangeRequirement::OwnerConsilium => {
+			require_governance_mail(ports.governance_mail_wired)?;
+			require_settled_roster(ports.consilia, now).await?;
+			let owners = ports.consilia.owner_roster().await?;
+			// Said in the fee plane's words before the aggregate says it in its own: an
+			// administrator who is not an owner needs to know WHY this particular change is
+			// out of their reach, not merely that a consilium is.
+			if !owners.contains(&requester) {
+				return Err(DomainError::Forbidden(
+					"this change tightens the terms beyond the house envelope, so it needs the owners' consilium — only a fund owner may propose it".into(),
+				));
+			}
+			let terms = ConsiliumTerms::FeePolicy(FeePolicySubject {
+				change_id: change.id,
+				service: request.service,
+				from: current,
+				to: request.policy,
+				reason: request.reason,
+				requested_effective_from: request.requested_effective_from_unix,
+			});
+			let payload_hash = digest(&terms.canonical_bytes());
+			let mut consilium = Consilium::open(ConsiliumId::new(), terms, payload_hash, requester, &owners, now)?;
+			let credentials = consilium.eligible().iter().map(|voter| mint_credential(*voter)).collect::<Result<Vec<_>, _>>()?;
+			ports
+				.changes
+				.schedule(
+					&change,
+					Some(ConsiliumOpening {
+						consilium: &mut consilium,
+						credentials: &credentials,
+						approval_url_base: ports.approval_url_base,
+					}),
+				)
+				.await
+		}
+	}
+}
+
+/// Withdraw a pending change (operator). One still awaiting the owners takes its consilium
+/// down with it — and for that reason only the owner who proposed it, or another owner,
+/// may withdraw it: an administrator who could not have opened the quorum must not be able
+/// to close it either, or every consilium-gated change is one `AllocationManage` holder
+/// away from never reaching a vote.
+pub async fn cancel_change(
+	changes: &dyn FeePolicyChanges,
+	consilia: &dyn ConsiliumRepository,
+	service: &ServiceId,
+	id: FeePolicyChangeId,
+	by: UserId,
+	now: i64,
+) -> Result<FeePolicyChange, DomainError> {
+	let change = changes.find(id).await?.filter(|change| &change.service == service).ok_or_else(|| DomainError::NotFound {
+		entity: "fee policy change",
+		id: id.to_string(),
+	})?;
+	if change.requirement == ChangeRequirement::OwnerConsilium && change.requested_by != by.to_string() && !consilia.owner_roster().await?.contains(&by) {
+		return Err(DomainError::Forbidden(
+			"a change awaiting the owners' consilium may be withdrawn only by the owner who proposed it or by another owner".into(),
+		));
+	}
+	changes.cancel(service, id, &by.to_string(), now).await
+}
+
+/// A product's whole history of terms, newest version first.
+pub async fn list_changes(changes: &dyn FeePolicyChanges, service: &ServiceId) -> Result<Vec<FeePolicyChange>, DomainError> {
+	changes.list(service).await
+}
+
+/// The live terms of a product together with the change on its way, if any — what every
+/// reader of a policy is shown, holder or not: the terms they are on, and the terms coming.
+pub struct PolicyView {
+	pub current: Option<PolicyRecord>,
+	pub pending: Option<FeePolicyChange>,
+}
+
+pub async fn policy_view(policies: &dyn FeePolicies, changes: &dyn FeePolicyChanges, service: &ServiceId) -> Result<PolicyView, DomainError> {
+	Ok(PolicyView {
+		current: policies.current(service).await?,
+		pending: changes.pending(service).await?,
+	})
 }
 
 /// One fund's terms, or `None` when the product charges nothing.
@@ -171,9 +320,50 @@ pub async fn get_policy(policies: &dyn FeePolicies, service: &ServiceId) -> Resu
 	policies.find(service).await
 }
 
-/// Every configured policy.
-pub async fn list_policies(policies: &dyn FeePolicies) -> Result<Vec<(ServiceId, FeePolicy)>, DomainError> {
-	policies.list().await
+/// Every configured policy, each with its pending change.
+pub async fn list_policies(policies: &dyn FeePolicies, changes: &dyn FeePolicyChanges) -> Result<Vec<(ServiceId, PolicyView)>, DomainError> {
+	let mut views = Vec::new();
+	for (service, current) in policies.list().await? {
+		let pending = changes.pending(&service).await?;
+		views.push((service, PolicyView { current: Some(current), pending }));
+	}
+	Ok(views)
+}
+
+/// How many consecutive failed promotions of one change turn the per-tick warning into an
+/// error: ten minutes of the same change refusing to land is no longer a transient.
+pub const PROMOTION_FAILURES_BEFORE_ERROR: u32 = 10;
+
+/// Promote every scheduled change whose moment has come. Driven by the fee sweeper; returns
+/// how many were promoted. A failure on one product warns and moves on — the change stays
+/// `scheduled` and the next tick retries it — so one product's broken position cannot hold
+/// every other product's terms hostage. `failures` is the sweeper's memory of consecutive
+/// failures per change: past [`PROMOTION_FAILURES_BEFORE_ERROR`] the line is an error, with
+/// the database's own words, because a change that will never land is an operator's problem
+/// and a warning per minute is how such a problem hides in a log.
+pub async fn promote_due(changes: &dyn FeePolicyChanges, now: i64, failures: &mut HashMap<FeePolicyChangeId, u32>) -> Result<usize, DomainError> {
+	let mut promoted = 0usize;
+	for id in changes.due(now).await? {
+		match changes.promote(id, now).await {
+			Ok(true) => {
+				promoted += 1;
+				failures.remove(&id);
+			}
+			Ok(false) => {
+				failures.remove(&id);
+			}
+			Err(err) => {
+				let streak = failures.entry(id).or_insert(0);
+				*streak = streak.saturating_add(1);
+				if *streak >= PROMOTION_FAILURES_BEFORE_ERROR {
+					tracing::error!(change_id = %id, consecutive_failures = *streak, "fee policy: a scheduled change keeps failing to promote: {err}");
+				} else {
+					tracing::warn!(change_id = %id, consecutive_failures = *streak, "fee policy: could not promote a scheduled change (will retry): {err}");
+				}
+			}
+		}
+	}
+	Ok(promoted)
 }
 
 /// One investor's fee statement, newest first.
