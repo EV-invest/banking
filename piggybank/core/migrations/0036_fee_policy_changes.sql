@@ -94,13 +94,22 @@ FROM fee_policies;
 -- (4) THE CEILINGS: 5% p.a. management, 50% performance — `MAX_MANAGEMENT_BPS` and
 -- `MAX_PERFORMANCE_BPS` in domain/src/fees.rs, stated here too so no write path, not even a
 -- direct one, can put a higher figure where the sweeper reads it. `NOT VALID`: a row that
--- already exceeds them must not stop the pod from booting (the promotion path will refuse
--- to write another like it, and the operator can see it on the history screen); every
--- INSERT and UPDATE from here on is held to them.
+-- already exceeds them must not stop the pod from booting; every INSERT and UPDATE from
+-- here on is held to them.
+--
+-- On the history table the ceiling holds only while a row can still bind — pending or
+-- active. A `NOT VALID` CHECK is re-evaluated on UPDATE, and the one UPDATE a legacy row
+-- above the ceiling ever receives is `SET state = 'superseded'` when its replacement is
+-- promoted: an unconditional ceiling would refuse exactly that, roll back the promotion
+-- every minute, and make an over-the-ceiling policy the one policy that can never be
+-- lowered — the very case #233 exists to end. A closed row is history, and history is not
+-- held to today's ceiling.
 ALTER TABLE fee_policies ADD CONSTRAINT fee_policies_management_ceiling CHECK (management_bps <= 500) NOT VALID;
 ALTER TABLE fee_policies ADD CONSTRAINT fee_policies_performance_ceiling CHECK (performance_bps <= 5000) NOT VALID;
-ALTER TABLE fee_policy_changes ADD CONSTRAINT fee_policy_changes_management_ceiling CHECK (management_bps <= 500) NOT VALID;
-ALTER TABLE fee_policy_changes ADD CONSTRAINT fee_policy_changes_performance_ceiling CHECK (performance_bps <= 5000) NOT VALID;
+ALTER TABLE fee_policy_changes ADD CONSTRAINT fee_policy_changes_management_ceiling
+    CHECK (state IN ('superseded', 'rejected', 'cancelled') OR management_bps <= 500) NOT VALID;
+ALTER TABLE fee_policy_changes ADD CONSTRAINT fee_policy_changes_performance_ceiling
+    CHECK (state IN ('superseded', 'rejected', 'cancelled') OR performance_bps <= 5000) NOT VALID;
 
 -- (5) The third consilium kind. ONE COMMIT WITH THE RUST ARM, for the reason 0029 and 0031
 -- state: `kind` decides how `terms` is read, and a row of a kind the binary cannot parse

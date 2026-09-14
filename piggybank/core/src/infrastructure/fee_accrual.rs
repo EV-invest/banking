@@ -119,7 +119,9 @@ async fn accrued_management(conn: &mut PgConnection, row: &sqlx::postgres::PgRow
 		ManagementBasis::MarketValue => match latest_nav(&mut *conn, service).await? {
 			Some(nav) => fees::management_due(&policy, &snapshot, nav, now_unix),
 			None => {
-				let fallback = FeePolicy::new(policy.management_bps(), 0, 0, ManagementBasis::InvestedCapital, policy.crystallization())?;
+				// Derived from a STORED policy, so held to what storage admits, not to the
+				// ceiling a new policy must clear: a legacy rate must still be carried.
+				let fallback = FeePolicy::from_stored(policy.management_bps(), 0, 0, ManagementBasis::InvestedCapital, policy.crystallization())?;
 				fees::management_due(&fallback, &snapshot, Nav::from_base_units(UNUSED_PRICE), now_unix)
 			}
 		},

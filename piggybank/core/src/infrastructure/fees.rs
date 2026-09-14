@@ -66,7 +66,7 @@ impl PgFeePolicies {
 
 pub(crate) fn policy_from_row(row: &sqlx::postgres::PgRow) -> Result<(ServiceId, FeePolicy), DomainError> {
 	let service = ServiceId::parse(row.try_get::<String, _>("service").map_err(repo_err)?.as_str())?;
-	let policy = FeePolicy::new(
+	let policy = FeePolicy::from_stored(
 		u32::try_from(row.try_get::<i32, _>("management_bps").map_err(repo_err)?).map_err(|_| DomainError::Repository("negative management rate".into()))?,
 		u32::try_from(row.try_get::<i32, _>("performance_bps").map_err(repo_err)?).map_err(|_| DomainError::Repository("negative performance rate".into()))?,
 		u32::try_from(row.try_get::<i32, _>("hurdle_bps").map_err(repo_err)?).map_err(|_| DomainError::Repository("negative hurdle rate".into()))?,
