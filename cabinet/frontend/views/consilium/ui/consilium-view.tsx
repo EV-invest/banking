@@ -68,7 +68,7 @@ import { BreakGlassNotice } from "@/shared/ui/break-glass-notice";
 import { Link } from "@/shared/ui/cabinet-link";
 import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
-import { EMPTY_BOX, isSettled, stateLabel, stateTone } from "@/views/consilium/lib/format";
+import { EMPTY_BOX, consiliumKind, consiliumKindLabel, consiliumStateLabel, isSettled, stateTone } from "@/views/consilium/lib/format";
 import {
   everyReadFailed,
   knownValue,
@@ -79,6 +79,7 @@ import {
   type Read,
 } from "@/views/consilium/lib/reads";
 import { AdmissionList, ProposeAdmission } from "@/views/consilium/ui/admissions";
+import { FeePolicyTerms, feePolicyWords } from "@/views/consilium/ui/fee-policy-terms";
 import { PayoutSkeleton, RosterSkeleton } from "@/views/consilium/ui/loading";
 import { PaymentTerms, paymentWords } from "@/views/consilium/ui/payment-terms";
 import { ReadFailure } from "@/views/consilium/ui/read-failure";
@@ -443,15 +444,17 @@ function PayoutSection({
                         <ItemTitle className="block w-auto truncate font-medium tabular-nums">
                           {consilium.payment
                             ? `${formatExactUsdt(consilium.payment.amount)} USDT · ${paymentWords(consilium.payment)}`
-                            : `${formatExactUsdt(consilium.revenue_payout?.amount)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
+                            : consilium.fee_policy
+                              ? feePolicyWords(consilium.fee_policy)
+                              : `${formatExactUsdt(consilium.revenue_payout?.amount)} USDT · ${networkLabel(consilium.revenue_payout?.network)}`}
                         </ItemTitle>
                         <ItemDescription className="truncate text-xs tabular-nums">
                           {/* `??` cannot do this: an undecided consilium carries the STRING "0", which is truthy. */}
-                          {formatMoment(hasStamp(consilium.decided_at) ? consilium.decided_at : consilium.created_at, locale)}
+                          {`${consiliumKindLabel(consiliumKind(consilium), t)} · ${formatMoment(hasStamp(consilium.decided_at) ? consilium.decided_at : consilium.created_at, locale)}`}
                         </ItemDescription>
                       </ItemContent>
                       <Badge variant="outline" className={cn("shrink-0", stateTone(consilium.state))}>
-                        {stateLabel(consilium.state, t)}
+                        {consiliumStateLabel(consilium, t)}
                       </Badge>
                     </Item>
                   </Fragment>
@@ -473,8 +476,11 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
   const [error, setError] = useState<unknown>(null);
 
   const payout = consilium.revenue_payout;
-  // A payment consilium carries its terms in `payment`; the payout fields are empty then.
+  // A payment consilium carries its terms in `payment`, a change of terms in `fee_policy`;
+  // the payout fields are empty then.
   const payment = consilium.payment ?? null;
+  const feePolicy = consilium.fee_policy ?? null;
+  const kind = consiliumKind(consilium);
   const threshold = consilium.threshold ?? 0;
   const approvals = consilium.approvals ?? 0;
   const progress = threshold > 0 ? Math.min(100, Math.round((approvals / threshold) * 100)) : 0;
@@ -498,17 +504,27 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="text-2xl font-semibold leading-none tabular-nums text-foreground">
-          {formatExactUsdt(payment ? payment.amount : payout?.amount)}
-          <span className="ml-2 text-sm font-medium text-muted-foreground">USDT</span>
-        </p>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted-foreground">{consiliumKindLabel(kind, t)}</span>
+          {feePolicy ? (
+            // Not a money move: the product is the subject, so the product is the headline.
+            <p className="text-2xl font-semibold leading-none text-foreground">{feePolicy.allocation_name || feePolicy.service}</p>
+          ) : (
+            <p className="text-2xl font-semibold leading-none tabular-nums text-foreground">
+              {formatExactUsdt(payment ? payment.amount : payout?.amount)}
+              <span className="ml-2 text-sm font-medium text-muted-foreground">USDT</span>
+            </p>
+          )}
+        </div>
         <Badge variant="outline" className={stateTone(consilium.state)}>
-          {stateLabel(consilium.state, t)}
+          {consiliumStateLabel(consilium, t)}
         </Badge>
       </div>
 
       {payment ? (
         <PaymentTerms terms={payment} />
+      ) : feePolicy ? (
+        <FeePolicyTerms terms={feePolicy} />
       ) : (
         // Full, monospace, wrapped rather than truncated — the same rule as the approval
         // email and the approval page. An owner who checks the address here and approves it
@@ -519,7 +535,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
       )}
 
       <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-        {!payment && <span className="tabular-nums">{t("consilium.payout.network", { network: networkLabel(payout?.network) })}</span>}
+        {kind === "revenue_payout" && <span className="tabular-nums">{t("consilium.payout.network", { network: networkLabel(payout?.network) })}</span>}
         <span className="font-mono-tech">{t("consilium.payout.fingerprint", { hash: hashPrefix(consilium.payload_hash) })}</span>
         <span>{t("consilium.payout.openedBy", { initiator: consilium.initiator_email })}</span>
         <span className="tabular-nums">
