@@ -1,5 +1,6 @@
-//! The deposit-log port — the control-plane record behind the company-money
-//! commands (seed capital, record an on-chain deposit).
+//! The deposit-log port — the control-plane record behind every on-chain arrival, a
+//! user's deposit and the fund's own capital alike (the latter is a `Party::Piggybank`
+//! deposit; there is no separate capital command since issue #234).
 //!
 //! These are the aggregate-less standalone [`LedgerEvent`](domain::balance::LedgerEvent)
 //! facts (see [`domain::balance`]) — there is no aggregate to hang a `Repository`
@@ -18,10 +19,6 @@ use domain::{
 
 #[async_trait]
 pub trait Deposits: Send + Sync {
-	/// Record the company's own capital seeded on `network` (`Dr WALLET / Cr FUND`)
-	/// as an outbox event.
-	async fn seed_capital(&self, network: Network, amount: Usdt) -> Result<(), DomainError>;
-
 	/// Record an on-chain deposit, **idempotent by `tx_ref`**: the unique gate makes
 	/// a second record of the same chain tx impossible, so the credit happens at most
 	/// once even under concurrent recorders. Returns `true` if newly recorded,

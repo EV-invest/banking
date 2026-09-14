@@ -666,7 +666,7 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 
 | RPC | Who | Boundary | In-tx invariant |
 | --- | --- | --- | --- |
-| `GetTreasury` / `SeedCapital` / `RecordDeposit` | operator | `require_permission` (RBAC matrix) | `tx_ref` gate |
+| `GetTreasury` / `SeedCapital` / `RecordDeposit` | operator | `require_permission` (RBAC matrix) | chain-proven arrival (amount + party read off the chain) ∧ `tx_ref` gate |
 | `Subscribe` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | available claim ≥ cash ∧ fresh NAV (TB flag backstop) |
 | `Redeem` | the user | `sub == user`, `is_access`, **not revoked, not paused, not frozen** | available units ≥ amount ∧ fresh NAV (TB flag backstop) |
 | `CancelRedemption` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
@@ -817,7 +817,11 @@ idempotent by the same `tx_ref` machinery as a user deposit. The sweep moves USD
 derived address INTO the treasury and that dollar is already in `wallet:<net>`, so a credit
 only fires when the sender is outside every wallet we control — see `is_external_source` in
 both watchers. `RecordDeposit` (admin, `CapitalManage`) is the manual path for anything the
-watchers could not see; prefer it over `SeedCapital`, which has no dedup key.
+watchers could not see, and `SeedCapital` is the same verification with one extra assertion
+— "this is the fund's own money": it refuses a transfer that landed on a user's deposit
+address instead of crediting that user, so an operator who meant capital and got a deposit
+finds out. Both are chain-proven and idempotent by the chain `tx_ref`; neither accepts an
+amount from the caller (the free-amount, no-dedup `SeedCapital` was removed in #234).
 
 [`reaper`](src/infrastructure/reaper.rs) (`Reaper::sweep`) owns the timeout for abandoned
 sagas (TB pendings are `timeout = 0`, so nothing auto-voids). Split by safety per the

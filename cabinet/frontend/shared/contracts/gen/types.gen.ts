@@ -2854,6 +2854,15 @@ export type BankingV1RotateDepositAddressResponse = {
 
 /**
  * SeedCapitalRequest
+ *
+ * Record fund capital that reached a rail's treasury, PROVEN against the chain.
+ *
+ * Like RecordDepositRequest the caller supplies only a pointer to a fact: the amount is
+ * read back from the chain and the recipient decides whether it is capital at all. The
+ * transfer must have landed on the rail's treasury address from a sender outside every
+ * wallet we control. A transfer to a user's deposit address is that user's deposit, not
+ * capital — refused, use RecordDeposit. The sweep consolidating a user's address into
+ * the treasury is money already on the ledger — refused.
  */
 export type BankingV1SeedCapitalRequest = {
     /**
@@ -2863,18 +2872,37 @@ export type BankingV1SeedCapitalRequest = {
      */
     network?: string;
     /**
-     * amount
+     * tx_ref
      *
-     * decimal USDT
+     * `txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key
      */
-    amount?: string;
+    tx_ref?: string;
+    /**
+     * expected_amount
+     *
+     * Optional operator assertion in decimal USDT. When set it must equal what the chain
+     * reports or the call is refused, so a mistyped reference fails loudly instead of
+     * silently crediting some other transfer.
+     */
+    expected_amount?: string;
 };
 
 /**
  * SeedCapitalResponse
  */
 export type BankingV1SeedCapitalResponse = {
-    [key: string]: never;
+    /**
+     * recorded
+     *
+     * false if `tx_ref` was already recorded (idempotent no-op)
+     */
+    recorded?: boolean;
+    /**
+     * amount
+     *
+     * what the CHAIN reported, decimal USDT — never the caller's number
+     */
+    amount?: string;
 };
 
 /**

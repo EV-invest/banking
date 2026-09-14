@@ -2014,7 +2014,7 @@
           "banking.v1.BalanceService"
         ],
         "summary": "SeedCapital",
-        "description": "Inject the company's own capital onto a rail (Dr WALLET / Cr FUND).",
+        "description": "Record the company's own capital arriving on a rail (Dr WALLET / Cr FUND), PROVEN\n against the chain. Same verification as RecordDeposit plus the assertion that the\n transfer is fund capital: it must have landed on the rail's treasury address from an\n external sender. A transfer to a user's deposit address is that user's deposit and is\n refused (record it with RecordDeposit); the sweep is refused. Idempotent by `tx_ref`.",
         "operationId": "banking.v1.BalanceService.SeedCapital",
         "parameters": [
           {
@@ -9832,17 +9832,35 @@
             "title": "network",
             "description": "bep20 | polygon | trc20 | ton — the rail the capital lands on"
           },
-          "amount": {
+          "tx_ref": {
             "type": "string",
-            "title": "amount",
-            "description": "decimal USDT"
+            "title": "tx_ref",
+            "description": "`txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key"
+          },
+          "expected_amount": {
+            "type": "string",
+            "title": "expected_amount",
+            "description": "Optional operator assertion in decimal USDT. When set it must equal what the chain\n reports or the call is refused, so a mistyped reference fails loudly instead of\n silently crediting some other transfer."
           }
         },
         "title": "SeedCapitalRequest",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Record fund capital that reached a rail's treasury, PROVEN against the chain.\n\n Like RecordDepositRequest the caller supplies only a pointer to a fact: the amount is\n read back from the chain and the recipient decides whether it is capital at all. The\n transfer must have landed on the rail's treasury address from a sender outside every\n wallet we control. A transfer to a user's deposit address is that user's deposit, not\n capital — refused, use RecordDeposit. The sweep consolidating a user's address into\n the treasury is money already on the ledger — refused."
       },
       "banking.v1.SeedCapitalResponse": {
         "type": "object",
+        "properties": {
+          "recorded": {
+            "type": "boolean",
+            "title": "recorded",
+            "description": "false if `tx_ref` was already recorded (idempotent no-op)"
+          },
+          "amount": {
+            "type": "string",
+            "title": "amount",
+            "description": "what the CHAIN reported, decimal USDT — never the caller's number"
+          }
+        },
         "title": "SeedCapitalResponse",
         "additionalProperties": false
       },

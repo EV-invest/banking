@@ -437,7 +437,9 @@ async fn withdraw_on_a_short_rail_is_queued_then_dispatched() {
 	assert_eq!(bal(&h, &claim).await.locked, big, "the gross is reserved while queued");
 
 	// The treasury tops up the TON rail past the net; the worker then dispatches it.
-	balance_app::seed_fund_capital(&h.deposits, &h.notify, Network::Ton, big).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, Network::Ton, big)
+		.await
+		.unwrap();
 	h.relay.drain().await;
 	let dispatched = withdrawal_app::dispatch_withdrawal(h.withdrawals.as_ref(), &StubCustody, &policy(&h), KycGate::ENFORCED, &h.notify, withdrawal.id())
 		.await
@@ -635,7 +637,9 @@ async fn the_dispatcher_sweeps_a_queued_withdrawal_once_both_gates_pass() {
 	let network = Network::Ton;
 	deposit(&h, user, Network::Bep20, "100").await;
 	// A small top-up so the TB TON gate covers the net without dwarfing the shared rail.
-	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("60")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("60"))
+		.await
+		.unwrap();
 	h.relay.drain().await;
 
 	let custody = Arc::new(TestCustody::short_everywhere());
@@ -695,7 +699,9 @@ async fn the_dispatcher_skips_a_frozen_owners_queued_withdrawal() {
 	// the shared TON rail out of a huge dispatch (mirrors the sibling dispatcher test).
 	let network = Network::Ton;
 	deposit(&h, user, Network::Bep20, "100").await;
-	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("60")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("60"))
+		.await
+		.unwrap();
 	h.relay.drain().await;
 
 	let custody = Arc::new(TestCustody::short_everywhere());
@@ -754,7 +760,9 @@ async fn a_sweep_dispatches_fifo_within_the_rails_remaining_liquidity() {
 	deposit(&h, user, Network::Bep20, "200").await;
 	// The TB rail covers every net individually — the on-chain view is the binding
 	// budget, so what's proven is the running deduction, not a static shortfall.
-	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("200")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("200"))
+		.await
+		.unwrap();
 	h.relay.drain().await;
 
 	let custody = Arc::new(TestCustody::short_everywhere());
@@ -829,7 +837,9 @@ async fn the_dispatcher_skips_a_queued_withdrawal_whose_owner_lost_their_tier() 
 	// (mirrors the sibling dispatcher tests).
 	let network = Network::Ton;
 	deposit(&h, user, Network::Bep20, "100").await;
-	balance_app::seed_fund_capital(&h.deposits, &h.notify, network, usdt("60")).await.unwrap();
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("60"))
+		.await
+		.unwrap();
 	h.relay.drain().await;
 
 	let custody = Arc::new(TestCustody::short_everywhere());

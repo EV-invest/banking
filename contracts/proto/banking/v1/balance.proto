@@ -16,7 +16,11 @@ service BalanceService {
   // (Layer 1), read live from TigerBeetle (Read-First).
   rpc GetTreasury(GetTreasuryRequest) returns (Treasury);
 
-  // Inject the company's own capital onto a rail (Dr WALLET / Cr FUND).
+  // Record the company's own capital arriving on a rail (Dr WALLET / Cr FUND), PROVEN
+  // against the chain. Same verification as RecordDeposit plus the assertion that the
+  // transfer is fund capital: it must have landed on the rail's treasury address from an
+  // external sender. A transfer to a user's deposit address is that user's deposit and is
+  // refused (record it with RecordDeposit); the sweep is refused. Idempotent by `tx_ref`.
   rpc SeedCapital(SeedCapitalRequest) returns (SeedCapitalResponse);
 
   // Record a settled on-chain deposit, crediting a party's claim. Idempotent by
@@ -230,12 +234,31 @@ message Treasury {
   string reserved_for_withdrawals = 7;  // of held_for_clients, locked by in-flight withdrawals
 }
 
+// Record fund capital that reached a rail's treasury, PROVEN against the chain.
+//
+// Like RecordDepositRequest the caller supplies only a pointer to a fact: the amount is
+// read back from the chain and the recipient decides whether it is capital at all. The
+// transfer must have landed on the rail's treasury address from a sender outside every
+// wallet we control. A transfer to a user's deposit address is that user's deposit, not
+// capital — refused, use RecordDeposit. The sweep consolidating a user's address into
+// the treasury is money already on the ledger — refused.
 message SeedCapitalRequest {
   string network = 1;  // bep20 | polygon | trc20 | ton — the rail the capital lands on
-  string amount = 2;   // decimal USDT
+  // The amount was once caller-supplied — a free credit of `fund` with no dedup key
+  // (issue #234). The chain is the only source for it now.
+  reserved 2;
+  reserved "amount";
+  string tx_ref = 3;  // `txhash:logIndex` (EVM) | `txhash:recipient` (TON) — verified, and the idempotency key
+  // Optional operator assertion in decimal USDT. When set it must equal what the chain
+  // reports or the call is refused, so a mistyped reference fails loudly instead of
+  // silently crediting some other transfer.
+  string expected_amount = 4;
 }
 
-message SeedCapitalResponse {}
+message SeedCapitalResponse {
+  bool recorded = 1;  // false if `tx_ref` was already recorded (idempotent no-op)
+  string amount = 2;  // what the CHAIN reported, decimal USDT — never the caller's number
+}
 
 // Record an arrival that reached a rail out of band, PROVEN against the chain.
 //
