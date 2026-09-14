@@ -11,6 +11,7 @@ import { useT } from "@evinvest/i18n/react";
 import { Button } from "@evinvest/uikit";
 
 import type { AllocationState } from "@/shared/contracts/admin";
+import { cn } from "@/shared/lib/cn";
 import type { AllocationPanelKind } from "@/views/admin/allocations/lib/panel";
 
 export function AllocationRowActions({
@@ -20,6 +21,7 @@ export function AllocationRowActions({
   onOpenPanel,
   onEdit,
   onToggle,
+  className,
 }: {
   state: AllocationState;
   busy: boolean;
@@ -27,11 +29,13 @@ export function AllocationRowActions({
   onOpenPanel: (kind: AllocationPanelKind) => void;
   onEdit: () => void;
   onToggle: () => void;
+  className?: string;
 }) {
   const t = useT();
   return (
-    // i18n-max: 12 per verb — four shrink-0 controls share this cell.
-    <div className="flex justify-end gap-2">
+    // i18n-max: 12 per verb — four shrink-0 controls share this cell. They wrap rather
+    // than overflow: with the side panel open the cell is narrower than four in a row.
+    <div className={cn("flex flex-wrap justify-end gap-2", className)}>
       <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onOpenPanel("grants")}>
         <KeyRound className="size-3.5" />
         {t("admin.alloc.grants.action")}

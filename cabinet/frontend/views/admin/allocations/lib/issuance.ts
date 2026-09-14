@@ -19,6 +19,15 @@ export interface IssueDraft {
 
 export const EMPTY_ISSUE_DRAFT: IssueDraft = { holder: null, units: "", costBasis: "" };
 
+/** The form once a mint has landed. The holder stays — a series of issues to one person
+ *  must not send the operator back to the picker each time — and only the figures clear.
+ *  The form retires its submission key at the same moment (see `submissionKeyFor`): the
+ *  next body is a new decision even when it is byte-identical, which it is exactly when
+ *  the same holder is issued the same amount twice on purpose. */
+export function afterIssued(draft: IssueDraft): IssueDraft {
+  return { ...draft, units: "", costBasis: "" };
+}
+
 /** Why the draft cannot be sent, in the order the form should point at: the holder is the
  *  one thing the form cannot guess, then the figure that must be positive, then the one
  *  that need only be well-formed. `null` means send it. */

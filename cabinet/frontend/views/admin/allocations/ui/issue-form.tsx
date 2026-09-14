@@ -12,7 +12,7 @@ import { Button, Input, ToggleGroup, ToggleGroupItem } from "@evinvest/uikit";
 
 import type { IssueUnitsBody } from "@/entities/admin/api/admin-client";
 import { cn } from "@/shared/lib/cn";
-import { EMPTY_ISSUE_DRAFT, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft, type SubmissionKey } from "@/views/admin/allocations/lib/issuance";
+import { EMPTY_ISSUE_DRAFT, afterIssued, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft, type SubmissionKey } from "@/views/admin/allocations/lib/issuance";
 import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-picker";
 
 const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
@@ -25,6 +25,9 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
   const submission = useRef<SubmissionKey | null>(null);
 
   const problem = issueDraftProblem(draft);
+  // Under the button, only what no field already says: an unpicked holder and untouched
+  // units have no message of their own, while a malformed figure is flagged at its field.
+  const reason = problem === "holder" ? "admin.alloc.issue.reason.holder" : problem === "units" && draft.units.trim() === "" ? "admin.alloc.issue.reason.units" : null;
   const kind = draft.holder?.kind ?? "user";
   const pickedUser: PickedUser | null = draft.holder?.kind === "user" ? { userId: draft.holder.userId, email: draft.holder.label } : null;
 
@@ -42,7 +45,9 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
     if (!body || !draft.holder) return;
     const label = draft.holder.kind === "company" ? t("admin.alloc.issue.holder.company") : draft.holder.label;
     if (await onSubmit(body, label)) {
-      setDraft(EMPTY_ISSUE_DRAFT);
+      // The holder stays for the next issue in the series; the key is retired so that an
+      // identical figure typed again is a new mint, not a de-duplicated retry.
+      setDraft(afterIssued);
       submission.current = null;
     }
   };
@@ -81,6 +86,9 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
         {busy ? <Loader2 className="size-4 animate-spin" /> : null}
         {t("admin.alloc.issue.submit")}
       </Button>
+      {/* The kit dims a disabled button to half opacity, which on a teal fill over navy
+          reads as "slightly quieter" rather than "off" — so the button also says why. */}
+      {reason && <p className="text-center text-xs text-muted-foreground">{t(reason)}</p>}
     </div>
   );
 }
