@@ -144,6 +144,11 @@ async fn provision_binary_database(base_url: String) -> String {
 /// Leave `<template>` existing and migrated to exactly this build's migration set, with no
 /// connection of ours still attached (`CREATE DATABASE … TEMPLATE` refuses a template that
 /// has other sessions). Caller holds the provisioning lock.
+///
+/// The template outlives builds, so it can carry another branch's migrations: a file that
+/// was edited (`VersionMismatch`) or a version this build does not know (`VersionMissing`,
+/// after switching branches). Both mean "not our schema" and are answered by rebuilding the
+/// template from scratch rather than failing every suite.
 async fn ensure_migrated_template(admin: &mut PgConnection, base_url: &str, template: &str) {
 	let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)")
 		.bind(template)
@@ -157,6 +162,15 @@ async fn ensure_migrated_template(admin: &mut PgConnection, base_url: &str, temp
 	let template_url = swap_db(base_url, template);
 	match migrate_template(&template_url).await {
 		Ok(()) => {}
+		Err(err @ (MigrateError::VersionMismatch(_) | MigrateError::VersionMissing(_))) => {
+			eprintln!("test template database {template} was migrated by another build ({err}) — recreating it");
+			sqlx::query(AssertSqlSafe(format!("DROP DATABASE {template} WITH (FORCE)")))
+				.execute(&mut *admin)
+				.await
+				.expect("drop the stale template database");
+			create_database(admin, template).await;
+			migrate_template(&template_url).await.expect("migrate the recreated template database");
+		}
 		Err(err) => panic!("migrating the test template database {template}: {err}"),
 	}
 }
