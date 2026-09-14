@@ -629,6 +629,53 @@ pub async fn revoke_allocation_access(State(st): State<AppState>, jar: CookieJar
 	Ok(Json(json!({ "ok": true })))
 }
 
+/// `POST /api/admin/allocations/issue` — mint units in kind to an investor or to the
+/// company, with no cash leg. Body: `service`, `units`, `idempotency_key`, and exactly
+/// one of `user_id` (the id the console carries — concierge-first, banking as a
+/// fallback, resolved hub-side like `/users/balance`) or `company: true`; `cost_basis`
+/// is optional and defaults hub-side to `units × NAV`. The key is the retry contract —
+/// the console generates one per form submission and re-sends the same one on a
+/// timeout, so a double click lands one mint.
+pub async fn issue_units(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::UnitIssuance>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(units), Some(idempotency_key)) = (required(&v, "service"), required(&v, "units"), required(&v, "idempotency_key")) else {
+		return Err(ApiError::BadRequest("service, units and idempotency_key are required".into()));
+	};
+	// The hub refuses a request naming nobody; answering here spares it a money-plane
+	// token for a form the console never filled in.
+	let holder = match (required(&v, "user_id"), bool_field(&v, "company")) {
+		(Some(_), true) => return Err(ApiError::BadRequest("user_id and company are mutually exclusive".into())),
+		(Some(user_id), false) => bk::issue_units_request::Holder::UserId(user_id),
+		(None, true) => bk::issue_units_request::Holder::Company(true),
+		(None, false) => return Err(ApiError::BadRequest("a holder is required: user_id, or company = true".into())),
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::IssueUnitsRequest {
+		service,
+		holder: Some(holder),
+		units,
+		cost_basis: editable(&v, "cost_basis"),
+		idempotency_key,
+	};
+	Ok(Json(st.grpc.issue_units(&token, req).await?.into()))
+}
+
+/// `GET /api/admin/allocations/holders?service=` — the product's settled supply split
+/// into the company's stake, the fee account's units and what investors hold.
+pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::UnitHolders>, ApiError> {
+	require_admin(&st, &jar).await?;
+	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let holders = st.grpc.list_unit_holders(&token, &service).await.map_err(|s| ApiError::read(s, "unit holders unavailable"))?;
+	Ok(Json(holders.into()))
+}
+
 /// `POST /api/admin/valuation/post` — post a fund NAV (with the fat-finger guard).
 pub async fn post_valuation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FundNav>, ApiError> {
 	require_admin(&st, &jar).await?;
@@ -1341,6 +1388,14 @@ mod admin_route_tests {
 		}
 
 		async fn set_allocation_unit_cap(&self, _: GrpcRequest<bk::SetAllocationUnitCapRequest>) -> Result<GrpcResponse<bk::Allocation>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn issue_units(&self, _: GrpcRequest<bk::IssueUnitsRequest>) -> Result<GrpcResponse<bk::UnitIssuance>, Status> {
+			Err(Status::unimplemented("not reached by the access routes"))
+		}
+
+		async fn list_unit_holders(&self, _: GrpcRequest<bk::ListUnitHoldersRequest>) -> Result<GrpcResponse<bk::UnitHolders>, Status> {
 			Err(Status::unimplemented("not reached by the access routes"))
 		}
 	}

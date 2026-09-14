@@ -19,6 +19,9 @@
 //! The fee plane adds [`FeePolicies`] (a fund's terms), [`PositionAccruals`] (the
 //! per-investor accrual clocks), [`FeeAssessments`] (the charge), and
 //! [`FeeSettlements`] (converting accumulated fee units to cash).
+//!
+//! [`UnitIssuanceRepository`] records an operator's in-kind mint — units to an investor
+//! or to the company with no cash leg — the one supply path beside a subscription.
 
 pub mod allocations;
 pub mod consilium;
@@ -27,6 +30,7 @@ pub mod deposit_addresses;
 pub mod deposits;
 pub mod fees;
 pub mod governance_mail;
+pub mod issuance;
 pub mod ledger;
 pub mod nav;
 pub mod operations;
@@ -51,6 +55,7 @@ use domain::{
 };
 pub use fees::{AssessmentRecord, FeeAssessments, FeePolicies, FeePorts, FeeSettlements, PositionAccrual, PositionAccruals, SettlementRecord};
 pub use governance_mail::GovernanceMailer;
+pub use issuance::{IssueOutcome, UnitIssuanceRecord, UnitIssuanceRepository};
 pub use ledger::{CompletionKind, Ledger, LedgerBalance, LedgerError, LedgerTransfer, PendingCompletion};
 pub use nav::{NavMarks, Valuation};
 pub use operations::OperationFeed;

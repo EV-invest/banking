@@ -188,6 +188,7 @@ pub(crate) fn fund_nav_to_proto(view: &funds_app::FundNavView) -> pb::FundNav {
 		stale: view.stale,
 		unit_cap: view.unit_cap.to_decimal_string(),
 		remaining_capacity: view.remaining_capacity.to_decimal_string(),
+		company_units: view.company_units.to_decimal_string(),
 	}
 }
 

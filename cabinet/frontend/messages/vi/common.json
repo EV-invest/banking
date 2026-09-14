@@ -131,6 +131,34 @@
     "en": "Accepting subscriptions and redemptions",
     "t": "Đang nhận lệnh đăng ký và lệnh hoàn vốn"
   },
+  "admin.alloc.holders.company": {
+    "en": "Company",
+    "t": "Công ty"
+  },
+  "admin.alloc.holders.empty": {
+    "en": "No units issued yet",
+    "t": "Chưa phát hành đơn vị quỹ nào"
+  },
+  "admin.alloc.holders.emptyHint": {
+    "en": "The split by holder appears once a subscription or an in-kind issuance mints the first unit.",
+    "t": "Phân bổ theo người nắm giữ sẽ hiện khi một lượt đăng ký hoặc một lượt phát hành hiện vật tạo ra đơn vị quỹ đầu tiên."
+  },
+  "admin.alloc.holders.fee": {
+    "en": "Fee account",
+    "t": "Tài khoản phí"
+  },
+  "admin.alloc.holders.investors": {
+    "en": "Investors",
+    "t": "Nhà đầu tư"
+  },
+  "admin.alloc.holders.outstanding": {
+    "en": "Outstanding",
+    "t": "Đang lưu hành"
+  },
+  "admin.alloc.holders.title": {
+    "en": "Holders",
+    "t": "Người nắm giữ"
+  },
   "admin.alloc.icon.arbitrage": {
     "en": "Arbitrage",
     "t": "Kinh doanh chênh lệch giá"
@@ -170,6 +198,62 @@
   "admin.alloc.icon.yield": {
     "en": "Yield",
     "t": "Lợi suất"
+  },
+  "admin.alloc.issue.action": {
+    "en": "Issue",
+    "t": "Phát hành"
+  },
+  "admin.alloc.issue.costBasisHint": {
+    "en": "Optional — defaults to units × NAV at the current mark. Zero is allowed: a stake in an asset the company already owned cost it no cash.",
+    "t": "Không bắt buộc — mặc định là đơn vị quỹ × NAV theo định giá hiện tại. Cho phép bằng 0: phần sở hữu trong tài sản mà công ty đã có sẵn không tốn tiền mặt."
+  },
+  "admin.alloc.issue.field.costBasis": {
+    "en": "Cost basis (USDT)",
+    "t": "Giá vốn (USDT)"
+  },
+  "admin.alloc.issue.field.holder": {
+    "en": "Holder",
+    "t": "Người nắm giữ"
+  },
+  "admin.alloc.issue.field.units": {
+    "en": "Units",
+    "t": "Đơn vị quỹ"
+  },
+  "admin.alloc.issue.holder.company": {
+    "en": "Company",
+    "t": "Công ty"
+  },
+  "admin.alloc.issue.holder.investor": {
+    "en": "Investor",
+    "t": "Nhà đầu tư"
+  },
+  "admin.alloc.issue.note": {
+    "en": "In kind: no cash moves. The units count against the cap like a subscription would, and the cost basis is what the holder is deemed to have paid.",
+    "t": "Phát hành hiện vật: không có dòng tiền. Đơn vị quỹ được tính vào hạn mức như một lượt đăng ký, và giá vốn là số tiền người nắm giữ được xem là đã trả."
+  },
+  "admin.alloc.issue.problem.costBasis": {
+    "en": "Cost basis must be a decimal USDT amount",
+    "t": "Giá vốn phải là số thập phân tính bằng USDT"
+  },
+  "admin.alloc.issue.problem.units": {
+    "en": "Units must be a decimal number above zero",
+    "t": "Đơn vị quỹ phải là số thập phân lớn hơn 0"
+  },
+  "admin.alloc.issue.resultApplied": {
+    "en": "{units} units issued to {holder}.",
+    "t": "Đã phát hành {units} đơn vị quỹ cho {holder}."
+  },
+  "admin.alloc.issue.resultQueued": {
+    "en": "{units} units to {holder} queued — the relay posts the mint shortly, and the split below follows.",
+    "t": "{units} đơn vị quỹ cho {holder} đang chờ — relay sẽ ghi nhận sớm, và phân bổ bên dưới sẽ cập nhật theo."
+  },
+  "admin.alloc.issue.submit": {
+    "en": "Issue units",
+    "t": "Phát hành đơn vị quỹ"
+  },
+  "admin.alloc.issue.title": {
+    "en": "Issue units",
+    "t": "Phát hành đơn vị quỹ"
   },
   "admin.alloc.open": {
     "en": "Open",
@@ -2170,6 +2254,14 @@
   "invest.carriedOver": {
     "en": "Carried over",
     "t": "Chuyển sang kỳ sau"
+  },
+  "invest.companyStake": {
+    "en": "Company stake",
+    "t": "Phần sở hữu của công ty"
+  },
+  "invest.companyStakeValue": {
+    "en": "{pct} · {units} units",
+    "t": "{pct} · {units} đơn vị quỹ"
   },
   "invest.costBasis": {
     "en": "Cost basis",

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compactUnits, formatExactUsdt, formatUsdt, fractionOfCap } from "./money.ts";
+import { compactUnits, formatExactUsdt, formatUsdt, fractionOfCap, shareBps } from "./money.ts";
 
 // The sizes this feature actually runs at: a hundred-million-unit cap is 1e26 base units,
 // past the 2^53 integer precision of a double. `Number(issued) / Number(cap)` is the
@@ -14,6 +14,26 @@ test("a supply fraction stays exact at cap sizes a float cannot hold", () => {
   assert.equal(fractionOfCap("25000000", CAP), 0.25);
   // 90% is the threshold the bar turns amber on, so it has to land exactly.
   assert.equal(fractionOfCap("90000000", CAP), 0.9);
+});
+
+// A share is rendered through `pct()`, which speaks basis points — so the split is exact
+// to the hundredth of a percent and no further, at supplies a float cannot hold.
+test("a holder share is exact basis points at cap sizes a float cannot hold", () => {
+  assert.equal(shareBps("12500000", CAP), 1250);
+  assert.equal(shareBps("33333333", CAP), 3333);
+  assert.equal(shareBps(CAP, CAP), 10_000);
+  // Past the whole is clamped, not a percentage over 100 — the supply invariant makes it
+  // impossible on the wire, so a client that sees it is looking at two reads out of step.
+  assert.equal(shareBps("200000000", CAP), 10_000);
+});
+
+test("no stake, no supply, or a malformed figure is a zero share, never NaN", () => {
+  assert.equal(shareBps("0", CAP), 0);
+  assert.equal(shareBps("5", "0"), 0);
+  assert.equal(shareBps(undefined, CAP), 0);
+  assert.equal(shareBps("abc", CAP), 0);
+  // Under one basis point floors to 0 on purpose — the bar is for a fund, not a dust holding.
+  assert.equal(shareBps("1", CAP), 0);
 });
 
 test("a small holding is a small number, not a flat zero", () => {

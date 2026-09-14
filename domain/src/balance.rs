@@ -18,6 +18,10 @@
 //! manager's `FeeShares`. Only the periodic bulk settlement of accumulated fee units
 //! crosses into cash (`Dr ServiceClaim / Cr FeeRevenue`).
 //!
+//! The company's own stake in a product is a third kind of unit holder, `CompanyShares`:
+//! units issued **in kind** (no cash leg) by an operator, so a product registered against
+//! an existing asset can start life with the company holding its share of the supply.
+//!
 //! Two layers, one invariant: **`sum(custody) == sum(claims)`** globally on the USDT
 //! ledger. Per-rail backing is a *treasury* concern (a withdrawal on a short rail is
 //! queued, not refused), not a ledger one — which is why the invariant is global, not
@@ -218,6 +222,7 @@ pub enum AccountCode {
 	UserShares,
 	SharesOutstanding,
 	FeeShares,
+	CompanyShares,
 }
 
 impl AccountCode {
@@ -233,6 +238,7 @@ impl AccountCode {
 			Self::UserShares => 60,
 			Self::SharesOutstanding => 61,
 			Self::FeeShares => 62,
+			Self::CompanyShares => 63,
 		}
 	}
 }
@@ -277,6 +283,12 @@ pub enum TransferCode {
 	/// from the claim pair a transfer names: a credit to `service:<id>` IS the service
 	/// tier. Three codes would encode the same fact twice and let the two disagree.
 	PaymentTransfer,
+	/// An in-kind unit issuance: a mint with no cash leg behind it. Its own code rather
+	/// than [`Self::ShareMint`] because the two explain `SharesOutstanding` growth in
+	/// opposite ways — a `ShareMint` is always paired with a `Subscribe` cash leg into
+	/// the service claim, an issuance never is — and reconciliation reading the Share
+	/// ledger alone must be able to tell which mints the fund's cash should account for.
+	UnitIssue,
 }
 
 impl TransferCode {
@@ -300,6 +312,7 @@ impl TransferCode {
 			Self::FeeClawback => 44,
 			Self::FeeSettle => 45,
 			Self::PaymentTransfer => 46,
+			Self::UnitIssue => 47,
 		}
 	}
 }
@@ -333,8 +346,8 @@ pub enum LedgerAccountKey {
 	/// units (its debits) rejected atomically by TigerBeetle — the over-redeem backstop.
 	UserShares(ServiceId, UserId),
 	/// A fund's total units in circulation (credit-normal, Share ledger). One per
-	/// service. `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)`
-	/// by construction.
+	/// service. `SharesOutstanding(svc) == Σ_user UserShares(svc, user) + FeeShares(svc)
+	/// + CompanyShares(svc)` by construction.
 	SharesOutstanding(ServiceId),
 	/// The manager's accumulated fee units in a fund (debit-normal, Share ledger). One per
 	/// service — a holder of units exactly like a user, which is the point: a management or
@@ -345,6 +358,14 @@ pub enum LedgerAccountKey {
 	/// all. The balance is converted to cash in one bulk settlement per period
 	/// ([`crate::fees::FeeSettlement`]).
 	FeeShares(ServiceId),
+	/// The company's own stake in a fund (debit-normal, Share ledger). One per service —
+	/// a holder of units exactly like a user or the fee account, minted by an operator's
+	/// **in-kind issuance** (`Dr CompanyShares / Cr SharesOutstanding`, no cash leg): the
+	/// product is registered against an asset the company already owns, so its share of
+	/// the supply was never bought with cash through a subscription. It counts toward the
+	/// unit cap and dilutes NAV like any other holding; it has no cost-basis projection,
+	/// because there is no investor to report P&L to.
+	CompanyShares(ServiceId),
 }
 
 impl LedgerAccountKey {
@@ -361,13 +382,14 @@ impl LedgerAccountKey {
 			Self::UserShares(service, user) => format!("shares:{service}:{user}"),
 			Self::SharesOutstanding(service) => format!("shares_outstanding:{service}"),
 			Self::FeeShares(service) => format!("shares_fee:{service}"),
+			Self::CompanyShares(service) => format!("shares_company:{service}"),
 		}
 	}
 
 	pub fn ledger(&self) -> Ledger {
 		match self {
 			Self::BankCustody => Ledger::UsdMock,
-			Self::UserShares(..) | Self::SharesOutstanding(_) | Self::FeeShares(_) => Ledger::Share,
+			Self::UserShares(..) | Self::SharesOutstanding(_) | Self::FeeShares(_) | Self::CompanyShares(_) => Ledger::Share,
 			_ => Ledger::Usdt,
 		}
 	}
@@ -384,14 +406,15 @@ impl LedgerAccountKey {
 			Self::UserShares(..) => AccountCode::UserShares,
 			Self::SharesOutstanding(_) => AccountCode::SharesOutstanding,
 			Self::FeeShares(_) => AccountCode::FeeShares,
+			Self::CompanyShares(_) => AccountCode::CompanyShares,
 		}
 	}
 
-	/// Custody (wallet/bank) and a user's unit holding are debit-normal; every claim
-	/// and the units-outstanding contra are credit-normal.
+	/// Custody (wallet/bank) and every unit holding are debit-normal; every claim and
+	/// the units-outstanding contra are credit-normal.
 	pub fn normal(&self) -> Normal {
 		match self {
-			Self::CryptoWallet(_) | Self::BankCustody | Self::UserShares(..) | Self::FeeShares(_) => Normal::Debit,
+			Self::CryptoWallet(_) | Self::BankCustody | Self::UserShares(..) | Self::FeeShares(_) | Self::CompanyShares(_) => Normal::Debit,
 			Self::Fund | Self::UserClaim(_) | Self::ServiceClaim(_) | Self::FeeRevenue | Self::WithdrawalClearing | Self::SharesOutstanding(_) => Normal::Credit,
 		}
 	}
@@ -495,6 +518,20 @@ mod tests {
 	}
 
 	#[test]
+	fn the_company_stake_is_a_unit_holder_like_any_other() {
+		let company = LedgerAccountKey::CompanyShares(ServiceId::parse("service_arb").unwrap());
+		// Same ledger and side as a user's holding, so an in-kind issuance is a plain mint
+		// against supply and the invariant `outstanding == Σ holders` keeps holding.
+		assert_eq!(company.ledger(), Ledger::Share);
+		assert_eq!(company.normal(), Normal::Debit);
+		assert_eq!(company.account_code(), AccountCode::CompanyShares);
+		assert_eq!(company.logical_key(), "shares_company:service_arb");
+		assert_eq!(company.network(), None);
+		// Its own account, never aliased onto the fee holder or a user's.
+		assert_ne!(company.logical_key(), LedgerAccountKey::FeeShares(ServiceId::parse("service_arb").unwrap()).logical_key());
+	}
+
+	#[test]
 	fn every_account_and_transfer_code_is_unique() {
 		let account_codes = [
 			AccountCode::Fund,
@@ -507,6 +544,7 @@ mod tests {
 			AccountCode::UserShares,
 			AccountCode::SharesOutstanding,
 			AccountCode::FeeShares,
+			AccountCode::CompanyShares,
 		]
 		.map(AccountCode::code);
 		let mut sorted = account_codes;
@@ -534,6 +572,7 @@ mod tests {
 			TransferCode::FeeClawback,
 			TransferCode::FeeSettle,
 			TransferCode::PaymentTransfer,
+			TransferCode::UnitIssue,
 		]
 		.map(TransferCode::code);
 		let mut sorted = transfer_codes;

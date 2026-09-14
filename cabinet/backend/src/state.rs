@@ -278,6 +278,15 @@ impl Grpc {
 		Ok(self.allocations().list_allocation_access_grants(bearer(token, req)?).await?.into_inner())
 	}
 
+	pub async fn issue_units(&self, token: &str, req: bk::IssueUnitsRequest) -> Result<bk::UnitIssuance, Status> {
+		Ok(self.allocations().issue_units(bearer(token, req)?).await?.into_inner())
+	}
+
+	pub async fn list_unit_holders(&self, token: &str, service: &str) -> Result<bk::UnitHolders, Status> {
+		let req = bk::ListUnitHoldersRequest { service: service.to_string() };
+		Ok(self.allocations().list_unit_holders(bearer(token, req)?).await?.into_inner())
+	}
+
 	pub async fn fund_nav(&self, token: &str, service: &str) -> Result<bk::FundNav, Status> {
 		let req = bk::GetFundNavRequest { service: service.to_string() };
 		Ok(self.funds().get_fund_nav(bearer(token, req)?).await?.into_inner())

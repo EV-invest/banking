@@ -7,7 +7,7 @@
 
 import type { Allocation, AllocationIcon, FundNav, Position } from "@/shared/contracts";
 
-import { toBaseUnits } from "./format";
+import { shareBps, toBaseUnits } from "./format";
 
 /** 10^18 — the base-unit scale every money and unit amount is carried in. */
 const SCALE = 10n ** 18n;
@@ -91,6 +91,21 @@ export function cashForUnits(units: string, nav: string | undefined): bigint | n
  * Returns the catalogue key rather than the sentence: this module is pure and has no
  * translator, and the reason flows into exactly one render site, which does have one.
  */
+/**
+ * The company's own stake in the fund as basis points of the settled supply, or `null`
+ * when it holds none — so the card can leave the row out rather than print "0%".
+ *
+ * `company_units` is optional on the wire type and absent on a mark rehydrated from
+ * sessionStorage before the field existed; both read as no stake, which is the honest
+ * answer until the next fetch lands. This is a fact about the fund, not a gate:
+ * `blockedReasonKey` above does not consult it, and a full cap stays a full cap whoever
+ * holds the units.
+ */
+export function companyStakeBps(nav: FundNav | null): number | null {
+  if (!nav || toBaseUnits(nav.company_units) <= 0n) return null;
+  return shareBps(nav.company_units, nav.units_outstanding);
+}
+
 export function blockedReasonKey(product: Product, nav: FundNav | null): string | null {
   if (product.allocation === null) return "invest.blocked.closed";
   if (product.allocation.caller_access === "view") return "invest.blocked.locked";

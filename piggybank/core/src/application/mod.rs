@@ -33,6 +33,9 @@
 //! one money use case that never moves cash while charging: a fee is collected by moving
 //! *units* between holders, so it costs no chain fee and cannot touch an investor's cash
 //! claim. Only the periodic bulk settlement of accumulated fee units crosses into cash.
+//! [`issuance`] is the operator's in-kind mint — units to an investor or to the company
+//! with no cash leg — the one supply path beside a subscription, run through the same
+//! registry, NAV and cap gates.
 
 pub mod allocations;
 pub mod auth_sync;
@@ -41,6 +44,7 @@ pub mod consilium;
 pub(crate) mod credentials;
 pub mod fees;
 pub mod funds;
+pub mod issuance;
 pub mod operations;
 pub mod payments;
 pub mod users;

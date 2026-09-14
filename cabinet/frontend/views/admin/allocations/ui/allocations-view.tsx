@@ -8,15 +8,15 @@ import { Button } from "@evinvest/uikit";
 
 import { registerAllocation, setAllocationAccess, setAllocationState, updateAllocation } from "@/entities/admin/api/admin-client";
 import { adminAllocationsResource } from "@/entities/admin/model/admin-resource";
-import type { Allocation } from "@/shared/contracts/admin";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
-import { Panel, PanelPresence, PanelSwap, StaggerItem } from "@/shared/ui/motion";
+import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
+import type { OpenAllocationPanel } from "@/views/admin/allocations/lib/panel";
+import { AllocationSidePanel } from "@/views/admin/allocations/ui/allocation-side-panel";
 import { AllocationsTable } from "@/views/admin/allocations/ui/allocations-table";
-import { GrantsPanel } from "@/views/admin/allocations/ui/grants-panel";
 import { RegisterForm } from "@/views/admin/allocations/ui/register-form";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
@@ -28,7 +28,7 @@ export function AllocationsView() {
   const [busy, setBusy] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-  const [grantsFor, setGrantsFor] = useState<Allocation | null>(null);
+  const [panel, setPanel] = useState<OpenAllocationPanel | null>(null);
 
   const read = useResource(adminAllocationsResource);
   const rows = read.data ? (read.data.allocations ?? []) : null;
@@ -87,7 +87,8 @@ export function AllocationsView() {
             }}
             onToggle={(row) => run(row.service, () => setAllocationState(row.service, row.state === "open" ? "closed" : "open"))}
             onSetAccess={(row, level) => run(row.service, () => setAllocationAccess(row.service, level))}
-            onOpenGrants={(row) => setGrantsFor((current) => (current?.service === row.service ? null : row))}
+            // The same button closes the panel it opened; a different row or kind swaps it.
+            onOpenPanel={(row, kind) => setPanel((current) => (current?.row.service === row.service && current.kind === kind ? null : { kind, row }))}
           />
           {/* One key for the whole paragraph, with the state name interpolated: a translator
               has to be able to move `draft` to wherever the sentence puts it in their
@@ -95,18 +96,7 @@ export function AllocationsView() {
           <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.alloc.footnote", { state: t("admin.state.draft") })}</p>
         </div>
 
-        {/* Same collapse-width panel idiom as the Users screen's row drawer — see
-            `UserDrawer` in `views/admin/users/ui/users-view.tsx` for why the width is
-            fixed rather than `w-full`, and why the presence boundary lives up here. */}
-        <PanelPresence>
-          {grantsFor && (
-            <Panel key="grants-panel" collapse={{ gap: "1.5rem", width: "21.25rem" }} className="shrink-0 self-start overflow-hidden">
-              <PanelSwap swapKey={grantsFor.service}>
-                <GrantsPanel key={grantsFor.service} allocation={grantsFor} onClose={() => setGrantsFor(null)} />
-              </PanelSwap>
-            </Panel>
-          )}
-        </PanelPresence>
+        <AllocationSidePanel panel={panel} onClose={() => setPanel(null)} />
       </StaggerItem>
     </AdminScreen>
   );

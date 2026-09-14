@@ -1009,6 +1009,15 @@ export type BankingV1FundNav = {
      * decimal units still issuable (0 once at the cap)
      */
     remaining_capacity?: string;
+    /**
+     * company_units
+     *
+     * Of `units_outstanding`, the company's own stake — units issued in kind to the fund
+     * itself (AllocationsService.IssueUnits), never bought through Subscribe. Shown to an
+     * investor so the share of the product that is neither theirs nor the market's is on
+     * the card rather than inferred from a supply that does not add up. decimal units
+     */
+    company_units?: string;
 };
 
 /**
@@ -1224,6 +1233,48 @@ export type BankingV1GrantAllocationAccessRequest = {
      */
     level?: string;
 };
+
+/**
+ * IssueUnitsRequest
+ */
+export type BankingV1IssueUnitsRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * units
+     *
+     * decimal units, > 0
+     */
+    units?: string;
+    /**
+     * cost_basis
+     *
+     * Decimal USDT the holder is deemed to have paid. Empty means `units × NAV` at the
+     * dealing mark — what a subscription for these units would have cost right now. An
+     * explicit value may be anything, zero included: the company's stake in an asset it
+     * already owned cost it no cash. For a user holder this is what lands in their
+     * position's cost basis, and so what their P&L and management fee are measured from.
+     */
+    cost_basis?: string;
+    /**
+     * idempotency_key
+     *
+     * required, 1..64 chars, unique per service
+     */
+    idempotency_key?: string;
+} & ({
+    /**
+     * company
+     */
+    company: boolean;
+} | {
+    /**
+     * user_id
+     */
+    user_id: string;
+});
 
 /**
  * IssueUserTokenRequest
@@ -1464,6 +1515,16 @@ export type BankingV1ListSessionsResponse = {
      * sessions
      */
     sessions?: Array<BankingV1Session>;
+};
+
+/**
+ * ListUnitHoldersRequest
+ */
+export type BankingV1ListUnitHoldersRequest = {
+    /**
+     * service
+     */
+    service?: string;
 };
 
 /**
@@ -3192,6 +3253,99 @@ export type BankingV1Treasury = {
      * of held_for_clients, locked by in-flight withdrawals
      */
     reserved_for_withdrawals?: string;
+};
+
+/**
+ * UnitHolders
+ *
+ * The settled supply of one product by holder class, all decimal units.
+ * `investor_units` is `units_outstanding − company_units − fee_units`: the ledger keeps
+ * one holding per investor, and the supply invariant makes the difference exact.
+ */
+export type BankingV1UnitHolders = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * units_outstanding
+     */
+    units_outstanding?: string;
+    /**
+     * company_units
+     */
+    company_units?: string;
+    /**
+     * fee_units
+     */
+    fee_units?: string;
+    /**
+     * investor_units
+     */
+    investor_units?: string;
+};
+
+/**
+ * UnitIssuance
+ *
+ * One in-kind mint. The holder is flattened to a kind + id pair here, unlike the
+ * request's `oneof`, because this shape is projected to TypeScript through OpenAPI and
+ * a flat message survives that pipeline unambiguously (the same trade the operations
+ * timeline makes).
+ */
+export type BankingV1UnitIssuance = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * holder_kind
+     *
+     * user | company
+     */
+    holder_kind?: string;
+    /**
+     * holder_id
+     *
+     * the banking user id for `user`; empty for `company`
+     */
+    holder_id?: string;
+    /**
+     * units
+     *
+     * decimal units minted
+     */
+    units?: string;
+    /**
+     * nav
+     *
+     * decimal USDT per unit the mint was recorded at
+     */
+    nav?: string;
+    /**
+     * cost_basis
+     *
+     * decimal USDT
+     */
+    cost_basis?: string;
+    /**
+     * state
+     *
+     * `queued` until the relay posts the mint, then `applied`. A client that needs the
+     * units to be visible on the ledger polls for `applied`; a `queued` row is a mint the
+     * relay has not reached yet (or one it parked — see BalanceService.ListParkedEvents).
+     */
+    state?: string;
+    /**
+     * created_at
+     *
+     * unix seconds
+     */
+    created_at?: number | string;
 };
 
 /**
@@ -5683,6 +5837,35 @@ export type BankingV1AllocationsServiceGrantAllocationAccessResponses = {
 
 export type BankingV1AllocationsServiceGrantAllocationAccessResponse = BankingV1AllocationsServiceGrantAllocationAccessResponses[keyof BankingV1AllocationsServiceGrantAllocationAccessResponses];
 
+export type BankingV1AllocationsServiceIssueUnitsData = {
+    body: BankingV1IssueUnitsRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/IssueUnits';
+};
+
+export type BankingV1AllocationsServiceIssueUnitsErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceIssueUnitsError = BankingV1AllocationsServiceIssueUnitsErrors[keyof BankingV1AllocationsServiceIssueUnitsErrors];
+
+export type BankingV1AllocationsServiceIssueUnitsResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1UnitIssuance;
+};
+
+export type BankingV1AllocationsServiceIssueUnitsResponse = BankingV1AllocationsServiceIssueUnitsResponses[keyof BankingV1AllocationsServiceIssueUnitsResponses];
+
 export type BankingV1AllocationsServiceListAllocationAccessGrantsData = {
     body: BankingV1ListAllocationAccessGrantsRequest;
     headers: {
@@ -5740,6 +5923,35 @@ export type BankingV1AllocationsServiceListAllocationsResponses = {
 };
 
 export type BankingV1AllocationsServiceListAllocationsResponse = BankingV1AllocationsServiceListAllocationsResponses[keyof BankingV1AllocationsServiceListAllocationsResponses];
+
+export type BankingV1AllocationsServiceListUnitHoldersData = {
+    body: BankingV1ListUnitHoldersRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.AllocationsService/ListUnitHolders';
+};
+
+export type BankingV1AllocationsServiceListUnitHoldersErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1AllocationsServiceListUnitHoldersError = BankingV1AllocationsServiceListUnitHoldersErrors[keyof BankingV1AllocationsServiceListUnitHoldersErrors];
+
+export type BankingV1AllocationsServiceListUnitHoldersResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1UnitHolders;
+};
+
+export type BankingV1AllocationsServiceListUnitHoldersResponse = BankingV1AllocationsServiceListUnitHoldersResponses[keyof BankingV1AllocationsServiceListUnitHoldersResponses];
 
 export type BankingV1AllocationsServiceRegisterAllocationData = {
     body: BankingV1RegisterAllocationRequest;

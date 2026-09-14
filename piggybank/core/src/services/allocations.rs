@@ -6,8 +6,15 @@
 //! valuation, because registering a product is what brings a fund into existence at
 //! all, and opening it to an investor is what lets their money in.
 //!
-//! No money crosses this surface: the handlers below never touch the ledger or notify
+//! No money crosses this surface — with one deliberate exception. [`IssueUnits`]
+//! (`AllocationsService::issue_units`) mints units **in kind**, with no cash leg: it is a
+//! registry decision about who holds what, made by the same manager who sizes the
+//! product, so it lives beside the cap rather than on the investor's dealing surface.
+//! It and [`ListUnitHolders`] are the only handlers here that read the ledger or notify
 //! the relay.
+//!
+//! [`IssueUnits`]: AllocationsService::issue_units
+//! [`ListUnitHolders`]: AllocationsService::list_unit_holders
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large
 //! type we don't control, so the large-err lint does not apply in this module.
@@ -17,20 +24,28 @@ use domain::{
 	allocations::{AllocationAccess, AllocationIcon},
 	authz::Permission,
 	balance::ServiceId,
-	money::Shares,
+	issuance::{IdempotencyKey, UnitHolder},
+	money::{Shares, Usdt},
 	users::UserId,
 };
 use evbanking_contracts::{
-	allocation::{access as wire_access, state as wire_state},
+	allocation::{IssueUnitsHolder, access as wire_access, state as wire_state},
 	banking::v1::{self as pb, allocations_service_server::AllocationsService},
 };
 use tonic::{Request, Response, Status};
 
 use crate::{
 	AppState,
-	application::allocations as allocations_app,
-	ports::allocations::{AllocationAccessGrant, AllocationRecord},
-	services::support::{caller_id, holds_permission, map_err, require_permission, resolve_target_user},
+	application::{
+		allocations as allocations_app,
+		funds::FundPorts,
+		issuance::{self as issuance_app, IssueUnitsRequest, UnitHoldersView},
+	},
+	ports::{
+		allocations::{AllocationAccessGrant, AllocationRecord},
+		issuance::UnitIssuanceRecord,
+	},
+	services::support::{caller_id, holds_permission, map_err, optional, require_permission, resolve_target_user, unix_now},
 };
 
 #[derive(Clone)]
@@ -185,6 +200,82 @@ impl AllocationsService for AllocationsSvc {
 			grants: grants.iter().map(grant_to_proto).collect(),
 		}))
 	}
+
+	async fn issue_units(&self, request: Request<pb::IssueUnitsRequest>) -> Result<Response<pb::UnitIssuance>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let req = request.into_inner();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		let holder = match req.holder {
+			// The console names investors by their concierge id; resolve the way every
+			// admin RPC does, so the units land on the money-plane row the holder redeems
+			// from. `NOT_FOUND` here is the existence gate the use case repeats.
+			Some(IssueUnitsHolder::UserId(raw)) => UnitHolder::User(resolve_target_user(&self.state, &raw).await?),
+			Some(IssueUnitsHolder::Company(true)) => UnitHolder::Company,
+			// `company: false` names nobody: a malformed request, never a mint to nobody.
+			Some(IssueUnitsHolder::Company(false)) | None => return Err(Status::invalid_argument("holder is required: a user_id, or company = true")),
+		};
+		// Parsed at the boundary, so a malformed amount is an `invalid_argument` about the
+		// input rather than a validation error from inside the aggregate.
+		let units = Shares::parse_decimal(&req.units).map_err(map_err)?;
+		let cost_basis = optional(&req.cost_basis).map(Usdt::parse_decimal).transpose().map_err(map_err)?;
+		let idempotency_key = IdempotencyKey::parse(&req.idempotency_key).map_err(map_err)?;
+		let ports = FundPorts {
+			allocations: self.state.allocations.as_ref(),
+			ledger: self.state.ledger.as_ref(),
+			nav: self.state.nav.as_ref(),
+			relay: &self.state.relay_notify,
+		};
+		let record = issuance_app::issue_units(
+			&ports,
+			self.state.issuances.as_ref(),
+			self.state.users.as_ref(),
+			IssueUnitsRequest {
+				service,
+				holder,
+				units,
+				cost_basis,
+				idempotency_key,
+			},
+			unix_now(),
+		)
+		.await
+		.map_err(map_err)?;
+		Ok(Response::new(issuance_to_proto(&record)))
+	}
+
+	async fn list_unit_holders(&self, request: Request<pb::ListUnitHoldersRequest>) -> Result<Response<pb::UnitHolders>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
+		let view = issuance_app::unit_holders(self.state.allocations.as_ref(), self.state.ledger.as_ref(), service)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(holders_to_proto(&view)))
+	}
+}
+
+fn issuance_to_proto(record: &UnitIssuanceRecord) -> pb::UnitIssuance {
+	let issuance = &record.issuance;
+	pb::UnitIssuance {
+		id: issuance.id().to_string(),
+		service: issuance.service().to_string(),
+		holder_kind: issuance.holder().kind_str().to_owned(),
+		holder_id: issuance.holder().user_id().map(|user| user.to_string()).unwrap_or_default(),
+		units: issuance.units().to_decimal_string(),
+		nav: issuance.nav().to_decimal_string(),
+		cost_basis: issuance.cost_basis().to_decimal_string(),
+		state: issuance.state().as_str().to_owned(),
+		created_at: record.created_at,
+	}
+}
+
+fn holders_to_proto(view: &UnitHoldersView) -> pb::UnitHolders {
+	pb::UnitHolders {
+		service: view.service.to_string(),
+		units_outstanding: view.units_outstanding.to_decimal_string(),
+		company_units: view.company_units.to_decimal_string(),
+		fee_units: view.fee_units.to_decimal_string(),
+		investor_units: view.investor_units.to_decimal_string(),
+	}
 }
 
 fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
@@ -257,12 +348,38 @@ fn parse_icon_update(raw: Option<&str>) -> Result<Option<AllocationIcon>, Status
 /// between them is a compile-and-test-time failure, not a runtime mystery.
 #[cfg(test)]
 mod tests {
-	use domain::allocations::{AllocationState, DEFAULT_UNIT_CAP};
-	// Only the guard below reads the icon vocabulary — the handlers go through
-	// `AllocationIcon`, which is the authority on what a stored icon may be.
-	use evbanking_contracts::allocation::icon as wire_icon;
+	use domain::{
+		allocations::{AllocationState, DEFAULT_UNIT_CAP},
+		issuance::IssuanceState,
+	};
+	// Only the guards below read these vocabularies — the handlers go through the domain
+	// enums, which are the authority on what a stored value may be.
+	use evbanking_contracts::allocation::{holder as wire_holder, icon as wire_icon, issuance_state as wire_issuance_state};
 
 	use super::*;
+
+	#[test]
+	fn domain_holders_and_issuance_states_match_the_wire_contract() {
+		// The two vocabularies an in-kind issuance crosses the wire with, held to the same
+		// standard as state/access/icon: the hub stores the domain enum, consumers match on
+		// the wire constants, and drift between them is a test failure, not a mystery.
+		let holders = [UnitHolder::User(UserId::new()), UnitHolder::Company];
+		let as_wire: Vec<&str> = holders.iter().map(|holder| holder.kind_str()).collect();
+		assert_eq!(as_wire.as_slice(), wire_holder::ALL.as_slice(), "the domain holder kinds and the wire vocabulary have drifted");
+		for kind in wire_holder::ALL {
+			assert!(wire_holder::is_known(kind));
+		}
+		let states = [IssuanceState::Queued, IssuanceState::Applied];
+		let as_wire: Vec<&str> = states.iter().map(|state| state.as_str()).collect();
+		assert_eq!(
+			as_wire.as_slice(),
+			wire_issuance_state::ALL.as_slice(),
+			"the domain issuance states and the wire vocabulary have drifted"
+		);
+		for state in wire_issuance_state::ALL {
+			assert_eq!(IssuanceState::parse(state).unwrap().as_str(), state);
+		}
+	}
 
 	#[test]
 	fn domain_states_match_the_wire_contract() {

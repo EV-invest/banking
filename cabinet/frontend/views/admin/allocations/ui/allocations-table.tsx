@@ -6,6 +6,7 @@ import { Card, CardContent, Skeleton } from "@evinvest/uikit";
 import type { AllocationWrite } from "@/entities/admin/api/admin-client";
 import type { Allocation, AllocationAccessLevel } from "@/shared/contracts/admin";
 import { Settled } from "@/shared/ui/motion";
+import type { AllocationPanelKind } from "@/views/admin/allocations/lib/panel";
 import { AllocationRow } from "@/views/admin/allocations/ui/allocation-row";
 
 export function AllocationsTable({
@@ -16,7 +17,7 @@ export function AllocationsTable({
   onSave,
   onToggle,
   onSetAccess,
-  onOpenGrants,
+  onOpenPanel,
 }: {
   rows: Allocation[] | null;
   busyService: string | null;
@@ -25,7 +26,7 @@ export function AllocationsTable({
   onSave: (body: AllocationWrite) => Promise<void>;
   onToggle: (row: Allocation) => void;
   onSetAccess: (row: Allocation, level: AllocationAccessLevel) => void;
-  onOpenGrants: (row: Allocation) => void;
+  onOpenPanel: (row: Allocation, kind: AllocationPanelKind) => void;
 }) {
   const t = useT();
   return (
@@ -69,7 +70,7 @@ export function AllocationsTable({
                     onSave={onSave}
                     onToggle={() => onToggle(row)}
                     onSetAccess={(level) => onSetAccess(row, level)}
-                    onOpenGrants={() => onOpenGrants(row)}
+                    onOpenPanel={(kind) => onOpenPanel(row, kind)}
                   />
                 ))}
               </tbody>

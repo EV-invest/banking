@@ -29,7 +29,7 @@ use ev::analytics::Analytics;
 use evbanking_auth::Authorizer;
 use ports::{
 	AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, OutflowPolicy, PaymentFeed, PaymentRepository,
-	RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
+	RedemptionRepository, SubscriptionRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 };
 use sqlx::PgPool;
 use tokio::sync::Notify;
@@ -76,6 +76,9 @@ pub struct AppState {
 	pub allocations: Arc<dyn AllocationRegistry>,
 	/// The `subscriptions` aggregate's driven port (mint records + position cost basis).
 	pub subscriptions: Arc<dyn SubscriptionRepository>,
+	/// The `issuance` aggregate's driven port — an operator's in-kind mints (units to an
+	/// investor or the company, no cash leg), idempotent by key.
+	pub issuances: Arc<dyn UnitIssuanceRepository>,
 	/// The `redemptions` aggregate's driven port (the accept-and-queue saga).
 	pub redemptions: Arc<dyn RedemptionRepository>,
 	/// The aggregate-less company-money facts (seed capital, deposit gate) + outbox.
@@ -139,6 +142,7 @@ impl AppState {
 		payment_feed: Arc<dyn PaymentFeed>,
 		allocations: Arc<dyn AllocationRegistry>,
 		subscriptions: Arc<dyn SubscriptionRepository>,
+		issuances: Arc<dyn UnitIssuanceRepository>,
 		redemptions: Arc<dyn RedemptionRepository>,
 		deposits: Arc<dyn Deposits>,
 		nav: Arc<dyn NavMarks>,
@@ -167,6 +171,7 @@ impl AppState {
 			payment_feed,
 			allocations,
 			subscriptions,
+			issuances,
 			redemptions,
 			deposits,
 			nav,

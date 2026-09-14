@@ -17,6 +17,8 @@
 //! investor ─ FundsService.Subscribe ────▶ refused unless open AND `invest` for the caller
 //! investor ─ FundsService.Redeem ───────▶ allowed while open OR closed, at ANY access
 //! operator ─ SetAllocationUnitCap ▶ supply  (how many units may ever be issued)
+//! operator ─ IssueUnits ─────────▶ units minted IN KIND to a user or the company
+//! operator ─ ListUnitHolders ────▶ company / fee / investor split of the supply
 //! operator ─ RevokeAllocationAccess ▶ the investor falls back to the default
 //! operator ─ SetAllocationState ─▶ closed   (redeem only — never traps an investor)
 //! ```
@@ -31,14 +33,19 @@
 //!
 //! Money is deliberately absent here. Units, NAV, positions and cash all belong to
 //! [`FundsService`](crate::banking::v1::funds_service_client::FundsServiceClient) and
-//! `BalanceService`, keyed by the same `service` slug this registry owns.
+//! `BalanceService`, keyed by the same `service` slug this registry owns. The one
+//! exception is `IssueUnits`: supply an operator mints **in kind** — no cash leg — to a
+//! [`holder`] that is an investor or the company itself, for a product registered
+//! against an asset that already has owners. Its vocabularies ([`holder`],
+//! [`issuance_state`]) are pinned here like the others.
 
 pub use crate::banking::v1::{
-	Allocation, AllocationAccessGrant, AllocationAccessGrantList, AllocationList, GetAllocationRequest, GrantAllocationAccessRequest, ListAllocationAccessGrantsRequest,
-	ListAllocationsRequest, RegisterAllocationRequest, RevokeAllocationAccessRequest, RevokeAllocationAccessResponse, SetAllocationAccessRequest, SetAllocationStateRequest,
-	SetAllocationUnitCapRequest, UpdateAllocationRequest,
+	Allocation, AllocationAccessGrant, AllocationAccessGrantList, AllocationList, GetAllocationRequest, GrantAllocationAccessRequest, IssueUnitsRequest, ListAllocationAccessGrantsRequest,
+	ListAllocationsRequest, ListUnitHoldersRequest, RegisterAllocationRequest, RevokeAllocationAccessRequest, RevokeAllocationAccessResponse, SetAllocationAccessRequest,
+	SetAllocationStateRequest, SetAllocationUnitCapRequest, UnitHolders, UnitIssuance, UpdateAllocationRequest,
 	allocations_service_client::AllocationsServiceClient,
 	allocations_service_server::{AllocationsService, AllocationsServiceServer},
+	issue_units_request::Holder as IssueUnitsHolder,
 };
 
 /// The unit cap a `RegisterAllocation` lands on, as its wire decimal — 100,000,000
@@ -186,9 +193,59 @@ pub mod icon {
 	}
 }
 
+/// The canonical `UnitIssuance.holder_kind` strings — who an in-kind issuance minted
+/// units to.
+///
+/// The hub's `domain::issuance::UnitHolder` stores exactly these
+/// (`unit_holder_strings_are_canonical` guards that side). `company` is a holder in its
+/// own right, not a user with a well-known id: it has no `users` row, no position and no
+/// P&L, so a client must never try to resolve its (empty) `holder_id` as a user.
+pub mod holder {
+	/// An investor; `holder_id` is their banking user id.
+	pub const USER: &str = "user";
+	/// The fund's own stake; `holder_id` is empty.
+	pub const COMPANY: &str = "company";
+
+	/// Every holder kind.
+	pub const ALL: [&str; 2] = [USER, COMPANY];
+
+	/// Whether `kind` is one this contract defines.
+	pub fn is_known(kind: &str) -> bool {
+		ALL.contains(&kind)
+	}
+}
+
+/// The canonical `UnitIssuance.state` strings.
+///
+/// The hub's `domain::issuance::IssuanceState` stores exactly these
+/// (`issuance_state_strings_are_canonical` guards that side). Two states only: an
+/// issuance is recorded (`queued`) and then minted by the relay (`applied`); there is
+/// no failure state because a mint that parks stays `queued` and is surfaced through
+/// the parked-event surface, never silently dropped.
+pub mod issuance_state {
+	/// Recorded; the relay has not posted the mint yet.
+	pub const QUEUED: &str = "queued";
+	/// The units are on the ledger.
+	pub const APPLIED: &str = "applied";
+
+	/// Every state, in lifecycle order.
+	pub const ALL: [&str; 2] = [QUEUED, APPLIED];
+
+	/// Whether `state` is one this contract defines.
+	pub fn is_known(state: &str) -> bool {
+		ALL.contains(&state)
+	}
+
+	/// Whether the units are on the ledger. A client waiting to show a holder their
+	/// new balance polls until this is true.
+	pub fn is_applied(state: &str) -> bool {
+		state == APPLIED
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::{access, icon, state};
+	use super::{access, holder, icon, issuance_state, state};
 
 	#[test]
 	fn the_access_vocabulary_is_ranked_closed_and_canonical() {
@@ -264,6 +321,28 @@ mod tests {
 		assert!(!icon::is_known("rocket"));
 		assert!(!icon::is_known(""));
 		assert!(!icon::is_known("realEstate"), "the wire form is lowercase snake_case");
+	}
+
+	#[test]
+	fn the_holder_vocabulary_is_closed_and_canonical() {
+		// Byte-identical with `domain::issuance::UnitHolder::kind_str`
+		// (`unit_holder_strings_are_canonical` guards the other side).
+		assert_eq!(holder::ALL, ["user", "company"]);
+		assert!(holder::ALL.iter().all(|h| holder::is_known(h)));
+		assert!(!holder::is_known("fund"));
+		assert!(!holder::is_known(""));
+		assert!(!holder::is_known("Company"), "the wire form is lowercase");
+	}
+
+	#[test]
+	fn the_issuance_state_vocabulary_is_closed_and_canonical() {
+		// Byte-identical with `domain::issuance::IssuanceState::as_str`
+		// (`issuance_state_strings_are_canonical` guards the other side).
+		assert_eq!(issuance_state::ALL, ["queued", "applied"]);
+		assert!(issuance_state::ALL.iter().all(|s| issuance_state::is_known(s)));
+		assert!(!issuance_state::is_known("minted"));
+		assert!(issuance_state::is_applied(issuance_state::APPLIED));
+		assert!(!issuance_state::is_applied(issuance_state::QUEUED));
 	}
 
 	#[test]

@@ -28,7 +28,7 @@ import { TipAnchor } from "@/shared/tips";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { compactUnits, formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
-import { blockedReasonKey, buildProducts, type Product } from "@/views/invest/lib/product";
+import { blockedReasonKey, buildProducts, companyStakeBps, type Product } from "@/views/invest/lib/product";
 import { Note, ProductBadges, Stat, SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
 import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-panels";
 
@@ -199,6 +199,7 @@ function SupplyCard({ nav }: { nav: FundNav | null }) {
       </Card>
     );
   }
+  const stake = companyStakeBps(nav);
   return (
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
@@ -209,6 +210,10 @@ function SupplyCard({ nav }: { nav: FundNav | null }) {
             label={t("invest.remainingCapacity")}
             value={t("dash.unitsAmount", { n: Number(nav.remaining_capacity ?? 0), units: compactUnits(nav.remaining_capacity) })}
           />
+          {/* The share of the issued supply that is neither this holder's nor the market's —
+              stated here, beside the figures it is a share OF, and only when there is one:
+              a "0%" row would read as a fact about most funds that is really an absence. */}
+          {stake !== null && <Row label={t("invest.companyStake")} value={t("invest.companyStakeValue", { pct: pct(stake), units: compactUnits(nav.company_units) })} />}
           <Row label={t("invest.navPerUnit")} value={`${formatUsdt(nav.nav)} USDT`} />
           <Row label={t("invest.fundAum")} value={nav.aum ? `${formatUsdt(nav.aum)} USDT` : t("invest.notYetValued")} />
         </dl>

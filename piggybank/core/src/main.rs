@@ -34,6 +34,7 @@ use piggybank_core::{
 		fee_sweeper::FeeSweeper,
 		fees::{PgFeeAssessments, PgFeePolicies, PgFeeSettlements, PgPositionAccruals},
 		governance_mail,
+		issuance::PgUnitIssuances,
 		ledger::{self, TbLedger},
 		nav::PgNav,
 		operation_feed::PgOperationFeed,
@@ -63,7 +64,7 @@ use piggybank_core::{
 	},
 	ports::{
 		AllocationRegistry, ConsiliumRepository, Custody, DepositAddresses, Deposits, FeePorts, FundPositionReader, NavMarks, OperationFeed, OutflowPolicy, PaymentFeed, PaymentRepository,
-		RedemptionRepository, SubscriptionRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
+		RedemptionRepository, SubscriptionRepository, UnitIssuanceRepository, UserRepository, WithdrawalRepository, ledger::Ledger,
 	},
 	services,
 };
@@ -224,6 +225,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	let payment_feed: Arc<dyn PaymentFeed> = pg_payments;
 	let allocations: Arc<dyn AllocationRegistry> = Arc::new(PgAllocations::new(pool.clone()));
 	let subscriptions: Arc<dyn SubscriptionRepository> = Arc::new(PgSubscriptions::new(pool.clone()));
+	let issuances: Arc<dyn UnitIssuanceRepository> = Arc::new(PgUnitIssuances::new(pool.clone()));
 	let redemptions: Arc<dyn RedemptionRepository> = Arc::new(PgRedemptions::new(pool.clone()));
 	let deposits: Arc<dyn Deposits> = Arc::new(PgDeposits::new(pool.clone()));
 	let nav: Arc<dyn NavMarks> = Arc::new(PgNav::new(pool.clone()));
@@ -487,6 +489,7 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 		payment_feed,
 		allocations,
 		subscriptions,
+		issuances,
 		redemptions,
 		deposits,
 		nav,

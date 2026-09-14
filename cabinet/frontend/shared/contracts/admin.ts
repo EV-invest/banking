@@ -319,6 +319,45 @@ export interface AllocationAccessGrantList {
   grants: AllocationAccessGrant[];
 }
 
+// ── in-kind issuance (units with no cash leg) ───────────────────────────────────
+
+/** Who an in-kind mint lands on: one investor, or the fund's own stake. */
+export type UnitHolderKind = "user" | "company";
+
+/** `queued` until the relay posts the mint, then `applied`. A `queued` row is real — the
+ *  hub has accepted it — but the units are not on the ledger yet, so a holders read
+ *  taken straight after the POST still shows the supply as it was. */
+export type UnitIssuanceState = "queued" | "applied";
+
+/** One in-kind mint, as the hub recorded it. */
+export interface UnitIssuance {
+  id: string;
+  service: string;
+  holder_kind: UnitHolderKind;
+  /** The banking user id for a `user` holder; empty for `company`. */
+  holder_id: string;
+  units: string;
+  /** Decimal USDT per unit the mint was recorded at. */
+  nav: string;
+  /** Decimal USDT the holder is deemed to have paid — what P&L and the management fee
+   *  are measured from. */
+  cost_basis: string;
+  state: UnitIssuanceState;
+  /** Unix seconds. */
+  created_at: string;
+}
+
+/** A product's settled supply by holder class, all decimal units. `investor_units` is
+ *  `units_outstanding − company_units − fee_units`; the supply invariant makes the
+ *  difference exact. */
+export interface UnitHolders {
+  service: string;
+  units_outstanding: string;
+  company_units: string;
+  fee_units: string;
+  investor_units: string;
+}
+
 // ── valuation + redemptions ─────────────────────────────────────────────────────
 export interface FundNav {
   service: string;
@@ -332,6 +371,12 @@ export interface FundNav {
   /** Units still issuable. Already nets off in-flight mints, so offering this figure can
    *  never offer more than the hub will accept. */
   remaining_capacity: string;
+  /** Of `units_outstanding`, the company's own in-kind stake — issued through
+   *  `/allocations/issue`, never bought through Subscribe. Optional on READ for the same
+   *  reason `Allocation.icon` is: `fundNavResource` persists to sessionStorage, and a
+   *  returning user's first frame may rehydrate a mark serialised before this field
+   *  existed. */
+  company_units?: string;
 }
 
 export interface RedemptionQueueItem {
