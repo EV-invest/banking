@@ -24,7 +24,7 @@ import { Link } from "@/shared/ui/cabinet-link";
 import { changeStateLabel, changeStateTone, termsSummary } from "@/views/admin/fees/lib/format";
 import { ago } from "@/views/admin/lib/format";
 
-export function PendingCard({ change }: { change: FeePolicyChange }) {
+export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; onCancelled: () => void }) {
   const t = useT();
   const locale = useLocale();
   const [confirming, setConfirming] = useState(false);
@@ -48,6 +48,7 @@ export function PendingCard({ change }: { change: FeePolicyChange }) {
       // beneath unblocks — all readers of the tag.
       revalidateTag(TAG.adminFees, TAG.consilium);
       setConfirming(false);
+      onCancelled();
     } catch (e) {
       setProblem(errorMessage(e, t));
     } finally {

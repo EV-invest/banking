@@ -41,7 +41,9 @@ export function FeesView() {
   const catalog = useResource(adminAllocationsResource);
   const policies = useResource(feePoliciesResource);
   const [service, setService] = useState("");
-  /** What the operator just scheduled, until dismissed or another fund is picked. */
+  /** What the operator just scheduled, until dismissed, cancelled or another fund is picked.
+   *  Cancelling clears it explicitly rather than by watching `pending` vanish: right after
+   *  scheduling, the receipt exists BEFORE the re-read brings the new pending change in. */
   const [receipt, setReceipt] = useState<FeePolicyChange | null>(null);
 
   const funds = catalog.data?.allocations ?? [];
@@ -86,7 +88,7 @@ export function FeesView() {
           <StaggerItem className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-5">
               {receipt && receipt.service === selected && <ScheduledReceipt change={receipt} onDismiss={() => setReceipt(null)} />}
-              {pending && <PendingCard key={pending.id} change={pending} />}
+              {pending && <PendingCard key={pending.id} change={pending} onCancelled={() => setReceipt(null)} />}
               {/* Keyed on the fund AND the pending change: a cancel or a promotion reseeds
                   the draft from the terms that are now in force. */}
               <PolicyCard key={`${selected}:${pending?.id ?? policy?.version ?? 0}`} service={selected} policy={policy} onScheduled={setReceipt} />
