@@ -50,7 +50,7 @@ use piggybank_core::{
 		ledger::Ledger,
 	},
 };
-use sqlx::PgPool;
+use sqlx::{AssertSqlSafe, PgPool};
 use tokio::sync::Notify;
 use uuid::Uuid;
 
@@ -711,17 +711,33 @@ async fn promotion_settles_the_elapsed_window_at_the_old_rate_before_the_new_one
 	assert_eq!(taken, charge.charge().charged_units);
 }
 
+/// The two management ceilings, as `(table, constraint)`.
+const MANAGEMENT_CEILINGS: [(&str, &str); 2] = [
+	("fee_policies", "fee_policies_management_ceiling"),
+	("fee_policy_changes", "fee_policy_changes_management_ceiling"),
+];
+
 /// A policy written under the OLD schema, above today's ceiling — the very row #233 is
 /// about. The ceilings are `NOT VALID`, so an INSERT after the migration is held to them;
 /// the only way to stage a legacy row is the way the migration met it: with the constraints
-/// off, then re-added `NOT VALID` exactly as `0036` states them.
+/// off, then re-added exactly as the schema states them — read back from the catalogue, so
+/// a ceiling moved in a later migration is re-added as moved rather than as this file
+/// remembers it.
 async fn plant_legacy_policy(h: &Harness, service: &ServiceId, bps: i32) {
 	let mut tx = h.pool.begin().await.unwrap();
-	for stmt in [
-		"ALTER TABLE fee_policies DROP CONSTRAINT fee_policies_management_ceiling",
-		"ALTER TABLE fee_policy_changes DROP CONSTRAINT fee_policy_changes_management_ceiling",
-	] {
-		sqlx::query(stmt).execute(&mut *tx).await.unwrap();
+	let mut definitions = Vec::new();
+	for (table, constraint) in MANAGEMENT_CEILINGS {
+		let definition: String = sqlx::query_scalar("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = $1")
+			.bind(constraint)
+			.fetch_one(&mut *tx)
+			.await
+			.expect("the ceiling exists before it is lifted");
+		assert!(definition.ends_with("NOT VALID"), "{constraint} must stay NOT VALID or a legacy row stops the boot: {definition}");
+		sqlx::query(AssertSqlSafe(format!("ALTER TABLE {table} DROP CONSTRAINT {constraint}")))
+			.execute(&mut *tx)
+			.await
+			.unwrap();
+		definitions.push((table, constraint, definition));
 	}
 	sqlx::query("INSERT INTO fee_policies (service, management_bps, performance_bps, hurdle_bps, basis, crystallization, updated_by, version, effective_from) VALUES ($1, $2, 2000, 0, 'invested_capital', 'annual', 'legacy', 1, now() - interval '30 days')")
 		.bind(service.as_str())
@@ -739,11 +755,11 @@ async fn plant_legacy_policy(h: &Harness, service: &ServiceId, bps: i32) {
 	.execute(&mut *tx)
 	.await
 	.unwrap();
-	for stmt in [
-		"ALTER TABLE fee_policies ADD CONSTRAINT fee_policies_management_ceiling CHECK (management_bps <= 500) NOT VALID",
-		"ALTER TABLE fee_policy_changes ADD CONSTRAINT fee_policy_changes_management_ceiling CHECK (state IN ('superseded', 'rejected', 'cancelled') OR management_bps <= 500) NOT VALID",
-	] {
-		sqlx::query(stmt).execute(&mut *tx).await.unwrap();
+	for (table, constraint, definition) in definitions {
+		sqlx::query(AssertSqlSafe(format!("ALTER TABLE {table} ADD CONSTRAINT {constraint} {definition}")))
+			.execute(&mut *tx)
+			.await
+			.unwrap();
 	}
 	tx.commit().await.unwrap();
 }
@@ -924,7 +940,7 @@ async fn a_held_product_gets_no_change_without_a_mailer_and_no_change_beyond_the
 async fn backends_waiting_on_the_product_lock(pool: &PgPool) -> i64 {
 	sqlx::query_scalar(
 		"SELECT COUNT(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' \
-		 AND query LIKE '%FROM allocations WHERE service = $1 FOR UPDATE%'",
+		 AND query LIKE '%allocations%FOR UPDATE%'",
 	)
 	.fetch_one(pool)
 	.await
