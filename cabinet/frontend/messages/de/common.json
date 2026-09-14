@@ -651,9 +651,9 @@
     "en": "Charges",
     "t": "Belastungen"
   },
-  "admin.fees.col.deferred": {
-    "en": "Deferred",
-    "t": "Aufgeschoben"
+  "admin.fees.col.deferredUsdt": {
+    "en": "Deferred, USDT",
+    "t": "Aufgeschoben, USDT"
   },
   "admin.fees.col.effective": {
     "en": "Effective",

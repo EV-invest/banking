@@ -651,9 +651,9 @@
     "en": "Charges",
     "t": "Các khoản thu phí"
   },
-  "admin.fees.col.deferred": {
-    "en": "Deferred",
-    "t": "Hoãn lại"
+  "admin.fees.col.deferredUsdt": {
+    "en": "Deferred, USDT",
+    "t": "Hoãn lại, USDT"
   },
   "admin.fees.col.effective": {
     "en": "Effective",

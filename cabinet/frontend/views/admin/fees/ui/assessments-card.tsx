@@ -54,7 +54,7 @@ export function AssessmentsCard({ service }: { service: string }) {
                 <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.field.management")}</TableHead>
                 <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.field.performance")}</TableHead>
                 <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.unitsTaken")}</TableHead>
-                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.deferred")}</TableHead>
+                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.deferredUsdt")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

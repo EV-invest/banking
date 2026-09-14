@@ -651,9 +651,9 @@
     "en": "Charges",
     "t": "Начисления"
   },
-  "admin.fees.col.deferred": {
-    "en": "Deferred",
-    "t": "Отложено"
+  "admin.fees.col.deferredUsdt": {
+    "en": "Deferred, USDT",
+    "t": "Отложено, USDT"
   },
   "admin.fees.col.effective": {
     "en": "Effective",
