@@ -918,3 +918,103 @@ async fn a_held_product_gets_no_change_without_a_mailer_and_no_change_beyond_the
 		.is_ok()
 	);
 }
+
+/// How many backends of this database are queued on the product lock right now — the one
+/// observable fact that says a transaction over the terms is WAITING rather than running.
+async fn backends_waiting_on_the_product_lock(pool: &PgPool) -> i64 {
+	sqlx::query_scalar(
+		"SELECT COUNT(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' \
+		 AND query LIKE '%FROM allocations WHERE service = $1 FOR UPDATE%'",
+	)
+	.fetch_one(pool)
+	.await
+	.unwrap()
+}
+
+/// Poll until `n` backends are queued on the product lock, or give up loudly.
+async fn wait_for_lock_waiters(pool: &PgPool, n: i64) {
+	for _ in 0..200 {
+		if backends_waiting_on_the_product_lock(pool).await >= n {
+			return;
+		}
+		tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+	}
+	panic!("expected {n} transaction(s) to queue on the product lock; none did within 10s");
+}
+
+/// banking#250: the schedule-vs-promote race with two REAL transactions in a forced order.
+///
+/// An operator's request is judged against the terms it read; a promotion may land between
+/// that read and the request's own transaction. The product lock is what turns that into a
+/// refusal rather than a change recorded against terms that no longer hold. Here a third
+/// transaction holds the product lock, the promotion queues behind it FIRST and the
+/// scheduling SECOND, and the lock is released — so the scheduling is guaranteed to run
+/// after the promotion has committed, on the terms the promotion wrote.
+#[tokio::test]
+async fn a_scheduling_queued_behind_a_promotion_is_judged_on_the_promoted_terms() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+
+	// The change about to be promoted adds a hurdle — a loosening, an administrator's call,
+	// and with no holders it may bind at once.
+	let hurdled = policy(200, 2_000, 800, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let promoting = schedule(&h, UserId::new(), &service, hurdled, 0, "").await.unwrap();
+	assert_eq!(promoting.state, FeePolicyChangeState::Scheduled);
+
+	// The request judged BEFORE that promotion: back to the house terms, which against the
+	// live (hurdle-less) terms changes nothing and is an administrator's call. Against the
+	// promoted terms it LOWERS a hurdle — the owners' call.
+	let judged_stale = NewFeePolicyChange {
+		id: FeePolicyChangeId::new(),
+		service: service.clone(),
+		policy: FeePolicy::HOUSE,
+		requirement: ChangeRequirement::Admin,
+		requested_effective_from_unix: 0,
+		requested_by: UserId::new().to_string(),
+		reason: String::new(),
+		now_unix: now(),
+	};
+	assert_eq!(domain::fees::requirement_for(Some(&FeePolicy::HOUSE), &judged_stale.policy), ChangeRequirement::Admin);
+	assert_eq!(domain::fees::requirement_for(Some(&hurdled), &judged_stale.policy), ChangeRequirement::OwnerConsilium);
+
+	// A third transaction holds the product lock, so the two under test can be queued in a
+	// known order behind it.
+	let mut gate = h.pool.begin().await.unwrap();
+	sqlx::query("SELECT service FROM allocations WHERE service = $1 FOR UPDATE")
+		.bind(service.as_str())
+		.fetch_one(&mut *gate)
+		.await
+		.unwrap();
+
+	let promotion = {
+		let changes = PgFeePolicyChanges::new(h.pool.clone());
+		let id = promoting.id;
+		tokio::spawn(async move { changes.promote(id, now()).await })
+	};
+	wait_for_lock_waiters(&h.pool, 1).await;
+	let stale_id = judged_stale.id;
+	let scheduling = {
+		let changes = PgFeePolicyChanges::new(h.pool.clone());
+		tokio::spawn(async move { changes.schedule(&judged_stale, None).await })
+	};
+	wait_for_lock_waiters(&h.pool, 2).await;
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE), "nothing has moved while the gate is held");
+
+	gate.commit().await.unwrap();
+
+	assert!(promotion.await.unwrap().unwrap(), "the promotion, first in the queue, lands");
+	let err = scheduling.await.unwrap().unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
+	assert!(err.to_string().contains("re-submit"), "the refusal names the stale judgement, not the pending slot: {err}");
+
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(hurdled), "the promoted terms are the live terms");
+	assert!(h.changes.find(stale_id).await.unwrap().is_none(), "the stale request left no row behind");
+	assert!(h.changes.pending(&service).await.unwrap().is_none());
+	assert_eq!(
+		h.changes.list(&service).await.unwrap().iter().map(|row| (row.version, row.state)).collect::<Vec<_>>(),
+		vec![(2, FeePolicyChangeState::Active), (1, FeePolicyChangeState::Superseded)]
+	);
+}
