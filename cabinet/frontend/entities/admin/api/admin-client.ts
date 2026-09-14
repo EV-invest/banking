@@ -15,11 +15,14 @@ import type {
   AllocationList,
   AdminUserList,
   AdminUserProfile,
+  CancelFeePolicyChangeRequest,
   FeeAssessmentList,
-  FeePolicy,
+  FeePolicyChange,
+  FeePolicyChangeList,
   FeePolicyList,
   FeeSettlement,
   FeeShares,
+  ScheduleFeePolicyRequest,
   CabinetConfig,
   FundNav,
   FundRevenue,
@@ -219,14 +222,15 @@ export const fetchFeeShares = (service: string): Promise<FeeShares> => getJson(`
 
 export const fetchFeeAssessments = (service: string): Promise<FeeAssessmentList> => getJson(`/api/admin/fees/assessments?service=${encodeURIComponent(service)}`);
 
-export const setFeePolicy = (body: {
-  service: string;
-  management_bps: number;
-  performance_bps: number;
-  hurdle_bps: number;
-  basis: string;
-  crystallization: string;
-}): Promise<FeePolicy> => postJson("/api/admin/fees/policy", body);
+/** Propose a change of a fund's terms. The hub decides who must agree and when the change
+ *  binds; the answer says both (`state`, `requirement`, `effective_from`). A second request
+ *  while one is pending is refused until the first is cancelled. */
+export const scheduleFeePolicy = (body: ScheduleFeePolicyRequest): Promise<FeePolicyChange> => postJson("/api/admin/fees/policy", body);
+
+export const cancelFeePolicyChange = (body: CancelFeePolicyChangeRequest): Promise<FeePolicyChange> => postJson("/api/admin/fees/policy/cancel", body);
+
+/** A fund's whole history of terms, newest version first. */
+export const fetchFeePolicyChanges = (service: string): Promise<FeePolicyChangeList> => getJson(`/api/admin/fees/changes?service=${encodeURIComponent(service)}`);
 
 // Empty `units` settles the whole accumulated balance — the ordinary end-of-period call.
 export const settleFeeShares = (body: { service: string; units: string }): Promise<FeeSettlement> => postJson("/api/admin/fees/settle", body);
