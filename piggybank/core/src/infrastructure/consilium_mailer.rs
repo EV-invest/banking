@@ -306,6 +306,28 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 	DomainError::Repository(err.to_string())
 }
 
+/// How many of one subject's mails of `kind` were given up on: undelivered and pinned at the
+/// attempt ceiling, whether they failed their way there or were retired past the deferral
+/// ceiling. What a promotion of fee terms asks before binding over the holders — a notice
+/// period whose notices never arrived is not notice.
+pub(crate) async fn retired_count(conn: &mut PgConnection, subject: MailSubject, kind: &str) -> Result<i64, DomainError> {
+	let (sql, id) = match subject {
+		MailSubject::Consilium(id) => (
+			"SELECT COUNT(*) FROM consilium_mail WHERE consilium_id = $1 AND kind = $2 AND sent_at IS NULL AND attempts >= $3",
+			id,
+		),
+		MailSubject::Payment(id) => (
+			"SELECT COUNT(*) FROM consilium_mail WHERE payment_id = $1 AND kind = $2 AND sent_at IS NULL AND attempts >= $3",
+			id,
+		),
+		MailSubject::FeePolicyChange(id) => (
+			"SELECT COUNT(*) FROM consilium_mail WHERE fee_policy_change_id = $1 AND kind = $2 AND sent_at IS NULL AND attempts >= $3",
+			id,
+		),
+	};
+	sqlx::query_scalar(sql).bind(id).bind(kind).bind(MAX_ATTEMPTS).fetch_one(&mut *conn).await.map_err(repo_err)
+}
+
 /// How many governance mails are still undelivered — the number the boot warning quotes when
 /// the seam is unwired.
 pub async fn pending_count(pool: &PgPool) -> Result<i64, DomainError> {

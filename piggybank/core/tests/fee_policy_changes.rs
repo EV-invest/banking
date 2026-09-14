@@ -461,6 +461,46 @@ async fn a_change_over_a_held_fund_waits_out_the_notice_and_mails_every_holder()
 }
 
 #[tokio::test]
+async fn a_change_does_not_bind_while_a_holder_notice_has_been_given_up_on() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	holder(&h, &service, "1000").await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let change = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	assert_eq!(notices(&h, &change).await.len(), 1);
+	let_the_notice_run(&h, &change).await;
+
+	// The relay refused the notice on every attempt until the mailer retired it (ten is the
+	// mailer's ceiling, `tests/consilium_mailer.rs` pins it): a holder who was never told.
+	sqlx::query("UPDATE consilium_mail SET attempts = 10, last_error = 'governance mail relay: status: InvalidArgument' WHERE fee_policy_change_id = $1 AND sent_at IS NULL")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	let refused = h.changes.promote(change.id, now()).await.unwrap_err();
+	assert!(matches!(refused, DomainError::Conflict(_)), "{refused:?}");
+	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Scheduled, "the change waits; nothing was written");
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE), "the old terms stay live");
+	assert!(h.changes.due(now()).await.unwrap().contains(&change.id), "still due: the sweeper keeps retrying, and escalating");
+	let mut failures = std::collections::HashMap::new();
+	assert_eq!(fee_app::promote_due(&h.changes, now(), &mut failures).await.unwrap(), 0);
+	assert_eq!(failures.get(&change.id), Some(&1), "the sweeper counts the refusal towards its error streak");
+
+	// Delivered after all: the terms bind.
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE fee_policy_change_id = $1")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(cheaper));
+	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Active);
+}
+
+#[tokio::test]
 async fn one_change_is_on_its_way_per_product_until_it_is_cancelled() {
 	let _lock = exclusive().await;
 	let Some(h) = harness().await else { return };

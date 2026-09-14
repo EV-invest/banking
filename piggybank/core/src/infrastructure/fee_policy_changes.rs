@@ -13,6 +13,8 @@
 //!   rate as of `effective_from` (`carry_accrual` reads `fee_policies` on this same
 //!   connection, which is why it runs strictly BEFORE the upsert), then writes the new
 //!   terms. `docs/FEES.md` § "The elapsed clock": nobody re-prices time that has passed.
+//!   It refuses while a holder's notice has been given up on: the notice period is only
+//!   notice if the notices arrived.
 //!
 //! Runtime queries throughout (`sqlx::query*`), so `cargo build` needs no database; the
 //! integration suite in `tests/fee_policy_changes.rs` executes every one of them.
@@ -30,7 +32,7 @@ use uuid::Uuid;
 use crate::{
 	infrastructure::{
 		consilium,
-		consilium_mailer::{MailSubject, enqueue},
+		consilium_mailer::{self, MailSubject, enqueue},
 		fee_accrual::carry_accrual,
 		fees::{policy_from_row, repo_err},
 	},
@@ -508,6 +510,17 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		let change = locked(&mut tx, id).await?;
 		if change.state != FeePolicyChangeState::Scheduled || change.effective_from_unix > now_unix {
 			return Ok(false);
+		}
+		// A notice the mailer gave up on — refused by the relay until its attempts ran out, or
+		// deferred past the ceiling — is a holder the notice period exists to warn who was
+		// never warned, and the terms do not bind over them. The change stays `scheduled`:
+		// the sweeper's failure streak turns the refusal into an error, and the operator
+		// cancels and schedules it again once the holders can be reached.
+		let undelivered = consilium_mailer::retired_count(&mut tx, MailSubject::FeePolicyChange(id.raw()), "fee_policy_notice").await?;
+		if undelivered > 0 {
+			return Err(DomainError::Conflict(format!(
+				"{undelivered} holder notice(s) for this change could not be delivered — cancel it and schedule it again once the holders can be reached"
+			)));
 		}
 
 		// Every holder's row, locked — the same lock a charge and a settle take — so no
