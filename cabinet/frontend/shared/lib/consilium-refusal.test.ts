@@ -22,6 +22,9 @@ const MAIL =
 const COOLING =
   "the owner roster changed less than 48h ago; a payout consilium cannot be opened until the cooling-off period lifts in 12h 30m";
 const TOO_FEW = "a payout consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached";
+// Since #250 the noun names the kind being opened; the rest of the sentence is shared.
+const TOO_FEW_FEE_POLICY =
+  "a fee-policy consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached";
 
 test("the two ALREADY_EXISTS refusals are told apart by message, not by status", () => {
   // They arrive with the same status, so the status cannot be the discriminator.
@@ -51,6 +54,18 @@ test("the deadline is an absolute moment taken once, from the duration", () => {
 
 test("a fund below the floor is recognised, with its owner count", () => {
   assert.deepEqual(classifyConsiliumRefusal(TOO_FEW), { kind: "too-few-owners", ownerCount: 2 });
+  assert.deepEqual(classifyConsiliumRefusal(TOO_FEW_FEE_POLICY), { kind: "too-few-owners", ownerCount: 2 });
+});
+
+test("the owner floor classifies the same whichever kind of consilium was refused", () => {
+  // The match is anchored on the condition, not on the noun, so a kind the backend names
+  // later still lands on the same explanation rather than on its raw prose.
+  for (const noun of ["payout", "payment", "valuation-override", "fee-policy"]) {
+    const message =
+      `a ${noun} consilium needs at least 3 owners; this fund has 2, so the threshold can never be reached`;
+    const refusal = classifyConsiliumRefusal(new WireError(message));
+    assert.deepEqual(refusal, { kind: "too-few-owners", ownerCount: 2 }, noun);
+  }
 });
 
 test("anything else is left to the caller's existing error handling", () => {

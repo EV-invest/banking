@@ -1,4 +1,4 @@
-// Reading the three refusals that stop a payout consilium being opened.
+// Reading the three refusals that stop a consilium — of any kind — being opened.
 //
 // The money plane raises all three as `DomainError::Conflict`, which reaches the browser as
 // one status with the plane's own prose in the body. `shared/lib/api-client.ts` passes prose
@@ -42,7 +42,8 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * Classify a failed `POST /api/consilium/revenue-payout`.
+ * Classify a refused attempt to open a consilium — a payout, a payment, any kind: the
+ * money plane words the three refusals the same way for each, save for the noun.
  *
  * Returns null for anything not recognised — including every ordinary failure (offline, a
  * 500, a bad amount). The caller renders those the way it always has.
