@@ -329,7 +329,7 @@ impl Book {
 	}
 
 	async fn open(&self, h: &Harness, service: &ServiceId) {
-		let policy = BookPolicy::new(true, 0, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500).unwrap();
+		let policy = BookPolicy::new(true, 0, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, false).unwrap();
 		book_app::set_policy(&h.allocations, &self.store, service, policy).await.unwrap();
 	}
 
