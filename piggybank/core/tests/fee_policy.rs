@@ -637,12 +637,18 @@ async fn settling_fee_units_is_the_only_moment_a_fee_becomes_cash() {
 	assert_eq!(cash_of(&h, LedgerAccountKey::ServiceClaim(service)).await, fund_before.checked_sub(settlement.cash()).unwrap());
 }
 
-/// Every unit in a resting sell: the holding reads zero, so the charge has nothing to
-/// take. The assessment then persists NOTHING — no debt, no clock move — and the year
-/// stays owed as elapsed time; the moment the units come home the next assessment
-/// charges it in full. The holding is never pushed negative and the escrow never touched.
+/// Every unit in a resting sell: the fee is still owed on the whole position — an order
+/// moves units into the book's escrow, it does not make them somebody else's — but none
+/// of it can be taken, so the charge is recorded with nothing collected, the whole year
+/// carried as debt, and the clock moved. The holding is never pushed negative and the
+/// escrow never touched; the moment the units come home the next assessment collects the
+/// debt, and only the debt — the year is not billed twice.
+///
+/// This is #255. Before it, a charge with nothing collectable persisted nothing at all,
+/// so a holder with an ask resting on the book deferred their fee for as long as it
+/// rested and was billed the whole stretch in one blow the day it came off.
 #[tokio::test]
-async fn units_escrowed_by_a_resting_sell_are_not_clawed_back_and_the_period_carries() {
+async fn units_escrowed_by_a_resting_sell_are_charged_as_debt_and_the_clock_moves() {
 	let _no_sweeping = no_sweeping().await;
 	let Some(h) = harness().await else { return };
 	let book = Book::new(&h);
@@ -659,7 +665,11 @@ async fn units_escrowed_by_a_resting_sell_are_not_clawed_back_and_the_period_car
 
 	backdate(&h, user, &service, YEAR).await;
 	let owed_since = accrued_at(&h, user, &service).await;
-	assert!(assess(&h, user, &service).await.is_none(), "nothing collectable, so nothing is charged");
+	let charge = assess(&h, user, &service).await.expect("the year is owed on the escrowed position and must be recorded");
+	assert_close(charge.management, usdt("20"), "a year of management on 1000 invested, escrow or not");
+	assert_eq!(charge.charged_units, Shares::ZERO, "nothing was collectable");
+	assert_eq!(charge.charged_cash, Usdt::ZERO);
+	assert_close(charge.debt_carried, usdt("20"), "the whole charge is carried as debt");
 	assert_eq!(
 		units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await,
 		Shares::ZERO,
@@ -670,18 +680,34 @@ async fn units_escrowed_by_a_resting_sell_are_not_clawed_back_and_the_period_car
 		shares("1000"),
 		"the escrow is the book's, not the fee's"
 	);
-	assert_eq!(accrued_at(&h, user, &service).await, owed_since, "the clock did not move: the year is still owed");
-	assert!(fee_app::list_assessments(&h.assessments, user).await.unwrap().is_empty(), "no assessment was recorded");
+	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("1000"), "supply is untouched");
+	assert!(accrued_at(&h, user, &service).await > owed_since, "the clock moved: the year has been assessed");
+	assert_close(h.accruals.find(user, &service).await.unwrap().unwrap().debt, usdt("20"), "the debt is on the position");
+	let recorded = fee_app::list_assessments(&h.assessments, user).await.unwrap();
+	assert_eq!(recorded.len(), 1, "the deferred charge has its audit row");
+	assert_eq!(recorded[0].charged_units, Shares::ZERO);
 
-	// The order comes off the book and the units come home; the whole year is charged.
+	// The order comes off the book and the units come home; the next assessment collects
+	// the debt — and the seconds since, not the year again.
 	book.cancel(&h, user, ask).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await, shares("1000"));
-	let charge = assess(&h, user, &service).await.expect("the year is collected once the units are free");
-	assert_close(charge.management, usdt("20"), "a year of management on 1000 invested, deferred by the escrow");
-	assert_eq!((charge.debt_opening, charge.debt_carried), (Usdt::ZERO, Usdt::ZERO));
+	let next = assess(&h, user, &service).await.expect("the carried debt is collected once the units are free");
+	assert_close(next.debt_opening, usdt("20"), "the debt came in");
+	assert!(
+		next.management < usdt("0.01"),
+		"only the seconds since the deferred charge accrued, not the year again: {}",
+		next.management
+	);
+	assert_close(next.charged_cash, usdt("20"), "and went out in units");
+	assert!(next.debt_carried < usdt("0.000001"), "nothing but the sub-unit residue is carried: {}", next.debt_carried);
+	assert_close(
+		charge.due.checked_add(next.management).unwrap(),
+		usdt("20"),
+		"the two passes together bill exactly one year's fee",
+	);
 	assert_eq!(
 		units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await,
-		shares("1000").checked_sub(charge.charged_units).unwrap()
+		shares("1000").checked_sub(next.charged_units).unwrap()
 	);
 	assert_eq!(
 		units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await,
@@ -690,10 +716,11 @@ async fn units_escrowed_by_a_resting_sell_are_not_clawed_back_and_the_period_car
 	);
 }
 
-/// Most of the units in a resting sell: the charge takes what the holding still has, and
-/// the rest is carried as debt — the same road a queued redemption sends it down. The
-/// escrow is never drawn on, the holding never goes negative, and the debt is collected
-/// by the next assessment once the order is cancelled and the units are back.
+/// Most of the units in a resting sell: the fee is owed on all of them, the charge takes
+/// what the holding still has, and the rest is carried as debt — the same road a queued
+/// redemption sends it down. The escrow is never drawn on, the holding never goes
+/// negative, and the debt is collected by the next assessment once the order is
+/// cancelled and the units are back.
 #[tokio::test]
 async fn a_partial_escrow_defers_the_uncollectable_fee_into_debt_until_the_units_return() {
 	let _no_sweeping = no_sweeping().await;
@@ -711,7 +738,7 @@ async fn a_partial_escrow_defers_the_uncollectable_fee_into_debt_until_the_units
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await, shares("5"));
 	backdate(&h, user, &service, YEAR).await;
 	let charge = assess(&h, user, &service).await.expect("the free units carry what they can");
-	assert_close(charge.management, usdt("20"), "a year of management on 1000 invested");
+	assert_close(charge.management, usdt("20"), "a year of management on 1000 invested — the escrowed 995 included");
 	assert_eq!(charge.charged_units, shares("5"), "capped by the free holding, not by what the book holds");
 	assert_close(charge.debt_carried, usdt("15"), "the rest is debt, not a negative balance");
 	assert_eq!(
@@ -1018,10 +1045,223 @@ async fn snapshot_at(h: &Harness, user: UserId, service: &ServiceId, accrued_at_
 	let units = units_of(h, LedgerAccountKey::UserShares(service.clone(), user)).await;
 	domain::fees::PositionSnapshot {
 		units,
+		collectable: units,
 		cost_basis: accrual.cost_basis,
 		high_water_mark: accrual.high_water_mark,
 		debt: accrual.debt,
 		accrued_at_unix,
 		crystallized_at_unix: accrual.crystallized_at_unix,
 	}
+}
+
+/// #255 as a regression pin, end to end: a holder whose every unit rests in a sell order is
+/// not skipped by the assessment. The charge is recorded with nothing collected, the debt
+/// is on the position, the clock has moved, and the ledger — holding, escrow, fee account,
+/// supply — is exactly as it was.
+#[tokio::test]
+async fn a_holder_with_every_unit_in_a_resting_sell_is_assessed_not_skipped() {
+	let _no_sweeping = no_sweeping().await;
+	let Some(h) = harness().await else { return };
+	let book = Book::new(&h);
+	let user = book.provisioned_user().await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	book.open(&h, &service).await;
+	fund_user(&h, user, "5000").await;
+	subscribe(&h, user, &service, "5000").await;
+	let _ask = book.rest_sell(&h, user, &service, "5000").await;
+
+	let holding_before = units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await;
+	let escrow_before = units_of(&h, LedgerAccountKey::BookShares(service.clone(), user)).await;
+	let fee_before = units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await;
+	let outstanding_before = units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await;
+	assert_eq!((holding_before, escrow_before), (Shares::ZERO, shares("5000")));
+
+	backdate(&h, user, &service, YEAR + PERIOD_MARGIN).await;
+	let owed_since = accrued_at(&h, user, &service).await;
+	let charge = assess(&h, user, &service).await.expect("the assessment is not skipped");
+	assert_close(charge.management, usdt("100"), "2% of the 5000 invested, all of it in the escrow");
+	assert_eq!(charge.charged_units, Shares::ZERO);
+	assert_close(charge.debt_carried, usdt("100"), "the whole year is now debt");
+	assert!(charge.crystallized, "the period elapsed, so the performance leg crystallized (to nothing, at a flat NAV)");
+
+	let position = h.accruals.find(user, &service).await.unwrap().unwrap();
+	assert_close(position.debt, usdt("100"), "the debt is written on the position");
+	assert!(position.accrued_at_unix > owed_since, "the accrual clock moved");
+	assert!(position.crystallized_at_unix > owed_since, "and so did the period clock");
+
+	let recorded = fee_app::list_assessments(&h.assessments, user).await.unwrap();
+	assert_eq!(recorded.len(), 1);
+	assert_eq!(recorded[0].charged_units, Shares::ZERO, "the audit row says nothing was collected");
+	assert_eq!(recorded[0].charged_cash, Usdt::ZERO);
+	assert_close(recorded[0].debt_carried, usdt("100"), "and how much was deferred");
+
+	// Nothing moved on the ledger: no clawback was posted, because there was none to post.
+	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await, holding_before);
+	assert_eq!(units_of(&h, LedgerAccountKey::BookShares(service.clone(), user)).await, escrow_before);
+	assert_eq!(units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await, fee_before);
+	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, outstanding_before);
+
+	// And none was even asked for: a wholly deferred charge raises no `Charged`, so
+	// neither the audit log nor the relay's outbox has a row for this fund — the ledger
+	// stayed put because there was nothing to relay, not because a zero transfer was
+	// tried and shrugged off.
+	let charged_events: i64 = sqlx::query_scalar(
+		"SELECT COUNT(*) FROM (SELECT 1 FROM event_log WHERE aggregate = 'fee_assessment' AND payload->>'service' = $1 \
+		 UNION ALL SELECT 1 FROM outbox WHERE aggregate = 'fee_assessment' AND payload->>'service' = $1) AS rows",
+	)
+	.bind(service.as_str())
+	.fetch_one(&h.pool)
+	.await
+	.unwrap();
+	assert_eq!(charged_events, 0, "a charge that collected nothing raises no Charged event");
+
+	// The holder's statement still shows it — as a fee that deferred, worth nothing in
+	// units, rather than choking the feed on a zero row the schema only just allowed.
+	let feed = piggybank_core::infrastructure::operation_feed::PgOperationFeed::new(h.pool.clone());
+	let page = piggybank_core::ports::operations::OperationFeed::list_by_user(&feed, user, piggybank_core::ports::operations::MAX_PAGE)
+		.await
+		.expect("the feed reads a zero-unit fee row");
+	let fee_rows: Vec<_> = page.operations.iter().filter(|op| op.kind() == "fee").collect();
+	assert_eq!(fee_rows.len(), 1, "the deferred charge is on the statement");
+	let piggybank_core::ports::operations::Operation::FeeCharge {
+		units: fed_units,
+		cash: fed_cash,
+		management: fed_management,
+		deferred,
+		..
+	} = fee_rows[0]
+	else {
+		panic!("expected a fee row, got {}", fee_rows[0].kind());
+	};
+	assert_eq!((*fed_units, *fed_cash), (Shares::ZERO, Usdt::ZERO));
+	assert_close(*fed_management, usdt("100"), "the feed carries what was owed, not only what was taken");
+	assert!(*deferred, "the feed flags the charge as deferred");
+}
+
+/// The other way a holder's units can be theirs yet untouchable: a queued redemption
+/// reserves them as a pending burn, so the holding's available balance is zero while its
+/// posted balance is not. The fee is still owed on all of them — and, the fund having been
+/// marked up to make the redemption queue, the performance leg is owed on all of them too.
+/// Nothing is collected while the reserve stands; the debt is taken the moment the
+/// redemption is cancelled and the units are free again.
+#[tokio::test]
+async fn units_reserved_by_a_queued_redemption_are_charged_as_debt_and_the_clock_moves() {
+	let _no_sweeping = no_sweeping().await;
+	let Some(h) = harness().await else { return };
+	let user = UserId::new();
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	fund_user(&h, user, "1000").await;
+	subscribe(&h, user, &service, "1000").await;
+
+	// Mark the fund up to NAV 2.0: the units are now worth more than the cash behind them,
+	// so a full exit cannot settle and genuinely QUEUES — reserving every unit as a pending
+	// burn. Posted stays 1000; available drops to nothing.
+	let claim = cash_of(&h, LedgerAccountKey::ServiceClaim(service.clone())).await;
+	funds_app::record_valuation(&h.nav, h.ledger.as_ref(), ValuationId::new(), service.clone(), claim.checked_add(claim).unwrap(), "itest")
+		.await
+		.unwrap();
+	funds_app::request_redemption(&fund_ports(&h), &h.reds, user, service.clone(), shares("1000"), now_unix())
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	let holding = h.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await.unwrap();
+	assert_eq!(
+		(Shares::from_base_units(holding.posted), Shares::from_base_units(holding.available())),
+		(shares("1000"), Shares::ZERO),
+		"reserved, not burned"
+	);
+
+	backdate(&h, user, &service, YEAR + PERIOD_MARGIN).await;
+	let owed_since = accrued_at(&h, user, &service).await;
+	let charge = assess(&h, user, &service).await.expect("the year is owed on the reserved position and must be recorded");
+	// Management: 2% of the 1000 invested = 20, or 10 units at NAV 2.0, leaving 990 in
+	// scope. Performance: 20% of the 1.0 gain on those 990 = 198 — on the WHOLE position,
+	// reserve included; a charge measured on the available balance would find no units to
+	// have gained anything.
+	assert_close(charge.management, usdt("20"), "a year of management on 1000 invested");
+	assert_close(charge.performance, usdt("198"), "the gain on every unit the holder owns, reserved or not");
+	assert_eq!(charge.charged_units, Shares::ZERO, "nothing was collectable");
+	assert_close(charge.debt_carried, usdt("218"), "the whole charge is carried as debt");
+
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await,
+		shares("1000"),
+		"the reserve was not drawn on"
+	);
+	assert_eq!(units_of(&h, LedgerAccountKey::FeeShares(service.clone())).await, Shares::ZERO, "no units reached the fee account");
+	let position = h.accruals.find(user, &service).await.unwrap().unwrap();
+	assert_close(position.debt, usdt("218"), "the debt is on the position");
+	assert!(position.accrued_at_unix > owed_since, "the clock moved: the year has been assessed");
+	assert_eq!(position.high_water_mark, Nav::parse_decimal("2").unwrap(), "the mark ratcheted with the crystallization");
+
+	// The investor changes their mind; the reserve is released and the debt is collected
+	// — at NAV 2.0, so 109 units for the 218 owed — with only the seconds since on top.
+	let queued = piggybank_core::ports::redemptions::RedemptionRepository::list_queued(&h.reds).await.unwrap();
+	let mine = queued.iter().find(|q| q.service == service).expect("the redemption is queued");
+	funds_app::cancel_redemption(&h.reds, &h.notify, mine.id, user).await.unwrap();
+	h.relay.drain().await;
+	let next = assess(&h, user, &service).await.expect("the carried debt is collected once the units are free");
+	assert_close(next.debt_opening, usdt("218"), "the debt came in");
+	assert!(next.performance.is_zero(), "the mark already sits at 2.0, so there is no new gain to charge");
+	assert!(
+		next.management < usdt("0.01"),
+		"only the seconds since the deferred charge, not the year again: {}",
+		next.management
+	);
+	assert_close(next.charged_cash, usdt("218"), "and went out in units");
+	assert_close(
+		Nav::parse_decimal("2")
+			.unwrap()
+			.value(units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await)
+			.unwrap(),
+		usdt("1782"),
+		"1000 units less 109 taken, at 2.0",
+	);
+}
+
+/// Units parked in the book are still measured at the fund's mark: a holder whose whole
+/// position rests in a sell order owes the performance leg on the gain of every unit,
+/// exactly as if the order had never been placed. Pins the escrow addend in the
+/// position read — a fee measured on the holding alone would see no units to have gained.
+#[tokio::test]
+async fn units_escrowed_by_a_resting_sell_still_owe_performance_on_their_gain() {
+	let _no_sweeping = no_sweeping().await;
+	let Some(h) = harness().await else { return };
+	let book = Book::new(&h);
+	let user = book.provisioned_user().await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	book.open(&h, &service).await;
+	fund_user(&h, user, "1000").await;
+	subscribe(&h, user, &service, "1000").await;
+	let _ask = book.rest_sell(&h, user, &service, "1000").await;
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::UserShares(service.clone(), user)).await,
+		Shares::ZERO,
+		"every unit is in the escrow"
+	);
+
+	// The fund doubles while the ask rests.
+	let claim = cash_of(&h, LedgerAccountKey::ServiceClaim(service.clone())).await;
+	funds_app::record_valuation(&h.nav, h.ledger.as_ref(), ValuationId::new(), service.clone(), claim.checked_add(claim).unwrap(), "itest")
+		.await
+		.unwrap();
+	backdate(&h, user, &service, YEAR + PERIOD_MARGIN).await;
+
+	let charge = assess(&h, user, &service).await.expect("the year is owed on the escrowed position");
+	assert_close(charge.management, usdt("20"), "a year of management on 1000 invested");
+	assert_close(
+		charge.performance,
+		usdt("198"),
+		"20% of the 1.0 gain on the 990 units net of management — all of them in the book",
+	);
+	assert_eq!(charge.charged_units, Shares::ZERO);
+	assert_close(charge.debt_carried, usdt("218"), "owed in full, collected not at all");
+	assert_eq!(
+		units_of(&h, LedgerAccountKey::BookShares(service.clone(), user)).await,
+		shares("1000"),
+		"the escrow is the book's, not the fee's"
+	);
 }
