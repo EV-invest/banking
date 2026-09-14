@@ -115,9 +115,13 @@ impl From<cc::UserProfile> for UserProfile {
 
 // ── piggybank: wallet ────────────────────────────────────────────────────────
 
+/// The unified balance by lifecycle: `total = available + in_orders + invested +
+/// pending_withdrawal`. `in_orders` is the cash the book holds for the caller's resting
+/// buy orders — still theirs, so it is inside `total` and outside `available`.
 #[derive(Default, Serialize)]
 pub struct Balance {
 	pub available: String,
+	pub in_orders: String,
 	pub invested: String,
 	pub pending_withdrawal: String,
 	pub total: String,
@@ -127,6 +131,7 @@ impl From<bk::Balance> for Balance {
 	fn from(b: bk::Balance) -> Self {
 		Self {
 			available: b.available,
+			in_orders: b.in_orders,
 			invested: b.invested,
 			pending_withdrawal: b.pending_withdrawal,
 			total: b.total,
@@ -701,7 +706,7 @@ impl From<bk::AccruedFees> for AccruedFees {
 /// One order. `user_id` is populated only on the caller's own orders. `price` is the
 /// limit — for a market order, the one the hub derived from the quote at placement.
 /// `avg_fill_price` is empty until the first fill; `reject_reason` is set only on
-/// `rejected`.
+/// `rejected`, `cancel_reason` only on `cancelled`.
 #[derive(Serialize)]
 pub struct Order {
 	pub id: String,
@@ -722,6 +727,8 @@ pub struct Order {
 	/// `open` | `partially_filled` | `filled` | `cancelled` | `rejected`.
 	pub state: String,
 	pub reject_reason: String,
+	/// `user` | `ioc_remainder` | `market_remainder`; empty unless `cancelled`.
+	pub cancel_reason: String,
 	pub client_order_id: String,
 	pub created_at: String,
 	pub updated_at: String,
@@ -744,6 +751,7 @@ impl From<bk::Order> for Order {
 			fee_paid: o.fee_paid,
 			state: o.state,
 			reject_reason: o.reject_reason,
+			cancel_reason: o.cancel_reason,
 			client_order_id: o.client_order_id,
 			created_at: o.created_at.to_string(),
 			updated_at: o.updated_at.to_string(),
@@ -2157,6 +2165,29 @@ mod tests {
 		assert_eq!(mask_email("not-an-address"), "***");
 		assert_eq!(mask_email("@example.com"), "***");
 		assert_eq!(mask_email("ada@"), "***");
+	}
+
+	/// The wallet's five lifecycle figures cross one-to-one — `in_orders` in particular,
+	/// which the cabinet shows beside `available` so a resting buy order explains the dip.
+	#[test]
+	fn the_balance_carries_every_lifecycle_figure() {
+		let balance = Balance::from(bk::Balance {
+			available: "87.88".into(),
+			in_orders: "12.12".into(),
+			invested: "50".into(),
+			pending_withdrawal: "0".into(),
+			total: "150".into(),
+		});
+		assert_eq!(
+			(
+				balance.available.as_str(),
+				balance.in_orders.as_str(),
+				balance.invested.as_str(),
+				balance.pending_withdrawal.as_str(),
+				balance.total.as_str()
+			),
+			("87.88", "12.12", "50", "0", "150")
+		);
 	}
 
 	/// A non-ASCII local part must not be sliced mid-character — a byte slice would panic

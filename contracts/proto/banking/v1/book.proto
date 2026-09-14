@@ -180,10 +180,15 @@ message Order {
   string avg_fill_price = 11;    // decimal USDT per unit; empty until the first fill
   string fee_paid = 12;          // decimal USDT the caller paid as taker on this order
   string state = 13;             // open | partially_filled | filled | cancelled | rejected
-  string reject_reason = 14;
+  string reject_reason = 14;     // free text; set exactly when state = rejected
   string client_order_id = 15;
   int64 created_at = 16;         // unix seconds
   int64 updated_at = 17;         // unix seconds
+  // Set exactly when state = cancelled: "" | user | ioc_remainder | market_remainder.
+  // `user` is the owner's own cancel; the other two are the hub cancelling what an IOC
+  // limit / a market order could not fill at once — such an order may still show
+  // `filled > 0`, which is what makes the reason worth carrying.
+  string cancel_reason = 18;
 }
 
 message OrderList {

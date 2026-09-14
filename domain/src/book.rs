@@ -209,6 +209,50 @@ impl OrderState {
 	}
 }
 
+/// Why a `cancelled` order left the book. Every cancellation carries one, so a client
+/// can tell "you cancelled it" from "the hub cancelled what could not fill" — an IOC or a
+/// market order that filled in part ends `cancelled` with `filled > 0`, which without
+/// the reason reads exactly like a user's own cancel. Disjoint from `reject_reason`,
+/// which is free text on a `rejected` order (the ledger's refusal); a cancelled order
+/// never carries a reject reason and a rejected one never carries a cancel reason.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CancelReason {
+	/// The owner cancelled it.
+	User,
+	/// An immediate-or-cancel limit order: whatever did not fill at once was cancelled.
+	IocRemainder,
+	/// A market order (always IOC): whatever the priced limit could not reach was cancelled.
+	MarketRemainder,
+}
+
+impl CancelReason {
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::User => "user",
+			Self::IocRemainder => "ioc_remainder",
+			Self::MarketRemainder => "market_remainder",
+		}
+	}
+
+	pub fn parse(raw: &str) -> Result<Self, DomainError> {
+		match raw {
+			"user" => Ok(Self::User),
+			"ioc_remainder" => Ok(Self::IocRemainder),
+			"market_remainder" => Ok(Self::MarketRemainder),
+			other => Err(DomainError::Validation(format!("unknown cancel reason: {other}"))),
+		}
+	}
+
+	/// The reason for the unfilled remainder of an order whose remainder does not rest.
+	pub fn remainder_of(kind: OrderKind) -> Self {
+		match kind {
+			OrderKind::Market => Self::MarketRemainder,
+			OrderKind::Limit => Self::IocRemainder,
+		}
+	}
+}
+
 /// The bucket width of a candle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CandleResolution {
@@ -532,6 +576,7 @@ pub struct OrderSnapshot {
 	pub reserved: Locked,
 	pub state: OrderState,
 	pub reject_reason: Option<String>,
+	pub cancel_reason: Option<CancelReason>,
 }
 
 /// One order — placed, filled in steps, and finally filled, cancelled or rejected. It
@@ -555,6 +600,7 @@ pub struct Order {
 	reserved: Locked,
 	state: OrderState,
 	reject_reason: Option<String>,
+	cancel_reason: Option<CancelReason>,
 }
 
 impl Order {
@@ -592,6 +638,7 @@ impl Order {
 			reserved,
 			state: OrderState::Open,
 			reject_reason: None,
+			cancel_reason: None,
 		}
 	}
 
@@ -613,6 +660,7 @@ impl Order {
 			reserved: snapshot.reserved,
 			state: snapshot.state,
 			reject_reason: snapshot.reject_reason,
+			cancel_reason: snapshot.cancel_reason,
 		}
 	}
 
@@ -653,13 +701,16 @@ impl Order {
 		Ok(())
 	}
 
-	/// Take the order off the book (the caller's cancel, or an IOC remainder). Idempotent
-	/// on an already-cancelled order; a filled or rejected one is a `Conflict`.
-	pub fn cancel(&mut self) -> Result<(), DomainError> {
+	/// Take the order off the book for `reason` (the caller's cancel, or an IOC / market
+	/// remainder). Idempotent on an already-cancelled order — the first reason stands,
+	/// because it is the one that actually ended the order; a filled or rejected one is a
+	/// `Conflict`.
+	pub fn cancel(&mut self, reason: CancelReason) -> Result<(), DomainError> {
 		match self.state {
 			OrderState::Cancelled => Ok(()),
 			OrderState::Open | OrderState::PartiallyFilled => {
 				self.state = OrderState::Cancelled;
+				self.cancel_reason = Some(reason);
 				Ok(())
 			}
 			OrderState::Filled | OrderState::Rejected => Err(DomainError::Conflict(format!("order is {}, not cancellable", self.state.as_str()))),
@@ -746,6 +797,11 @@ impl Order {
 
 	pub fn reject_reason(&self) -> Option<&str> {
 		self.reject_reason.as_deref()
+	}
+
+	/// Set exactly when the order is `cancelled`.
+	pub fn cancel_reason(&self) -> Option<CancelReason> {
+		self.cancel_reason
 	}
 }
 
@@ -995,6 +1051,13 @@ mod tests {
 			assert_eq!(OrderState::parse(state.as_str()).unwrap(), state);
 			assert_eq!(serde_json::to_string(&state).unwrap(), format!("\"{}\"", state.as_str()));
 		}
+		for reason in [CancelReason::User, CancelReason::IocRemainder, CancelReason::MarketRemainder] {
+			assert_eq!(CancelReason::parse(reason.as_str()).unwrap(), reason);
+			assert_eq!(serde_json::to_string(&reason).unwrap(), format!("\"{}\"", reason.as_str()));
+		}
+		assert_eq!(CancelReason::remainder_of(OrderKind::Limit), CancelReason::IocRemainder);
+		assert_eq!(CancelReason::remainder_of(OrderKind::Market), CancelReason::MarketRemainder);
+		assert!(CancelReason::parse("timeout").is_err());
 		for side in [Side::Buy, Side::Sell] {
 			assert_eq!(Side::parse(side.as_str()).unwrap(), side);
 			assert_eq!(side.opposite().opposite(), side);
@@ -1204,7 +1267,7 @@ mod tests {
 		// 20.2 reserved − 19.6 spent − 0.076 fee = 0.524 handed back.
 		assert_eq!(buy.release(), Some(Locked::Cash(usdt("0.524"))));
 		assert!(buy.fill(shares("1"), price("2"), Usdt::ZERO).is_err(), "a filled order takes no more");
-		assert!(matches!(buy.cancel(), Err(DomainError::Conflict(_))));
+		assert!(matches!(buy.cancel(CancelReason::User), Err(DomainError::Conflict(_))));
 
 		// A sell escrows its units and releases the unsold ones on cancel.
 		let mut sell = Order::place(
@@ -1220,10 +1283,13 @@ mod tests {
 			Locked::Units(shares("10")),
 		);
 		sell.fill(shares("3"), price("2"), Usdt::ZERO).unwrap();
-		sell.cancel().unwrap();
+		sell.cancel(CancelReason::User).unwrap();
 		assert_eq!(sell.state(), OrderState::Cancelled);
+		assert_eq!(sell.cancel_reason(), Some(CancelReason::User));
 		assert_eq!(sell.release(), Some(Locked::Units(shares("7"))));
-		sell.cancel().unwrap();
+		// A repeat cancel is the documented no-op: the reason that ended the order stands.
+		sell.cancel(CancelReason::IocRemainder).unwrap();
+		assert_eq!(sell.cancel_reason(), Some(CancelReason::User));
 		assert!(sell.fill(shares("1"), price("2"), Usdt::ZERO).is_err(), "a cancelled order takes no more");
 		// A fully filled sell has nothing left to hand back.
 		let mut sold = Order::place(

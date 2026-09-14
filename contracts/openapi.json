@@ -7805,7 +7805,7 @@
           "invested": {
             "type": "string",
             "title": "invested",
-            "description": "staked in fund services (active allocations)"
+            "description": "held in fund units at NAV, the units escrowed by resting sell orders included"
           },
           "pending_withdrawal": {
             "type": "string",
@@ -7815,12 +7815,17 @@
           "total": {
             "type": "string",
             "title": "total",
-            "description": "available + invested + pending_withdrawal"
+            "description": "available + in_orders + invested + pending_withdrawal"
+          },
+          "in_orders": {
+            "type": "string",
+            "title": "in_orders",
+            "description": "cash escrowed by the caller's resting buy orders on the book (still theirs)"
           }
         },
         "title": "Balance",
         "additionalProperties": false,
-        "description": "The user's single, network-agnostic balance, segmented by lifecycle. Every figure is\n a TigerBeetle-authoritative decimal USDT string; total = available + invested +\n pending_withdrawal."
+        "description": "The user's single, network-agnostic balance, segmented by lifecycle. Every figure is\n a TigerBeetle-authoritative decimal USDT string; total = available + in_orders +\n invested + pending_withdrawal."
       },
       "banking.v1.BookEvent": {
         "type": "object",
@@ -9782,7 +9787,8 @@
           },
           "reject_reason": {
             "type": "string",
-            "title": "reject_reason"
+            "title": "reject_reason",
+            "description": "free text; set exactly when state = rejected"
           },
           "client_order_id": {
             "type": "string",
@@ -9805,6 +9811,11 @@
             "title": "updated_at",
             "format": "int64",
             "description": "unix seconds"
+          },
+          "cancel_reason": {
+            "type": "string",
+            "title": "cancel_reason",
+            "description": "Set exactly when state = cancelled: \"\" | user | ioc_remainder | market_remainder.\n `user` is the owner's own cancel; the other two are the hub cancelling what an IOC\n limit / a market order could not fill at once — such an order may still show\n `filled \u003e 0`, which is what makes the reason worth carrying."
           }
         },
         "title": "Order",

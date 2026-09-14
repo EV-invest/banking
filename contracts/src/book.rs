@@ -4,7 +4,7 @@
 //! A consumer imports this one module instead of hunting through the generated
 //! `banking::v1` namespace: it re-exports the book stubs and message types, and pins the
 //! wire vocabularies the two sides must agree on ([`side`], [`kind`], [`tif`],
-//! [`state`], [`resolution`]).
+//! [`state`], [`cancel_reason`], [`resolution`]).
 //!
 //! # The conversation
 //!
@@ -95,6 +95,24 @@ pub mod state {
 	}
 }
 
+/// The canonical `Order.cancel_reason` strings — set exactly when `state` is
+/// [`state::CANCELLED`], empty otherwise. Disjoint from `reject_reason`, the free text a
+/// `rejected` order carries: the two never appear on one order.
+pub mod cancel_reason {
+	/// The owner cancelled the order.
+	pub const USER: &str = "user";
+	/// An IOC limit order: the hub cancelled what did not fill at once (`filled` may be > 0).
+	pub const IOC_REMAINDER: &str = "ioc_remainder";
+	/// A market order: the hub cancelled what its priced limit could not reach.
+	pub const MARKET_REMAINDER: &str = "market_remainder";
+
+	pub const ALL: [&str; 3] = [USER, IOC_REMAINDER, MARKET_REMAINDER];
+
+	pub fn is_known(reason: &str) -> bool {
+		ALL.contains(&reason)
+	}
+}
+
 /// The canonical `ListCandlesRequest.resolution` strings.
 pub mod resolution {
 	pub const M1: &str = "1m";
@@ -114,7 +132,7 @@ pub mod resolution {
 
 #[cfg(test)]
 mod tests {
-	use super::{kind, resolution, side, state, tif};
+	use super::{cancel_reason, kind, resolution, side, state, tif};
 
 	#[test]
 	fn the_book_vocabularies_are_closed_and_canonical() {
@@ -124,15 +142,19 @@ mod tests {
 		assert_eq!(kind::ALL, ["limit", "market"]);
 		assert_eq!(tif::ALL, ["gtc", "ioc", "alo"]);
 		assert_eq!(state::ALL, ["open", "partially_filled", "filled", "cancelled", "rejected"]);
+		assert_eq!(cancel_reason::ALL, ["user", "ioc_remainder", "market_remainder"]);
 		assert_eq!(resolution::ALL, ["1m", "5m", "15m", "1h", "4h", "1d"]);
 		assert!(side::ALL.iter().all(|s| side::is_known(s)));
 		assert!(kind::ALL.iter().all(|k| kind::is_known(k)));
 		assert!(tif::ALL.iter().all(|t| tif::is_known(t)));
 		assert!(state::ALL.iter().all(|s| state::is_known(s)));
+		assert!(cancel_reason::ALL.iter().all(|r| cancel_reason::is_known(r)));
 		assert!(resolution::ALL.iter().all(|r| resolution::is_known(r)));
 		assert!(!side::is_known("long"));
 		assert!(!tif::is_known("fok"));
 		assert!(!state::is_known("Open"), "the wire form is lowercase");
+		assert!(!cancel_reason::is_known(""), "an empty reason is the absence of one, not a member");
+		assert!(!cancel_reason::is_known("post_only_cross"), "a refused post-only order is never recorded, so it has no reason");
 		assert!(!resolution::is_known("2h"));
 	}
 
