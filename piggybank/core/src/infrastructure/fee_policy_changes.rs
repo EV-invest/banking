@@ -79,6 +79,26 @@ pub(crate) fn mail_terms(policy: &FeePolicy) -> FeePolicyTerms {
 	}
 }
 
+/// Take the ONE lock every transaction over a product's terms opens with: its row in
+/// `allocations`, `FOR UPDATE`. Scheduling, carrying and promoting a change all read the
+/// live terms and write something derived from them (the requirement, the notice's "from",
+/// the accrual carried at the old rate); without a common lock, a schedule computing its
+/// requirement while a promotion commits reads the terms of a minute ago and records a
+/// requirement the new terms would not have allowed. `NotFound` for a slug the registry does
+/// not know — terms for a product that does not exist are always a typo.
+async fn lock_product(conn: &mut PgConnection, service: &ServiceId) -> Result<(), DomainError> {
+	sqlx::query_scalar::<_, String>("SELECT service FROM allocations WHERE service = $1 FOR UPDATE")
+		.bind(service.as_str())
+		.fetch_optional(&mut *conn)
+		.await
+		.map_err(repo_err)?
+		.map(|_| ())
+		.ok_or_else(|| DomainError::NotFound {
+			entity: "allocation",
+			id: service.to_string(),
+		})
+}
+
 /// The product's title, or `None` for a slug the registry does not know.
 pub(crate) async fn allocation_title(conn: &mut PgConnection, service: &ServiceId) -> Result<Option<String>, DomainError> {
 	sqlx::query_scalar::<_, String>("SELECT title FROM allocations WHERE service = $1")
@@ -233,13 +253,24 @@ fn bps(value: u32) -> i32 {
 impl FeePolicyChanges for PgFeePolicyChanges {
 	async fn schedule(&self, change: &NewFeePolicyChange, consilium: Option<ConsiliumOpening<'_>>) -> Result<FeePolicyChange, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
-		if allocation_title(&mut tx, &change.service).await?.is_none() {
-			return Err(DomainError::NotFound {
-				entity: "allocation",
-				id: change.service.to_string(),
-			});
-		}
+		lock_product(&mut tx, &change.service).await?;
 		let from = current_terms(&mut tx, &change.service).await?;
+		// The application decided the requirement against the terms it read BEFORE this lock.
+		// A promotion may have committed in between (an INSERT waiting on the pending index
+		// is exactly that window), so the decision is re-taken under the lock and any
+		// disagreement is a refusal: the caller re-reads and re-submits, rather than this path
+		// recording a requirement the live terms would not have allowed.
+		let stale = || DomainError::Conflict("the live terms changed while the request was being recorded — re-submit".into());
+		if fees::requirement_for(from.as_ref(), &change.policy) != change.requirement {
+			return Err(stale());
+		}
+		if let Some(opening) = &consilium
+			&& let domain::consilium::ConsiliumTerms::FeePolicy(subject) = opening.consilium.terms()
+			&& subject.from != from
+		{
+			// The owners would be signing a "from" that is no longer the truth.
+			return Err(stale());
+		}
 		let holders = holders(&mut tx, &change.service).await?;
 		let version: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) + 1 FROM fee_policy_changes WHERE service = $1")
 			.bind(change.service.as_str())
@@ -315,14 +346,15 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 
 	async fn schedule_approved(&self, subject: &FeePolicySubject, consilium: ConsiliumId, now_unix: i64) -> Result<FeePolicyChange, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		lock_product(&mut tx, &subject.service).await?;
 		let change = locked(&mut tx, subject.change_id).await?;
-		if change.consilium_id != Some(consilium) {
+		if change.consilium_id != Some(consilium) || change.requirement != ChangeRequirement::OwnerConsilium {
 			return Err(DomainError::Conflict("this consilium does not decide this fee-policy change".into()));
 		}
 		// The row is re-checked against the subject the owners signed, as a payment order is
 		// re-hashed against its consilium: a change edited underneath its quorum cannot spend
 		// the quorum's signature.
-		if change.service != subject.service || change.policy != subject.to {
+		if change.service != subject.service || change.policy != subject.to || change.reason != subject.reason {
 			return Err(DomainError::Conflict("the fee-policy change no longer matches the terms the owners approved".into()));
 		}
 		match change.state {
@@ -398,6 +430,11 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		find_on(&mut conn, id).await
 	}
 
+	async fn holder_count(&self, service: &ServiceId) -> Result<u32, DomainError> {
+		let mut conn = self.pool.acquire().await.map_err(repo_err)?;
+		holder_count(&mut conn, service).await
+	}
+
 	async fn pending(&self, service: &ServiceId) -> Result<Option<FeePolicyChange>, DomainError> {
 		sqlx::query(concat!(
 			"SELECT ",
@@ -433,6 +470,12 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 
 	async fn promote(&self, id: FeePolicyChangeId, now_unix: i64) -> Result<bool, DomainError> {
 		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		// An unlocked probe for the product, so the PRODUCT lock is taken before the change's —
+		// the order `schedule` and `schedule_approved` use. Nothing below trusts the probe.
+		let Some(probe) = find_on(&mut tx, id).await? else {
+			return Ok(false);
+		};
+		lock_product(&mut tx, &probe.service).await?;
 		let change = locked(&mut tx, id).await?;
 		if change.state != FeePolicyChangeState::Scheduled || change.effective_from_unix > now_unix {
 			return Ok(false);

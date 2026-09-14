@@ -122,6 +122,9 @@ pub trait FeePolicyChanges: Send + Sync {
 
 	async fn find(&self, id: FeePolicyChangeId) -> Result<Option<FeePolicyChange>, DomainError>;
 
+	/// How many investors hold units of the product right now — who a notice is owed to.
+	async fn holder_count(&self, service: &ServiceId) -> Result<u32, DomainError>;
+
 	/// The one change on its way for a product, if any.
 	async fn pending(&self, service: &ServiceId) -> Result<Option<FeePolicyChange>, DomainError>;
 
