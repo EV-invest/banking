@@ -21,7 +21,7 @@ use domain::{
 	balance::{LedgerAccountKey, Party, ServiceId},
 	consilium::{ConsiliumId, ConsiliumState, VoteDecision},
 	error::DomainError,
-	fees::{ChangeRequirement, CrystallizationPeriod, FeePolicy, FeePolicyChangeState, MIN_NOTICE_SECS, ManagementBasis, Trigger},
+	fees::{ChangeRequirement, CrystallizationPeriod, FeePolicy, FeePolicyChangeId, FeePolicyChangeState, MAX_EFFECTIVE_FROM_HORIZON_SECS, MIN_NOTICE_SECS, ManagementBasis, Trigger},
 	money::{Network, Shares, TxRef, Usdt},
 	users::{Email, UserId},
 };
@@ -46,7 +46,7 @@ use piggybank_core::{
 	ports::{
 		AllocationRegistry, ConsiliumRepository, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::VoteAudit,
-		fees::{FeePolicies, FeePolicyChange, FeePolicyChanges, PositionAccruals},
+		fees::{FeePolicies, FeePolicyChange, FeePolicyChanges, NewFeePolicyChange, PositionAccruals},
 		ledger::Ledger,
 	},
 };
@@ -381,7 +381,7 @@ async fn a_change_on_a_fund_with_no_holders_binds_at_once_and_notifies_nobody() 
 	assert_eq!(h.policies.find(&service).await.unwrap(), None);
 	assert_eq!(h.changes.pending(&service).await.unwrap().map(|pending| pending.id), Some(change.id));
 
-	assert!(fee_app::promote_due(&h.changes, now()).await.unwrap() >= 1, "the sweeper's promotion picks it up");
+	assert!(fee_app::promote_due(&h.changes, now(), &mut std::collections::HashMap::new()).await.unwrap() >= 1, "the sweeper's promotion picks it up");
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
 	let current = h.policies.current(&service).await.unwrap().expect("a live row");
 	assert_eq!(current.version, 1);
@@ -489,11 +489,11 @@ async fn one_change_is_on_its_way_per_product_until_it_is_cancelled() {
 	assert!(err.to_string().contains("cancel it"), "the refusal must say what to do: {err}");
 
 	let admin = UserId::new();
-	let cancelled = fee_app::cancel_change(&h.changes, &service, first.id, admin, now()).await.unwrap();
+	let cancelled = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, first.id, admin, now()).await.unwrap();
 	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
 	// Idempotent, and never promoted.
 	assert_eq!(
-		fee_app::cancel_change(&h.changes, &service, first.id, admin, now()).await.unwrap().state,
+		fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, first.id, admin, now()).await.unwrap().state,
 		FeePolicyChangeState::Cancelled
 	);
 	let_the_notice_run(&h, &first).await;
@@ -512,13 +512,13 @@ async fn one_change_is_on_its_way_per_product_until_it_is_cancelled() {
 	.await
 	.unwrap();
 	assert!(matches!(
-		fee_app::cancel_change(&h.changes, &unique_service(), second.id, admin, now()).await.unwrap_err(),
+		fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &unique_service(), second.id, admin, now()).await.unwrap_err(),
 		DomainError::NotFound { .. }
 	));
 	// A live version cannot be cancelled: it is not on its way anywhere.
 	let active = h.changes.list(&service).await.unwrap().into_iter().find(|row| row.state == FeePolicyChangeState::Active).unwrap();
 	assert!(matches!(
-		fee_app::cancel_change(&h.changes, &service, active.id, admin, now()).await.unwrap_err(),
+		fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, active.id, admin, now()).await.unwrap_err(),
 		DomainError::Conflict(_)
 	));
 }
@@ -624,10 +624,10 @@ async fn a_refused_or_withdrawn_quorum_closes_the_change() {
 	assert_eq!(h.policies.find(&service).await.unwrap(), None, "a refused change never reaches the live terms");
 	assert!(h.changes.pending(&service).await.unwrap().is_none(), "the slot is free for the next proposal");
 
-	// Withdrawn by an administrator: the change is cancelled and its consilium goes with it.
+	// Withdrawn by another owner: the change is cancelled and its consilium goes with it.
 	let change = schedule(&h, roster[0], &service, dearer(), 0, "withdrawn for the record").await.unwrap();
 	let consilium = change.consilium_id.unwrap();
-	let cancelled = fee_app::cancel_change(&h.changes, &service, change.id, UserId::new(), now()).await.unwrap();
+	let cancelled = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, roster[2], now()).await.unwrap();
 	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
 	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Cancelled);
 	// A vote arriving after the withdrawal lands on a closed consilium and changes nothing.
@@ -703,4 +703,158 @@ async fn promotion_settles_the_elapsed_window_at_the_old_rate_before_the_new_one
 	assert_eq!(fee_debt_of(&h, investor, &service).await, Usdt::ZERO, "a 1000-unit holding covers the charge whole");
 	let taken = Shares::from_base_units(h.ledger.balance(&LedgerAccountKey::FeeShares(service.clone())).await.unwrap().posted);
 	assert_eq!(taken, charge.charge().charged_units);
+}
+
+/// A policy written under the OLD schema, above today's ceiling — the very row #233 is
+/// about. The ceilings are `NOT VALID`, so an INSERT after the migration is held to them;
+/// the only way to stage a legacy row is the way the migration met it: with the constraints
+/// off, then re-added `NOT VALID` exactly as `0036` states them.
+async fn plant_legacy_policy(h: &Harness, service: &ServiceId, bps: i32) {
+	let mut tx = h.pool.begin().await.unwrap();
+	for stmt in [
+		"ALTER TABLE fee_policies DROP CONSTRAINT fee_policies_management_ceiling",
+		"ALTER TABLE fee_policy_changes DROP CONSTRAINT fee_policy_changes_management_ceiling",
+	] {
+		sqlx::query(stmt).execute(&mut *tx).await.unwrap();
+	}
+	sqlx::query("INSERT INTO fee_policies (service, management_bps, performance_bps, hurdle_bps, basis, crystallization, updated_by, version, effective_from) VALUES ($1, $2, 2000, 0, 'invested_capital', 'annual', 'legacy', 1, now() - interval '30 days')")
+		.bind(service.as_str())
+		.bind(bps)
+		.execute(&mut *tx)
+		.await
+		.unwrap();
+	sqlx::query(
+		"INSERT INTO fee_policy_changes (id, service, version, management_bps, performance_bps, hurdle_bps, basis, crystallization, state, requirement, effective_from, requested_by, requested_at, scheduled_at, applied_at) \
+		 VALUES ($1, $2, 1, $3, 2000, 0, 'invested_capital', 'annual', 'active', 'admin', now() - interval '30 days', 'legacy', now() - interval '30 days', now() - interval '30 days', now() - interval '30 days')",
+	)
+	.bind(Uuid::new_v4())
+	.bind(service.as_str())
+	.bind(bps)
+	.execute(&mut *tx)
+	.await
+	.unwrap();
+	for stmt in [
+		"ALTER TABLE fee_policies ADD CONSTRAINT fee_policies_management_ceiling CHECK (management_bps <= 500) NOT VALID",
+		"ALTER TABLE fee_policy_changes ADD CONSTRAINT fee_policy_changes_management_ceiling CHECK (state IN ('superseded', 'rejected', 'cancelled') OR management_bps <= 500) NOT VALID",
+	] {
+		sqlx::query(stmt).execute(&mut *tx).await.unwrap();
+	}
+	tx.commit().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_legacy_policy_above_the_ceiling_can_still_be_lowered() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	plant_legacy_policy(&h, &service, 10_000).await;
+	let investor = holder(&h, &service, "1000").await;
+	// Two hours on the legacy rate, so the promotion has a window to settle at it.
+	backdate(&h, investor, &service, 2 * 60 * 60).await;
+	assert_eq!(h.policies.find(&service).await.unwrap().map(|p| p.management_bps()), Some(10_000), "the legacy row reads back as it is");
+
+	// Lowering to the house terms is a loosening: one administrator, and the holder's notice.
+	let change = schedule(&h, UserId::new(), &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	assert_eq!(change.requirement, ChangeRequirement::Admin);
+	assert_eq!(notices(&h, &change).await.len(), 1);
+	let_the_notice_run(&h, &change).await;
+	// The promotion supersedes the legacy row — an UPDATE the ceiling must not refuse.
+	assert!(h.changes.promote(change.id, now()).await.unwrap(), "the over-the-ceiling policy is the one that must always be lowerable");
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+	let history = h.changes.list(&service).await.unwrap();
+	assert_eq!(history.iter().map(|row| (row.version, row.state, row.policy.management_bps())).collect::<Vec<_>>(), vec![(2, FeePolicyChangeState::Active, 200), (1, FeePolicyChangeState::Superseded, 10_000)]);
+	// And the window before the change was priced at the legacy rate, as any other.
+	assert!(fee_debt_of(&h, investor, &service).await > Usdt::ZERO);
+}
+
+#[tokio::test]
+async fn a_requirement_decided_against_stale_terms_is_refused_under_the_lock() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+
+	// What a request judged before a promotion landed would carry: an administrator's
+	// requirement for a change the live terms make the owners'.
+	let stale = NewFeePolicyChange {
+		id: FeePolicyChangeId::new(),
+		service: service.clone(),
+		policy: dearer(),
+		requirement: ChangeRequirement::Admin,
+		requested_effective_from_unix: 0,
+		requested_by: UserId::new().to_string(),
+		reason: String::new(),
+		now_unix: now(),
+	};
+	let err = h.changes.schedule(&stale, None).await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
+	assert!(err.to_string().contains("re-submit"), "{err}");
+	assert!(h.changes.pending(&service).await.unwrap().is_none(), "nothing was recorded");
+	// The same terms with the requirement the live terms call for are not stale.
+	assert_eq!(fee_app::policy_view(&h.policies, &h.changes, &service).await.unwrap().current.map(|c| c.policy), Some(FeePolicy::HOUSE));
+}
+
+#[tokio::test]
+async fn a_consilium_gated_change_is_withdrawn_only_by_an_owner() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let roster = owners(&h, 3).await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let change = schedule(&h, roster[0], &service, dearer(), 0, "for the withdrawal test").await.unwrap();
+	let consilium = change.consilium_id.unwrap();
+
+	// An administrator who is not an owner could not have opened the quorum and cannot close it.
+	let err = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, UserId::new(), now()).await.unwrap_err();
+	assert!(matches!(err, DomainError::Forbidden(_)), "got {err:?}");
+	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Open);
+	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::AwaitingConsilium);
+	// Another owner may.
+	let cancelled = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, roster[2], now()).await.unwrap();
+	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
+	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Cancelled);
+	// And the proposer, even after leaving the roster: the request was theirs.
+	let change = schedule(&h, roster[1], &service, dearer(), 0, "for the proposer test").await.unwrap();
+	sqlx::query("UPDATE users SET role = 'investor' WHERE id = $1").bind(roster[1].raw()).execute(&h.pool).await.unwrap();
+	assert_eq!(fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, roster[1], now()).await.unwrap().state, FeePolicyChangeState::Cancelled);
+	// An administrator's own change stays an administrator's to withdraw.
+	let admin_change = schedule(&h, UserId::new(), &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	assert_eq!(fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, admin_change.id, UserId::new(), now()).await.unwrap().state, FeePolicyChangeState::Cancelled);
+}
+
+#[tokio::test]
+async fn a_held_product_gets_no_change_without_a_mailer_and_no_change_beyond_the_horizon() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let unwired = fee_app::FeePolicyPorts {
+		governance_mail_wired: false,
+		..policy_ports(&h)
+	};
+	let request = |policy: FeePolicy, effective_from: i64| fee_app::PolicyChangeRequest {
+		service: service.clone(),
+		policy,
+		requested_effective_from_unix: effective_from,
+		reason: String::new(),
+	};
+	// Nobody holds units: nobody is owed a notice, and the change goes through unwired.
+	let first = fee_app::schedule_policy(&unwired, UserId::new(), request(FeePolicy::HOUSE, 0), now()).await.unwrap();
+	assert!(h.changes.promote(first.id, now()).await.unwrap());
+	holder(&h, &service, "100").await;
+	// A holder: the notice is the protection, and a relay that never runs is not notice.
+	let err = fee_app::schedule_policy(&unwired, UserId::new(), request(policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual), 0), now())
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
+	assert!(err.to_string().contains("notice"), "{err}");
+	assert!(h.changes.pending(&service).await.unwrap().is_none());
+	// Wired, the same request is fine — but not a year and a day out.
+	let err = schedule(&h, UserId::new(), &service, policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual), now() + MAX_EFFECTIVE_FROM_HORIZON_SECS + 60, "")
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(_)), "got {err:?}");
+	assert!(schedule(&h, UserId::new(), &service, policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual), now() + MAX_EFFECTIVE_FROM_HORIZON_SECS - 60, "").await.is_ok());
 }
