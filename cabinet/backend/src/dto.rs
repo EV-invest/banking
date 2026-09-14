@@ -511,7 +511,8 @@ impl From<bk::UnitIssuance> for UnitIssuance {
 
 /// A product's settled supply by holder class, all decimal units. `investor_units` is
 /// what is left once the company's and the fee account's holdings are taken out of
-/// `units_outstanding`.
+/// `units_outstanding`. `queued_units` are mints recorded but not yet on the ledger —
+/// the console must not pin the cap to `units_outstanding` while it is non-zero.
 #[derive(Serialize)]
 pub struct UnitHolders {
 	pub service: String,
@@ -519,6 +520,7 @@ pub struct UnitHolders {
 	pub company_units: String,
 	pub fee_units: String,
 	pub investor_units: String,
+	pub queued_units: String,
 }
 
 impl From<bk::UnitHolders> for UnitHolders {
@@ -529,6 +531,7 @@ impl From<bk::UnitHolders> for UnitHolders {
 			company_units: h.company_units,
 			fee_units: h.fee_units,
 			investor_units: h.investor_units,
+			queued_units: h.queued_units,
 		}
 	}
 }
