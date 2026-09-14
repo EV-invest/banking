@@ -18,6 +18,7 @@
 //! investor ─ FundsService.Redeem ───────▶ allowed while open OR closed, at ANY access
 //! operator ─ SetAllocationUnitCap ▶ supply  (how many units may ever be issued)
 //! operator ─ IssueUnits ─────────▶ units minted IN KIND to a user or the company
+//! operator ─ TransferCompanyStake ▶ the company's units handed to a user, supply unchanged
 //! operator ─ ListUnitHolders ────▶ company / fee / investor split of the supply
 //! operator ─ RevokeAllocationAccess ▶ the investor falls back to the default
 //! operator ─ SetAllocationState ─▶ closed   (redeem only — never traps an investor)
@@ -36,13 +37,15 @@
 //! `BalanceService`, keyed by the same `service` slug this registry owns. The one
 //! exception is `IssueUnits`: supply an operator mints **in kind** — no cash leg — to a
 //! [`holder`] that is an investor or the company itself, for a product registered
-//! against an asset that already has owners. Its vocabularies ([`holder`],
-//! [`issuance_state`]) are pinned here like the others.
+//! against an asset that already has owners — and `TransferCompanyStake`, the way those
+//! units come back out of the company to a named user without the supply moving. Its
+//! vocabularies ([`holder`], [`issuance_source`], [`issuance_state`]) are pinned here
+//! like the others.
 
 pub use crate::banking::v1::{
 	Allocation, AllocationAccessGrant, AllocationAccessGrantList, AllocationList, GetAllocationRequest, GrantAllocationAccessRequest, IssueUnitsRequest, ListAllocationAccessGrantsRequest,
 	ListAllocationsRequest, ListUnitHoldersRequest, RegisterAllocationRequest, RevokeAllocationAccessRequest, RevokeAllocationAccessResponse, SetAllocationAccessRequest,
-	SetAllocationStateRequest, SetAllocationUnitCapRequest, UnitHolders, UnitIssuance, UpdateAllocationRequest,
+	SetAllocationStateRequest, SetAllocationUnitCapRequest, TransferCompanyStakeRequest, UnitHolders, UnitIssuance, UpdateAllocationRequest,
 	allocations_service_client::AllocationsServiceClient,
 	allocations_service_server::{AllocationsService, AllocationsServiceServer},
 	issue_units_request::Holder as IssueUnitsHolder,
@@ -215,6 +218,28 @@ pub mod holder {
 	}
 }
 
+/// The canonical `UnitIssuance.source` strings — where an issuance's units came from.
+///
+/// The hub's `domain::issuance::IssuanceSource` stores exactly these
+/// (`issuance_source_strings_are_canonical` guards that side). A `mint` grew the
+/// supply by the row's `units`; a `company` row moved them out of the company's stake
+/// and left the supply alone — a client summing issuances into "units created" must
+/// count only the first.
+pub mod issuance_source {
+	/// Minted in kind (`IssueUnits`).
+	pub const MINT: &str = "mint";
+	/// Handed over out of the company's stake (`TransferCompanyStake`).
+	pub const COMPANY: &str = "company";
+
+	/// Every source.
+	pub const ALL: [&str; 2] = [MINT, COMPANY];
+
+	/// Whether `source` is one this contract defines.
+	pub fn is_known(source: &str) -> bool {
+		ALL.contains(&source)
+	}
+}
+
 /// The canonical `UnitIssuance.state` strings.
 ///
 /// The hub's `domain::issuance::IssuanceState` stores exactly these
@@ -245,7 +270,7 @@ pub mod issuance_state {
 
 #[cfg(test)]
 mod tests {
-	use super::{access, holder, icon, issuance_state, state};
+	use super::{access, holder, icon, issuance_source, issuance_state, state};
 
 	#[test]
 	fn the_access_vocabulary_is_ranked_closed_and_canonical() {
@@ -332,6 +357,17 @@ mod tests {
 		assert!(!holder::is_known("fund"));
 		assert!(!holder::is_known(""));
 		assert!(!holder::is_known("Company"), "the wire form is lowercase");
+	}
+
+	#[test]
+	fn the_issuance_source_vocabulary_is_closed_and_canonical() {
+		// Byte-identical with `domain::issuance::IssuanceSource::as_str`
+		// (`issuance_source_strings_are_canonical` guards the other side).
+		assert_eq!(issuance_source::ALL, ["mint", "company"]);
+		assert!(issuance_source::ALL.iter().all(|s| issuance_source::is_known(s)));
+		assert!(!issuance_source::is_known("transfer"));
+		assert!(!issuance_source::is_known(""));
+		assert!(!issuance_source::is_known("Company"), "the wire form is lowercase");
 	}
 
 	#[test]
