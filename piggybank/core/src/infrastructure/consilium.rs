@@ -214,14 +214,39 @@ async fn destination_detail(conn: &mut PgConnection, consilium: &Consilium) -> R
 	}
 }
 
+/// The relay's bound on one mail line (`line(.., 160, ..)` in concierge's governance
+/// handler). A product title is up to 120 CHARACTERS, so a Cyrillic one alone can pass
+/// this in bytes; a label over the bound is not a long mail but a refused one — and a
+/// refused invitation leaves the consilium open with nobody able to vote.
+const MAIL_LINE_BYTES: usize = 160;
+
 /// How a valuation override names the fund in a mail: the product's title when the
 /// registry has one, else the slug — never blank, because the owners are approving a
-/// price on THIS fund and must be able to tell which.
-fn marked_fund_label(terms: &ValuationOverrideTerms, detail: Option<&EndDetail>) -> String {
-	match detail {
-		Some(EndDetail::ProductTitle(title)) => format!("{title} ({})", terms.service),
-		Some(EndDetail::Mailbox(_)) | None => terms.service.to_string(),
+/// price on THIS fund and must be able to tell which. The slug and the suffix always
+/// survive; only the title is clipped to keep the line inside [`MAIL_LINE_BYTES`].
+fn valuation_mail_source(terms: &ValuationOverrideTerms, detail: Option<&EndDetail>) -> String {
+	const SUFFIX: &str = " — NAV valuation";
+	let slug = terms.service.to_string();
+	let Some(EndDetail::ProductTitle(title)) = detail else {
+		return format!("{slug}{SUFFIX}");
+	};
+	let tail = format!(" ({slug}){SUFFIX}");
+	let title = clip_utf8(title, MAIL_LINE_BYTES.saturating_sub(tail.len()));
+	format!("{title}{tail}")
+}
+
+/// `s` when it fits in `max_bytes`, else its longest char-boundary prefix that leaves
+/// room for an ellipsis inside the budget.
+fn clip_utf8(s: &str, max_bytes: usize) -> String {
+	const ELLIPSIS: &str = "…";
+	if s.len() <= max_bytes {
+		return s.to_owned();
 	}
+	let mut end = max_bytes.saturating_sub(ELLIPSIS.len());
+	while end > 0 && !s.is_char_boundary(end) {
+		end -= 1;
+	}
+	format!("{}{ELLIPSIS}", &s[..end])
 }
 
 /// The approval invitation for one seat, per kind.
@@ -281,7 +306,7 @@ fn approval_mail(consilium: &Consilium, initiator_email: &str, credential: &Vote
 			payment_id: consilium.id().to_string(),
 			initiator_email: initiator_email.to_owned(),
 			tier: VALUATION_MAIL_TIER.to_owned(),
-			source: format!("{} — NAV valuation", marked_fund_label(terms, detail)),
+			source: valuation_mail_source(terms, detail),
 			destination: format!("AUM {} USDT", terms.aum.to_decimal_string()),
 			amount: terms.aum.to_decimal_string(),
 			reason: VALUATION_MAIL_REASON.to_owned(),
@@ -336,7 +361,7 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, destinatio
 		ConsiliumTerms::ValuationOverride(terms) => PayoutOutcome {
 			amount: terms.aum.to_decimal_string(),
 			tier: VALUATION_MAIL_TIER.to_owned(),
-			source: format!("{} — NAV valuation", marked_fund_label(terms, destination_detail)),
+			source: valuation_mail_source(terms, destination_detail),
 			destination: format!("AUM {} USDT", terms.aum.to_decimal_string()),
 			reason: VALUATION_MAIL_REASON.to_owned(),
 			..base
@@ -1106,5 +1131,50 @@ impl ConsiliumRepository for PgConsilia {
 		let initiator_email = email_of(&mut tx, consilium.initiator()).await?;
 		tx.commit().await.map_err(repo_err)?;
 		view_of(consilium, initiator_email, &seats)
+	}
+}
+
+#[cfg(test)]
+mod mail_line_tests {
+	use domain::{balance::ServiceId, consilium::ValuationOverrideTerms, money::Usdt};
+
+	use super::{EndDetail, MAIL_LINE_BYTES, clip_utf8, valuation_mail_source};
+
+	fn terms() -> ValuationOverrideTerms {
+		ValuationOverrideTerms {
+			service: ServiceId::parse("service_arb").unwrap(),
+			aum: Usdt::parse_decimal("16250").unwrap(),
+		}
+	}
+
+	#[test]
+	fn a_short_title_is_carried_whole() {
+		let source = valuation_mail_source(&terms(), Some(&EndDetail::ProductTitle("Arb desk".to_owned())));
+		assert_eq!(source, "Arb desk (service_arb) — NAV valuation");
+		assert_eq!(valuation_mail_source(&terms(), None), "service_arb — NAV valuation");
+	}
+
+	#[test]
+	fn a_long_cyrillic_title_is_clipped_inside_the_relay_bound_and_keeps_the_slug() {
+		// 120 chars of Cyrillic — the longest title the registry admits — is past the bound in bytes on its own.
+		let title: String = "Арбитражный портфель по стейблкоинам на пяти биржах с ежедневной переоценкой "
+			.repeat(2)
+			.chars()
+			.take(120)
+			.collect();
+		assert!(title.len() > MAIL_LINE_BYTES);
+		let source = valuation_mail_source(&terms(), Some(&EndDetail::ProductTitle(title)));
+		assert!(source.len() <= MAIL_LINE_BYTES, "{} bytes", source.len());
+		assert!(source.ends_with("… (service_arb) — NAV valuation"), "{source}");
+	}
+
+	#[test]
+	fn clipping_never_splits_a_character() {
+		let s = "ёёёёё";
+		for budget in 0..=s.len() {
+			let out = clip_utf8(s, budget);
+			assert!(out.len() <= budget.max("…".len()), "budget {budget} → {} bytes", out.len());
+		}
+		assert_eq!(clip_utf8("abc", 3), "abc");
 	}
 }
