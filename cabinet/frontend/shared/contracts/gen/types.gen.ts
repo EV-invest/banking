@@ -3998,6 +3998,184 @@ export type ConciergeV1ExchangeRequest = {
 };
 
 /**
+ * FeePolicyApprovalMail
+ *
+ * An owner asked to approve new fee terms for a fund.
+ *
+ * Shaped like PaymentApprovalMail — a seated owner, a verified address, the operator's
+ * reason set apart as theirs, a link on our origin and the code that arms it — and it
+ * describes what an owner must actually be able to check: the terms in force NOW beside
+ * the terms PROPOSED, field by field. A fee change is a change to the price of every
+ * investor in the fund, and an approval mail that showed only the new number would have
+ * the owner approve a difference they cannot see.
+ */
+export type ConciergeV1FeePolicyApprovalMail = {
+    /**
+     * consilium_id
+     */
+    consilium_id?: string;
+    /**
+     * initiator_email
+     */
+    initiator_email?: string;
+    /**
+     * fund
+     *
+     * The fund whose terms change, in words a person recognises (not a service id).
+     */
+    fund?: string;
+    /**
+     * current
+     *
+     * The terms in force today. Absent when the fund charges nothing yet — a product with
+     * no policy charges no fee, so "none" is a real current state, not a missing field.
+     */
+    current?: ConciergeV1FeeTerms;
+    /**
+     * proposed
+     *
+     * The terms proposed. Required.
+     */
+    proposed?: ConciergeV1FeeTerms;
+    /**
+     * reason
+     *
+     * Why, in the operator's words. Required, and rendered attributed to them.
+     */
+    reason?: string;
+    /**
+     * payload_hash
+     */
+    payload_hash?: string;
+    /**
+     * threshold
+     */
+    threshold?: number;
+    /**
+     * owner_count
+     */
+    owner_count?: number;
+    /**
+     * expires_at
+     */
+    expires_at?: number | string;
+    /**
+     * approval_url
+     *
+     * Absolute URL of the approval page, carrying the opaque token.
+     */
+    approval_url?: string;
+    /**
+     * code
+     *
+     * The secret code the owner types on that page. Held only until the mail is sent,
+     * then cleared from the delivery row.
+     */
+    code?: string;
+};
+
+/**
+ * FeePolicyNoticeMail
+ *
+ * One investor told that the fee terms of a fund they hold are changing.
+ *
+ * `subject_user_id` exists beside SendGovernanceMailRequest.user_id for the reason
+ * PaymentConsentMail gives: no seat is involved, so the only fact this plane can hold
+ * the money plane to is that the person it is writing to IS the person the notice is
+ * about. A caller that fans one investor's notice out to a second mailbox has to
+ * contradict itself in the same message to do it.
+ *
+ * No code and no decision: the terms were set — by the operator within the house terms,
+ * or by the owners' consilium beyond them — and this is the investor being told before
+ * they take effect, with the same notice either way. `link` is a CABINET-RELATIVE path —
+ * the money plane names no host at all; this plane hangs it off its own cabinet origin.
+ */
+export type ConciergeV1FeePolicyNoticeMail = {
+    /**
+     * subject_user_id
+     *
+     * Concierge canonical id of the investor. MUST equal the request's user_id; the relay
+     * refuses the mail otherwise.
+     */
+    subject_user_id?: string;
+    /**
+     * fund
+     *
+     * The fund whose terms change, in words a person recognises.
+     */
+    fund?: string;
+    /**
+     * current
+     *
+     * The terms in force until `effective_at`. Absent when the fund charged nothing.
+     */
+    current?: ConciergeV1FeeTerms;
+    /**
+     * proposed
+     *
+     * The terms that apply from `effective_at`. Required.
+     */
+    proposed?: ConciergeV1FeeTerms;
+    /**
+     * effective_at
+     *
+     * Unix seconds the new terms take effect.
+     */
+    effective_at?: number | string;
+    /**
+     * link
+     *
+     * Cabinet-relative path of the page showing the full terms, e.g. `/funds/qn/fees`.
+     * Must start with a single `/`; empty means the cabinet's front page.
+     */
+    link?: string;
+};
+
+/**
+ * FeeTerms
+ *
+ * One set of fee terms, as the money plane's `FeePolicy` spells them: basis points and
+ * two closed vocabularies. Rendered HERE as percentages and words — the money plane
+ * never hands this plane a pre-rendered "2.5%", because a string it renders is a string
+ * it can make say anything. Every `_bps` is refused above 10 000 (100%), and `basis` and
+ * `crystallization` are refused outside their closed sets: an unknown word means the two
+ * planes disagree about what the terms ARE, which is a rejected call, not a line of mail.
+ */
+export type ConciergeV1FeeTerms = {
+    /**
+     * management_bps
+     *
+     * Annual management fee, in basis points of `basis`.
+     */
+    management_bps?: number;
+    /**
+     * performance_bps
+     *
+     * Performance fee over the high-water mark, in basis points of the gain.
+     */
+    performance_bps?: number;
+    /**
+     * hurdle_bps
+     *
+     * Annual hurdle the gain must clear before the performance fee is due. 0 = none.
+     */
+    hurdle_bps?: number;
+    /**
+     * basis
+     *
+     * invested_capital | market_value — what the management fee is charged on.
+     */
+    basis?: string;
+    /**
+     * crystallization
+     *
+     * monthly | quarterly | semi_annual | annual — how often the performance fee
+     * crystallizes.
+     */
+    crystallization?: string;
+};
+
+/**
  * GetMeRequest
  */
 export type ConciergeV1GetMeRequest = {
@@ -4059,7 +4237,7 @@ export type ConciergeV1GetUserRequest = {
  *
  * The typed governance mails this plane knows how to render.
  */
-export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED' | 'GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT' | 'GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL';
+export type ConciergeV1GovernanceMailKind = 'GOVERNANCE_MAIL_KIND_UNSPECIFIED' | 'GOVERNANCE_MAIL_KIND_PAYOUT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_PAYOUT_OUTCOME' | 'GOVERNANCE_MAIL_KIND_APPROVAL_TOKEN_BURNED' | 'GOVERNANCE_MAIL_KIND_PAYMENT_CONSENT' | 'GOVERNANCE_MAIL_KIND_PAYMENT_APPROVAL' | 'GOVERNANCE_MAIL_KIND_FEE_POLICY_APPROVAL' | 'GOVERNANCE_MAIL_KIND_FEE_POLICY_NOTICE';
 
 /**
  * GovernanceTick
@@ -5134,6 +5312,14 @@ export type ConciergeV1SendGovernanceMailRequest = {
      * payment_approval
      */
     payment_approval?: ConciergeV1PaymentApprovalMail;
+    /**
+     * fee_policy_approval
+     */
+    fee_policy_approval?: ConciergeV1FeePolicyApprovalMail;
+    /**
+     * fee_policy_notice
+     */
+    fee_policy_notice?: ConciergeV1FeePolicyNoticeMail;
 };
 
 /**

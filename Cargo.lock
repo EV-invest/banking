@@ -1842,7 +1842,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_auth"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=1561338f805b7ba982f5e72a7b07064b5d2d5391#1561338f805b7ba982f5e72a7b07064b5d2d5391"
+source = "git+https://github.com/EV-invest/concierge.git?rev=824c604b1dd932167294e1385fa5b8677c68cb6f#824c604b1dd932167294e1385fa5b8677c68cb6f"
 dependencies = [
  "color-eyre",
  "ev_lib",
@@ -1864,7 +1864,7 @@ dependencies = [
 [[package]]
 name = "evconcierge_contracts"
 version = "0.1.0"
-source = "git+https://github.com/EV-invest/concierge.git?rev=1561338f805b7ba982f5e72a7b07064b5d2d5391#1561338f805b7ba982f5e72a7b07064b5d2d5391"
+source = "git+https://github.com/EV-invest/concierge.git?rev=824c604b1dd932167294e1385fa5b8677c68cb6f#824c604b1dd932167294e1385fa5b8677c68cb6f"
 dependencies = [
  "prost 0.14.4",
  "tonic 0.14.6",
@@ -2716,15 +2716,6 @@ name = "itertools"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
 dependencies = [
  "either",
 ]
@@ -4028,7 +4019,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03da047801ff44bb6a4d407d4860c05fd70bb81714e6b2f3812603d5b145b042"
 dependencies = [
  "heck",
- "itertools 0.14.0",
+ "itertools",
  "log",
  "multimap",
  "petgraph",
@@ -4049,7 +4040,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools",
  "proc-macro2",
  "quote",
  "syn",
@@ -4062,7 +4053,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools",
  "proc-macro2",
  "quote",
  "syn",
