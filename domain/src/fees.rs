@@ -325,6 +325,26 @@ pub fn earliest_effective_from(scheduled_at: i64, requested_effective_from: i64,
 	requested_effective_from.max(floor)
 }
 
+/// The longest reason an initiator may attach to a change of terms. Long enough for a real
+/// justification, short enough that the approval mail still reads as one.
+pub const MAX_REASON_BYTES: usize = 500;
+
+/// Validate the initiator's stated reason for a change. Required — non-empty — when the
+/// owners must approve it (the approval mail is refused without one); optional otherwise.
+/// A control character has no meaning in a reason and every meaning in a mail header.
+pub fn validate_reason(reason: &str, required: bool) -> Result<(), DomainError> {
+	if required && reason.trim().is_empty() {
+		return Err(DomainError::Validation("a change that needs the owners' approval must state a reason".into()));
+	}
+	if reason.len() > MAX_REASON_BYTES {
+		return Err(DomainError::Validation(format!("reason exceeds {MAX_REASON_BYTES} bytes")));
+	}
+	if reason.chars().any(char::is_control) {
+		return Err(DomainError::Validation("reason may not contain control characters".into()));
+	}
+	Ok(())
+}
+
 /// A unique fee-policy-change id (UUID). Minted by the application layer.
 pub type FeePolicyChangeId = Id<FeePolicyChangeTag>;
 /// Phantom tag making [`FeePolicyChangeId`] a distinct, incompatible identity type.
@@ -386,10 +406,14 @@ impl FeePolicyChangeState {
 pub struct FeePolicySubject {
 	pub change_id: FeePolicyChangeId,
 	pub service: ServiceId,
-	/// The terms in force when the change was proposed ([`FeePolicy::NONE`] for a product
-	/// with no policy) — what the owners are told they are moving AWAY from.
-	pub from: FeePolicy,
+	/// The terms in force when the change was proposed — what the owners are told they are
+	/// moving AWAY from. `None` for a product that charged nothing, which is a different
+	/// fact from a policy whose rates are zero.
+	pub from: Option<FeePolicy>,
 	pub to: FeePolicy,
+	/// Why, in the initiator's words. Part of what is signed: an approval given for one
+	/// justification is not an approval of the same numbers under another.
+	pub reason: String,
 	/// The operator's requested effective moment (unix seconds; `0` = as soon as allowed).
 	/// The actual moment is fixed when the change is scheduled, which for this kind is the
 	/// moment the owners carry it, and is never earlier than this.
@@ -402,19 +426,26 @@ impl FeePolicySubject {
 	pub const DOMAIN: &'static [u8] = b"banking.v1.FeePolicySubject\x00";
 
 	/// The bytes the payload hash is taken over — fixed field order, every variable-length
-	/// part length-prefixed, both policies encoded leg by leg.
+	/// part length-prefixed, both policies encoded leg by leg behind a presence byte.
 	pub fn canonical_bytes(&self) -> Vec<u8> {
-		let mut out = Vec::with_capacity(Self::DOMAIN.len() + 160);
+		let mut out = Vec::with_capacity(Self::DOMAIN.len() + 192);
 		out.extend_from_slice(Self::DOMAIN);
 		push_field(&mut out, self.change_id.raw().as_bytes());
 		push_field(&mut out, self.service.as_str().as_bytes());
-		for policy in [&self.from, &self.to] {
-			out.extend_from_slice(&policy.management_bps.to_be_bytes());
-			out.extend_from_slice(&policy.performance_bps.to_be_bytes());
-			out.extend_from_slice(&policy.hurdle_bps.to_be_bytes());
-			push_field(&mut out, policy.basis.as_str().as_bytes());
-			push_field(&mut out, policy.crystallization.as_str().as_bytes());
+		for policy in [self.from.as_ref(), Some(&self.to)] {
+			match policy {
+				None => out.push(0),
+				Some(policy) => {
+					out.push(1);
+					out.extend_from_slice(&policy.management_bps.to_be_bytes());
+					out.extend_from_slice(&policy.performance_bps.to_be_bytes());
+					out.extend_from_slice(&policy.hurdle_bps.to_be_bytes());
+					push_field(&mut out, policy.basis.as_str().as_bytes());
+					push_field(&mut out, policy.crystallization.as_str().as_bytes());
+				}
+			}
 		}
+		push_field(&mut out, self.reason.as_bytes());
 		out.extend_from_slice(&self.requested_effective_from.to_be_bytes());
 		out
 	}
@@ -1158,8 +1189,9 @@ mod tests {
 		let subject = FeePolicySubject {
 			change_id: FeePolicyChangeId::from_raw(uuid::Uuid::from_u128(0x233)),
 			service: svc(),
-			from: FeePolicy::NONE,
+			from: None,
 			to: FeePolicy::HOUSE,
+			reason: "align with the prospectus".to_owned(),
 			requested_effective_from: 0,
 		};
 		assert!(subject.canonical_bytes().starts_with(FeePolicySubject::DOMAIN));
@@ -1184,12 +1216,32 @@ mod tests {
 			..subject.clone()
 		};
 		assert_ne!(subject.canonical_bytes(), later.canonical_bytes());
+		let differently_justified = FeePolicySubject {
+			reason: "because".to_owned(),
+			..subject.clone()
+		};
+		assert_ne!(subject.canonical_bytes(), differently_justified.canonical_bytes(), "the reason is part of what is signed");
+		// "Charged nothing" and "charged zero" are different facts and encode differently.
+		let from_zero = FeePolicySubject {
+			from: Some(FeePolicy::NONE),
+			..subject.clone()
+		};
+		assert_ne!(subject.canonical_bytes(), from_zero.canonical_bytes());
 		let swapped = FeePolicySubject {
-			from: FeePolicy::HOUSE,
+			from: Some(FeePolicy::HOUSE),
 			to: FeePolicy::NONE,
 			..subject.clone()
 		};
-		assert_ne!(subject.canonical_bytes(), swapped.canonical_bytes(), "the direction of the change is part of what is signed");
+		assert_ne!(from_zero.canonical_bytes(), swapped.canonical_bytes(), "the direction of the change is part of what is signed");
+	}
+
+	#[test]
+	fn a_reason_is_required_only_when_the_owners_are() {
+		assert!(validate_reason("", false).is_ok());
+		assert!(validate_reason("  ", true).is_err());
+		assert!(validate_reason("raise the hurdle to match the new mandate", true).is_ok());
+		assert!(validate_reason(&"x".repeat(MAX_REASON_BYTES + 1), false).is_err());
+		assert!(validate_reason("line\nbreak", false).is_err());
 	}
 
 	#[test]

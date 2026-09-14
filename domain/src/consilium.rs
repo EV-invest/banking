@@ -1201,8 +1201,9 @@ mod tests {
 		crate::fees::FeePolicySubject {
 			change_id: FeePolicyChangeId::from_raw(uuid::Uuid::from_u128(0x233)),
 			service: crate::balance::ServiceId::parse("trading").unwrap(),
-			from: FeePolicy::HOUSE,
+			from: Some(FeePolicy::HOUSE),
 			to: FeePolicy::new(300, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual).unwrap(),
+			reason: "the new mandate costs more to run".to_owned(),
 			requested_effective_from: 0,
 		}
 	}
