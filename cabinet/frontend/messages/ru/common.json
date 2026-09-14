@@ -2351,6 +2351,10 @@
     "en": "Proposed AUM",
     "t": "Предлагаемый AUM"
   },
+  "approval.valuation.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and the fund's NAV mark is unchanged. Ask whoever opened the request to send a new one.",
+    "t": "Код вводили неверно слишком много раз, поэтому ссылка закрыта, а все владельцы уведомлены. Ничего не подтверждено, оценка NAV фонда не изменилась. Попросите того, кто открыл запрос, прислать новую ссылку."
+  },
   "approval.valuation.decided.approvedTitle": {
     "en": "You approved this mark",
     "t": "Вы подтвердили эту оценку"
@@ -2378,6 +2382,10 @@
   "approval.valuation.product": {
     "en": "Product",
     "t": "Продукт"
+  },
+  "approval.valuation.tallyHint": {
+    "en": "More than half of the owners must approve before the fund is marked. You are one of them.",
+    "t": "Прежде чем фонд будет оценён, это должны подтвердить больше половины владельцев. Вы — один из них."
   },
   "approval.valuation.title": {
     "en": "Approve a NAV mark",
