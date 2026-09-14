@@ -46,7 +46,7 @@ const hasNoProse = (text: string): boolean =>
 
 // Strings that are the same in every language: tickers and currency codes,
 // environment names, chain and network names, crypto jargon that no locale
-// translates ("gas", "tx", maker/taker), and column abbreviations.
+// translates ("gas", "tx", "memo", maker/taker), and column abbreviations.
 const SHARED_TERMS: ReadonlySet<string> = new Set([
   "NAV",
   "AUM (USDT)",
@@ -75,13 +75,14 @@ const SHARED_TERMS: ReadonlySet<string> = new Set([
   "gas",
   "Maker",
   "Taker",
+  "Memo",
 ]);
 
 // Strings that coincide with English in *one* language — loanwords, shared Latin
 // roots, or a term the locale's own catalogue already uses untranslated
 // ("Wallet", "Treasury" and "Cabinet" in German; "wallet" and "rail" in French;
-// "email" in Vietnamese). Keyed by value, not by key: whether "Status" is a
-// German word does not depend on which screen shows it.
+// "email" and "consilium" in Vietnamese). Keyed by value, not by key: whether
+// "Status" is a German word does not depend on which screen shows it.
 const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
   de: new Set([
     "Admin",
@@ -120,7 +121,9 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
   fr: new Set([
     "Actions",
     "Admin",
+    "Admissions",
     "Arbitrage",
+    "Consilium",
     "Feature flags",
     "Max",
     "Onboarding",
@@ -140,11 +143,8 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "1M",
     "6M",
   ]),
-  ru: new Set([
-    // The TON/exchange field name; Russian crypto UIs keep it in Latin script.
-    "Memo",
-  ]),
-  vi: new Set(["Cabinet", "EV Investment — Cabinet", "Email"]),
+  ru: new Set(),
+  vi: new Set(["Cabinet", "Consilium", "EV Investment — Cabinet", "Email"]),
 };
 
 const isLegitimatelyIdentical = (locale: Translated, text: string): boolean =>
