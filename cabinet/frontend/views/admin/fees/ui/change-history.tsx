@@ -68,7 +68,7 @@ export function ChangeHistory({ service }: { service: string }) {
                     {/* "0" while a change awaits the owners: the moment is not known until
                         they carry it, and a dash says so better than 1 Jan 1970 would. */}
                     <td className="py-2 tabular-nums text-muted-foreground">{hasStamp(c.effective_from) ? formatMoment(c.effective_from, locale) : "—"}</td>
-                    <td className="max-w-xs whitespace-pre-line py-2 text-muted-foreground">{c.reason.trim() || "—"}</td>
+                    <td className="max-w-xs py-2 text-muted-foreground">{c.reason.trim() || "—"}</td>
                   </tr>
                 ))}
               </tbody>

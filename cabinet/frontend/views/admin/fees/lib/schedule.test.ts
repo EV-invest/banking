@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { HOUSE_TERMS } from "../../../../shared/lib/fee-terms.ts";
-import { draftProblem, draftRequirement, draftTerms, effectiveFromSeconds, toRequest, type TermsDraft } from "./schedule.ts";
+import { draftProblem, draftRequirement, draftTerms, effectiveFromSeconds, normalizeReason, toRequest, type TermsDraft } from "./schedule.ts";
 
 const draft = (over: Partial<TermsDraft> = {}): TermsDraft => ({
   management: "2",
@@ -62,6 +62,25 @@ test("a reason is required exactly when the owners must approve", () => {
   assert.equal(draftProblem(HOUSE_TERMS, draft({ management: "1" })), null);
   // The rate problems come first: a reason cannot excuse a rate the plane will refuse.
   assert.deepEqual(draftProblem(HOUSE_TERMS, draft({ management: "6" })), { key: "admin.fees.err.overCeiling", field: "management", ceiling: "5%" });
+});
+
+test("the reason is measured in bytes, as the plane measures it", () => {
+  assert.equal(draftProblem(HOUSE_TERMS, draft({ reason: "a".repeat(500) })), null);
+  assert.deepEqual(draftProblem(HOUSE_TERMS, draft({ reason: "a".repeat(501) })), { key: "admin.fees.err.reasonTooLong", max: 500, used: 501 });
+  // 251 Cyrillic letters are 502 bytes: the letter count alone would have passed this.
+  assert.deepEqual(draftProblem(HOUSE_TERMS, draft({ reason: "ж".repeat(251) })), { key: "admin.fees.err.reasonTooLong", max: 500, used: 502 });
+  // Measured after normalisation: the surrounding whitespace is never sent.
+  assert.equal(draftProblem(HOUSE_TERMS, draft({ reason: `  ${"a".repeat(500)}  ` })), null);
+  // A too-long reason is refused whoever has to agree, and before "required" is asked.
+  assert.deepEqual(draftProblem(HOUSE_TERMS, draft({ management: "3", reason: "a".repeat(501) })), { key: "admin.fees.err.reasonTooLong", max: 500, used: 501 });
+});
+
+test("a pasted line break is folded into a space rather than refused by the plane", () => {
+  assert.equal(normalizeReason("Costs\nrose."), "Costs rose.");
+  assert.equal(normalizeReason("Costs\r\n\trose.  "), "Costs rose.");
+  assert.equal(toRequest("alpha", draft({ reason: "Costs\nrose." })).reason, "Costs rose.");
+  // A reason that is nothing but breaks is no reason at all.
+  assert.deepEqual(draftProblem(HOUSE_TERMS, draft({ management: "3", reason: "\n\n" })), { key: "admin.fees.err.reasonRequired" });
 });
 
 test("an empty moment asks for the earliest allowed; a typed one is read in the local zone", () => {

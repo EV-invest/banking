@@ -72,7 +72,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
             : t("admin.fees.pending.scheduled", { version: change.version, at: formatMoment(change.effective_from, locale) })}
         </p>
         {change.reason.trim() && (
-          <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed">{change.reason.trim()}</blockquote>
+          <blockquote className="border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed">{change.reason.trim()}</blockquote>
         )}
         <p className="text-xs text-muted-foreground">{t("admin.fees.pending.requested", { when: ago(change.requested_at, t) })}</p>
 

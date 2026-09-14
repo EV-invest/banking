@@ -659,6 +659,10 @@
     "en": "A reason is required when the owners must approve.",
     "t": "Wenn die Eigentümer zustimmen müssen, ist ein Grund erforderlich."
   },
+  "admin.fees.err.reasonTooLong": {
+    "en": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
+    "t": "Die Begründung ist zu lang: {used} Byte bei höchstens {max}. Buchstaben außerhalb des einfachen Lateins zählen mehrfach."
+  },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
     "t": "Hurdle"

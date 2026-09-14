@@ -10,7 +10,7 @@
 // "scheduled" as "changed".
 
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent } from "@evinvest/uikit";
@@ -22,7 +22,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { formatMoment } from "@/shared/lib/datetime";
 import { revalidateTag } from "@/shared/lib/resource";
 import { isPendingChange } from "@/views/admin/fees/lib/format";
-import { FIELD_LABEL_KEY, draftBps, draftProblem, draftRequirement, toRequest } from "@/views/admin/fees/lib/schedule";
+import { FIELD_LABEL_KEY, draftBps, draftProblem, draftRequirement, toRequest, type TermsDraft } from "@/views/admin/fees/lib/schedule";
 import { useTermsDraft } from "@/views/admin/fees/model/use-terms-draft";
 import { ScheduleFields } from "@/views/admin/fees/ui/schedule-fields";
 import { TermsFields } from "@/views/admin/fees/ui/terms-fields";
@@ -49,6 +49,15 @@ export function PolicyCard({
   const { draft, set, reset } = useTermsDraft(current);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // The plane's refusal is about the draft as it was sent; the first edit makes it stale,
+  // and a red sentence that outlives the mistake it named reads as a second mistake.
+  const edit = useCallback(
+    <K extends keyof TermsDraft>(field: K, value: TermsDraft[K]) => {
+      setProblem(null);
+      set(field, value);
+    },
+    [set],
+  );
   // The reason becomes required the moment a rate crosses the envelope, which is before
   // the operator has been anywhere near the field — so "required" is said as a label at
   // once and as an ERROR only after they have touched it.
@@ -70,10 +79,12 @@ export function PolicyCard({
   const requirement = useMemo(() => draftRequirement(current, draft), [current, draft]);
   const found = useMemo(() => draftProblem(current, draft), [current, draft]);
   const reasonMissing = found?.key === "admin.fees.err.reasonRequired";
+  // Too long is said at once, unlike "required": it is about text they have typed.
+  const reasonTooLong = found?.key === "admin.fees.err.reasonTooLong" ? t(found.key, { max: found.max, used: found.used }) : null;
   // The rate problems, in words. The field name is interpolated rather than concatenated
   // onto the front: which end of the sentence it belongs at is a per-language decision.
   const rateProblem = useMemo(() => {
-    if (!found || found.key === "admin.fees.err.reasonRequired") return null;
+    if (!found || found.key === "admin.fees.err.reasonRequired" || found.key === "admin.fees.err.reasonTooLong") return null;
     if (found.key === "admin.fees.err.overCeiling") return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]), ceiling: found.ceiling });
     return t(found.key, { field: t(FIELD_LABEL_KEY[found.field]) });
   }, [found, t]);
@@ -110,12 +121,12 @@ export function PolicyCard({
           </p>
         </div>
 
-        <TermsFields draft={draft} bps={bps} onChange={set} disabled={blocked} />
+        <TermsFields draft={draft} bps={bps} onChange={edit} disabled={blocked} />
         <ScheduleFields
           draft={draft}
           requirement={requirement}
-          reasonError={reasonMissing && reasonTouched ? t("admin.fees.err.reasonRequired") : null}
-          onChange={set}
+          reasonError={reasonMissing && reasonTouched ? t("admin.fees.err.reasonRequired") : reasonTooLong}
+          onChange={edit}
           onReasonTouched={() => setReasonTouched(true)}
           disabled={blocked}
         />

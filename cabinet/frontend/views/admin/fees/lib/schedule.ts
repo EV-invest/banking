@@ -11,7 +11,7 @@
 
 import type { ScheduleFeePolicyRequest } from "@/shared/contracts/admin";
 
-import { MAX_HURDLE_BPS, MAX_MANAGEMENT_BPS, MAX_PERFORMANCE_BPS, requirementFor, type ChangeRequirement, type FeeTermsLike } from "../../../../shared/lib/fee-terms.ts";
+import { MAX_HURDLE_BPS, MAX_MANAGEMENT_BPS, MAX_PERFORMANCE_BPS, MAX_REASON_BYTES, requirementFor, type ChangeRequirement, type FeeTermsLike } from "../../../../shared/lib/fee-terms.ts";
 import { pct, toBps } from "../../../../shared/lib/rate.ts";
 
 /** The five terms as the form holds them: rates in percent, exactly as typed. */
@@ -48,7 +48,23 @@ export const FIELD_LABEL_KEY: Record<RateField, string> = {
 export type DraftProblem =
   | { key: "admin.fees.err.notPercent"; field: RateField }
   | { key: "admin.fees.err.overCeiling"; field: RateField; ceiling: string }
-  | { key: "admin.fees.err.reasonRequired" };
+  | { key: "admin.fees.err.reasonRequired" }
+  | { key: "admin.fees.err.reasonTooLong"; max: number; used: number };
+
+/**
+ * The reason as the wire will carry it: one line, trimmed. The plane refuses any control
+ * character outright (`validate_reason` — a line break has every meaning in a mail
+ * header), and the field is single-line, so the only way one arrives is a paste; it is
+ * folded into a space rather than bounced back as a server error about "control characters".
+ */
+export function normalizeReason(reason: string): string {
+  return reason.replace(/\p{Cc}+/gu, " ").trim();
+}
+
+/** How long the plane will measure the reason to be — bytes, not characters. */
+export function reasonBytes(reason: string): number {
+  return new TextEncoder().encode(reason).length;
+}
 
 /** Every rate parsed, or `null` while any of them is not a percent. */
 export function draftBps(draft: TermsDraft): Record<RateField, number | null> {
@@ -91,7 +107,10 @@ export function draftProblem(current: FeeTermsLike | null, draft: TermsDraft): D
     if (value === null) return { key: "admin.fees.err.notPercent", field };
     if (value > CEILING_BPS[field]) return { key: "admin.fees.err.overCeiling", field, ceiling: pct(CEILING_BPS[field]) };
   }
-  if (draftRequirement(current, draft) === "owner_consilium" && draft.reason.trim().length === 0) {
+  const reason = normalizeReason(draft.reason);
+  const used = reasonBytes(reason);
+  if (used > MAX_REASON_BYTES) return { key: "admin.fees.err.reasonTooLong", max: MAX_REASON_BYTES, used };
+  if (draftRequirement(current, draft) === "owner_consilium" && reason.length === 0) {
     return { key: "admin.fees.err.reasonRequired" };
   }
   return null;
@@ -117,6 +136,6 @@ export function toRequest(service: string, draft: TermsDraft): ScheduleFeePolicy
     service,
     ...terms,
     effective_from: effectiveFromSeconds(draft.effectiveFrom) ?? 0,
-    reason: draft.reason.trim(),
+    reason: normalizeReason(draft.reason),
   };
 }

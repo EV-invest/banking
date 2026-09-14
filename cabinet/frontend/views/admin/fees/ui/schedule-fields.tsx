@@ -4,12 +4,15 @@
 //
 // The reason is marked required the moment the draft would need the owners: they read it
 // in their approval mail and it is part of what they sign, so an operator should learn
-// that here, not from a refusal after the click.
+// that here, not from a refusal after the click. It is a single line, because that is what
+// the plane accepts (`validate_reason` refuses any control character) and what the mail
+// and the history row render — a textarea here used to invite a paragraph the plane then
+// bounced with a sentence about control characters.
 
 import { useId, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
-import { Field, FieldDescription, FieldError, FieldLabel, Input, Textarea } from "@evinvest/uikit";
+import { Field, FieldDescription, FieldError, FieldLabel, Input } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
 import type { ChangeRequirement } from "@/shared/lib/fee-terms";
@@ -59,15 +62,15 @@ export function ScheduleFields({
 
       <Field data-invalid={reasonError !== null || undefined}>
         <FieldLabel htmlFor={reasonId}>{consilium ? t("admin.fees.reasonRequiredLabel") : t("admin.fees.reason")}</FieldLabel>
-        <Textarea
+        <Input
           id={reasonId}
+          type="text"
           value={draft.reason}
           onChange={(e) => {
             onReasonTouched();
             onChange("reason", e.target.value);
           }}
           onBlur={onReasonTouched}
-          rows={3}
           disabled={disabled}
           aria-required={consilium || undefined}
           aria-invalid={reasonError !== null || undefined}

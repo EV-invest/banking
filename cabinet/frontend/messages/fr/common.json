@@ -659,6 +659,10 @@
     "en": "A reason is required when the owners must approve.",
     "t": "Un motif est obligatoire lorsque les propriétaires doivent approuver."
   },
+  "admin.fees.err.reasonTooLong": {
+    "en": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
+    "t": "Le motif est trop long : {used} octets pour au plus {max}. Les lettres hors latin de base comptent pour plus d'un."
+  },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
     "t": "Seuil"

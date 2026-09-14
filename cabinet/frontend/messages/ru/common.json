@@ -659,6 +659,10 @@
     "en": "A reason is required when the owners must approve.",
     "t": "Когда требуется одобрение владельцев, причина обязательна."
   },
+  "admin.fees.err.reasonTooLong": {
+    "en": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",
+    "t": "Причина слишком длинная: {used} байт при пределе {max}. Буквы вне базовой латиницы считаются больше чем за один."
+  },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
     "t": "Барьер"
