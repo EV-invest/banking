@@ -16,7 +16,7 @@
 // form here would give an operator two doors to the same money.
 
 import { Landmark } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton } from "@evinvest/uikit";
@@ -45,6 +45,11 @@ export function FeesView() {
    *  Cancelling clears it explicitly rather than by watching `pending` vanish: right after
    *  scheduling, the receipt exists BEFORE the re-read brings the new pending change in. */
   const [receipt, setReceipt] = useState<FeePolicyChange | null>(null);
+
+  /** The fund whose pending change was just cancelled: its terms card takes focus once the
+   *  re-read has removed the pending card, whose button the focus was on. */
+  const [cancelledIn, setCancelledIn] = useState<string | null>(null);
+  const onTermsFocused = useCallback(() => setCancelledIn(null), []);
 
   const funds = catalog.data?.allocations ?? [];
   // The first fund is the default so the screen is useful without a click.
@@ -88,10 +93,26 @@ export function FeesView() {
           <StaggerItem className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-5">
               {receipt && receipt.service === selected && <ScheduledReceipt change={receipt} onDismiss={() => setReceipt(null)} />}
-              {pending && <PendingCard key={pending.id} change={pending} onCancelled={() => setReceipt(null)} />}
+              {pending && (
+                <PendingCard
+                  key={pending.id}
+                  change={pending}
+                  onCancelled={() => {
+                    setReceipt(null);
+                    setCancelledIn(selected);
+                  }}
+                />
+              )}
               {/* Keyed on the fund AND the pending change: a cancel or a promotion reseeds
                   the draft from the terms that are now in force. */}
-              <PolicyCard key={`${selected}:${pending?.id ?? policy?.version ?? 0}`} service={selected} policy={policy} onScheduled={setReceipt} />
+              <PolicyCard
+                key={`${selected}:${pending?.id ?? policy?.version ?? 0}`}
+                service={selected}
+                policy={policy}
+                onScheduled={setReceipt}
+                focusTitle={cancelledIn === selected && pending === null}
+                onTitleFocused={onTermsFocused}
+              />
             </div>
             <CollectCard service={selected} />
           </StaggerItem>

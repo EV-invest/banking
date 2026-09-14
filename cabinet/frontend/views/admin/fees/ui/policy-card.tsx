@@ -10,7 +10,7 @@
 // "scheduled" as "changed".
 
 import { Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent } from "@evinvest/uikit";
@@ -27,7 +27,22 @@ import { useTermsDraft } from "@/views/admin/fees/model/use-terms-draft";
 import { ScheduleFields } from "@/views/admin/fees/ui/schedule-fields";
 import { TermsFields } from "@/views/admin/fees/ui/terms-fields";
 
-export function PolicyCard({ service, policy, onScheduled }: { service: string; policy: FeePolicy | null; onScheduled: (change: FeePolicyChange) => void }) {
+export function PolicyCard({
+  service,
+  policy,
+  onScheduled,
+  focusTitle,
+  onTitleFocused,
+}: {
+  service: string;
+  policy: FeePolicy | null;
+  onScheduled: (change: FeePolicyChange) => void;
+  /** Take focus on the card's title — after a cancel, whose button unmounted with the
+   *  pending card and would otherwise drop focus to `body`. Acknowledged through
+   *  `onTitleFocused`, so a later remount does not grab focus again. */
+  focusTitle: boolean;
+  onTitleFocused: () => void;
+}) {
   const t = useT();
   const locale = useLocale();
   const current = policy?.configured ? policy : null;
@@ -38,6 +53,12 @@ export function PolicyCard({ service, policy, onScheduled }: { service: string; 
   // the operator has been anywhere near the field — so "required" is said as a label at
   // once and as an ERROR only after they have touched it.
   const [reasonTouched, setReasonTouched] = useState(false);
+  const titleRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (!focusTitle) return;
+    titleRef.current?.focus();
+    onTitleFocused();
+  }, [focusTitle, onTitleFocused]);
 
   // One change per product at a time: the plane refuses a second until the first is
   // cancelled, so the form says so instead of offering a click that will be refused.
@@ -81,7 +102,9 @@ export function PolicyCard({ service, policy, onScheduled }: { service: string; 
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
         <div className="space-y-1">
-          <p className="text-sm font-semibold">{t("admin.fees.terms")}</p>
+          <p ref={titleRef} tabIndex={-1} className="rounded-sm text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            {t("admin.fees.terms")}
+          </p>
           <p className="text-xs text-muted-foreground">
             {current ? t("admin.fees.inForce", { version: current.version, since: formatMoment(current.effective_from, locale) }) : t("admin.fees.notConfigured")}
           </p>
