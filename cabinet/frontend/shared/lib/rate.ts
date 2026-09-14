@@ -20,8 +20,10 @@ export function pct(bps: number | undefined): string {
 /** What a percent field admits. One basis point is 0.01%, so two decimal places is the
  *  whole resolution the money plane has — a third would be a rate it cannot store. The
  *  fraction is optional down to nothing so a half-typed "2." does not flash an error at
- *  someone in the middle of typing "2.5". Either separator: four of the cabinet's five
- *  locales write a half as "2,5", and the hint under the field says so in those languages.
+ *  someone in the middle of typing "2.5". Either separator on the way IN: four of the
+ *  cabinet's five locales write a half as "2,5". The way OUT (`pct`, `toPercentInput`)
+ *  stays the point in every locale — one policy here, and the hint under the field names
+ *  both spellings rather than teaching a separator the figures beside it do not use.
  *
  *  No cap on the digits: "5001" is a well-formed percentage that is far too large, and the
  *  caller wants to say "cannot be more than 5%" about it, not "not a percentage". */

@@ -656,8 +656,8 @@
     "t": "Раньше, чем позволяет уведомление: изменение вступит в силу не раньше чем через 24 часа после одобрения владельцами."
   },
   "admin.fees.err.notPercent": {
-    "en": "{field} must be a percentage — 2, or 2.5 for a half.",
-    "t": "{field}: нужны проценты — 2 или 2,5 для половины."
+    "en": "{field} must be a percentage — 2, or 2.5 / 2,5 for a half.",
+    "t": "{field}: нужны проценты — 2 или 2.5 / 2,5 для половины."
   },
   "admin.fees.err.overCeiling": {
     "en": "{field} cannot be more than {ceiling}.",

@@ -163,7 +163,7 @@
   "admin.fees.effectiveFromHint": "Leave empty for the earliest allowed. While anyone holds units, a change binds no earlier than 24 hours after it is scheduled — counted from the owners' approval when they must give it. An earlier moment is lifted to that minimum, never refused.",
   "admin.fees.effectiveFromLifted": "Earlier than the notice allows: while anyone holds units, this binds no earlier than {floor}.",
   "admin.fees.effectiveFromLiftedConsilium": "Earlier than the notice allows: this binds no earlier than 24 hours after the owners approve.",
-  "admin.fees.err.notPercent": "{field} must be a percentage — 2, or 2.5 for a half.",
+  "admin.fees.err.notPercent": "{field} must be a percentage — 2, or 2.5 / 2,5 for a half.",
   "admin.fees.err.overCeiling": "{field} cannot be more than {ceiling}.",
   "admin.fees.err.reasonRequired": "A reason is required when the owners must approve.",
   "admin.fees.err.reasonTooLong": "The reason is too long: {used} bytes of at most {max}. Letters outside plain Latin count as more than one.",

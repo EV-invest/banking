@@ -656,8 +656,8 @@
     "t": "Plus tôt que le préavis ne le permet : cela prendra effet au plus tôt 24 heures après l'accord des propriétaires."
   },
   "admin.fees.err.notPercent": {
-    "en": "{field} must be a percentage — 2, or 2.5 for a half.",
-    "t": "{field} doit être un pourcentage — 2, ou 2,5 pour un demi-point."
+    "en": "{field} must be a percentage — 2, or 2.5 / 2,5 for a half.",
+    "t": "{field} doit être un pourcentage — 2, ou 2.5 / 2,5 pour un demi-point."
   },
   "admin.fees.err.overCeiling": {
     "en": "{field} cannot be more than {ceiling}.",

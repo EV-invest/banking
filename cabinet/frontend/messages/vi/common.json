@@ -656,8 +656,8 @@
     "t": "Sớm hơn thời hạn thông báo cho phép: thay đổi này có hiệu lực không sớm hơn 24 giờ sau khi các chủ sở hữu chấp thuận."
   },
   "admin.fees.err.notPercent": {
-    "en": "{field} must be a percentage — 2, or 2.5 for a half.",
-    "t": "{field} phải là phần trăm — 2, hoặc 2,5 cho nửa phần trăm."
+    "en": "{field} must be a percentage — 2, or 2.5 / 2,5 for a half.",
+    "t": "{field} phải là phần trăm — 2, hoặc 2.5 / 2,5 cho nửa phần trăm."
   },
   "admin.fees.err.overCeiling": {
     "en": "{field} cannot be more than {ceiling}.",
