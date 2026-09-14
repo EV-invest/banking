@@ -230,7 +230,7 @@ impl BookService for BookSvc {
 			.transpose()
 			.map_err(map_err)?
 			.unwrap_or(BookPolicy::DEFAULT_LOT_SIZE);
-		let policy = BookPolicy::new(req.book_open, req.taker_fee_bps, price_tick, lot_size, req.market_slippage_bps).map_err(map_err)?;
+		let policy = BookPolicy::new(req.book_open, req.taker_fee_bps, price_tick, lot_size, req.market_slippage_bps, req.allow_unbacked_trading).map_err(map_err)?;
 		let record = book_app::set_policy(self.state.allocations.as_ref(), self.state.book.as_ref(), &service, policy)
 			.await
 			.map_err(map_err)?;
@@ -433,6 +433,7 @@ fn policy_to_proto(record: &BookPolicyRecord) -> pb::BookPolicy {
 		lot_size: policy.lot_size().to_decimal_string(),
 		market_slippage_bps: policy.market_slippage_bps(),
 		updated_at: record.updated_at,
+		allow_unbacked_trading: policy.allow_unbacked_trading(),
 	}
 }
 
