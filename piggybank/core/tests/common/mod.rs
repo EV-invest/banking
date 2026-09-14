@@ -5,9 +5,12 @@
 //!
 //! Each test binary gets **its own database**, cloned from a migrated template (see
 //! [`database_url`]). Two things forced that: the outbox relay's advisory lock is scoped to
-//! a database, so binaries sharing one (nextest, two `cargo test --test …` side by side)
-//! raced for it and timed out; and one shared database migrated by another branch's build
-//! failed every suite with "migration N was previously applied but has been modified".
+//! a database, so binaries sharing one (two `cargo test --test …` side by side) raced for it
+//! and timed out; and one shared database migrated by another branch's build failed every
+//! suite with "migration N was previously applied but has been modified". The unit is the
+//! binary, not the process: a runner that forks one process per *test* (nextest) would have
+//! every process drop and re-create the same clone under its siblings — that needs a
+//! per-process name and is not supported here.
 //!
 //! Each integration test is its own crate, so a suite that uses only part of this
 //! module still compiles the rest — hence the blanket `dead_code` allowance.
@@ -36,9 +39,9 @@ use tokio::sync::OnceCell;
 /// take this: it never touches the lock.
 ///
 /// Scope: the outbox lock lives in this binary's own database (see [`database_url`]), so
-/// another binary — even one running at the same time under nextest — can never hold it.
-/// What remains to serialize is the tests *inside* one binary, and a `LazyLock` in one
-/// process is exactly that.
+/// another binary — even one running at the same time — can never hold it. What remains to
+/// serialize is the tests *inside* one binary, and a `LazyLock` in one process is exactly
+/// that.
 static RELAY: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 /// Hold for the duration of a test that runs `Relay::run` or takes the outbox lock.
@@ -77,8 +80,9 @@ fn skip_or_fail<T>(reason: &str) -> Option<T> {
 /// next run replaces it.
 ///
 /// Provisioning holds a session-level advisory lock on the base database, so binaries
-/// started in parallel (nextest, two `cargo test` invocations) take turns at the template
-/// instead of racing to create it.
+/// started in parallel (two `cargo test` invocations) take turns at the template instead of
+/// racing to create it. Two processes of the *same* binary at once are not isolated: they
+/// share the clone's name, and the second drops it under the first.
 pub async fn database_url() -> Option<String> {
 	let base_url = match std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty()) {
 		Some(url) => url,
@@ -100,6 +104,10 @@ const PROVISION_LOCK_KEY: i64 = 0x7067_7473_7464_6221;
 /// ourselves keeps the name we connect to equal to the name we created.
 const MAX_IDENTIFIER_BYTES: usize = 63;
 
+/// Leaves `MAX_IDENTIFIER_BYTES - MAX_BASE_NAME_BYTES - 1` = 30 bytes for the binary name —
+/// longer than any suite under `tests/` — so no two binaries truncate onto one clone.
+const MAX_BASE_NAME_BYTES: usize = 32;
+
 /// Provision this binary's database: lock, ensure a migrated template, clone it under this
 /// binary's name, unlock. Returns the clone's URL.
 async fn provision_binary_database(base_url: String) -> String {
@@ -107,6 +115,12 @@ async fn provision_binary_database(base_url: String) -> String {
 	assert!(
 		!base_name.is_empty() && base_name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'),
 		"DATABASE_URL must name a plain lowercase database (got {base_name:?}): the tests derive `{base_name}_template` and `{base_name}_<binary>` from it and splice them into DDL unquoted"
+	);
+	// Postgres truncates identifiers silently, so a long base name would make `_template`
+	// and the clones collide or disappear; keep room for the longest suite name.
+	assert!(
+		base_name.len() <= MAX_BASE_NAME_BYTES,
+		"DATABASE_URL database name {base_name:?} is longer than {MAX_BASE_NAME_BYTES} bytes — `{base_name}_<binary>` would no longer fit a Postgres identifier"
 	);
 	let template = format!("{base_name}_template");
 	let binary_db = binary_database_name(&base_name);
@@ -147,8 +161,9 @@ async fn provision_binary_database(base_url: String) -> String {
 ///
 /// The template outlives builds, so it can carry another branch's migrations: a file that
 /// was edited (`VersionMismatch`) or a version this build does not know (`VersionMissing`,
-/// after switching branches). Both mean "not our schema" and are answered by rebuilding the
-/// template from scratch rather than failing every suite.
+/// after switching branches) or a migration left half-applied by a killed run (`Dirty`). All
+/// mean "not our schema" and are answered by rebuilding the template from scratch rather
+/// than failing every suite.
 async fn ensure_migrated_template(admin: &mut PgConnection, base_url: &str, template: &str) {
 	let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)")
 		.bind(template)
@@ -162,7 +177,7 @@ async fn ensure_migrated_template(admin: &mut PgConnection, base_url: &str, temp
 	let template_url = swap_db(base_url, template);
 	match migrate_template(&template_url).await {
 		Ok(()) => {}
-		Err(err @ (MigrateError::VersionMismatch(_) | MigrateError::VersionMissing(_))) => {
+		Err(err @ (MigrateError::VersionMismatch(_) | MigrateError::VersionMissing(_) | MigrateError::Dirty(_))) => {
 			eprintln!("test template database {template} was migrated by another build ({err}) — recreating it");
 			sqlx::query(AssertSqlSafe(format!("DROP DATABASE {template} WITH (FORCE)")))
 				.execute(&mut *admin)
@@ -276,10 +291,10 @@ pub fn ledger_for(pool: &PgPool) -> Arc<dyn Ledger> {
 /// locally (a panic under CI). `skipping` names the suite in the skip notice.
 pub async fn seeded_ledger(pool: &PgPool, skipping: &str) -> Option<Arc<dyn Ledger>> {
 	let ledger = ledger_for(pool);
-	if ledger::seed_singletons(ledger.as_ref()).await.is_err() {
+	if let Err(err) = ledger::seed_singletons(ledger.as_ref()).await {
 		let address = tigerbeetle_address();
-		eprintln!("TigerBeetle unreachable at {address} — skipping {skipping}");
-		return skip_or_fail(&format!("TigerBeetle unreachable at {address} — run `nix run .#tb`"));
+		eprintln!("TigerBeetle unreachable at {address} ({err}) — skipping {skipping}");
+		return skip_or_fail(&format!("TigerBeetle unreachable at {address} ({err}) — run `nix run .#tb`"));
 	}
 	Some(ledger)
 }
