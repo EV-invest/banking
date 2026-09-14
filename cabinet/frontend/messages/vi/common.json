@@ -1540,8 +1540,8 @@
     "t": "AUM / số đơn vị quỹ"
   },
   "admin.valuation.navGuardNote": {
-    "en": "NAV-move guard — a post is rejected if NAV moves more than 50% from the last mark, unless override is on.",
-    "t": "Chốt chặn biến động NAV — một lần đăng định giá sẽ bị từ chối nếu NAV lệch quá 50% so với mức gần nhất, trừ khi bật bỏ qua chốt chặn."
+    "en": "NAV-move guard — a post is refused if the NAV moves more than 50% from the last mark or from the mark of a week ago, so stepping there in smaller posts is refused too. Nothing overrides it: a larger move is put to the owners' vote instead.",
+    "t": "Chốt chặn biến động NAV — một lần đăng định giá sẽ bị từ chối nếu NAV lệch quá 50% so với mức gần nhất hoặc so với mức của một tuần trước, nên tiến tới con số đó bằng nhiều bước nhỏ cũng bị từ chối. Không có cách bỏ qua: biến động lớn hơn được đưa ra cho các chủ sở hữu bỏ phiếu."
   },
   "admin.valuation.noAllocations": {
     "en": "No allocations registered",
@@ -1551,13 +1551,9 @@
     "en": "No units outstanding — NAV is {formula}, so it is undefined until someone subscribes. The fund prices at the seed NAV 1.0 until the first subscription; there is nothing to mark yet.",
     "t": "Chưa có đơn vị quỹ nào lưu hành — NAV là {formula}, nên chưa xác định được cho tới khi có người đăng ký. Quỹ định giá theo NAV khởi tạo 1.0 cho tới lệnh đăng ký đầu tiên; hiện chưa có gì để định giá."
   },
-  "admin.valuation.overrideGuard": {
-    "en": "Override guard",
-    "t": "Bỏ qua chốt chặn"
-  },
-  "admin.valuation.overrideGuardHint": {
-    "en": "Allow a >50% NAV move",
-    "t": "Cho phép NAV biến động trên 50%"
+  "admin.valuation.openConsilium": {
+    "en": "Open the consilium",
+    "t": "Mở hội đồng"
   },
   "admin.valuation.pickAFund": {
     "en": "Pick a fund above to see and resize its authorised unit supply.",
@@ -1566,6 +1562,22 @@
   "admin.valuation.postValuation": {
     "en": "Post valuation",
     "t": "Đăng định giá"
+  },
+  "admin.valuation.propose": {
+    "en": "Propose to the owners",
+    "t": "Đề xuất cho chủ sở hữu"
+  },
+  "admin.valuation.proposeHint": {
+    "en": "A move past the guard is put to the owners' vote instead of being posted.",
+    "t": "Biến động vượt chốt chặn được đưa ra cho các chủ sở hữu bỏ phiếu thay vì được đăng."
+  },
+  "admin.valuation.proposedBody": {
+    "en": "Nothing is marked yet. Every owner has been emailed a link; once more than half of them agree, {service} is marked at {aum} USDT. The live tally is in the consilium.",
+    "t": "Chưa có gì được định giá. Mỗi chủ sở hữu đã được gửi một liên kết qua email; khi hơn một nửa đồng ý, {service} sẽ được định giá ở mức {aum} USDT. Số phiếu hiện tại nằm trong hội đồng."
+  },
+  "admin.valuation.proposedTitle": {
+    "en": "Proposed to the owners",
+    "t": "Đã đề xuất cho các chủ sở hữu"
   },
   "admin.valuation.queueEmpty": {
     "en": "The redemption queue is empty.",
@@ -1718,6 +1730,46 @@
   "approval.payout.title": {
     "en": "Approve a fund payout",
     "t": "Phê duyệt một khoản chi trả của quỹ"
+  },
+  "approval.valuation.approve": {
+    "en": "Approve this mark",
+    "t": "Phê duyệt mức định giá này"
+  },
+  "approval.valuation.aum": {
+    "en": "Proposed AUM",
+    "t": "AUM đề xuất"
+  },
+  "approval.valuation.decided.approvedTitle": {
+    "en": "You approved this mark",
+    "t": "Bạn đã phê duyệt mức định giá này"
+  },
+  "approval.valuation.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the fund is marked once enough owners have agreed.",
+    "t": "Câu trả lời của bạn đã được ghi nhận. Không còn gì phải làm ở đây — quỹ sẽ được định giá khi có đủ chủ sở hữu đồng ý."
+  },
+  "approval.valuation.decided.rejectedTitle": {
+    "en": "You rejected this mark",
+    "t": "Bạn đã từ chối mức định giá này"
+  },
+  "approval.valuation.executes": {
+    "en": "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.",
+    "t": "Nếu được thông qua, quỹ sẽ được định giá ở mức AUM này bất kể chốt chặn biến động NAV, và các lệnh hoàn vốn đang chờ sẽ được tất toán theo NAV tương ứng."
+  },
+  "approval.valuation.lead": {
+    "en": "{initiator} has asked to mark a fund at a value the NAV-move guard refuses. A mark past the guard is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} đề nghị định giá một quỹ ở mức mà chốt chặn biến động NAV từ chối. Định giá vượt chốt chặn không bao giờ là quyết định của một người, nên cần các chủ sở hữu đồng ý."
+  },
+  "approval.valuation.payloadHashHint": {
+    "en": "The fingerprint is taken over the product and the AUM above. It is checked again before the mark is recorded, so a request cannot be edited after you have agreed to it.",
+    "t": "Dấu vân tay được tính trên sản phẩm và AUM ở trên. Nó được kiểm tra lại trước khi mức định giá được ghi nhận, nên yêu cầu không thể bị chỉnh sửa sau khi bạn đã đồng ý."
+  },
+  "approval.valuation.product": {
+    "en": "Product",
+    "t": "Sản phẩm"
+  },
+  "approval.valuation.title": {
+    "en": "Approve a NAV mark",
+    "t": "Phê duyệt một mức định giá NAV"
   },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
@@ -1888,8 +1940,8 @@
     "t": "Không có yêu cầu nào đang mở"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
-    "t": "Chuyển tiền thuộc sở hữu của quỹ — chi trả doanh thu, hoặc một lệnh thanh toán giữa hai đầu của nền tảng. Mỗi lần một yêu cầu, và không bao giờ là quyết định của một người."
+    "en": "Moving money the fund owns — a revenue payout or a payment order — and marking a fund past the NAV-move guard. One request at a time, and never one person's decision.",
+    "t": "Chuyển tiền thuộc sở hữu của quỹ — chi trả doanh thu hoặc một lệnh thanh toán — và định giá một quỹ vượt chốt chặn biến động NAV. Mỗi lần một yêu cầu, và không bao giờ là quyết định của một người."
   },
   "consilium.payout.title": {
     "en": "Fund payouts and payments",
@@ -1902,6 +1954,18 @@
   "consilium.roster.emptyNext": {
     "en": "Add the missing people to OWNER_SUBJECTS, have each of them sign in once so the account exists, and restart the service. Until the first seat is written, the operators on that list are working under emergency access — temporary by construction: the first successful seeding closes it permanently, and from then on a seat is only ever granted by a consilium of the existing owners.",
     "t": "Hãy bổ sung những người còn thiếu vào OWNER_SUBJECTS, để mỗi người đăng nhập một lần cho tài khoản tồn tại, rồi khởi động lại dịch vụ. Cho đến khi ghế đầu tiên được ghi, các vận hành viên trong danh sách đó làm việc bằng truy cập khẩn cấp — tạm thời theo thiết kế: lần gieo mầm thành công đầu tiên đóng nó lại vĩnh viễn, và từ đó một ghế chỉ được trao bởi hội đồng các chủ sở hữu đương nhiệm."
+  },
+  "consilium.valuation.executes": {
+    "en": "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.",
+    "t": "Nếu được thông qua, quỹ sẽ được định giá ở mức AUM này bất kể chốt chặn biến động NAV, và các lệnh hoàn vốn đang chờ sẽ được tất toán theo NAV tương ứng."
+  },
+  "consilium.valuation.mark": {
+    "en": "NAV mark",
+    "t": "Định giá NAV"
+  },
+  "consilium.valuation.product": {
+    "en": "Product",
+    "t": "Sản phẩm"
   },
   "dash.activeStrategies": {
     "en": "Active strategies",
@@ -3720,20 +3784,20 @@
     "t": "NAV suy ra / đơn vị"
   },
   "tips.admin.valuation.post.nav-guard.body": {
-    "en": "A post is rejected if the NAV moves more than 50% from the last mark, unless Override guard is on.",
-    "t": "Một lần đăng định giá sẽ bị từ chối nếu NAV lệch quá 50% so với mức gần nhất, trừ khi bật Bỏ qua chốt chặn."
+    "en": "A post is refused if the NAV moves more than 50% from the last mark or from the mark of a week ago — stepping there in smaller posts is refused too. There is no override: a larger move is proposed to the owners and recorded only if their vote carries.",
+    "t": "Một lần đăng định giá sẽ bị từ chối nếu NAV lệch quá 50% so với mức gần nhất hoặc mức của một tuần trước — chia thành các bước nhỏ cũng bị từ chối. Không có cách bỏ qua: biến động lớn hơn được đề xuất cho các chủ sở hữu và chỉ được ghi nhận nếu cuộc bỏ phiếu thông qua."
   },
   "tips.admin.valuation.post.nav-guard.title": {
     "en": "NAV-move guard",
     "t": "Chốt chặn biến động NAV"
   },
-  "tips.admin.valuation.post.override.body": {
-    "en": "Bypasses the NAV-move guard so a post that moves NAV more than 50% is accepted and settles redemptions at that mark. A fat-fingered AUM then over- or under-pays irreversibly.",
-    "t": "Vô hiệu hóa chốt chặn biến động NAV, để một lần đăng làm NAV lệch hơn 50% vẫn được chấp nhận và tất toán các lệnh hoàn vốn theo mức đó. Khi ấy một con số AUM gõ nhầm sẽ trả thừa hoặc trả thiếu, không thể đảo ngược."
+  "tips.admin.valuation.post.propose.body": {
+    "en": "Opens a consilium instead of posting. The owners answer from their mailboxes; if more than half agree, the fund is marked at this AUM regardless of the NAV-move guard. Nothing changes until then.",
+    "t": "Mở một hội đồng thay vì đăng. Các chủ sở hữu trả lời từ hộp thư của họ; nếu hơn một nửa đồng ý, quỹ được định giá ở mức AUM này bất kể chốt chặn biến động NAV. Cho đến lúc đó không có gì thay đổi."
   },
-  "tips.admin.valuation.post.override.title": {
-    "en": "Override guard",
-    "t": "Bỏ qua chốt chặn"
+  "tips.admin.valuation.post.propose.title": {
+    "en": "Propose to the owners",
+    "t": "Đề xuất cho chủ sở hữu"
   },
   "tips.admin.valuation.queue.est-cash.body": {
     "en": "A preview only — approximately units × current NAV. The actual payout settles at the settle-time NAV, not this figure.",

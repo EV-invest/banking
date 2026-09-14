@@ -14,9 +14,10 @@
 //     exactly these values, and an owner who was shown a truncated address approved
 //     something else.
 //
-// A consilium carries one of two things — a revenue payout, or a payment order
-// (`invitation.payment`, docs/CONSILIUM.md § Payments). The page is the same either way;
-// only the terms card and the words naming what is approved change.
+// A consilium carries one of three things — a revenue payout, a payment order
+// (`invitation.payment`, docs/CONSILIUM.md § Payments) or a NAV mark past the move guard
+// (`invitation.valuation_override`, banking#232). The page is the same in every case; only
+// the terms card and the words naming what is approved change.
 //
 // The tally, the attempt counter and the settled decision are all read back from the
 // server. This page never decrements, increments or predicts any of them: a wrong code is
@@ -52,6 +53,7 @@ import {
 } from "@/views/approval/ui/approval-chrome";
 import { PaymentTermsBlock, renderablePayment } from "@/views/approval/ui/payment-terms";
 import { PayoutTerms } from "@/views/approval/ui/payout-terms";
+import { ValuationTermsBlock, renderableValuation } from "@/views/approval/ui/valuation-terms";
 
 export function PayoutApprovalView({ token }: { token: string }) {
   const t = useT();
@@ -141,14 +143,19 @@ export function PayoutApprovalView({ token }: { token: string }) {
   }
 
   const payment = invitation.payment ?? null;
+  const valuation = invitation.valuation_override ?? null;
   const payout = invitation.revenue_payout;
   // The terms an owner is agreeing to must actually be on screen. The BFF fills a missing
   // payout with `unwrap_or_default()`, which is empty strings — and an empty string is not
   // nullish, so a `?? "-"` renders nothing at all while the Approve button stays live. That
   // is precisely the approval-of-something-unseen policy 12/13 exists to prevent, so a
   // request whose amount or address did not arrive is not offered for decision at all.
-  const renderable = payment ? renderablePayment(payment) : Boolean(payout?.amount?.trim()) && Boolean(payout?.address?.trim());
-  const words = payment ? "approval.payment" : "approval.payout";
+  const renderable = valuation
+    ? renderableValuation(valuation)
+    : payment
+      ? renderablePayment(payment)
+      : Boolean(payout?.amount?.trim()) && Boolean(payout?.address?.trim());
+  const words = valuation ? "approval.valuation" : payment ? "approval.payment" : "approval.payout";
   const burned = !settled && (invitation.attempts_remaining ?? 0) <= 0;
   const expired = !settled && hasExpired(invitation.expires_at);
   const threshold = invitation.threshold ?? 0;
@@ -176,7 +183,9 @@ export function PayoutApprovalView({ token }: { token: string }) {
         </CardHeader>
 
         <CardContent className="flex flex-col gap-5">
-          {payment ? (
+          {valuation ? (
+            <ValuationTermsBlock terms={valuation} payloadHash={invitation.payload_hash} />
+          ) : payment ? (
             <PaymentTermsBlock terms={payment} payloadHash={invitation.payload_hash} reasonLabel={t("approval.payment.reasonLabel")} />
           ) : (
             <PayoutTerms payout={payout} payloadHash={invitation.payload_hash} />

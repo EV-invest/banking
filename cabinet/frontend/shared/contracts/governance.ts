@@ -70,6 +70,8 @@ export interface PayoutApproval {
   /** Present for a payment consilium — the sibling of `revenue_payout`, and what the page
    *  renders when it is set (docs/CONSILIUM.md § Payments). */
   payment?: ConsiliumPaymentTerms | null;
+  /** Present for a NAV mark past the move guard — the third sibling (banking#232). */
+  valuation_override?: ValuationOverride | null;
   /** Full hash; the page shows a short prefix of it. */
   payload_hash: string;
   initiator_email: string;
@@ -332,10 +334,25 @@ export interface UserProposalList {
   items: UserProposal[];
 }
 
+// ── The NAV mark being authorized ──────────────────────────────────────────────
+
 /**
- * A consilium as the owners' room sees it. Two kinds: a revenue payout (`revenue_payout`)
- * and a payment order (`payment`), told apart by which sibling is set — a kind is never
- * expressed by widening the other one's field.
+ * What a valuation-override consilium authorizes: marking one fund at an AUM the NAV-move
+ * guard refuses. There is no per-request "override" flag any more (banking#232) — a move
+ * past the guard is only ever recorded by executing one of these, at exactly this AUM.
+ * Both fields are covered by `payload_hash`, so both are shown in full wherever the
+ * request is decided.
+ */
+export interface ValuationOverride {
+  service: string;
+  aum: Decimal;
+}
+
+/**
+ * A consilium as the owners' room sees it. Three kinds: a revenue payout (`revenue_payout`),
+ * a payment order (`payment`) and a NAV mark past the move guard (`valuation_override`),
+ * told apart by which sibling is set — exactly one is, and a kind is never expressed by
+ * widening another one's field.
  *
  * The fields past `expires_at` are the ones the money plane records as a request settles.
  * They are optional because an open request carries none of them, and because a client
@@ -346,6 +363,7 @@ export interface Consilium {
   state: string;
   revenue_payout?: RevenuePayout | null;
   payment?: ConsiliumPaymentTerms | null;
+  valuation_override?: ValuationOverride | null;
   payload_hash: string;
   initiator_user_id?: string;
   initiator_email: string;
@@ -360,6 +378,8 @@ export interface Consilium {
   executed_withdrawal_id?: string | null;
   /** The payment order a payment consilium carried into execution. */
   executed_payment_id?: string | null;
+  /** The valuation a NAV-mark consilium recorded on execution. */
+  executed_valuation_id?: string | null;
 }
 
 export interface ConsiliumList {

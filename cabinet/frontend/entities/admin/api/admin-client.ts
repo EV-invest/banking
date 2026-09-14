@@ -36,6 +36,7 @@ import type {
   UserBalance,
   WithdrawalQueue,
 } from "@/shared/contracts/admin";
+import type { Consilium } from "@/shared/contracts/governance";
 import type { MfeEntry } from "@/shared/mfe/types";
 
 // ── overview ──────────────────────────────────────────────────────────────────
@@ -185,7 +186,11 @@ export const fetchUnitHolders = (service: string): Promise<UnitHolders> => getJs
 // ── valuation + redemptions ─────────────────────────────────────────────────────
 export const fetchRedemptionQueue = (): Promise<RedemptionQueue> => getJson("/api/admin/valuation/queue");
 
-export const postValuation = (body: { service: string; aum: string; override: boolean }): Promise<FundNav> => postJson("/api/admin/valuation/post", body);
+export const postValuation = (body: { service: string; aum: string }): Promise<FundNav> => postJson("/api/admin/valuation/post", body);
+
+// A mark the NAV-move guard refuses is not posted with a flag — it is put to the owners.
+// The answer is the consilium the room and the emailed invitations then show.
+export const proposeValuationOverride = (body: { service: string; aum: string }): Promise<Consilium> => postJson("/api/admin/valuation/override", body);
 
 export const settleRedemption = (redemptionId: string): Promise<Redemption> => postJson("/api/admin/valuation/settle", { redemption_id: redemptionId });
 

@@ -679,7 +679,9 @@ pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query
 	Ok(Json(holders.into()))
 }
 
-/// `POST /api/admin/valuation/post` — post a fund NAV (with the fat-finger guard).
+/// `POST /api/admin/valuation/post` — post a fund NAV, inside the move guard. There is no
+/// `override` in the body any more (banking#232): a mark the guard refuses goes through
+/// [`propose_valuation_override`] and the owners' vote.
 pub async fn post_valuation(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::FundNav>, ApiError> {
 	require_admin(&st, &jar).await?;
 	if !verify_csrf(&st, &jar, &headers) {
@@ -690,12 +692,26 @@ pub async fn post_valuation(State(st): State<AppState>, jar: CookieJar, headers:
 	let (Some(service), Some(aum)) = (required(&v, "service"), required(&v, "aum")) else {
 		return Err(ApiError::BadRequest("service and aum are required".into()));
 	};
-	let req = bk::PostFundValuationRequest {
-		service,
-		aum,
-		r#override: bool_field(&v, "override"),
-	};
+	let req = bk::PostFundValuationRequest { service, aum };
 	Ok(Json(st.grpc.post_valuation(&token, req).await?.into()))
+}
+
+/// `POST /api/admin/valuation/override` — put a NAV mark the move guard refuses to the
+/// owners. Body `{service, aum}`; the answer is the consilium the owners' room and the
+/// emailed invitations then show. Same admin + CSRF gate as `/post`; the plane re-checks
+/// `ValuationPost` and refuses a proposer who holds no owner seat.
+pub async fn propose_valuation_override(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::Consilium>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let (Some(service), Some(aum)) = (required(&v, "service"), required(&v, "aum")) else {
+		return Err(ApiError::BadRequest("service and aum are required".into()));
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let terms = bk::ValuationOverrideTerms { service, aum };
+	Ok(Json(st.grpc.open_valuation_override(&token, terms).await?.into()))
 }
 
 /// `POST /api/admin/valuation/settle` — settle a queued redemption.
