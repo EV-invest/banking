@@ -37,6 +37,7 @@
 //! for an hour longer than they were told.
 
 use std::{
+	collections::HashMap,
 	sync::Arc,
 	time::{Duration, Instant},
 };
@@ -107,6 +108,7 @@ impl FeeSweeper {
 		info!("fee sweeper: assessing due positions every {SWEEP_INTERVAL:?}, promoting due policy changes every {PROMOTION_INTERVAL:?}");
 		// One loop on the tighter cadence; the hourly sweep runs on the ticks where it is due.
 		let mut last_sweep: Option<Instant> = None;
+		let mut promotion_failures = HashMap::new();
 		loop {
 			let now = now_unix_i64();
 			if last_sweep.is_none_or(|at| at.elapsed() >= SWEEP_INTERVAL) {
@@ -117,7 +119,7 @@ impl FeeSweeper {
 				}
 				last_sweep = Some(Instant::now());
 			}
-			match fee_app::promote_due(self.changes.as_ref(), now).await {
+			match fee_app::promote_due(self.changes.as_ref(), now, &mut promotion_failures).await {
 				Ok(promoted) if promoted > 0 => info!(promoted, "fee sweeper: promoted scheduled fee-policy changes"),
 				Ok(_) => {}
 				Err(err) => warn!("fee sweeper: could not list due fee-policy changes (will retry): {err}"),

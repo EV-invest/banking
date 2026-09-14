@@ -32,7 +32,7 @@ use crate::{
 	AppState,
 	application::fees::{self as fee_app, FeePolicyPorts, PolicyChangeRequest, PolicyView},
 	ports::fees::{AssessmentRecord, FeePolicyChange},
-	services::support::{caller_id, map_err, require_permission, unix_now},
+	services::support::{caller_id, holds_permission, map_err, require_permission, unix_now},
 };
 
 #[derive(Clone)]
@@ -83,20 +83,22 @@ fn parse_policy(management_bps: u32, performance_bps: u32, hurdle_bps: u32, basi
 impl FeesService for FeesSvc {
 	async fn get_fee_policy(&self, request: Request<pb::GetFeePolicyRequest>) -> Result<Response<pb::FeePolicy>, Status> {
 		caller_id(&request)?;
+		let audience = audience_of(&self.state, &request).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		let view = fee_app::policy_view(self.state.fees.policies.as_ref(), self.state.fees.changes.as_ref(), &service)
 			.await
 			.map_err(map_err)?;
-		Ok(Response::new(policy_to_proto(&service, &view)))
+		Ok(Response::new(policy_to_proto(&service, &view, audience)))
 	}
 
 	async fn list_fee_policies(&self, request: Request<pb::ListFeePoliciesRequest>) -> Result<Response<pb::FeePolicyList>, Status> {
 		caller_id(&request)?;
+		let audience = audience_of(&self.state, &request).await?;
 		let policies = fee_app::list_policies(self.state.fees.policies.as_ref(), self.state.fees.changes.as_ref())
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(pb::FeePolicyList {
-			policies: policies.iter().map(|(service, view)| policy_to_proto(service, view)).collect(),
+			policies: policies.iter().map(|(service, view)| policy_to_proto(service, view, audience)).collect(),
 		}))
 	}
 
@@ -132,7 +134,7 @@ impl FeesService for FeesSvc {
 			effective_from = change.effective_from_unix,
 			"scheduled a fee-policy change"
 		);
-		Ok(Response::new(change_to_proto(&change)))
+		Ok(Response::new(change_to_proto(&change, Audience::Operator)))
 	}
 
 	async fn cancel_fee_policy_change(&self, request: Request<pb::CancelFeePolicyChangeRequest>) -> Result<Response<pb::FeePolicyChange>, Status> {
@@ -141,16 +143,19 @@ impl FeesService for FeesSvc {
 		let req = request.get_ref();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		let id = parse_change_id(&req.change_id)?;
-		let change = fee_app::cancel_change(self.state.fees.changes.as_ref(), &service, id, by, unix_now()).await.map_err(map_err)?;
-		Ok(Response::new(change_to_proto(&change)))
+		let change = fee_app::cancel_change(self.state.fees.changes.as_ref(), self.state.consilia.as_ref(), &service, id, by, unix_now())
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(change_to_proto(&change, Audience::Operator)))
 	}
 
 	async fn list_fee_policy_changes(&self, request: Request<pb::ListFeePolicyChangesRequest>) -> Result<Response<pb::FeePolicyChangeList>, Status> {
 		caller_id(&request)?;
+		let audience = audience_of(&self.state, &request).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
 		let changes = fee_app::list_changes(self.state.fees.changes.as_ref(), &service).await.map_err(map_err)?;
 		Ok(Response::new(pb::FeePolicyChangeList {
-			changes: changes.iter().map(change_to_proto).collect(),
+			changes: changes.iter().map(|change| change_to_proto(change, audience)).collect(),
 		}))
 	}
 
@@ -255,8 +260,21 @@ impl FeesService for FeesSvc {
 	}
 }
 
-fn policy_to_proto(service: &ServiceId, view: &PolicyView) -> pb::FeePolicy {
-	let pending = view.pending.as_ref().map(change_to_proto);
+/// Who is reading a change. The terms, the state, the moments and the reason are public
+/// information about a product; WHO asked and WHICH consilium decides are governance
+/// detail, shown to operators and blanked for everyone else.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Audience {
+	Operator,
+	Investor,
+}
+
+async fn audience_of<T>(state: &AppState, request: &Request<T>) -> Result<Audience, Status> {
+	Ok(if holds_permission(state, request, Permission::AllocationManage).await? { Audience::Operator } else { Audience::Investor })
+}
+
+fn policy_to_proto(service: &ServiceId, view: &PolicyView, audience: Audience) -> pb::FeePolicy {
+	let pending = view.pending.as_ref().map(|change| change_to_proto(change, audience));
 	match &view.current {
 		Some(record) => pb::FeePolicy {
 			service: service.to_string(),
@@ -290,7 +308,8 @@ fn policy_to_proto(service: &ServiceId, view: &PolicyView) -> pb::FeePolicy {
 	}
 }
 
-fn change_to_proto(change: &FeePolicyChange) -> pb::FeePolicyChange {
+fn change_to_proto(change: &FeePolicyChange, audience: Audience) -> pb::FeePolicyChange {
+	let operator = audience == Audience::Operator;
 	pb::FeePolicyChange {
 		id: change.id.to_string(),
 		service: change.service.to_string(),
@@ -303,8 +322,8 @@ fn change_to_proto(change: &FeePolicyChange) -> pb::FeePolicyChange {
 		crystallization: change.policy.crystallization().as_str().to_owned(),
 		effective_from: change.effective_from_unix,
 		requirement: change.requirement.as_str().to_owned(),
-		consilium_id: change.consilium_id.map(|id| id.to_string()).unwrap_or_default(),
-		requested_by: change.requested_by.clone(),
+		consilium_id: change.consilium_id.filter(|_| operator).map(|id| id.to_string()).unwrap_or_default(),
+		requested_by: if operator { change.requested_by.clone() } else { String::new() },
 		requested_at: change.requested_at_unix,
 		scheduled_at: change.scheduled_at_unix.unwrap_or_default(),
 		applied_at: change.applied_at_unix.unwrap_or_default(),

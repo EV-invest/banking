@@ -14,6 +14,8 @@
 //! charge the operator sets, prices, and collects, so it gets the same guard as an
 //! investor's own dealing.
 
+use std::collections::HashMap;
+
 use domain::{
 	balance::{LedgerAccountKey, ServiceId},
 	consilium::{Consilium, ConsiliumId, ConsiliumTerms},
@@ -204,9 +206,21 @@ pub async fn schedule_policy(ports: &FeePolicyPorts<'_>, requester: UserId, requ
 	// The registry is the same gate subscribe runs through: terms for an unregistered
 	// product are always a typo.
 	allocations_app::get(ports.allocations, &request.service).await?;
+	if request.requested_effective_from_unix > now.saturating_add(fees::MAX_EFFECTIVE_FROM_HORIZON_SECS) {
+		return Err(DomainError::Validation("effective_from may be at most 366 days ahead".into()));
+	}
 	let current = ports.policies.find(&request.service).await?;
 	let requirement = fees::requirement_for(current.as_ref(), &request.policy);
 	fees::validate_reason(&request.reason, requirement == ChangeRequirement::OwnerConsilium)?;
+	// The notice IS the protection, on either path. A change over a held product with no
+	// mailer would be scheduled, its notices queued into a relay that never runs, and bind
+	// 24h later on holders who were told nothing — the guardrail looking healthy the whole
+	// time. A product nobody holds owes nobody a notice and may proceed.
+	if !ports.governance_mail_wired && ports.changes.holder_count(&request.service).await? > 0 {
+		return Err(DomainError::Conflict(
+			"governance mail is not configured, so the holders of this product could not be given notice of a change of terms. Build with the `concierge_governance_mail` feature and configure the concierge mail relay first.".into(),
+		));
+	}
 	let change = NewFeePolicyChange {
 		id: FeePolicyChangeId::new(),
 		service: request.service.clone(),
@@ -258,8 +272,25 @@ pub async fn schedule_policy(ports: &FeePolicyPorts<'_>, requester: UserId, requ
 }
 
 /// Withdraw a pending change (operator). One still awaiting the owners takes its consilium
-/// down with it.
-pub async fn cancel_change(changes: &dyn FeePolicyChanges, service: &ServiceId, id: FeePolicyChangeId, by: UserId, now: i64) -> Result<FeePolicyChange, DomainError> {
+/// down with it — and for that reason only the owner who proposed it, or another owner,
+/// may withdraw it: an administrator who could not have opened the quorum must not be able
+/// to close it either, or every consilium-gated change is one `AllocationManage` holder
+/// away from never reaching a vote.
+pub async fn cancel_change(
+	changes: &dyn FeePolicyChanges,
+	consilia: &dyn ConsiliumRepository,
+	service: &ServiceId,
+	id: FeePolicyChangeId,
+	by: UserId,
+	now: i64,
+) -> Result<FeePolicyChange, DomainError> {
+	let change = changes.find(id).await?.filter(|change| &change.service == service).ok_or_else(|| DomainError::NotFound {
+		entity: "fee policy change",
+		id: id.to_string(),
+	})?;
+	if change.requirement == ChangeRequirement::OwnerConsilium && change.requested_by != by.to_string() && !consilia.owner_roster().await?.contains(&by) {
+		return Err(DomainError::Forbidden("a change awaiting the owners' consilium may be withdrawn only by the owner who proposed it or by another owner".into()));
+	}
 	changes.cancel(service, id, &by.to_string(), now).await
 }
 
@@ -297,17 +328,37 @@ pub async fn list_policies(policies: &dyn FeePolicies, changes: &dyn FeePolicyCh
 	Ok(views)
 }
 
+/// How many consecutive failed promotions of one change turn the per-tick warning into an
+/// error: ten minutes of the same change refusing to land is no longer a transient.
+pub const PROMOTION_FAILURES_BEFORE_ERROR: u32 = 10;
+
 /// Promote every scheduled change whose moment has come. Driven by the fee sweeper; returns
 /// how many were promoted. A failure on one product warns and moves on — the change stays
 /// `scheduled` and the next tick retries it — so one product's broken position cannot hold
-/// every other product's terms hostage.
-pub async fn promote_due(changes: &dyn FeePolicyChanges, now: i64) -> Result<usize, DomainError> {
+/// every other product's terms hostage. `failures` is the sweeper's memory of consecutive
+/// failures per change: past [`PROMOTION_FAILURES_BEFORE_ERROR`] the line is an error, with
+/// the database's own words, because a change that will never land is an operator's problem
+/// and a warning per minute is how such a problem hides in a log.
+pub async fn promote_due(changes: &dyn FeePolicyChanges, now: i64, failures: &mut HashMap<FeePolicyChangeId, u32>) -> Result<usize, DomainError> {
 	let mut promoted = 0usize;
 	for id in changes.due(now).await? {
 		match changes.promote(id, now).await {
-			Ok(true) => promoted += 1,
-			Ok(false) => {}
-			Err(err) => tracing::warn!(change_id = %id, "fee policy: could not promote a scheduled change (will retry): {err}"),
+			Ok(true) => {
+				promoted += 1;
+				failures.remove(&id);
+			}
+			Ok(false) => {
+				failures.remove(&id);
+			}
+			Err(err) => {
+				let streak = failures.entry(id).or_insert(0);
+				*streak = streak.saturating_add(1);
+				if *streak >= PROMOTION_FAILURES_BEFORE_ERROR {
+					tracing::error!(change_id = %id, consecutive_failures = *streak, "fee policy: a scheduled change keeps failing to promote: {err}");
+				} else {
+					tracing::warn!(change_id = %id, consecutive_failures = *streak, "fee policy: could not promote a scheduled change (will retry): {err}");
+				}
+			}
 		}
 	}
 	Ok(promoted)
