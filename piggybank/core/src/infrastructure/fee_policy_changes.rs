@@ -164,14 +164,20 @@ struct Undelivered {
 /// Counted by DELIVERY, not by attempts: a relay that has been down since the change was
 /// scheduled charges no attempt at all (`defer`), and a deferral ceiling equal to the notice
 /// period would otherwise let a change bind the very minute nobody could have been told.
-async fn undelivered_notices(conn: &mut PgConnection, change: FeePolicyChangeId) -> Result<Undelivered, DomainError> {
-	let (total, given_up): (i64, i64) =
-		sqlx::query_as("SELECT COUNT(*), COUNT(*) FILTER (WHERE attempts >= $2) FROM consilium_mail 		 WHERE fee_policy_change_id = $1 AND kind = 'fee_policy_notice' AND sent_at IS NULL")
-			.bind(change.raw())
-			.bind(MAX_ATTEMPTS)
-			.fetch_one(&mut *conn)
-			.await
-			.map_err(repo_err)?;
+/// Counted over the holders of RIGHT NOW: a recipient who has since redeemed every unit has
+/// no terms to be warned about, and must not hold the change for those who stayed.
+async fn undelivered_notices(conn: &mut PgConnection, change: &FeePolicyChange) -> Result<Undelivered, DomainError> {
+	let (total, given_up): (i64, i64) = sqlx::query_as(
+		"SELECT COUNT(*), COUNT(*) FILTER (WHERE m.attempts >= $3) FROM consilium_mail m \
+		 JOIN fund_positions p ON p.user_id = m.user_id AND p.service = $2 AND p.units <> '0' \
+		 WHERE m.fee_policy_change_id = $1 AND m.kind = 'fee_policy_notice' AND m.sent_at IS NULL",
+	)
+	.bind(change.id.raw())
+	.bind(change.service.as_str())
+	.bind(MAX_ATTEMPTS)
+	.fetch_one(&mut *conn)
+	.await
+	.map_err(repo_err)?;
 	Ok(Undelivered { total, given_up })
 }
 
@@ -546,16 +552,31 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			return Ok(false);
 		}
 		// A notice that has not reached its holder — still deferred behind a relay outage, or
-		// given up on — is a holder the notice period exists to warn who was never warned,
-		// and the terms do not bind over them. The change stays `scheduled`: a relay coming
-		// back delivers and the next tick promotes; a notice given up on needs the operator,
-		// and the sweeper's failure streak turns the refusal into an error.
-		let undelivered = undelivered_notices(&mut tx, id).await?;
+		// given up on — is a holder the notice period exists to warn who was never warned.
+		// Terms that get DEARER for them do not bind over them: the change stays `scheduled`,
+		// a relay coming back delivers and the next tick promotes, a notice given up on needs
+		// the operator, and the sweeper's failure streak turns the refusal into an error.
+		// Terms that only get cheaper bind regardless, on the record: a holder the identity
+		// plane cannot reach (an unverified mailbox, no mirrored id) would otherwise pin a
+		// product's terms forever — the loosening, and the lowering of a legacy rate above
+		// today's ceiling, included. No terms at all are measured as `FeePolicy::NONE`: a
+		// first positive rate tightens.
+		let undelivered = undelivered_notices(&mut tx, &change).await?;
 		if undelivered.total > 0 {
-			return Err(DomainError::Conflict(format!(
-				"{} holder notice(s) for this change are undelivered, {} of them given up on — the terms bind once every holder has been told",
-				undelivered.total, undelivered.given_up
-			)));
+			let current = current_terms(&mut tx, &change.service).await?;
+			if change.policy.tightens_from(current.as_ref().unwrap_or(&FeePolicy::NONE)) {
+				return Err(DomainError::Conflict(format!(
+					"{} holder notice(s) for this change are undelivered, {} of them given up on — dearer terms bind once every holder has been told",
+					undelivered.total, undelivered.given_up
+				)));
+			}
+			tracing::warn!(
+				change_id = %change.id,
+				service = %change.service,
+				undelivered = undelivered.total,
+				given_up = undelivered.given_up,
+				"fee policy: binding cheaper terms over holders whose notice was not delivered"
+			);
 		}
 
 		// Every holder's row, locked — the same lock a charge and a settle take — so no
