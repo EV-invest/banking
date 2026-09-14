@@ -1,8 +1,8 @@
 "use client";
 
 // The title row every side panel opens with: which product it belongs to, and the one
-// control that dismisses it. Shared by the grants and issuance panels so the two cannot
-// drift apart in how they name a row or where the close control sits.
+// control that dismisses it. Shared by the grants, issuance and book panels so the three
+// cannot drift apart in how they name a row or where the close control sits.
 
 import { X } from "lucide-react";
 

@@ -9,7 +9,7 @@
 // saved, which is published straight into that cache: an operator who flips the switch
 // and walks to the product page finds the control already there.
 
-import { TriangleAlert, X } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { useT } from "@evinvest/i18n/react";
@@ -21,11 +21,13 @@ import type { Allocation } from "@/shared/contracts/admin";
 import type { SetBookPolicyBody } from "@/shared/contracts/book";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
+import { cn } from "@/shared/lib/cn";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { Settled } from "@/shared/ui/motion";
 import { BookForm } from "@/views/admin/allocations/ui/book-form";
+import { PanelHeader } from "@/views/admin/allocations/ui/panel-header";
 
-export function BookPanel({ allocation, onClose }: { allocation: Allocation; onClose: () => void }) {
+export function BookPanel({ allocation, onClose, className }: { allocation: Allocation; onClose: () => void; className?: string }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -55,23 +57,11 @@ export function BookPanel({ allocation, onClose }: { allocation: Allocation; onC
   };
 
   return (
-    // Fixed width, matching `GrantsPanel` — see the note there.
-    <Card className="w-85">
+    // Fixed width, matching `GrantsPanel` — see the note there. `className` lets the
+    // bottom-sheet presentation widen it to the sheet instead.
+    <Card className={cn("w-85", className)}>
       <CardContent className="space-y-5 py-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate font-semibold">{allocation.title}</p>
-            <p className="truncate font-mono-tech text-xs text-muted-foreground">{allocation.service}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("ui.close")}
-            className="rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+        <PanelHeader allocation={allocation} onClose={onClose} />
 
         {error && (
           <p className="flex items-center gap-2 text-xs text-destructive">
