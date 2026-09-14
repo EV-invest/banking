@@ -78,6 +78,7 @@ const SHARED_TERMS: ReadonlySet<string> = new Set([
   "Maker",
   "Taker",
   "Memo",
+  "off-ramp · FX",
 ]);
 
 // Strings that coincide with English in *one* language — loanwords, shared Latin
@@ -94,9 +95,12 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Cabinet",
     "Chart",
     "Details",
+    "{title} — Details",
     "EV Investment — Cabinet",
     "Hurdle",
     "IN ORDERS",
+    "In Orders",
+    "INVEST.",
     "Index",
     "Investor",
     "Limit",
@@ -105,7 +109,9 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
     "Onboarding",
     "Operator",
     "ORDERS",
+    "{n, plural, one {# Order} other {# Orders}}",
     "Performance",
+    "{amount} Performance",
     "Portfolio",
     "Rollout %",
     "Service",
@@ -152,6 +158,18 @@ const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
 const isLegitimatelyIdentical = (locale: Translated, text: string): boolean =>
   hasNoProse(text) || SHARED_TERMS.has(text) || LOANWORDS[locale].has(text);
 
+// Compared loosely: a trailing full stop, a stray space or a capital letter is
+// still the English text, not a translation of it — and a strict `===` would let
+// exactly that byte through. Anything past this (a half-translated sentence)
+// is a reviewer's job, as the policy module says of itself.
+const canonical = (text: string): string =>
+  text
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/gu, " ")
+    .trim()
+    .replace(/[\s.,;:!?…]+$/u, "");
+
 const resolved = catalogueReport();
 const { report } = auditCatalogues(resolved, 1);
 console.log(report);
@@ -162,7 +180,10 @@ const drifted = resolved.flatMap((c) =>
 
 const identical = (Object.keys(AUTHORED) as Translated[]).flatMap((locale) =>
   Object.entries(AUTHORED[locale]).flatMap(([key, entry]) =>
-    entry.t === ENGLISH[key] && !isLegitimatelyIdentical(locale, entry.t)
+    ENGLISH[key] !== undefined &&
+    canonical(entry.t) === canonical(ENGLISH[key]) &&
+    !isLegitimatelyIdentical(locale, entry.t) &&
+    !isLegitimatelyIdentical(locale, ENGLISH[key])
       ? [`${locale}/${key}: ${JSON.stringify(entry.t)}`]
       : [],
   ),
