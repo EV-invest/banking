@@ -31,7 +31,7 @@ import {
   Skeleton,
 } from "@evinvest/uikit";
 
-import { Logo } from "@/application/layout/logo";
+import { Logo } from "@/shared/ui/logo";
 import { cn } from "@/shared/lib/cn";
 
 /**

@@ -10,6 +10,9 @@
 //!
 //! This lives in its own test binary (own process) so its long-lived relay's session
 //! advisory lock never overlaps the singleton test's lock assertions on a shared DB.
+//! The database and the outbox are still shared with every other suite, so the test
+//! drains whatever they left behind BEFORE it starts timing, and gives the relay far
+//! longer than one drain takes — see `run_finishes_its_drain_then_stops_on_cancellation`.
 
 use std::{sync::Arc, time::Duration};
 
@@ -58,10 +61,19 @@ async fn harness() -> Option<Harness> {
 /// spawn) with a driver that commits a deposit, waits until the relay has applied it (the
 /// iteration completed), then cancels the token. `join!` only returns once `run` has itself
 /// observed the cancellation and exited; the outer timeout proves it does not loop forever.
+///
+/// The outbox is shared with every suite that ran before this binary, and `run` applies it
+/// in strict `seq` order: the deposit below is applied only after everything a sibling left
+/// undrained — including a retryable row, which costs `run` a 2 s back-off per attempt. So
+/// the backlog is drained first, unfenced like every other test does it, and the deadlines
+/// are set for a relay that has to re-acquire a lock or ride out a throttle, not for the
+/// milliseconds a clean drain takes.
 #[tokio::test]
 async fn run_finishes_its_drain_then_stops_on_cancellation() {
+	let _relay_owner = common::relay_exclusive().await;
 	let Some(h) = harness().await else { return };
 	let relay = Relay::new(h.pool.clone(), ledger_for(&h.pool), Arc::new(StubCustody), h.notify.clone());
+	drain_the_shared_backlog(&relay).await;
 
 	let party = Party::User(UserId::new());
 	let before = h.claim_balance(&party).await;
@@ -75,18 +87,38 @@ async fn run_finishes_its_drain_then_stops_on_cancellation() {
 
 	// `join!` returns only after `run` exits; the timeout guards against a regression that
 	// ignored the token and looped forever (the driver always cancels, so a correct run ends).
-	let (applied, ()) = tokio::time::timeout(Duration::from_secs(15), async { tokio::join!(driver, relay.run(shutdown)) })
+	// 90 s: the driver's own deadline plus a lock re-acquisition back-off (capped at 30 s).
+	let (applied, ()) = tokio::time::timeout(Duration::from_secs(90), async { tokio::join!(driver, relay.run(shutdown)) })
 		.await
 		.expect("run returns promptly after the current drain iteration on cancellation");
 	assert_eq!(applied, expected, "the relay applied the committed deposit before shutdown");
 }
 
+/// Walk the whole shared backlog through the unfenced `drain` until it reports nothing
+/// left. A throttled drain (a row the ledger asked to retry) returns early; calling again
+/// advances that row's bounded attempt counter until it is parked, so the loop is bounded
+/// too — and if the backlog is truly stuck the timed test below fails with a clear
+/// message rather than this loop spinning.
+async fn drain_the_shared_backlog(relay: &Relay) {
+	for _ in 0..64 {
+		if !relay.drain().await {
+			return;
+		}
+	}
+	eprintln!("relay shutdown test: the shared outbox backlog is still throttling after 64 drains");
+}
+
 /// Poll until the relay has applied the committed deposit (proving the in-flight drain
 /// iteration ran to completion while the token was still live), then cancel the token so the
 /// relay observes shutdown at its wait point and exits. Returns the observed balance.
+///
+/// 60 s, not the few hundred milliseconds a healthy relay needs: the outbox lock is one
+/// per database, and a holder left by a sibling process (a dev hub on the same
+/// `DATABASE_URL`, a suite run in parallel) keeps `run` queued on it for as long as it
+/// lives. The deadline is the cost of sharing the lock, not the time the relay takes.
 async fn drive_until_applied_then_cancel(h: &Harness, party: &Party, expected: u128, shutdown: CancellationToken) -> u128 {
 	let mut applied = h.claim_balance(party).await;
-	for _ in 0..100 {
+	for _ in 0..600 {
 		if applied == expected {
 			break;
 		}

@@ -58,7 +58,7 @@ cabinet-backend   → evbanking_contracts, evconcierge_contracts (git: EV-invest
 
 | Crate                                | Role                                                                                                                                            | wasm-safe |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `domain/`                            | Pure DDD types over `ev::architecture`; the bounded contexts (`balance`, `users`, `withdrawals`, `subscriptions`, `redemptions`, `auth`). Source of truth across platform. | **yes**   |
+| `domain/`                            | Pure DDD types over `ev::architecture`; the bounded contexts (`balance`, `users`, `withdrawals`, `subscriptions`, `redemptions`, `book`, `auth`). Source of truth across platform. | **yes**   |
 | `evbanking_contracts` (`contracts/`) | gRPC wire contracts: tonic client+server stubs from `proto/`. Other repos import it for the client stubs.                                       | no        |
 | `evbanking_auth` (`piggybank/auth/`) | The auth **service** (issuance gRPC + in-process `Authorizer` channel) **and** the shared verification flow (JWKS verify + interceptor).        | no        |
 | `piggybank-core` (`piggybank/core/`) | The hub server: composition root that runs the core gRPC services and the auth service as in-process tasks; data-plane services + infra.        | no        |
@@ -78,6 +78,7 @@ dependency of `domain` — so `domain` stays wasm-safe for service frontends.
 | `withdrawals`   | user withdrawals to chain (accept-and-queue saga)       | Postgres + TigerBeetle     |
 | `subscriptions` | buying fund units at NAV (the service currency, mint)   | Postgres + TigerBeetle     |
 | `redemptions`   | redeeming fund units to cash (accept-and-queue saga)    | Postgres + TigerBeetle     |
+| `book`          | the secondary market: holders trading an allocation's units with each other (orders, price-time matching, DvP settlement) | Postgres + TigerBeetle     |
 | `auth`          | identities + token issuance/verification                | Postgres + Redis (central) |
 
 ## Contracts pipeline

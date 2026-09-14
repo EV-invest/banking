@@ -2303,6 +2303,597 @@
         }
       }
     },
+    "/banking.v1.BookService/CancelOrder": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "CancelOrder",
+        "description": "Take the caller's resting order off the book; its unspent escrow is released.\n Idempotent on an already-cancelled order; a filled one is ALREADY_EXISTS.",
+        "operationId": "banking.v1.BookService.CancelOrder",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CancelOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Order"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/GetBook": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "GetBook",
+        "description": "The aggregated book: the top `depth` price levels a side, the last trade, the\n 24h figures, and the fund's NAV for the ticker. Readable by anyone who may view the\n allocation; a hidden one is NOT_FOUND, as on AllocationsService.",
+        "operationId": "banking.v1.BookService.GetBook",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetBookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.BookSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/GetBookPolicy": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "GetBookPolicy",
+        "description": "The allocation's trading terms. Readable by anyone who may view the allocation.",
+        "operationId": "banking.v1.BookService.GetBookPolicy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.GetBookPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.BookPolicy"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/ListCandles": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "ListCandles",
+        "description": "OHLCV candles aggregated from the tape over `[from, to)`, one per non-empty bucket\n at `resolution` (1m | 5m | 15m | 1h | 4h | 1d). Buckets with no trade are omitted —\n a chart carries the last close forward itself.",
+        "operationId": "banking.v1.BookService.ListCandles",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListCandlesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.CandleList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/ListOpenOrders": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "ListOpenOrders",
+        "description": "The caller's resting orders (`open` | `partially_filled`), oldest first, optionally\n on one allocation.",
+        "operationId": "banking.v1.BookService.ListOpenOrders",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListOpenOrdersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.OrderList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/ListOrderHistory": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "ListOrderHistory",
+        "description": "The caller's orders in every state, newest first, optionally on one allocation.",
+        "operationId": "banking.v1.BookService.ListOrderHistory",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListOrderHistoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.OrderList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/ListTrades": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "ListTrades",
+        "description": "The public tape, newest first: price, size, the taker's side and the time. No\n order ids and no parties — a counterparty is never disclosed.",
+        "operationId": "banking.v1.BookService.ListTrades",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListTradesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.TradeList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/ListUserTrades": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "ListUserTrades",
+        "description": "The caller's own fills, newest first: each carries the caller's side, their order\n id and the fee they paid on it.",
+        "operationId": "banking.v1.BookService.ListUserTrades",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListUserTradesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.TradeList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/PlaceOrder": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "Place an order for the caller. Limit orders carry a `price` on the policy's tick;\n market orders leave it empty and are priced by the hub from the best opposite quote\n ± the policy's slippage, then run as an IOC limit at that price (an empty opposite\n side is FAILED_PRECONDITION). `size` is on the policy's lot.",
+        "description": "Refusals: `book_open = false`, or the caller below `invest` — FAILED_PRECONDITION;\n a post-only (`alo`) order that would cross, or one that would trade against the\n caller's own resting order — INVALID_ARGUMENT, nothing recorded; an insufficient\n available balance or holding — INVALID_ARGUMENT.\n\n Idempotent by `client_order_id`, unique per caller: a retry of a timed-out call\n returns the order the id already names. The same id for a DIFFERENT order is\n ALREADY_EXISTS.",
+        "operationId": "banking.v1.BookService.PlaceOrder",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.PlaceOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.Order"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/SetBookPolicy": {
+      "post": {
+        "tags": [
+          "banking.v1.BookService"
+        ],
+        "summary": "SetBookPolicy",
+        "description": "Replace the allocation's trading terms (AllocationManage). Closing the book\n (`book_open = false`) stops new orders; resting ones stay and may still be cancelled.",
+        "operationId": "banking.v1.BookService.SetBookPolicy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.SetBookPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.BookPolicy"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/banking.v1.BookService/WatchBook": {},
     "/banking.v1.ConsiliumApprovalService/GetInvitation": {
       "post": {
         "tags": [
@@ -7391,7 +7982,7 @@
           "invested": {
             "type": "string",
             "title": "invested",
-            "description": "staked in fund services (active allocations)"
+            "description": "held in fund units at NAV, the units escrowed by resting sell orders included"
           },
           "pending_withdrawal": {
             "type": "string",
@@ -7401,12 +7992,185 @@
           "total": {
             "type": "string",
             "title": "total",
-            "description": "available + invested + pending_withdrawal"
+            "description": "available + in_orders + invested + pending_withdrawal"
+          },
+          "in_orders": {
+            "type": "string",
+            "title": "in_orders",
+            "description": "cash escrowed by the caller's resting buy orders on the book (still theirs)"
           }
         },
         "title": "Balance",
         "additionalProperties": false,
-        "description": "The user's single, network-agnostic balance, segmented by lifecycle. Every figure is\n a TigerBeetle-authoritative decimal USDT string; total = available + invested +\n pending_withdrawal."
+        "description": "The user's single, network-agnostic balance, segmented by lifecycle. Every figure is\n a TigerBeetle-authoritative decimal USDT string; total = available + in_orders +\n invested + pending_withdrawal."
+      },
+      "banking.v1.BookEvent": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "title": "snapshot",
+            "$ref": "#/components/schemas/banking.v1.BookSnapshot"
+          },
+          "trades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Trade"
+            },
+            "title": "trades",
+            "description": "the latest public trades, newest first"
+          },
+          "orders_revision": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "orders_revision",
+            "format": "int64"
+          }
+        },
+        "title": "BookEvent",
+        "additionalProperties": false,
+        "description": "One frame of WatchBook. `orders_revision` is the book revision at which the caller's\n own orders on this allocation last changed (0 = never) — compare it with the previous\n frame's to know whether to refetch ListOpenOrders."
+      },
+      "banking.v1.BookLevel": {
+        "type": "object",
+        "properties": {
+          "price": {
+            "type": "string",
+            "title": "price",
+            "description": "decimal USDT per unit"
+          },
+          "size": {
+            "type": "string",
+            "title": "size",
+            "description": "decimal units resting at this price"
+          },
+          "orders": {
+            "type": "integer",
+            "title": "orders",
+            "description": "how many orders make it up"
+          }
+        },
+        "title": "BookLevel",
+        "additionalProperties": false,
+        "description": "One aggregated price level of one side."
+      },
+      "banking.v1.BookPolicy": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "book_open": {
+            "type": "boolean",
+            "title": "book_open"
+          },
+          "taker_fee_bps": {
+            "type": "integer",
+            "title": "taker_fee_bps"
+          },
+          "price_tick": {
+            "type": "string",
+            "title": "price_tick",
+            "description": "decimal USDT"
+          },
+          "lot_size": {
+            "type": "string",
+            "title": "lot_size",
+            "description": "decimal units"
+          },
+          "market_slippage_bps": {
+            "type": "integer",
+            "title": "market_slippage_bps"
+          },
+          "updated_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "updated_at",
+            "format": "int64",
+            "description": "unix seconds; 0 when the product has no policy row (the defaults)"
+          }
+        },
+        "title": "BookPolicy",
+        "additionalProperties": false,
+        "description": "One allocation's trading terms."
+      },
+      "banking.v1.BookSnapshot": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "revision",
+            "format": "int64"
+          },
+          "bids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.BookLevel"
+            },
+            "title": "bids"
+          },
+          "asks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.BookLevel"
+            },
+            "title": "asks"
+          },
+          "last_price": {
+            "type": "string",
+            "title": "last_price"
+          },
+          "last_side": {
+            "type": "string",
+            "title": "last_side",
+            "description": "buy | sell — the taker's side of the last trade"
+          },
+          "mid": {
+            "type": "string",
+            "title": "mid"
+          },
+          "spread": {
+            "type": "string",
+            "title": "spread"
+          },
+          "nav": {
+            "type": "string",
+            "title": "nav"
+          },
+          "volume_24h": {
+            "type": "string",
+            "title": "volume_24h",
+            "description": "decimal units"
+          },
+          "change_24h": {
+            "type": "string",
+            "title": "change_24h",
+            "description": "signed decimal percent, e.g. \"-2.5\""
+          },
+          "as_of": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "as_of",
+            "format": "int64",
+            "description": "unix seconds the snapshot was taken"
+          }
+        },
+        "title": "BookSnapshot",
+        "additionalProperties": false,
+        "description": "The book as of `revision`. `bids` are best (highest) first, `asks` best (lowest)\n first. `last_price` / `last_side` describe the latest trade (empty before the first);\n `mid` and `spread` are empty unless both sides have a level. `volume_24h` is the units\n traded in the trailing day and `change_24h` the signed percent move of the last price\n against the last trade at or before 24h ago (empty when there is none). `nav` is the\n fund's current mark, carried so a ticker can show the two prices side by side."
       },
       "banking.v1.CancelConsiliumRequest": {
         "type": "object",
@@ -7432,6 +8196,17 @@
           }
         },
         "title": "CancelFeePolicyChangeRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.CancelOrderRequest": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "order_id"
+          }
+        },
+        "title": "CancelOrderRequest",
         "additionalProperties": false
       },
       "banking.v1.CancelPaymentRequest": {
@@ -7476,6 +8251,65 @@
           }
         },
         "title": "CancelWithdrawalRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.Candle": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "time",
+            "format": "int64"
+          },
+          "open": {
+            "type": "string",
+            "title": "open"
+          },
+          "high": {
+            "type": "string",
+            "title": "high"
+          },
+          "low": {
+            "type": "string",
+            "title": "low"
+          },
+          "close": {
+            "type": "string",
+            "title": "close"
+          },
+          "volume": {
+            "type": "string",
+            "title": "volume",
+            "description": "decimal units"
+          }
+        },
+        "title": "Candle",
+        "additionalProperties": false,
+        "description": "One OHLCV bucket. `time` is the bucket's start, unix seconds."
+      },
+      "banking.v1.CandleList": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "resolution": {
+            "type": "string",
+            "title": "resolution"
+          },
+          "candles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Candle"
+            },
+            "title": "candles"
+          }
+        },
+        "title": "CandleList",
         "additionalProperties": false
       },
       "banking.v1.CheckRequest": {
@@ -8502,6 +9336,33 @@
         "title": "GetAllocationRequest",
         "additionalProperties": false
       },
+      "banking.v1.GetBookPolicyRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "GetBookPolicyRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.GetBookRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "depth": {
+            "type": "integer",
+            "title": "depth",
+            "description": "price levels a side; 0 = the server default (20); capped at 50"
+          }
+        },
+        "title": "GetBookRequest",
+        "additionalProperties": false
+      },
       "banking.v1.GetConsentInvitationRequest": {
         "type": "object",
         "properties": {
@@ -8810,6 +9671,40 @@
         "title": "ListAllocationsRequest",
         "additionalProperties": false
       },
+      "banking.v1.ListCandlesRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "resolution": {
+            "type": "string",
+            "title": "resolution",
+            "description": "1m | 5m | 15m | 1h | 4h | 1d"
+          },
+          "from": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "from",
+            "format": "int64",
+            "description": "unix seconds, inclusive"
+          },
+          "to": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "to",
+            "format": "int64",
+            "description": "unix seconds, exclusive; 0 = now"
+          }
+        },
+        "title": "ListCandlesRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListConsiliaRequest": {
         "type": "object",
         "properties": {
@@ -8859,6 +9754,18 @@
         "title": "ListFundFeeAssessmentsRequest",
         "additionalProperties": false
       },
+      "banking.v1.ListOpenOrdersRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "empty = every allocation"
+          }
+        },
+        "title": "ListOpenOrdersRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListOperationsRequest": {
         "type": "object",
         "properties": {
@@ -8869,6 +9776,23 @@
           }
         },
         "title": "ListOperationsRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListOrderHistoryRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "empty = every allocation"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "0 = the server default (100); capped at 200"
+          }
+        },
+        "title": "ListOrderHistoryRequest",
         "additionalProperties": false
       },
       "banking.v1.ListParkedEventsRequest": {
@@ -8949,6 +9873,22 @@
         "title": "ListSessionsResponse",
         "additionalProperties": false
       },
+      "banking.v1.ListTradesRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "0 = the server default (50); capped at 200"
+          }
+        },
+        "title": "ListTradesRequest",
+        "additionalProperties": false
+      },
       "banking.v1.ListUnitHoldersRequest": {
         "type": "object",
         "properties": {
@@ -8958,6 +9898,23 @@
           }
         },
         "title": "ListUnitHoldersRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListUserTradesRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "empty = every allocation"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "limit",
+            "description": "0 = the server default (100); capped at 200"
+          }
+        },
+        "title": "ListUserTradesRequest",
         "additionalProperties": false
       },
       "banking.v1.ListWithdrawalQueueRequest": {
@@ -9219,6 +10176,122 @@
           }
         },
         "title": "OperationsMode",
+        "additionalProperties": false
+      },
+      "banking.v1.Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "user_id"
+          },
+          "side": {
+            "type": "string",
+            "title": "side",
+            "description": "buy | sell"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "limit | market"
+          },
+          "tif": {
+            "type": "string",
+            "title": "tif",
+            "description": "gtc | ioc | alo"
+          },
+          "price": {
+            "type": "string",
+            "title": "price",
+            "description": "decimal USDT per unit"
+          },
+          "size": {
+            "type": "string",
+            "title": "size",
+            "description": "decimal units"
+          },
+          "filled": {
+            "type": "string",
+            "title": "filled",
+            "description": "decimal units"
+          },
+          "remaining": {
+            "type": "string",
+            "title": "remaining",
+            "description": "decimal units (size − filled)"
+          },
+          "avg_fill_price": {
+            "type": "string",
+            "title": "avg_fill_price",
+            "description": "decimal USDT per unit; empty until the first fill"
+          },
+          "fee_paid": {
+            "type": "string",
+            "title": "fee_paid",
+            "description": "decimal USDT the caller paid as taker on this order"
+          },
+          "state": {
+            "type": "string",
+            "title": "state",
+            "description": "open | partially_filled | filled | cancelled | rejected"
+          },
+          "reject_reason": {
+            "type": "string",
+            "title": "reject_reason",
+            "description": "free text; set exactly when state = rejected"
+          },
+          "client_order_id": {
+            "type": "string",
+            "title": "client_order_id"
+          },
+          "created_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "created_at",
+            "format": "int64",
+            "description": "unix seconds"
+          },
+          "updated_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "updated_at",
+            "format": "int64",
+            "description": "unix seconds"
+          },
+          "cancel_reason": {
+            "type": "string",
+            "title": "cancel_reason",
+            "description": "Set exactly when state = cancelled: \"\" | user | ioc_remainder | market_remainder.\n `user` is the owner's own cancel; the other two are the hub cancelling what an IOC\n limit / a market order could not fill at once — such an order may still show\n `filled \u003e 0`, which is what makes the reason worth carrying."
+          }
+        },
+        "title": "Order",
+        "additionalProperties": false,
+        "description": "One order. `price` is the limit — for a market order, the limit the hub derived from\n the quote at placement. `filled`, `remaining`, `avg_fill_price` and `fee_paid` grow as\n fills land; `state` ends in `filled`, `cancelled` or `rejected` (`reject_reason` set —\n the ledger refused the escrow after the order was recorded, a raced over-spend the\n optimistic balance check could not see). `user_id` is populated only on the caller's\n own orders."
+      },
+      "banking.v1.OrderList": {
+        "type": "object",
+        "properties": {
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Order"
+            },
+            "title": "orders"
+          }
+        },
+        "title": "OrderList",
         "additionalProperties": false
       },
       "banking.v1.ParkedEvent": {
@@ -9610,6 +10683,48 @@
         ],
         "description": "Where an order stands. Terminal everywhere except PENDING and APPROVED."
       },
+      "banking.v1.PlaceOrderRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service",
+            "description": "the allocation"
+          },
+          "side": {
+            "type": "string",
+            "title": "side",
+            "description": "buy | sell"
+          },
+          "kind": {
+            "type": "string",
+            "title": "kind",
+            "description": "limit | market"
+          },
+          "tif": {
+            "type": "string",
+            "title": "tif",
+            "description": "gtc | ioc | alo (post-only); market orders are always ioc"
+          },
+          "price": {
+            "type": "string",
+            "title": "price",
+            "description": "decimal USDT per unit, on the tick; EMPTY for market"
+          },
+          "size": {
+            "type": "string",
+            "title": "size",
+            "description": "decimal units, on the lot, \u003e 0"
+          },
+          "client_order_id": {
+            "type": "string",
+            "title": "client_order_id",
+            "description": "required, 1..64 chars, unique per caller (the retry key)"
+          }
+        },
+        "title": "PlaceOrderRequest",
+        "additionalProperties": false
+      },
       "banking.v1.Position": {
         "type": "object",
         "properties": {
@@ -9620,7 +10735,7 @@
           "units": {
             "type": "string",
             "title": "units",
-            "description": "units held (decimal)"
+            "description": "units held free in the holding (decimal)"
           },
           "nav": {
             "type": "string",
@@ -9650,11 +10765,16 @@
             "title": "nav_as_of",
             "format": "int64",
             "description": "unix seconds of the NAV mark (0 = seed NAV)"
+          },
+          "units_in_orders": {
+            "type": "string",
+            "title": "units_in_orders",
+            "description": "Units committed to the holder's resting sell orders on the book (BookService).\n Still theirs — `value` and `pnl` price `units + units_in_orders` — but not free to\n redeem or sell again until the order fills or is cancelled."
           }
         },
         "title": "Position",
         "additionalProperties": false,
-        "description": "A user's holding in one fund. `value = units × nav`; `pnl = value − cost_basis`\n (a signed decimal — losses are negative). `nav_as_of` is the unix-seconds timestamp\n of the NAV mark used (0 when the fund is on the bootstrap seed NAV)."
+        "description": "A user's holding in one fund. `value = (units + units_in_orders) × nav`; `pnl = value − cost_basis`\n (a signed decimal — losses are negative). `nav_as_of` is the unix-seconds timestamp\n of the NAV mark used (0 when the fund is on the bootstrap seed NAV)."
       },
       "banking.v1.PositionList": {
         "type": "object",
@@ -10372,6 +11492,41 @@
         "title": "SetAllocationUnitCapRequest",
         "additionalProperties": false
       },
+      "banking.v1.SetBookPolicyRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "book_open": {
+            "type": "boolean",
+            "title": "book_open"
+          },
+          "taker_fee_bps": {
+            "type": "integer",
+            "title": "taker_fee_bps",
+            "description": "0..10000"
+          },
+          "price_tick": {
+            "type": "string",
+            "title": "price_tick",
+            "description": "decimal USDT, \u003e 0; empty = 0.01"
+          },
+          "lot_size": {
+            "type": "string",
+            "title": "lot_size",
+            "description": "decimal units, \u003e 0; empty = 0.0001"
+          },
+          "market_slippage_bps": {
+            "type": "integer",
+            "title": "market_slippage_bps",
+            "description": "0..10000; how far past the best quote a market order may fill"
+          }
+        },
+        "title": "SetBookPolicyRequest",
+        "additionalProperties": false
+      },
       "banking.v1.SetOperationsModeRequest": {
         "type": "object",
         "properties": {
@@ -10605,6 +11760,75 @@
         "title": "TokenResponse",
         "additionalProperties": false,
         "description": "A first-party token pair plus a snapshot of the principal. All expiries are\n unix SECONDS (matching the JWT `exp` claim); the BFF parses them with\n proto-loader `longs: String`."
+      },
+      "banking.v1.Trade": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "price": {
+            "type": "string",
+            "title": "price",
+            "description": "decimal USDT per unit"
+          },
+          "size": {
+            "type": "string",
+            "title": "size",
+            "description": "decimal units"
+          },
+          "taker_side": {
+            "type": "string",
+            "title": "taker_side",
+            "description": "buy | sell — the side that crossed the spread"
+          },
+          "executed_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "executed_at",
+            "format": "int64",
+            "description": "unix seconds"
+          },
+          "user_side": {
+            "type": "string",
+            "title": "user_side",
+            "description": "the caller's side; empty on the public tape"
+          },
+          "order_id": {
+            "type": "string",
+            "title": "order_id",
+            "description": "the caller's order; empty on the public tape"
+          },
+          "fee": {
+            "type": "string",
+            "title": "fee",
+            "description": "decimal USDT the caller paid; empty on the public tape"
+          }
+        },
+        "title": "Trade",
+        "additionalProperties": false,
+        "description": "One fill. On the public tape only `id`, `service`, `price`, `size`, `taker_side` and\n `executed_at` are populated. On the caller's own tape (ListUserTrades) `user_side` is\n the caller's side, `order_id` their order on it and `fee` what they paid (empty when\n they were the maker); the counterparty is never disclosed."
+      },
+      "banking.v1.TradeList": {
+        "type": "object",
+        "properties": {
+          "trades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.Trade"
+            },
+            "title": "trades"
+          }
+        },
+        "title": "TradeList",
+        "additionalProperties": false
       },
       "banking.v1.Treasury": {
         "type": "object",
@@ -11051,6 +12275,22 @@
           }
         },
         "title": "Wallet",
+        "additionalProperties": false
+      },
+      "banking.v1.WatchBookRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "depth": {
+            "type": "integer",
+            "title": "depth",
+            "description": "as GetBook"
+          }
+        },
+        "title": "WatchBookRequest",
         "additionalProperties": false
       },
       "banking.v1.Withdrawal": {
@@ -13420,6 +14660,10 @@
     {
       "name": "banking.v1.BalanceService",
       "description": "BalanceService — the bank's treasury and company capital (operator surface).\n\n Reads authoritative balances from the TigerBeetle ledger; metadata and events from\n Postgres. Every amount is a decimal USDT STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). All RPCs are admin-gated\n (allowlist) at the boundary. See docs/ARCHITECTURE.md."
+    },
+    {
+      "name": "banking.v1.BookService",
+      "description": "BookService — the secondary market in an allocation's units: holders trading with\n each other on a central limit order book, price-time priority, in the shape of a spot\n exchange.\n\n It sits BESIDE the fund's own dealing, never instead of it. FundsService.Subscribe and\n Redeem are dealings with the fund at NAV; the book is holders dealing with holders at\n whatever they agree. NAV stays the accounting price — a position, its P\u0026L and the fee\n high-water mark are measured at it — and the book's last trade is a second, market\n quote shown next to it (`BookSnapshot.nav` carries the mark so a ticker can show both).\n\n Money never leaves the ledger's custody: a resting order is an ESCROW inside it. A sell\n moves its units from the holder's `shares` account into a per-user book escrow, a buy\n moves its worst-case cash — size × price plus the taker fee it might owe — from the\n user's claim into a per-user cash escrow. A fill is ONE linked TigerBeetle batch (units\n to the buyer, cash to the seller, the taker's fee to the fund): delivery versus payment\n or nothing. Whatever the escrow still holds when an order ends is handed back, so a buy\n that filled below its limit, an IOC remainder and a cancel all release the difference.\n The hub records the order and its fills first (Postgres, under one lock per book) and\n the ledger moves follow through the same outbox relay as every other money event, so\n the balances a client reads lag a placement by the relay's latency, exactly as after a\n Subscribe.\n\n Who may trade: any signed-in investor whose effective access on the allocation is\n `invest` — the same gate as Subscribe, EXCEPT that the allocation's `state` does not\n apply (a `closed` product's holders may still trade among themselves; only `book_open`\n on the policy, `hidden` and `view` refuse). Placing is also refused while the money\n plane is in read-only mode or the caller is frozen; cancelling never is, so a frozen\n user can still unwind. The policy (fees, tick, lot, slippage, whether the book is open\n at all) is set by an `AllocationManage` holder; a product with no policy row has a\n closed book.\n\n Every amount, size and price is a decimal STRING (proto3 has no u128; a string is\n lossless and matches proto-loader's `longs: String`). Enumerations are strings too,\n pinned in `evbanking_contracts::book`. See piggybank/core/PATTERNS.md."
     },
     {
       "name": "banking.v1.ConsiliumService",

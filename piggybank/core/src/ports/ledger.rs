@@ -43,6 +43,14 @@ pub trait Ledger: Gateway {
 	/// first. Idempotent on the transfer `id` (a re-submit returns `Exists` ⇒ ok).
 	async fn post(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError>;
 
+	/// Apply several posted transfers as ONE TigerBeetle linked chain: every leg lands or
+	/// none does, and each leg's non-negative check sees the legs before it — so a chain
+	/// can credit an account and debit it again in the same breath. Empty is a no-op.
+	/// Idempotent on the FIRST leg's id: a chain applies atomically, so its first id
+	/// existing means the whole chain already did, and a re-submit is `Ok(())` without
+	/// touching the ledger. The book's delivery-versus-payment fill is the caller.
+	async fn post_linked(&self, transfers: &[LedgerTransfer]) -> Result<(), LedgerError>;
+
 	/// Apply a pending (two-phase) transfer with `timeout = 0` — the saga owns the
 	/// lifecycle, never TB's clock (so a pending can't auto-void out from under it).
 	async fn reserve(&self, transfer: &LedgerTransfer) -> Result<(), LedgerError>;

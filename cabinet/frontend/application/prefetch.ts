@@ -28,6 +28,7 @@ import {
   usersResource,
   withdrawalQueueResource,
 } from "@/entities/admin/model/admin-resource";
+import { bookPolicyResource, bookSnapshotResource, bookTradesResource, openOrdersResource } from "@/entities/book/model/book-resource";
 import { allocationsResource, fundNavResource, positionsResource, redemptionsResource } from "@/entities/fund/model/fund-resource";
 import { notificationSettingsResource, notificationsResource } from "@/entities/notification/model/notification-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
@@ -95,9 +96,21 @@ const ROUTES: ReadonlyArray<{ prefix: string; warm: (path: string) => void }> = 
       allocationsResource.prefetch();
       positionsResource.prefetch();
       redemptionsResource.prefetch();
-      // `/invest/<service>` — the fund's own page opens on its NAV.
-      const service = decodeURIComponent(path.slice("/invest/".length).split("/")[0] ?? "");
-      if (service) fundNavResource.prefetch(service);
+      // `/invest/<service>` — the fund's own page opens on its NAV, and on whether its
+      // book is open (the "Trade" control reads the policy).
+      const [slug, surface] = path.slice("/invest/".length).split("/");
+      const service = decodeURIComponent(slug ?? "");
+      if (!service) return;
+      fundNavResource.prefetch(service);
+      bookPolicyResource.prefetch(service);
+      if (surface === "trade") {
+        // The terminal: the book paints from the cache before the socket's first frame
+        // lands, and the form needs the balance to say what is available.
+        bookSnapshotResource.prefetch(service);
+        bookTradesResource.prefetch(service);
+        openOrdersResource.prefetch(service);
+        walletResource.prefetch();
+      }
     },
   },
   {

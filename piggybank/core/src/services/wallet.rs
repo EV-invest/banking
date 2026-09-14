@@ -54,6 +54,7 @@ impl WalletService for WalletSvc {
 				invested: wallet.balance.invested.to_decimal_string(),
 				pending_withdrawal: wallet.balance.pending_withdrawal.to_decimal_string(),
 				total: wallet.balance.total.to_decimal_string(),
+				in_orders: wallet.balance.in_orders.to_decimal_string(),
 			}),
 			deposit_addresses: wallet
 				.deposit_addresses

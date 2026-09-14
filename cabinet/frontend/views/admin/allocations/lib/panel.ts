@@ -4,7 +4,7 @@
 
 import type { Allocation } from "@/shared/contracts/admin";
 
-export type AllocationPanelKind = "grants" | "issue";
+export type AllocationPanelKind = "grants" | "issue" | "book";
 
 /** The one side panel open beside the table — a row and which of its panels. One slot,
  *  not one per kind: the panel is where the operator is working, and two open at once

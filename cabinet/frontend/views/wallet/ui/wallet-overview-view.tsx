@@ -82,11 +82,15 @@ export function WalletOverviewView() {
               so it would break this row — the chips carry the inline tips instead. */}
           <p className="hidden whitespace-nowrap text-sm text-muted-foreground lg:block">{t("wallet.oneFungibleBalance", { amount: formatUsdt(balance?.total) })}</p>
         </div>
-        {/* Three equal columns at 390px leave ~76px for a label, which is why the short
-            forms exist at all. i18n-max: 7 on every `label`; the `wideLabel` forms only
-            render from `lg`, where the chips size to their content. */}
-        <div className="grid grid-cols-3 gap-2.5 lg:flex lg:shrink-0">
+        {/* Four chips, one per term of the balance identity (total = available + in orders
+            + invested + pending withdrawal). Two columns at 390px, not four: four leave
+            ~55px for a label, which no short form fits. The short forms date from the
+            three-across layout and stay, since a 2×2 chip still shares its row with a dot
+            and a tip. i18n-max: 7 on every `label`; the `wideLabel` forms only render from
+            `lg`, where the chips size to their content. */}
+        <div className="grid grid-cols-2 gap-2.5 lg:flex lg:shrink-0">
           <Chip label={t("wallet.chip.availShort")} wideLabel={t("wallet.chip.avail")} dot="bg-main-accent-t2" value={balance?.available} loading={loading} tip="wallet.balance.available" />
+          <Chip label={t("wallet.chip.inOrdersShort")} wideLabel={t("wallet.chip.inOrders")} dot="bg-main-accent-t4" value={balance?.in_orders} loading={loading} tip="wallet.balance.in-orders" />
           <Chip label={t("wallet.chip.investShort")} wideLabel={t("wallet.chip.invest")} dot="bg-main-accent-t3" value={balance?.invested} loading={loading} tip="wallet.balance.invested" />
           <Chip label={t("wallet.pendWd")} wideLabel={t("wallet.chip.pendingWd")} dot="bg-main-accent-t1" value={balance?.pending_withdrawal} loading={loading} tip="wallet.balance.pending-withdrawal" />
         </div>

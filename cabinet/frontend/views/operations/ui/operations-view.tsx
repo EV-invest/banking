@@ -40,12 +40,12 @@ import {
 
 import { allocationsResource } from "@/entities/fund/model/fund-resource";
 import { operationsResource } from "@/entities/operation/model/operation-resource";
-import { useIsCompact } from "@/views/operations/lib/use-is-compact";
 import { OperationDetail } from "@/views/operations/ui/operation-detail";
 import type { Operation } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
+import { useIsCompact } from "@/shared/lib/use-is-compact";
 import { SECTION_STAGGER, Settled, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import {
@@ -366,18 +366,9 @@ function Row({ operation, titleOf }: { operation: Operation; titleOf: (service: 
     return (
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerTrigger asChild>{trigger}</DrawerTrigger>
-        {/* UIKIT-MIRROR: drawer-animation — TEMPORARY, mirrors EV-invest/lib#96.
-            The published uikit's Drawer ships with no transition at all, so the sheet
-            appears in a single frame. These are the kit's own classes, passed here until
-            the npm bump carries them; `shared/config/uikit-mirror.test.ts` fails the
-            moment the installed uikit animates, which is the signal to delete this. */}
-        <DrawerContent
-          className={cn(
-            "data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom",
-            "transition duration-500 ease-in-out",
-            "max-h-[85vh] overflow-y-auto",
-          )}
-        >
+        {/* The kit animates the sheet itself; what it does not do is cap it. A tall
+            in-flight withdrawal has to scroll inside the sheet, not push it off-screen. */}
+        <DrawerContent className="max-h-[85vh] overflow-y-auto">
           <DrawerTitle className="sr-only">{title}</DrawerTitle>
           {detail}
         </DrawerContent>

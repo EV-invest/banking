@@ -26,7 +26,7 @@ import { cabinetPath } from "@/shared/config/base-path";
  */
 export type StatusKind = "notFound" | "forbidden" | "unauthorized";
 
-const ACCENT = { notFound: "teal", forbidden: "gold", unauthorized: "gold" } as const;
+const ACCENT = { notFound: "debug", forbidden: "warn", unauthorized: "warn" } as const;
 const CODE = { notFound: "404", forbidden: "403", unauthorized: "401" } as const;
 
 export function LocalisedStatus({ kind, locale }: { kind: StatusKind; locale: Locale }) {

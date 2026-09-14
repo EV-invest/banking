@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { EMPTY_ISSUE_DRAFT, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft } from "./issuance.ts";
+import { EMPTY_ISSUE_DRAFT, afterIssued, issueDraftProblem, issueUnitsBody, submissionFingerprint, submissionKeyFor, type IssueDraft } from "./issuance.ts";
 
 const investor: IssueDraft = { holder: { kind: "user", userId: "u-1", label: "ann@example.com" }, units: "250", costBasis: "" };
 const company: IssueDraft = { holder: { kind: "company" }, units: "1000.5", costBasis: "0" };
@@ -62,4 +62,28 @@ test("a retry of the same submission reuses its key; an edited one mints a new k
   assert.equal(submissionKeyFor(first, "arb", { ...investor, units: "300" }, mint).key, "key-2");
   assert.equal(submissionKeyFor(first, "arb", company, mint).key, "key-3");
   assert.equal(submissionKeyFor(first, "other", investor, mint).key, "key-4");
+});
+
+test("after a mint lands the holder stays and only the figures clear", () => {
+  const next = afterIssued({ ...investor, units: "250", costBasis: "12.50" });
+  assert.deepEqual(next.holder, investor.holder);
+  assert.equal(next.units, "");
+  assert.equal(next.costBasis, "");
+  assert.equal(issueDraftProblem(next), "units");
+  // The company toggle survives the same way — the operator is mid-series, not starting over.
+  assert.deepEqual(afterIssued(company).holder, { kind: "company" });
+});
+
+test("a second issue to the kept holder is a new decision with a new key", () => {
+  let n = 0;
+  const mint = () => `key-${++n}`;
+  const first = submissionKeyFor(null, "arb", investor, mint);
+  // The cleared draft is a different body, so even an un-retired key would not be reused.
+  assert.notEqual(submissionFingerprint("arb", afterIssued(investor)), first.fingerprint);
+  // And the form retires the key on success, so the very same figure typed again — the
+  // same holder issued 250 twice on purpose — is sent under a fresh key rather than
+  // silently de-duplicated by the hub.
+  const again = submissionKeyFor(null, "arb", investor, mint);
+  assert.notEqual(again.key, first.key);
+  assert.equal(again.fingerprint, first.fingerprint);
 });

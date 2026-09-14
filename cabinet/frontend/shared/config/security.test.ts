@@ -77,3 +77,16 @@ test("static headers cover frame, sniffing and referrer hardening", () => {
   const nosniff = staticSecurityHeaders().find((h) => h.key === "X-Content-Type-Options")!;
   assert.equal(nosniff.value, "nosniff");
 });
+
+test("workers may be built from blob: URLs, and only workers", () => {
+  // Sentry Replay's compression worker is a `new Worker(URL.createObjectURL(blob))`.
+  // Without its own directive the browser would judge it under script-src, where `blob:`
+  // must never appear — so the allowance is scoped to worker-src and script-src stays shut.
+  const csp = contentSecurityPolicy("testnonce123");
+  const workerSrc = csp.split(";").map((s) => s.trim()).find((s) => s.startsWith("worker-src"));
+  const scriptSrc = csp.split(";").map((s) => s.trim()).find((s) => s.startsWith("script-src"))!;
+  assert.ok(workerSrc, "a worker-src directive is present");
+  assert.ok(workerSrc.includes("blob:"), "worker-src admits blob: workers");
+  assert.ok(workerSrc.includes("'self'"), "worker-src keeps same-origin workers");
+  assert.ok(!scriptSrc.includes("blob:"), "script-src must not admit blob: scripts");
+});

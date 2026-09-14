@@ -172,6 +172,7 @@ fn position_to_proto(view: &funds_app::PositionView) -> pb::Position {
 		cost_basis: view.cost_basis.to_decimal_string(),
 		pnl: signed_diff(view.value, view.cost_basis),
 		nav_as_of: view.nav_as_of,
+		units_in_orders: view.units_in_orders.to_decimal_string(),
 	}
 }
 

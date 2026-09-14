@@ -42,13 +42,14 @@ service WalletService {
 message GetWalletRequest {}
 
 // The user's single, network-agnostic balance, segmented by lifecycle. Every figure is
-// a TigerBeetle-authoritative decimal USDT string; total = available + invested +
-// pending_withdrawal.
+// a TigerBeetle-authoritative decimal USDT string; total = available + in_orders +
+// invested + pending_withdrawal.
 message Balance {
   string available = 1;           // free, spendable now
-  string invested = 2;            // staked in fund services (active allocations)
+  string invested = 2;            // held in fund units at NAV, the units escrowed by resting sell orders included
   string pending_withdrawal = 3;  // locked by queued/in-flight withdrawals
-  string total = 4;               // available + invested + pending_withdrawal
+  string total = 4;               // available + in_orders + invested + pending_withdrawal
+  string in_orders = 5;           // cash escrowed by the caller's resting buy orders on the book (still theirs)
 }
 
 // Per-rail withdrawal options (the accept-and-queue UX). `withdrawable` is the whole

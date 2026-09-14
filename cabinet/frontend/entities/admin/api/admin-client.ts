@@ -39,6 +39,7 @@ import type {
   UserBalance,
   WithdrawalQueue,
 } from "@/shared/contracts/admin";
+import type { BookPolicy, SetBookPolicyBody } from "@/shared/contracts/book";
 import type { Consilium } from "@/shared/contracts/governance";
 import type { MfeEntry } from "@/shared/mfe/types";
 
@@ -185,6 +186,12 @@ export type IssueUnitsBody = {
 export const issueUnits = (body: IssueUnitsBody): Promise<UnitIssuance> => postJson("/api/admin/allocations/issue", body);
 
 export const fetchUnitHolders = (service: string): Promise<UnitHolders> => getJson(`/api/admin/allocations/holders?service=${encodeURIComponent(service)}`);
+
+// The product's secondary-market terms. Reading them is the investor route
+// (`GET /api/book/policy`, `entities/book`); only the write is an operator's. The
+// optional fields are sent only when set — absent means "keep the hub's value" — and
+// `views/admin/allocations/lib/book-policy.ts` is the one place that builds the body.
+export const setBookPolicy = (body: SetBookPolicyBody): Promise<BookPolicy> => postJson("/api/admin/allocations/book", body);
 
 // ── valuation + redemptions ─────────────────────────────────────────────────────
 export const fetchRedemptionQueue = (): Promise<RedemptionQueue> => getJson("/api/admin/valuation/queue");

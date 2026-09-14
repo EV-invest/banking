@@ -722,6 +722,48 @@ pub async fn list_unit_holders(State(st): State<AppState>, jar: CookieJar, Query
 	Ok(Json(holders.into()))
 }
 
+/// `POST /api/admin/allocations/book` — replace a product's trading terms: whether its
+/// secondary book is open, the taker fee, the price tick, the lot size and how far past
+/// the best quote a market order may fill. Closing the book stops new orders; resting
+/// ones stay and may still be cancelled.
+///
+/// Read as a whole, like the fee schedule: `book_open` and `taker_fee_bps` must be
+/// present and well-typed, because a missing flag coerced to `false` would close a book
+/// the operator meant to leave open, and a missing fee read as zero would price the book
+/// at nothing while the console answers "saved". `price_tick` and `lot_size` may be left
+/// out (the hub's defaults, `0.01` and `0.0001`); `market_slippage_bps` may be left out
+/// and is then zero, but if it is sent it has to be a whole number of bps.
+pub async fn set_book_policy(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<dto::BookPolicy>, ApiError> {
+	require_admin(&st, &jar).await?;
+	if !verify_csrf(&st, &jar, &headers) {
+		return Err(ApiError::Csrf);
+	}
+	let v = parse_body(&body);
+	let Some(service) = required(&v, "service") else {
+		return Err(ApiError::BadRequest("service is required".into()));
+	};
+	let Some(book_open) = v.get("book_open").and_then(Value::as_bool) else {
+		return Err(ApiError::BadRequest("book_open is required and must be a boolean".into()));
+	};
+	let Some(taker_fee_bps) = required_u32(&v, "taker_fee_bps") else {
+		return Err(ApiError::BadRequest("taker_fee_bps is required and must be a whole number of basis points".into()));
+	};
+	let market_slippage_bps = match v.get("market_slippage_bps") {
+		None => 0,
+		Some(_) => required_u32(&v, "market_slippage_bps").ok_or_else(|| ApiError::BadRequest("market_slippage_bps must be a whole number of basis points".into()))?,
+	};
+	let token = require_money_token(&st, &jar).await?;
+	let req = bk::SetBookPolicyRequest {
+		service,
+		book_open,
+		taker_fee_bps,
+		price_tick: editable(&v, "price_tick"),
+		lot_size: editable(&v, "lot_size"),
+		market_slippage_bps,
+	};
+	Ok(Json(st.grpc.set_book_policy(&token, req).await?.into()))
+}
+
 /// `POST /api/admin/valuation/post` — post a fund NAV, inside the move guard. There is no
 /// `override` in the body any more (banking#232): a mark the guard refuses goes through
 /// [`propose_valuation_override`] and the owners' vote.

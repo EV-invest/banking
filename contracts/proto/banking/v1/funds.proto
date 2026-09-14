@@ -60,17 +60,21 @@ message GetFundNavRequest {
   string service = 1;
 }
 
-// A user's holding in one fund. `value = units × nav`; `pnl = value − cost_basis`
+// A user's holding in one fund. `value = (units + units_in_orders) × nav`; `pnl = value − cost_basis`
 // (a signed decimal — losses are negative). `nav_as_of` is the unix-seconds timestamp
 // of the NAV mark used (0 when the fund is on the bootstrap seed NAV).
 message Position {
   string service = 1;
-  string units = 2;       // units held (decimal)
+  string units = 2;       // units held free in the holding (decimal)
   string nav = 3;         // current NAV per share (decimal USDT)
   string value = 4;       // units × nav (decimal USDT)
   string cost_basis = 5;  // net cash invested, average cost (decimal USDT)
   string pnl = 6;         // value − cost_basis (signed decimal USDT)
   int64 nav_as_of = 7;    // unix seconds of the NAV mark (0 = seed NAV)
+  // Units committed to the holder's resting sell orders on the book (BookService).
+  // Still theirs — `value` and `pnl` price `units + units_in_orders` — but not free to
+  // redeem or sell again until the order fills or is cancelled.
+  string units_in_orders = 8;
 }
 
 message PositionList {
