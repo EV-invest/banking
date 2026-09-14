@@ -150,9 +150,23 @@ use an overflow-safe 128×128→256 `mul_div` (a naïve `u128` mul overflows at 
 `fund_valuations` (append-only marks; the latest is the price, **frozen** between marks).
 The first subscription bootstraps at **seed NAV 1.0**. Dealing on a frozen mark is
 *backward pricing* — guarded by a **staleness** check (`MAX_NAV_AGE_SECS`); the AUM post is
-guarded by a **move** check (`MAX_NAV_MOVE_PCT`, override-able) because the AUM input is the
-most dangerous seam ("trusted" ≠ "safe"). NAV is a price, never a TB balance. There is
+guarded by a **move** check (`MAX_NAV_MOVE_PCT`) because the AUM input is the most
+dangerous seam ("trusted" ≠ "safe"). NAV is a price, never a TB balance. There is
 **no cross-ledger invariant** tying units to USDT — units float; cash stays exact.
+
+**The move check has no override, and it is measured twice** (banking#232). The cap is
+checked against the previous mark AND against the mark anchoring a rolling
+`NAV_MOVE_WINDOW_SECS` window (the newest mark at least that old, or the fund's first mark
+while it is younger than the window) — so +49% seventeen times in an afternoon is refused
+on the second post, not compounded into a 900× price. A move the guard refuses is a
+**valuation-override consilium** (`docs/CONSILIUM.md` § Valuation override): the poster
+proposes, the owners vote, and executing it records the mark through the same writer
+(`funds::record_valuation`) with the guard simply not consulted. A subject who posted a
+mark for a fund — directly or by proposing the override — **cannot redeem from that fund
+for `VALUATION_REDEEM_COOLDOWN_SECS`**, checked at request AND at settle, so the person
+who moved the price is never the person cashing out at it. A hard ceiling "AUM ≤ cash in
+the fund's claim" was considered and rejected: an in-kind product (§ In-kind issuance) is
+worth its asset with zero cash in its claim, and that invariant would make it unmarkable.
 
 **Subscribe (cash → units, synchronous).** Read-First on the unified claim + a fresh NAV;
 the relay posts two legs, **cash-first**: `Dr user / Cr service` (the cash pools in the
@@ -663,7 +677,8 @@ aggregate, applied under the row lock; the TB non-negative flag is the ledger ba
 | `CancelWithdrawal` | the user | `sub == user`, `is_access` | owns it ∧ state is `queued` (idempotent) |
 | `DispatchWithdrawal` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ **not read-only** ∧ (user source) owner not frozen ∧ `kyc_level ≥ 1` — fail-closed, no `force` |
 | `SettleWithdrawal` / `FailWithdrawal` | operator | `require_permission` (RBAC matrix) | state is `processing` (idempotent) |
-| `PostFundValuation` | operator | `require_permission` (RBAC matrix) | units outstanding > 0 ∧ NAV move ≤ threshold (or override) |
+| `PostFundValuation` | operator | `require_permission` (RBAC matrix) | allocation registered ∧ units outstanding > 0 ∧ NAV move ≤ threshold vs the previous mark ∧ vs the rolling-window anchor — **no override**; beyond it: `ConsiliumService.OpenValuationOverride` (same `ValuationPost` permission, initiator must hold an owner seat, owners' quorum executes the mark) |
+| `Redeem` / `SettleRedemption` (cooldown) | the user / operator | as above | the redeeming user posted **no** mark for this fund within `VALUATION_REDEEM_COOLDOWN_SECS` (`failed_precondition` otherwise; checked at request and again at settle) |
 | `IssueUnits` / `ListUnitHolders` | admin (`AllocationManage`) | `require_permission` (RBAC matrix) | (issue) allocation registered ∧ user holder exists ∧ fresh NAV ∧ issued + units ≤ cap; idempotent by `(service, idempotency_key)` |
 | `SettleRedemption` / `FailRedemption` | operator (treasury) | `require_permission` (RBAC matrix) | state is `queued` (idempotent) ∧ (settle) position projection tracks ≥ the redeemed units |
 | `GetUserBalance` | operator | `require_permission` (RBAC matrix); resolves the CONCIERGE id first via the bridge mirror (`users.concierge_user_id`), then the banking id; unknown ⇒ `NOT_FOUND` | — |

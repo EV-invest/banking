@@ -38,8 +38,11 @@ service BalanceService {
   rpc FailWithdrawal(FailWithdrawalRequest) returns (FailWithdrawalResponse);
 
   // Post a fund's total AUM; NAV is derived = AUM / units_outstanding (units read live
-  // from TigerBeetle). Rejects zero units and, unless `override` is set, a NAV move
-  // beyond the safety threshold vs the last mark (the fat-finger guard on the trust seam).
+  // from TigerBeetle). Rejects zero units and a NAV move beyond the safety threshold —
+  // measured against BOTH the previous mark and the mark that anchored the rolling
+  // window, so the cap cannot be walked past in steps. There is NO per-request override:
+  // a move past the cap is put to the owners through
+  // `ConsiliumService.OpenValuationOverride`, and only an executed consilium records it.
   rpc PostFundValuation(PostFundValuationRequest) returns (FundNav);
 
   // Settle a queued fund redemption once the fund's claim is liquid (the treasury
@@ -283,7 +286,11 @@ message FailWithdrawalResponse {}
 message PostFundValuationRequest {
   string service = 1;   // the fund/service id
   string aum = 2;       // decimal USDT — the fund's total assets under management
-  bool override = 3;    // bypass the NAV-move safety guard (operator confirmed)
+  // Field 3 was `bool override`, the flag that let the poster lift their own guard
+  // (banking#232). Reserved so no later field can inherit its number and be read by an
+  // old client as "bypass the guard".
+  reserved 3;
+  reserved "override";
 }
 
 message RotateDepositAddressRequest {

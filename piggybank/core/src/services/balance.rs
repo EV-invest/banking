@@ -162,7 +162,7 @@ impl BalanceService for BalanceSvc {
 			service.clone(),
 			aum,
 			&posted_by,
-			req.r#override,
+			unix_now(),
 		)
 		.await
 		.map_err(map_err)?;

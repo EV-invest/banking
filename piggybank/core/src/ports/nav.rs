@@ -19,6 +19,21 @@ pub trait NavMarks: Send + Sync {
 	/// The latest mark for `service`, or `None` if the fund has never been valued.
 	async fn current(&self, service: &ServiceId) -> Result<Option<Valuation>, DomainError>;
 
+	/// The mark the rolling move window is measured against: the LATEST mark with
+	/// `posted_at ≤ at_unix`, or — when no mark is that old yet — the fund's EARLIEST mark.
+	/// `None` only for a fund that has never been valued. See
+	/// [`NAV_MOVE_WINDOW_SECS`](crate::application::funds::NAV_MOVE_WINDOW_SECS).
+	async fn anchor(&self, service: &ServiceId, at_unix: i64) -> Result<Option<Valuation>, DomainError>;
+
+	/// Whether `subject` posted a mark for `service` strictly after `since_unix` — the
+	/// redeem cooldown's question. `subject` is the `posted_by` string as recorded.
+	async fn posted_by_since(&self, service: &ServiceId, subject: &str, since_unix: i64) -> Result<bool, DomainError>;
+
+	/// One mark by its caller-minted id, or `None`. The consilium execution path derives
+	/// the id from the consilium and re-reads it here, so a retried execution finds the
+	/// mark it already recorded instead of filing a phantom failure.
+	async fn find(&self, id: ValuationId) -> Result<Option<Valuation>, DomainError>;
+
 	/// Append a new mark — `id` is caller-minted, `posted_at` is DB-stamped. Returns the
 	/// stamped `posted_at` (unix seconds) so the caller can report the recorded mark.
 	async fn record(&self, id: ValuationId, service: &ServiceId, aum: Usdt, units_outstanding: Shares, nav: Nav, posted_by: &str) -> Result<i64, DomainError>;

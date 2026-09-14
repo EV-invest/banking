@@ -17,20 +17,21 @@ use std::sync::Arc;
 
 use domain::{
 	auth::AuthSubject,
-	balance::{LedgerAccountKey, TransferCode},
-	consilium::{ConsiliumId, ConsiliumState, RevenuePayoutTerms, VoteDecision},
+	balance::{LedgerAccountKey, ServiceId, TransferCode, ValuationId},
+	consilium::{ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
-	money::{Network, Usdt, WalletAddress},
+	money::{Nav, Network, Shares, Usdt, WalletAddress},
 	users::{Email, UserId},
 };
 use piggybank_core::{
-	application::{consilium as consilium_app, payments as payments_app},
+	application::{consilium as consilium_app, funds as funds_app, payments as payments_app},
 	config::KycGate,
 	infrastructure::{
-		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, outflow::PgOutflowPolicy, payments::PgPayments, relay::Relay, users::PgUsers, withdrawals::PgWithdrawals,
+		allocations::PgAllocations, consilium::PgConsilia, custody::StubCustody, nav::PgNav, outflow::PgOutflowPolicy, payments::PgPayments, redemptions::PgRedemptions, relay::Relay,
+		users::PgUsers, withdrawals::PgWithdrawals,
 	},
 	ports::{
-		ConsiliumRepository, LedgerTransfer, PaymentRepository, UserRepository, WithdrawalRepository,
+		AllocationRegistry, ConsiliumRepository, LedgerTransfer, NavMarks, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::{ConsiliumView, MAX_CODE_ATTEMPTS, VoteAudit},
 		ledger::Ledger,
 	},
@@ -66,6 +67,7 @@ struct Harness {
 	users: Arc<dyn UserRepository>,
 	outflow: PgOutflowPolicy,
 	allocations: PgAllocations,
+	nav: PgNav,
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
@@ -82,6 +84,7 @@ async fn harness() -> Option<Harness> {
 		users: Arc::new(PgUsers::new(pool.clone())),
 		outflow: PgOutflowPolicy::new(pool.clone()),
 		allocations: PgAllocations::new(pool.clone()),
+		nav: PgNav::new(pool.clone()),
 		relay: Relay::new(pool.clone(), ledger.clone(), Arc::new(StubCustody), notify.clone()),
 		ledger,
 		notify,
@@ -99,6 +102,7 @@ fn ports(h: &Harness) -> consilium_app::ConsiliumPorts<'_> {
 		custody: &StubCustody,
 		policy: &h.outflow,
 		allocations: &h.allocations,
+		nav: &h.nav,
 		relay: &h.notify,
 		configured: &CONFIGURED,
 		kyc: KycGate::LIFTED,
@@ -1496,9 +1500,165 @@ async fn a_refused_approval_is_believed_unless_the_order_is_actually_approved() 
 	for _ in 0..2 {
 		match consilium_app::execute_payment(&ports(&h), &view.consilium, subject.clone(), now()).await.unwrap() {
 			ExecutionOutcome::Executed(ConsiliumEffect::Payment(id)) => assert_eq!(id, subject.payment_id),
-			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_)) => panic!("a payment consilium produces no withdrawal"),
+			ExecutionOutcome::Executed(ConsiliumEffect::Withdrawal(_) | ConsiliumEffect::Valuation(_)) => panic!("a payment consilium produces neither a withdrawal nor a mark"),
 			ExecutionOutcome::Failed(why) => panic!("an approved order must be believed: {why}"),
 		}
 	}
 	remove(&h, &subject, consilium).await;
+}
+
+/// A registered, open fund with `units` outstanding held by `holder`, marked once at
+/// NAV 1.0 by an operator — the state a valuation override is proposed against.
+async fn marked_fund(h: &Harness, holder: UserId, units: &str) -> ServiceId {
+	use domain::allocations::{Allocation, AllocationIcon, AllocationId};
+	let service = ServiceId::parse(&format!("svc-{}", Uuid::new_v4())).unwrap();
+	let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "Arbitrage seat", "", AllocationIcon::default()).unwrap();
+	h.allocations.register(&mut allocation).await.unwrap();
+	h.allocations.open(&service).await.unwrap();
+	h.ledger
+		.post(&LedgerTransfer {
+			id: Uuid::new_v4().as_u128(),
+			debit: LedgerAccountKey::UserShares(service.clone(), holder),
+			credit: LedgerAccountKey::SharesOutstanding(service.clone()),
+			amount: Shares::parse_decimal(units).unwrap().base_units(),
+			code: TransferCode::ShareMint,
+			reference: 0,
+		})
+		.await
+		.unwrap();
+	funds_app::record_valuation(&h.nav, h.ledger.as_ref(), ValuationId::new(), service.clone(), usdt(units), "itest")
+		.await
+		.unwrap();
+	service
+}
+
+fn override_terms(service: &ServiceId, aum: &str) -> ValuationOverrideTerms {
+	ValuationOverrideTerms {
+		service: service.clone(),
+		aum: usdt(aum),
+	}
+}
+
+/// banking#232 end to end: the guarded post refuses a +900% mark and there is no flag to
+/// lift it; the same mark put to the owners is mailed, voted, and executed through the
+/// shared writer with the initiator as `posted_by` — which then blocks the initiator's own
+/// redemption. A retried execution appends nothing, and the history stays readable.
+#[tokio::test]
+async fn a_valuation_override_is_the_only_way_past_the_move_guard_and_binds_its_proposer() {
+	let _guard = exclusive_governance().await;
+	let Some(h) = harness().await else {
+		eprintln!("DATABASE_URL unset — skipping the consilium suite");
+		return;
+	};
+	reset_governance(&h).await;
+	let roster = owners(&h, 3).await;
+	let service = marked_fund(&h, roster[0], "100").await;
+
+	// The direct post is capped, and names the way past it.
+	let err = funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1000"), &roster[0].to_string(), now())
+		.await
+		.unwrap_err();
+	assert!(matches!(&err, DomainError::Validation(reason) if reason.contains("valuation-override consilium")), "got {err:?}");
+
+	// The open gates: a fund the registry does not know, and one with nothing outstanding.
+	let unregistered = ServiceId::parse("svc-nobody").unwrap();
+	assert!(matches!(
+		consilium_app::open_valuation_override(&ports(&h), roster[0], override_terms(&unregistered, "1"), now()).await,
+		Err(DomainError::NotFound { entity: "allocation", .. })
+	));
+	let empty = {
+		use domain::allocations::{Allocation, AllocationIcon, AllocationId};
+		let service = ServiceId::parse(&format!("svc-{}", Uuid::new_v4())).unwrap();
+		let mut allocation = Allocation::register(AllocationId::new(), service.clone(), "empty", "", AllocationIcon::default()).unwrap();
+		h.allocations.register(&mut allocation).await.unwrap();
+		service
+	};
+	assert!(matches!(
+		consilium_app::open_valuation_override(&ports(&h), roster[0], override_terms(&empty, "1"), now()).await,
+		Err(DomainError::Validation(_))
+	));
+
+	let opened = consilium_app::open_valuation_override(&ports(&h), roster[0], override_terms(&service, "1000"), now())
+		.await
+		.unwrap();
+	let id = opened.consilium.id();
+	assert_eq!(opened.consilium.kind(), ConsiliumKind::ValuationOverride);
+	assert_eq!(
+		opened.consilium.source_claim(),
+		LedgerAccountKey::ServiceClaim(service.clone()),
+		"one open override per fund, keyed on its claim"
+	);
+	assert_eq!(opened.voters.len(), 2, "the initiator holds no seat");
+	// A second override on the same fund is refused while this one is open.
+	assert!(matches!(
+		consilium_app::open_valuation_override(&ports(&h), roster[1], override_terms(&service, "900"), now()).await,
+		Err(DomainError::Conflict(_))
+	));
+
+	// The owners are rung through the borrowed payment template, with the labels spelled out.
+	let kinds: Vec<String> = sqlx::query_scalar("SELECT kind FROM consilium_mail WHERE consilium_id = $1 ORDER BY kind")
+		.bind(id.raw())
+		.fetch_all(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(kinds, vec!["payment_approval".to_owned(); 2]);
+	let payload: String = sqlx::query_scalar("SELECT payload::text FROM consilium_mail WHERE consilium_id = $1 LIMIT 1")
+		.bind(id.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	let mail: serde_json::Value = serde_json::from_str(&payload).unwrap();
+	assert_eq!(mail["source"], format!("Arbitrage seat ({service}) — NAV valuation"));
+	assert_eq!(mail["destination"], "AUM 1000 USDT");
+	assert_eq!(mail["amount"], "1000");
+	// The invitation carries the real terms, not the mail's labels.
+	let (token, _) = credentials(&h, id, roster[1]).await;
+	let invitation = consilium_app::invitation(h.consilia.as_ref(), &token, now()).await.unwrap();
+	assert_eq!(invitation.terms, ConsiliumTerms::ValuationOverride(override_terms(&service, "1000")));
+
+	// Carried by both peers; executed through the shared writer, guard not consulted.
+	assert!(!vote(&h, id, roster[1], VoteDecision::Approve).await.unwrap());
+	assert!(vote(&h, id, roster[2], VoteDecision::Approve).await.unwrap());
+	let executed = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
+	assert_eq!(executed.consilium.state(), ConsiliumState::Executed);
+	let mark = consilium_app::valuation_id(id);
+	assert_eq!(executed.consilium.executed_valuation_id(), Some(mark));
+	assert!(executed.consilium.executed_withdrawal_id().is_none() && executed.consilium.executed_payment_id().is_none());
+	let current = h.nav.current(&service).await.unwrap().unwrap();
+	assert_eq!(current.nav, Nav::parse_decimal("10").unwrap(), "AUM 1000 over 100 live units");
+	assert_eq!(current.posted_by, roster[0].to_string(), "the proposer is the poster");
+	assert_eq!(h.nav.find(mark).await.unwrap().map(|v| v.aum), Some(usdt("1000")));
+
+	// A retried execution names the same mark and appends nothing.
+	let again = consilium_app::execute(&ports(&h), id, now()).await.unwrap();
+	assert_eq!(again.consilium.executed_valuation_id(), Some(mark));
+	let marks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM fund_valuations WHERE service = $1")
+		.bind(service.as_str())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap();
+	assert_eq!(marks, 2, "the operator's first mark and the owners' one");
+
+	// The proposer is bound by the cooldown exactly as a direct poster would be.
+	let fund_ports = funds_app::FundPorts {
+		allocations: &h.allocations,
+		ledger: h.ledger.as_ref(),
+		nav: &h.nav,
+		relay: &h.notify,
+	};
+	let err = funds_app::request_redemption(
+		&fund_ports,
+		&PgRedemptions::new(h.pool.clone()),
+		roster[0],
+		service.clone(),
+		Shares::parse_decimal("1").unwrap(),
+		now(),
+	)
+	.await
+	.unwrap_err();
+	assert!(matches!(err, DomainError::Precondition(_)), "got {err:?}");
+
+	// The history read — the third kind must not break it either.
+	let history = consilium_app::list(h.consilia.as_ref(), 50).await.expect("a third kind must not break the history read");
+	assert!(history.iter().any(|view| view.consilium.id() == id));
 }

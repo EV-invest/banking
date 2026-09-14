@@ -24,18 +24,75 @@ impl PgNav {
 	}
 }
 
+/// The projection every read here shares. sqlx 0.9 takes only a `&'static str`, so the
+/// column list is spliced with `concat!` rather than built at runtime.
+macro_rules! valuation_columns {
+	() => {
+		"service, aum, units_outstanding, nav, posted_by, EXTRACT(EPOCH FROM posted_at)::bigint AS posted_at_unix"
+	};
+}
+
 #[async_trait]
 impl NavMarks for PgNav {
 	async fn current(&self, service: &ServiceId) -> Result<Option<Valuation>, DomainError> {
-		let row = sqlx::query(
-			"SELECT aum, units_outstanding, nav, posted_by, EXTRACT(EPOCH FROM posted_at)::bigint AS posted_at_unix \
-			 FROM fund_valuations WHERE service = $1 ORDER BY posted_at DESC LIMIT 1",
-		)
+		let row = sqlx::query(concat!(
+			"SELECT ",
+			valuation_columns!(),
+			" FROM fund_valuations WHERE service = $1 ORDER BY posted_at DESC LIMIT 1"
+		))
 		.bind(service.as_str())
 		.fetch_optional(&self.pool)
 		.await
 		.map_err(repo_err)?;
-		row.map(|row| valuation_from_row(service, &row)).transpose()
+		row.as_ref().map(valuation_from_row).transpose()
+	}
+
+	async fn anchor(&self, service: &ServiceId, at_unix: i64) -> Result<Option<Valuation>, DomainError> {
+		// The newest mark old enough to sit outside the window; failing that, the oldest mark
+		// there is — a fund younger than the window is measured from its first price, so the
+		// window cannot be bootstrapped away by marking a fresh fund up in steps.
+		let aged = sqlx::query(concat!(
+			"SELECT ",
+			valuation_columns!(),
+			" FROM fund_valuations WHERE service = $1 AND posted_at <= to_timestamp($2) ORDER BY posted_at DESC LIMIT 1"
+		))
+		.bind(service.as_str())
+		.bind(at_unix as f64)
+		.fetch_optional(&self.pool)
+		.await
+		.map_err(repo_err)?;
+		let row = match aged {
+			Some(row) => Some(row),
+			None => sqlx::query(concat!(
+				"SELECT ",
+				valuation_columns!(),
+				" FROM fund_valuations WHERE service = $1 ORDER BY posted_at ASC LIMIT 1"
+			))
+			.bind(service.as_str())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?,
+		};
+		row.as_ref().map(valuation_from_row).transpose()
+	}
+
+	async fn posted_by_since(&self, service: &ServiceId, subject: &str, since_unix: i64) -> Result<bool, DomainError> {
+		sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM fund_valuations WHERE service = $1 AND posted_by = $2 AND posted_at > to_timestamp($3))")
+			.bind(service.as_str())
+			.bind(subject)
+			.bind(since_unix as f64)
+			.fetch_one(&self.pool)
+			.await
+			.map_err(repo_err)
+	}
+
+	async fn find(&self, id: ValuationId) -> Result<Option<Valuation>, DomainError> {
+		let row = sqlx::query(concat!("SELECT ", valuation_columns!(), " FROM fund_valuations WHERE id = $1"))
+			.bind(id.raw())
+			.fetch_optional(&self.pool)
+			.await
+			.map_err(repo_err)?;
+		row.as_ref().map(valuation_from_row).transpose()
 	}
 
 	async fn record(&self, id: ValuationId, service: &ServiceId, aum: Usdt, units_outstanding: Shares, nav: Nav, posted_by: &str) -> Result<i64, DomainError> {
@@ -56,9 +113,9 @@ impl NavMarks for PgNav {
 	}
 }
 
-fn valuation_from_row(service: &ServiceId, row: &sqlx::postgres::PgRow) -> Result<Valuation, DomainError> {
+fn valuation_from_row(row: &sqlx::postgres::PgRow) -> Result<Valuation, DomainError> {
 	Ok(Valuation {
-		service: service.clone(),
+		service: ServiceId::parse(row.try_get::<String, _>("service").map_err(repo_err)?.as_str())?,
 		aum: Usdt::from_base_units(parse_base_units(row.try_get("aum").map_err(repo_err)?)?),
 		units_outstanding: Shares::from_base_units(parse_base_units(row.try_get("units_outstanding").map_err(repo_err)?)?),
 		nav: Nav::from_base_units(parse_base_units(row.try_get("nav").map_err(repo_err)?)?),

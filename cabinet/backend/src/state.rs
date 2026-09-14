@@ -738,6 +738,13 @@ impl Grpc {
 		Ok(self.consilium().open_revenue_payout(bearer(token, req)?).await?.into_inner())
 	}
 
+	/// Put a NAV mark past the move guard to the owners (banking#232). Same plane and same
+	/// token as the payout above: the mark reprices fund-owned money.
+	pub async fn open_valuation_override(&self, token: &str, terms: bk::ValuationOverrideTerms) -> Result<bk::Consilium, Status> {
+		let req = bk::OpenValuationOverrideRequest { terms: Some(terms) };
+		Ok(self.consilium().open_valuation_override(bearer(token, req)?).await?.into_inner())
+	}
+
 	pub async fn cancel_consilium(&self, token: &str, consilium_id: &str) -> Result<bk::Consilium, Status> {
 		let req = bk::CancelConsiliumRequest {
 			consilium_id: consilium_id.to_string(),
