@@ -227,6 +227,10 @@
     "en": "Outstanding",
     "t": "Im Umlauf"
   },
+  "admin.alloc.holders.queued": {
+    "en": "Queued (not yet on the ledger)",
+    "t": "Wartend (noch nicht im Register)"
+  },
   "admin.alloc.holders.title": {
     "en": "Holders",
     "t": "Inhaber"
@@ -350,6 +354,10 @@
   "admin.alloc.pinCap.nothingIssued": {
     "en": "Nothing has settled yet — a queued mint is not on the ledger until the relay posts it.",
     "t": "Noch nichts verbucht — eine wartende Ausgabe steht erst im Register, wenn das Relay sie bucht."
+  },
+  "admin.alloc.pinCap.queued": {
+    "en": "{units} units are still queued in the relay — pin the cap once they have landed.",
+    "t": "{units} Anteile warten noch im Relay — legen Sie das Cap fest, sobald sie verbucht sind."
   },
   "admin.alloc.pinCap.submit": {
     "en": "Pin cap",

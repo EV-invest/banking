@@ -227,6 +227,10 @@
     "en": "Outstanding",
     "t": "Đang lưu hành"
   },
+  "admin.alloc.holders.queued": {
+    "en": "Queued (not yet on the ledger)",
+    "t": "Đang chờ (chưa vào sổ)"
+  },
   "admin.alloc.holders.title": {
     "en": "Holders",
     "t": "Người nắm giữ"
@@ -350,6 +354,10 @@
   "admin.alloc.pinCap.nothingIssued": {
     "en": "Nothing has settled yet — a queued mint is not on the ledger until the relay posts it.",
     "t": "Chưa có gì được ghi sổ — đợt phát hành đang chờ chỉ vào sổ khi relay ghi nhận."
+  },
+  "admin.alloc.pinCap.queued": {
+    "en": "{units} units are still queued in the relay — pin the cap once they have landed.",
+    "t": "{units} đơn vị vẫn đang chờ trong relay — hãy ghim trần sau khi chúng được ghi sổ."
   },
   "admin.alloc.pinCap.submit": {
     "en": "Pin cap",

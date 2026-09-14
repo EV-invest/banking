@@ -446,6 +446,10 @@ export interface UnitHolders {
   company_units: string;
   fee_units: string;
   investor_units: string;
+  /** In-kind mints the relay has accepted but not yet posted — not part of
+   *  `units_outstanding` until they land. Optional: objects cached before the BFF
+   *  started sending it carry no field, and readers fold that to "0". */
+  queued_units?: string;
 }
 
 // ── valuation + redemptions ─────────────────────────────────────────────────────
