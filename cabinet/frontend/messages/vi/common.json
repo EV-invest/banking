@@ -704,8 +704,8 @@
     "t": "Lịch sử điều khoản"
   },
   "admin.fees.immediateBody": {
-    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. The first investor to subscribe reads these terms.",
-    "t": "Không ai đang nắm giữ đơn vị của sản phẩm này nên không cần thông báo: phiên bản {version} có hiệu lực ngay và được áp dụng trong vòng một phút. Nhà đầu tư đầu tiên đăng ký sẽ đọc chính các điều khoản này."
+    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. Until it is, it can still be cancelled below. The first investor to subscribe reads these terms.",
+    "t": "Không ai đang nắm giữ đơn vị của sản phẩm này nên không cần thông báo: phiên bản {version} có hiệu lực ngay và được áp dụng trong vòng một phút. Trước đó, bạn vẫn có thể hủy ở bên dưới. Nhà đầu tư đầu tiên đăng ký sẽ đọc chính các điều khoản này."
   },
   "admin.fees.immediateTitle": {
     "en": "In force within a minute — nobody to notify",
@@ -758,6 +758,10 @@
   "admin.fees.pending.awaiting": {
     "en": "Version {version} awaits the owners' approval. It binds 24 hours after they carry it, while anyone holds units.",
     "t": "Phiên bản {version} đang chờ các chủ sở hữu chấp thuận. Nó có hiệu lực 24 giờ sau khi họ thông qua, khi còn người nắm giữ đơn vị."
+  },
+  "admin.fees.pending.immediate": {
+    "en": "Version {version} takes effect now and is applied within a minute. Nobody holds units, so no notice was sent.",
+    "t": "Phiên bản {version} có hiệu lực ngay và được áp dụng trong vòng một phút. Không ai nắm giữ đơn vị nên không có thông báo nào được gửi."
   },
   "admin.fees.pending.requested": {
     "en": "Requested {when}",

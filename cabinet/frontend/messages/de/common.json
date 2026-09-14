@@ -704,8 +704,8 @@
     "t": "Historie der Konditionen"
   },
   "admin.fees.immediateBody": {
-    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. The first investor to subscribe reads these terms.",
-    "t": "Niemand hält Anteile dieses Produkts, daher war keine Benachrichtigung fällig: Version {version} tritt jetzt in Kraft und wird innerhalb einer Minute angewendet. Der erste zeichnende Anleger liest bereits diese Bedingungen."
+    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. Until it is, it can still be cancelled below. The first investor to subscribe reads these terms.",
+    "t": "Niemand hält Anteile dieses Produkts, daher war keine Benachrichtigung fällig: Version {version} tritt jetzt in Kraft und wird innerhalb einer Minute angewendet. Bis dahin kann sie unten noch abgebrochen werden. Der erste zeichnende Anleger liest bereits diese Bedingungen."
   },
   "admin.fees.immediateTitle": {
     "en": "In force within a minute — nobody to notify",
@@ -758,6 +758,10 @@
   "admin.fees.pending.awaiting": {
     "en": "Version {version} awaits the owners' approval. It binds 24 hours after they carry it, while anyone holds units.",
     "t": "Version {version} wartet auf die Zustimmung der Eigentümer. Sie gilt 24 Stunden nach deren Beschluss, solange jemand Anteile hält."
+  },
+  "admin.fees.pending.immediate": {
+    "en": "Version {version} takes effect now and is applied within a minute. Nobody holds units, so no notice was sent.",
+    "t": "Version {version} tritt jetzt in Kraft und wird innerhalb einer Minute angewendet. Niemand hält Anteile, daher wurde keine Benachrichtigung verschickt."
   },
   "admin.fees.pending.requested": {
     "en": "Requested {when}",

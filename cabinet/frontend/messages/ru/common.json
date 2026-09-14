@@ -704,8 +704,8 @@
     "t": "История условий"
   },
   "admin.fees.immediateBody": {
-    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. The first investor to subscribe reads these terms.",
-    "t": "У этого продукта нет держателей паёв, поэтому уведомление не требовалось: версия {version} вступает в силу сейчас и будет применена в течение минуты. Первый подписавшийся инвестор увидит уже эти условия."
+    "en": "Nobody holds units in this product, so no notice was due: version {version} takes effect now and is applied within a minute. Until it is, it can still be cancelled below. The first investor to subscribe reads these terms.",
+    "t": "У этого продукта нет держателей паёв, поэтому уведомление не требовалось: версия {version} вступает в силу сейчас и будет применена в течение минуты. До этого её ещё можно отменить ниже. Первый подписавшийся инвестор увидит уже эти условия."
   },
   "admin.fees.immediateTitle": {
     "en": "In force within a minute — nobody to notify",
@@ -758,6 +758,10 @@
   "admin.fees.pending.awaiting": {
     "en": "Version {version} awaits the owners' approval. It binds 24 hours after they carry it, while anyone holds units.",
     "t": "Версия {version} ждёт одобрения владельцев. Она вступит в силу через 24 часа после их решения, пока у кого-то есть юниты."
+  },
+  "admin.fees.pending.immediate": {
+    "en": "Version {version} takes effect now and is applied within a minute. Nobody holds units, so no notice was sent.",
+    "t": "Версия {version} вступает в силу сейчас и будет применена в течение минуты. Держателей нет, уведомление не отправлялось."
   },
   "admin.fees.pending.requested": {
     "en": "Requested {when}",
