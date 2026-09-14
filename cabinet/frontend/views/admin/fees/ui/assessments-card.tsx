@@ -11,7 +11,7 @@ import { feeAssessmentsResource } from "@/entities/admin/model/admin-resource";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
-import { ago, formatUnits, formatUsd } from "@/views/admin/lib/format";
+import { ago, formatUnits, formatUsdt } from "@/views/admin/lib/format";
 
 // The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
 // borders, the cell padding and the scroll wrapper; only the header treatment is ours.
@@ -61,14 +61,14 @@ export function AssessmentsCard({ service }: { service: string }) {
                 <TableRow key={`${a.assessed_at}-${i}`}>
                   <TableCell className="text-muted-foreground">{ago(a.assessed_at, t)}</TableCell>
                   <TableCell className="capitalize">{a.trigger}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatUsd(a.management)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatUsd(a.performance)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatUsdt(a.management)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatUsdt(a.performance)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatUnits(a.charged_units)}</TableCell>
                   {/* Non-zero means the holding could not cover the charge and the rest
                       rides to the next one. Worth its own column: it is the only reason
                       a charge collects less than it assessed. */}
                   <TableCell className={cn("text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-main-accent-t3" : "text-muted-foreground")}>
-                    {formatUsd(a.debt_carried)}
+                    {formatUsdt(a.debt_carried)}
                   </TableCell>
                 </TableRow>
               ))}

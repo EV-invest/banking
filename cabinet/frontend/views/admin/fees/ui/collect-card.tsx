@@ -20,7 +20,7 @@ import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { Row } from "@/views/admin/fees/ui/fields";
-import { formatUnits, formatUsd } from "@/views/admin/lib/format";
+import { formatUnits, formatUsdt } from "@/views/admin/lib/format";
 
 export function CollectCard({ service }: { service: string }) {
   const t = useT();
@@ -46,7 +46,9 @@ export function CollectCard({ service }: { service: string }) {
       const settlement = await settleFeeShares({ service, units: "" });
       // The settle moves the fee units AND the revenue figure the payout screen reads.
       revalidateTag(TAG.adminFees, TAG.adminRevenue);
-      setDone(t("admin.fees.settledAtNav", { cash: formatUsd(settlement.cash), nav: settlement.nav }));
+      // Fee cash is USDT, and `formatUsdt` carries no symbol: the unit rides in the value so
+      // the sentence still names it, the way the "worth" row below does.
+      setDone(t("admin.fees.settledAtNav", { cash: `${formatUsdt(settlement.cash)} USDT`, nav: settlement.nav }));
     } catch (e) {
       setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feeSettle"));
     } finally {
@@ -69,7 +71,7 @@ export function CollectCard({ service }: { service: string }) {
         ) : (
           <dl className="space-y-2.5 text-sm">
             <Row label={t("admin.fees.unitsHeld")} value={formatUnits(data?.units)} />
-            <Row label={t("admin.fees.worthAtNav")} value={`${formatUsd(data?.value)} USDT`} />
+            <Row label={t("admin.fees.worthAtNav")} value={`${formatUsdt(data?.value)} USDT`} />
           </dl>
         )}
 
