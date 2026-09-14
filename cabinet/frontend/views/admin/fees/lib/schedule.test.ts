@@ -45,6 +45,19 @@ test("the ceilings are 5% p.a., 50% of the gain and 100% for the hurdle — incl
   assert.equal(draftTerms(draft({ management: "20" })), null);
 });
 
+test("basis points typed into a percent field are refused as too large, not as not a percentage", () => {
+  // "5001" used to fail the three-digit pattern and be called "not a percentage" — true
+  // in no useful sense. The ceiling sentence names the mistake and its bound.
+  assert.deepEqual(draftProblem(null, draft({ management: "1000" })), { key: "admin.fees.err.overCeiling", field: "management", ceiling: "5%" });
+  assert.deepEqual(draftProblem(null, draft({ performance: "5001" })), { key: "admin.fees.err.overCeiling", field: "performance", ceiling: "50%" });
+  assert.deepEqual(draftProblem(null, draft({ hurdle: "10001" })), { key: "admin.fees.err.overCeiling", field: "hurdle", ceiling: "100%" });
+});
+
+test("a rate typed with a decimal comma is the rate it says", () => {
+  assert.deepEqual(draftTerms(draft({ management: "2,5", performance: "20,5", hurdle: "0,5" })), { ...HOUSE_TERMS, management_bps: 250, performance_bps: 2_050, hurdle_bps: 50 });
+  assert.equal(toRequest("alpha", draft({ management: "2,5" })).management_bps, 250);
+});
+
 test("the requirement is unknown until every rate parses, then follows the plane's rule", () => {
   assert.equal(draftRequirement(HOUSE_TERMS, draft({ management: "" })), null);
   assert.equal(draftRequirement(HOUSE_TERMS, draft()), "admin");

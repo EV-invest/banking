@@ -649,7 +649,7 @@
   },
   "admin.fees.err.notPercent": {
     "en": "{field} must be a percentage — 2, or 2.5 for a half.",
-    "t": "{field} doit être un pourcentage — 2, ou 2.5 pour un demi-point."
+    "t": "{field} doit être un pourcentage — 2, ou 2,5 pour un demi-point."
   },
   "admin.fees.err.overCeiling": {
     "en": "{field} cannot be more than {ceiling}.",

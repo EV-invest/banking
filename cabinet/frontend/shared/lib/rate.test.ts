@@ -27,6 +27,17 @@ test("a half-typed rate parses rather than flashing an error mid-keystroke", () 
   // message under the field between two keystrokes.
   assert.equal(toBps("2."), 200);
   assert.equal(toBps(" 2.5 "), 250);
+  assert.equal(toBps("2,"), 200);
+});
+
+test("a decimal comma is the same half a percent", () => {
+  // ru, de, fr and vi all write it that way, and the hint under the field shows "2,5".
+  assert.equal(toBps("2,5"), 250);
+  assert.equal(toBps("20,05"), 2005);
+  assert.equal(toBps("0,01"), 1);
+  // One separator, not a thousands mark: "1,000" would be a rate with three decimals.
+  assert.equal(toBps("1,000"), null);
+  assert.equal(toBps("2,5.5"), null);
 });
 
 test("anything that is not a percentage is refused, not coerced to a number", () => {
@@ -38,7 +49,6 @@ test("anything that is not a percentage is refused, not coerced to a number", ()
   assert.equal(toBps("abc"), null);
   assert.equal(toBps("2%"), null);
   assert.equal(toBps("1e2"), null);
-  assert.equal(toBps("2,5"), null);
   // A third decimal is a rate finer than a basis point — the money plane cannot hold it.
   assert.equal(toBps("2.555"), null);
 });
@@ -48,6 +58,11 @@ test("an over-cap rate parses so the caller can name the mistake", () => {
   // 100% cap, and the form says so in different words than "that is not a percentage".
   assert.equal(toBps("150"), 15_000);
   assert.equal(toBps("999"), 99_900);
+  // Four and more digits too: an operator who typed the basis points instead of the
+  // percent is told the ceiling, not that 5001 is "not a percentage".
+  assert.equal(toBps("1000"), 100_000);
+  assert.equal(toBps("5001"), 500_100);
+  assert.equal(toBps("10001"), 1_000_100);
 });
 
 test("a stored policy opens the form on the rate it was saved with", () => {
