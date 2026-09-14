@@ -2657,6 +2657,65 @@
         }
       }
     },
+    "/banking.v1.FeesService/CancelFeePolicyChange": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "CancelFeePolicyChange",
+        "description": "Withdraw a pending change (AllocationManage). One still awaiting the owners takes its\n consilium down with it. Idempotent on an already-cancelled change.",
+        "operationId": "banking.v1.FeesService.CancelFeePolicyChange",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.CancelFeePolicyChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeePolicyChange"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.FeesService/GetAccruedFees": {
       "post": {
         "tags": [
@@ -2952,6 +3011,65 @@
         }
       }
     },
+    "/banking.v1.FeesService/ListFeePolicyChanges": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "ListFeePolicyChanges",
+        "description": "A fund's whole history of terms, newest version first. Readable by any\n authenticated user — the terms one is on, and how they came to be, are public\n information about a product.",
+        "operationId": "banking.v1.FeesService.ListFeePolicyChanges",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.ListFeePolicyChangesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeePolicyChangeList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.FeesService/ListFundFeeAssessments": {
       "post": {
         "tags": [
@@ -3011,14 +3129,14 @@
         }
       }
     },
-    "/banking.v1.FeesService/SetFeePolicy": {
+    "/banking.v1.FeesService/ScheduleFeePolicy": {
       "post": {
         "tags": [
           "banking.v1.FeesService"
         ],
-        "summary": "SetFeePolicy",
-        "description": "Install or replace a fund's terms (AllocationManage — the same trust seam as\n bringing the product into existence or posting its valuation). The service must\n already be a registered allocation. Rates are basis points and each is capped at\n 10000; a rate above 100% of the thing it is charged on is always a fat finger.",
-        "operationId": "banking.v1.FeesService.SetFeePolicy",
+        "summary": "Propose a change of a fund's terms (AllocationManage — the same trust seam as\n bringing the product into existence or posting its valuation). The service must\n already be a registered allocation. Rates are basis points, capped at 500\n (management, 5% p.a.) and 5000 (performance, 50% of the gain); the hurdle at 10000.",
+        "description": "A policy is never edited in place. The change is recorded with a version and takes\n effect no earlier than 24h after it was scheduled while anyone holds units (at once\n for a fund with no holders); `effective_from` may ask for later, never earlier. A\n change that TIGHTENS the terms beyond the house envelope (2-and-20 on invested\n capital, annual) needs the owners' consilium, which the caller must be an owner to\n open, and `reason` is then required; every other change is scheduled at once. The\n holders are mailed when the change is scheduled. One pending change per fund: a\n second is refused with ALREADY_EXISTS until the first is cancelled.",
+        "operationId": "banking.v1.FeesService.ScheduleFeePolicy",
         "parameters": [
           {
             "name": "Connect-Protocol-Version",
@@ -3040,7 +3158,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/banking.v1.SetFeePolicyRequest"
+                "$ref": "#/components/schemas/banking.v1.ScheduleFeePolicyRequest"
               }
             }
           },
@@ -3062,7 +3180,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/banking.v1.FeePolicy"
+                  "$ref": "#/components/schemas/banking.v1.FeePolicyChange"
                 }
               }
             }
@@ -7242,6 +7360,21 @@
         "title": "CancelConsiliumRequest",
         "additionalProperties": false
       },
+      "banking.v1.CancelFeePolicyChangeRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "change_id": {
+            "type": "string",
+            "title": "change_id"
+          }
+        },
+        "title": "CancelFeePolicyChangeRequest",
+        "additionalProperties": false
+      },
       "banking.v1.CancelPaymentRequest": {
         "type": "object",
         "properties": {
@@ -7326,7 +7459,7 @@
           },
           "revenue_payout": {
             "title": "revenue_payout",
-            "description": "EXACTLY ONE of the two terms fields is set, decided by the kind. Two fields rather than\n a oneof because the surfaces read them by name and a oneof buys nothing here that the\n \"exactly one\" rule does not already give.",
+            "description": "EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `fee_policy`) is set,\n decided by the kind. Named fields rather than a oneof because the surfaces read them by\n name and a oneof buys nothing here that the \"exactly one\" rule does not already give.",
             "$ref": "#/components/schemas/banking.v1.RevenuePayoutTerms"
           },
           "payload_hash": {
@@ -7417,10 +7550,106 @@
             "type": "string",
             "title": "executed_payment_id",
             "description": "The payment order an executed PAYMENT consilium carried."
+          },
+          "fee_policy": {
+            "title": "fee_policy",
+            "description": "Field numbers 20 and 21 are reserved for the valuation-override kind (#232).\n The third of the \"exactly one\" terms fields — set exactly for a FEE_POLICY consilium.",
+            "$ref": "#/components/schemas/banking.v1.ConsiliumFeePolicyTerms"
+          },
+          "executed_fee_policy_change_id": {
+            "type": "string",
+            "title": "executed_fee_policy_change_id",
+            "description": "The fee-policy change an executed FEE_POLICY consilium scheduled."
           }
         },
         "title": "Consilium",
         "additionalProperties": false
+      },
+      "banking.v1.ConsiliumFeePolicyTerms": {
+        "type": "object",
+        "properties": {
+          "change_id": {
+            "type": "string",
+            "title": "change_id",
+            "description": "The change this quorum authorizes. Inside the hashed subject, so an approval of one\n change is never a valid signature over another naming the same numbers."
+          },
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "allocation_name": {
+            "type": "string",
+            "title": "allocation_name",
+            "description": "The product's display name, read live from the registry."
+          },
+          "from_configured": {
+            "type": "boolean",
+            "title": "from_configured",
+            "description": "The terms in force when the change was proposed. `from_configured` is false when the\n fund charged nothing — a different fact from a policy whose rates are zero — and the\n `from_*` fields are then zero / default."
+          },
+          "from_management_bps": {
+            "type": "integer",
+            "title": "from_management_bps"
+          },
+          "from_performance_bps": {
+            "type": "integer",
+            "title": "from_performance_bps"
+          },
+          "from_hurdle_bps": {
+            "type": "integer",
+            "title": "from_hurdle_bps"
+          },
+          "from_basis": {
+            "type": "string",
+            "title": "from_basis"
+          },
+          "from_crystallization": {
+            "type": "string",
+            "title": "from_crystallization"
+          },
+          "to_management_bps": {
+            "type": "integer",
+            "title": "to_management_bps"
+          },
+          "to_performance_bps": {
+            "type": "integer",
+            "title": "to_performance_bps"
+          },
+          "to_hurdle_bps": {
+            "type": "integer",
+            "title": "to_hurdle_bps"
+          },
+          "to_basis": {
+            "type": "string",
+            "title": "to_basis"
+          },
+          "to_crystallization": {
+            "type": "string",
+            "title": "to_crystallization"
+          },
+          "effective_from": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "effective_from",
+            "format": "int64",
+            "description": "Unix seconds the requester asked the change to bind from; 0 = as soon as the notice\n allows. The moment actually fixed is never earlier than 24h after the carrying vote\n while anyone holds units."
+          },
+          "holder_count": {
+            "type": "integer",
+            "title": "holder_count",
+            "description": "How many investors hold units right now — who the change binds."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the requester's words. Required for this kind, shown verbatim."
+          }
+        },
+        "title": "ConsiliumFeePolicyTerms",
+        "additionalProperties": false,
+        "description": "The immutable subject of a FEE-POLICY consilium — a change of a product's fee terms\n that tightens them beyond the house envelope (docs/FEES.md § \"Changing the terms\").\n Not a money move: carrying it schedules the change, and the fee sweeper promotes it once\n the holders' notice period has run."
       },
       "banking.v1.ConsiliumInvitation": {
         "type": "object",
@@ -7493,6 +7722,11 @@
           "payment": {
             "title": "payment",
             "$ref": "#/components/schemas/banking.v1.ConsiliumPaymentTerms"
+          },
+          "fee_policy": {
+            "title": "fee_policy",
+            "description": "Field number 15 is reserved for the valuation-override kind (#232).",
+            "$ref": "#/components/schemas/banking.v1.ConsiliumFeePolicyTerms"
           }
         },
         "title": "ConsiliumInvitation",
@@ -7895,11 +8129,141 @@
             "title": "updated_at",
             "format": "int64",
             "description": "unix seconds; 0 when unconfigured"
+          },
+          "version": {
+            "type": "integer",
+            "title": "version",
+            "description": "Which version of the fund's history these terms are; 0 when unconfigured."
+          },
+          "effective_from": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "effective_from",
+            "format": "int64",
+            "description": "Unix seconds since which these terms bind; 0 when unconfigured."
+          },
+          "pending": {
+            "title": "pending",
+            "description": "The change on its way, if any — awaiting the owners or scheduled. Shown to holders\n and non-holders alike: the terms coming are part of deciding whether to stay in.",
+            "$ref": "#/components/schemas/banking.v1.FeePolicyChange"
           }
         },
         "title": "FeePolicy",
         "additionalProperties": false,
         "description": "One fund's fee terms. `configured` is false when the product has no policy at all,\n which is different from a policy whose rates happen to be zero."
+      },
+      "banking.v1.FeePolicyChange": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "id"
+          },
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "version": {
+            "type": "integer",
+            "title": "version"
+          },
+          "state": {
+            "type": "string",
+            "title": "state"
+          },
+          "management_bps": {
+            "type": "integer",
+            "title": "management_bps"
+          },
+          "performance_bps": {
+            "type": "integer",
+            "title": "performance_bps"
+          },
+          "hurdle_bps": {
+            "type": "integer",
+            "title": "hurdle_bps"
+          },
+          "basis": {
+            "type": "string",
+            "title": "basis"
+          },
+          "crystallization": {
+            "type": "string",
+            "title": "crystallization"
+          },
+          "effective_from": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "effective_from",
+            "format": "int64",
+            "description": "Unix seconds the terms bind from. Provisional while awaiting the owners; fixed when\n the change is scheduled."
+          },
+          "requirement": {
+            "type": "string",
+            "title": "requirement"
+          },
+          "consilium_id": {
+            "type": "string",
+            "title": "consilium_id",
+            "description": "The consilium this change waits on (or waited on); empty for an administrator's change."
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "requested_by"
+          },
+          "requested_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "requested_at",
+            "format": "int64"
+          },
+          "scheduled_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "scheduled_at",
+            "format": "int64",
+            "description": "Unix seconds the notice clock started; 0 while awaiting the owners."
+          },
+          "applied_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "applied_at",
+            "format": "int64",
+            "description": "Unix seconds the terms took effect; 0 until they did."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the requester's words; empty when none was given."
+          }
+        },
+        "title": "FeePolicyChange",
+        "additionalProperties": false,
+        "description": "One row of a fund's fee-policy history. `state` is one of awaiting_consilium |\n scheduled | active | superseded | rejected | cancelled; `requirement` is admin |\n owner_consilium. See docs/FEES.md § \"Changing the terms\"."
+      },
+      "banking.v1.FeePolicyChangeList": {
+        "type": "object",
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/banking.v1.FeePolicyChange"
+            },
+            "title": "changes"
+          }
+        },
+        "title": "FeePolicyChangeList",
+        "additionalProperties": false
       },
       "banking.v1.FeePolicyList": {
         "type": "object",
@@ -8399,6 +8763,17 @@
       "banking.v1.ListFeePoliciesRequest": {
         "type": "object",
         "title": "ListFeePoliciesRequest",
+        "additionalProperties": false
+      },
+      "banking.v1.ListFeePolicyChangesRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          }
+        },
+        "title": "ListFeePolicyChangesRequest",
         "additionalProperties": false
       },
       "banking.v1.ListFundFeeAssessmentsRequest": {
@@ -9745,6 +10120,51 @@
         "title": "RotateDepositAddressResponse",
         "additionalProperties": false
       },
+      "banking.v1.ScheduleFeePolicyRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "management_bps": {
+            "type": "integer",
+            "title": "management_bps"
+          },
+          "performance_bps": {
+            "type": "integer",
+            "title": "performance_bps"
+          },
+          "hurdle_bps": {
+            "type": "integer",
+            "title": "hurdle_bps"
+          },
+          "basis": {
+            "type": "string",
+            "title": "basis"
+          },
+          "crystallization": {
+            "type": "string",
+            "title": "crystallization"
+          },
+          "effective_from": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "effective_from",
+            "format": "int64",
+            "description": "Unix seconds the change should bind from; 0 = as soon as the notice period allows.\n An earlier request than the notice allows is lifted to the minimum, not refused."
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "Why, in the requester's words. Required and non-empty when the owners must approve\n (the approval mail is refused without one); optional otherwise. Shown verbatim."
+          }
+        },
+        "title": "ScheduleFeePolicyRequest",
+        "additionalProperties": false
+      },
       "banking.v1.SeedCapitalRequest": {
         "type": "object",
         "properties": {
@@ -9854,37 +10274,6 @@
           }
         },
         "title": "SetAllocationUnitCapRequest",
-        "additionalProperties": false
-      },
-      "banking.v1.SetFeePolicyRequest": {
-        "type": "object",
-        "properties": {
-          "service": {
-            "type": "string",
-            "title": "service"
-          },
-          "management_bps": {
-            "type": "integer",
-            "title": "management_bps"
-          },
-          "performance_bps": {
-            "type": "integer",
-            "title": "performance_bps"
-          },
-          "hurdle_bps": {
-            "type": "integer",
-            "title": "hurdle_bps"
-          },
-          "basis": {
-            "type": "string",
-            "title": "basis"
-          },
-          "crystallization": {
-            "type": "string",
-            "title": "crystallization"
-          }
-        },
-        "title": "SetFeePolicyRequest",
         "additionalProperties": false
       },
       "banking.v1.SetOperationsModeRequest": {

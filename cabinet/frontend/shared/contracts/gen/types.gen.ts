@@ -244,6 +244,20 @@ export type BankingV1CancelConsiliumRequest = {
 };
 
 /**
+ * CancelFeePolicyChangeRequest
+ */
+export type BankingV1CancelFeePolicyChangeRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * change_id
+     */
+    change_id?: string;
+};
+
+/**
  * CancelPaymentRequest
  */
 export type BankingV1CancelPaymentRequest = {
@@ -322,9 +336,9 @@ export type BankingV1Consilium = {
     /**
      * revenue_payout
      *
-     * EXACTLY ONE of the two terms fields is set, decided by the kind. Two fields rather than
-     * a oneof because the surfaces read them by name and a oneof buys nothing here that the
-     * "exactly one" rule does not already give.
+     * EXACTLY ONE of the terms fields (`revenue_payout`, `payment`, `fee_policy`) is set,
+     * decided by the kind. Named fields rather than a oneof because the surfaces read them by
+     * name and a oneof buys nothing here that the "exactly one" rule does not already give.
      */
     revenue_payout?: BankingV1RevenuePayoutTerms;
     /**
@@ -407,6 +421,115 @@ export type BankingV1Consilium = {
      * The payment order an executed PAYMENT consilium carried.
      */
     executed_payment_id?: string;
+    /**
+     * fee_policy
+     *
+     * Field numbers 20 and 21 are reserved for the valuation-override kind (#232).
+     * The third of the "exactly one" terms fields — set exactly for a FEE_POLICY consilium.
+     */
+    fee_policy?: BankingV1ConsiliumFeePolicyTerms;
+    /**
+     * executed_fee_policy_change_id
+     *
+     * The fee-policy change an executed FEE_POLICY consilium scheduled.
+     */
+    executed_fee_policy_change_id?: string;
+};
+
+/**
+ * ConsiliumFeePolicyTerms
+ *
+ * The immutable subject of a FEE-POLICY consilium — a change of a product's fee terms
+ * that tightens them beyond the house envelope (docs/FEES.md § "Changing the terms").
+ * Not a money move: carrying it schedules the change, and the fee sweeper promotes it once
+ * the holders' notice period has run.
+ */
+export type BankingV1ConsiliumFeePolicyTerms = {
+    /**
+     * change_id
+     *
+     * The change this quorum authorizes. Inside the hashed subject, so an approval of one
+     * change is never a valid signature over another naming the same numbers.
+     */
+    change_id?: string;
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * allocation_name
+     *
+     * The product's display name, read live from the registry.
+     */
+    allocation_name?: string;
+    /**
+     * from_configured
+     *
+     * The terms in force when the change was proposed. `from_configured` is false when the
+     * fund charged nothing — a different fact from a policy whose rates are zero — and the
+     * `from_*` fields are then zero / default.
+     */
+    from_configured?: boolean;
+    /**
+     * from_management_bps
+     */
+    from_management_bps?: number;
+    /**
+     * from_performance_bps
+     */
+    from_performance_bps?: number;
+    /**
+     * from_hurdle_bps
+     */
+    from_hurdle_bps?: number;
+    /**
+     * from_basis
+     */
+    from_basis?: string;
+    /**
+     * from_crystallization
+     */
+    from_crystallization?: string;
+    /**
+     * to_management_bps
+     */
+    to_management_bps?: number;
+    /**
+     * to_performance_bps
+     */
+    to_performance_bps?: number;
+    /**
+     * to_hurdle_bps
+     */
+    to_hurdle_bps?: number;
+    /**
+     * to_basis
+     */
+    to_basis?: string;
+    /**
+     * to_crystallization
+     */
+    to_crystallization?: string;
+    /**
+     * effective_from
+     *
+     * Unix seconds the requester asked the change to bind from; 0 = as soon as the notice
+     * allows. The moment actually fixed is never earlier than 24h after the carrying vote
+     * while anyone holds units.
+     */
+    effective_from?: number | string;
+    /**
+     * holder_count
+     *
+     * How many investors hold units right now — who the change binds.
+     */
+    holder_count?: number;
+    /**
+     * reason
+     *
+     * Why, in the requester's words. Required for this kind, shown verbatim.
+     */
+    reason?: string;
 };
 
 /**
@@ -483,6 +606,12 @@ export type BankingV1ConsiliumInvitation = {
      * payment
      */
     payment?: BankingV1ConsiliumPaymentTerms;
+    /**
+     * fee_policy
+     *
+     * Field number 15 is reserved for the valuation-override kind (#232).
+     */
+    fee_policy?: BankingV1ConsiliumFeePolicyTerms;
 };
 
 /**
@@ -899,6 +1028,124 @@ export type BankingV1FeePolicy = {
      * unix seconds; 0 when unconfigured
      */
     updated_at?: number | string;
+    /**
+     * version
+     *
+     * Which version of the fund's history these terms are; 0 when unconfigured.
+     */
+    version?: number;
+    /**
+     * effective_from
+     *
+     * Unix seconds since which these terms bind; 0 when unconfigured.
+     */
+    effective_from?: number | string;
+    /**
+     * pending
+     *
+     * The change on its way, if any — awaiting the owners or scheduled. Shown to holders
+     * and non-holders alike: the terms coming are part of deciding whether to stay in.
+     */
+    pending?: BankingV1FeePolicyChange;
+};
+
+/**
+ * FeePolicyChange
+ *
+ * One row of a fund's fee-policy history. `state` is one of awaiting_consilium |
+ * scheduled | active | superseded | rejected | cancelled; `requirement` is admin |
+ * owner_consilium. See docs/FEES.md § "Changing the terms".
+ */
+export type BankingV1FeePolicyChange = {
+    /**
+     * id
+     */
+    id?: string;
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * version
+     */
+    version?: number;
+    /**
+     * state
+     */
+    state?: string;
+    /**
+     * management_bps
+     */
+    management_bps?: number;
+    /**
+     * performance_bps
+     */
+    performance_bps?: number;
+    /**
+     * hurdle_bps
+     */
+    hurdle_bps?: number;
+    /**
+     * basis
+     */
+    basis?: string;
+    /**
+     * crystallization
+     */
+    crystallization?: string;
+    /**
+     * effective_from
+     *
+     * Unix seconds the terms bind from. Provisional while awaiting the owners; fixed when
+     * the change is scheduled.
+     */
+    effective_from?: number | string;
+    /**
+     * requirement
+     */
+    requirement?: string;
+    /**
+     * consilium_id
+     *
+     * The consilium this change waits on (or waited on); empty for an administrator's change.
+     */
+    consilium_id?: string;
+    /**
+     * requested_by
+     */
+    requested_by?: string;
+    /**
+     * requested_at
+     */
+    requested_at?: number | string;
+    /**
+     * scheduled_at
+     *
+     * Unix seconds the notice clock started; 0 while awaiting the owners.
+     */
+    scheduled_at?: number | string;
+    /**
+     * applied_at
+     *
+     * Unix seconds the terms took effect; 0 until they did.
+     */
+    applied_at?: number | string;
+    /**
+     * reason
+     *
+     * Why, in the requester's words; empty when none was given.
+     */
+    reason?: string;
+};
+
+/**
+ * FeePolicyChangeList
+ */
+export type BankingV1FeePolicyChangeList = {
+    /**
+     * changes
+     */
+    changes?: Array<BankingV1FeePolicyChange>;
 };
 
 /**
@@ -1406,6 +1653,16 @@ export type BankingV1ListFeeAssessmentsRequest = {
  */
 export type BankingV1ListFeePoliciesRequest = {
     [key: string]: never;
+};
+
+/**
+ * ListFeePolicyChangesRequest
+ */
+export type BankingV1ListFeePolicyChangesRequest = {
+    /**
+     * service
+     */
+    service?: string;
 };
 
 /**
@@ -2830,6 +3087,50 @@ export type BankingV1RotateDepositAddressResponse = {
 };
 
 /**
+ * ScheduleFeePolicyRequest
+ */
+export type BankingV1ScheduleFeePolicyRequest = {
+    /**
+     * service
+     */
+    service?: string;
+    /**
+     * management_bps
+     */
+    management_bps?: number;
+    /**
+     * performance_bps
+     */
+    performance_bps?: number;
+    /**
+     * hurdle_bps
+     */
+    hurdle_bps?: number;
+    /**
+     * basis
+     */
+    basis?: string;
+    /**
+     * crystallization
+     */
+    crystallization?: string;
+    /**
+     * effective_from
+     *
+     * Unix seconds the change should bind from; 0 = as soon as the notice period allows.
+     * An earlier request than the notice allows is lifted to the minimum, not refused.
+     */
+    effective_from?: number | string;
+    /**
+     * reason
+     *
+     * Why, in the requester's words. Required and non-empty when the owners must approve
+     * (the approval mail is refused without one); optional otherwise. Shown verbatim.
+     */
+    reason?: string;
+};
+
+/**
  * SeedCapitalRequest
  */
 export type BankingV1SeedCapitalRequest = {
@@ -2934,36 +3235,6 @@ export type BankingV1SetAllocationUnitCapRequest = {
      * decimal units, > 0 (e.g. "1000" or "100000000")
      */
     unit_cap?: string;
-};
-
-/**
- * SetFeePolicyRequest
- */
-export type BankingV1SetFeePolicyRequest = {
-    /**
-     * service
-     */
-    service?: string;
-    /**
-     * management_bps
-     */
-    management_bps?: number;
-    /**
-     * performance_bps
-     */
-    performance_bps?: number;
-    /**
-     * hurdle_bps
-     */
-    hurdle_bps?: number;
-    /**
-     * basis
-     */
-    basis?: string;
-    /**
-     * crystallization
-     */
-    crystallization?: string;
 };
 
 /**
@@ -7270,6 +7541,35 @@ export type BankingV1ConsiliumServiceOpenRevenuePayoutResponses = {
 
 export type BankingV1ConsiliumServiceOpenRevenuePayoutResponse = BankingV1ConsiliumServiceOpenRevenuePayoutResponses[keyof BankingV1ConsiliumServiceOpenRevenuePayoutResponses];
 
+export type BankingV1FeesServiceCancelFeePolicyChangeData = {
+    body: BankingV1CancelFeePolicyChangeRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/CancelFeePolicyChange';
+};
+
+export type BankingV1FeesServiceCancelFeePolicyChangeErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceCancelFeePolicyChangeError = BankingV1FeesServiceCancelFeePolicyChangeErrors[keyof BankingV1FeesServiceCancelFeePolicyChangeErrors];
+
+export type BankingV1FeesServiceCancelFeePolicyChangeResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeePolicyChange;
+};
+
+export type BankingV1FeesServiceCancelFeePolicyChangeResponse = BankingV1FeesServiceCancelFeePolicyChangeResponses[keyof BankingV1FeesServiceCancelFeePolicyChangeResponses];
+
 export type BankingV1FeesServiceGetAccruedFeesData = {
     body: BankingV1GetAccruedFeesRequest;
     headers: {
@@ -7415,6 +7715,35 @@ export type BankingV1FeesServiceListFeePoliciesResponses = {
 
 export type BankingV1FeesServiceListFeePoliciesResponse = BankingV1FeesServiceListFeePoliciesResponses[keyof BankingV1FeesServiceListFeePoliciesResponses];
 
+export type BankingV1FeesServiceListFeePolicyChangesData = {
+    body: BankingV1ListFeePolicyChangesRequest;
+    headers: {
+        'Connect-Protocol-Version': ConnectProtocolVersion;
+        'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
+    };
+    path?: never;
+    query?: never;
+    url: '/banking.v1.FeesService/ListFeePolicyChanges';
+};
+
+export type BankingV1FeesServiceListFeePolicyChangesErrors = {
+    /**
+     * Error
+     */
+    default: ConnectError;
+};
+
+export type BankingV1FeesServiceListFeePolicyChangesError = BankingV1FeesServiceListFeePolicyChangesErrors[keyof BankingV1FeesServiceListFeePolicyChangesErrors];
+
+export type BankingV1FeesServiceListFeePolicyChangesResponses = {
+    /**
+     * Success
+     */
+    200: BankingV1FeePolicyChangeList;
+};
+
+export type BankingV1FeesServiceListFeePolicyChangesResponse = BankingV1FeesServiceListFeePolicyChangesResponses[keyof BankingV1FeesServiceListFeePolicyChangesResponses];
+
 export type BankingV1FeesServiceListFundFeeAssessmentsData = {
     body: BankingV1ListFundFeeAssessmentsRequest;
     headers: {
@@ -7444,34 +7773,34 @@ export type BankingV1FeesServiceListFundFeeAssessmentsResponses = {
 
 export type BankingV1FeesServiceListFundFeeAssessmentsResponse = BankingV1FeesServiceListFundFeeAssessmentsResponses[keyof BankingV1FeesServiceListFundFeeAssessmentsResponses];
 
-export type BankingV1FeesServiceSetFeePolicyData = {
-    body: BankingV1SetFeePolicyRequest;
+export type BankingV1FeesServiceScheduleFeePolicyData = {
+    body: BankingV1ScheduleFeePolicyRequest;
     headers: {
         'Connect-Protocol-Version': ConnectProtocolVersion;
         'Connect-Timeout-Ms'?: ConnectTimeoutHeader;
     };
     path?: never;
     query?: never;
-    url: '/banking.v1.FeesService/SetFeePolicy';
+    url: '/banking.v1.FeesService/ScheduleFeePolicy';
 };
 
-export type BankingV1FeesServiceSetFeePolicyErrors = {
+export type BankingV1FeesServiceScheduleFeePolicyErrors = {
     /**
      * Error
      */
     default: ConnectError;
 };
 
-export type BankingV1FeesServiceSetFeePolicyError = BankingV1FeesServiceSetFeePolicyErrors[keyof BankingV1FeesServiceSetFeePolicyErrors];
+export type BankingV1FeesServiceScheduleFeePolicyError = BankingV1FeesServiceScheduleFeePolicyErrors[keyof BankingV1FeesServiceScheduleFeePolicyErrors];
 
-export type BankingV1FeesServiceSetFeePolicyResponses = {
+export type BankingV1FeesServiceScheduleFeePolicyResponses = {
     /**
      * Success
      */
-    200: BankingV1FeePolicy;
+    200: BankingV1FeePolicyChange;
 };
 
-export type BankingV1FeesServiceSetFeePolicyResponse = BankingV1FeesServiceSetFeePolicyResponses[keyof BankingV1FeesServiceSetFeePolicyResponses];
+export type BankingV1FeesServiceScheduleFeePolicyResponse = BankingV1FeesServiceScheduleFeePolicyResponses[keyof BankingV1FeesServiceScheduleFeePolicyResponses];
 
 export type BankingV1FeesServiceSettleFeeSharesData = {
     body: BankingV1SettleFeeSharesRequest;

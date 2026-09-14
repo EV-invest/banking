@@ -1,15 +1,18 @@
 //! `fees` context — a fund's management and performance fee.
 //!
-//! Reads of a fund's *terms* are open to any authenticated user: an investor is
-//! entitled to know what they are paying before they pay it, and a policy is public
-//! information about a product. Reads of a *charge* are scoped to the caller's own
-//! statement. Everything that sets terms or moves value is gated on
-//! [`Permission::AllocationManage`] — the same trust seam as registering the product
-//! or posting its valuation, because a fee policy is part of what the product *is*.
+//! Reads of a fund's *terms* — and of their history — are open to any authenticated
+//! user: an investor is entitled to know what they are paying before they pay it, what
+//! they will be paying next, and how the terms came to be. Reads of a *charge* are scoped
+//! to the caller's own statement. Everything that changes terms or moves value is gated on
+//! [`Permission::AllocationManage`] — the same trust seam as registering the product or
+//! posting its valuation, because a fee policy is part of what the product *is* — and a
+//! change that tightens the terms beyond the house envelope needs the owners besides
+//! (`docs/FEES.md` § "Changing the terms").
 //!
 //! Only [`SettleFeeShares`](FeesService::settle_fee_shares) moves money, and it
 //! notifies the relay. Charging happens on the sweeper, not on this surface: a fee is
-//! a consequence of time passing, never of somebody calling an RPC.
+//! a consequence of time passing, never of somebody calling an RPC — and so is a change of
+//! terms taking effect.
 //!
 //! `Result<_, Status>` is tonic's mandated handler signature; `Status` is a large type
 //! we don't control, so the large-err lint does not apply in this module.
@@ -18,17 +21,17 @@
 use domain::{
 	authz::Permission,
 	balance::ServiceId,
-	fees::{CrystallizationPeriod, FeePolicy, ManagementBasis},
+	fees::{CrystallizationPeriod, FeePolicy, FeePolicyChangeId, ManagementBasis},
 	money::Shares,
 };
-use evbanking_auth::claims_of;
 use evbanking_contracts::banking::v1::{self as pb, fees_service_server::FeesService};
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 use crate::{
 	AppState,
-	application::fees as fee_app,
-	ports::fees::AssessmentRecord,
+	application::fees::{self as fee_app, FeePolicyPorts, PolicyChangeRequest, PolicyView},
+	ports::fees::{AssessmentRecord, FeePolicyChange},
 	services::support::{caller_id, map_err, require_permission, unix_now},
 };
 
@@ -43,44 +46,112 @@ impl FeesSvc {
 	}
 }
 
+impl AppState {
+	fn fee_policy_ports(&self) -> FeePolicyPorts<'_> {
+		FeePolicyPorts {
+			policies: self.fees.policies.as_ref(),
+			changes: self.fees.changes.as_ref(),
+			allocations: self.allocations.as_ref(),
+			consilia: self.consilia.as_ref(),
+			approval_url_base: &self.consilium_approval_url_base,
+			governance_mail_wired: crate::infrastructure::governance_mail::is_wired(),
+		}
+	}
+}
+
+fn parse_change_id(raw: &str) -> Result<FeePolicyChangeId, Status> {
+	Uuid::parse_str(raw)
+		.map(FeePolicyChangeId::from_raw)
+		.map_err(|_| Status::invalid_argument("invalid fee policy change id"))
+}
+
+/// The terms, validated into their domain form at the boundary so a bad rate or an unknown
+/// vocabulary word is an `invalid_argument` about the input, not a validation error from
+/// deeper in.
+fn parse_policy(management_bps: u32, performance_bps: u32, hurdle_bps: u32, basis: &str, crystallization: &str) -> Result<FeePolicy, Status> {
+	FeePolicy::new(
+		management_bps,
+		performance_bps,
+		hurdle_bps,
+		ManagementBasis::parse(basis).map_err(map_err)?,
+		CrystallizationPeriod::parse(crystallization).map_err(map_err)?,
+	)
+	.map_err(map_err)
+}
+
 #[tonic::async_trait]
 impl FeesService for FeesSvc {
 	async fn get_fee_policy(&self, request: Request<pb::GetFeePolicyRequest>) -> Result<Response<pb::FeePolicy>, Status> {
 		caller_id(&request)?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
-		let policy = fee_app::get_policy(self.state.fees.policies.as_ref(), &service).await.map_err(map_err)?;
-		Ok(Response::new(policy_to_proto(&service, policy)))
+		let view = fee_app::policy_view(self.state.fees.policies.as_ref(), self.state.fees.changes.as_ref(), &service)
+			.await
+			.map_err(map_err)?;
+		Ok(Response::new(policy_to_proto(&service, &view)))
 	}
 
 	async fn list_fee_policies(&self, request: Request<pb::ListFeePoliciesRequest>) -> Result<Response<pb::FeePolicyList>, Status> {
 		caller_id(&request)?;
-		let policies = fee_app::list_policies(self.state.fees.policies.as_ref()).await.map_err(map_err)?;
+		let policies = fee_app::list_policies(self.state.fees.policies.as_ref(), self.state.fees.changes.as_ref())
+			.await
+			.map_err(map_err)?;
 		Ok(Response::new(pb::FeePolicyList {
-			policies: policies.iter().map(|(service, policy)| policy_to_proto(service, Some(*policy))).collect(),
+			policies: policies.iter().map(|(service, view)| policy_to_proto(service, view)).collect(),
 		}))
 	}
 
-	async fn set_fee_policy(&self, request: Request<pb::SetFeePolicyRequest>) -> Result<Response<pb::FeePolicy>, Status> {
+	async fn schedule_fee_policy(&self, request: Request<pb::ScheduleFeePolicyRequest>) -> Result<Response<pb::FeePolicyChange>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
-		// The operator subject is the trust seam on the terms, exactly as `posted_by` is on
-		// a valuation: the audit answers "who set this fee", not just "the fee changed".
-		let updated_by = claims_of(&request).ok_or_else(|| Status::unauthenticated("missing claims"))?.sub.clone();
+		// The requester is the trust seam on the terms, exactly as `posted_by` is on a
+		// valuation — and, for a change that needs the owners, the initiator of their consilium.
+		let requester = caller_id(&request)?;
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
-		// Parsed at the boundary so a bad rate or an unknown vocabulary word is an
-		// `invalid_argument` about the input, not a validation error from deeper in.
-		let policy = FeePolicy::new(
-			req.management_bps,
-			req.performance_bps,
-			req.hurdle_bps,
-			ManagementBasis::parse(&req.basis).map_err(map_err)?,
-			CrystallizationPeriod::parse(&req.crystallization).map_err(map_err)?,
+		let policy = parse_policy(req.management_bps, req.performance_bps, req.hurdle_bps, &req.basis, &req.crystallization)?;
+		let change = fee_app::schedule_policy(
+			&self.state.fee_policy_ports(),
+			requester,
+			PolicyChangeRequest {
+				service,
+				policy,
+				requested_effective_from_unix: req.effective_from,
+				reason: req.reason,
+			},
+			unix_now(),
 		)
+		.await
 		.map_err(map_err)?;
-		let stored = fee_app::set_policy(self.state.fees.policies.as_ref(), self.state.allocations.as_ref(), service.clone(), policy, &updated_by)
-			.await
-			.map_err(map_err)?;
-		Ok(Response::new(policy_to_proto(&service, Some(stored))))
+		// WARN on success on purpose: a change of the terms investors are charged on is worth
+		// an audit line that stands out, whichever path it took.
+		tracing::warn!(
+			change_id = %change.id,
+			service = %change.service,
+			requester = %requester,
+			requirement = change.requirement.as_str(),
+			state = change.state.as_str(),
+			effective_from = change.effective_from_unix,
+			"scheduled a fee-policy change"
+		);
+		Ok(Response::new(change_to_proto(&change)))
+	}
+
+	async fn cancel_fee_policy_change(&self, request: Request<pb::CancelFeePolicyChangeRequest>) -> Result<Response<pb::FeePolicyChange>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let by = caller_id(&request)?;
+		let req = request.get_ref();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		let id = parse_change_id(&req.change_id)?;
+		let change = fee_app::cancel_change(self.state.fees.changes.as_ref(), &service, id, by, unix_now()).await.map_err(map_err)?;
+		Ok(Response::new(change_to_proto(&change)))
+	}
+
+	async fn list_fee_policy_changes(&self, request: Request<pb::ListFeePolicyChangesRequest>) -> Result<Response<pb::FeePolicyChangeList>, Status> {
+		caller_id(&request)?;
+		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
+		let changes = fee_app::list_changes(self.state.fees.changes.as_ref(), &service).await.map_err(map_err)?;
+		Ok(Response::new(pb::FeePolicyChangeList {
+			changes: changes.iter().map(change_to_proto).collect(),
+		}))
 	}
 
 	async fn list_fee_assessments(&self, request: Request<pb::ListFeeAssessmentsRequest>) -> Result<Response<pb::FeeAssessmentList>, Status> {
@@ -154,7 +225,7 @@ impl FeesService for FeesSvc {
 
 	async fn settle_fee_shares(&self, request: Request<pb::SettleFeeSharesRequest>) -> Result<Response<pb::FeeSettlement>, Status> {
 		require_permission(&self.state, &request, Permission::AllocationManage).await?;
-		let settled_by = claims_of(&request).ok_or_else(|| Status::unauthenticated("missing claims"))?.sub.clone();
+		let settled_by = caller_id(&request)?.to_string();
 		let req = request.into_inner();
 		let service = ServiceId::parse(&req.service).map_err(map_err)?;
 		// Empty means "all of it" — the ordinary end-of-period call.
@@ -184,20 +255,25 @@ impl FeesService for FeesSvc {
 	}
 }
 
-fn policy_to_proto(service: &ServiceId, policy: Option<FeePolicy>) -> pb::FeePolicy {
-	match policy {
-		Some(policy) => pb::FeePolicy {
+fn policy_to_proto(service: &ServiceId, view: &PolicyView) -> pb::FeePolicy {
+	let pending = view.pending.as_ref().map(change_to_proto);
+	match &view.current {
+		Some(record) => pb::FeePolicy {
 			service: service.to_string(),
 			configured: true,
-			management_bps: policy.management_bps(),
-			performance_bps: policy.performance_bps(),
-			hurdle_bps: policy.hurdle_bps(),
-			basis: policy.basis().as_str().to_owned(),
-			crystallization: policy.crystallization().as_str().to_owned(),
-			updated_at: 0,
+			management_bps: record.policy.management_bps(),
+			performance_bps: record.policy.performance_bps(),
+			hurdle_bps: record.policy.hurdle_bps(),
+			basis: record.policy.basis().as_str().to_owned(),
+			crystallization: record.policy.crystallization().as_str().to_owned(),
+			updated_at: record.updated_at_unix,
+			version: record.version,
+			effective_from: record.effective_from_unix,
+			pending,
 		},
 		// Not an error and not a 404: "this product charges no fee" is a real answer, and
-		// the client renders it as such rather than as a missing policy.
+		// the client renders it as such rather than as a missing policy — with the change on
+		// its way, if one is, so a first policy is announced before it binds.
 		None => pb::FeePolicy {
 			service: service.to_string(),
 			configured: false,
@@ -207,7 +283,32 @@ fn policy_to_proto(service: &ServiceId, policy: Option<FeePolicy>) -> pb::FeePol
 			basis: ManagementBasis::InvestedCapital.as_str().to_owned(),
 			crystallization: CrystallizationPeriod::Annual.as_str().to_owned(),
 			updated_at: 0,
+			version: 0,
+			effective_from: 0,
+			pending,
 		},
+	}
+}
+
+fn change_to_proto(change: &FeePolicyChange) -> pb::FeePolicyChange {
+	pb::FeePolicyChange {
+		id: change.id.to_string(),
+		service: change.service.to_string(),
+		version: change.version,
+		state: change.state.as_str().to_owned(),
+		management_bps: change.policy.management_bps(),
+		performance_bps: change.policy.performance_bps(),
+		hurdle_bps: change.policy.hurdle_bps(),
+		basis: change.policy.basis().as_str().to_owned(),
+		crystallization: change.policy.crystallization().as_str().to_owned(),
+		effective_from: change.effective_from_unix,
+		requirement: change.requirement.as_str().to_owned(),
+		consilium_id: change.consilium_id.map(|id| id.to_string()).unwrap_or_default(),
+		requested_by: change.requested_by.clone(),
+		requested_at: change.requested_at_unix,
+		scheduled_at: change.scheduled_at_unix.unwrap_or_default(),
+		applied_at: change.applied_at_unix.unwrap_or_default(),
+		reason: change.reason.clone(),
 	}
 }
 

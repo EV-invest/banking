@@ -17,6 +17,7 @@ use domain::{
 	authz::Permission,
 	consilium::{ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, VoteDecision},
 	error::DomainError,
+	fees::FeePolicy,
 	money::{Network, Usdt, WalletAddress},
 	users::mask_email,
 };
@@ -27,7 +28,7 @@ use uuid::Uuid;
 use crate::{
 	AppState,
 	application::consilium as consilium_app,
-	ports::consilium::{ConsiliumView, InvitationView, VoteAudit},
+	ports::consilium::{ConsiliumView, FeePolicyDetail, InvitationView, VoteAudit},
 	services::support::{MAX_AUDIT_IP_BYTES, MAX_AUDIT_USER_AGENT_BYTES, caller_id, clamp, map_err, require_permission, unix_now},
 };
 
@@ -68,6 +69,7 @@ impl AppState {
 			custody: self.custody.as_ref(),
 			policy: self.outflow.as_ref(),
 			allocations: self.allocations.as_ref(),
+			fee_changes: self.fees.changes.as_ref(),
 			relay: &self.relay_notify,
 			configured: &self.configured_networks,
 			kyc: self.kyc_gate,
@@ -140,19 +142,19 @@ fn payout_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::RevenuePayoutTerm
 			amount: terms.amount.to_decimal_string(),
 			memo: terms.memo.clone(),
 		}),
-		ConsiliumTerms::Payment(_) => None,
+		ConsiliumTerms::Payment(_) | ConsiliumTerms::FeePolicy(_) => None,
 	}
 }
 
-/// The payment terms as the wire carries them — the other half of "exactly one of the two
-/// terms fields is set".
+/// The payment terms as the wire carries them — one more of "exactly one of the terms
+/// fields is set".
 ///
 /// The two ends are LABELS, taken from the same [`domain::payments::PaymentTerms`] the
 /// consent mail and the payments screen describe, so the three surfaces cannot come to
 /// disagree about what an owner approved.
 fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPaymentTerms> {
 	match terms {
-		ConsiliumTerms::RevenuePayout(_) => None,
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::FeePolicy(_) => None,
 		ConsiliumTerms::Payment(subject) => Some(pb::ConsiliumPaymentTerms {
 			payment_id: subject.payment_id.to_string(),
 			tier: subject.terms.tier().as_str().to_owned(),
@@ -164,6 +166,36 @@ fn payment_terms_to_proto(terms: &ConsiliumTerms) -> Option<pb::ConsiliumPayment
 	}
 }
 
+/// The fee-policy terms as the wire carries them: the hashed subject plus the live
+/// presentation (product title, holder count) the repository reads beside it.
+fn fee_policy_terms_to_proto(terms: &ConsiliumTerms, detail: Option<&FeePolicyDetail>) -> Option<pb::ConsiliumFeePolicyTerms> {
+	match terms {
+		ConsiliumTerms::RevenuePayout(_) | ConsiliumTerms::Payment(_) => None,
+		ConsiliumTerms::FeePolicy(subject) => {
+			let from = subject.from.unwrap_or(FeePolicy::NONE);
+			Some(pb::ConsiliumFeePolicyTerms {
+				change_id: subject.change_id.to_string(),
+				service: subject.service.to_string(),
+				allocation_name: detail.map(|detail| detail.allocation_name.clone()).unwrap_or_default(),
+				from_configured: subject.from.is_some(),
+				from_management_bps: from.management_bps(),
+				from_performance_bps: from.performance_bps(),
+				from_hurdle_bps: from.hurdle_bps(),
+				from_basis: from.basis().as_str().to_owned(),
+				from_crystallization: from.crystallization().as_str().to_owned(),
+				to_management_bps: subject.to.management_bps(),
+				to_performance_bps: subject.to.performance_bps(),
+				to_hurdle_bps: subject.to.hurdle_bps(),
+				to_basis: subject.to.basis().as_str().to_owned(),
+				to_crystallization: subject.to.crystallization().as_str().to_owned(),
+				effective_from: subject.requested_effective_from,
+				holder_count: detail.map(|detail| detail.holder_count).unwrap_or_default(),
+				reason: subject.reason.clone(),
+			})
+		}
+	}
+}
+
 fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 	let c = &view.consilium;
 	pb::Consilium {
@@ -171,6 +203,7 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 		state: state_to_proto(c.state()),
 		revenue_payout: payout_terms_to_proto(c.terms()),
 		payment: payment_terms_to_proto(c.terms()),
+		fee_policy: fee_policy_terms_to_proto(c.terms(), view.fee_policy.as_ref()),
 		payload_hash: c.payload_hash_hex(),
 		initiator_user_id: c.initiator().to_string(),
 		initiator_email: view.initiator_email.clone(),
@@ -196,6 +229,7 @@ fn consilium_to_proto(view: &ConsiliumView) -> pb::Consilium {
 		decided_at: c.decided_at().unwrap_or_default(),
 		executed_withdrawal_id: c.executed_withdrawal_id().map(|id| id.to_string()).unwrap_or_default(),
 		executed_payment_id: c.executed_payment_id().map(|id| id.to_string()).unwrap_or_default(),
+		executed_fee_policy_change_id: c.executed_fee_policy_change_id().map(|id| id.to_string()).unwrap_or_default(),
 		failure_reason: c.failure_reason().unwrap_or_default().to_owned(),
 		version: c.version(),
 	}
@@ -207,6 +241,7 @@ fn invitation_to_proto(view: &InvitationView) -> pb::ConsiliumInvitation {
 		state: state_to_proto(view.state),
 		revenue_payout: payout_terms_to_proto(&view.terms),
 		payment: payment_terms_to_proto(&view.terms),
+		fee_policy: fee_policy_terms_to_proto(&view.terms, view.fee_policy.as_ref()),
 		payload_hash: view.payload_hash.clone(),
 		initiator_email: mask_email(&view.initiator_email),
 		voter_email: mask_email(&view.voter_email),
