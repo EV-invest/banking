@@ -564,6 +564,35 @@ async fn the_terms_of_a_hidden_product_are_kept_from_an_investor_who_cannot_see_
 }
 
 #[tokio::test]
+async fn a_holder_the_queue_cannot_address_still_gets_the_notice_period() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	// A position with units and no `users` row behind it — nothing the mail queue could
+	// reference, but somebody whose terms are about to change all the same.
+	sqlx::query("INSERT INTO fund_positions (user_id, service, cost_basis, units, high_water_mark) VALUES ($1, $2, '1000000000', '1000000000000000000000', '1000000000')")
+		.bind(Uuid::new_v4())
+		.bind(service.as_str())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+
+	let before = now();
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let change = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	assert_eq!(change.state, FeePolicyChangeState::Scheduled);
+	assert!(
+		change.effective_from_unix >= before + MIN_NOTICE_SECS,
+		"the floor is decided on every position with units, mailed or not"
+	);
+	assert!(notices(&h, &change).await.is_empty(), "and nobody the queue cannot address is queued");
+	assert!(!h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+}
+
+#[tokio::test]
 async fn one_change_is_on_its_way_per_product_until_it_is_cancelled() {
 	let _lock = exclusive().await;
 	let Some(h) = harness().await else { return };

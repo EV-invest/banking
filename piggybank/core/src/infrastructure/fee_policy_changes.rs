@@ -234,7 +234,13 @@ struct Holder {
 	concierge_user_id: Option<Uuid>,
 }
 
-async fn holders(conn: &mut PgConnection, service: &ServiceId) -> Result<Vec<Holder>, DomainError> {
+/// The holders a notice can be queued for. NOT the count the notice period is decided on —
+/// that is [`holder_count`], every position with units — because this roster is joined to
+/// `users`: `consilium_mail.user_id` references that table, so a position the money plane
+/// has no account row for could not be queued anyway. Such a holder still delays the
+/// change; they are simply not mailed. A holder with a row but no mirrored identity IS
+/// queued, and the worker retires that row loudly.
+async fn notice_roster(conn: &mut PgConnection, service: &ServiceId) -> Result<Vec<Holder>, DomainError> {
 	let rows = sqlx::query("SELECT p.user_id, u.concierge_user_id FROM fund_positions p JOIN users u ON u.id = p.user_id WHERE p.service = $1 AND p.units <> '0' ORDER BY p.user_id")
 		.bind(service.as_str())
 		.fetch_all(&mut *conn)
@@ -302,7 +308,7 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			// The owners would be signing a "from" that is no longer the truth.
 			return Err(stale());
 		}
-		let holders = holders(&mut tx, &change.service).await?;
+		let has_holders = holder_count(&mut tx, &change.service).await? > 0;
 		let version: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) + 1 FROM fee_policy_changes WHERE service = $1")
 			.bind(change.service.as_str())
 			.fetch_one(&mut *tx)
@@ -317,7 +323,7 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 				FeePolicyChangeState::Scheduled,
 				None,
 				Some(change.now_unix),
-				fees::earliest_effective_from(change.now_unix, change.requested_effective_from_unix, !holders.is_empty()),
+				fees::earliest_effective_from(change.now_unix, change.requested_effective_from_unix, has_holders),
 			),
 			Some(opening) => {
 				consilium::open_on(&mut tx, opening.consilium, opening.credentials, opening.approval_url_base).await?;
@@ -369,7 +375,8 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			.await?
 			.ok_or_else(|| DomainError::Repository("fee policy change vanished inside its own transaction".into()))?;
 		if state == FeePolicyChangeState::Scheduled {
-			enqueue_notices(&mut tx, &stored, from.as_ref(), &holders).await?;
+			let roster = notice_roster(&mut tx, &change.service).await?;
+			enqueue_notices(&mut tx, &stored, from.as_ref(), &roster).await?;
 		}
 		tx.commit().await.map_err(repo_err)?;
 		Ok(stored)
@@ -397,8 +404,8 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			}
 		}
 		let from = current_terms(&mut tx, &change.service).await?;
-		let holders = holders(&mut tx, &change.service).await?;
-		let effective_from = fees::earliest_effective_from(now_unix, subject.requested_effective_from, !holders.is_empty());
+		let has_holders = holder_count(&mut tx, &change.service).await? > 0;
+		let effective_from = fees::earliest_effective_from(now_unix, subject.requested_effective_from, has_holders);
 		sqlx::query("UPDATE fee_policy_changes SET state = 'scheduled', scheduled_at = to_timestamp($2), effective_from = to_timestamp($3) WHERE id = $1")
 			.bind(change.id.raw())
 			.bind(now_unix as f64)
@@ -409,7 +416,8 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		let stored = find_on(&mut tx, change.id)
 			.await?
 			.ok_or_else(|| DomainError::Repository("fee policy change vanished under lock".into()))?;
-		enqueue_notices(&mut tx, &stored, from.as_ref(), &holders).await?;
+		let roster = notice_roster(&mut tx, &change.service).await?;
+		enqueue_notices(&mut tx, &stored, from.as_ref(), &roster).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(stored)
 	}
