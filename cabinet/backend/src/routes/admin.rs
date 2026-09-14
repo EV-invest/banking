@@ -285,9 +285,12 @@ pub async fn treasury(State(st): State<AppState>, jar: CookieJar) -> Result<Json
 /// company put in, and the withdrawal dispatch gate (`min(TB rail, on-chain treasury)`) keeps
 /// reading zero, so that liquidity cannot be spent. This records the missing fact.
 ///
-/// Idempotent by `tx_ref` — deliberately NOT `SeedCapital`, which has no dedup key and
-/// double-credits the fund on a retried click. Pass the real on-chain reference (`txhash:logIndex`
-/// on an EVM rail) so a re-submission, and any watcher that later scans the same transfer,
+/// Chain-proven and idempotent by `tx_ref`: the amount and the credited party are read off
+/// the chain, never taken from the form. `RecordDeposit` is the general path — the chain
+/// decides whether the transfer is a user's deposit or the fund's capital; `SeedCapital` is
+/// the same verification plus the assertion "this is fund capital", refusing a user's
+/// deposit instead of crediting it. Pass the real on-chain reference (`txhash:logIndex` on
+/// an EVM rail) so a re-submission, and any watcher that later scans the same transfer,
 /// collapse onto the same key.
 pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar, headers: HeaderMap, body: Bytes) -> Result<Json<Value>, ApiError> {
 	require_admin(&st, &jar).await?;

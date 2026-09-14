@@ -628,10 +628,11 @@ impl Grpc {
 		Ok(self.balance().get_treasury(bearer(token, bk::GetTreasuryRequest {})?).await?.into_inner())
 	}
 
-	/// Record an out-of-band on-chain arrival against the ledger, idempotent by `tx_ref`.
-	/// The operator funds a rail's treasury hot wallet directly, which moves real USDT
-	/// without producing any ledger fact — this is how that fact gets written. Prefer it
-	/// over `SeedCapital`, which has no dedup key and double-credits on a retry.
+	/// Record an out-of-band on-chain arrival against the ledger, chain-proven and
+	/// idempotent by `tx_ref`. The operator funds a rail's treasury hot wallet directly,
+	/// which moves real USDT without producing any ledger fact — this is how that fact gets
+	/// written. It is the general path (the chain decides whose money it is); `SeedCapital`
+	/// is the same verification with the added assertion that it is the fund's own capital.
 	pub async fn record_deposit(&self, token: &str, req: bk::RecordDepositRequest) -> Result<bk::RecordDepositResponse, Status> {
 		Ok(self.balance().record_deposit(bearer(token, req)?).await?.into_inner())
 	}
