@@ -423,9 +423,10 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			entity: "fee policy change",
 			id: id.to_string(),
 		})?;
-		if let (Some(consilium), true) = (probe.consilium_id, probe.state == FeePolicyChangeState::AwaitingConsilium) {
-			consilium::withdraw_on(&mut tx, consilium, now_unix).await?;
-		}
+		let withdrawn = match (probe.consilium_id, probe.state) {
+			(Some(consilium), FeePolicyChangeState::AwaitingConsilium) => consilium::withdraw_on(&mut tx, consilium, now_unix).await?,
+			_ => false,
+		};
 		let change = locked(&mut tx, id).await?;
 		if &change.service != service {
 			return Err(DomainError::NotFound {
@@ -435,9 +436,12 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		}
 		match change.state {
 			FeePolicyChangeState::Cancelled => return Ok(change),
-			// `withdraw_on` above may already have closed it as `rejected` through the
-			// consilium's cascade; either way it is being withdrawn by an administrator now,
-			// and that is the state the history should say.
+			// The owners refused it (or a vote landed between the probe and the lock): their
+			// verdict and its reason stand, and there is nothing left to withdraw.
+			FeePolicyChangeState::Rejected if !withdrawn => return Ok(change),
+			// `withdraw_on` above closed it as `rejected` through the consilium's own
+			// cascade; it is being withdrawn by an administrator now, and that is the state
+			// the history should say.
 			FeePolicyChangeState::Scheduled | FeePolicyChangeState::AwaitingConsilium | FeePolicyChangeState::Rejected => {}
 			state @ (FeePolicyChangeState::Active | FeePolicyChangeState::Superseded) => {
 				return Err(DomainError::Conflict(format!("the fee-policy change is {} and can no longer be cancelled", state.as_str())));

@@ -346,6 +346,16 @@ async fn consilium_state(h: &Harness, id: ConsiliumId) -> ConsiliumState {
 	consilium_app::find(h.consilia.as_ref(), id).await.unwrap().consilium.state()
 }
 
+/// Why a change was closed, as the history records it.
+async fn closed_reason(h: &Harness, change: &FeePolicyChange) -> String {
+	sqlx::query_scalar::<_, Option<String>>("SELECT closed_reason FROM fee_policy_changes WHERE id = $1")
+		.bind(change.id.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap()
+		.unwrap_or_default()
+}
+
 /// The queued notices for one change, as `(recipient, payload)`.
 async fn notices(h: &Harness, change: &FeePolicyChange) -> Vec<(Uuid, serde_json::Value)> {
 	let rows: Vec<(Uuid, String, String)> =
@@ -722,6 +732,11 @@ async fn a_refused_or_withdrawn_quorum_closes_the_change() {
 	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Rejected);
 	assert_eq!(h.policies.find(&service).await.unwrap(), None, "a refused change never reaches the live terms");
 	assert!(h.changes.pending(&service).await.unwrap().is_none(), "the slot is free for the next proposal");
+	// An administrator's cancel after the verdict has nothing to withdraw: the owners'
+	// refusal, and the reason it was recorded with, stand.
+	let after = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, roster[2], now()).await.unwrap();
+	assert_eq!(after.state, FeePolicyChangeState::Rejected);
+	assert_eq!(closed_reason(&h, &change).await, "the owners' consilium ended rejected");
 
 	// Withdrawn by another owner: the change is cancelled and its consilium goes with it.
 	let change = schedule(&h, roster[0], &service, dearer(), 0, "withdrawn for the record").await.unwrap();

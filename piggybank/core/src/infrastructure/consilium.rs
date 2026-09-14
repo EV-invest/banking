@@ -161,17 +161,19 @@ impl PgConsilia {
 ///
 /// The caller has NOT yet closed the subject when this runs — this is called first, so the
 /// consilium row is the first lock taken, as everywhere else — and `close_decided_subject`
-/// then closes it exactly as an owner's withdrawal would. A no-op on a consilium that has
-/// already reached a verdict.
-pub(crate) async fn withdraw_on(conn: &mut PgConnection, id: ConsiliumId, at: i64) -> Result<(), DomainError> {
+/// then closes it exactly as an owner's withdrawal would. A no-op — `false` — on a consilium
+/// that has already reached a verdict, so the caller can tell its own cascade from the
+/// owners' decision.
+pub(crate) async fn withdraw_on(conn: &mut PgConnection, id: ConsiliumId, at: i64) -> Result<bool, DomainError> {
 	let (mut consilium, _) = locked(conn, id).await?;
 	if !consilium.state().is_open() {
-		return Ok(());
+		return Ok(false);
 	}
 	consilium.cancel(at)?;
 	persist(conn, &mut consilium).await?;
 	close_decided_subject(conn, &consilium, at).await?;
-	announce(conn, &consilium, "withdrawn together with the request it decided").await
+	announce(conn, &consilium, "withdrawn together with the request it decided").await?;
+	Ok(true)
 }
 
 /// The stored JSONB shape of the terms. Amounts are exact base-unit strings, as everywhere
