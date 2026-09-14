@@ -25,7 +25,7 @@ use domain::{
 	balance::ServiceId,
 	error::DomainError,
 	money::Shares,
-	users::UserId,
+	users::{ConciergeUserId, UserId},
 };
 use sqlx::{PgConnection, PgPool};
 use tracing::warn;
@@ -65,12 +65,24 @@ const SELECT_CATALOG_FOR_CALLER: &str = "SELECT a.id, a.service, a.title, a.summ
 	 LEFT JOIN allocation_access_grants g ON g.service = a.service AND g.user_id = $1 \
 	 WHERE $2 OR (a.state = 'open' AND (a.access <> 'hidden' OR g.level IS NOT NULL)) \
 	 ORDER BY a.service";
-const SELECT_GRANTS: &str = "SELECT service, user_id, level, granted_by, \
-	 EXTRACT(EPOCH FROM granted_at)::bigint AS granted_at \
-	 FROM allocation_access_grants WHERE service = $1 ORDER BY user_id";
-const SELECT_GRANT: &str = "SELECT service, user_id, level, granted_by, \
-	 EXTRACT(EPOCH FROM granted_at)::bigint AS granted_at \
-	 FROM allocation_access_grants WHERE service = $1 AND user_id = $2";
+/// Both user columns are joined back to `users` for their concierge mirror in the same
+/// read: the console names people by that id, and a lookup per row would be an N+1
+/// against the very table this one already references. `LEFT` because the mirror is
+/// nullable — the bridge fills it, and a row provisioned before it ran has none.
+const SELECT_GRANTS: &str = "SELECT g.service, g.user_id, g.level, g.granted_by, \
+	 u.concierge_user_id, b.concierge_user_id AS granted_by_concierge_id, \
+	 EXTRACT(EPOCH FROM g.granted_at)::bigint AS granted_at \
+	 FROM allocation_access_grants g \
+	 LEFT JOIN users u ON u.id = g.user_id \
+	 LEFT JOIN users b ON b.id = g.granted_by \
+	 WHERE g.service = $1 ORDER BY g.user_id";
+const SELECT_GRANT: &str = "SELECT g.service, g.user_id, g.level, g.granted_by, \
+	 u.concierge_user_id, b.concierge_user_id AS granted_by_concierge_id, \
+	 EXTRACT(EPOCH FROM g.granted_at)::bigint AS granted_at \
+	 FROM allocation_access_grants g \
+	 LEFT JOIN users u ON u.id = g.user_id \
+	 LEFT JOIN users b ON b.id = g.granted_by \
+	 WHERE g.service = $1 AND g.user_id = $2";
 /// The `WHERE` on the conflict arm makes a repeat grant at the same level touch no row,
 /// which is how the caller knows there is no fact to log. `granted_at` moves on a real
 /// change so the operator's list dates the level that stands, not the first contact.
@@ -138,8 +150,10 @@ struct AllocationForCallerRow {
 struct GrantRow {
 	service: String,
 	user_id: Uuid,
+	concierge_user_id: Option<Uuid>,
 	level: String,
 	granted_by: Uuid,
+	granted_by_concierge_id: Option<Uuid>,
 	granted_at: i64,
 }
 
@@ -197,8 +211,10 @@ impl GrantRow {
 		Ok(AllocationAccessGrant {
 			service: ServiceId::parse(&self.service)?,
 			user_id: UserId::from_raw(self.user_id),
+			concierge_user_id: self.concierge_user_id.map(ConciergeUserId::from_raw),
 			level: AllocationAccess::parse(&self.level)?,
 			granted_by: UserId::from_raw(self.granted_by),
+			granted_by_concierge_id: self.granted_by_concierge_id.map(ConciergeUserId::from_raw),
 			granted_at: self.granted_at,
 		})
 	}

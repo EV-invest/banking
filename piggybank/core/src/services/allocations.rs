@@ -28,7 +28,7 @@ use domain::{
 	balance::ServiceId,
 	issuance::{IdempotencyKey, UnitHolder},
 	money::{Shares, Usdt},
-	users::UserId,
+	users::{ConciergeUserId, UserId},
 };
 use evbanking_contracts::{
 	allocation::{IssueUnitsHolder, access as wire_access, state as wire_state},
@@ -331,14 +331,24 @@ fn record_to_proto(record: &AllocationRecord) -> pb::Allocation {
 	}
 }
 
+/// The ids cross the wire as the CONSOLE knows them — the concierge mirror when the
+/// bridge has written one, the hub's own id otherwise. That is the exact order
+/// [`resolve_target_user`] accepts on the way in, so a revoke that echoes a listed id
+/// lands on the same row, and the console can look the person up in its directory
+/// instead of showing a uuid no other screen recognises. The storage id stays what the
+/// grants table holds; only the presentation changes.
 fn grant_to_proto(grant: &AllocationAccessGrant) -> pb::AllocationAccessGrant {
 	pb::AllocationAccessGrant {
 		service: grant.service.to_string(),
-		user_id: grant.user_id.to_string(),
+		user_id: console_user_id(grant.concierge_user_id, grant.user_id),
 		level: grant.level.as_str().to_owned(),
-		granted_by: grant.granted_by.to_string(),
+		granted_by: console_user_id(grant.granted_by_concierge_id, grant.granted_by),
 		granted_at: grant.granted_at,
 	}
+}
+
+fn console_user_id(concierge: Option<ConciergeUserId>, banking: UserId) -> String {
+	concierge.map_or_else(|| banking.to_string(), |id| id.to_string())
 }
 
 /// An access level a request named, parsed strictly. Unlike the icon there is no
@@ -503,6 +513,38 @@ mod tests {
 		assert_eq!(parse_icon_update(Some(wire_icon::VENTURE)).unwrap(), Some(AllocationIcon::Venture));
 		// Strictness is unchanged for a value the caller did send.
 		assert_eq!(parse_icon_update(Some("rocket")).unwrap_err().code(), tonic::Code::InvalidArgument);
+	}
+
+	#[test]
+	fn a_grant_crosses_the_wire_under_the_id_the_console_carries() {
+		// The console's user picker and `/users/detail` speak concierge ids; a listed grant
+		// that answered with the hub's id was one the console could not name (banking#252).
+		// The fallback must stay the hub id, because that is what `resolve_target_user`
+		// tries second — so a revoke echoing either listed id still finds the row.
+		let (investor, operator) = (UserId::new(), UserId::new());
+		let (investor_cc, operator_cc) = (ConciergeUserId::new(), ConciergeUserId::new());
+		let mirrored = AllocationAccessGrant {
+			service: ServiceId::parse("quy-nhon").unwrap(),
+			user_id: investor,
+			concierge_user_id: Some(investor_cc),
+			level: AllocationAccess::Invest,
+			granted_by: operator,
+			granted_by_concierge_id: Some(operator_cc),
+			granted_at: 1_750_000_400,
+		};
+		let wire = grant_to_proto(&mirrored);
+		assert_eq!(wire.user_id, investor_cc.to_string(), "a mirrored investor is named by the concierge id");
+		assert_eq!(wire.granted_by, operator_cc.to_string(), "and so is the operator who let them in");
+		assert_eq!((wire.service.as_str(), wire.level.as_str(), wire.granted_at), ("quy-nhon", wire_access::INVEST, 1_750_000_400));
+
+		let unmirrored = AllocationAccessGrant {
+			concierge_user_id: None,
+			granted_by_concierge_id: None,
+			..mirrored
+		};
+		let wire = grant_to_proto(&unmirrored);
+		assert_eq!(wire.user_id, investor.to_string(), "without a mirror the hub id is the only name there is");
+		assert_eq!(wire.granted_by, operator.to_string());
 	}
 
 	#[test]
