@@ -1119,3 +1119,142 @@ async fn a_change_edited_underneath_its_quorum_cannot_spend_the_owners_signature
 	assert!(notices(&h, &change).await.is_empty());
 	assert_eq!(h.policies.find(&service).await.unwrap(), None);
 }
+
+/// The constraint a refused write names, or a panic naming what was accepted instead.
+fn refused_by(result: Result<sqlx::postgres::PgQueryResult, sqlx::Error>, what: &str) -> String {
+	match result {
+		Err(sqlx::Error::Database(err)) => {
+			assert_eq!(err.code().as_deref(), Some("23514"), "{what}: expected a CHECK violation, got {err}");
+			err.constraint().unwrap_or_default().to_owned()
+		}
+		Err(other) => panic!("{what}: expected a CHECK violation, got {other}"),
+		Ok(_) => panic!("{what}: the schema accepted it"),
+	}
+}
+
+#[tokio::test]
+async fn the_schema_holds_every_new_row_to_the_ceilings_and_only_closed_history_above_them() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+
+	// The live row: neither ceiling can be crossed by any write path, SQL included.
+	let live = |management: i32, performance: i32| {
+		sqlx::query(
+			"INSERT INTO fee_policies (service, management_bps, performance_bps, hurdle_bps, basis, crystallization, updated_by) VALUES ($1, $2, $3, 0, 'invested_capital', 'annual', 'itest')",
+		)
+		.bind(service.as_str())
+		.bind(management)
+		.bind(performance)
+	};
+	assert_eq!(
+		refused_by(live(501, 2_000).execute(&h.pool).await, "management 501 on the live row"),
+		"fee_policies_management_ceiling"
+	);
+	assert_eq!(
+		refused_by(live(200, 5_001).execute(&h.pool).await, "performance 5001 on the live row"),
+		"fee_policies_performance_ceiling"
+	);
+	live(500, 5_000).execute(&h.pool).await.expect("the ceilings themselves are legal terms");
+
+	// The history: a row that can still bind is held to the ceilings; a closed one is not.
+	let history = |state: &'static str, management: i32, performance: i32, hurdle: i32| {
+		sqlx::query(
+			"INSERT INTO fee_policy_changes (id, service, version, management_bps, performance_bps, hurdle_bps, basis, crystallization, state, requirement, \
+			   effective_from, requested_by, scheduled_at, closed_reason) \
+			 SELECT gen_random_uuid(), $1, COALESCE(MAX(version), 0) + 1, $3, $4, $5, 'invested_capital', 'annual', $2, 'admin', now(), 'itest', \
+			   CASE WHEN $2 = 'scheduled' THEN now() END, CASE WHEN $2 = 'cancelled' THEN 'itest' END \
+			 FROM fee_policy_changes WHERE service = $1",
+		)
+		.bind(service.as_str())
+		.bind(state)
+		.bind(management)
+		.bind(performance)
+		.bind(hurdle)
+	};
+	assert_eq!(
+		refused_by(history("scheduled", 501, 2_000, 0).execute(&h.pool).await, "management 501 scheduled"),
+		"fee_policy_changes_management_ceiling"
+	);
+	assert_eq!(
+		refused_by(history("scheduled", 200, 5_001, 0).execute(&h.pool).await, "performance 5001 scheduled"),
+		"fee_policy_changes_performance_ceiling"
+	);
+	assert!(
+		refused_by(history("scheduled", 200, 2_000, 10_001).execute(&h.pool).await, "hurdle 10001").contains("hurdle_bps"),
+		"a hurdle above 100% is refused by the column check"
+	);
+	history("cancelled", 10_000, 10_000, 10_000)
+		.execute(&h.pool)
+		.await
+		.expect("closed history is not held to today's ceilings");
+	history("scheduled", 500, 5_000, 10_000).execute(&h.pool).await.expect("the ceilings themselves are legal terms");
+
+	// A LEGACY row above the ceiling (planted the way the migration met it) stays readable and
+	// takes exactly one kind of UPDATE — the one that closes it. Any edit that leaves it
+	// active re-evaluates the NOT VALID ceiling and is refused: the promotion path never
+	// touches an active row except to supersede it, and this pins that nothing else may.
+	let legacy_service = unique_service();
+	open_fund(&h, &legacy_service).await;
+	plant_legacy_policy(&h, &legacy_service, 10_000).await;
+	assert_eq!(h.policies.find(&legacy_service).await.unwrap().map(|p| p.management_bps()), Some(10_000));
+	let touched = sqlx::query("UPDATE fee_policy_changes SET reason = 'touched' WHERE service = $1 AND state = 'active'")
+		.bind(legacy_service.as_str())
+		.execute(&h.pool)
+		.await;
+	assert_eq!(refused_by(touched, "editing an active legacy row"), "fee_policy_changes_management_ceiling");
+	sqlx::query("UPDATE fee_policy_changes SET state = 'superseded' WHERE service = $1 AND state = 'active'")
+		.bind(legacy_service.as_str())
+		.execute(&h.pool)
+		.await
+		.expect("closing a legacy row is the one UPDATE the ceiling lets through");
+}
+
+#[tokio::test]
+async fn the_horizon_is_inclusive_at_366_days_and_refuses_the_next_second() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	// The moment is passed in explicitly, so the boundary is exact and not a race with the
+	// wall clock.
+	let at = now();
+	let request = |effective_from: i64| fee_app::PolicyChangeRequest {
+		service: service.clone(),
+		policy: FeePolicy::HOUSE,
+		requested_effective_from_unix: effective_from,
+		reason: String::new(),
+	};
+
+	let err = fee_app::schedule_policy(&policy_ports(&h), UserId::new(), request(at + MAX_EFFECTIVE_FROM_HORIZON_SECS + 1), at)
+		.await
+		.unwrap_err();
+	assert!(matches!(err, DomainError::Validation(_)), "got {err:?}");
+	assert!(err.to_string().contains("366 days"), "{err}");
+	assert!(h.changes.pending(&service).await.unwrap().is_none());
+
+	let change = fee_app::schedule_policy(&policy_ports(&h), UserId::new(), request(at + MAX_EFFECTIVE_FROM_HORIZON_SECS), at)
+		.await
+		.expect("exactly 366 days ahead is the last legal moment");
+	assert_eq!(change.effective_from_unix, at + MAX_EFFECTIVE_FROM_HORIZON_SECS);
+}
+
+#[tokio::test]
+async fn a_change_awaiting_the_owners_holds_the_products_single_pending_slot() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let roster = owners(&h, 3).await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let awaiting = schedule(&h, roster[0], &service, dearer(), 0, "holds the slot").await.unwrap();
+	assert_eq!(awaiting.state, FeePolicyChangeState::AwaitingConsilium);
+
+	// An administrator's change that needs no quorum still finds the slot taken: two changes
+	// on their way would leave the holders told of terms that never arrive.
+	let err = schedule(&h, UserId::new(), &service, FeePolicy::HOUSE, 0, "").await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "got {err:?}");
+	assert!(err.to_string().contains("already pending"), "{err}");
+	assert_eq!(h.changes.pending(&service).await.unwrap().map(|pending| pending.id), Some(awaiting.id));
+	assert_eq!(h.changes.list(&service).await.unwrap().len(), 1, "the refused request left no row");
+}
