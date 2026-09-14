@@ -1015,17 +1015,32 @@ auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
 ### Bring-up
 
 Every suite under `piggybank/core/tests` runs against a **real** Postgres and TigerBeetle
-through `tests/common/mod.rs` — no suite opens its own connection. `pool()` connects to
-`DATABASE_URL` and applies the migrations; `seeded_ledger()` connects to
-`TIGERBEETLE_ADDRESS` / `TIGERBEETLE_CLUSTER_ID` (default `127.0.0.1:3033`, cluster `0`)
-and seeds the singleton accounts; `database_url()` is for the two suites that size their
-own pool. Locally:
+through `tests/common/mod.rs` — no suite opens its own connection. `DATABASE_URL` names the
+*base* database; the harness never migrates it. On a binary's first `pool()` it takes a
+session advisory lock on the base, ensures `<base>_template` exists and carries exactly this
+build's migrations, then `DROP … IF EXISTS` / `CREATE DATABASE <base>_<binary> TEMPLATE
+<base>_template` — one database per test binary (`banking_allocation_registry`,
+`banking_relay_shutdown`, …), so the outbox relay's per-database advisory lock is never
+shared between binaries and a parallel runner (nextest, two `cargo test --test …` side by
+side) cannot race for it. `pool()` hands each test its own pool on that clone;
+`database_url()` returns the clone's URL for the two suites that size their own pool;
+`seeded_ledger()` connects to `TIGERBEETLE_ADDRESS` / `TIGERBEETLE_CLUSTER_ID` (default
+`127.0.0.1:3033`, cluster `0`) and seeds the singleton accounts. Clones are not dropped at
+exit (a test binary has no end-of-process hook); the next run of the same binary replaces
+its clone. Locally:
 
 ```bash
 nix run .#db          # the shared postgres cluster; ensures the `banking` database
 nix run .#tb          # a single-replica ledger on :3033
 DATABASE_URL=postgres://postgres@localhost:5432/banking cargo test -p piggybank-core --tests
 ```
+
+A template migrated by another build — a migration file edited on this branch
+(`VersionMismatch`) or a version this build does not know after switching branches
+(`VersionMissing`) — is recreated from scratch with a notice on stderr (`--nocapture` to
+see it), instead of failing every suite with `migration N was previously applied but has
+been modified`. The base database itself is never touched, so it can no longer go stale
+through the tests.
 
 A missing service is a **skip locally and a failure under CI**. Without `DATABASE_URL`
 (or with a replica that does not answer) a suite prints a notice and returns early — the
@@ -1037,12 +1052,11 @@ exercised (#259). `check-rust` brings up its own throwaway Postgres (`:54329`) a
 TigerBeetle (`:3039`) from the flake apps, runs the workspace against them and tears them
 down on exit; move the ports with `CHECK_POSTGRES_PORT` / `CHECK_TIGERBEETLE_PORT`.
 
-Your own database, when the shared one is busy or on another branch's schema:
-`PGDATABASES="banking_<name>" nix run .#db` creates it on the shared cluster; point
-`DATABASE_URL` at it. Never downgrade a database across branches — a database that ran
-another numbering of a migration fails every suite with `migration N was previously
-applied but has been modified`; `dropdb` and `createdb` it instead. A second ledger next
-to the default one: `TIGERBEETLE_PORT=3034 TBCLUSTER=1 nix run .#tb`, then
+Your own base database, when several checkouts share the cluster:
+`PGDATABASES="banking_<name>" nix run .#db` creates it; point `DATABASE_URL` at it and the
+template and clones follow as `banking_<name>_template`, `banking_<name>_<binary>`. The base
+name must be plain `[a-z0-9_]` — it is spliced into DDL. A second ledger next to the default
+one: `TIGERBEETLE_PORT=3034 TBCLUSTER=1 nix run .#tb`, then
 `TIGERBEETLE_ADDRESS=127.0.0.1:3034 TIGERBEETLE_CLUSTER_ID=1`.
 
 `domain` unit tests cover the money + NAV math (incl. the `mul_div` overflow bound and the
