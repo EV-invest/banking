@@ -14,6 +14,7 @@ import { feePolicyChangesResource } from "@/entities/admin/model/admin-resource"
 import { cn } from "@/shared/lib/cn";
 import { formatMoment, hasStamp } from "@/shared/lib/datetime";
 import { useResource } from "@/shared/lib/resource";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { changeStateLabel, changeStateTone, termsSummary } from "@/views/admin/fees/lib/format";
 
 export function ChangeHistory({ service }: { service: string }) {
@@ -28,6 +29,10 @@ export function ChangeHistory({ service }: { service: string }) {
         <p className="text-sm font-semibold">{t("admin.fees.history")}</p>
         {list.isLoading ? (
           <Skeleton className="h-24 w-full" />
+        ) : !list.data && list.error ? (
+          // In place of the zero state, never as it: "no changes yet" is a claim about the
+          // fund's history that a read which did not arrive has not earned.
+          <ResourceError error={list.error} onRetry={() => void list.refresh()} retrying={list.isValidating} />
         ) : rows.length === 0 ? (
           <Empty className="border">
             <EmptyHeader>

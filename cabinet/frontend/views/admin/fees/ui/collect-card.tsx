@@ -18,6 +18,7 @@ import { feeSharesResource } from "@/entities/admin/model/admin-resource";
 import { errorMessage } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { revalidateTag, useResource } from "@/shared/lib/resource";
+import { ResourceError } from "@/shared/ui/resource-error";
 import { Row } from "@/views/admin/fees/ui/fields";
 import { formatUnits, formatUsd } from "@/views/admin/lib/format";
 
@@ -29,7 +30,10 @@ export function CollectCard({ service }: { service: string }) {
   const [done, setDone] = useState<string | null>(null);
 
   const data = shares.data ?? null;
-  const nothing = !data || Number(data.units) <= 0;
+  const failed = !data && Boolean(shares.error);
+  // Decided only from figures that arrived: "nothing to settle" on a read that failed
+  // would tell the operator the fund has earned nothing when the truth is unknown.
+  const nothing = data !== null && Number(data.units) <= 0;
 
   async function settle() {
     setBusy(true);
@@ -60,6 +64,8 @@ export function CollectCard({ service }: { service: string }) {
 
         {shares.isLoading ? (
           <Skeleton className="h-16 w-full" />
+        ) : failed ? (
+          <ResourceError error={shares.error} onRetry={() => void shares.refresh()} retrying={shares.isValidating} />
         ) : (
           <dl className="space-y-2.5 text-sm">
             <Row label={t("admin.fees.unitsHeld")} value={formatUnits(data?.units)} />
@@ -76,11 +82,11 @@ export function CollectCard({ service }: { service: string }) {
             of keeping the sentence whole for translators. */}
         {done && !problem && <p className="text-xs text-main-accent-t2">{`${done} ${t("admin.fees.withdrawableFrom", { screen: t("nav.revenue") })}`}</p>}
 
-        <Button type="button" variant="outline" onClick={settle} disabled={busy || nothing}>
+        <Button type="button" variant="outline" onClick={settle} disabled={busy || data === null || nothing}>
           {busy && <Loader2 className="size-4 animate-spin" />}
           {t("admin.fees.settleAll")}
         </Button>
-        {nothing && !shares.isLoading && <p className="text-xs text-muted-foreground">{t("admin.fees.nothingToSettle")}</p>}
+        {nothing && <p className="text-xs text-muted-foreground">{t("admin.fees.nothingToSettle")}</p>}
       </CardContent>
     </Card>
   );

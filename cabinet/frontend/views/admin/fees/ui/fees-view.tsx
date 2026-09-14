@@ -23,7 +23,6 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Skeleton 
 
 import { adminAllocationsResource, feePoliciesResource } from "@/entities/admin/model/admin-resource";
 import type { FeePolicyChange } from "@/shared/contracts/admin";
-import { errorMessage } from "@/shared/lib/api-client";
 import { useResource } from "@/shared/lib/resource";
 import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
@@ -53,15 +52,21 @@ export function FeesView() {
   const pending = policy?.pending && isPendingChange(policy.pending.state) ? policy.pending : null;
 
   const loading = catalog.isLoading || policies.isLoading;
-  const error = catalog.data || !catalog.error ? null : errorMessage(catalog.error, t);
+  // A read that failed with nothing to show is reported in place of the screen, never
+  // rendered through: without the policies every fund would read "No fee" and the form
+  // would open on the house default with a "Start charging" button — a claim about
+  // pricing derived from nothing at all.
+  const catalogFailed = !catalog.data && Boolean(catalog.error);
+  const policiesFailed = !policies.data && Boolean(policies.error);
+  const failed = catalogFailed ? catalog : policiesFailed ? policies : null;
 
   return (
     <AdminScreen className="space-y-6">
       <AdminHeader eyebrow={t("nav.fees")} title={t("admin.fees.title")} subtitle={t("admin.fees.subtitle")} />
 
-      {error && <ResourceError variant="alert" message={error} />}
-
-      {loading ? (
+      {failed ? (
+        <ResourceError error={failed.error} onRetry={() => void failed.refresh()} retrying={failed.isValidating} />
+      ) : loading ? (
         <StaggerItem>
           <Skeleton className="h-64 w-full" />
         </StaggerItem>
