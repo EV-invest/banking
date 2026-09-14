@@ -755,7 +755,7 @@
         # and .tb-client all exist and match what developers run.
         runCheckRust = pkgs.writeShellApplication {
           name = "run-check-rust";
-          runtimeInputs = with pkgs; [ rust git protobuf mold ];
+          runtimeInputs = with pkgs; [ rust git protobuf mold postgresql coreutils ];
           text = ''
             cd "$(git rev-parse --show-toplevel)"
             ${linkTbClient}
@@ -767,12 +767,49 @@
             echo "▶ clippy (workspace, all targets, warnings denied)"
             cargo clippy --workspace --all-targets -- -D warnings
 
-            echo "▶ tests (workspace)"
-            # DELIBERATELY without DATABASE_URL: every suite under piggybank/*/tests
-            # skips itself when it is unset (tests/common/mod.rs), so what runs here is
-            # the unit and in-process coverage. The Postgres + TigerBeetle suites are
-            # NOT exercised by CI and still need a real pair of services — worth knowing
-            # before reading a green tick as "the money plane is covered".
+            # Until #259 this step ran deliberately WITHOUT DATABASE_URL, and every suite
+            # under piggybank/*/tests skipped itself — four releases went out on a green
+            # tick that had never touched Postgres or TigerBeetle. Now the gate brings up
+            # both from the same flake apps developers run (`.#db`, `.#tb`; the TB binary
+            # is the 0.17.6 the client is built against), in a throwaway state dir on
+            # ports away from the shared dev cluster, and sets CI=true so
+            # tests/common/mod.rs FAILS instead of skipping when a service is missing.
+            # /tmp rather than mktemp's default: macOS's $TMPDIR pushes the postgres
+            # socket path past the 103-byte sun_path limit.
+            scratch="$(mktemp -d /tmp/check-rust.XXXXXX)"
+            export XDG_STATE_HOME="$scratch/state"
+            export TB_DATA="$scratch/tb"
+            export POSTGRES_PORT="''${CHECK_POSTGRES_PORT:-54329}"
+            export TIGERBEETLE_PORT="''${CHECK_TIGERBEETLE_PORT:-3039}"
+            export PGDATABASES="banking_check"
+            tb_pid=""
+            cleanup() {
+              if [ -n "$tb_pid" ]; then kill "$tb_pid" 2>/dev/null || true; fi
+              pg_ctl -D "$XDG_STATE_HOME/ev_invest/pg/data" -m fast stop >/dev/null 2>&1 || true
+              rm -rf "$scratch"
+            }
+            trap cleanup EXIT
+
+            echo "▶ postgres :$POSTGRES_PORT + tigerbeetle :$TIGERBEETLE_PORT (throwaway)"
+            ${runPostgres}/bin/run-postgres
+            TBCLUSTER=0 ${runTigerbeetle}/bin/run-tigerbeetle >"$scratch/tb.log" 2>&1 &
+            tb_pid=$!
+            for _ in $(seq 1 150); do
+              if (exec 3<>"/dev/tcp/127.0.0.1/$TIGERBEETLE_PORT") 2>/dev/null; then break; fi
+              if ! kill -0 "$tb_pid" 2>/dev/null; then cat "$scratch/tb.log" >&2; echo "tigerbeetle exited" >&2; exit 1; fi
+              sleep 0.2
+            done
+            if ! (exec 3<>"/dev/tcp/127.0.0.1/$TIGERBEETLE_PORT") 2>/dev/null; then
+              cat "$scratch/tb.log" >&2; echo "tigerbeetle did not come up on :$TIGERBEETLE_PORT" >&2; exit 1
+            fi
+            export DATABASE_URL="postgres://postgres@127.0.0.1:$POSTGRES_PORT/banking_check"
+            # The signer suites create their own throwaway databases from this URL.
+            export SIGNER_DATABASE_URL="$DATABASE_URL"
+            export TIGERBEETLE_ADDRESS="127.0.0.1:$TIGERBEETLE_PORT"
+            export TIGERBEETLE_CLUSTER_ID=0
+            export CI=true
+
+            echo "▶ tests (workspace, integration suites against the throwaway services)"
             cargo test --workspace
 
             echo "✓ rust ok"
@@ -883,7 +920,8 @@
           text = ''
             ${portEnv}
             repo="$(git rev-parse --show-toplevel)"
-            export TB_DATA="$repo/.tb/data"
+            # Overridable so a gate can point a throwaway replica away from the dev ledger.
+            export TB_DATA="''${TB_DATA:-$repo/.tb/data}"
             port="$TIGERBEETLE_PORT"
             cluster_id="''${TBCLUSTER:-0}"
             data_file="$TB_DATA/''${cluster_id}_0.tigerbeetle"
