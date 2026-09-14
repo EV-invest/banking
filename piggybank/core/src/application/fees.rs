@@ -14,7 +14,7 @@
 //! charge the operator sets, prices, and collects, so it gets the same guard as an
 //! investor's own dealing.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use domain::{
 	balance::{LedgerAccountKey, ServiceId},
@@ -296,8 +296,35 @@ pub async fn cancel_change(
 	changes.cancel(service, id, &by.to_string(), now).await
 }
 
+/// Who is reading a product's terms. A product hidden from `caller` answers as unregistered
+/// — `NotFound`, exactly as `GetAllocation` and `GetFundNav` answer — unless `unrestricted`
+/// (an `AllocationManage` holder, decided at the boundary): the terms are part of what the
+/// product IS, and a product a caller cannot see has no terms to show them either.
+pub struct PolicyReader<'a> {
+	pub allocations: &'a dyn AllocationRegistry,
+	pub caller: UserId,
+	pub unrestricted: bool,
+}
+
+impl PolicyReader<'_> {
+	async fn require_visible(&self, service: &ServiceId) -> Result<(), DomainError> {
+		allocations_app::get_for(self.allocations, service, self.caller, self.unrestricted).await.map(|_| ())
+	}
+
+	/// The products whose terms this reader may list: every one for an unrestricted
+	/// reader, else the catalog as they see it — the same set `ListAllocations` shows them.
+	async fn visible_set(&self) -> Result<Option<HashSet<ServiceId>>, DomainError> {
+		if self.unrestricted {
+			return Ok(None);
+		}
+		let catalog = allocations_app::list_for(self.allocations, self.caller, false).await?;
+		Ok(Some(catalog.into_iter().map(|record| record.allocation.service().clone()).collect()))
+	}
+}
+
 /// A product's whole history of terms, newest version first.
-pub async fn list_changes(changes: &dyn FeePolicyChanges, service: &ServiceId) -> Result<Vec<FeePolicyChange>, DomainError> {
+pub async fn list_changes(changes: &dyn FeePolicyChanges, reader: &PolicyReader<'_>, service: &ServiceId) -> Result<Vec<FeePolicyChange>, DomainError> {
+	reader.require_visible(service).await?;
 	changes.list(service).await
 }
 
@@ -308,7 +335,8 @@ pub struct PolicyView {
 	pub pending: Option<FeePolicyChange>,
 }
 
-pub async fn policy_view(policies: &dyn FeePolicies, changes: &dyn FeePolicyChanges, service: &ServiceId) -> Result<PolicyView, DomainError> {
+pub async fn policy_view(policies: &dyn FeePolicies, changes: &dyn FeePolicyChanges, reader: &PolicyReader<'_>, service: &ServiceId) -> Result<PolicyView, DomainError> {
+	reader.require_visible(service).await?;
 	Ok(PolicyView {
 		current: policies.current(service).await?,
 		pending: changes.pending(service).await?,
@@ -320,10 +348,14 @@ pub async fn get_policy(policies: &dyn FeePolicies, service: &ServiceId) -> Resu
 	policies.find(service).await
 }
 
-/// Every configured policy, each with its pending change.
-pub async fn list_policies(policies: &dyn FeePolicies, changes: &dyn FeePolicyChanges) -> Result<Vec<(ServiceId, PolicyView)>, DomainError> {
+/// Every configured policy the reader may see, each with its pending change.
+pub async fn list_policies(policies: &dyn FeePolicies, changes: &dyn FeePolicyChanges, reader: &PolicyReader<'_>) -> Result<Vec<(ServiceId, PolicyView)>, DomainError> {
+	let visible = reader.visible_set().await?;
 	let mut views = Vec::new();
 	for (service, current) in policies.list().await? {
+		if visible.as_ref().is_some_and(|visible| !visible.contains(&service)) {
+			continue;
+		}
 		let pending = changes.pending(&service).await?;
 		views.push((service, PolicyView { current: Some(current), pending }));
 	}

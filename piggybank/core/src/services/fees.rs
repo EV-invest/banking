@@ -1,8 +1,10 @@
 //! `fees` context — a fund's management and performance fee.
 //!
 //! Reads of a fund's *terms* — and of their history — are open to any authenticated
-//! user: an investor is entitled to know what they are paying before they pay it, what
-//! they will be paying next, and how the terms came to be. Reads of a *charge* are scoped
+//! user who can see the product: an investor is entitled to know what they are paying
+//! before they pay it, what they will be paying next, and how the terms came to be; a
+//! product hidden from them is `NOT_FOUND`, exactly as `GetAllocation` answers, unless they
+//! hold [`Permission::AllocationManage`]. Reads of a *charge* are scoped
 //! to the caller's own statement. Everything that changes terms or moves value is gated on
 //! [`Permission::AllocationManage`] — the same trust seam as registering the product or
 //! posting its valuation, because a fee policy is part of what the product *is* — and a
@@ -30,7 +32,7 @@ use uuid::Uuid;
 
 use crate::{
 	AppState,
-	application::fees::{self as fee_app, FeePolicyPorts, PolicyChangeRequest, PolicyView},
+	application::fees::{self as fee_app, FeePolicyPorts, PolicyChangeRequest, PolicyReader, PolicyView},
 	ports::fees::{AssessmentRecord, FeePolicyChange},
 	services::support::{caller_id, holds_permission, map_err, require_permission, unix_now},
 };
@@ -82,19 +84,17 @@ fn parse_policy(management_bps: u32, performance_bps: u32, hurdle_bps: u32, basi
 #[tonic::async_trait]
 impl FeesService for FeesSvc {
 	async fn get_fee_policy(&self, request: Request<pb::GetFeePolicyRequest>) -> Result<Response<pb::FeePolicy>, Status> {
-		caller_id(&request)?;
-		let audience = audience_of(&self.state, &request).await?;
+		let (reader, audience) = reader_of(&self.state, &request).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
-		let view = fee_app::policy_view(self.state.fees.policies.as_ref(), self.state.fees.changes.as_ref(), &service)
+		let view = fee_app::policy_view(self.state.fees.policies.as_ref(), self.state.fees.changes.as_ref(), &reader, &service)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(policy_to_proto(&service, &view, audience)))
 	}
 
 	async fn list_fee_policies(&self, request: Request<pb::ListFeePoliciesRequest>) -> Result<Response<pb::FeePolicyList>, Status> {
-		caller_id(&request)?;
-		let audience = audience_of(&self.state, &request).await?;
-		let policies = fee_app::list_policies(self.state.fees.policies.as_ref(), self.state.fees.changes.as_ref())
+		let (reader, audience) = reader_of(&self.state, &request).await?;
+		let policies = fee_app::list_policies(self.state.fees.policies.as_ref(), self.state.fees.changes.as_ref(), &reader)
 			.await
 			.map_err(map_err)?;
 		Ok(Response::new(pb::FeePolicyList {
@@ -150,10 +150,9 @@ impl FeesService for FeesSvc {
 	}
 
 	async fn list_fee_policy_changes(&self, request: Request<pb::ListFeePolicyChangesRequest>) -> Result<Response<pb::FeePolicyChangeList>, Status> {
-		caller_id(&request)?;
-		let audience = audience_of(&self.state, &request).await?;
+		let (reader, audience) = reader_of(&self.state, &request).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
-		let changes = fee_app::list_changes(self.state.fees.changes.as_ref(), &service).await.map_err(map_err)?;
+		let changes = fee_app::list_changes(self.state.fees.changes.as_ref(), &reader, &service).await.map_err(map_err)?;
 		Ok(Response::new(pb::FeePolicyChangeList {
 			changes: changes.iter().map(|change| change_to_proto(change, audience)).collect(),
 		}))
@@ -269,12 +268,18 @@ enum Audience {
 	Investor,
 }
 
-async fn audience_of<T>(state: &AppState, request: &Request<T>) -> Result<Audience, Status> {
-	Ok(if holds_permission(state, request, Permission::AllocationManage).await? {
-		Audience::Operator
-	} else {
-		Audience::Investor
-	})
+/// The caller as a reader of terms: which products they may see, and how much of a change
+/// they are shown. Both follow from the one permission — a question, not a gate, since these
+/// handlers serve everyone and merely widen for a manager.
+async fn reader_of<'a, T>(state: &'a AppState, request: &Request<T>) -> Result<(PolicyReader<'a>, Audience), Status> {
+	let caller = caller_id(request)?;
+	let unrestricted = holds_permission(state, request, Permission::AllocationManage).await?;
+	let reader = PolicyReader {
+		allocations: state.allocations.as_ref(),
+		caller,
+		unrestricted,
+	};
+	Ok((reader, if unrestricted { Audience::Operator } else { Audience::Investor }))
 }
 
 fn policy_to_proto(service: &ServiceId, view: &PolicyView, audience: Audience) -> pb::FeePolicy {

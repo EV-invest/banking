@@ -88,8 +88,11 @@ has no such lock. It does not need one now.
 ## What the investor sees
 
 The proto marks `GetFeePolicy` readable by any authenticated user: an investor is entitled
-to know what they are paying before they subscribe, not after the first charge. The cabinet
-surfaces it in three places.
+to know what they are paying before they subscribe, not after the first charge. Any user
+who can see the product, that is — the terms, their history and the catalog of policies
+follow the product's visibility exactly as `GetAllocation` and `GetFundNav` do: a product
+hidden from the caller is `NOT_FOUND` (and absent from `ListFeePolicies`), unless they hold
+`AllocationManage`. The cabinet surfaces it in three places.
 
 - **The product page** shows the terms in a `Fees` card beside the unit supply, for holders
   and non-holders alike, and adds the caller's own accrued figures (management, performance
@@ -234,6 +237,28 @@ under whichever terms are in force then.
 
 A failure on one product warns and moves on; the change stays `scheduled` and is retried on
 the next tick.
+
+Promotion also waits for the notices — when the terms get dearer. A holder's notice that
+has not been DELIVERED — still deferred behind a relay outage, refused until its attempts
+ran out, or deferred past the ceiling (`docs/CONSILIUM.md`) — is a holder who was never
+told, and terms that tighten on them (`FeePolicy::tightens_from` against the live row; no
+row is measured as `FeePolicy::NONE`) do not bind over them: `promote` refuses with a
+conflict naming how many are undelivered and how many of those the mailer has given up on,
+the change stays `scheduled`, and after ten consecutive refusals the sweeper's warning
+becomes an error. Delivery is the test, not attempts: a relay down since the change was
+scheduled charges no attempt at all, and the deferral ceiling equals the notice period, so
+counting only abandoned rows would let a change bind the very minute nobody could have
+been told. Only the holders of the moment count — a recipient who has since redeemed every
+unit holds nothing back.
+
+A loosening binds regardless, with a `warn!` naming the undelivered count: nobody is worse
+off, and a holder the identity plane cannot reach (an unverified mailbox, no mirrored id —
+their notice is retired within minutes of every scheduling) would otherwise pin a product's
+terms forever, the lowering of a legacy rate above today's ceiling included. A tightening
+over such a holder has no way through yet: the relay coming back promotes it by itself on
+the next tick, a notice given up on needs the operator to cancel and schedule again once
+the holder can be reached, and for a holder who stays unreachable an explicit
+acknowledgement RPC is the missing piece (see the follow-up issue).
 
 ## Still open
 

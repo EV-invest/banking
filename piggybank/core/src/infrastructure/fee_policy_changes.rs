@@ -13,6 +13,8 @@
 //!   rate as of `effective_from` (`carry_accrual` reads `fee_policies` on this same
 //!   connection, which is why it runs strictly BEFORE the upsert), then writes the new
 //!   terms. `docs/FEES.md` § "The elapsed clock": nobody re-prices time that has passed.
+//!   It refuses while a holder's notice has been given up on: the notice period is only
+//!   notice if the notices arrived.
 //!
 //! Runtime queries throughout (`sqlx::query*`), so `cargo build` needs no database; the
 //! integration suite in `tests/fee_policy_changes.rs` executes every one of them.
@@ -30,7 +32,7 @@ use uuid::Uuid;
 use crate::{
 	infrastructure::{
 		consilium,
-		consilium_mailer::{MailSubject, enqueue},
+		consilium_mailer::{MAX_ATTEMPTS, MailSubject, enqueue},
 		fee_accrual::carry_accrual,
 		fees::{policy_from_row, repo_err},
 	},
@@ -79,6 +81,38 @@ pub(crate) fn mail_terms(policy: &FeePolicy) -> FeePolicyTerms {
 	}
 }
 
+/// How a mail names the product whose terms are changing: the title, clipped to the relay's
+/// line bound, with the slug in brackets — or the slug alone when the registry has no title
+/// or the title would read as a link.
+///
+/// The slug always survives: a holder or an owner is told about THIS product and must be
+/// able to tell which. A title alone can be refused by the relay — 120 characters of
+/// Cyrillic overrun the 160-BYTE bound, and concierge's `no_link` refuses anything a mail
+/// client would linkify (its own needles are repeated here) — and a refused mail is charged
+/// attempt after attempt until it is retired: a notice nobody receives, an approval nobody
+/// can answer. Control characters are folded for the same reason; the relay refuses them.
+pub(crate) fn fee_mail_fund(title: Option<&str>, service: &ServiceId) -> String {
+	const LINK_NEEDLES: [&str; 3] = ["://", "www.", "http"];
+	let slug = service.to_string();
+	let title: String = title
+		.unwrap_or_default()
+		.chars()
+		.map(|c| if c.is_control() { ' ' } else { c })
+		.collect::<String>()
+		.trim()
+		.to_owned();
+	if title.is_empty() {
+		return slug;
+	}
+	let lower = title.to_ascii_lowercase();
+	if LINK_NEEDLES.iter().any(|needle| lower.contains(needle)) {
+		return slug;
+	}
+	let tail = format!(" ({slug})");
+	let title = consilium::clip_utf8(&title, consilium::MAIL_LINE_BYTES.saturating_sub(tail.len()));
+	format!("{title}{tail}")
+}
+
 /// Take the ONE lock every transaction over a product's terms opens with: its row in
 /// `allocations`, `FOR UPDATE`. Scheduling, carrying and promoting a change all read the
 /// live terms and write something derived from them (the requirement, the notice's "from",
@@ -117,6 +151,34 @@ pub(crate) async fn holder_count(conn: &mut PgConnection, service: &ServiceId) -
 		.await
 		.map_err(repo_err)?;
 	Ok(u32::try_from(count).unwrap_or(u32::MAX))
+}
+
+/// The notices of one change that have not reached a holder: how many in all, and how many
+/// of those the mailer has given up on (pinned at the attempt ceiling, whether they failed
+/// their way there or were deferred past the ceiling).
+struct Undelivered {
+	total: i64,
+	given_up: i64,
+}
+
+/// Counted by DELIVERY, not by attempts: a relay that has been down since the change was
+/// scheduled charges no attempt at all (`defer`), and a deferral ceiling equal to the notice
+/// period would otherwise let a change bind the very minute nobody could have been told.
+/// Counted over the holders of RIGHT NOW: a recipient who has since redeemed every unit has
+/// no terms to be warned about, and must not hold the change for those who stayed.
+async fn undelivered_notices(conn: &mut PgConnection, change: &FeePolicyChange) -> Result<Undelivered, DomainError> {
+	let (total, given_up): (i64, i64) = sqlx::query_as(
+		"SELECT COUNT(*), COUNT(*) FILTER (WHERE m.attempts >= $3) FROM consilium_mail m \
+		 JOIN fund_positions p ON p.user_id = m.user_id AND p.service = $2 AND p.units <> '0' \
+		 WHERE m.fee_policy_change_id = $1 AND m.kind = 'fee_policy_notice' AND m.sent_at IS NULL",
+	)
+	.bind(change.id.raw())
+	.bind(change.service.as_str())
+	.bind(MAX_ATTEMPTS)
+	.fetch_one(&mut *conn)
+	.await
+	.map_err(repo_err)?;
+	Ok(Undelivered { total, given_up })
 }
 
 /// Close a change whose consilium reached a verdict other than approval, on the verdict's
@@ -200,7 +262,13 @@ struct Holder {
 	concierge_user_id: Option<Uuid>,
 }
 
-async fn holders(conn: &mut PgConnection, service: &ServiceId) -> Result<Vec<Holder>, DomainError> {
+/// The holders a notice can be queued for. NOT the count the notice period is decided on —
+/// that is [`holder_count`], every position with units — because this roster is joined to
+/// `users`: `consilium_mail.user_id` references that table, so a position the money plane
+/// has no account row for could not be queued anyway. Such a holder still delays the
+/// change; they are simply not mailed. A holder with a row but no mirrored identity IS
+/// queued, and the worker retires that row loudly.
+async fn notice_roster(conn: &mut PgConnection, service: &ServiceId) -> Result<Vec<Holder>, DomainError> {
 	let rows = sqlx::query("SELECT p.user_id, u.concierge_user_id FROM fund_positions p JOIN users u ON u.id = p.user_id WHERE p.service = $1 AND p.units <> '0' ORDER BY p.user_id")
 		.bind(service.as_str())
 		.fetch_all(&mut *conn)
@@ -224,10 +292,7 @@ async fn holders(conn: &mut PgConnection, service: &ServiceId) -> Result<Vec<Hol
 /// concierge user id") rather than this path silently skipping someone the notice period
 /// exists to protect.
 async fn enqueue_notices(conn: &mut PgConnection, change: &FeePolicyChange, from: Option<&FeePolicy>, holders: &[Holder]) -> Result<(), DomainError> {
-	let fund = allocation_title(conn, &change.service)
-		.await?
-		.filter(|title| !title.is_empty())
-		.unwrap_or_else(|| change.service.to_string());
+	let fund = fee_mail_fund(allocation_title(conn, &change.service).await?.as_deref(), &change.service);
 	let link = product_page_path(&change.service);
 	for holder in holders {
 		let mail = GovernanceMail::FeePolicyNotice(FeePolicyNotice {
@@ -271,7 +336,7 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			// The owners would be signing a "from" that is no longer the truth.
 			return Err(stale());
 		}
-		let holders = holders(&mut tx, &change.service).await?;
+		let has_holders = holder_count(&mut tx, &change.service).await? > 0;
 		let version: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) + 1 FROM fee_policy_changes WHERE service = $1")
 			.bind(change.service.as_str())
 			.fetch_one(&mut *tx)
@@ -286,7 +351,7 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 				FeePolicyChangeState::Scheduled,
 				None,
 				Some(change.now_unix),
-				fees::earliest_effective_from(change.now_unix, change.requested_effective_from_unix, !holders.is_empty()),
+				fees::earliest_effective_from(change.now_unix, change.requested_effective_from_unix, has_holders),
 			),
 			Some(opening) => {
 				consilium::open_on(&mut tx, opening.consilium, opening.credentials, opening.approval_url_base).await?;
@@ -338,7 +403,8 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			.await?
 			.ok_or_else(|| DomainError::Repository("fee policy change vanished inside its own transaction".into()))?;
 		if state == FeePolicyChangeState::Scheduled {
-			enqueue_notices(&mut tx, &stored, from.as_ref(), &holders).await?;
+			let roster = notice_roster(&mut tx, &change.service).await?;
+			enqueue_notices(&mut tx, &stored, from.as_ref(), &roster).await?;
 		}
 		tx.commit().await.map_err(repo_err)?;
 		Ok(stored)
@@ -366,8 +432,8 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			}
 		}
 		let from = current_terms(&mut tx, &change.service).await?;
-		let holders = holders(&mut tx, &change.service).await?;
-		let effective_from = fees::earliest_effective_from(now_unix, subject.requested_effective_from, !holders.is_empty());
+		let has_holders = holder_count(&mut tx, &change.service).await? > 0;
+		let effective_from = fees::earliest_effective_from(now_unix, subject.requested_effective_from, has_holders);
 		sqlx::query("UPDATE fee_policy_changes SET state = 'scheduled', scheduled_at = to_timestamp($2), effective_from = to_timestamp($3) WHERE id = $1")
 			.bind(change.id.raw())
 			.bind(now_unix as f64)
@@ -378,7 +444,8 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		let stored = find_on(&mut tx, change.id)
 			.await?
 			.ok_or_else(|| DomainError::Repository("fee policy change vanished under lock".into()))?;
-		enqueue_notices(&mut tx, &stored, from.as_ref(), &holders).await?;
+		let roster = notice_roster(&mut tx, &change.service).await?;
+		enqueue_notices(&mut tx, &stored, from.as_ref(), &roster).await?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(stored)
 	}
@@ -392,9 +459,10 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			entity: "fee policy change",
 			id: id.to_string(),
 		})?;
-		if let (Some(consilium), true) = (probe.consilium_id, probe.state == FeePolicyChangeState::AwaitingConsilium) {
-			consilium::withdraw_on(&mut tx, consilium, now_unix).await?;
-		}
+		let withdrawn = match (probe.consilium_id, probe.state) {
+			(Some(consilium), FeePolicyChangeState::AwaitingConsilium) => consilium::withdraw_on(&mut tx, consilium, now_unix).await?,
+			_ => false,
+		};
 		let change = locked(&mut tx, id).await?;
 		if &change.service != service {
 			return Err(DomainError::NotFound {
@@ -404,9 +472,12 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		}
 		match change.state {
 			FeePolicyChangeState::Cancelled => return Ok(change),
-			// `withdraw_on` above may already have closed it as `rejected` through the
-			// consilium's cascade; either way it is being withdrawn by an administrator now,
-			// and that is the state the history should say.
+			// The owners refused it (or a vote landed between the probe and the lock): their
+			// verdict and its reason stand, and there is nothing left to withdraw.
+			FeePolicyChangeState::Rejected if !withdrawn => return Ok(change),
+			// `withdraw_on` above closed it as `rejected` through the consilium's own
+			// cascade; it is being withdrawn by an administrator now, and that is the state
+			// the history should say.
 			FeePolicyChangeState::Scheduled | FeePolicyChangeState::AwaitingConsilium | FeePolicyChangeState::Rejected => {}
 			state @ (FeePolicyChangeState::Active | FeePolicyChangeState::Superseded) => {
 				return Err(DomainError::Conflict(format!("the fee-policy change is {} and can no longer be cancelled", state.as_str())));
@@ -480,6 +551,33 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		if change.state != FeePolicyChangeState::Scheduled || change.effective_from_unix > now_unix {
 			return Ok(false);
 		}
+		// A notice that has not reached its holder — still deferred behind a relay outage, or
+		// given up on — is a holder the notice period exists to warn who was never warned.
+		// Terms that get DEARER for them do not bind over them: the change stays `scheduled`,
+		// a relay coming back delivers and the next tick promotes, a notice given up on needs
+		// the operator, and the sweeper's failure streak turns the refusal into an error.
+		// Terms that only get cheaper bind regardless, on the record: a holder the identity
+		// plane cannot reach (an unverified mailbox, no mirrored id) would otherwise pin a
+		// product's terms forever — the loosening, and the lowering of a legacy rate above
+		// today's ceiling, included. No terms at all are measured as `FeePolicy::NONE`: a
+		// first positive rate tightens.
+		let undelivered = undelivered_notices(&mut tx, &change).await?;
+		if undelivered.total > 0 {
+			let current = current_terms(&mut tx, &change.service).await?;
+			if change.policy.tightens_from(current.as_ref().unwrap_or(&FeePolicy::NONE)) {
+				return Err(DomainError::Conflict(format!(
+					"{} holder notice(s) for this change are undelivered, {} of them given up on — dearer terms bind once every holder has been told",
+					undelivered.total, undelivered.given_up
+				)));
+			}
+			tracing::warn!(
+				change_id = %change.id,
+				service = %change.service,
+				undelivered = undelivered.total,
+				given_up = undelivered.given_up,
+				"fee policy: binding cheaper terms over holders whose notice was not delivered"
+			);
+		}
 
 		// Every holder's row, locked — the same lock a charge and a settle take — so no
 		// assessment can read the new terms against a clock the old terms still own.
@@ -535,5 +633,50 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			.map_err(repo_err)?;
 		tx.commit().await.map_err(repo_err)?;
 		Ok(true)
+	}
+}
+
+#[cfg(test)]
+mod mail_fund_tests {
+	use domain::balance::ServiceId;
+
+	use super::fee_mail_fund;
+	use crate::infrastructure::consilium::MAIL_LINE_BYTES;
+
+	fn service() -> ServiceId {
+		ServiceId::parse("service_arb").unwrap()
+	}
+
+	#[test]
+	fn a_short_title_is_carried_whole_with_the_slug() {
+		assert_eq!(fee_mail_fund(Some("Arb desk"), &service()), "Arb desk (service_arb)");
+		assert_eq!(fee_mail_fund(None, &service()), "service_arb");
+		assert_eq!(fee_mail_fund(Some("   "), &service()), "service_arb");
+	}
+
+	#[test]
+	fn the_longest_cyrillic_title_stays_inside_the_relay_bound_and_keeps_the_slug() {
+		// 120 chars — the longest title the registry admits — is over the bound in bytes alone.
+		let title: String = "Арбитражный портфель по стейблкоинам на пяти биржах с ежедневной переоценкой "
+			.repeat(2)
+			.chars()
+			.take(120)
+			.collect();
+		assert!(title.len() > MAIL_LINE_BYTES);
+		let fund = fee_mail_fund(Some(&title), &service());
+		assert!(fund.len() <= MAIL_LINE_BYTES, "{} bytes", fund.len());
+		assert!(fund.ends_with("… (service_arb)"), "{fund}");
+	}
+
+	#[test]
+	fn a_title_that_reads_as_a_link_is_replaced_by_the_slug() {
+		for title in ["Visit www.example.test", "https://evil.example", "HTTP evil", "ftp://x"] {
+			assert_eq!(fee_mail_fund(Some(title), &service()), "service_arb", "{title}");
+		}
+	}
+
+	#[test]
+	fn control_characters_are_folded() {
+		assert_eq!(fee_mail_fund(Some("Arb\tdesk\n"), &service()), "Arb desk (service_arb)");
 	}
 }

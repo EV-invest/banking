@@ -68,8 +68,10 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 const BATCH: i64 = 100;
 
 /// After this many failures a row stops being retried and starts being an alert. It is
-/// never deleted: the audit trail keeps what could not be delivered, and why.
-const MAX_ATTEMPTS: i32 = 10;
+/// never deleted: the audit trail keeps what could not be delivered, and why. A row at the
+/// ceiling with no `sent_at` is one that was GIVEN UP ON, whichever way it got there — a
+/// deferral past [`DEFERRAL_CEILING`] is pinned here too.
+pub(crate) const MAX_ATTEMPTS: i32 = 10;
 
 /// How long a mail keeps being DEFERRED — the relay throttling its recipient, or being
 /// unreachable — before it is finally given up on. A deferral charges no attempt (nothing
