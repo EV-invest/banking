@@ -431,6 +431,42 @@
     "en": "Fail",
     "t": "Échouer"
   },
+  "admin.feeChange.state.active": {
+    "en": "In force",
+    "t": "En vigueur"
+  },
+  "admin.feeChange.state.awaiting_consilium": {
+    "en": "Awaiting owners",
+    "t": "Attend les propriétaires"
+  },
+  "admin.feeChange.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Annulé"
+  },
+  "admin.feeChange.state.rejected": {
+    "en": "Rejected",
+    "t": "Rejeté"
+  },
+  "admin.feeChange.state.scheduled": {
+    "en": "Scheduled",
+    "t": "Planifié"
+  },
+  "admin.feeChange.state.superseded": {
+    "en": "Superseded",
+    "t": "Remplacé"
+  },
+  "admin.fees.askOwners": {
+    "en": "Ask the owners",
+    "t": "Demander aux propriétaires"
+  },
+  "admin.fees.awaitingBody": {
+    "en": "The owners have each been emailed a link. Version {version} is scheduled only once more than half of them approve, and binds 24 hours after that while anyone holds units. The live tally is in the consilium.",
+    "t": "Chaque propriétaire a reçu un lien par courriel. La version {version} n'est planifiée qu'une fois que plus de la moitié d'entre eux approuvent, et s'applique 24 heures après, tant que quelqu'un détient des parts. Le décompte en direct est dans le consilium."
+  },
+  "admin.fees.awaitingTitle": {
+    "en": "Sent to the owners — nothing has changed yet",
+    "t": "Envoyé aux propriétaires — rien n'a encore changé"
+  },
   "admin.fees.basis.investedCapital": {
     "en": "Invested capital",
     "t": "Capital investi"
@@ -442,6 +478,22 @@
   "admin.fees.basisNote": {
     "en": "Invested capital is the house default: it does not swell with a mark you posted, so what the manager earns stays independent of the input the manager supplies.",
     "t": "Le capital investi est le réglage par défaut de la maison : il n’enfle pas avec une valorisation que le gérant a lui-même publiée, si bien que sa rémunération reste indépendante de la donnée qu’il fournit."
+  },
+  "admin.fees.cancelChange": {
+    "en": "Cancel this change",
+    "t": "Annuler ce changement"
+  },
+  "admin.fees.cancelConfirm": {
+    "en": "Cancel the change",
+    "t": "Annuler le changement"
+  },
+  "admin.fees.cancelWarning": {
+    "en": "Cancelling withdraws the change. The fund keeps its current terms, and the holders who were notified will not see the new ones.",
+    "t": "L'annulation retire le changement. Le fonds conserve ses conditions actuelles, et les porteurs avertis ne verront pas les nouvelles."
+  },
+  "admin.fees.cancelWarningAwaiting": {
+    "en": "Cancelling withdraws the change and takes its consilium down with it, voiding every approval collected so far. The owners who have already answered would each have to answer again.",
+    "t": "L'annulation retire le changement et clôt son consilium, annulant toutes les approbations recueillies. Les propriétaires ayant déjà répondu devraient répondre à nouveau."
   },
   "admin.fees.chargedOn": {
     "en": "Charged on",
@@ -455,6 +507,14 @@
     "en": "Deferred",
     "t": "Reporté"
   },
+  "admin.fees.col.effective": {
+    "en": "Effective",
+    "t": "Effectif"
+  },
+  "admin.fees.col.reason": {
+    "en": "Reason",
+    "t": "Motif"
+  },
   "admin.fees.col.trigger": {
     "en": "Trigger",
     "t": "Déclencheur"
@@ -462,6 +522,10 @@
   "admin.fees.col.unitsTaken": {
     "en": "Units taken",
     "t": "Parts prises"
+  },
+  "admin.fees.col.version": {
+    "en": "Version",
+    "t": "Version"
   },
   "admin.fees.collected": {
     "en": "Collected, not yet converted",
@@ -475,13 +539,25 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Un coût, pas un détail — cristalliser plus souvent augmente sensiblement ce que paie un investisseur sur la durée de vie d’un fonds, car chaque réinitialisation fige des gains qu’une perte ultérieure ne pourra plus reprendre."
   },
+  "admin.fees.effectiveFrom": {
+    "en": "Takes effect",
+    "t": "Prend effet"
+  },
+  "admin.fees.effectiveFromHint": {
+    "en": "Leave empty for the earliest allowed. While anyone holds units, a change binds no earlier than 24 hours after it is scheduled — counted from the owners' approval when they must give it. An earlier moment is lifted to that minimum, never refused.",
+    "t": "Laissez vide pour le plus tôt possible. Tant que quelqu'un détient des parts, un changement ne s'applique pas moins de 24 heures après sa planification — comptées depuis l'accord des propriétaires lorsqu'il est requis. Un moment plus tôt est relevé à ce minimum, jamais refusé."
+  },
   "admin.fees.err.notPercent": {
     "en": "{field} must be a percentage — 2, or 2.5 for a half.",
     "t": "{field} doit être un pourcentage — 2, ou 2.5 pour un demi-point."
   },
-  "admin.fees.err.overHundred": {
-    "en": "{field} cannot be more than 100%.",
-    "t": "{field} ne peut pas dépasser 100 %."
+  "admin.fees.err.overCeiling": {
+    "en": "{field} cannot be more than {ceiling}.",
+    "t": "{field} ne peut pas dépasser {ceiling}."
+  },
+  "admin.fees.err.reasonRequired": {
+    "en": "A reason is required when the owners must approve.",
+    "t": "Un motif est obligatoire lorsque les propriétaires doivent approuver."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
@@ -507,9 +583,13 @@
     "en": "0 for none",
     "t": "0 pour aucun"
   },
-  "admin.fees.lastChanged": {
-    "en": "Last changed {when}. Investors see these on the product page.",
-    "t": "Dernière modification {when}. Les investisseurs voient ces conditions sur la page du produit."
+  "admin.fees.history": {
+    "en": "History of terms",
+    "t": "Historique des conditions"
+  },
+  "admin.fees.inForce": {
+    "en": "Version {version}, in force since {since}. Investors see these on the product page.",
+    "t": "Version {version}, en vigueur depuis {since}. Les investisseurs les voient sur la page du produit."
   },
   "admin.fees.lockedIn": {
     "en": "Performance locked in",
@@ -535,13 +615,45 @@
     "en": "A fee is a property of a product. Register an allocation first, then price it here.",
     "t": "Les frais sont une propriété du produit. Inscrivez d’abord une allocation, puis tarifez-la ici."
   },
+  "admin.fees.noHistory": {
+    "en": "No changes yet",
+    "t": "Aucun changement pour l'instant"
+  },
+  "admin.fees.noHistoryHint": {
+    "en": "Every version of this fund's terms will be listed here — what was scheduled, when it bound, and why.",
+    "t": "Chaque version des conditions de ce fonds apparaîtra ici — ce qui a été planifié, quand cela s'est appliqué, et pourquoi."
+  },
   "admin.fees.notConfigured": {
-    "en": "This fund charges nothing today. Saving these terms starts the clock on every holding in it.",
-    "t": "Ce fonds ne prélève rien aujourd’hui. Enregistrer ces conditions déclenche le compteur sur chacune de ses positions."
+    "en": "This fund charges nothing today. Scheduling terms starts the clock on every holding in it from the moment they take effect.",
+    "t": "Ce fonds ne prélève rien aujourd'hui. Planifier des conditions déclenche le compteur sur chacune de ses positions dès leur prise d'effet."
   },
   "admin.fees.nothingToSettle": {
     "en": "Nothing to settle — no fee has been charged in this fund yet.",
     "t": "Rien à régler — aucun frais n’a encore été prélevé dans ce fonds."
+  },
+  "admin.fees.pending.awaiting": {
+    "en": "Version {version} awaits the owners' approval. It binds 24 hours after they carry it, while anyone holds units.",
+    "t": "La version {version} attend l'accord des propriétaires. Elle s'applique 24 heures après leur décision, tant que quelqu'un détient des parts."
+  },
+  "admin.fees.pending.requested": {
+    "en": "Requested {when}",
+    "t": "Demandé {when}"
+  },
+  "admin.fees.pending.scheduled": {
+    "en": "Version {version} takes effect on {at}. Holders have been notified.",
+    "t": "La version {version} prend effet le {at}. Les porteurs ont été avertis."
+  },
+  "admin.fees.pendingBlocks": {
+    "en": "One change at a time: cancel the pending one to schedule another.",
+    "t": "Un changement à la fois : annulez celui en attente pour en planifier un autre."
+  },
+  "admin.fees.pendingChip": {
+    "en": "Change pending",
+    "t": "Changement en attente"
+  },
+  "admin.fees.pendingTitle": {
+    "en": "Change on its way",
+    "t": "Changement en cours"
   },
   "admin.fees.period.annual": {
     "en": "Annually",
@@ -559,9 +671,41 @@
     "en": "Every 6 months",
     "t": "Tous les 6 mois"
   },
-  "admin.fees.saved": {
-    "en": "Saved. Investors see the new terms immediately.",
-    "t": "Enregistré. Les investisseurs voient immédiatement les nouvelles conditions."
+  "admin.fees.reason": {
+    "en": "Reason",
+    "t": "Motif"
+  },
+  "admin.fees.reasonHint": {
+    "en": "Optional. Kept with this version in the history.",
+    "t": "Facultatif. Conservé avec cette version dans l'historique."
+  },
+  "admin.fees.reasonRequiredHint": {
+    "en": "The owners read this in their approval mail, and it is part of what they sign.",
+    "t": "Les propriétaires le liront dans leur courriel d'approbation ; cela fait partie de ce qu'ils signent."
+  },
+  "admin.fees.reasonRequiredLabel": {
+    "en": "Reason (required)",
+    "t": "Motif (obligatoire)"
+  },
+  "admin.fees.requirement.admin": {
+    "en": "No vote needed: one administrator may make this change. Holders are mailed the notice when it is scheduled.",
+    "t": "Aucun vote nécessaire : un administrateur peut effectuer ce changement. Les porteurs reçoivent l'avis par courriel lorsqu'il est planifié."
+  },
+  "admin.fees.requirement.consilium": {
+    "en": "Needs the owners' approval: these terms tighten the current ones beyond the house 2 and 20, or lower the hurdle. You must be an owner to open the request.",
+    "t": "Requiert l'accord des propriétaires : ces conditions durcissent les actuelles au-delà des 2 et 20 maison, ou abaissent le seuil. Seul un propriétaire peut ouvrir la demande."
+  },
+  "admin.fees.scheduleChange": {
+    "en": "Schedule the change",
+    "t": "Planifier le changement"
+  },
+  "admin.fees.scheduledBody": {
+    "en": "Version {version} takes effect on {at}. Every holder is being emailed the notice; until then the fund charges its current terms.",
+    "t": "La version {version} prend effet le {at}. Chaque porteur reçoit l'avis par courriel ; d'ici là, le fonds applique ses conditions actuelles."
+  },
+  "admin.fees.scheduledTitle": {
+    "en": "Scheduled — nothing has changed yet",
+    "t": "Planifié — rien n'a encore changé"
   },
   "admin.fees.settleAll": {
     "en": "Settle all units",
@@ -599,6 +743,14 @@
     "en": "What each fund charges its investors, and converting what it has already earned into cash.",
     "t": "Ce que chaque fonds facture à ses investisseurs, et la conversion en cash de ce qu’il a déjà gagné."
   },
+  "admin.fees.summary": {
+    "en": "{management} p.a. · {performance} of the gain · {basis} · {period}",
+    "t": "{management} par an · {performance} du gain · {basis} · {period}"
+  },
+  "admin.fees.summaryHurdle": {
+    "en": "{management} p.a. · {performance} of the gain above {hurdle} · {basis} · {period}",
+    "t": "{management} par an · {performance} du gain au-delà de {hurdle} · {basis} · {period}"
+  },
   "admin.fees.terms": {
     "en": "Terms",
     "t": "Conditions"
@@ -610,10 +762,6 @@
   "admin.fees.unitsHeld": {
     "en": "Fee units held",
     "t": "Parts de frais détenues"
-  },
-  "admin.fees.updateTerms": {
-    "en": "Update terms",
-    "t": "Mettre à jour les conditions"
   },
   "admin.fees.withdrawableFrom": {
     "en": "It is withdrawable on-chain from {screen}.",
@@ -1651,6 +1799,34 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Expédier, régler ou faire échouer les retraits — ceux des investisseurs et les versements du fonds"
   },
+  "approval.feePolicy.approve": {
+    "en": "Approve this change",
+    "t": "Approuver ce changement"
+  },
+  "approval.feePolicy.decided.approvedTitle": {
+    "en": "You approved this change",
+    "t": "Vous avez approuvé ce changement"
+  },
+  "approval.feePolicy.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the change is scheduled once enough owners have agreed, and binds 24 hours after that while anyone holds units.",
+    "t": "Votre réponse a été enregistrée. Il n'y a rien d'autre à faire ici — le changement est planifié dès qu'assez de propriétaires ont approuvé, et s'applique 24 heures après, tant que quelqu'un détient des parts."
+  },
+  "approval.feePolicy.decided.rejectedTitle": {
+    "en": "You rejected this change",
+    "t": "Vous avez rejeté ce changement"
+  },
+  "approval.feePolicy.lead": {
+    "en": "{initiator} has asked to change what a product charges its investors, as set out below. Tightening the terms beyond what the prospectus promised is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} a demandé de changer ce qu'un produit prélève à ses investisseurs, comme indiqué ci-dessous. Durcir les conditions au-delà de ce que le prospectus promettait n'est jamais la décision d'une seule personne ; les propriétaires doivent donc l'approuver."
+  },
+  "approval.feePolicy.payloadHashHint": {
+    "en": "The fingerprint is taken over the product, the terms now and proposed, the reason and the requested moment above. It is checked again before the change is scheduled, so a request cannot be edited after you have agreed to it.",
+    "t": "L'empreinte est calculée sur le produit, les conditions actuelles et proposées, le motif et le moment demandé ci-dessus. Elle est vérifiée à nouveau avant la planification du changement, de sorte qu'une demande ne peut plus être modifiée après votre accord."
+  },
+  "approval.feePolicy.title": {
+    "en": "Approve a change of fee terms",
+    "t": "Approuver un changement des conditions de frais"
+  },
   "approval.payment.approve": {
     "en": "Approve this payment",
     "t": "Approuver ce paiement"
@@ -1859,6 +2035,62 @@
     "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
     "t": "Ce fonds compte {n, plural, =0 {aucun propriétaire siégeant} one {# propriétaire siégeant} many {# propriétaires siégeants} other {# propriétaires siégeants}}. Une admission exige au moins un propriétaire autre que celui qui la propose : elle ne peut donc pas installer les fondateurs. Ceux-là sont inscrits par le service lui-même au démarrage, depuis la liste de genèse, et seulement tant que le registre est vide. Ce démarrage referme la fenêtre pour de bon, et ce formulaire devient la seule voie d'entrée."
   },
+  "consilium.feePolicy.asSoonAsAllowed": {
+    "en": "As soon as allowed — 24 hours after the owners carry it, while anyone holds units",
+    "t": "Dès que possible — 24 heures après la décision des propriétaires, tant que quelqu'un détient des parts"
+  },
+  "consilium.feePolicy.carried": {
+    "en": "Carried",
+    "t": "Adopté"
+  },
+  "consilium.feePolicy.effectiveFrom": {
+    "en": "Takes effect · {at}",
+    "t": "Prend effet · {at}"
+  },
+  "consilium.feePolicy.effectiveFromLabel": {
+    "en": "Takes effect",
+    "t": "Prend effet"
+  },
+  "consilium.feePolicy.fund": {
+    "en": "Product",
+    "t": "Produit"
+  },
+  "consilium.feePolicy.holders": {
+    "en": "{n, plural, one {# holder will be notified} other {# holders will be notified}}",
+    "t": "{n, plural, one {# porteur sera averti} many {# porteurs seront avertis} other {# porteurs seront avertis}}"
+  },
+  "consilium.feePolicy.holdersLabel": {
+    "en": "Holders to notify",
+    "t": "Porteurs à avertir"
+  },
+  "consilium.feePolicy.nothingCharged": {
+    "en": "Nothing charged",
+    "t": "Rien prélevé"
+  },
+  "consilium.feePolicy.now": {
+    "en": "Now",
+    "t": "Actuellement"
+  },
+  "consilium.feePolicy.proposed": {
+    "en": "Proposed",
+    "t": "Proposé"
+  },
+  "consilium.feePolicy.reason": {
+    "en": "Reason given",
+    "t": "Motif donné"
+  },
+  "consilium.kind.fee_policy": {
+    "en": "Fee terms",
+    "t": "Conditions de frais"
+  },
+  "consilium.kind.payment": {
+    "en": "Payment",
+    "t": "Paiement"
+  },
+  "consilium.kind.revenue_payout": {
+    "en": "Revenue payout",
+    "t": "Versement de revenus"
+  },
   "consilium.payment.from": {
     "en": "From",
     "t": "De"
@@ -1888,8 +2120,8 @@
     "t": "Aucune demande ouverte"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
-    "t": "Déplacer l'argent du fonds — un versement de revenus, ou un paiement entre deux extrémités de la plateforme. Une demande à la fois, et jamais la décision d'une seule personne."
+    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform — and changing what a product charges. One request at a time, and never one person's decision.",
+    "t": "Déplacer l'argent du fonds — un versement de revenus ou un ordre de paiement entre deux extrémités de la plateforme — et changer ce qu'un produit prélève. Une demande à la fois, et jamais la décision d'une seule personne."
   },
   "consilium.payout.title": {
     "en": "Fund payouts and payments",
@@ -2270,6 +2502,14 @@
   "invest.dustHint": {
     "en": "Too small to buy a whole unit at {nav} — increase the amount.",
     "t": "Trop faible pour acheter une part entière à {nav} — augmentez le montant."
+  },
+  "invest.feeChangeProposed": {
+    "en": "A change is proposed and awaits the owners: {terms}.",
+    "t": "Un changement est proposé et attend les propriétaires : {terms}."
+  },
+  "invest.feeChangeScheduled": {
+    "en": "Terms change on {at}: {terms}.",
+    "t": "Les conditions changent le {at} : {terms}."
   },
   "invest.feeNoteHolder": {
     "en": "Fees are taken in units, never in cash — your wallet balance is untouched, and the value shown opposite is before them. The performance fee applies only to gains above your own high-water mark, so a recovery back to it costs nothing.",

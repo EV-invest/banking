@@ -431,6 +431,42 @@
     "en": "Fail",
     "t": "Отклонить"
   },
+  "admin.feeChange.state.active": {
+    "en": "In force",
+    "t": "Действует"
+  },
+  "admin.feeChange.state.awaiting_consilium": {
+    "en": "Awaiting owners",
+    "t": "Ждёт владельцев"
+  },
+  "admin.feeChange.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Отменено"
+  },
+  "admin.feeChange.state.rejected": {
+    "en": "Rejected",
+    "t": "Отклонено"
+  },
+  "admin.feeChange.state.scheduled": {
+    "en": "Scheduled",
+    "t": "Запланировано"
+  },
+  "admin.feeChange.state.superseded": {
+    "en": "Superseded",
+    "t": "Заменено"
+  },
+  "admin.fees.askOwners": {
+    "en": "Ask the owners",
+    "t": "Запросить владельцев"
+  },
+  "admin.fees.awaitingBody": {
+    "en": "The owners have each been emailed a link. Version {version} is scheduled only once more than half of them approve, and binds 24 hours after that while anyone holds units. The live tally is in the consilium.",
+    "t": "Каждому владельцу отправлена ссылка. Версия {version} будет назначена, только когда одобрит больше половины из них, и вступит в силу через 24 часа после этого, пока у кого-то есть юниты. Текущий подсчёт — в консилиуме."
+  },
+  "admin.fees.awaitingTitle": {
+    "en": "Sent to the owners — nothing has changed yet",
+    "t": "Отправлено владельцам — пока ничего не изменилось"
+  },
   "admin.fees.basis.investedCapital": {
     "en": "Invested capital",
     "t": "Вложенный капитал"
@@ -442,6 +478,22 @@
   "admin.fees.basisNote": {
     "en": "Invested capital is the house default: it does not swell with a mark you posted, so what the manager earns stays independent of the input the manager supplies.",
     "t": "Вложенный капитал — база по умолчанию: она не растёт от оценки, которую вы же и публикуете, поэтому вознаграждение управляющего не зависит от данных, которые вводит сам управляющий."
+  },
+  "admin.fees.cancelChange": {
+    "en": "Cancel this change",
+    "t": "Отменить это изменение"
+  },
+  "admin.fees.cancelConfirm": {
+    "en": "Cancel the change",
+    "t": "Отменить изменение"
+  },
+  "admin.fees.cancelWarning": {
+    "en": "Cancelling withdraws the change. The fund keeps its current terms, and the holders who were notified will not see the new ones.",
+    "t": "Отмена отзывает изменение. Фонд сохраняет текущие условия, и уведомлённые держатели новых не увидят."
+  },
+  "admin.fees.cancelWarningAwaiting": {
+    "en": "Cancelling withdraws the change and takes its consilium down with it, voiding every approval collected so far. The owners who have already answered would each have to answer again.",
+    "t": "Отмена отзывает изменение и закрывает его консилиум, аннулируя все собранные одобрения. Владельцам, которые уже ответили, придётся отвечать заново."
   },
   "admin.fees.chargedOn": {
     "en": "Charged on",
@@ -455,6 +507,14 @@
     "en": "Deferred",
     "t": "Отложено"
   },
+  "admin.fees.col.effective": {
+    "en": "Effective",
+    "t": "В силе с"
+  },
+  "admin.fees.col.reason": {
+    "en": "Reason",
+    "t": "Причина"
+  },
   "admin.fees.col.trigger": {
     "en": "Trigger",
     "t": "Триггер"
@@ -462,6 +522,10 @@
   "admin.fees.col.unitsTaken": {
     "en": "Units taken",
     "t": "Взято паёв"
+  },
+  "admin.fees.col.version": {
+    "en": "Version",
+    "t": "Версия"
   },
   "admin.fees.collected": {
     "en": "Collected, not yet converted",
@@ -475,13 +539,25 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Это цена, а не деталь: чем чаще происходит фиксация, тем ощутимо больше платит инвестор за всё время жизни фонда, потому что каждый сброс закрепляет прибыль, которую последующий убыток уже не вернёт."
   },
+  "admin.fees.effectiveFrom": {
+    "en": "Takes effect",
+    "t": "Вступает в силу"
+  },
+  "admin.fees.effectiveFromHint": {
+    "en": "Leave empty for the earliest allowed. While anyone holds units, a change binds no earlier than 24 hours after it is scheduled — counted from the owners' approval when they must give it. An earlier moment is lifted to that minimum, never refused.",
+    "t": "Оставьте пустым для самого раннего допустимого момента. Пока у кого-то есть юниты, изменение вступает в силу не раньше чем через 24 часа после назначения — от одобрения владельцев, если оно требуется. Более ранний момент поднимается до этого минимума, а не отклоняется."
+  },
   "admin.fees.err.notPercent": {
     "en": "{field} must be a percentage — 2, or 2.5 for a half.",
     "t": "{field}: нужны проценты — 2 или 2.5 для половины."
   },
-  "admin.fees.err.overHundred": {
-    "en": "{field} cannot be more than 100%.",
-    "t": "{field}: не больше 100%."
+  "admin.fees.err.overCeiling": {
+    "en": "{field} cannot be more than {ceiling}.",
+    "t": "{field} не может быть больше {ceiling}."
+  },
+  "admin.fees.err.reasonRequired": {
+    "en": "A reason is required when the owners must approve.",
+    "t": "Когда требуется одобрение владельцев, причина обязательна."
   },
   "admin.fees.field.hurdle": {
     "en": "Hurdle",
@@ -507,9 +583,13 @@
     "en": "0 for none",
     "t": "0 — без комиссии"
   },
-  "admin.fees.lastChanged": {
-    "en": "Last changed {when}. Investors see these on the product page.",
-    "t": "Последнее изменение: {when}. Инвесторы видят эти условия на странице продукта."
+  "admin.fees.history": {
+    "en": "History of terms",
+    "t": "История условий"
+  },
+  "admin.fees.inForce": {
+    "en": "Version {version}, in force since {since}. Investors see these on the product page.",
+    "t": "Версия {version}, действует с {since}. Инвесторы видят эти условия на странице продукта."
   },
   "admin.fees.lockedIn": {
     "en": "Performance locked in",
@@ -535,13 +615,45 @@
     "en": "A fee is a property of a product. Register an allocation first, then price it here.",
     "t": "Комиссия — свойство продукта. Сначала зарегистрируйте продукт, затем задайте его условия здесь."
   },
+  "admin.fees.noHistory": {
+    "en": "No changes yet",
+    "t": "Изменений пока нет"
+  },
+  "admin.fees.noHistoryHint": {
+    "en": "Every version of this fund's terms will be listed here — what was scheduled, when it bound, and why.",
+    "t": "Здесь будет каждая версия условий этого фонда — что назначили, когда вступило в силу и почему."
+  },
   "admin.fees.notConfigured": {
-    "en": "This fund charges nothing today. Saving these terms starts the clock on every holding in it.",
-    "t": "Сегодня этот фонд ничего не взимает. Сохранение условий запускает начисление по каждой позиции в нём."
+    "en": "This fund charges nothing today. Scheduling terms starts the clock on every holding in it from the moment they take effect.",
+    "t": "Сегодня этот фонд ничего не взимает. Назначенные условия запускают начисление по каждой позиции в нём с момента вступления в силу."
   },
   "admin.fees.nothingToSettle": {
     "en": "Nothing to settle — no fee has been charged in this fund yet.",
     "t": "Исполнять нечего — в этом фонде ещё не начислено ни одной комиссии."
+  },
+  "admin.fees.pending.awaiting": {
+    "en": "Version {version} awaits the owners' approval. It binds 24 hours after they carry it, while anyone holds units.",
+    "t": "Версия {version} ждёт одобрения владельцев. Она вступит в силу через 24 часа после их решения, пока у кого-то есть юниты."
+  },
+  "admin.fees.pending.requested": {
+    "en": "Requested {when}",
+    "t": "Запрошено {when}"
+  },
+  "admin.fees.pending.scheduled": {
+    "en": "Version {version} takes effect on {at}. Holders have been notified.",
+    "t": "Версия {version} вступает в силу {at}. Держатели уведомлены."
+  },
+  "admin.fees.pendingBlocks": {
+    "en": "One change at a time: cancel the pending one to schedule another.",
+    "t": "Одно изменение за раз: отмените ожидающее, чтобы назначить другое."
+  },
+  "admin.fees.pendingChip": {
+    "en": "Change pending",
+    "t": "Ожидает изменение"
+  },
+  "admin.fees.pendingTitle": {
+    "en": "Change on its way",
+    "t": "Изменение в пути"
   },
   "admin.fees.period.annual": {
     "en": "Annually",
@@ -559,9 +671,41 @@
     "en": "Every 6 months",
     "t": "Раз в полгода"
   },
-  "admin.fees.saved": {
-    "en": "Saved. Investors see the new terms immediately.",
-    "t": "Сохранено. Инвесторы видят новые условия сразу."
+  "admin.fees.reason": {
+    "en": "Reason",
+    "t": "Причина"
+  },
+  "admin.fees.reasonHint": {
+    "en": "Optional. Kept with this version in the history.",
+    "t": "Необязательно. Сохраняется вместе с этой версией в истории."
+  },
+  "admin.fees.reasonRequiredHint": {
+    "en": "The owners read this in their approval mail, and it is part of what they sign.",
+    "t": "Владельцы прочтут это в письме на одобрение; это часть того, что они подписывают."
+  },
+  "admin.fees.reasonRequiredLabel": {
+    "en": "Reason (required)",
+    "t": "Причина (обязательно)"
+  },
+  "admin.fees.requirement.admin": {
+    "en": "No vote needed: one administrator may make this change. Holders are mailed the notice when it is scheduled.",
+    "t": "Голосование не нужно: это изменение может внести один администратор. Держателям отправят уведомление, когда оно будет назначено."
+  },
+  "admin.fees.requirement.consilium": {
+    "en": "Needs the owners' approval: these terms tighten the current ones beyond the house 2 and 20, or lower the hurdle. You must be an owner to open the request.",
+    "t": "Требуется одобрение владельцев: эти условия ужесточают текущие сверх домашних 2 и 20 либо снижают барьер. Открыть запрос может только владелец."
+  },
+  "admin.fees.scheduleChange": {
+    "en": "Schedule the change",
+    "t": "Запланировать изменение"
+  },
+  "admin.fees.scheduledBody": {
+    "en": "Version {version} takes effect on {at}. Every holder is being emailed the notice; until then the fund charges its current terms.",
+    "t": "Версия {version} вступает в силу {at}. Каждому держателю отправляется уведомление; до тех пор фонд взимает текущие условия."
+  },
+  "admin.fees.scheduledTitle": {
+    "en": "Scheduled — nothing has changed yet",
+    "t": "Запланировано — пока ничего не изменилось"
   },
   "admin.fees.settleAll": {
     "en": "Settle all units",
@@ -599,6 +743,14 @@
     "en": "What each fund charges its investors, and converting what it has already earned into cash.",
     "t": "Что каждый фонд взимает со своих инвесторов и как уже заработанное превращается в деньги."
   },
+  "admin.fees.summary": {
+    "en": "{management} p.a. · {performance} of the gain · {basis} · {period}",
+    "t": "{management} в год · {performance} от прироста · {basis} · {period}"
+  },
+  "admin.fees.summaryHurdle": {
+    "en": "{management} p.a. · {performance} of the gain above {hurdle} · {basis} · {period}",
+    "t": "{management} в год · {performance} от прироста сверх {hurdle} · {basis} · {period}"
+  },
   "admin.fees.terms": {
     "en": "Terms",
     "t": "Условия"
@@ -610,10 +762,6 @@
   "admin.fees.unitsHeld": {
     "en": "Fee units held",
     "t": "Удержано паёв в счёт комиссий"
-  },
-  "admin.fees.updateTerms": {
-    "en": "Update terms",
-    "t": "Обновить условия"
   },
   "admin.fees.withdrawableFrom": {
     "en": "It is withdrawable on-chain from {screen}.",
@@ -1759,6 +1907,34 @@
     "en": "The deadline has passed",
     "t": "Срок истёк"
   },
+  "approval.feePolicy.approve": {
+    "en": "Approve this change",
+    "t": "Одобрить это изменение"
+  },
+  "approval.feePolicy.decided.approvedTitle": {
+    "en": "You approved this change",
+    "t": "Вы одобрили это изменение"
+  },
+  "approval.feePolicy.decided.freshBody": {
+    "en": "Your answer has been recorded. There is nothing further to do here — the change is scheduled once enough owners have agreed, and binds 24 hours after that while anyone holds units.",
+    "t": "Ваш ответ записан. Здесь больше ничего делать не нужно — изменение будет назначено, когда согласится достаточно владельцев, и вступит в силу через 24 часа после этого, пока у кого-то есть юниты."
+  },
+  "approval.feePolicy.decided.rejectedTitle": {
+    "en": "You rejected this change",
+    "t": "Вы отклонили это изменение"
+  },
+  "approval.feePolicy.lead": {
+    "en": "{initiator} has asked to change what a product charges its investors, as set out below. Tightening the terms beyond what the prospectus promised is never one person's decision, so it needs the owners to agree.",
+    "t": "{initiator} просит изменить то, что продукт взимает с инвесторов, как указано ниже. Ужесточение условий сверх обещанного в проспекте никогда не бывает решением одного человека, поэтому нужно согласие владельцев."
+  },
+  "approval.feePolicy.payloadHashHint": {
+    "en": "The fingerprint is taken over the product, the terms now and proposed, the reason and the requested moment above. It is checked again before the change is scheduled, so a request cannot be edited after you have agreed to it.",
+    "t": "Отпечаток берётся по продукту, текущим и предлагаемым условиям, причине и запрошенному моменту выше. Он проверяется повторно перед назначением изменения, поэтому запрос нельзя отредактировать после вашего согласия."
+  },
+  "approval.feePolicy.title": {
+    "en": "Approve a change of fee terms",
+    "t": "Одобрить изменение условий комиссий"
+  },
   "approval.footnote": {
     "en": "This link was made for you alone. It works once, expires 72 hours after it was sent, and should not be forwarded.",
     "t": "Эта ссылка сделана лично для вас. Она срабатывает один раз, истекает через 72 часа после отправки, и её не следует пересылать."
@@ -2263,6 +2439,50 @@
     "en": "The owner list did not load",
     "t": "Список владельцев не загрузился"
   },
+  "consilium.feePolicy.asSoonAsAllowed": {
+    "en": "As soon as allowed — 24 hours after the owners carry it, while anyone holds units",
+    "t": "Как только позволят правила — через 24 часа после решения владельцев, пока у кого-то есть юниты"
+  },
+  "consilium.feePolicy.carried": {
+    "en": "Carried",
+    "t": "Принято"
+  },
+  "consilium.feePolicy.effectiveFrom": {
+    "en": "Takes effect · {at}",
+    "t": "Вступает в силу · {at}"
+  },
+  "consilium.feePolicy.effectiveFromLabel": {
+    "en": "Takes effect",
+    "t": "Вступает в силу"
+  },
+  "consilium.feePolicy.fund": {
+    "en": "Product",
+    "t": "Продукт"
+  },
+  "consilium.feePolicy.holders": {
+    "en": "{n, plural, one {# holder will be notified} other {# holders will be notified}}",
+    "t": "{n, plural, one {# держатель будет уведомлён} few {# держателя будут уведомлены} many {# держателей будут уведомлены} other {# держателя будут уведомлены}}"
+  },
+  "consilium.feePolicy.holdersLabel": {
+    "en": "Holders to notify",
+    "t": "Держателей к уведомлению"
+  },
+  "consilium.feePolicy.nothingCharged": {
+    "en": "Nothing charged",
+    "t": "Не взимается"
+  },
+  "consilium.feePolicy.now": {
+    "en": "Now",
+    "t": "Сейчас"
+  },
+  "consilium.feePolicy.proposed": {
+    "en": "Proposed",
+    "t": "Предлагается"
+  },
+  "consilium.feePolicy.reason": {
+    "en": "Reason given",
+    "t": "Указанная причина"
+  },
   "consilium.floor.body": {
     "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can no longer be cleared. Adding owners restores it.",
     "t": "Для выплаты нужно согласие больше половины владельцев, а при {n, plural, one {# владельце} few {# владельцах} many {# владельцах} other {# владельцах}} этот порог уже недостижим. Добавление владельцев вернёт эту возможность."
@@ -2278,6 +2498,18 @@
   "consilium.forbidden.title": {
     "en": "This room is for the fund's owners",
     "t": "Эта комната — для владельцев фонда"
+  },
+  "consilium.kind.fee_policy": {
+    "en": "Fee terms",
+    "t": "Условия комиссий"
+  },
+  "consilium.kind.payment": {
+    "en": "Payment",
+    "t": "Платёж"
+  },
+  "consilium.kind.revenue_payout": {
+    "en": "Revenue payout",
+    "t": "Выплата дохода"
   },
   "consilium.payment.from": {
     "en": "From",
@@ -2352,8 +2584,8 @@
     "t": "Прошлые запросы"
   },
   "consilium.payout.sub": {
-    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform. One request at a time, and never one person's decision.",
-    "t": "Движение денег фонда — выплата дохода или платёж между двумя сторонами платформы. По одному запросу за раз и никогда по решению одного человека."
+    "en": "Moving money the fund owns — a revenue payout, or a payment order between two ends of the platform — and changing what a product charges. One request at a time, and never one person's decision.",
+    "t": "Перемещение денег фонда — выплата дохода или платёжное поручение между двумя сторонами платформы — и изменение того, что взимает продукт. По одному запросу за раз, и никогда не решение одного человека."
   },
   "consilium.payout.tally": {
     "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",
@@ -3166,6 +3398,14 @@
   "invest.dustHint": {
     "en": "Too small to buy a whole unit at {nav} — increase the amount.",
     "t": "Слишком мало, чтобы купить целый пай по {nav} — увеличьте сумму."
+  },
+  "invest.feeChangeProposed": {
+    "en": "A change is proposed and awaits the owners: {terms}.",
+    "t": "Предложено изменение, оно ждёт владельцев: {terms}."
+  },
+  "invest.feeChangeScheduled": {
+    "en": "Terms change on {at}: {terms}.",
+    "t": "Условия меняются {at}: {terms}."
   },
   "invest.feeNoteHolder": {
     "en": "Fees are taken in units, never in cash — your wallet balance is untouched, and the value shown opposite is before them. The performance fee applies only to gains above your own high-water mark, so a recovery back to it costs nothing.",
