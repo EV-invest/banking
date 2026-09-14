@@ -22,6 +22,7 @@ import { accruedFeesResource, allocationsResource, feePolicyResource, fundNavRes
 import type { AccruedFees, FeePolicy, FundNav, Position } from "@/shared/contracts";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
+import { basisLabel, crystallizationLabel } from "@/shared/lib/fee-terms";
 import { pct } from "@/shared/lib/rate";
 import { useResource } from "@/shared/lib/resource";
 import { TipAnchor } from "@/shared/tips";
@@ -31,6 +32,7 @@ import { compactUnits, formatSignedUsdt, formatUnits, formatUsdt, isNegative, is
 import { blockedReasonKey, buildProducts, companyStakeBps, type Product } from "@/views/invest/lib/product";
 import { Note, ProductBadges, Stat, SupplyBar, TEAL_CTA } from "@/views/invest/ui/atoms";
 import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-panels";
+import { FeePendingNote } from "@/views/invest/ui/fee-pending-note";
 
 type Panel = "subscribe" | "redeem" | null;
 
@@ -243,8 +245,6 @@ function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: Accru
   const t = useT();
   if (!policy?.configured) return null;
   const owed = accrued?.configured ? accrued : null;
-  const basisKey = BASIS_LABEL_KEYS[policy.basis ?? ""];
-  const periodKey = PERIOD_LABEL_KEYS[policy.crystallization ?? ""];
   return (
     <Card className="h-fit">
       <CardContent className="space-y-4 py-6">
@@ -255,9 +255,13 @@ function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: Accru
           {policy.hurdle_bps ? <Row label={t("admin.fees.field.hurdle")} value={t("invest.hurdleFirst", { pct: pct(policy.hurdle_bps) })} /> : null}
           {/* An unmapped basis/period falls back to the wire identifier — a value the hub
               added that this build has no word for, shown rather than swallowed. */}
-          <Row label={t("admin.fees.chargedOn")} value={basisKey ? t(basisKey) : (policy.basis ?? "—")} />
-          <Row label={t("invest.lockedIn")} value={periodKey ? t(periodKey) : (policy.crystallization ?? "—")} />
+          <Row label={t("admin.fees.chargedOn")} value={basisLabel(policy.basis, t)} />
+          <Row label={t("invest.lockedIn")} value={crystallizationLabel(policy.crystallization, t)} />
         </dl>
+
+        {/* The terms coming are part of deciding whether to stay in, so a holder and a
+            prospect both read them here — before the notice mail, not instead of it. */}
+        <FeePendingNote pending={policy.pending} />
 
         {owed && (
           <div className="space-y-2.5 border-t border-border pt-4">
@@ -280,20 +284,6 @@ function FeeCard({ policy, accrued }: { policy: FeePolicy | null; accrued: Accru
     </Card>
   );
 }
-
-// The same two vocabularies the admin fee console writes, read here — one wire value has
-// one name across the cabinet, so both surfaces point at the same catalogue entries.
-const BASIS_LABEL_KEYS: Record<string, string> = {
-  invested_capital: "admin.fees.basis.investedCapital",
-  market_value: "admin.fees.basis.marketValue",
-};
-
-const PERIOD_LABEL_KEYS: Record<string, string> = {
-  monthly: "admin.fees.period.monthly",
-  quarterly: "admin.fees.period.quarterly",
-  semi_annual: "admin.fees.period.semiAnnual",
-  annual: "admin.fees.period.annual",
-};
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
