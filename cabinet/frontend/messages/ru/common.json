@@ -27,6 +27,78 @@
     "en": "View only",
     "t": "Только просмотр"
   },
+  "admin.alloc.book.action": {
+    "en": "Book",
+    "t": "Книга"
+  },
+  "admin.alloc.book.advanced": {
+    "en": "Advanced",
+    "t": "Дополнительно"
+  },
+  "admin.alloc.book.closedHint": {
+    "en": "Orders are refused; the book stays readable",
+    "t": "Заявки не принимаются; книга остаётся видимой"
+  },
+  "admin.alloc.book.field.lot": {
+    "en": "Lot size (units)",
+    "t": "Размер лота (юниты)"
+  },
+  "admin.alloc.book.field.open": {
+    "en": "Book open",
+    "t": "Книга открыта"
+  },
+  "admin.alloc.book.field.slippage": {
+    "en": "Market slippage (%)",
+    "t": "Проскальзывание рынка (%)"
+  },
+  "admin.alloc.book.field.takerFee": {
+    "en": "Taker fee (%)",
+    "t": "Комиссия тейкера (%)"
+  },
+  "admin.alloc.book.field.tick": {
+    "en": "Price tick (USDT)",
+    "t": "Шаг цены (USDT)"
+  },
+  "admin.alloc.book.keepHint": {
+    "en": "Leave empty to keep the current value.",
+    "t": "Оставьте пустым, чтобы сохранить текущее значение."
+  },
+  "admin.alloc.book.note": {
+    "en": "The book is the secondary market in this product's units: holders trade with each other at the book's price, not at NAV. Opening it needs no valuation.",
+    "t": "Книга — вторичный рынок юнитов продукта: держатели торгуют друг с другом по цене книги, а не по NAV. Для открытия оценка не нужна."
+  },
+  "admin.alloc.book.openHint": {
+    "en": "Holders can place and fill orders",
+    "t": "Держатели могут выставлять и исполнять заявки"
+  },
+  "admin.alloc.book.problem.decimal": {
+    "en": "Enter a decimal number",
+    "t": "Укажите десятичное число"
+  },
+  "admin.alloc.book.problem.fee": {
+    "en": "Enter a percent between 0 and 100 with up to two decimals",
+    "t": "Укажите процент от 0 до 100 не более чем с двумя знаками"
+  },
+  "admin.alloc.book.saved": {
+    "en": "Book terms saved.",
+    "t": "Условия книги сохранены."
+  },
+  "admin.alloc.book.slippageHint": {
+    "en": "How far past the best level a market order may sweep.",
+    "t": "Насколько дальше лучшего уровня может пройти рыночная заявка."
+  },
+  "admin.alloc.book.submit": {
+    "en": "Save book terms",
+    "t": "Сохранить условия книги"
+  },
+  "admin.alloc.book.takerFeeHint": {
+    "en": "Charged to the side that crosses the spread, in USDT on the order value.",
+    "t": "Берётся со стороны, пересекающей спред, в USDT от суммы заявки."
+  },
+  "admin.alloc.book.title": {
+    "en": "Order book",
+    "t": "Книга заявок"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Закрыть"
@@ -3363,6 +3435,10 @@
     "en": "Top up",
     "t": "Пополнить"
   },
+  "invest.trade": {
+    "en": "Trade",
+    "t": "Торговать"
+  },
   "invest.units": {
     "en": "Units",
     "t": "Паи"
@@ -4983,17 +5059,25 @@
     "en": "Available",
     "t": "Доступно"
   },
+  "tips.wallet.balance.in-orders.body": {
+    "en": "USDT set aside by your resting buy orders on the book. Still yours: it comes back to available when an order is cancelled, and turns into units when it fills.",
+    "t": "USDT, зарезервированные вашими заявками на покупку, стоящими в книге. Они по-прежнему ваши: вернутся в доступные при отмене заявки и превратятся в паи при исполнении."
+  },
+  "tips.wallet.balance.in-orders.title": {
+    "en": "In orders",
+    "t": "В заявках"
+  },
   "tips.wallet.balance.invested.body": {
-    "en": "Held in fund units, valued at the current NAV.",
-    "t": "Размещено в паях фондов и оценено по текущему NAV."
+    "en": "Held in fund units, valued at the current NAV — units offered for sale on the book included.",
+    "t": "Размещено в паях фондов и оценено по текущему NAV — включая паи, выставленные на продажу в книге."
   },
   "tips.wallet.balance.invested.title": {
     "en": "Invested",
     "t": "Инвестировано"
   },
   "tips.wallet.balance.model.body": {
-    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + Invested + Pending withdrawal.",
-    "t": "У вас единый баланс USDT — сети лишь способ пополнения и вывода. Эта карточка раскладывает его так: всего = доступно + инвестировано + в ожидании вывода."
+    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + In orders + Invested + Pending withdrawal.",
+    "t": "У вас единый баланс USDT — сети лишь способ пополнения и вывода. Эта карточка раскладывает его так: всего = доступно + в заявках + инвестировано + в ожидании вывода."
   },
   "tips.wallet.balance.model.title": {
     "en": "One balance, many rails",
@@ -5094,6 +5178,342 @@
   "tips.wallet.withdraw.you-receive.title": {
     "en": "You will receive",
     "t": "Вы получите"
+  },
+  "trade.book.col.price": {
+    "en": "Price",
+    "t": "Цена"
+  },
+  "trade.book.col.size": {
+    "en": "Size",
+    "t": "Объём"
+  },
+  "trade.book.col.total": {
+    "en": "Total",
+    "t": "Итого"
+  },
+  "trade.book.empty": {
+    "en": "Nothing resting",
+    "t": "Заявок нет"
+  },
+  "trade.book.emptyHint": {
+    "en": "No holder has quoted yet. The first limit order opens the book.",
+    "t": "Никто ещё не выставил котировку. Первая лимитная заявка откроет стакан."
+  },
+  "trade.book.levelOrders": {
+    "en": "{n, plural, one {# order} other {# orders}}",
+    "t": "{n, plural, one {# заявка} few {# заявки} many {# заявок} other {# заявки}}"
+  },
+  "trade.book.oneSided": {
+    "en": "One-sided",
+    "t": "Одна сторона"
+  },
+  "trade.book.spread": {
+    "en": "Spread {spread}",
+    "t": "Спред {spread}"
+  },
+  "trade.book.tape": {
+    "en": "Trades",
+    "t": "Сделки"
+  },
+  "trade.book.title": {
+    "en": "Book",
+    "t": "Стакан"
+  },
+  "trade.chart.empty": {
+    "en": "No trades yet — the chart draws from the first fill.",
+    "t": "Сделок ещё нет — график начнётся с первого исполнения."
+  },
+  "trade.chart.resolution": {
+    "en": "Candle size",
+    "t": "Размер свечи"
+  },
+  "trade.chart.title": {
+    "en": "Chart",
+    "t": "График"
+  },
+  "trade.form.available": {
+    "en": "Available",
+    "t": "Доступно"
+  },
+  "trade.form.buy": {
+    "en": "Buy",
+    "t": "Купить"
+  },
+  "trade.form.closed": {
+    "en": "The book is closed. Orders are refused until an operator opens it.",
+    "t": "Книга закрыта. Заявки не принимаются, пока оператор её не откроет."
+  },
+  "trade.form.duplicateTitle": {
+    "en": "Already submitted",
+    "t": "Уже отправлена"
+  },
+  "trade.form.failedTitle": {
+    "en": "Order failed",
+    "t": "Заявка не прошла"
+  },
+  "trade.form.fee": {
+    "en": "Taker fee",
+    "t": "Комиссия тейкера"
+  },
+  "trade.form.inOrders": {
+    "en": "In orders",
+    "t": "В заявках"
+  },
+  "trade.form.kind": {
+    "en": "Order type",
+    "t": "Тип заявки"
+  },
+  "trade.form.limit": {
+    "en": "Limit",
+    "t": "Лимит"
+  },
+  "trade.form.locked": {
+    "en": "Trading isn't open to you on this product. Ask an operator if you should have access.",
+    "t": "Торговля этим продуктом вам не открыта. Обратитесь к оператору, если доступ должен быть."
+  },
+  "trade.form.market": {
+    "en": "Market",
+    "t": "Рынок"
+  },
+  "trade.form.notional": {
+    "en": "Order value",
+    "t": "Сумма заявки"
+  },
+  "trade.form.notionalEstimate": {
+    "en": "Est. value",
+    "t": "Оценка суммы"
+  },
+  "trade.form.placed.cancelled": {
+    "en": "Nothing crossed, so the order was cancelled.",
+    "t": "Ничего не пересеклось, заявка отменена."
+  },
+  "trade.form.placed.filled": {
+    "en": "Filled {filled} at an average of {avg} USDT.",
+    "t": "Исполнено {filled} по средней {avg} USDT."
+  },
+  "trade.form.placed.partial": {
+    "en": "Filled {filled} of {size} at {avg} USDT; the rest was cancelled.",
+    "t": "Исполнено {filled} из {size} по {avg} USDT; остаток отменён."
+  },
+  "trade.form.placed.rejected": {
+    "en": "The ledger refused the order: {reason}",
+    "t": "Леджер отклонил заявку: {reason}"
+  },
+  "trade.form.placed.resting": {
+    "en": "Resting on the book: {filled} of {size} filled so far.",
+    "t": "Стоит в стакане: исполнено {filled} из {size}."
+  },
+  "trade.form.price": {
+    "en": "Price (USDT)",
+    "t": "Цена (USDT)"
+  },
+  "trade.form.problem.funds": {
+    "en": "More than you have available",
+    "t": "Больше, чем у вас доступно"
+  },
+  "trade.form.problem.lot": {
+    "en": "Size must be a multiple of {lot}",
+    "t": "Объём должен быть кратен {lot}"
+  },
+  "trade.form.problem.noQuote": {
+    "en": "Nothing on the other side to trade against — place a limit order instead.",
+    "t": "На другой стороне нет заявок — выставьте лимитную."
+  },
+  "trade.form.problem.price": {
+    "en": "Enter a price above zero",
+    "t": "Укажите цену больше нуля"
+  },
+  "trade.form.problem.size": {
+    "en": "Enter a size above zero",
+    "t": "Укажите объём больше нуля"
+  },
+  "trade.form.problem.tick": {
+    "en": "Price must be a multiple of {tick}",
+    "t": "Цена должна быть кратна {tick}"
+  },
+  "trade.form.refusedBody": {
+    "en": "{detail} If you think you should be able to trade this product, ask an operator.",
+    "t": "{detail} Если вы считаете, что должны торговать этим продуктом, обратитесь к оператору."
+  },
+  "trade.form.refusedTitle": {
+    "en": "Order refused",
+    "t": "Заявка отклонена"
+  },
+  "trade.form.sell": {
+    "en": "Sell",
+    "t": "Продать"
+  },
+  "trade.form.size": {
+    "en": "Size (units)",
+    "t": "Объём (юниты)"
+  },
+  "trade.form.submitBuy": {
+    "en": "Place buy order",
+    "t": "Выставить покупку"
+  },
+  "trade.form.submitSell": {
+    "en": "Place sell order",
+    "t": "Выставить продажу"
+  },
+  "trade.form.tif": {
+    "en": "Time in force",
+    "t": "Срок действия"
+  },
+  "trade.form.tifLabel.alo": {
+    "en": "Post-only",
+    "t": "Только мейкер"
+  },
+  "trade.form.tifLabel.gtc": {
+    "en": "Good till cancelled",
+    "t": "До отмены"
+  },
+  "trade.form.tifLabel.ioc": {
+    "en": "Immediate or cancel",
+    "t": "Исполнить или отменить"
+  },
+  "trade.orders.col.avgFill": {
+    "en": "Avg fill",
+    "t": "Ср. цена"
+  },
+  "trade.orders.col.fee": {
+    "en": "Fee",
+    "t": "Комиссия"
+  },
+  "trade.orders.col.filled": {
+    "en": "Filled",
+    "t": "Исполнено"
+  },
+  "trade.orders.col.role": {
+    "en": "Role",
+    "t": "Роль"
+  },
+  "trade.orders.col.side": {
+    "en": "Side",
+    "t": "Сторона"
+  },
+  "trade.orders.col.state": {
+    "en": "Status",
+    "t": "Статус"
+  },
+  "trade.orders.col.time": {
+    "en": "Time",
+    "t": "Время"
+  },
+  "trade.orders.col.type": {
+    "en": "Type",
+    "t": "Тип"
+  },
+  "trade.orders.emptyFills": {
+    "en": "No fills yet",
+    "t": "Исполнений ещё нет"
+  },
+  "trade.orders.emptyHistory": {
+    "en": "No orders yet",
+    "t": "Заявок ещё не было"
+  },
+  "trade.orders.emptyOpen": {
+    "en": "No open orders",
+    "t": "Открытых заявок нет"
+  },
+  "trade.orders.fills": {
+    "en": "Fills",
+    "t": "Исполнения"
+  },
+  "trade.orders.history": {
+    "en": "Order history",
+    "t": "История заявок"
+  },
+  "trade.orders.maker": {
+    "en": "Maker",
+    "t": "Мейкер"
+  },
+  "trade.orders.open": {
+    "en": "Open orders",
+    "t": "Открытые заявки"
+  },
+  "trade.orders.taker": {
+    "en": "Taker",
+    "t": "Тейкер"
+  },
+  "trade.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Отменена"
+  },
+  "trade.state.filled": {
+    "en": "Filled",
+    "t": "Исполнена"
+  },
+  "trade.state.open": {
+    "en": "Open",
+    "t": "Открыта"
+  },
+  "trade.state.partialCancelled": {
+    "en": "Partially filled, rest cancelled",
+    "t": "Частично исполнена, остаток отменён"
+  },
+  "trade.state.unfilledCancelled": {
+    "en": "Not filled, cancelled",
+    "t": "Не исполнена, отменена"
+  },
+  "trade.state.partiallyFilled": {
+    "en": "Partially filled",
+    "t": "Частично исполнена"
+  },
+  "trade.state.rejected": {
+    "en": "Rejected",
+    "t": "Отклонена"
+  },
+  "trade.stream.live": {
+    "en": "Live",
+    "t": "В эфире"
+  },
+  "trade.stream.paused": {
+    "en": "Paused",
+    "t": "Пауза"
+  },
+  "trade.stream.polling": {
+    "en": "Polling",
+    "t": "Опрос"
+  },
+  "trade.stream.reconnecting": {
+    "en": "Reconnecting",
+    "t": "Переподключение"
+  },
+  "trade.tape.col.time": {
+    "en": "Time",
+    "t": "Время"
+  },
+  "trade.tape.empty": {
+    "en": "No trades yet",
+    "t": "Сделок ещё нет"
+  },
+  "trade.ticker.change": {
+    "en": "24h change",
+    "t": "За 24 ч"
+  },
+  "trade.ticker.last": {
+    "en": "Last",
+    "t": "Последняя"
+  },
+  "trade.ticker.mid": {
+    "en": "Mid",
+    "t": "Середина"
+  },
+  "trade.ticker.nav": {
+    "en": "NAV",
+    "t": "NAV"
+  },
+  "trade.ticker.navHint": {
+    "en": "The book price is what holders trade at; NAV is the fund's own mark.",
+    "t": "Цена книги — по ней торгуют держатели; NAV — учётная оценка фонда."
+  },
+  "trade.ticker.spread": {
+    "en": "Spread",
+    "t": "Спред"
+  },
+  "trade.ticker.volume": {
+    "en": "24h volume",
+    "t": "Объём 24 ч"
   },
   "ui.account": {
     "en": "Account",
@@ -5346,6 +5766,14 @@
   "wallet.chip.availShort": {
     "en": "AVAIL",
     "t": "ДОСТ."
+  },
+  "wallet.chip.inOrders": {
+    "en": "IN ORDERS",
+    "t": "В ЗАЯВКАХ"
+  },
+  "wallet.chip.inOrdersShort": {
+    "en": "ORDERS",
+    "t": "ЗАЯВКИ"
   },
   "wallet.chip.invest": {
     "en": "INVESTED",

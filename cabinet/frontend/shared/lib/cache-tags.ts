@@ -37,6 +37,18 @@ export const TAG = {
   /** The caller's active device sessions. */
   sessions: "sessions",
 
+  // ── the book (secondary market in an allocation's units) ──────────────────────
+  /** A product's public book: the snapshot and the trade tape. Delivered by the socket
+   *  and polled underneath it (`entities/book/model/book-socket.ts`). */
+  book: "book",
+  /** The caller's own orders — resting, history and fills. Moves on every fill, and a
+   *  fill also moves `wallet` and `positions` (the escrow settles into both), so the
+   *  socket names all three when `orders_revision` moves. */
+  orders: "book.orders",
+  /** A product's trading terms: open flag, taker fee, tick, lot, slippage. Operator-set;
+   *  changes rarely. */
+  bookPolicy: "book.policy",
+
   // ── fund governance ───────────────────────────────────────────────────────────
   // Three facts, not three endpoints, and they move together often enough that the
   // websocket names all three at once: a removal that carries changes the roster, and a

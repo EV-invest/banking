@@ -9,8 +9,11 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 // Resolved through the package's own exports map, so this tracks whatever version is
-// installed rather than a guessed path into node_modules.
-const uikitTokens = createRequire(import.meta.url).resolve("@evinvest/uikit/styles/tokens.css");
+// installed rather than a guessed path into node_modules. The LEGACY sheet, because that
+// is the one both entry points import (see globals.css): since uikit 0.10 the plain
+// `tokens.css` carries the renamed vocabulary only, and the `main-*` palette this test
+// is about lives in the legacy layer.
+const uikitTokens = createRequire(import.meta.url).resolve("@evinvest/uikit/styles/tokens-legacy.css");
 const mfeEntry = new URL("../../mfe/account-chip/mfe.css", import.meta.url);
 
 test("the brand palette follows the semantic tokens rather than copying them", () => {
@@ -26,7 +29,7 @@ test("the brand palette follows the semantic tokens rather than copying them", (
 test("the element remote is built against the shared tokens", () => {
   // The remote compiles from its own stylesheet, so it does not inherit anything the app
   // entry point sets up. Without this import it renders an untokenised palette.
-  assert.match(readFileSync(mfeEntry, "utf8"), /@evinvest\/uikit\/styles\/tokens\.css/, "mfe.css must import the shared tokens");
+  assert.match(readFileSync(mfeEntry, "utf8"), /@evinvest\/uikit\/styles\/tokens-legacy\.css/, "mfe.css must import the same token sheet as globals.css");
 });
 
 test("the remote's theme import stays unlayered", () => {

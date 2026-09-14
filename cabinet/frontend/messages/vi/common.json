@@ -27,6 +27,78 @@
     "en": "View only",
     "t": "Chỉ xem"
   },
+  "admin.alloc.book.action": {
+    "en": "Book",
+    "t": "Sổ lệnh"
+  },
+  "admin.alloc.book.advanced": {
+    "en": "Advanced",
+    "t": "Nâng cao"
+  },
+  "admin.alloc.book.closedHint": {
+    "en": "Orders are refused; the book stays readable",
+    "t": "Lệnh bị từ chối; sổ vẫn xem được"
+  },
+  "admin.alloc.book.field.lot": {
+    "en": "Lot size (units)",
+    "t": "Kích thước lô (đơn vị)"
+  },
+  "admin.alloc.book.field.open": {
+    "en": "Book open",
+    "t": "Mở sổ lệnh"
+  },
+  "admin.alloc.book.field.slippage": {
+    "en": "Market slippage (%)",
+    "t": "Trượt giá thị trường (%)"
+  },
+  "admin.alloc.book.field.takerFee": {
+    "en": "Taker fee (%)",
+    "t": "Phí taker (%)"
+  },
+  "admin.alloc.book.field.tick": {
+    "en": "Price tick (USDT)",
+    "t": "Bước giá (USDT)"
+  },
+  "admin.alloc.book.keepHint": {
+    "en": "Leave empty to keep the current value.",
+    "t": "Để trống để giữ giá trị hiện tại."
+  },
+  "admin.alloc.book.note": {
+    "en": "The book is the secondary market in this product's units: holders trade with each other at the book's price, not at NAV. Opening it needs no valuation.",
+    "t": "Sổ lệnh là thị trường thứ cấp cho đơn vị của sản phẩm này: người nắm giữ giao dịch với nhau theo giá sổ lệnh, không theo NAV. Mở sổ không cần định giá."
+  },
+  "admin.alloc.book.openHint": {
+    "en": "Holders can place and fill orders",
+    "t": "Người nắm giữ có thể đặt và khớp lệnh"
+  },
+  "admin.alloc.book.problem.decimal": {
+    "en": "Enter a decimal number",
+    "t": "Nhập số thập phân"
+  },
+  "admin.alloc.book.problem.fee": {
+    "en": "Enter a percent between 0 and 100 with up to two decimals",
+    "t": "Nhập phần trăm từ 0 đến 100, tối đa hai chữ số thập phân"
+  },
+  "admin.alloc.book.saved": {
+    "en": "Book terms saved.",
+    "t": "Đã lưu điều kiện sổ lệnh."
+  },
+  "admin.alloc.book.slippageHint": {
+    "en": "How far past the best level a market order may sweep.",
+    "t": "Lệnh thị trường được phép quét xa mức tốt nhất bao nhiêu."
+  },
+  "admin.alloc.book.submit": {
+    "en": "Save book terms",
+    "t": "Lưu điều kiện sổ lệnh"
+  },
+  "admin.alloc.book.takerFeeHint": {
+    "en": "Charged to the side that crosses the spread, in USDT on the order value.",
+    "t": "Thu từ phía vượt chênh lệch, bằng USDT trên giá trị lệnh."
+  },
+  "admin.alloc.book.title": {
+    "en": "Order book",
+    "t": "Sổ lệnh"
+  },
   "admin.alloc.close": {
     "en": "Close",
     "t": "Đóng"
@@ -2467,6 +2539,10 @@
     "en": "Top up",
     "t": "Nạp thêm"
   },
+  "invest.trade": {
+    "en": "Trade",
+    "t": "Giao dịch"
+  },
   "invest.units": {
     "en": "Units",
     "t": "Đơn vị quỹ"
@@ -4083,17 +4159,25 @@
     "en": "Available",
     "t": "Khả dụng"
   },
+  "tips.wallet.balance.in-orders.body": {
+    "en": "USDT set aside by your resting buy orders on the book. Still yours: it comes back to available when an order is cancelled, and turns into units when it fills.",
+    "t": "USDT đang được giữ cho các lệnh mua của bạn còn chờ trong sổ. Vẫn là của bạn: sẽ trở lại khả dụng khi lệnh bị hủy và chuyển thành đơn vị quỹ khi lệnh khớp."
+  },
+  "tips.wallet.balance.in-orders.title": {
+    "en": "In orders",
+    "t": "Trong lệnh"
+  },
   "tips.wallet.balance.invested.body": {
-    "en": "Held in fund units, valued at the current NAV.",
-    "t": "Đang nằm trong đơn vị quỹ, định giá theo NAV hiện tại."
+    "en": "Held in fund units, valued at the current NAV — units offered for sale on the book included.",
+    "t": "Đang nằm trong đơn vị quỹ, định giá theo NAV hiện tại — bao gồm cả đơn vị đang rao bán trong sổ lệnh."
   },
   "tips.wallet.balance.invested.title": {
     "en": "Invested",
     "t": "Đã đầu tư"
   },
   "tips.wallet.balance.model.body": {
-    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + Invested + Pending withdrawal.",
-    "t": "Bạn chỉ có một số dư USDT duy nhất — các mạng chỉ là cách bạn nạp và rút. Thẻ này chia số dư đó thành Tổng = Khả dụng + Đã đầu tư + Đang chờ rút."
+    "en": "You have a single USDT balance — networks are just how you deposit and withdraw. This card splits it into Total = Available + In orders + Invested + Pending withdrawal.",
+    "t": "Bạn chỉ có một số dư USDT duy nhất — các mạng chỉ là cách bạn nạp và rút. Thẻ này chia số dư đó thành Tổng = Khả dụng + Trong lệnh + Đã đầu tư + Đang chờ rút."
   },
   "tips.wallet.balance.model.title": {
     "en": "One balance, many rails",
@@ -4194,6 +4278,342 @@
   "tips.wallet.withdraw.you-receive.title": {
     "en": "You will receive",
     "t": "Bạn sẽ nhận được"
+  },
+  "trade.book.col.price": {
+    "en": "Price",
+    "t": "Giá"
+  },
+  "trade.book.col.size": {
+    "en": "Size",
+    "t": "Khối lượng"
+  },
+  "trade.book.col.total": {
+    "en": "Total",
+    "t": "Tổng"
+  },
+  "trade.book.empty": {
+    "en": "Nothing resting",
+    "t": "Chưa có lệnh chờ"
+  },
+  "trade.book.emptyHint": {
+    "en": "No holder has quoted yet. The first limit order opens the book.",
+    "t": "Chưa ai đặt giá. Lệnh giới hạn đầu tiên sẽ mở sổ lệnh."
+  },
+  "trade.book.levelOrders": {
+    "en": "{n, plural, one {# order} other {# orders}}",
+    "t": "{n, plural, one {# lệnh} other {# lệnh}}"
+  },
+  "trade.book.oneSided": {
+    "en": "One-sided",
+    "t": "Một phía"
+  },
+  "trade.book.spread": {
+    "en": "Spread {spread}",
+    "t": "Chênh lệch {spread}"
+  },
+  "trade.book.tape": {
+    "en": "Trades",
+    "t": "Giao dịch"
+  },
+  "trade.book.title": {
+    "en": "Book",
+    "t": "Sổ lệnh"
+  },
+  "trade.chart.empty": {
+    "en": "No trades yet — the chart draws from the first fill.",
+    "t": "Chưa có giao dịch — biểu đồ bắt đầu từ lần khớp đầu tiên."
+  },
+  "trade.chart.resolution": {
+    "en": "Candle size",
+    "t": "Khung nến"
+  },
+  "trade.chart.title": {
+    "en": "Chart",
+    "t": "Biểu đồ"
+  },
+  "trade.form.available": {
+    "en": "Available",
+    "t": "Khả dụng"
+  },
+  "trade.form.buy": {
+    "en": "Buy",
+    "t": "Mua"
+  },
+  "trade.form.closed": {
+    "en": "The book is closed. Orders are refused until an operator opens it.",
+    "t": "Sổ lệnh đang đóng. Lệnh bị từ chối cho đến khi người vận hành mở lại."
+  },
+  "trade.form.duplicateTitle": {
+    "en": "Already submitted",
+    "t": "Đã gửi trước đó"
+  },
+  "trade.form.failedTitle": {
+    "en": "Order failed",
+    "t": "Lệnh không thành công"
+  },
+  "trade.form.fee": {
+    "en": "Taker fee",
+    "t": "Phí taker"
+  },
+  "trade.form.inOrders": {
+    "en": "In orders",
+    "t": "Đang trong lệnh"
+  },
+  "trade.form.kind": {
+    "en": "Order type",
+    "t": "Loại lệnh"
+  },
+  "trade.form.limit": {
+    "en": "Limit",
+    "t": "Giới hạn"
+  },
+  "trade.form.locked": {
+    "en": "Trading isn't open to you on this product. Ask an operator if you should have access.",
+    "t": "Bạn chưa được mở giao dịch sản phẩm này. Hãy hỏi người vận hành nếu bạn nên có quyền."
+  },
+  "trade.form.market": {
+    "en": "Market",
+    "t": "Thị trường"
+  },
+  "trade.form.notional": {
+    "en": "Order value",
+    "t": "Giá trị lệnh"
+  },
+  "trade.form.notionalEstimate": {
+    "en": "Est. value",
+    "t": "Giá trị ước tính"
+  },
+  "trade.form.placed.cancelled": {
+    "en": "Nothing crossed, so the order was cancelled.",
+    "t": "Không khớp được gì nên lệnh đã hủy."
+  },
+  "trade.form.placed.filled": {
+    "en": "Filled {filled} at an average of {avg} USDT.",
+    "t": "Đã khớp {filled} với giá trung bình {avg} USDT."
+  },
+  "trade.form.placed.partial": {
+    "en": "Filled {filled} of {size} at {avg} USDT; the rest was cancelled.",
+    "t": "Đã khớp {filled} trên {size} ở {avg} USDT; phần còn lại đã hủy."
+  },
+  "trade.form.placed.rejected": {
+    "en": "The ledger refused the order: {reason}",
+    "t": "Sổ cái từ chối lệnh: {reason}"
+  },
+  "trade.form.placed.resting": {
+    "en": "Resting on the book: {filled} of {size} filled so far.",
+    "t": "Đang chờ trong sổ: đã khớp {filled} trên {size}."
+  },
+  "trade.form.price": {
+    "en": "Price (USDT)",
+    "t": "Giá (USDT)"
+  },
+  "trade.form.problem.funds": {
+    "en": "More than you have available",
+    "t": "Nhiều hơn số bạn khả dụng"
+  },
+  "trade.form.problem.lot": {
+    "en": "Size must be a multiple of {lot}",
+    "t": "Khối lượng phải là bội số của {lot}"
+  },
+  "trade.form.problem.noQuote": {
+    "en": "Nothing on the other side to trade against — place a limit order instead.",
+    "t": "Phía đối diện không có lệnh để khớp — hãy đặt lệnh giới hạn."
+  },
+  "trade.form.problem.price": {
+    "en": "Enter a price above zero",
+    "t": "Nhập giá lớn hơn 0"
+  },
+  "trade.form.problem.size": {
+    "en": "Enter a size above zero",
+    "t": "Nhập khối lượng lớn hơn 0"
+  },
+  "trade.form.problem.tick": {
+    "en": "Price must be a multiple of {tick}",
+    "t": "Giá phải là bội số của {tick}"
+  },
+  "trade.form.refusedBody": {
+    "en": "{detail} If you think you should be able to trade this product, ask an operator.",
+    "t": "{detail} Nếu bạn cho rằng mình được giao dịch sản phẩm này, hãy hỏi người vận hành."
+  },
+  "trade.form.refusedTitle": {
+    "en": "Order refused",
+    "t": "Lệnh bị từ chối"
+  },
+  "trade.form.sell": {
+    "en": "Sell",
+    "t": "Bán"
+  },
+  "trade.form.size": {
+    "en": "Size (units)",
+    "t": "Khối lượng (đơn vị)"
+  },
+  "trade.form.submitBuy": {
+    "en": "Place buy order",
+    "t": "Đặt lệnh mua"
+  },
+  "trade.form.submitSell": {
+    "en": "Place sell order",
+    "t": "Đặt lệnh bán"
+  },
+  "trade.form.tif": {
+    "en": "Time in force",
+    "t": "Hiệu lực"
+  },
+  "trade.form.tifLabel.alo": {
+    "en": "Post-only",
+    "t": "Chỉ đặt chờ"
+  },
+  "trade.form.tifLabel.gtc": {
+    "en": "Good till cancelled",
+    "t": "Đến khi hủy"
+  },
+  "trade.form.tifLabel.ioc": {
+    "en": "Immediate or cancel",
+    "t": "Khớp ngay hoặc hủy"
+  },
+  "trade.orders.col.avgFill": {
+    "en": "Avg fill",
+    "t": "Giá TB"
+  },
+  "trade.orders.col.fee": {
+    "en": "Fee",
+    "t": "Phí"
+  },
+  "trade.orders.col.filled": {
+    "en": "Filled",
+    "t": "Đã khớp"
+  },
+  "trade.orders.col.role": {
+    "en": "Role",
+    "t": "Vai trò"
+  },
+  "trade.orders.col.side": {
+    "en": "Side",
+    "t": "Chiều"
+  },
+  "trade.orders.col.state": {
+    "en": "Status",
+    "t": "Trạng thái"
+  },
+  "trade.orders.col.time": {
+    "en": "Time",
+    "t": "Thời gian"
+  },
+  "trade.orders.col.type": {
+    "en": "Type",
+    "t": "Loại"
+  },
+  "trade.orders.emptyFills": {
+    "en": "No fills yet",
+    "t": "Chưa có khớp lệnh"
+  },
+  "trade.orders.emptyHistory": {
+    "en": "No orders yet",
+    "t": "Chưa có lệnh nào"
+  },
+  "trade.orders.emptyOpen": {
+    "en": "No open orders",
+    "t": "Không có lệnh đang mở"
+  },
+  "trade.orders.fills": {
+    "en": "Fills",
+    "t": "Khớp lệnh"
+  },
+  "trade.orders.history": {
+    "en": "Order history",
+    "t": "Lịch sử lệnh"
+  },
+  "trade.orders.maker": {
+    "en": "Maker",
+    "t": "Maker"
+  },
+  "trade.orders.open": {
+    "en": "Open orders",
+    "t": "Lệnh đang mở"
+  },
+  "trade.orders.taker": {
+    "en": "Taker",
+    "t": "Taker"
+  },
+  "trade.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Đã hủy"
+  },
+  "trade.state.filled": {
+    "en": "Filled",
+    "t": "Đã khớp"
+  },
+  "trade.state.open": {
+    "en": "Open",
+    "t": "Đang mở"
+  },
+  "trade.state.partialCancelled": {
+    "en": "Partially filled, rest cancelled",
+    "t": "Khớp một phần, phần còn lại đã hủy"
+  },
+  "trade.state.unfilledCancelled": {
+    "en": "Not filled, cancelled",
+    "t": "Không khớp, đã hủy"
+  },
+  "trade.state.partiallyFilled": {
+    "en": "Partially filled",
+    "t": "Khớp một phần"
+  },
+  "trade.state.rejected": {
+    "en": "Rejected",
+    "t": "Bị từ chối"
+  },
+  "trade.stream.live": {
+    "en": "Live",
+    "t": "Trực tiếp"
+  },
+  "trade.stream.paused": {
+    "en": "Paused",
+    "t": "Tạm dừng"
+  },
+  "trade.stream.polling": {
+    "en": "Polling",
+    "t": "Đang cập nhật định kỳ"
+  },
+  "trade.stream.reconnecting": {
+    "en": "Reconnecting",
+    "t": "Đang kết nối lại"
+  },
+  "trade.tape.col.time": {
+    "en": "Time",
+    "t": "Thời gian"
+  },
+  "trade.tape.empty": {
+    "en": "No trades yet",
+    "t": "Chưa có giao dịch"
+  },
+  "trade.ticker.change": {
+    "en": "24h change",
+    "t": "Thay đổi 24h"
+  },
+  "trade.ticker.last": {
+    "en": "Last",
+    "t": "Giá cuối"
+  },
+  "trade.ticker.mid": {
+    "en": "Mid",
+    "t": "Giá giữa"
+  },
+  "trade.ticker.nav": {
+    "en": "NAV",
+    "t": "NAV"
+  },
+  "trade.ticker.navHint": {
+    "en": "The book price is what holders trade at; NAV is the fund's own mark.",
+    "t": "Giá sổ lệnh là giá người nắm giữ giao dịch với nhau; NAV là định giá riêng của quỹ."
+  },
+  "trade.ticker.spread": {
+    "en": "Spread",
+    "t": "Chênh lệch"
+  },
+  "trade.ticker.volume": {
+    "en": "24h volume",
+    "t": "Khối lượng 24h"
   },
   "ui.account": {
     "en": "Account",
@@ -4446,6 +4866,14 @@
   "wallet.chip.availShort": {
     "en": "AVAIL",
     "t": "SẴN CÓ"
+  },
+  "wallet.chip.inOrders": {
+    "en": "IN ORDERS",
+    "t": "TRONG LỆNH"
+  },
+  "wallet.chip.inOrdersShort": {
+    "en": "ORDERS",
+    "t": "LỆNH"
   },
   "wallet.chip.invest": {
     "en": "INVESTED",

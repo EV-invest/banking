@@ -121,6 +121,13 @@ export interface Resource<T, A extends unknown[]> {
   prefetch: (...args: A) => void;
   /** Write a value straight in — for a mutation whose response IS the new state. */
   publish: (value: T, ...args: A) => void;
+  /**
+   * Follow one key's snapshot outside React — for a store or a feed that has to act when a
+   * value lands (the chart folds each new tape print into its open bar). The listener
+   * counts as a reader, exactly like a mounted screen: a tag invalidation refreshes the
+   * key while one is attached. Returns the unsubscribe.
+   */
+  watch: (listener: (snapshot: ResourceSnapshot<T>) => void, ...args: A) => () => void;
   /** Mark one key stale; refresh it now if a screen is showing it. */
   invalidate: (...args: A) => void;
   /** The same, for every key this resource has cached (all NAVs, all pages). */
@@ -490,6 +497,15 @@ export function defineResource<T, A extends unknown[] = []>(config: ResourceConf
       entry.fetchedAt = Date.now();
       writePersisted(entry);
       publishSnapshot(entry);
+    },
+    watch(listener, ...args: A): () => void {
+      if (typeof window === "undefined" || !enabled(...args)) return () => undefined;
+      const entry = ensure(keyOf(...args), args);
+      const fn = () => listener(entry.snapshot);
+      entry.listeners.add(fn);
+      return () => {
+        entry.listeners.delete(fn);
+      };
     },
     invalidate(...args: A): void {
       const entry = REGISTRY.get(keyOf(...args));

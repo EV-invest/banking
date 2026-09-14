@@ -11,10 +11,10 @@
 
 import { Drawer, DrawerContent, DrawerTitle } from "@evinvest/uikit";
 
-import { cn } from "@/shared/lib/cn";
 import { useIsCompact } from "@/shared/lib/use-is-compact";
 import { Panel, PanelPresence, PanelSwap } from "@/shared/ui/motion";
 import type { OpenAllocationPanel } from "@/views/admin/allocations/lib/panel";
+import { BookPanel } from "@/views/admin/allocations/ui/book-panel";
 import { GrantsPanel } from "@/views/admin/allocations/ui/grants-panel";
 import { IssuancePanel } from "@/views/admin/allocations/ui/issuance-panel";
 
@@ -23,11 +23,14 @@ import { IssuancePanel } from "@/views/admin/allocations/ui/issuance-panel";
 const SHEET_PANEL = "w-full rounded-none border-0 shadow-none";
 
 function PanelBody({ panel, onClose, className }: { panel: OpenAllocationPanel; onClose: () => void; className?: string }) {
-  return panel.kind === "grants" ? (
-    <GrantsPanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />
-  ) : (
-    <IssuancePanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />
-  );
+  switch (panel.kind) {
+    case "grants":
+      return <GrantsPanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />;
+    case "issue":
+      return <IssuancePanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />;
+    case "book":
+      return <BookPanel key={panel.row.service} allocation={panel.row} onClose={onClose} className={className} />;
+  }
 }
 
 export function AllocationSidePanel({ panel, onClose }: { panel: OpenAllocationPanel | null; onClose: () => void }) {
@@ -36,18 +39,9 @@ export function AllocationSidePanel({ panel, onClose }: { panel: OpenAllocationP
   if (compact) {
     return (
       <Drawer open={panel !== null} onOpenChange={(open) => !open && onClose()}>
-        {/* UIKIT-MIRROR: drawer-animation — TEMPORARY, mirrors EV-invest/lib#96.
-            The published uikit's Drawer ships with no transition at all, so the sheet
-            appears in a single frame. These are the kit's own classes, passed here until
-            the npm bump carries them; `shared/config/uikit-mirror.test.ts` fails the
-            moment the installed uikit animates, which is the signal to delete this. */}
-        <DrawerContent
-          className={cn(
-            "data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom",
-            "transition duration-500 ease-in-out",
-            "max-h-[85vh] overflow-y-auto",
-          )}
-        >
+        {/* The kit animates the sheet itself; what it does not do is cap it. A long
+            holders roster has to scroll inside the sheet, not push it off-screen. */}
+        <DrawerContent className="max-h-[85vh] overflow-y-auto">
           {panel && (
             <>
               <DrawerTitle className="sr-only">{panel.row.title}</DrawerTitle>
