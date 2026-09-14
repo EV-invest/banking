@@ -830,6 +830,9 @@
             echo "▶ cabinet tests"
             npm run test --workspace @evbanking/cabinet
 
+            echo "▶ cabinet i18n catalogues"
+            npm run i18n:check --workspace @evbanking/cabinet
+
             # `npm run lint` is deliberately absent: it reports 5 errors on main today
             # (profile-schema.ts, instrumentation.ts, next.config.ts, profile-view.tsx,
             # settings/ui/fields.tsx). Adding it now would land red, which is the exact
