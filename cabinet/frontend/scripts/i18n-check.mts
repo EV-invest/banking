@@ -5,9 +5,11 @@
 // fallback is indistinguishable from a surface that was never translated, so
 // without a noisy second channel a locale can rot to zero coverage unnoticed.
 //
-// Fails only on *drift*, never on untranslated keys: a locale is filled in over
-// time, and blocking CI on unfinished translation work only gets the check
-// disabled.
+// Fails on *drift* and on *missing keys* alike. The check used to tolerate
+// untranslated keys so a locale could be filled in over time — and three locales
+// sat at 86 % for a release cycle while every new consilium screen shipped in
+// English. All five catalogues are complete now, so the floor is 100 %: a new key
+// lands in `en` and in all four translations in the same change, or CI is red.
 //
 // Drift has two faces. The policy catches *key* drift — the `en` field no longer
 // matches today's English. It cannot catch *copy* drift: a translator who pastes
@@ -151,7 +153,7 @@ const isLegitimatelyIdentical = (locale: Translated, text: string): boolean =>
   hasNoProse(text) || SHARED_TERMS.has(text) || LOANWORDS[locale].has(text);
 
 const resolved = catalogueReport();
-const { report } = auditCatalogues(resolved, 0);
+const { report } = auditCatalogues(resolved, 1);
 console.log(report);
 
 const drifted = resolved.flatMap((c) =>
@@ -166,7 +168,22 @@ const identical = (Object.keys(AUTHORED) as Translated[]).flatMap((locale) =>
   ),
 );
 
+// Listed explicitly rather than trusting `auditCatalogues().ok`: the report only
+// prints the first ten missing keys per locale, and a red CI job has to name
+// every key that needs translating, not make the author go count.
+const missing = resolved.flatMap((c) => c.missing.map((key) => `${c.locale}/${key}`));
+
 let failed = false;
+
+if (missing.length > 0) {
+  failed = true;
+  console.error(`\n${missing.length} key${missing.length === 1 ? "" : "s"} missing from a locale:`);
+  for (const line of missing) console.error(`  ${line}`);
+  console.error(
+    "\nEvery key English defines must be translated in all four locales." +
+      " Add the entry to each messages/<locale>/common.json with the exact `en` text.",
+  );
+}
 
 if (drifted.length > 0) {
   failed = true;
@@ -193,4 +210,6 @@ if (identical.length > 0) {
 
 if (failed) process.exit(1);
 
-console.log("\ni18n: no drift — every translation matches its English source and none is a copy of it");
+console.log(
+  "\ni18n: complete — every key is translated in every locale, none has drifted, none is a copy of English",
+);
