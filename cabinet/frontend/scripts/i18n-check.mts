@@ -8,9 +8,147 @@
 // Fails only on *drift*, never on untranslated keys: a locale is filled in over
 // time, and blocking CI on unfinished translation work only gets the check
 // disabled.
-import { auditCatalogues } from "@evinvest/i18n/policy";
+//
+// Drift has two faces. The policy catches *key* drift — the `en` field no longer
+// matches today's English. It cannot catch *copy* drift: a translator who pastes
+// the English text into `t` (or a rewrite that updates `en` and leaves `t` alone)
+// passes the policy and ships English under a foreign locale. The one mechanical
+// signal for that is `t === en`, so this script fails on it too — minus an
+// allowlist of strings that legitimately read the same in every language.
+import type { Locale } from "@evinvest/i18n";
+import { auditCatalogues, type TranslatedCatalogue } from "@evinvest/i18n/policy";
 
 import { catalogueReport } from "../shared/config/i18n";
+import de from "../messages/de/common.json";
+import en from "../messages/en/common.json";
+import fr from "../messages/fr/common.json";
+import ru from "../messages/ru/common.json";
+import vi from "../messages/vi/common.json";
+
+type Translated = Exclude<Locale, "en">;
+
+// The authored catalogues, before the policy resolves them: `resolveCatalogue`
+// already replaces a rejected `t` with English, so the identity check has to
+// look at what the translator wrote, not at what is served.
+const AUTHORED: Record<Translated, TranslatedCatalogue> = { ru, vi, fr, de };
+const ENGLISH: Readonly<Record<string, string>> = en;
+
+// A simple ICU argument — `{n}`, `{n, number}`, `{n, number, ::percent}`. Plural
+// and select arguments are deliberately *not* matched: their branches carry
+// prose, and an English plural pasted into a locale is exactly the copy drift
+// this check exists for.
+const SIMPLE_ARGUMENT = /\{\s*\w+\s*(?:,\s*\w+\s*(?:,\s*[^{}]*)?)?\}/gu;
+
+// Nothing to translate: once the placeholders are gone only digits, punctuation
+// and symbols remain — "{title} ({service})", "≈ {amount}", "{pct}%".
+const hasNoProse = (text: string): boolean =>
+  !/\p{L}/u.test(text.replace(SIMPLE_ARGUMENT, ""));
+
+// Strings that are the same in every language: tickers and currency codes,
+// environment names, chain and network names, crypto jargon that no locale
+// translates ("gas", "tx", maker/taker), and column abbreviations.
+const SHARED_TERMS: ReadonlySet<string> = new Set([
+  "NAV",
+  "AUM (USDT)",
+  "P&L",
+  "KYC",
+  "KYC L{n}",
+  "L{n}",
+  "v{n}",
+  "DEV",
+  "PROD",
+  "STAGING",
+  "USD ($)",
+  "EUR (€)",
+  "{network} · USDT",
+  "tx {ref}",
+  "BEP20 · BNB Chain",
+  "Polygon · PoS",
+  "TON · Open Network",
+  "TRC20 · TRON",
+  "BNB Smart Chain",
+  "Polygon PoS",
+  "The Open Network",
+  "TRON",
+  "Seq",
+  "Gas",
+  "gas",
+  "Maker",
+  "Taker",
+]);
+
+// Strings that coincide with English in *one* language — loanwords, shared Latin
+// roots, or a term the locale's own catalogue already uses untranslated
+// ("Wallet", "Treasury" and "Cabinet" in German; "wallet" and "rail" in French;
+// "email" in Vietnamese). Keyed by value, not by key: whether "Status" is a
+// German word does not depend on which screen shows it.
+const LOANWORDS: Readonly<Record<Translated, ReadonlySet<string>>> = {
+  de: new Set([
+    "Admin",
+    "Arbitrage",
+    "Bank · USD",
+    "Browser",
+    "Cabinet",
+    "Chart",
+    "Details",
+    "EV Investment — Cabinet",
+    "Hurdle",
+    "IN ORDERS",
+    "Index",
+    "Investor",
+    "Limit",
+    "Live",
+    "Max",
+    "Onboarding",
+    "Operator",
+    "ORDERS",
+    "Performance",
+    "Portfolio",
+    "Rollout %",
+    "Service",
+    "Spread",
+    "Spread {spread}",
+    "Status",
+    "STATUS",
+    "Trades",
+    "Treasury",
+    "Version",
+    "Wallet",
+    "1M",
+    "6M",
+  ]),
+  fr: new Set([
+    "Actions",
+    "Admin",
+    "Arbitrage",
+    "Feature flags",
+    "Max",
+    "Onboarding",
+    "Performance",
+    "Rail",
+    "Service",
+    "Source",
+    "Total",
+    "Trading",
+    "Transaction",
+    "Type",
+    "Version",
+    "Wallet",
+    "{amount} net",
+    "{amount} performance",
+    "{network} · {destination} · {amount} USDT net",
+    "1M",
+    "6M",
+  ]),
+  ru: new Set([
+    // The TON/exchange field name; Russian crypto UIs keep it in Latin script.
+    "Memo",
+  ]),
+  vi: new Set(["Cabinet", "EV Investment — Cabinet", "Email"]),
+};
+
+const isLegitimatelyIdentical = (locale: Translated, text: string): boolean =>
+  hasNoProse(text) || SHARED_TERMS.has(text) || LOANWORDS[locale].has(text);
 
 const resolved = catalogueReport();
 const { report } = auditCatalogues(resolved, 0);
@@ -20,14 +158,39 @@ const drifted = resolved.flatMap((c) =>
   c.rejected.map((r) => `${c.locale}/${r.key}: ${r.reason} — ${r.detail}`),
 );
 
+const identical = (Object.keys(AUTHORED) as Translated[]).flatMap((locale) =>
+  Object.entries(AUTHORED[locale]).flatMap(([key, entry]) =>
+    entry.t === ENGLISH[key] && !isLegitimatelyIdentical(locale, entry.t)
+      ? [`${locale}/${key}: ${JSON.stringify(entry.t)}`]
+      : [],
+  ),
+);
+
+let failed = false;
+
 if (drifted.length > 0) {
+  failed = true;
   console.error(`\n${drifted.length} entr${drifted.length === 1 ? "y" : "ies"} rejected by policy:`);
   for (const line of drifted) console.error(`  ${line}`);
   console.error(
     "\nEnglish is being served for these. Retranslate and update the `en` field," +
       " or revert the English change.",
   );
-  process.exit(1);
 }
 
-console.log("\ni18n: no drift — every translation matches its English source");
+if (identical.length > 0) {
+  failed = true;
+  console.error(
+    `\n${identical.length} translation${identical.length === 1 ? "" : "s"} identical to the English source:`,
+  );
+  for (const line of identical) console.error(`  ${line}`);
+  console.error(
+    "\nThese pass the policy but ship English under a foreign locale. Translate them," +
+      " or — for a ticker, a proper name or a loanword — add the string to the" +
+      " allowlist in scripts/i18n-check.mts with a reason.",
+  );
+}
+
+if (failed) process.exit(1);
+
+console.log("\ni18n: no drift — every translation matches its English source and none is a copy of it");
