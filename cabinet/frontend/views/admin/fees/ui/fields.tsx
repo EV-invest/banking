@@ -67,7 +67,10 @@ export function Choice<T extends string>({
         }}
       >
         {options.map((option) => (
-          <ToggleGroupItem key={option.value} value={option.value} disabled={disabled} className="text-xs">
+          // `flex-auto` over the kit's `flex-1`: with a fit-content group, basis-0 items
+          // split the row into equal columns and a longer label ("Every 6 months")
+          // spills past its own border. Each option owns exactly the width it reads.
+          <ToggleGroupItem key={option.value} value={option.value} disabled={disabled} className="flex-auto px-2 text-xs">
             {t(option.labelKey)}
           </ToggleGroupItem>
         ))}
