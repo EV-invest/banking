@@ -4,6 +4,8 @@
 
 import type { Translate } from "@evinvest/i18n";
 
+import type { PillTone } from "@/shared/ui/list-card";
+
 /** Max chars a display name takes up before ellipsis in the chip and headings. */
 const MAX_DISPLAY = 32;
 
@@ -54,4 +56,30 @@ export function initialsOfName(name: string, email: string | null | undefined): 
   const a = parts[0]?.[0];
   if (!a) return initialsOf(email);
   return (a + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
+/** `status`/`role` arrive as lower snake_case from the hub. */
+function titleCase(value: string): string {
+  const s = value.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * A wire enum as words. `titleCase` alone is English capitalisation applied to an
+ * English wire value, so it stayed English under every locale; these resolve through the
+ * shared `admin.status.*` / `admin.role.*` entries instead. The translator hands back the
+ * key itself for a value no entry names — a hub enum we have not catalogued yet — so that
+ * case falls back to the old capitalisation rather than printing a key on screen.
+ */
+export function enumLabel(namespace: "admin.status" | "admin.role", value: string, t: Translate): string {
+  const key = `${namespace}.${value}`;
+  const label = t(key);
+  return label === key ? titleCase(value) : label;
+}
+
+export function statusTone(status: string): PillTone {
+  const s = status.toLowerCase();
+  if (s === "active") return "positive";
+  if (s === "pending" || s === "review") return "pending";
+  return "neutral";
 }
