@@ -31,3 +31,7 @@ jobs:
           name: ev-invest
       - name: Manifest ↔ lock, protos ↔ committed contract
         run: nix run .#drift-check
+      # The concierge pin: ancestor of origin/main, proto bytes equal at the pin, on
+      # main and in the cargo checkout gen-api just read (contracts/concierge-protos.txt).
+      - name: Concierge pin ↔ origin/main ↔ cargo checkout
+        run: nix run .#concierge-pin-check

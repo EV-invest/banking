@@ -642,6 +642,10 @@
         # Both protos feed one merged OpenAPI doc; service FQNs keep paths/schemas
         # namespaced (`banking.v1.*` vs `concierge.v1.*`), so the gen emits both
         # `BankingV1*` and `ConciergeV1*` types with no collision.
+        #
+        # WHICH concierge protos: contracts/concierge-protos.txt — the same list
+        # `concierge-pin-check` guards, so a proto cannot be generated from without
+        # its bytes being pinned (#293: governance.proto was fed here but not checked).
         runGenApi = pkgs.writeShellApplication {
           name = "run-gen-api";
           runtimeInputs = with pkgs; [ protobuf protocGenConnectOpenapi nodejs git cargo jq ];
@@ -650,14 +654,13 @@
             cd "$repo"
             cc_dir="$(dirname "$(cargo metadata --format-version 1 --manifest-path contracts/Cargo.toml \
               | jq -r '.packages[] | select(.name=="evconcierge_contracts") | .manifest_path')")"
-            echo "▶ proto (banking + concierge identity) → contracts/openapi.json"
+            mapfile -t cc_protos < <(grep -Ev '^[[:space:]]*(#|$)' contracts/concierge-protos.txt)
+            echo "▶ proto (banking + concierge: ''${cc_protos[*]}) → contracts/openapi.json"
             protoc -I contracts/proto -I "$cc_dir/proto" \
               --connect-openapi_out=contracts \
               --connect-openapi_opt=format=json,path=openapi.json,with-proto-names \
               contracts/proto/banking/v1/*.proto \
-              "$cc_dir/proto/concierge/v1/directory.proto" \
-              "$cc_dir/proto/concierge/v1/auth.proto" \
-              "$cc_dir/proto/concierge/v1/governance.proto"
+              "''${cc_protos[@]/#/$cc_dir/proto/}"
             echo "▶ openapi.json → cabinet TypeScript types"
             [ -d node_modules ] || npm install
             npm run gen:api --workspace @evbanking/cabinet
@@ -667,13 +670,26 @@
 
         # ── cross-repo concierge pin guard ──────────────────────────────────
         # `nix run .#concierge-pin-check` — assert the pinned `evconcierge_contracts`
-        # rev (the identity wire contract banking compiles and re-aliases its cabinet
-        # TS from) is an ancestor of concierge origin/main with matching proto bytes.
-        # CI entry point for the contract-parity guard; needs network to the remote.
+        # rev (the identity + governance wire contract banking compiles and re-aliases
+        # its cabinet TS from) is an ancestor of concierge origin/main, and that every
+        # proto in contracts/concierge-protos.txt has the same bytes at the pin, on
+        # origin/main and in the local cargo checkout gen-api reads. CI entry point for
+        # the contract-parity guard (drift.yml); needs network to the remote.
+        #
+        # `rust` + the tb-client link + empty RUSTC_WRAPPER as in runDriftCheck below:
+        # the checkout is located via `cargo metadata`, which needs the workspace to
+        # resolve (the .tb-client path dep) and no sccache probe (.cargo/config.toml).
+        # `bash` explicitly: the script needs bash ≥ 4 (`mapfile`), and `exec bash`
+        # would otherwise pick up macOS's system 3.2 from PATH.
         runConciergePinCheck = pkgs.writeShellApplication {
           name = "run-concierge-pin-check";
-          runtimeInputs = with pkgs; [ git gnused coreutils gnugrep ];
-          text = ''exec bash "$(git rev-parse --show-toplevel)/contracts/concierge-pin-check.sh"'';
+          runtimeInputs = with pkgs; [ bash rust git jq gnused coreutils gnugrep ];
+          text = ''
+            cd "$(git rev-parse --show-toplevel)"
+            ${linkTbClient}
+            export RUSTC_WRAPPER=""
+            exec bash contracts/concierge-pin-check.sh
+          '';
         };
 
         # ── drift gate (CI entry point) ─────────────────────────────────────
@@ -1200,7 +1216,7 @@
         # `nix run .#new-replica` → move a PROD cluster replica to another host (recover, never format)
         # `nix run .#redis`     → ensure the SHARED ev_invest Redis is up
         # `nix run .#gen-api`   → regenerate contracts/openapi.json + cabinet TS types from the proto
-        # `nix run .#concierge-pin-check` → assert the concierge contract pin is an ancestor of origin/main + bytes match
+        # `nix run .#concierge-pin-check` → assert the concierge contract pin is an ancestor of origin/main + bytes match (pin ↔ main ↔ cargo checkout, list: contracts/concierge-protos.txt; CI: .github/workflows/drift.yml)
         # `nix run .#drift-check` → assert Cargo.lock matches the manifests and the committed contract matches the protos (CI: .github/workflows/drift.yml)
         # `nix run .#check-rust`     → clippy (warnings denied) + workspace tests, the way CI runs them (CI: .github/workflows/checks.yml)
         # `nix run .#check-frontend` → cabinet tsc + tests against a clean `npm ci` (CI: .github/workflows/checks.yml)
