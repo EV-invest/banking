@@ -31,43 +31,38 @@ use piggybank_core::{
 use sqlx::{AssertSqlSafe, Connection, PgConnection, PgPool, migrate::MigrateError, postgres::PgPoolOptions};
 use tokio::sync::OnceCell;
 
-/// Serializes the tests that own the relay as a *process* would: those that run
-/// [`Relay::run`](piggybank_core::infrastructure::relay::Relay::run) or hold its
-/// session-level outbox advisory lock (`acquire_outbox_lock`). The lock is one per
-/// database, so two such tests in one binary would block each other on it — a driver
-/// polling for "the relay applied my row" then times out while `run` is still queued
-/// behind the sibling's lock. A test that only calls the unfenced `drain()` takes
-/// [`outbox_serial`] instead — it never touches the advisory lock, but it does share the
-/// outbox table, which is a race of its own.
+/// Serializes every test that works this binary's outbox — the one rule production gets
+/// from the relay's advisory lock, restated for a process that runs several relays.
 ///
-/// Scope: the outbox lock lives in this binary's own database (see [`database_url`]), so
-/// another binary — even one running at the same time — can never hold it. What remains to
-/// serialize is the tests *inside* one binary, and a `LazyLock` in one process is exactly
-/// that.
-static RELAY: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
-
-/// Hold for the duration of a test that runs `Relay::run` or takes the outbox lock.
-pub async fn relay_exclusive() -> tokio::sync::MutexGuard<'static, ()> {
-	RELAY.lock().await
-}
-
-/// Serializes the tests that drain the outbox *without* the advisory lock. `Relay::drain` —
-/// unlike `Relay::run` — never takes `OUTBOX_LOCK_KEY`, while the outbox is one table per
-/// test binary, so two of a binary's relays draining at once pick up the same row and both
-/// act on it. Two shapes have been observed. The loser's `saga_steps` insert trips the
-/// table's second unique key (`tb_transfer_id`), which its `ON CONFLICT (event_id, leg)`
-/// does not cover; the relay files that as a transient failure and `drain()` returns early,
-/// leaving the calling test's own rows queued, so it reads a balance the relay has not
-/// landed yet (#294/#298). And a row ends up with `dispatched_at` *and* `parked_at` set,
-/// each written by a different custody fake — the mechanism behind the `relay_recovery`
-/// flakes. Production has a single drainer under the advisory lock and needs none of this.
+/// Two ways in, one lock, deliberately. A test that runs
+/// [`Relay::run`](piggybank_core::infrastructure::relay::Relay::run) or takes the outbox
+/// advisory lock (`acquire_outbox_lock`) needs it because the lock is one per database, so a
+/// sibling doing the same blocks — a driver polling for "the relay applied my row" then times
+/// out while `run` is still queued behind it. A test that only calls the unfenced
+/// `Relay::drain` never touches that lock, but shares the table it drains, and two of a
+/// binary's relays draining at once pick up the same row and both act on it. Two shapes have
+/// been observed. The loser's `saga_steps` insert trips the table's second unique key
+/// (`tb_transfer_id`), which its `ON CONFLICT (event_id, leg)` does not cover; the relay files
+/// that as a transient failure and `drain()` returns early, leaving the calling test's own
+/// rows queued, so it reads a balance the relay has not landed yet (#294/#298). And a row ends
+/// up with `dispatched_at` *and* `parked_at` set, each written by a different custody fake —
+/// the mechanism behind the `relay_recovery` flakes.
 ///
-/// Hold it for the test's whole life, not just around the drain: rows are visible to a
-/// sibling's drain from the moment they commit, which is before the enqueuing test gets to
-/// its own `drain()`. Suites keep the guard in their harness so no test can forget it.
+/// One lock for both, not one per reason: a mutex per reason serializes each class against
+/// itself and neither against the other, so a `run` test and a `drain` test in one binary
+/// would race over the same outbox with both guards held and nothing to show for it. Take it
+/// once per test — `tokio::sync::Mutex` is not reentrant.
+///
+/// Scope: the outbox and its lock live in this binary's own database (see [`database_url`]),
+/// so another binary — even one running at the same time — can never reach them. What remains
+/// to serialize is the tests *inside* one binary, and a `LazyLock` in one process is exactly
+/// that. Production has a single drainer under the advisory lock and needs none of this.
 static OUTBOX: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
 
-/// Hold for the whole life of a test that calls `Relay::drain`; see [`OUTBOX`].
+/// Hold for the whole life of a test that runs `Relay::run`, takes the outbox lock, or calls
+/// `Relay::drain` — not just around the call. Rows are visible to a sibling's drain from the
+/// moment they commit, which is before the enqueuing test gets to its own `drain()`. Suites
+/// keep the guard in their harness so no test can forget it. See [`OUTBOX`].
 pub async fn outbox_serial() -> tokio::sync::MutexGuard<'static, ()> {
 	OUTBOX.lock().await
 }
