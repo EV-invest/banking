@@ -58,12 +58,13 @@ service FeesService {
   // (AllocationManage, AND the caller must be the one who requested the change or a fund
   // owner). A change that TIGHTENS the terms does not bind while a holder's notice is
   // undelivered; for a holder the identity plane can never reach that is forever. This
-  // records who acknowledged, when, and exactly which holders' notices were undelivered at
-  // that moment, and the change then binds over those holders — and over nobody else who
-  // turns out untold later. Idempotent on a change already acknowledged (the first record
-  // stands); ALREADY_EXISTS when the change is not scheduled or every notice has been
-  // delivered — there is nothing to take responsibility for; PERMISSION_DENIED for a caller
-  // who is neither the requester nor an owner.
+  // records who acknowledged, when, and exactly which holders' notices the mailer had
+  // GIVEN UP on at that moment (`notices_given_up`, never a notice still being tried), and
+  // the change then binds over those holders — and over nobody else who turns out untold
+  // later. Idempotent on a change already acknowledged (the first record stands);
+  // ALREADY_EXISTS when the change is not scheduled, only loosens the terms (it binds by
+  // itself), or has no notice given up on yet — there is nothing to take responsibility
+  // for; PERMISSION_DENIED for a caller who is neither the requester nor an owner.
   rpc AcknowledgeUndeliveredNotices(AcknowledgeUndeliveredNoticesRequest) returns (FeePolicyChange);
 
   // A fund's whole history of terms, newest version first. Readable by any
@@ -196,8 +197,8 @@ message FeePolicyChange {
   // Unix seconds the acknowledgement was given; 0 when the notices were never waived.
   // Public like every other moment on the change.
   int64 notices_waived_at = 19;
-  // The ids of the holders whose notice was undelivered at that moment — the holders the
-  // change binds over untold. Operators only; empty for everyone else.
+  // The ids of the holders whose notice the mailer had given up on at that moment — the
+  // holders the change binds over untold. Operators only; empty for everyone else.
   repeated string notices_waived_users = 20;
   // Notices of this change not yet delivered to a CURRENT holder, and how many of those the
   // mailer has given up on — the figures a tightening waits on. Counted only while

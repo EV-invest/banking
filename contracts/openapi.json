@@ -3372,7 +3372,7 @@
           "banking.v1.FeesService"
         ],
         "summary": "AcknowledgeUndeliveredNotices",
-        "description": "Take responsibility for the holders of a scheduled change who could not be told\n (AllocationManage, AND the caller must be the one who requested the change or a fund\n owner). A change that TIGHTENS the terms does not bind while a holder's notice is\n undelivered; for a holder the identity plane can never reach that is forever. This\n records who acknowledged, when, and exactly which holders' notices were undelivered at\n that moment, and the change then binds over those holders — and over nobody else who\n turns out untold later. Idempotent on a change already acknowledged (the first record\n stands); ALREADY_EXISTS when the change is not scheduled or every notice has been\n delivered — there is nothing to take responsibility for; PERMISSION_DENIED for a caller\n who is neither the requester nor an owner.",
+        "description": "Take responsibility for the holders of a scheduled change who could not be told\n (AllocationManage, AND the caller must be the one who requested the change or a fund\n owner). A change that TIGHTENS the terms does not bind while a holder's notice is\n undelivered; for a holder the identity plane can never reach that is forever. This\n records who acknowledged, when, and exactly which holders' notices the mailer had\n GIVEN UP on at that moment (`notices_given_up`, never a notice still being tried), and\n the change then binds over those holders — and over nobody else who turns out untold\n later. Idempotent on a change already acknowledged (the first record stands);\n ALREADY_EXISTS when the change is not scheduled, only loosens the terms (it binds by\n itself), or has no notice given up on yet — there is nothing to take responsibility\n for; PERMISSION_DENIED for a caller who is neither the requester nor an owner.",
         "operationId": "banking.v1.FeesService.AcknowledgeUndeliveredNotices",
         "parameters": [
           {
@@ -9305,7 +9305,7 @@
               "type": "string"
             },
             "title": "notices_waived_users",
-            "description": "The ids of the holders whose notice was undelivered at that moment — the holders the\n change binds over untold. Operators only; empty for everyone else."
+            "description": "The ids of the holders whose notice the mailer had given up on at that moment — the\n holders the change binds over untold. Operators only; empty for everyone else."
           },
           "undelivered_notices": {
             "type": "integer",

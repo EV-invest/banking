@@ -1413,8 +1413,8 @@ export type BankingV1FeePolicyChange = {
     /**
      * notices_waived_users
      *
-     * The ids of the holders whose notice was undelivered at that moment — the holders the
-     * change binds over untold. Operators only; empty for everyone else.
+     * The ids of the holders whose notice the mailer had given up on at that moment — the
+     * holders the change binds over untold. Operators only; empty for everyone else.
      */
     notices_waived_users?: Array<string>;
     /**
