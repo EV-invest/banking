@@ -11,6 +11,7 @@ import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Em
 import { allocationsResource, positionsResource } from "@/entities/fund/model/fund-resource";
 import { RECENT_OPS, operationsResource } from "@/entities/operation/model/operation-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
+import { VerificationBanner } from "@/features/kyc";
 import type { Operation } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
@@ -92,112 +93,119 @@ export function DashboardView() {
   // The hub honours `limit`, so the slice is only a shape guarantee for the card.
   const ops = (operations.data?.operations ?? []).slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf, t));
 
+  // One DOM order, two layouts. Mobile stacks in reading order (hero → figures →
+  // what I own → move money → activity); from `xl` the same children are placed
+  // explicitly on a two-column grid so the desktop composition is unchanged. The
+  // sidebar track is a fixed 360px with no matching step on the spacing scale, so it
+  // rides in as a custom property instead of an arbitrary class.
+  //
+  // The grid is also the entrance: `Stagger` renders this same element, and each
+  // section below is a `StaggerItem` rendered as the element it already was, so the
+  // placement classes stay on the grid items that carry them. The sequence follows
+  // DOM order — which on mobile is reading order, and on desktop is close enough
+  // that no section arrives before the one above it.
   return (
-    // One DOM order, two layouts. Mobile stacks in reading order (hero → figures →
-    // what I own → move money → activity); from `xl` the same children are placed
-    // explicitly on a two-column grid so the desktop composition is unchanged. The
-    // sidebar track is a fixed 360px with no matching step on the spacing scale, so it
-    // rides in as a custom property instead of an arbitrary class.
-    //
-    // The grid is also the entrance: `Stagger` renders this same element, and each
-    // section below is a `StaggerItem` rendered as the element it already was, so the
-    // placement classes stay on the grid items that carry them. The sequence follows
-    // DOM order — which on mobile is reading order, and on desktop is close enough
-    // that no section arrives before the one above it.
-    <Stagger
-      step={SECTION_STAGGER}
-      className="grid grid-cols-1 gap-4 px-4 pb-6 pt-5 lg:gap-6 lg:px-8 lg:pb-7 lg:pt-6 xl:grid-cols-(--dash-columns) xl:items-start"
-      style={{ "--dash-columns": "minmax(0, 1fr) 360px" } as CSSProperties}
-    >
-      {/* topbar — desktop only; on mobile the shell app bar plus the hero label carry the page */}
-      <StaggerItem className="hidden items-center justify-between gap-4 lg:flex xl:col-span-2 xl:row-start-1">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-2xl font-semibold leading-tight text-ink">{t("dash.portfolio")}</h1>
-          <p className="text-sm text-ink-soft">{t("dash.portfolioSub")}</p>
-        </div>
-        {/* Shortcuts to the same two actions the Move money card offers, so they stay
-            outline: one solid accent per screen, and that one belongs to the card that
-            explains what it does. Two filled teal CTAs for the same destination read as
-            loud rather than emphatic. */}
-        <div className="flex shrink-0 gap-2.5">
-          <Button asChild variant="outline">
-            <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
-          </Button>
-        </div>
-      </StaggerItem>
-
-      <PerfCard value={balance?.total} loading={walletLoading} allTimePct={allTimePct} className="lg:order-1 xl:col-start-1 xl:row-span-2 xl:row-start-2" />
-
-      {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
-      <StaggerItem as={Card} className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-        <Stat label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
-        <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
-        <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label={t("dash.activeStrategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} />
-        <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={formatUsd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
-      </StaggerItem>
-
-      {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop
-          sequence for the single-column band between `lg` and `xl`. */}
-      <WhatIOwn allocations={allocations} total={allocTotal} loading={posLoading} className="lg:order-3 xl:col-start-2 xl:row-start-3" />
-      <MoveMoney className="lg:order-2 xl:col-start-2 xl:row-start-2" />
-
-      {/* operations */}
-      <StaggerItem as={Card} className="gap-3 py-4 lg:order-5 lg:gap-4 lg:py-5 xl:col-span-2 xl:col-start-1 xl:row-start-5">
-        <CardHeader className={CARD_PAD}>
-          <CardTitle>{t("dash.recentOperations")}</CardTitle>
-          <CardAction>
-            <Button asChild variant="link" size="sm" className="px-0">
-              <Link href="/operations">{t("ui.viewAll")}</Link>
+    <>
+      {/* Above the grid rather than inside it: from `xl` the grid places its children on
+          explicitly numbered rows, and an onboarding notice that renumbered them would move
+          the whole desktop composition for one temporary state. It renders nothing at all
+          for a caller past tier 0, which is everyone the day after they verify. */}
+      <VerificationBanner className="mx-4 mt-5 lg:mx-8 lg:mt-6" />
+      <Stagger
+        step={SECTION_STAGGER}
+        className="grid grid-cols-1 gap-4 px-4 pb-6 pt-5 lg:gap-6 lg:px-8 lg:pb-7 lg:pt-6 xl:grid-cols-(--dash-columns) xl:items-start"
+        style={{ "--dash-columns": "minmax(0, 1fr) 360px" } as CSSProperties}
+      >
+        {/* topbar — desktop only; on mobile the shell app bar plus the hero label carry the page */}
+        <StaggerItem className="hidden items-center justify-between gap-4 lg:flex xl:col-span-2 xl:row-start-1">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-2xl font-semibold leading-tight text-ink">{t("dash.portfolio")}</h1>
+            <p className="text-sm text-ink-soft">{t("dash.portfolioSub")}</p>
+          </div>
+          {/* Shortcuts to the same two actions the Move money card offers, so they stay
+              outline: one solid accent per screen, and that one belongs to the card that
+              explains what it does. Two filled teal CTAs for the same destination read as
+              loud rather than emphatic. */}
+          <div className="flex shrink-0 gap-2.5">
+            <Button asChild variant="outline">
+              <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
             </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className={CARD_PAD}>
-          {ops.length === 0 ? (
-            <Empty className={EMPTY_BOX}>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <ArrowLeftRight />
-                </EmptyMedia>
-                <EmptyTitle>{t("ui.noOperations")}</EmptyTitle>
-                <EmptyDescription>{t("dash.noOperationsHint")}</EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                {/* Same destination as the Move money card's filled Deposit, which is
-                    already on screen — so this one stays outline. */}
-                <Button asChild variant="outline">
-                  <Link href="/wallet/deposit">{t("ui.addFunds")}</Link>
-                </Button>
-              </EmptyContent>
-            </Empty>
-          ) : (
-            <ItemGroup>
-              {ops.map((op, i) => (
-                <Fragment key={op.id}>
-                  {i > 0 && <ItemSeparator />}
-                  <Item size="sm" className="px-0 py-3 lg:py-4">
-                    <ItemMedia>
-                      {/* Decorative: the row title names the kind in words right beside it. */}
-                      <Badge className={cn("font-semibold", op.tagClass)}>{op.icon ? <op.icon aria-hidden /> : op.tag}</Badge>
-                    </ItemMedia>
-                    <ItemContent className="min-w-0 gap-0.5">
-                      <ItemTitle className="block w-auto truncate font-semibold">{op.title}</ItemTitle>
-                      <ItemDescription className="line-clamp-1 text-xs">{op.sub}</ItemDescription>
-                    </ItemContent>
-                    <ItemActions className={cn("shrink-0 text-sm font-semibold tabular-nums", op.amountClass)}>{op.amount}</ItemActions>
-                  </Item>
-                </Fragment>
-              ))}
-            </ItemGroup>
-          )}
-        </CardContent>
-      </StaggerItem>
-    </Stagger>
+            <Button asChild variant="outline">
+              <Link href="/wallet/deposit">{t("ui.deposit")}</Link>
+            </Button>
+          </div>
+        </StaggerItem>
+
+        <PerfCard value={balance?.total} loading={walletLoading} allTimePct={allTimePct} className="lg:order-1 xl:col-start-1 xl:row-span-2 xl:row-start-2" />
+
+        {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
+        <StaggerItem as={Card} className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
+          <Stat label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
+          <Separator orientation="vertical" className="hidden self-stretch lg:block" />
+          <Stat label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
+          <Separator orientation="vertical" className="hidden self-stretch lg:block" />
+          <Stat label={t("dash.activeStrategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} />
+          <Separator orientation="vertical" className="hidden self-stretch lg:block" />
+          <Stat label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={formatUsd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
+        </StaggerItem>
+
+        {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop
+            sequence for the single-column band between `lg` and `xl`. */}
+        <WhatIOwn allocations={allocations} total={allocTotal} loading={posLoading} className="lg:order-3 xl:col-start-2 xl:row-start-3" />
+        <MoveMoney className="lg:order-2 xl:col-start-2 xl:row-start-2" />
+
+        {/* operations */}
+        <StaggerItem as={Card} className="gap-3 py-4 lg:order-5 lg:gap-4 lg:py-5 xl:col-span-2 xl:col-start-1 xl:row-start-5">
+          <CardHeader className={CARD_PAD}>
+            <CardTitle>{t("dash.recentOperations")}</CardTitle>
+            <CardAction>
+              <Button asChild variant="link" size="sm" className="px-0">
+                <Link href="/operations">{t("ui.viewAll")}</Link>
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent className={CARD_PAD}>
+            {ops.length === 0 ? (
+              <Empty className={EMPTY_BOX}>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <ArrowLeftRight />
+                  </EmptyMedia>
+                  <EmptyTitle>{t("ui.noOperations")}</EmptyTitle>
+                  <EmptyDescription>{t("dash.noOperationsHint")}</EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  {/* Same destination as the Move money card's filled Deposit, which is
+                      already on screen — so this one stays outline. */}
+                  <Button asChild variant="outline">
+                    <Link href="/wallet/deposit">{t("ui.addFunds")}</Link>
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            ) : (
+              <ItemGroup>
+                {ops.map((op, i) => (
+                  <Fragment key={op.id}>
+                    {i > 0 && <ItemSeparator />}
+                    <Item size="sm" className="px-0 py-3 lg:py-4">
+                      <ItemMedia>
+                        {/* Decorative: the row title names the kind in words right beside it. */}
+                        <Badge className={cn("font-semibold", op.tagClass)}>{op.icon ? <op.icon aria-hidden /> : op.tag}</Badge>
+                      </ItemMedia>
+                      <ItemContent className="min-w-0 gap-0.5">
+                        <ItemTitle className="block w-auto truncate font-semibold">{op.title}</ItemTitle>
+                        <ItemDescription className="line-clamp-1 text-xs">{op.sub}</ItemDescription>
+                      </ItemContent>
+                      <ItemActions className={cn("shrink-0 text-sm font-semibold tabular-nums", op.amountClass)}>{op.amount}</ItemActions>
+                    </Item>
+                  </Fragment>
+                ))}
+              </ItemGroup>
+            )}
+          </CardContent>
+        </StaggerItem>
+      </Stagger>
+    </>
   );
 }
 
