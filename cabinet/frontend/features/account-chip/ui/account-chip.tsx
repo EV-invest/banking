@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { translator, type Translate } from "@evinvest/i18n";
 
 import { profileResource } from "@/entities/user/model/profile-resource";
-import { cabinetPath } from "@/shared/config/base-path";
+import { cabinetPath, isCabinetPage } from "@/shared/config/base-path";
 import { chipMessages } from "@/features/account-chip/model/chip-messages";
 import { cn } from "@/shared/lib/cn";
 import { csrfHeader } from "@/shared/lib/csrf-client";
@@ -61,14 +61,20 @@ function chipTranslator(): Translate {
 // anonymous visitor on the public site must not be bounced to login.
 //
 // Those destinations are LOCALISED, and that is the whole fix for "the cabinet always opens
-// in Russian". Cabinet page URLs carry the locale first (`/{locale}/cabinet/profile`); the
-// chip used to link to the locale-free `/cabinet/profile`, which the zone proxy then had to
+// in Russian". Cabinet page URLs carry the locale first (`/{locale}/cabinet/…`); the chip
+// used to link to the locale-free `/cabinet/profile`, which the zone proxy then had to
 // resolve on its own — and with nothing carrying the reader's site language across the zone
 // boundary, it resolved from Accept-Language. A reader on the English landing with a
 // Russian-configured browser was sent to /ru/cabinet/profile every time. The document the
 // chip is rendered into already knows the answer, so it links straight there and no guess
 // is ever made. site_conductor also mirrors that locale into the `ev_locale` cookie, which
 // covers the other entry points (bookmarks, old links) the chip is not involved in.
+//
+// Where the chip links depends on where it is. On a public-site page it is the way INTO
+// the cabinet, so it opens the cabinet home — an investor arriving from the landing wants
+// their portfolio, not their own name and address. On a cabinet page the home is one rail
+// click away and the chip is the identity affordance, so there it opens the profile. The
+// document's own pathname decides (`isCabinetPage`), read the same way the locale is.
 export function AccountChip({ className }: { className?: string }) {
   const session = useSession();
   // Read once, at mount: the optimistic identity from the last visit.
@@ -153,7 +159,7 @@ function AuthedChip({
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <a
-        href={cabinetPath(documentLocale(), "/profile")}
+        href={chipHref()}
         className={cn("flex min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-ink/5", CHIP_FOCUS)}
       >
         <span className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-accent-debug/15 text-xs font-semibold text-accent-debug">
@@ -182,6 +188,16 @@ function AuthedChip({
       </button>
     </div>
   );
+}
+
+/**
+ * The chip's destination: the cabinet home from the public site, the profile from inside
+ * the cabinet (see the note above AccountChip). Read at render, like the locale — the
+ * conductor swaps documents under a chip that never remounts.
+ */
+function chipHref(): string {
+  const inCabinet = typeof document !== "undefined" && isCabinetPage(document.location.pathname);
+  return cabinetPath(documentLocale(), inCabinet ? "/profile" : "/");
 }
 
 // Signed-out (or BFF-unavailable) state — the Investor Portal CTA the chip supersedes.

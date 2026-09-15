@@ -119,6 +119,23 @@ const NON_PAGE = new RegExp(
 export const isNonPagePath = (pathname: string): boolean => NON_PAGE.test(pathname);
 
 /**
+ * Whether `pathname` is a page of this zone — `/cabinet`, `/cabinet/…`, or the same
+ * behind a locale segment. Assets, BFF calls and MFE bundles under the prefix are not
+ * pages (see {@link isNonPagePath}), and a sibling route like `/cabinets` is not this zone.
+ *
+ * The account chip needs the answer from the document it was mounted into: the same
+ * bundle renders on the public site and inside the cabinet, and where its link goes
+ * depends on which of the two the reader is looking at.
+ */
+export const isCabinetPage = (pathname: string): boolean => {
+  if (isNonPagePath(pathname)) return false;
+  const zone = BASE_PATH.slice(1);
+  // Whole segments, so `/cabinets` and `/en/cabinets/list` stay someone else's routes.
+  const [, first, second] = pathname.split("/");
+  return first === zone || (isLocale(first) && second === zone);
+};
+
+/**
  * The same cabinet page, in another locale — path, query and hash intact.
  *
  * Two callers relocalise the current page (the settings language switcher and

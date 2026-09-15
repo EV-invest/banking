@@ -4175,6 +4175,10 @@
     "en": "Payments",
     "t": "Thanh toán"
   },
+  "nav.profile": {
+    "en": "Profile",
+    "t": "Hồ sơ"
+  },
   "nav.revenue": {
     "en": "Revenue stats",
     "t": "Thống kê doanh thu"
@@ -4731,17 +4735,41 @@
     "en": "To a product",
     "t": "Vào sản phẩm"
   },
-  "profile.accountSnapshot": {
-    "en": "Account snapshot",
-    "t": "Tổng quan tài khoản"
+  "profile.activeSince": {
+    "en": "Active since {date}",
+    "t": "Hoạt động từ {date}"
+  },
+  "profile.activity": {
+    "en": "Activity",
+    "t": "Hoạt động"
+  },
+  "profile.activityCapped": {
+    "en": "Counted over your {n} most recent operations",
+    "t": "Tính trên {n} giao dịch gần nhất của bạn"
+  },
+  "profile.activitySub": {
+    "en": "Everything that has moved money on this account",
+    "t": "Mọi giao dịch đã chuyển tiền trên tài khoản này"
+  },
+  "profile.completeDetails": {
+    "en": "Complete your details in Settings — verification and compliance checks rely on them.",
+    "t": "Hoàn thiện thông tin trong Cài đặt — việc xác minh và kiểm tra tuân thủ dựa vào đó."
   },
   "profile.dateOfBirth": {
     "en": "Date of birth",
     "t": "Ngày sinh"
   },
-  "profile.editProfile": {
-    "en": "Edit profile",
-    "t": "Chỉnh sửa hồ sơ"
+  "profile.edit": {
+    "en": "Edit",
+    "t": "Sửa"
+  },
+  "profile.editInSettings": {
+    "en": "Edit in Settings",
+    "t": "Sửa trong Cài đặt"
+  },
+  "profile.hintAtNav": {
+    "en": "at current NAV",
+    "t": "theo NAV hiện tại"
   },
   "profile.identityAndStanding": {
     "en": "Identity and account standing",
@@ -4783,6 +4811,10 @@
     "en": "Raised by verification and review",
     "t": "Được nâng sau khi xác minh và xét duyệt"
   },
+  "profile.lastActivity": {
+    "en": "Last activity",
+    "t": "Hoạt động gần nhất"
+  },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Tên pháp lý"
@@ -4791,13 +4823,13 @@
     "en": "Nationality",
     "t": "Quốc tịch"
   },
-  "profile.personalInformation": {
-    "en": "Personal information",
-    "t": "Thông tin cá nhân"
+  "profile.noActivityBody": {
+    "en": "Your first deposit will appear here.",
+    "t": "Khoản nạp đầu tiên của bạn sẽ xuất hiện ở đây."
   },
-  "profile.personalInformationSub": {
-    "en": "Used for compliance and statements",
-    "t": "Dùng cho tuân thủ và sao kê"
+  "profile.noActivityTitle": {
+    "en": "No activity yet",
+    "t": "Chưa có hoạt động nào"
   },
   "profile.phoneNumber": {
     "en": "Phone number",
@@ -4815,25 +4847,21 @@
     "en": "Residential address",
     "t": "Địa chỉ thường trú"
   },
-  "profile.roleAccount": {
-    "en": "{role} account",
-    "t": "Tài khoản {role}"
-  },
   "profile.subtitle": {
-    "en": "Your personal details and verification status",
-    "t": "Thông tin cá nhân và tình trạng xác minh của bạn"
+    "en": "Who you are on the platform and how your account stands",
+    "t": "Bạn là ai trên nền tảng và tình trạng tài khoản của bạn"
   },
   "profile.taxResidence": {
     "en": "Tax residence",
     "t": "Nơi cư trú thuế"
   },
-  "profile.totalInvested": {
-    "en": "Total invested",
-    "t": "Tổng đã đầu tư"
-  },
   "profile.unverified": {
     "en": "Unverified",
     "t": "Chưa xác minh"
+  },
+  "profile.viewAllActivity": {
+    "en": "View all activity",
+    "t": "Xem toàn bộ hoạt động"
   },
   "session.breakGlass.body": {
     "en": "This fund has no owner in the register yet, so your role comes from the OWNER_SUBJECTS emergency allowlist and not from the register itself. It is real authority over this console, but it seats nobody: you hold no vote in the consilium. A seat is written once by the genesis seed when the service starts, or granted afterwards by a consilium of the existing owners — and this notice goes away for good the moment the first owner is seated.",
@@ -4846,10 +4874,6 @@
   "settings.a11y.sections": {
     "en": "Settings sections",
     "t": "Các mục cài đặt"
-  },
-  "settings.accountSub": {
-    "en": "Your contact details and preferences",
-    "t": "Thông tin liên hệ và tùy chọn của bạn"
   },
   "settings.baseCurrency": {
     "en": "Base currency",
@@ -4903,17 +4927,81 @@
     "en": "Your password, two-factor authentication and recovery are configured in your Google Account.",
     "t": "Mật khẩu, xác thực hai yếu tố và khôi phục của bạn được thiết lập trong Tài khoản Google."
   },
-  "settings.nav.general": {
-    "en": "General",
-    "t": "Chung"
+  "settings.group.cabinet": {
+    "en": "Cabinet",
+    "t": "Cabinet"
+  },
+  "settings.group.cabinetSub": {
+    "en": "How the cabinet looks and how it reaches you",
+    "t": "Cabinet trông thế nào và liên hệ với bạn ra sao"
+  },
+  "settings.group.profileSub": {
+    "en": "Who you are and how your account is protected",
+    "t": "Bạn là ai và tài khoản của bạn được bảo vệ ra sao"
+  },
+  "settings.hint.address": {
+    "en": "Your current home address.",
+    "t": "Địa chỉ nhà hiện tại của bạn."
+  },
+  "settings.hint.baseCurrency": {
+    "en": "Saved to your account. Balances in the cabinet are always shown in USD.",
+    "t": "Lưu vào tài khoản của bạn. Số dư trong cabinet luôn hiển thị bằng USD."
+  },
+  "settings.hint.dateOfBirth": {
+    "en": "As on your identity document.",
+    "t": "Như trên giấy tờ tùy thân của bạn."
+  },
+  "settings.hint.email": {
+    "en": "Comes from your Google account and can't be changed here.",
+    "t": "Lấy từ tài khoản Google của bạn và không thể thay đổi tại đây."
+  },
+  "settings.hint.language": {
+    "en": "Applies as soon as you save; the whole cabinet switches.",
+    "t": "Áp dụng ngay khi bạn lưu; toàn bộ cabinet sẽ chuyển ngôn ngữ."
+  },
+  "settings.hint.phone": {
+    "en": "Used to reach you about your account.",
+    "t": "Dùng để liên hệ với bạn về tài khoản."
+  },
+  "settings.hint.preferredName": {
+    "en": "How the cabinet and our emails address you.",
+    "t": "Cách cabinet và email của chúng tôi xưng hô với bạn."
+  },
+  "settings.hint.timeZone": {
+    "en": "Saved to your account. The cabinet itself shows times in your device's time zone.",
+    "t": "Lưu vào tài khoản của bạn. Cabinet hiển thị thời gian theo múi giờ của thiết bị bạn dùng."
+  },
+  "settings.nav.personal": {
+    "en": "Personal details",
+    "t": "Thông tin cá nhân"
+  },
+  "settings.nav.preferences": {
+    "en": "Preferences",
+    "t": "Tùy chọn"
   },
   "settings.noSessions": {
     "en": "No active sessions.",
     "t": "Không có phiên nào đang hoạt động."
   },
+  "settings.notificationsSub": {
+    "en": "Which channels reach you and which events you follow",
+    "t": "Kênh nào liên hệ với bạn và sự kiện nào bạn theo dõi"
+  },
+  "settings.personalRowSub": {
+    "en": "Name, phone, address, tax residence",
+    "t": "Tên, điện thoại, địa chỉ, cư trú thuế"
+  },
+  "settings.personalSub": {
+    "en": "Your identity as the fund records it",
+    "t": "Danh tính của bạn theo hồ sơ của quỹ"
+  },
   "settings.phone": {
     "en": "Phone",
     "t": "Điện thoại"
+  },
+  "settings.preferencesSub": {
+    "en": "How the cabinet is displayed to you. Saved to your account, so every device follows",
+    "t": "Cách cabinet hiển thị với bạn. Lưu vào tài khoản, nên mọi thiết bị đều áp dụng"
   },
   "settings.revoke": {
     "en": "Revoke",
@@ -4990,6 +5078,10 @@
   "settings.tz.hoChiMinh": {
     "en": "Asia / Ho Chi Minh",
     "t": "Châu Á / Hồ Chí Minh"
+  },
+  "settings.viewProfile": {
+    "en": "View profile",
+    "t": "Xem hồ sơ"
   },
   "status.backHome": {
     "en": "Back to home",
