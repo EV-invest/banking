@@ -41,7 +41,8 @@ export function VerificationRequired({ title, description, className }: { title:
       {/* `gap-2` rather than the default: the message below the button is a note on it, and
           an outcome-free block would otherwise carry the full gap under a lone control. */}
       <EmptyContent className="gap-2">
-        {/* i18n-max: 16 — the uikit Button is shrink-0. */}
+        {/* i18n-max: 14 — the uikit Button is shrink-0. The number is the banner's, which is
+            the tighter of the two frames this key renders in; one string, one budget. */}
         <StartVerificationButton start={start} label={t("kyc.verifyNow")} />
         <VerificationOutcome start={start} className="text-center" />
       </EmptyContent>

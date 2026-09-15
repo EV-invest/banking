@@ -45,19 +45,30 @@ export function VerificationBanner({ className }: { className?: string }) {
             <p className="text-sm font-semibold text-ink">{t("kyc.banner.title")}</p>
             <p className="text-sm leading-snug text-ink-soft">{t("kyc.banner.body")}</p>
           </div>
-          {/* i18n-max: 14 — a `shrink-0` button beside a `min-w-0` block from `lg` up. */}
+          {/* i18n-max: 14 — a `shrink-0` button beside a `min-w-0` block from `lg` up. The
+              budget is the tightest frame this key appears in, and ./verification-required
+              declares the same number for it: two numbers on one string is how a budget
+              stops meaning anything. Nothing checks these (scripts/i18n-check.mts compares
+              catalogues, never code), so they are worth only as much as they are true —
+              de/fr/ru were at 20-21 when this was written and have been cut to fit. */}
           <Button type="button" size="sm" className="shrink-0 self-start font-semibold lg:self-auto" onClick={() => setOpen(true)}>
             {t("kyc.verifyNow")}
           </Button>
         </div>
-        <button
+        {/* uikit's own icon button: the square, the hover surface, the disabled state and a
+            focus ring are all things it brings, and the hand-written one had rebuilt half of
+            them. */}
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
+          icon
           onClick={() => dismissBanner()}
           aria-label={t("kyc.banner.dismiss")}
-          className="-m-1 shrink-0 rounded-md p-1 text-ink-soft outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
+          className="-mt-1 -mr-1 shrink-0 text-ink-soft hover:text-ink"
         >
-          <X className="size-4" aria-hidden />
-        </button>
+          <X aria-hidden />
+        </Button>
       </Card>
       <VerificationDialog open={open} onOpenChange={setOpen} />
     </>
