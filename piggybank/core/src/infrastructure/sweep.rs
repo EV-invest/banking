@@ -32,6 +32,12 @@
 //! the chain's own precision (18-dp on BEP20, 6-dp on Polygon). A stuck underpriced transaction (no
 //! replacement-by-fee here) blocking a nonce is a known operational residual — manual intervention,
 //! like the reaper's stuck-withdrawal alert.
+//!
+//! **Signer refusals.** A signer outage retries next poll like any RPC blip, but a refusal on the
+//! merits — the custodian parking the activity for a human, its policy saying no, a request the
+//! signer will never accept — is not re-asked every 30 s: the address is held back with an
+//! exponential backoff ([`rails::RefusalBackoff`]) and the first refusal is logged at `error!`
+//! with the custodian's activity id, the way the withdrawal path parks once and surfaces the id.
 
 use std::{
 	collections::HashMap,
@@ -53,7 +59,7 @@ use crate::{
 	config::{EvmConfig, SweepConfig},
 	infrastructure::{
 		evm_rpc::{EvmRpc, RpcError},
-		rails::{self, GAS_STATION, SweepError, read_err},
+		rails::{self, GAS_STATION, RefusalBackoff, SweepError, read_err, signer_err},
 	},
 };
 
@@ -77,6 +83,8 @@ pub struct Sweep {
 	treasury: OnceCell<String>,
 	gas_station: OnceCell<String>,
 	state: Mutex<GasState>,
+	/// Addresses the signer refused on the merits, each held back with a growing backoff.
+	refusals: Mutex<RefusalBackoff>,
 }
 impl Sweep {
 	pub fn new(pool: PgPool, channel: Channel, service_token: Option<ServiceTokenSource>, evm: &EvmConfig, config: SweepConfig) -> Self {
@@ -93,6 +101,7 @@ impl Sweep {
 			treasury: OnceCell::new(),
 			gas_station: OnceCell::new(),
 			state: Mutex::new(GasState::default()),
+			refusals: Mutex::new(RefusalBackoff::default()),
 		}
 	}
 
@@ -134,12 +143,37 @@ impl Sweep {
 			if address.eq_ignore_ascii_case(&treasury) || address.eq_ignore_ascii_case(&gas_station) {
 				continue;
 			}
+			if self.refusals.lock().is_ok_and(|held| held.is_held(&address, Instant::now())) {
+				continue;
+			}
 			// One bad address (RPC blip, an out-of-gas sender) must not stop the others.
-			if let Err(err) = self.sweep_address(user_id, &address, &treasury, &gas_station).await {
-				warn!(%address, "sweep: address cycle failed (continuing): {err}");
+			match self.sweep_address(user_id, &address, &treasury, &gas_station).await {
+				Ok(()) =>
+					if let Ok(mut held) = self.refusals.lock() {
+						held.release(&address);
+					},
+				Err(SweepError::SignerRefused { detail, activity_id }) => self.hold(&address, &detail, activity_id.as_deref()),
+				Err(err) => warn!(%address, "sweep: address cycle failed (continuing): {err}"),
 			}
 		}
 		Ok(())
+	}
+
+	/// Back `address` off after a terminal signer refusal. The FIRST refusal is the alert —
+	/// with the custodian's activity id when there is one, so the operator can find it on the
+	/// custodian's side — and every later one is the routine note that the hold keeps growing.
+	fn hold(&self, address: &str, detail: &str, activity_id: Option<&str>) {
+		let Ok(mut held) = self.refusals.lock() else {
+			return;
+		};
+		let strike = held.strike(address, Instant::now(), Duration::from_secs(self.config.poll_secs));
+		let retry_in_secs = strike.hold.as_secs();
+		let activity_id = activity_id.unwrap_or("none");
+		if strike.strikes == 1 {
+			error!(network = %self.network, %address, activity_id, retry_in_secs, "sweep: signer refused on the merits — address held back with exponential backoff; an activity id means a human must approve it at the custodian: {detail}");
+		} else {
+			warn!(%address, activity_id, strikes = strike.strikes, retry_in_secs, "sweep: signer refused again — hold extended: {detail}");
+		}
 	}
 
 	async fn sweep_address(&self, user_id: Uuid, address: &str, treasury: &str, gas_station: &str) -> Result<(), SweepError> {
@@ -257,7 +291,7 @@ impl Sweep {
 			.await
 			.map_err(|s| {
 				super::telemetry::note_signer_error("sweep", address, s.message());
-				SweepError::Signer(format!("sweep {address}: {}", s.message()))
+				signer_err(format!("sweep {address}"), &s)
 			})?
 			.into_inner();
 		Ok((response.raw_tx, response.tx_hash))
@@ -284,7 +318,7 @@ impl Sweep {
 			.await
 			.map_err(|s| {
 				super::telemetry::note_signer_error("gas top-up", "gas-station", s.message());
-				SweepError::Signer(format!("gas top-up {to}: {}", s.message()))
+				signer_err(format!("gas top-up {to}"), &s)
 			})?
 			.into_inner();
 		Ok((response.raw_tx, response.tx_hash))
