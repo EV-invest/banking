@@ -219,6 +219,14 @@ the moment they bind and the cabinet-relative product page (`/invest/<service>`,
 concierge's own origin). On the administrator's path the same mails go out the moment the
 change is scheduled.
 
+A notice is queued for every holder with an account row, whether or not the identity plane
+has mirrored them yet. Its addressee (`subject_user_id`, which concierge checks against the
+recipient) is named by the mailer from `users.concierge_user_id` **at the moment it sends**,
+not from whatever the queue row was written with — so a holder whose mirror lands after the
+scheduling (a first cabinet login) is reached on the next pass, rather than the row being
+refused pass after pass for an empty name until the mailer gave up on it (#325). A holder
+still unmirrored when the mailer gets to the row is retired within minutes, as before.
+
 The owners, for their part, are told how the consilium ended: one outcome mail
 (`GovernanceMail::PayoutOutcome`) to the initiator and to every seat on each closed state —
 rejected, expired, cancelled, executed, execution failed — and one burn notice
@@ -261,7 +269,16 @@ says to cancel the pending one first. `CancelFeePolicyChange` withdraws a schedu
 and, for one still awaiting the owners, withdraws its consilium in the same transaction —
 which is why a consilium-gated change may be withdrawn only by the owner who proposed it or
 by another owner: an administrator who could not open the quorum must not be able to close
-it.
+it. Withdrawing a scheduled change also withdraws, in the same transaction, every holder
+notice the mailer has not delivered yet (`consilium_mail.withdrawn_at`, migration `0043`): a
+notice still queued behind a relay outage would otherwise tell its holder, once the relay
+is back, that terms which will never bind "change on <date>" (#319). A withdrawn notice is
+terminal — never drained, never counted as owed — and distinct from one given up on: nobody
+failed to reach anybody. Notices already delivered stand; this plane sends no "cancelled"
+mail after them. The mailer holds each row's lock across the relay call, so a cancel that
+lands while a notice is being handed over waits for the outcome and then withdraws nothing
+delivered — never a notice sent after the fact was taken back, never a delivered one on
+record as withdrawn.
 
 Every transaction over a product's terms — scheduling, the owners carrying, promotion —
 opens by locking the product's `allocations` row. The requirement an operator's request
@@ -364,6 +381,6 @@ performance half is the remaining work.
 | Settling the accrual before a basis moves | `piggybank/core/src/infrastructure/fee_accrual.rs` |
 | The periodic worker | `piggybank/core/src/infrastructure/fee_sweeper.rs` |
 | Changing the terms: history, notice, promotion | `piggybank/core/src/infrastructure/fee_policy_changes.rs` |
-| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql`, `0041_fee_assessment_deferred_charge.sql`, `0042_fee_policy_notice_waiver.sql` |
+| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql`, `0041_fee_assessment_deferred_charge.sql`, `0042_fee_policy_notice_waiver.sql`, `0043_consilium_mail_withdrawn.sql` |
 | Wire contract | `contracts/proto/banking/v1/fees.proto` |
 | Integration tests (real PG + TigerBeetle) | `piggybank/core/tests/fee_policy.rs` |

@@ -62,6 +62,33 @@ pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uui
 	Ok(())
 }
 
+/// Withdraw every mail about `subject` that has not been delivered, on the caller's open
+/// transaction: the fact the mails announce is being taken back, and they must go with it or
+/// not at all. Terminal — a withdrawn row is never drained and never counted as a mail
+/// somebody is still owed — and distinct from a row given up on: nobody failed to reach
+/// anybody. A delivered mail is left as it is; the schema refuses to withdraw one. Returns
+/// how many rows were withdrawn. The UPDATE takes each row's lock, which the worker holds
+/// across a delivery in flight ([`ConsiliumMailer::deliver`]): this waits for that outcome
+/// rather than withdrawing a mail that is being handed over.
+pub async fn withdraw_undelivered(conn: &mut PgConnection, subject: MailSubject) -> Result<u64, DomainError> {
+	let (sql, id) = match subject {
+		MailSubject::Consilium(id) => (
+			"UPDATE consilium_mail SET withdrawn_at = now() WHERE consilium_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
+			id,
+		),
+		MailSubject::Payment(id) => (
+			"UPDATE consilium_mail SET withdrawn_at = now() WHERE payment_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
+			id,
+		),
+		MailSubject::FeePolicyChange(id) => (
+			"UPDATE consilium_mail SET withdrawn_at = now() WHERE fee_policy_change_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
+			id,
+		),
+	};
+	let withdrawn = sqlx::query(sql).bind(id).execute(&mut *conn).await.map_err(repo_err)?;
+	Ok(withdrawn.rows_affected())
+}
+
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Rows per pass. Governance mail is low volume by nature — a handful per consilium.
@@ -148,12 +175,14 @@ impl ConsiliumMailer {
 	/// One pass. Returns how many messages were handed over. Public so an integration test
 	/// can drive it deterministically.
 	pub async fn drain(&self) -> Result<usize, DomainError> {
-		// A deferred row waits out its backoff; everything else undelivered and under the
-		// ceiling is due now.
-		let rows = sqlx::query(
-			"SELECT m.id, m.dedupe_key, m.payload::text AS payload, u.concierge_user_id \
-			 FROM consilium_mail m JOIN users u ON u.id = m.user_id \
-			 WHERE m.sent_at IS NULL AND m.attempts < $1 AND (m.next_attempt_at IS NULL OR m.next_attempt_at <= now()) ORDER BY m.id LIMIT $2",
+		// A deferred row waits out its backoff; a withdrawn one is never due again; everything
+		// else undelivered and under the ceiling is due now. Ids only: each row is then
+		// re-read and LOCKED in its own transaction, so what is judged is the row of the
+		// moment it is delivered, not of the moment the pass began.
+		let ids: Vec<i64> = sqlx::query_scalar(
+			"SELECT id FROM consilium_mail \
+			 WHERE sent_at IS NULL AND withdrawn_at IS NULL AND attempts < $1 AND (next_attempt_at IS NULL OR next_attempt_at <= now()) \
+			 ORDER BY id LIMIT $2",
 		)
 		.bind(MAX_ATTEMPTS)
 		.bind(BATCH)
@@ -162,62 +191,115 @@ impl ConsiliumMailer {
 		.map_err(repo_err)?;
 
 		let mut sent = 0;
-		for row in &rows {
-			let id: i64 = row.try_get("id").map_err(repo_err)?;
-			let dedupe_key: String = row.try_get("dedupe_key").map_err(repo_err)?;
-			let payload: String = row.try_get("payload").map_err(repo_err)?;
-			let concierge_user_id: Option<Uuid> = row.try_get("concierge_user_id").map_err(repo_err)?;
-			let mail: GovernanceMail = match serde_json::from_str(&payload) {
-				Ok(mail) => mail,
-				Err(err) => {
-					// Nothing typed to redact: a payload this worker cannot read is one it
-					// cannot strip either, and the row is retired as it stands.
-					self.fail(id, &format!("unreadable payload: {err}"), None).await?;
-					continue;
-				}
-			};
-			// The recipient is addressed in the plane that OWNS identities, so the money
-			// plane cannot redirect a governance mail. Without the mirrored id there is no
-			// safe address to send to, and guessing is not an option.
-			let Some(recipient) = concierge_user_id else {
-				self.fail(id, "recipient has no mirrored concierge user id", Some(&mail)).await?;
-				continue;
-			};
-			match self.mailer.send(recipient, &dedupe_key, &mail).await {
-				Ok(()) => {
-					let redacted = serde_json::to_string(&mail.redacted()).map_err(|e| DomainError::Repository(e.to_string()))?;
-					sqlx::query("UPDATE consilium_mail SET sent_at = now(), payload = $2::jsonb WHERE id = $1")
-						.bind(id)
-						.bind(redacted)
-						.execute(&self.pool)
-						.await
-						.map_err(repo_err)?;
-					// `notified` used to be set TRUE at INSERT, where it meant "queued" while
-					// the operator screen reading it says "notified". During a concierge outage
-					// every seat would show as notified with not one mail delivered — the screen
-					// would look healthiest exactly when the mechanism was most broken. It is set
-					// HERE, once concierge has actually taken the message, and only for a mail
-					// that carries a token: an outcome or burn notice tells the recipient nothing
-					// about whether they were given one to answer with. Which seat table holds
-					// the flag follows from which subject the row names.
-					if mail.carries_a_token() {
-						sqlx::query("UPDATE consilium_voter v SET notified = TRUE FROM consilium_mail m WHERE m.id = $1 AND v.consilium_id = m.consilium_id AND v.user_id = m.user_id")
-							.bind(id)
-							.execute(&self.pool)
-							.await
-							.map_err(repo_err)?;
-						sqlx::query("UPDATE payment_consent c SET notified = TRUE FROM consilium_mail m WHERE m.id = $1 AND c.payment_id = m.payment_id AND c.subject_user_id = m.user_id")
-							.bind(id)
-							.execute(&self.pool)
-							.await
-							.map_err(repo_err)?;
-					}
-					sent += 1;
-				}
-				Err(MailDeliveryError::Deferred(why)) => self.defer(id, &why, &mail).await?,
-				Err(MailDeliveryError::Failed(why)) => self.fail(id, &why, Some(&mail)).await?,
+		for id in ids {
+			if self.deliver(id).await? {
+				sent += 1;
 			}
 		}
+		Ok(sent)
+	}
+
+	/// One row, in ONE transaction that holds the row's lock from the moment it is read until
+	/// its outcome is written — across the relay call. A transition that withdraws the row
+	/// ([`withdraw_undelivered`], on a cancel) takes the same lock, so it either runs before
+	/// this read (and the row is skipped here) or waits until the outcome is committed: a
+	/// mail is never handed over after the fact it announces was taken back, and the outcome
+	/// is never written over a withdrawal. Without the lock, a cancel landing between the
+	/// read and the send would deliver a withdrawn notice AND then trip
+	/// `consilium_mail_withdrawn_is_unsent` on the write-back, leaving a delivered mail on
+	/// record as "nobody told". The relay call is bounded (connect and request deadlines on
+	/// the channel), so the wait a cancel may sit out is bounded with it. `SKIP LOCKED`: a row
+	/// under such a transition right now is left to the next pass, which sees its result.
+	///
+	/// Returns whether the message was handed over.
+	async fn deliver(&self, id: i64) -> Result<bool, DomainError> {
+		let mut tx = self.pool.begin().await.map_err(repo_err)?;
+		let row = sqlx::query(
+			"SELECT m.dedupe_key, m.payload::text AS payload, u.concierge_user_id \
+			 FROM consilium_mail m JOIN users u ON u.id = m.user_id \
+			 WHERE m.id = $1 AND m.sent_at IS NULL AND m.withdrawn_at IS NULL AND m.attempts < $2 AND (m.next_attempt_at IS NULL OR m.next_attempt_at <= now()) \
+			 FOR UPDATE OF m SKIP LOCKED",
+		)
+		.bind(id)
+		.bind(MAX_ATTEMPTS)
+		.fetch_optional(&mut *tx)
+		.await
+		.map_err(repo_err)?;
+		// Withdrawn, delivered or locked by a transition since the pass began: not this pass's.
+		let Some(row) = row else {
+			return Ok(false);
+		};
+		let dedupe_key: String = row.try_get("dedupe_key").map_err(repo_err)?;
+		let payload: String = row.try_get("payload").map_err(repo_err)?;
+		let concierge_user_id: Option<Uuid> = row.try_get("concierge_user_id").map_err(repo_err)?;
+		let mut mail: GovernanceMail = match serde_json::from_str(&payload) {
+			Ok(mail) => mail,
+			Err(err) => {
+				// Nothing typed to redact: a payload this worker cannot read is one it
+				// cannot strip either, and the row is retired as it stands.
+				self.fail(&mut tx, id, &format!("unreadable payload: {err}"), None).await?;
+				tx.commit().await.map_err(repo_err)?;
+				return Ok(false);
+			}
+		};
+		// The recipient is addressed in the plane that OWNS identities, so the money
+		// plane cannot redirect a governance mail. Without the mirrored id there is no
+		// safe address to send to, and guessing is not an option.
+		let Some(recipient) = concierge_user_id else {
+			self.fail(&mut tx, id, "recipient has no mirrored concierge user id", Some(&mail)).await?;
+			tx.commit().await.map_err(repo_err)?;
+			return Ok(false);
+		};
+		// A holder's notice names its addressee in the identity plane as a consent does,
+		// and concierge refuses the two disagreeing — but unlike a consent it is queued
+		// whether or not the holder was mirrored at the time (#325), so the name is taken
+		// from the mirror of THIS moment, the same row the address above came from. A
+		// holder mirrored after the change was scheduled is then reached on the next pass
+		// instead of the row being charged an attempt per pass for an empty name.
+		if let GovernanceMail::FeePolicyNotice(notice) = &mut mail {
+			notice.subject_user_id = recipient.to_string();
+		}
+		let sent = match self.mailer.send(recipient, &dedupe_key, &mail).await {
+			Ok(()) => {
+				let redacted = serde_json::to_string(&mail.redacted()).map_err(|e| DomainError::Repository(e.to_string()))?;
+				sqlx::query("UPDATE consilium_mail SET sent_at = now(), payload = $2::jsonb WHERE id = $1")
+					.bind(id)
+					.bind(redacted)
+					.execute(&mut *tx)
+					.await
+					.map_err(repo_err)?;
+				// `notified` used to be set TRUE at INSERT, where it meant "queued" while
+				// the operator screen reading it says "notified". During a concierge outage
+				// every seat would show as notified with not one mail delivered — the screen
+				// would look healthiest exactly when the mechanism was most broken. It is set
+				// HERE, once concierge has actually taken the message, and only for a mail
+				// that carries a token: an outcome or burn notice tells the recipient nothing
+				// about whether they were given one to answer with. Which seat table holds
+				// the flag follows from which subject the row names.
+				if mail.carries_a_token() {
+					sqlx::query("UPDATE consilium_voter v SET notified = TRUE FROM consilium_mail m WHERE m.id = $1 AND v.consilium_id = m.consilium_id AND v.user_id = m.user_id")
+						.bind(id)
+						.execute(&mut *tx)
+						.await
+						.map_err(repo_err)?;
+					sqlx::query("UPDATE payment_consent c SET notified = TRUE FROM consilium_mail m WHERE m.id = $1 AND c.payment_id = m.payment_id AND c.subject_user_id = m.user_id")
+						.bind(id)
+						.execute(&mut *tx)
+						.await
+						.map_err(repo_err)?;
+				}
+				true
+			}
+			Err(MailDeliveryError::Deferred(why)) => {
+				self.defer(&mut tx, id, &why, &mail).await?;
+				false
+			}
+			Err(MailDeliveryError::Failed(why)) => {
+				self.fail(&mut tx, id, &why, Some(&mail)).await?;
+				false
+			}
+		};
+		tx.commit().await.map_err(repo_err)?;
 		Ok(sent)
 	}
 
@@ -226,15 +308,15 @@ impl ConsiliumMailer {
 	/// from the sweep interval up to [`MAX_DEFERRAL_BACKOFF`]; past [`DEFERRAL_CEILING`] from
 	/// creation the row is given up on the way a failed one is, so a permanently throttled
 	/// recipient still becomes an alert rather than a silent stall.
-	async fn defer(&self, id: i64, reason: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
+	async fn defer(&self, conn: &mut PgConnection, id: i64, reason: &str, mail: &GovernanceMail) -> Result<(), DomainError> {
 		let expired: bool = sqlx::query_scalar("SELECT created_at + $2 < now() FROM consilium_mail WHERE id = $1")
 			.bind(id)
 			.bind(DEFERRAL_CEILING)
-			.fetch_one(&self.pool)
+			.fetch_one(&mut *conn)
 			.await
 			.map_err(repo_err)?;
 		if expired {
-			self.retire(id, reason, Some(mail)).await?;
+			self.retire(conn, id, reason, Some(mail)).await?;
 			error!(
 				mail_id = id,
 				"consilium mailer: giving up on a governance mail deferred for over {DEFERRAL_CEILING:?} — an owner will not be told: {reason}"
@@ -244,14 +326,14 @@ impl ConsiliumMailer {
 		let deferrals: i32 = sqlx::query_scalar("UPDATE consilium_mail SET deferrals = deferrals + 1, last_error = $2 WHERE id = $1 RETURNING deferrals")
 			.bind(id)
 			.bind(reason)
-			.fetch_one(&self.pool)
+			.fetch_one(&mut *conn)
 			.await
 			.map_err(repo_err)?;
 		let backoff = SWEEP_INTERVAL.saturating_mul(1u32 << (deferrals - 1).clamp(0, 16)).min(MAX_DEFERRAL_BACKOFF);
 		sqlx::query("UPDATE consilium_mail SET next_attempt_at = now() + $2 WHERE id = $1")
 			.bind(id)
 			.bind(backoff)
-			.execute(&self.pool)
+			.execute(&mut *conn)
 			.await
 			.map_err(repo_err)?;
 		warn!(
@@ -267,15 +349,15 @@ impl ConsiliumMailer {
 	/// approval mail that never arrives is a consilium that can never reach quorum, which is
 	/// exactly the kind of silent stall an operator must be told about — and the row is
 	/// retired with its secrets stripped, exactly as a delivered one is.
-	async fn fail(&self, id: i64, reason: &str, mail: Option<&GovernanceMail>) -> Result<(), DomainError> {
+	async fn fail(&self, conn: &mut PgConnection, id: i64, reason: &str, mail: Option<&GovernanceMail>) -> Result<(), DomainError> {
 		let attempts: i32 = sqlx::query_scalar("UPDATE consilium_mail SET attempts = attempts + 1, last_error = $2 WHERE id = $1 RETURNING attempts")
 			.bind(id)
 			.bind(reason)
-			.fetch_one(&self.pool)
+			.fetch_one(&mut *conn)
 			.await
 			.map_err(repo_err)?;
 		if attempts >= MAX_ATTEMPTS {
-			self.retire(id, reason, mail).await?;
+			self.retire(conn, id, reason, mail).await?;
 			error!(mail_id = id, attempts, "consilium mailer: giving up on a governance mail — an owner will not be told: {reason}");
 		} else {
 			warn!(mail_id = id, attempts, "consilium mailer: delivery failed (will retry): {reason}");
@@ -287,7 +369,7 @@ impl ConsiliumMailer {
 	/// and its payload rewritten WITHOUT its secrets. A token and a code that will never be
 	/// delivered are a credential nobody legitimately holds, and the row is kept for the
 	/// audit trail — which needs to say what was attempted, not what the code was.
-	async fn retire(&self, id: i64, reason: &str, mail: Option<&GovernanceMail>) -> Result<(), DomainError> {
+	async fn retire(&self, conn: &mut PgConnection, id: i64, reason: &str, mail: Option<&GovernanceMail>) -> Result<(), DomainError> {
 		let redacted = mail
 			.map(|mail| serde_json::to_string(&mail.redacted()))
 			.transpose()
@@ -297,7 +379,7 @@ impl ConsiliumMailer {
 			.bind(MAX_ATTEMPTS)
 			.bind(reason)
 			.bind(redacted)
-			.execute(&self.pool)
+			.execute(&mut *conn)
 			.await
 			.map_err(repo_err)?;
 		Ok(())
@@ -309,9 +391,9 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 }
 
 /// How many governance mails are still undelivered — the number the boot warning quotes when
-/// the seam is unwired.
+/// the seam is unwired. A withdrawn mail is not owed to anybody and is not counted.
 pub async fn pending_count(pool: &PgPool) -> Result<i64, DomainError> {
-	sqlx::query_scalar("SELECT COUNT(*) FROM consilium_mail WHERE sent_at IS NULL")
+	sqlx::query_scalar("SELECT COUNT(*) FROM consilium_mail WHERE sent_at IS NULL AND withdrawn_at IS NULL")
 		.fetch_one(pool)
 		.await
 		.map_err(repo_err)

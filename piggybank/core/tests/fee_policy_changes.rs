@@ -13,8 +13,12 @@
 //! [`exclusive`] and starts from a cleared roster; products, holders and changes are all
 //! per test.
 
-use std::sync::Arc;
+use std::sync::{
+	Arc,
+	atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 
+use async_trait::async_trait;
 use domain::{
 	allocations::{Allocation, AllocationAccess, AllocationIcon, AllocationId},
 	auth::AuthSubject,
@@ -31,6 +35,7 @@ use piggybank_core::{
 	infrastructure::{
 		allocations::PgAllocations,
 		consilium::PgConsilia,
+		consilium_mailer::ConsiliumMailer,
 		custody::StubCustody,
 		deposits::PgDeposits,
 		fee_policy_changes::PgFeePolicyChanges,
@@ -47,6 +52,7 @@ use piggybank_core::{
 		AllocationRegistry, ConsiliumRepository, PaymentRepository, UserRepository, WithdrawalRepository,
 		consilium::{MAX_CODE_ATTEMPTS, VoteAudit},
 		fees::{FeePolicies, FeePolicyChange, FeePolicyChanges, NewFeePolicyChange, PositionAccruals},
+		governance_mail::{GovernanceMail, GovernanceMailer, MailDeliveryError},
 		ledger::Ledger,
 	},
 };
@@ -227,9 +233,16 @@ async fn install(h: &Harness, service: &ServiceId, policy: FeePolicy) {
 
 /// A provisioned investor with a mirrored identity-plane id, so a notice can be addressed.
 async fn investor(h: &Harness) -> UserId {
+	let id = unmirrored_investor(h).await;
+	mirror(h, id).await;
+	id
+}
+
+/// A provisioned investor the identity plane has not mirrored yet — a money-plane row with
+/// no `concierge_user_id`, as the bridge leaves one until the first cabinet login lands.
+async fn unmirrored_investor(h: &Harness) -> UserId {
 	let tag = Uuid::new_v4();
-	let id = h
-		.users
+	h.users
 		.provision(
 			AuthSubject::parse(&format!("fpc-{tag}")).unwrap(),
 			Email::parse(&format!("fpc-{}@example.test", tag.simple())).unwrap(),
@@ -237,14 +250,19 @@ async fn investor(h: &Harness) -> UserId {
 		)
 		.await
 		.unwrap()
-		.id();
+		.id()
+}
+
+/// Stand in for the bridge mirroring the investor's identity-plane id. Returns that id.
+async fn mirror(h: &Harness, user: UserId) -> Uuid {
+	let concierge_id = Uuid::new_v4();
 	sqlx::query("UPDATE users SET concierge_user_id = $2 WHERE id = $1")
-		.bind(id.raw())
-		.bind(Uuid::new_v4())
+		.bind(user.raw())
+		.bind(concierge_id)
 		.execute(&h.pool)
 		.await
 		.unwrap();
-	id
+	concierge_id
 }
 
 async fn fund_user(h: &Harness, user: UserId, amount: &str) {
@@ -326,6 +344,65 @@ async fn let_the_notice_run(h: &Harness, change: &FeePolicyChange) {
 		.execute(&h.pool)
 		.await
 		.unwrap();
+}
+
+/// The identity plane's relay, stood in for at the mailer's port: DOWN (every send
+/// deferred, as an unreachable concierge is) or UP (every send taken and kept, with the
+/// recipient it was addressed to), switched by the test.
+#[derive(Default)]
+struct SwitchedRelay {
+	down: AtomicBool,
+	seen: std::sync::Mutex<Vec<(Uuid, GovernanceMail)>>,
+}
+
+#[async_trait]
+impl GovernanceMailer for SwitchedRelay {
+	async fn send(&self, recipient: Uuid, _dedupe_key: &str, mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
+		if self.down.load(Ordering::SeqCst) {
+			return Err(MailDeliveryError::Deferred("governance mail relay: status: Unavailable".into()));
+		}
+		self.seen.lock().unwrap().push((recipient, mail.clone()));
+		Ok(())
+	}
+}
+
+/// The queue is shared by every test in this binary and drained in batches of 100 by id, so
+/// a test that runs the mailer first retires the backlog the others left behind.
+async fn quiet_queue(h: &Harness) {
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE sent_at IS NULL AND withdrawn_at IS NULL")
+		.execute(&h.pool)
+		.await
+		.unwrap();
+}
+
+/// Every notice row of a change as the queue holds it, by holder: `(sent, withdrawn)`.
+async fn notice_states(h: &Harness, change: &FeePolicyChange) -> std::collections::HashMap<UserId, (bool, bool)> {
+	let rows: Vec<(Uuid, bool, bool)> =
+		sqlx::query_as("SELECT user_id, sent_at IS NOT NULL, withdrawn_at IS NOT NULL FROM consilium_mail WHERE fee_policy_change_id = $1 AND kind = 'fee_policy_notice'")
+			.bind(change.id.raw())
+			.fetch_all(&h.pool)
+			.await
+			.unwrap();
+	rows.into_iter().map(|(user, sent, withdrawn)| (UserId::from_raw(user), (sent, withdrawn))).collect()
+}
+
+/// Stand in for a deferred row's backoff having run out, so the next pass asks the relay again.
+async fn let_the_backoff_run(h: &Harness, change: &FeePolicyChange) {
+	sqlx::query("UPDATE consilium_mail SET next_attempt_at = NULL WHERE fee_policy_change_id = $1")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+}
+
+/// One notice row as the mailer left it: `(attempts, last_error, sent, subject_user_id)`.
+async fn notice_row(h: &Harness, change: &FeePolicyChange, user: UserId) -> (i32, Option<String>, bool, String) {
+	sqlx::query_as("SELECT attempts, last_error, sent_at IS NOT NULL, payload ->> 'subject_user_id' FROM consilium_mail WHERE fee_policy_change_id = $1 AND user_id = $2")
+		.bind(change.id.raw())
+		.bind(user.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap()
 }
 
 /// Clear the global roster and the cooling-off clock, then seat `n` fresh owners.
@@ -560,6 +637,210 @@ async fn a_change_does_not_bind_while_a_holder_notice_has_been_given_up_on() {
 	assert!(h.changes.promote(change.id, now()).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
 	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Active);
+}
+
+/// A holder the identity plane had not mirrored when the change was scheduled (#325): the
+/// notice is queued with no addressee, and the worker names one from the mirror at SEND
+/// time — so the mirror landing after the scheduling is enough for the notice to go out,
+/// addressed to it, and the row is never charged for an empty name it could have filled.
+#[tokio::test]
+async fn a_holder_mirrored_after_the_scheduling_is_still_told() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	install(&h, &service, cheaper).await;
+	let late = unmirrored_investor(&h).await;
+	fund_user(&h, late, "1000").await;
+	subscribe(&h, late, &service, "1000").await;
+	quiet_queue(&h).await;
+
+	// A tightening, so that the notice is the one thing the change waits on.
+	let change = schedule(&h, UserId::new(), &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	let (_, mail) = notices(&h, &change).await.pop().expect("queued for the unmirrored holder all the same");
+	assert_eq!(mail["subject_user_id"], "", "no identity-plane id to name yet");
+
+	// Still unmirrored when the worker gets to it: charged, and the reason says what is
+	// missing — not that the relay refused a name.
+	let relay = Arc::new(SwitchedRelay::default());
+	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	let (attempts, last_error, sent, _) = notice_row(&h, &change, late).await;
+	assert_eq!((attempts, sent), (1, false));
+	assert_eq!(last_error.as_deref(), Some("recipient has no mirrored concierge user id"));
+	assert!(relay.seen.lock().unwrap().is_empty(), "nothing was handed over without an address");
+
+	// The bridge mirrors the holder (a first cabinet login): the next pass reaches them,
+	// addressed to that id in the identity plane, and the row says so afterwards.
+	let concierge_id = mirror(&h, late).await;
+	assert_eq!(mailer.drain().await.unwrap(), 1);
+	let seen = relay.seen.lock().unwrap().clone();
+	let [(recipient, GovernanceMail::FeePolicyNotice(notice))] = seen.as_slice() else {
+		panic!("one notice, kept as it was handed over: {seen:?}");
+	};
+	assert_eq!(*recipient, concierge_id);
+	assert_eq!(
+		notice.subject_user_id,
+		concierge_id.to_string(),
+		"named as it is addressed — concierge refuses the two disagreeing"
+	);
+	assert_eq!(notice.proposed.management_bps, 200);
+	let (attempts, _, sent, subject) = notice_row(&h, &change, late).await;
+	assert_eq!((attempts, sent), (1, true), "delivered on the pass after the mirror landed");
+	assert_eq!(subject, concierge_id.to_string(), "the audit row names who it went to");
+
+	// Told, so the dearer terms bind once the period has run — with nobody's acknowledgement.
+	assert_eq!(change_of(&h, &change).await.undelivered_notices, 0);
+	let_the_notice_run(&h, &change).await;
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+}
+
+/// The relay is down when a change is scheduled and still down when the change is
+/// cancelled (#319): the holders' notices are withdrawn with it, so the relay coming back
+/// does not tell anybody about terms that will never bind. A notice that had already gone
+/// out stands, and neither figures as a notice anybody is still owed.
+#[tokio::test]
+async fn cancelling_a_change_withdraws_the_notices_the_relay_has_not_taken() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	let told = holder(&h, &service, "1000").await;
+	let untold = holder(&h, &service, "500").await;
+	quiet_queue(&h).await;
+
+	let relay = Arc::new(SwitchedRelay::default());
+	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let change = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	assert_eq!(notices(&h, &change).await.len(), 2);
+	// One holder was reached before the outage; the other's notice sits deferred behind it.
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE fee_policy_change_id = $1 AND user_id = $2")
+		.bind(change.id.raw())
+		.bind(told.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	relay.down.store(true, Ordering::SeqCst);
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert_eq!(change_of(&h, &change).await.undelivered_notices, 1, "deferred, and still owed while the change stands");
+
+	let admin = UserId::new();
+	let cancelled = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, admin, now()).await.unwrap();
+	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
+	assert_eq!(cancelled.undelivered_notices, 0, "a cancelled change waits on nobody");
+	let states = notice_states(&h, &change).await;
+	assert_eq!(states.get(&told), Some(&(true, false)), "what was delivered stands");
+	assert_eq!(states.get(&untold), Some(&(false, true)), "what was not is withdrawn, not delivered");
+
+	// The relay comes back: the withdrawn notice is not handed over — not now, not after its
+	// backoff, and it is not among the mails the boot warning would count as pending.
+	relay.down.store(false, Ordering::SeqCst);
+	let_the_backoff_run(&h, &change).await;
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert!(relay.seen.lock().unwrap().is_empty(), "nothing about the cancelled change reaches the relay");
+	assert_eq!(notice_states(&h, &change).await.get(&untold), Some(&(false, true)));
+	assert_eq!(piggybank_core::infrastructure::consilium_mailer::pending_count(&h.pool).await.unwrap(), 0);
+	// A repeat of the cancel withdraws nothing more and changes nothing.
+	fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, admin, now()).await.unwrap();
+	assert_eq!(notice_states(&h, &change).await.len(), 2);
+
+	// The slot is free: the next change over the same holders queues fresh notices, and
+	// those go out — the withdrawal was the cancelled change's alone.
+	let next = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	assert_eq!(mailer.drain().await.unwrap(), 2);
+	assert_eq!(change_of(&h, &next).await.undelivered_notices, 0);
+	assert!(
+		relay
+			.seen
+			.lock()
+			.unwrap()
+			.iter()
+			.all(|(_, mail)| matches!(mail, GovernanceMail::FeePolicyNotice(notice) if notice.effective_at == next.effective_from_unix))
+	);
+}
+
+/// A relay that, while it holds the one mail it is handed, has the change CANCELLED from
+/// another connection — and hands the mail over only once that cancel is queued on the mail
+/// row's lock. The race #319's withdrawal opened: a cancel landing between the worker's read
+/// and its write-back.
+struct CancellingRelay {
+	pool: PgPool,
+	service: ServiceId,
+	change: FeePolicyChangeId,
+	cancel: std::sync::Mutex<Option<tokio::task::JoinHandle<Result<FeePolicyChange, DomainError>>>>,
+	seen: AtomicUsize,
+}
+
+#[async_trait]
+impl GovernanceMailer for CancellingRelay {
+	async fn send(&self, _recipient: Uuid, _dedupe_key: &str, _mail: &GovernanceMail) -> Result<(), MailDeliveryError> {
+		self.seen.fetch_add(1, Ordering::SeqCst);
+		let (pool, service, change) = (self.pool.clone(), self.service.clone(), self.change);
+		let cancel = tokio::spawn(async move {
+			let changes = PgFeePolicyChanges::new(pool.clone());
+			let consilia = PgConsilia::new(pool);
+			fee_app::cancel_change(&changes, &consilia, &service, change, UserId::new(), now()).await
+		});
+		// Not awaited here: the cancel must queue behind the worker's lock on the row, and
+		// waiting for it inside the delivery would be the deadlock the lock exists to order.
+		for _ in 0..200 {
+			let waiting: i64 = sqlx::query_scalar(
+				"SELECT COUNT(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' \
+				 AND query LIKE '%consilium_mail SET withdrawn_at%'",
+			)
+			.fetch_one(&self.pool)
+			.await
+			.unwrap();
+			if waiting >= 1 {
+				*self.cancel.lock().unwrap() = Some(cancel);
+				return Ok(());
+			}
+			tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+		}
+		panic!("the cancel never queued on the mail row's lock within 10s — the worker is not holding it across the send");
+	}
+}
+
+/// A cancel that lands while the worker is handing a notice over waits for the outcome
+/// rather than withdrawing a mail in flight: the row is delivered on the record, the cancel
+/// then withdraws nothing (there is nothing left undelivered), and no write trips
+/// `consilium_mail_withdrawn_is_unsent`. Without the row lock held across the send the mail
+/// would go out AND the write-back would fail, leaving a delivered notice recorded as
+/// "nobody told".
+#[tokio::test]
+async fn a_cancel_racing_a_delivery_waits_for_the_outcome_and_withdraws_nothing_delivered() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	let holder_ = holder(&h, &service, "1000").await;
+	quiet_queue(&h).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let change = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+
+	let relay = Arc::new(CancellingRelay {
+		pool: h.pool.clone(),
+		service: service.clone(),
+		change: change.id,
+		cancel: std::sync::Mutex::new(None),
+		seen: AtomicUsize::new(0),
+	});
+	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
+	assert_eq!(mailer.drain().await.unwrap(), 1, "handed over, and the outcome written without tripping the schema");
+	assert_eq!(relay.seen.load(Ordering::SeqCst), 1);
+
+	let cancel = relay.cancel.lock().unwrap().take().expect("the cancel was queued during the send");
+	let cancelled = cancel.await.unwrap().unwrap();
+	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
+	assert_eq!(notice_states(&h, &change).await.get(&holder_), Some(&(true, false)), "delivered stands; nothing to withdraw");
+	// A second pass has nothing left to do for this change.
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert_eq!(relay.seen.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
