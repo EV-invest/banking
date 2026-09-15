@@ -15,7 +15,11 @@ import type {
   UserProposal,
   UserProposalPeer,
 } from "@/shared/contracts/governance";
-import { admissionVote, peerVote, proposalVote, settledRemoval } from "@/shared/lib/decision";
+// Relative `.ts` paths, not the `@/` alias, for the same reason `views/trade/lib/order-state.ts`
+// uses them: `node --test` does not resolve the alias for value imports, and this module's
+// rules (#318) are exactly the ones a unit test has to be able to reach.
+import { admissionVote, peerVote, proposalVote, settledRemoval } from "../../../shared/lib/decision.ts";
+import { hasUnixStamp } from "../../../shared/lib/unix-stamp.ts";
 
 /**
  * States in which nothing further can be voted.
@@ -54,9 +58,15 @@ export const EMPTY_BOX = "border md:p-6";
 
 const normalise = (state: string | undefined): string => (state ?? "").toLowerCase().replaceAll("_", "");
 
-/** Whether a request is finished with — settled, expired, cancelled or void. */
+/**
+ * Whether a request is finished with — settled, expired, cancelled or void.
+ *
+ * `hasUnixStamp`, not truthiness: an undecided request arrives with `decided_at` as the
+ * string "0", which is truthy, and reading it raw filed every OPEN consilium under "Earlier
+ * requests" while the live card said none was open (#318).
+ */
 export function isSettled(state: string | undefined, decidedAt?: string | null): boolean {
-  return Boolean(decidedAt) || TERMINAL.has(normalise(state));
+  return hasUnixStamp(decidedAt) || TERMINAL.has(normalise(state));
 }
 
 // States that have a name in the catalogue. Anything else falls back to the bare wire word,

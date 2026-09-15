@@ -2,7 +2,7 @@
 
 import { useT } from "@evinvest/i18n/react";
 
-import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UsersRound, Wallet, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, ArrowUpFromLine, Bell, Boxes, Gavel, Home, Landmark, LayoutGrid, LineChart, ListChecks, PanelsTopLeft, Percent, PiggyBank, Receipt, Settings, UserRound, UsersRound, Wallet, type LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { type ReactNode, useState } from "react";
@@ -87,6 +87,16 @@ const ADMIN: NavItem[] = [
   { href: "/admin/fees", label: "Fees", key: "nav.fees", icon: Percent, active: (p) => p.startsWith("/admin/fees"), roles: ["admin", "owner"] },
 ];
 
+// The bottom rail — the reader's own account, then the two things about it that change.
+// Profile sits first: it is who the row is about, where Notifications and Settings are
+// things done to that account. The mobile tab bar has no sixth slot, so below `lg` the
+// profile is reached through Settings instead.
+const SECONDARY: NavItem[] = [
+  { href: "/profile", label: "Profile", key: "nav.profile", icon: UserRound, active: (p) => p.startsWith("/profile") },
+  { href: "/notifications", label: "Notifications", key: "nav.notifications", icon: Bell, active: (p) => p.startsWith("/notifications") },
+  { href: "/settings", label: "Settings", key: "nav.settings", icon: Settings, active: (p) => p.startsWith("/settings") },
+];
+
 // A product's row owns its page AND the surfaces under it — `/invest/<service>/trade` is
 // the terminal over that product, not a different place in the rail. Matched with the
 // trailing slash so `/invest/arb` never lights the row of a product called `arbitrage`.
@@ -135,7 +145,7 @@ export function Sidebar() {
       ? "fund"
       : isAdmin && admin.some((i) => i.active(pathname))
         ? "administer"
-        : pathname.startsWith("/notifications") || pathname.startsWith("/settings")
+        : SECONDARY.some((i) => i.active(pathname))
           ? "secondary"
           : null;
   const crossed = useCrossedSection(pathname, activeSection);
@@ -192,14 +202,19 @@ export function Sidebar() {
       <div className="flex-1" />
 
       <nav aria-label={t("nav.a11y.secondary")} className="flex flex-col gap-1">
-        <NavLink
-          item={{ href: "/notifications", label: "Notifications", key: "nav.notifications", icon: Bell, active: (p) => p.startsWith("/notifications") }}
-          active={pathname.startsWith("/notifications")}
-          section="secondary"
-          appear={crossed}
-          trailing={unread ? <UnreadPill count={unread} active={pathname.startsWith("/notifications")} /> : undefined}
-        />
-        <NavLink item={{ href: "/settings", label: "Settings", key: "nav.settings", icon: Settings, active: (p) => p.startsWith("/settings") }} active={pathname.startsWith("/settings")} section="secondary" appear={crossed} />
+        {SECONDARY.map((item) => {
+          const active = item.active(pathname);
+          return (
+            <NavLink
+              key={item.label}
+              item={item}
+              active={active}
+              section="secondary"
+              appear={crossed}
+              trailing={item.href === "/notifications" && unread ? <UnreadPill count={unread} active={active} /> : undefined}
+            />
+          );
+        })}
       </nav>
     </aside>
   );

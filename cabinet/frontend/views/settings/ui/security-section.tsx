@@ -11,7 +11,7 @@ import type { Session } from "@/shared/contracts";
 import { cn } from "@/shared/lib/cn";
 import { CARD, Hairline, Row, RowLabel } from "@/shared/ui/list-card";
 import { formatEmail } from "@/views/settings/lib/contact";
-import { SectionHeader } from "@/views/settings/ui/fields";
+import { FieldHint, SectionHeader } from "@/views/settings/ui/fields";
 
 export function SecuritySection({
   email,
@@ -44,7 +44,12 @@ export function SecuritySection({
         {/* i18n-max: 12 — a `shrink-0` badge beside the truncated account email. */}
         <Badge className="border-transparent bg-accent-debug/15 text-accent-debug">{t("settings.connected")}</Badge>
       </div>
-      <p className="mb-1 mt-3 text-sm leading-relaxed text-ink-soft">{t("settings.googleManaged")}</p>
+      {/* The hint under the sign-in control, worded once: the tip catalog carries the same
+          sentence under `settings.security.google-signin`, and rendering both would say it
+          twice on one card. */}
+      <div className="mb-3">
+        <FieldHint>{t("settings.googleManaged")}</FieldHint>
+      </div>
       <Hairline />
       <Row>
         <RowLabel title={t("ui.sessionsDevices")} sub={summary} />
