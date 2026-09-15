@@ -35,17 +35,20 @@ fn consilium_gated_change() -> FeePolicyChange {
 		applied_at_unix: None,
 		undelivered_notices: 0,
 		notices_given_up: 0,
+		notices_unacknowledged: 0,
 		notices_waiver: None,
 	}
 }
 
-/// A scheduled change one holder could not be told about, acknowledged by the requester.
+/// A scheduled change acknowledged by the requester, with a holder given up on since — the
+/// figures are only checked for reaching the wire, not for adding up.
 fn acknowledged_change() -> FeePolicyChange {
 	FeePolicyChange {
 		state: FeePolicyChangeState::Scheduled,
 		scheduled_at_unix: Some(1_700_000_500),
 		undelivered_notices: 2,
 		notices_given_up: 1,
+		notices_unacknowledged: 1,
 		notices_waiver: Some(NoticeWaiver {
 			by: "8f0d2a8e-2b3e-4a1a-9a53-6d5a0d1d2e3f".to_owned(),
 			at_unix: 1_700_050_000,
@@ -95,12 +98,14 @@ fn the_waiver_and_the_undelivered_figures_are_governance_detail() {
 	);
 	assert_eq!(operator.undelivered_notices, 2);
 	assert_eq!(operator.notices_given_up, 1);
+	assert_eq!(operator.notices_unacknowledged, 1);
 
 	let investor = change_to_proto(&change, Audience::Investor);
 	assert_eq!(investor.notices_waived_by, "", "who took responsibility is governance detail");
 	assert!(investor.notices_waived_users.is_empty(), "other holders' ids are never shown to an investor");
 	assert_eq!(investor.undelivered_notices, 0);
 	assert_eq!(investor.notices_given_up, 0);
+	assert_eq!(investor.notices_unacknowledged, 0);
 	// That the notice was waived, and when, is a fact about the terms they are on.
 	assert_eq!(investor.notices_waived_at, 1_700_050_000);
 

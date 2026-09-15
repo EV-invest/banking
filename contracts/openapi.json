@@ -9288,7 +9288,7 @@
           "notices_waived_by": {
             "type": "string",
             "title": "notices_waived_by",
-            "description": "The operator's acknowledgement of holders who could not be told (see\n AcknowledgeUndeliveredNotices): who took responsibility — governance detail, shown to\n operators and blank for everyone else."
+            "description": "The operator's acknowledgement of holders who could not be told (see\n AcknowledgeUndeliveredNotices): who took responsibility — the latest to, when the\n record was extended — governance detail, shown to operators and blank for everyone\n else."
           },
           "notices_waived_at": {
             "type": [
@@ -9297,7 +9297,7 @@
             ],
             "title": "notices_waived_at",
             "format": "int64",
-            "description": "Unix seconds the acknowledgement was given; 0 when the notices were never waived.\n Public like every other moment on the change."
+            "description": "Unix seconds the (latest) acknowledgement was given; 0 when the notices were never\n waived. Public like every other moment on the change."
           },
           "notices_waived_users": {
             "type": "array",
@@ -9305,16 +9305,20 @@
               "type": "string"
             },
             "title": "notices_waived_users",
-            "description": "The ids of the holders whose notice the mailer had given up on at that moment — the\n holders the change binds over untold. Operators only; empty for everyone else."
+            "description": "The ids of the holders whose notice the mailer had given up on by that moment — the\n holders the change binds over untold. Operators only; empty for everyone else."
           },
           "undelivered_notices": {
             "type": "integer",
             "title": "undelivered_notices",
-            "description": "Notices of this change not yet delivered to a CURRENT holder, and how many of those the\n mailer has given up on — the figures a tightening waits on. Counted only while\n `scheduled` (0 in every other state), and shown to operators only."
+            "description": "Notices of this change not yet delivered to a CURRENT holder, how many of those the\n mailer has given up on — the figures a tightening waits on — and how many of the\n given-up ones the acknowledgement does not cover (all of them while there is none):\n the holders a (further) AcknowledgeUndeliveredNotices would name, so it is worth\n offering exactly while this is non-zero. Counted only while `scheduled` (0 in every\n other state), and shown to operators only."
           },
           "notices_given_up": {
             "type": "integer",
             "title": "notices_given_up"
+          },
+          "notices_unacknowledged": {
+            "type": "integer",
+            "title": "notices_unacknowledged"
           }
         },
         "title": "FeePolicyChange",

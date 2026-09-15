@@ -74,11 +74,14 @@ pub struct FeePolicyChange {
 	pub reason: String,
 	pub scheduled_at_unix: Option<i64>,
 	pub applied_at_unix: Option<i64>,
-	/// Notices of this change that have not reached a CURRENT holder, and how many of those
-	/// the mailer has given up on — the figures the tightening gate is decided on. Counted
-	/// only while `scheduled`; zero in every other state, where there is nothing to wait for.
+	/// Notices of this change that have not reached a CURRENT holder, how many of those the
+	/// mailer has given up on — the figures the tightening gate is decided on — and how many
+	/// of the given-up ones no acknowledgement covers yet: what a (further) acknowledgement
+	/// would name, and so whether one is worth offering. Counted only while `scheduled`;
+	/// zero in every other state, where there is nothing to wait for.
 	pub undelivered_notices: u32,
 	pub notices_given_up: u32,
+	pub notices_unacknowledged: u32,
 	/// The operator's acknowledgement of holders who could not be told, if given — see
 	/// [`FeePolicyChanges::acknowledge_undelivered_notices`].
 	pub notices_waiver: Option<NoticeWaiver>,

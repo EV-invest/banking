@@ -1216,6 +1216,7 @@ mod admin_route_tests {
 			notices_waived_users: Vec::new(),
 			undelivered_notices: 0,
 			notices_given_up: 0,
+			notices_unacknowledged: 0,
 		}
 	}
 
@@ -1476,6 +1477,8 @@ mod admin_route_tests {
 				notices_waived_users: vec![UNTOLD_HOLDER.into()],
 				undelivered_notices: 1,
 				notices_given_up: 1,
+				// Covered by the record just written: nothing left to offer.
+				notices_unacknowledged: 0,
 				..stub_change(&req.change_id, "scheduled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, "")
 			}))
 		}
@@ -2020,6 +2023,7 @@ mod admin_route_tests {
 		assert_eq!(response["notices_waived_users"], serde_json::json!([UNTOLD_HOLDER]));
 		assert_eq!(response["undelivered_notices"], 1);
 		assert_eq!(response["notices_given_up"], 1);
+		assert_eq!(response["notices_unacknowledged"], 0);
 		let forwarded = seen.lock().unwrap().acknowledge.clone().expect("the hub saw the acknowledgement");
 		assert_eq!(forwarded.service, SERVICE);
 		assert_eq!(forwarded.change_id, CHANGE_ID);

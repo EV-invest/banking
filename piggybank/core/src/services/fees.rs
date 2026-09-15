@@ -377,6 +377,7 @@ fn change_to_proto(change: &FeePolicyChange, audience: Audience) -> pb::FeePolic
 			.unwrap_or_default(),
 		undelivered_notices: if operator { change.undelivered_notices } else { 0 },
 		notices_given_up: if operator { change.notices_given_up } else { 0 },
+		notices_unacknowledged: if operator { change.notices_unacknowledged } else { 0 },
 	}
 }
 

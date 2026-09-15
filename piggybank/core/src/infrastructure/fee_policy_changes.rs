@@ -230,6 +230,7 @@ fn change_from_row(row: &PgRow) -> Result<FeePolicyChange, DomainError> {
 		// Filled in by `hydrate`, which has the connection this row was read on.
 		undelivered_notices: 0,
 		notices_given_up: 0,
+		notices_unacknowledged: 0,
 		notices_waiver: waiver_from_row(row)?,
 	})
 }
@@ -257,8 +258,11 @@ async fn hydrate(conn: &mut PgConnection, row: &PgRow) -> Result<FeePolicyChange
 	let mut change = change_from_row(row)?;
 	if change.state == FeePolicyChangeState::Scheduled {
 		let undelivered = undelivered_notices(conn, change.id, &change.service).await?;
+		let given_up = undelivered.iter().filter(|notice| notice.given_up);
 		change.undelivered_notices = count(undelivered.len());
-		change.notices_given_up = count(undelivered.iter().filter(|notice| notice.given_up).count());
+		change.notices_given_up = count(given_up.clone().count());
+		let covered: &[UserId] = change.notices_waiver.as_ref().map_or(&[], |waiver| waiver.users.as_slice());
+		change.notices_unacknowledged = count(given_up.filter(|notice| !covered.contains(&notice.user_id)).count());
 	}
 	Ok(change)
 }

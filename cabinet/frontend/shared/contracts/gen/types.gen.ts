@@ -1399,36 +1399,44 @@ export type BankingV1FeePolicyChange = {
      * notices_waived_by
      *
      * The operator's acknowledgement of holders who could not be told (see
-     * AcknowledgeUndeliveredNotices): who took responsibility — governance detail, shown to
-     * operators and blank for everyone else.
+     * AcknowledgeUndeliveredNotices): who took responsibility — the latest to, when the
+     * record was extended — governance detail, shown to operators and blank for everyone
+     * else.
      */
     notices_waived_by?: string;
     /**
      * notices_waived_at
      *
-     * Unix seconds the acknowledgement was given; 0 when the notices were never waived.
-     * Public like every other moment on the change.
+     * Unix seconds the (latest) acknowledgement was given; 0 when the notices were never
+     * waived. Public like every other moment on the change.
      */
     notices_waived_at?: number | string;
     /**
      * notices_waived_users
      *
-     * The ids of the holders whose notice the mailer had given up on at that moment — the
+     * The ids of the holders whose notice the mailer had given up on by that moment — the
      * holders the change binds over untold. Operators only; empty for everyone else.
      */
     notices_waived_users?: Array<string>;
     /**
      * undelivered_notices
      *
-     * Notices of this change not yet delivered to a CURRENT holder, and how many of those the
-     * mailer has given up on — the figures a tightening waits on. Counted only while
-     * `scheduled` (0 in every other state), and shown to operators only.
+     * Notices of this change not yet delivered to a CURRENT holder, how many of those the
+     * mailer has given up on — the figures a tightening waits on — and how many of the
+     * given-up ones the acknowledgement does not cover (all of them while there is none):
+     * the holders a (further) AcknowledgeUndeliveredNotices would name, so it is worth
+     * offering exactly while this is non-zero. Counted only while `scheduled` (0 in every
+     * other state), and shown to operators only.
      */
     undelivered_notices?: number;
     /**
      * notices_given_up
      */
     notices_given_up?: number;
+    /**
+     * notices_unacknowledged
+     */
+    notices_unacknowledged?: number;
 };
 
 /**
