@@ -59,12 +59,15 @@ service FeesService {
   // owner). A change that TIGHTENS the terms does not bind while a holder's notice is
   // undelivered; for a holder the identity plane can never reach that is forever. This
   // records who acknowledged, when, and exactly which holders' notices the mailer had
-  // GIVEN UP on at that moment (`notices_given_up`, never a notice still being tried), and
+  // GIVEN UP on by that moment (`notices_given_up`, never a notice still being tried), and
   // the change then binds over those holders — and over nobody else who turns out untold
-  // later. Idempotent on a change already acknowledged (the first record stands);
-  // ALREADY_EXISTS when the change is not scheduled, only loosens the terms (it binds by
-  // itself), or has no notice given up on yet — there is nothing to take responsibility
-  // for; PERMISSION_DENIED for a caller who is neither the requester nor an owner.
+  // later. A later call ADDS the holders given up on since (`notices_unacknowledged`) and
+  // stands as the latest: its caller and moment replace the record's, taking
+  // responsibility for the whole list. A repeat that would add nobody returns the record
+  // unchanged. ALREADY_EXISTS when the change is not scheduled, only loosens the terms (it
+  // binds by itself), or has no notice given up on yet that is not already covered —
+  // there is nothing to take responsibility for; PERMISSION_DENIED for a caller who is
+  // neither the requester nor an owner.
   rpc AcknowledgeUndeliveredNotices(AcknowledgeUndeliveredNoticesRequest) returns (FeePolicyChange);
 
   // A fund's whole history of terms, newest version first. Readable by any

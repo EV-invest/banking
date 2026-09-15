@@ -161,10 +161,11 @@ impl FeesService for FeesSvc {
 			.map_err(map_err)?;
 		// WARN on success, as scheduling is: somebody just took responsibility for holders
 		// who were never told their terms are getting dearer. Worth a line that stands out —
-		// but only when THIS call wrote the record. A repeat returns the standing record,
-		// somebody else's or an earlier one of the caller's own, and the audit log must not
-		// report an acknowledgement that did not happen. The record is recognised by the
-		// caller and the moment this call passed in.
+		// but only when THIS call wrote the record (first, or extended by holders given up on
+		// since: either way the row carries this caller and this moment). A repeat that added
+		// nobody returns the standing record, somebody else's or an earlier one of the
+		// caller's own, and the audit log must not report an acknowledgement that did not
+		// happen. The record is recognised by the caller and the moment this call passed in.
 		if let Some(waiver) = change.notices_waiver.as_ref().filter(|waiver| waiver.by == by.to_string() && waiver.at_unix == now) {
 			tracing::warn!(
 				change_id = %change.id,

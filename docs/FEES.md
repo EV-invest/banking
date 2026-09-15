@@ -268,20 +268,24 @@ migration `0042`). Given up on, not merely undelivered: a notice still in the qu
 arrive, and its holder is then told — waiving it before the mailer has finished trying would
 take responsibility for holders nobody has failed to reach (the requester pressing "take
 responsibility" in the first minute after scheduling would otherwise name every holder).
-Such a holder keeps holding the change until their notice is delivered or given up on, and
-a later acknowledgement can name them. `promote` then binds the tightening over the named
-holders and logs a `warn!` naming them by id — and still refuses over anyone the record does
-not cover: a holder still in the queue at the time, or one who had redeemed and bought back
-in untold, holds the change again, so an acknowledgement never widens by itself. The first
-acknowledgement stands (a repeat returns it unchanged, and the service's audit `warn!` is
-written only by the call that recorded it); a change that is not `scheduled`, one that only
-loosens the terms (it binds by itself, so there is no protection to waive), or one with no
-notice given up on yet has nothing to acknowledge and is refused rather than silently
-stamped — an acknowledgement covering nobody would be a misleading line in the history, and
-the schema refuses one too. Every change carries `undelivered_notices` / `notices_given_up`
-on the wire (counted only while `scheduled`, operators only), which is what the admin
-console's "N holders could not be told" reads; the acknowledgement is offered only while
-`notices_given_up > 0`.
+Such a holder keeps holding the change until their notice is delivered or given up on.
+`promote` then binds the tightening over the named holders and logs a `warn!` naming them by
+id — and still refuses over anyone the record does not cover: a holder still in the queue
+at the time, or one who had redeemed and bought back in untold, holds the change again, so
+an acknowledgement never widens by itself. An acknowledgement covers every notice given up
+on so far; a later one ADDS the holders given up on since and stands as the latest — the
+list only grows, and the caller who extends it becomes `notices_waived_by` at `_at`, taking
+responsibility for the whole list (the console's confirmation says as much). A repeat that
+would add nobody returns the record unchanged, and the service's audit `warn!` is written
+only by a call that recorded or extended it. A change that is not `scheduled`, one that
+only loosens the terms (it binds by itself, so there is no protection to waive), or one
+with no uncovered notice given up on yet has nothing to acknowledge and is refused rather
+than silently stamped — an acknowledgement covering nobody would be a misleading line in
+the history, and the schema refuses one too. Every change carries `undelivered_notices` /
+`notices_given_up` / `notices_unacknowledged` on the wire (counted only while `scheduled`,
+operators only) — the last being the given-up notices no acknowledgement covers, which is
+what the admin console's "N holders could not be told" and its "take responsibility" offer
+read: the acknowledgement is offered exactly while `notices_unacknowledged > 0`.
 
 ## Still open
 

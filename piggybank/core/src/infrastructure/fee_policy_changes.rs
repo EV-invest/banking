@@ -15,7 +15,8 @@
 //!   terms. `docs/FEES.md` § "The elapsed clock": nobody re-prices time that has passed.
 //!   It refuses while a holder's notice has been given up on: the notice period is only
 //!   notice if the notices arrived — unless an operator has taken responsibility for
-//!   exactly those holders ([`FeePolicyChanges::acknowledge_undelivered_notices`]).
+//!   exactly those holders ([`FeePolicyChanges::acknowledge_undelivered_notices`], which a
+//!   later call extends by the holders given up on since).
 //!
 //! Runtime queries throughout (`sqlx::query*`), so `cargo build` needs no database; the
 //! integration suite in `tests/fee_policy_changes.rs` executes every one of them.
@@ -170,7 +171,7 @@ struct UndeliveredNotice {
 /// Counted over the holders of RIGHT NOW: a recipient who has since redeemed every unit has
 /// no terms to be warned about, and must not hold the change for those who stayed. The ONE
 /// rule behind the figures on the wire, the tightening gate and the acknowledgement's list
-/// (which keeps only the given-up half).
+/// (which keeps only the given-up half, and only the holders no acknowledgement covers yet).
 async fn undelivered_notices(conn: &mut PgConnection, id: FeePolicyChangeId, service: &ServiceId) -> Result<Vec<UndeliveredNotice>, DomainError> {
 	let rows: Vec<(Uuid, bool)> = sqlx::query_as(
 		"SELECT m.user_id, m.attempts >= $3 FROM consilium_mail m \
@@ -569,12 +570,12 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 				id: id.to_string(),
 			});
 		}
-		// The first acknowledgement stands, whoever repeats it: it is the record of who took
-		// responsibility, and a retry must not rewrite that.
-		if change.notices_waiver.is_some() {
-			return Ok(change);
-		}
 		if change.state != FeePolicyChangeState::Scheduled {
+			// A closed change waits on nobody, so its record — if it has one — has nothing
+			// left to gain: a repeat returns it, as it did while the change was open.
+			if change.notices_waiver.is_some() {
+				return Ok(change);
+			}
 			return Err(DomainError::Conflict(format!(
 				"the fee-policy change is {}; only a scheduled change has holder notices to acknowledge",
 				change.state.as_str()
@@ -589,26 +590,39 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 				"the terms only get cheaper for the holders — a loosening binds over an undelivered notice by itself and needs no acknowledgement".into(),
 			));
 		}
-		let undelivered = undelivered_notices(&mut tx, change.id, service).await?;
-		if undelivered.is_empty() {
-			// Not a no-op: the operator saw a figure that is no longer true (the relay came
-			// back, or the holder left), and the change will bind by itself on the next tick.
-			return Err(DomainError::Conflict(
-				"every holder notice for this change has been delivered — there is nothing to acknowledge".into(),
-			));
-		}
 		// Only the notices the mailer has GIVEN UP on: a notice still being tried may yet
 		// arrive, and a holder it reaches was told — waiving their notice before the mailer
 		// has finished trying would take responsibility for holders nobody has failed to
 		// reach. A holder still in the queue at this moment holds the change until their
-		// notice is delivered or given up on, and a later acknowledgement can name them.
-		let users: Vec<Uuid> = undelivered.iter().filter(|notice| notice.given_up).map(|notice| notice.user_id.raw()).collect();
-		if users.is_empty() {
+		// notice is delivered or given up on — and a later acknowledgement then ADDS them:
+		// the record grows by the holders given up on since, never shrinks, and the caller
+		// who extends it takes responsibility for the whole list (it is their name and
+		// moment the row then carries). A repeat that would add nobody leaves the record
+		// untouched — it says who took responsibility, and a retry must not rewrite that.
+		let undelivered = undelivered_notices(&mut tx, change.id, service).await?;
+		let covered: &[UserId] = change.notices_waiver.as_ref().map_or(&[], |waiver| waiver.users.as_slice());
+		let added: Vec<Uuid> = undelivered
+			.iter()
+			.filter(|notice| notice.given_up && !covered.contains(&notice.user_id))
+			.map(|notice| notice.user_id.raw())
+			.collect();
+		if added.is_empty() {
+			if change.notices_waiver.is_some() {
+				return Ok(change);
+			}
+			if undelivered.is_empty() {
+				// Not a no-op: the operator saw a figure that is no longer true (the relay came
+				// back, or the holder left), and the change will bind by itself on the next tick.
+				return Err(DomainError::Conflict(
+					"every holder notice for this change has been delivered — there is nothing to acknowledge".into(),
+				));
+			}
 			return Err(DomainError::Conflict(format!(
 				"{} holder notice(s) for this change are still being delivered and none has been given up on yet — there is nothing to acknowledge until the mailer gives up",
 				undelivered.len()
 			)));
 		}
+		let users: Vec<Uuid> = covered.iter().map(|user| user.raw()).chain(added).collect();
 		sqlx::query("UPDATE fee_policy_changes SET notices_waived_by = $2, notices_waived_at = to_timestamp($3), notices_waived_users = $4 WHERE id = $1")
 			.bind(id.raw())
 			.bind(by)
@@ -692,10 +706,10 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		// a relay coming back delivers and the next tick promotes, a notice given up on needs
 		// the operator, and the sweeper's failure streak turns the refusal into an error.
 		// The operator's move is the acknowledgement: it names the holders whose notice had
-		// been given up on when it was given, and the terms bind over THOSE — a holder it does
-		// not name (one still in the mailer's queue at the time, or one who had redeemed and
-		// has since bought back in) still holds the change, so an acknowledgement never
-		// widens by itself.
+		// been given up on when it was given (and, on a later call, since), and the terms
+		// bind over THOSE — a holder it does not name (one still in the mailer's queue at the
+		// time, or one who had redeemed and has since bought back in) still holds the change,
+		// so an acknowledgement never widens by itself: only another acknowledgement does.
 		// Terms that only get cheaper bind regardless, on the record: a holder the identity
 		// plane cannot reach (an unverified mailbox, no mirrored id) would otherwise pin a
 		// product's terms forever — the loosening, and the lowering of a legacy rate above

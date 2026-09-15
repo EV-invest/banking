@@ -88,8 +88,9 @@ pub struct FeePolicyChange {
 }
 
 /// An operator taking responsibility for holders whose notice never arrived: who, when, and
-/// the banking ids of exactly the holders whose notice the mailer had given up on at that
-/// moment. A tightening then binds over THESE holders and no other.
+/// the banking ids of exactly the holders whose notice the mailer had given up on by that
+/// moment — the latest acknowledgement's, which took over the whole list. A tightening
+/// then binds over THESE holders and no other.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NoticeWaiver {
 	pub by: String,
@@ -145,11 +146,14 @@ pub trait FeePolicyChanges: Send + Sync {
 	/// has GIVEN UP on: record who, when, and the list of those holders on the change, so
 	/// that [`FeePolicyChanges::promote`] binds the tightening over them — and over nobody
 	/// else. A notice still being tried is not waived: it may yet arrive, and until it is
-	/// delivered or given up on its holder keeps holding the change. Idempotent on a change
-	/// already acknowledged (the first record stands); a conflict on a change that is not
-	/// `scheduled`, that only loosens the terms (it binds by itself), or that has no notice
-	/// given up on yet — there is nothing to take responsibility for, and an acknowledgement
-	/// covering nobody would be a misleading line in the history.
+	/// delivered or given up on its holder keeps holding the change; once given up on, a
+	/// later acknowledgement ADDS them to the list, and its caller and moment replace the
+	/// record's — they take responsibility for the whole list, which never shrinks. A repeat
+	/// that would add nobody returns the record untouched. A conflict on a change that is
+	/// not `scheduled` (unless it carries a record, which the repeat then returns), that
+	/// only loosens the terms (it binds by itself), or that has no notice given up on yet
+	/// — there is nothing to take responsibility for, and an acknowledgement covering
+	/// nobody would be a misleading line in the history.
 	async fn acknowledge_undelivered_notices(&self, service: &ServiceId, id: FeePolicyChangeId, by: &str, now_unix: i64) -> Result<FeePolicyChange, DomainError>;
 
 	async fn find(&self, id: FeePolicyChangeId) -> Result<Option<FeePolicyChange>, DomainError>;

@@ -1849,7 +1849,73 @@ async fn an_acknowledgement_waits_for_the_mailer_to_give_up_and_names_only_those
 }
 
 #[tokio::test]
-async fn an_acknowledgement_is_the_requesters_or_an_owners_and_the_first_one_stands() {
+async fn a_later_acknowledgement_adds_the_holders_given_up_on_since_and_stands_as_the_latest() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let roster = owners(&h, 1).await;
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	install(&h, &service, cheaper).await;
+	let first_lost = holder(&h, &service, "1000").await;
+	let second_lost = holder(&h, &service, "500").await;
+	let requester = UserId::new();
+	let change = schedule(&h, requester, &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	assert_eq!((change.undelivered_notices, change.notices_given_up, change.notices_unacknowledged), (2, 0, 0));
+
+	// The mailer gives up on the first holder; the requester takes responsibility for them.
+	retire_notice(&h, &change, first_lost).await;
+	assert_eq!(change_of(&h, &change).await.notices_unacknowledged, 1, "one holder to offer the acknowledgement over");
+	let first = acknowledge(&h, &service, &change, requester).await.unwrap();
+	let waiver = first.notices_waiver.clone().expect("acknowledged");
+	assert_eq!(waiver.users, vec![first_lost]);
+	assert_eq!(
+		(first.undelivered_notices, first.notices_given_up, first.notices_unacknowledged),
+		(2, 1, 0),
+		"covered: nothing left to offer"
+	);
+
+	// Then on the second, AFTER the acknowledgement: the record does not stretch to cover
+	// them, so the change waits — and the console has somebody to offer again. Without a
+	// second acknowledgement this holder would block the tightening forever.
+	retire_notice(&h, &change, second_lost).await;
+	let_the_notice_run(&h, &change).await;
+	let refused = h.changes.promote(change.id, now()).await.unwrap_err();
+	assert!(matches!(refused, DomainError::Conflict(_)), "{refused:?}");
+	assert!(refused.to_string().contains("1 of them to holders the acknowledgement by"), "{refused}");
+	let waiting = change_of(&h, &change).await;
+	assert_eq!((waiting.undelivered_notices, waiting.notices_given_up, waiting.notices_unacknowledged), (2, 2, 1));
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(cheaper));
+
+	// An owner's later acknowledgement adds them. The record is now the owner's, over the
+	// whole list: whoever extends it takes responsibility for everyone on it.
+	tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+	let second = acknowledge(&h, &service, &change, roster[0]).await.unwrap();
+	let extended = second.notices_waiver.clone().expect("still acknowledged");
+	assert_eq!(extended.users, vec![first_lost, second_lost], "the earlier record first, the addition after");
+	assert_eq!(extended.by, roster[0].to_string());
+	assert!(extended.at_unix > waiver.at_unix, "{} <= {}", extended.at_unix, waiver.at_unix);
+	assert_eq!(second.notices_unacknowledged, 0);
+	assert_eq!(
+		waiver_row(&h, &change).await,
+		(Some(roster[0].to_string()), Some(extended.at_unix), Some(vec![first_lost.raw(), second_lost.raw()]))
+	);
+
+	// A repeat with nobody new to add leaves the latest record as it is.
+	tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+	let repeated = acknowledge(&h, &service, &change, requester).await.unwrap();
+	assert_eq!(repeated.notices_waiver, Some(extended.clone()));
+
+	// The terms bind over both, and the extended record survives the promotion.
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+	let active = change_of(&h, &change).await;
+	assert_eq!(active.notices_waiver, Some(extended));
+	assert_eq!((active.notices_given_up, active.notices_unacknowledged), (0, 0), "an active change waits on nobody");
+}
+
+#[tokio::test]
+async fn an_acknowledgement_is_the_requesters_or_an_owners_and_a_repeat_adding_nobody_leaves_it() {
 	let _lock = exclusive().await;
 	let Some(h) = harness().await else { return };
 	let roster = owners(&h, 2).await;
@@ -1874,8 +1940,9 @@ async fn an_acknowledgement_is_the_requesters_or_an_owners_and_the_first_one_sta
 	assert_eq!(waiver.by, roster[0].to_string());
 	assert_eq!(waiver.users, vec![unreachable]);
 
-	// Repeated — by the requester, by the other owner — the first record stands untouched:
-	// it says who took responsibility, and a retry must not rewrite that.
+	// Repeated — by the requester, by the other owner — with nobody given up on since, the
+	// record stands untouched: it says who took responsibility, and a retry that adds no
+	// holder must not rewrite that.
 	tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
 	for again in [requester, roster[1]] {
 		let repeated = acknowledge(&h, &service, &change, again).await.unwrap();
