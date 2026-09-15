@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { HOUSE_TERMS, MAX_MANAGEMENT_BPS, MAX_PERFORMANCE_BPS, NO_TERMS, requirementFor, tightensFrom, withinHouseEnvelope, type FeeTermsLike } from "./fee-terms.ts";
+import { HOUSE_TERMS, isPendingChange, MAX_MANAGEMENT_BPS, MAX_PERFORMANCE_BPS, NO_TERMS, requirementFor, tightensFrom, withinHouseEnvelope, type FeeTermsLike } from "./fee-terms.ts";
 
 const terms = (over: Partial<FeeTermsLike> = {}): FeeTermsLike => ({ ...HOUSE_TERMS, ...over });
 
@@ -71,4 +71,11 @@ test("lowering the hurdle always needs the owners, wherever the other legs sit",
   assert.equal(requirementFor(terms({ hurdle_bps: 500 }), terms({ hurdle_bps: 0, management_bps: 100 })), "owner_consilium");
   // Raising it, or leaving it, does not.
   assert.equal(requirementFor(terms({ hurdle_bps: 500 }), terms({ hurdle_bps: 600 })), "admin");
+});
+
+test("a change is pending in exactly the two states that still move without the screen acting", () => {
+  // What the admin resources poll on: a settled fund must cost nothing.
+  assert.equal(isPendingChange("scheduled"), true);
+  assert.equal(isPendingChange("awaiting_consilium"), true);
+  for (const state of ["active", "superseded", "rejected", "cancelled", "", undefined]) assert.equal(isPendingChange(state), false, String(state));
 });

@@ -36,9 +36,17 @@ import {
   type UserFilters,
 } from "@/entities/admin/api/admin-client";
 import { TAG } from "@/shared/lib/cache-tags";
+import { isPendingChange } from "@/shared/lib/fee-terms";
 import { defineResource } from "@/shared/lib/resource";
 
 const OPERATIONAL = 10;
+
+// A pending change moves without anyone on the screen acting — the sweeper promotes it at
+// its moment, the owners carry or reject it from their mailboxes — and none of the clock's
+// other triggers fires while the tab just sits there open (`shared/lib/resource.ts`,
+// `poll`). Polled only while one is on its way, so a fund whose terms are settled costs
+// nothing; the card and the history row are read by the two resources below, both on it.
+const PENDING_CHANGE_POLL = { startMs: 15_000, maxMs: 60_000 };
 
 export const overviewResource = defineResource({
   name: "admin.overview",
@@ -108,6 +116,7 @@ export const feePoliciesResource = defineResource({
   fetch: fetchFeePolicies,
   revalidate: 300,
   tags: [TAG.adminFees],
+  poll: { ...PENDING_CHANGE_POLL, while: (list) => (list?.policies ?? []).some((p) => isPendingChange(p.pending?.state)) },
 });
 
 // The accumulated units move with every sweep, and their value moves with every mark, so
@@ -140,6 +149,7 @@ export const feePolicyChangesResource = defineResource({
   revalidate: 300,
   tags: [TAG.adminFees],
   enabled: (service) => service.trim().length > 0,
+  poll: { ...PENDING_CHANGE_POLL, while: (list) => (list?.changes ?? []).some((c) => isPendingChange(c.state)) },
 });
 
 export const redemptionQueueResource = defineResource({
