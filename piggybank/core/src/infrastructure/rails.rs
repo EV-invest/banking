@@ -16,13 +16,17 @@
 //! `piggybank_core::infrastructure::{sweep,ton_sweep,tron_sweep}` into one target and cost
 //! operators the ability to filter or alert on a single rail.
 
-use std::fmt::Display;
+use std::{
+	collections::HashMap,
+	fmt::Display,
+	time::{Duration, Instant},
+};
 
 use evbanking_auth::ServiceTokenSource;
 use evbanking_contracts::signer::v1::{ProvisionAddressRequest, signer_service_client::SignerServiceClient};
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
-use tonic::{Request, transport::Channel};
+use tonic::{Code, Request, Status, transport::Channel};
 use uuid::Uuid;
 
 /// The reserved gas-station account id, shared by every rail's sweep and distinct from the nil
@@ -74,8 +78,16 @@ pub(super) fn repo(err: sqlx::Error) -> WatcherError {
 pub(super) enum SweepError {
 	#[error("rpc: {0}")]
 	Rpc(String),
+	/// The signer could not answer *right now* — retried on the next poll, like an RPC blip.
 	#[error("signer: {0}")]
 	Signer(String),
+	/// The signer refused ON THE MERITS and the same request would reproduce the refusal:
+	/// the custodian's policy said no, the request is malformed, or the custodian parked
+	/// the activity for a human (`activity_id` set — the `turnkey-activity-id` trailer).
+	/// Re-asking every poll would only mint another pending activity per cycle, so the
+	/// address is held back with an exponential backoff instead ([`RefusalBackoff`]).
+	#[error("signer refused: {detail}")]
+	SignerRefused { detail: String, activity_id: Option<String> },
 	#[error("db: {0}")]
 	Db(String),
 	#[error("config: {0}")]
@@ -87,6 +99,86 @@ pub(super) enum SweepError {
 /// share the wrapping, not the error type.
 pub(super) fn read_err(err: impl Display) -> SweepError {
 	SweepError::Rpc(err.to_string())
+}
+
+/// The trailer the signer attaches to a `FailedPrecondition` when the key custodian parked
+/// the activity for a human (`BackendError::RequiresApproval`). The hub does not depend on
+/// the signer crate, so this mirrors its `ACTIVITY_ID_METADATA_KEY` rather than importing it.
+pub(super) const ACTIVITY_ID_METADATA_KEY: &str = "turnkey-activity-id";
+
+/// Classify a signer status on a sweep's signing call, `what` naming the attempt for the log.
+///
+/// The split mirrors the withdrawal path (`custody.rs`: only `Unavailable`/`DeadlineExceeded`
+/// retry) on the codes that matter here. A refusal on the merits — `FailedPrecondition`
+/// (custodian approval, an unprovisioned wallet), `PermissionDenied` (the custodian's policy
+/// or our own spend policy), `InvalidArgument` (a request the signer will never accept) — is
+/// [`SweepError::SignerRefused`], and the sweep backs off. Everything else keeps the
+/// per-cycle retry: an `Unavailable` is a blip, and an `Internal` is the dead-key alarm that
+/// `telemetry::note_signer_error` counts on every hit — slowing that count down would mute
+/// the signal an operator watches.
+pub(super) fn signer_err(what: impl Display, status: &Status) -> SweepError {
+	let detail = format!("{what}: {}", status.message());
+	match status.code() {
+		Code::FailedPrecondition | Code::PermissionDenied | Code::InvalidArgument => SweepError::SignerRefused {
+			detail,
+			activity_id: status.metadata().get(ACTIVITY_ID_METADATA_KEY).and_then(|value| value.to_str().ok()).map(str::to_owned),
+		},
+		_ => SweepError::Signer(detail),
+	}
+}
+
+/// Per-address hold-off after a terminal signer refusal — the sweep's stand-in for the
+/// withdrawal path's park.
+///
+/// A withdrawal that the custodian parks stays parked: the relay never re-signs it, an
+/// operator resolves it. A sweep cannot park for good — its state is in memory, there is no
+/// unpark RPC, and re-signing IS the only way it ever resumes once the operator has fixed
+/// the policy or approved the activity. So instead of "never again" it is "less and less
+/// often": each refusal doubles the hold from the poll interval up to [`CAP`](Self::CAP),
+/// which turns ~2 880 pending activities per address per day into ~24, and a success
+/// clears the record. Held addresses cost no RPC and no signer call.
+///
+/// The clock is passed in rather than read, so the arithmetic is testable without sleeping.
+#[derive(Default)]
+pub(super) struct RefusalBackoff {
+	holds: HashMap<String, Hold>,
+}
+
+struct Hold {
+	until: Instant,
+	strikes: u32,
+}
+
+/// What one refusal did to the address's hold — the sweeps log it in their own module.
+pub(super) struct Strike {
+	/// How long the address is skipped for from now.
+	pub(super) hold: Duration,
+	/// 1 on the first refusal since the last success; the first is the one to alert on.
+	pub(super) strikes: u32,
+}
+
+impl RefusalBackoff {
+	/// The longest an address is held between two attempts. An hour bounds both the noise
+	/// (one activity per address per hour, at worst) and the wait after an operator acts.
+	pub(super) const CAP: Duration = Duration::from_secs(60 * 60);
+
+	/// Whether `address` is still inside its hold at `now`.
+	pub(super) fn is_held(&self, address: &str, now: Instant) -> bool {
+		self.holds.get(address).is_some_and(|hold| now < hold.until)
+	}
+
+	/// Record a refusal: the hold starts at `base` and doubles per consecutive strike, capped.
+	pub(super) fn strike(&mut self, address: &str, now: Instant, base: Duration) -> Strike {
+		let strikes = self.holds.get(address).map_or(1, |hold| hold.strikes.saturating_add(1));
+		let hold = base.saturating_mul(1u32 << (strikes - 1).min(31)).min(Self::CAP);
+		self.holds.insert(address.to_owned(), Hold { until: now + hold, strikes });
+		Strike { hold, strikes }
+	}
+
+	/// The signer accepted a request for `address` again: forget its strikes.
+	pub(super) fn release(&mut self, address: &str) {
+		self.holds.remove(address);
+	}
 }
 
 /// A system wallet's on-chain address for `network`, resolved once via `ProvisionAddress`
@@ -148,4 +240,99 @@ pub(super) async fn mark_swept(pool: &PgPool, network: &str, user_id: Uuid) -> R
 		.await
 		.map_err(|e| SweepError::Db(e.to_string()))?;
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use tonic::metadata::MetadataValue;
+
+	use super::*;
+
+	const ACTIVITY_ID: &str = "0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b";
+	const POLL: Duration = Duration::from_secs(30);
+
+	#[test]
+	fn requires_approval_is_a_refusal_that_carries_the_activity_id() {
+		let mut status = Status::failed_precondition(format!("key custodian requires approval for activity {ACTIVITY_ID}"));
+		status.metadata_mut().insert(ACTIVITY_ID_METADATA_KEY, MetadataValue::try_from(ACTIVITY_ID).unwrap());
+		match signer_err("sweep 0xabc", &status) {
+			SweepError::SignerRefused { detail, activity_id } => {
+				assert_eq!(activity_id.as_deref(), Some(ACTIVITY_ID));
+				assert!(detail.starts_with("sweep 0xabc: "), "{detail}");
+			}
+			other => panic!("RequiresApproval must not be retried every poll: {other}"),
+		}
+	}
+
+	#[test]
+	fn refusals_on_the_merits_do_not_retry_every_poll() {
+		for status in [
+			Status::failed_precondition("sending wallet is not provisioned"),
+			Status::permission_denied("key custodian refused: policy"),
+			Status::invalid_argument("amount must be a u128 decimal"),
+		] {
+			let code = status.code();
+			assert!(
+				matches!(signer_err("sweep", &status), SweepError::SignerRefused { activity_id: None, .. }),
+				"{code:?} is terminal for this request"
+			);
+		}
+	}
+
+	#[test]
+	fn outages_and_dead_keys_keep_the_per_poll_retry() {
+		for status in [
+			Status::unavailable("key custodian unavailable: timeout"),
+			Status::deadline_exceeded("slow"),
+			Status::internal("could not unseal the signing key"),
+			Status::unauthenticated("token expired"),
+		] {
+			let code = status.code();
+			assert!(matches!(signer_err("sweep", &status), SweepError::Signer(_)), "{code:?} retries next poll");
+		}
+	}
+
+	#[test]
+	fn a_held_address_is_skipped_until_its_hold_expires() {
+		let mut backoff = RefusalBackoff::default();
+		let t0 = Instant::now();
+		assert!(!backoff.is_held("a", t0), "never refused ⇒ never held");
+		let strike = backoff.strike("a", t0, POLL);
+		assert_eq!((strike.strikes, strike.hold), (1, POLL));
+		assert!(backoff.is_held("a", t0 + POLL / 2));
+		assert!(!backoff.is_held("a", t0 + POLL), "the hold is half-open: due exactly at its end");
+		assert!(!backoff.is_held("b", t0), "holds are per address");
+	}
+
+	#[test]
+	fn consecutive_refusals_double_the_hold_up_to_the_cap() {
+		let mut backoff = RefusalBackoff::default();
+		let t0 = Instant::now();
+		let holds: Vec<Duration> = (0..10u32).map(|i| backoff.strike("a", t0 + POLL * i, POLL).hold).collect();
+		assert_eq!(&holds[..4], &[POLL, POLL * 2, POLL * 4, POLL * 8]);
+		assert_eq!(holds[9], RefusalBackoff::CAP, "30s doubled nine times is 4h16m — clamped to the cap");
+		assert!(holds.windows(2).all(|w| w[0] <= w[1]), "never shrinks while refusals continue");
+	}
+
+	#[test]
+	fn a_success_clears_the_strikes() {
+		let mut backoff = RefusalBackoff::default();
+		let t0 = Instant::now();
+		backoff.strike("a", t0, POLL);
+		backoff.strike("a", t0, POLL);
+		backoff.release("a");
+		assert!(!backoff.is_held("a", t0));
+		assert_eq!(backoff.strike("a", t0, POLL).strikes, 1, "the count restarts after a success");
+	}
+
+	#[test]
+	fn the_shift_cannot_overflow_after_many_strikes() {
+		let mut backoff = RefusalBackoff::default();
+		let t0 = Instant::now();
+		let mut last = backoff.strike("a", t0, POLL);
+		for _ in 1..100 {
+			last = backoff.strike("a", t0, POLL);
+		}
+		assert_eq!((last.strikes, last.hold), (100, RefusalBackoff::CAP));
+	}
 }
