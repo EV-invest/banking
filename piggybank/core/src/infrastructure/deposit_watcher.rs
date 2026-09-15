@@ -13,6 +13,13 @@
 //! below `latest − confirmations` are scanned, so shallow reorgs are absorbed; a reorg
 //! deeper than `confirmations` is a known, out-of-scope residual (reconciliation territory).
 //!
+//! A provider that has **pruned** the history the cursor points at (shared nodes keep a
+//! bounded window of logs) can never serve that window, so the live scan bisects for the
+//! oldest block it still has, jumps the cursor there, and reports the skipped range as an
+//! incident at `error!` — those deposits are NOT credited and must be reconciled by hand
+//! (`RecordDeposit`). Skipping is the lesser evil: retrying the pruned window forever wedges
+//! the rail and loses every deposit AFTER the gap too.
+//!
 //! Generic over the EVM rail — one instance per chain (BEP20, Polygon), keyed by
 //! `config.network`; the raw log value is scaled into canonical base units via
 //! [`Usdt::from_onchain`], so a 6-dp rail (Polygon) and an 18-dp rail (BEP20) credit correctly.
@@ -37,7 +44,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 /// The watcher failure taxonomy, shared with every other rail's watcher and defined in
 /// [`rails`](super::rails). Re-exported under this module's original path so importers
@@ -78,6 +85,11 @@ const CHUNK_PACE_MS: u64 = 250;
 /// A lagging scan means deposits are landing on-chain UNCREDITED, which is worth an alert
 /// in a way that an individual throttled RPC call is not.
 const LAG_WARN_BLOCKS: u64 = 5_000;
+/// How many times one scan may jump its cursor past pruned history before it gives up and
+/// fails the cycle. The retained window moves with the chain, so a clamp can land a hair
+/// behind it and be refused once more; a provider that keeps refusing after this many
+/// bisections is not serving logs at all, and the cycle backoff is the right response.
+const PRUNE_CLAMPS_PER_SCAN: u32 = 3;
 
 /// Whether a scan owns the persistent cursor. The live cycle does; a backfill must not
 /// touch it, or it would drag the live scan backwards or skip it past unread blocks.
@@ -233,6 +245,13 @@ impl DepositWatcher {
 	///
 	/// Safe to re-run over any window: crediting is idempotent by `tx_ref`, so an overlapping
 	/// or repeated backfill costs RPC calls and changes nothing else.
+	///
+	/// Pruned history is handled only for the live scan: it jumps the cursor to the oldest
+	/// block the provider still serves (see [`first_retained_block`]) and files the skipped
+	/// range as an incident, because the alternative — retrying the pruned window until the
+	/// backoff cap — loses every deposit after the gap as well. A backfill asked for a window
+	/// its endpoint no longer has gets the error back instead: the operator chose that window
+	/// deliberately, and "done, credited 0" would be a lie.
 	pub async fn scan_range(&self, from: u64, to: u64, cursor: CursorPolicy) -> Result<ScanSummary, WatcherError> {
 		let network = self.config.network;
 		let mut summary = ScanSummary {
@@ -259,8 +278,36 @@ impl DepositWatcher {
 		let topic_addrs: Vec<Value> = watched.keys().chain(treasury.iter()).map(|a| Value::String(pad_topic(a))).collect();
 
 		let mut next = from;
+		let mut clamps: u32 = 0;
 		while next <= to {
-			let (logs, chunk_end) = self.get_logs(next, to, &topic_addrs).await?;
+			let (logs, chunk_end) = match self.get_logs(next, to, &topic_addrs).await {
+				Ok(chunk) => chunk,
+				Err(err) if matches!(cursor, CursorPolicy::Advance) && is_pruned(&err) && clamps < PRUNE_CLAMPS_PER_SCAN => {
+					clamps += 1;
+					let first = first_retained_block(next, to, |block| self.is_retained(block, to, &topic_addrs)).await?;
+					if first <= next {
+						// Even the head of the window is pruned — nothing here can be scanned,
+						// and jumping to `to` would only hide that behind a clean cursor.
+						return Err(err);
+					}
+					let skipped_to = first - 1;
+					// `error!`, not `warn!`: this is a money incident that reaches Sentry, and the
+					// from/to are what the operator needs to reconcile the window by hand.
+					error!(
+						network = %network,
+						from = next,
+						to = skipped_to,
+						skipped_blocks = first - next,
+						"deposit watcher: provider has pruned history below block {first} — skipping blocks {next}..={skipped_to}; USDT deposits landing in that window were NOT credited and must be reconciled by hand (RecordDeposit, or a backfill on a full-history endpoint): {err}"
+					);
+					// Persist the jump before anything else can fail, so the gap is filed exactly
+					// once: a later throttled chunk must not re-run the bisection and re-alert.
+					self.set_cursor(network, skipped_to).await?;
+					next = first;
+					continue;
+				}
+				Err(err) => return Err(err),
+			};
 			for log in &logs {
 				let Some(transfer) = decode_transfer(log) else { continue };
 				let credited = if let Some(&user) = watched.get(&transfer.to) {
@@ -334,13 +381,7 @@ impl DepositWatcher {
 		loop {
 			let range = self.block_range.load(Ordering::Relaxed);
 			let to = from.saturating_add(range - 1).min(safe_head);
-			let params = json!([{
-				"fromBlock": format!("0x{from:x}"),
-				"toBlock": format!("0x{to:x}"),
-				"address": self.config.usdt_contract,
-				"topics": [TRANSFER_TOPIC, Value::Null, addresses],
-			}]);
-			match self.rpc("eth_getLogs", params).await {
+			match self.rpc("eth_getLogs", self.logs_params(from, to, addresses)).await {
 				Ok(result) => {
 					let logs = result.as_array().cloned().ok_or_else(|| WatcherError::Rpc("eth_getLogs: result is not an array".into()))?;
 					return Ok((logs, to));
@@ -354,6 +395,31 @@ impl DepositWatcher {
 				}
 				Err(err) => return Err(err),
 			}
+		}
+	}
+
+	fn logs_params(&self, from: u64, to: u64, addresses: &[Value]) -> Value {
+		json!([{
+			"fromBlock": format!("0x{from:x}"),
+			"toBlock": format!("0x{to:x}"),
+			"address": self.config.usdt_contract,
+			"topics": [TRANSFER_TOPIC, Value::Null, addresses],
+		}])
+	}
+
+	/// Does the provider still serve logs starting at `block`? The probe for
+	/// [`first_retained_block`]: a [`MIN_BLOCK_RANGE`]-wide `eth_getLogs`, narrow enough that
+	/// no endpoint refuses it for width, so the only refusal left to read is "pruned". Any
+	/// other failure is the caller's to handle — a rate limit mid-bisection has already been
+	/// retried by [`rpc`] and fails the cycle as it would anywhere else. Paced like the
+	/// catch-up chunks, for the same reason.
+	async fn is_retained(&self, block: u64, safe_head: u64, addresses: &[Value]) -> Result<bool, WatcherError> {
+		let to = block.saturating_add(MIN_BLOCK_RANGE - 1).min(safe_head);
+		tokio::time::sleep(Duration::from_millis(CHUNK_PACE_MS)).await;
+		match self.rpc("eth_getLogs", self.logs_params(block, to, addresses)).await {
+			Ok(_) => Ok(true),
+			Err(err) if is_pruned(&err) => Ok(false),
+			Err(err) => Err(err),
 		}
 	}
 
@@ -545,6 +611,35 @@ fn rpc_host(url: &str) -> &str {
 	url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or(url)
 }
 
+/// The oldest block in `(pruned, hi]` that `probe` reports as still served, by bisection.
+///
+/// `pruned` is a block the provider just refused; `hi` is taken as served without asking —
+/// it is the safe head, derived from the height the same provider just reported, and a
+/// node does not prune its own tip. Retention is a suffix of the chain, so "served" is
+/// monotonic in the block number and bisection is sound. Returns `hi` unchanged when the
+/// window is empty or every probe is refused, which the caller reads as "nothing here can
+/// be scanned".
+///
+/// Cost is `log2(hi − pruned)` probes — twenty-odd calls for a scan a million blocks
+/// behind — against a cycle that was otherwise failing forever.
+async fn first_retained_block<E>(pruned: u64, mut hi: u64, mut probe: impl AsyncFnMut(u64) -> Result<bool, E>) -> Result<u64, E> {
+	let mut lo = pruned;
+	while hi.saturating_sub(lo) > 1 {
+		let mid = lo + (hi - lo) / 2;
+		if probe(mid).await? {
+			hi = mid;
+		} else {
+			lo = mid;
+		}
+	}
+	Ok(hi)
+}
+
+/// The refusal that only a LATER window can get past — see [`RpcAction::Pruned`].
+fn is_pruned(err: &WatcherError) -> bool {
+	matches!(err, WatcherError::Rpc(msg) if classify(msg) == RpcAction::Pruned)
+}
+
 /// How the caller should react to an RPC error.
 #[derive(Debug, PartialEq, Eq)]
 enum RpcAction {
@@ -552,12 +647,16 @@ enum RpcAction {
 	Backoff,
 	/// The endpoint refused the query's block window — only a narrower one can succeed.
 	Narrow,
+	/// The endpoint no longer holds history at `fromBlock` — only a LATER window can
+	/// succeed; narrowing or retrying the same one never will.
+	Pruned,
 	/// Repeating changes nothing (invalid params, method-not-found, unparseable) — fail now.
 	Fail,
 }
 
 /// Classify an RPC error message. dRPC's free tier is the endpoint these run against by
-/// default, so its codes lead: 15 (rate limit), 30 (timeout), 35 (block window refused).
+/// default, so its codes lead: 15 (rate limit), 30 (timeout), 35 (block window refused);
+/// -32701 (history pruned) is allnodes', the keyed nodes prod runs on.
 /// The `Narrow` phrasings cover the other providers' wording for the same condition, since
 /// the rail's RPC URL is operator-configured and may point anywhere.
 ///
@@ -568,6 +667,11 @@ fn classify(msg: &str) -> RpcAction {
 	// Codes are matched against a whitespace-stripped copy: the JSON-RPC error object is
 	// reproduced verbatim from the wire, and `{"code": 35}` is as valid as `{"code":35}`.
 	let compact: String = msg.chars().filter(|c| !c.is_whitespace()).collect();
+	// -32701 is allnodes' "History has been pruned for this block"; the word covers the
+	// other node implementations' phrasing of the same condition (geth/erigon/nethermind).
+	if compact.contains("\"code\":-32701") || msg.to_ascii_lowercase().contains("pruned") {
+		return RpcAction::Pruned;
+	}
 	if compact.contains("\"code\":35")
 		|| msg.contains("blocks are not supported")
 		|| msg.contains("block range")
@@ -711,6 +815,84 @@ mod tests {
 		// A 4xx with nothing actionable in it stays fatal — repeating it changes nothing.
 		assert_eq!(classify("rpc: eth_getLogs: http status 400 <html>Bad Request</html>"), RpcAction::Fail);
 		assert_eq!(classify("rpc: eth_getLogs: http status 400"), RpcAction::Fail);
+	}
+
+	/// The prod incident (#309): allnodes' keyed BSC and Polygon nodes answered every
+	/// `eth_getLogs` at the cursor with -32701, the cycle backed off to its 300 s cap, and
+	/// the rail never caught up. Neither retrying nor narrowing can get past this — only a
+	/// later window can — so it is its own action.
+	#[test]
+	fn a_pruned_window_is_neither_retried_nor_narrowed() {
+		let allnodes = r#"rpc: eth_getLogs: rpc error: {"code":-32701,"message":"History has been pruned for this block. To remove restrictions, order a dedicated full node here: https://www.allnodes.com/pol/host"}"#;
+		assert_eq!(classify(allnodes), RpcAction::Pruned);
+		assert!(is_pruned(&WatcherError::Rpc(allnodes.trim_start_matches("rpc: ").to_owned())));
+		// The same object with the spacing another serializer produces, and behind a 4xx.
+		assert_eq!(
+			classify(r#"rpc: eth_getLogs: http status 400 {"error": {"code": -32701, "message": "History has been pruned for this block"}}"#),
+			RpcAction::Pruned
+		);
+		// Other node implementations' wording for the same condition.
+		assert_eq!(
+			classify(r#"rpc: eth_getLogs: rpc error: {"code":-32000,"message":"logs history has been PRUNED"}"#),
+			RpcAction::Pruned
+		);
+		// A range refusal or a throttle is not a prune, whatever else the message says.
+		assert_eq!(
+			classify(r#"rpc: eth_getLogs: rpc error: {"code":35,"message":"ranges over 10000 blocks are not supported on free plan"}"#),
+			RpcAction::Narrow
+		);
+		assert_eq!(classify("rpc: eth_getLogs: http status 429"), RpcAction::Backoff);
+		assert!(!is_pruned(&WatcherError::Db("connection closed".into())));
+	}
+
+	/// The clamp finds the retention boundary by bisection, without a configured window size
+	/// — the provider's window is neither documented nor stable — and does so in
+	/// `log2(lag)` probes, not `lag`.
+	#[tokio::test]
+	async fn bisection_finds_the_oldest_retained_block() {
+		let retained_from = 1_000_000u64;
+		let mut probes = 0u32;
+		let first = first_retained_block::<()>(500_000, 1_500_000, async |block| {
+			probes += 1;
+			Ok(block >= retained_from)
+		})
+		.await
+		.expect("probe never fails");
+		assert_eq!(first, retained_from);
+		assert!(probes <= 21, "a million-block lag must take ~log2 probes, took {probes}");
+
+		// The boundary sits right above the refused block: the smallest possible skip.
+		let first = first_retained_block::<()>(41, 100, async |block| Ok(block >= 42)).await.expect("probe never fails");
+		assert_eq!(first, 42);
+		// Everything below the head is gone: the answer is the head itself.
+		let first = first_retained_block::<()>(0, 100, async |block| Ok(block >= 100)).await.expect("probe never fails");
+		assert_eq!(first, 100);
+	}
+
+	/// An empty or fully-pruned window returns `hi` unchanged — the caller's signal that
+	/// there is nothing to jump to — and never probes past the window it was given.
+	#[tokio::test]
+	async fn bisection_over_an_empty_window_asks_nothing() {
+		let mut probes = 0u32;
+		let first = first_retained_block::<()>(100, 100, async |_| {
+			probes += 1;
+			Ok(true)
+		})
+		.await
+		.expect("probe never fails");
+		assert_eq!(first, 100);
+		assert_eq!(probes, 0);
+		let first = first_retained_block::<()>(100, 101, async |_| Ok(false)).await.expect("probe never fails");
+		assert_eq!(first, 101);
+	}
+
+	/// A probe failing for any reason other than "pruned" — a rate limit that outlived its
+	/// retries, say — ends the bisection: the cycle fails and backs off exactly as it did
+	/// before the clamp existed.
+	#[tokio::test]
+	async fn a_failing_probe_aborts_the_bisection() {
+		let result = first_retained_block(0, 1_000, async |block| if block > 400 { Err("http status 429") } else { Ok(false) }).await;
+		assert_eq!(result, Err("http status 429"));
 	}
 
 	#[test]
