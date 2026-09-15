@@ -676,12 +676,14 @@
         # origin/main and in the local cargo checkout gen-api reads. CI entry point for
         # the contract-parity guard (drift.yml); needs network to the remote.
         #
-        # `rust` + the tb-client link + empty RUSTC_WRAPPER for the same reasons as
-        # runDriftCheck below: the checkout is located via `cargo metadata`, which needs
-        # the workspace to resolve and stable cargo cannot parse this manifest.
+        # `rust` + the tb-client link + empty RUSTC_WRAPPER as in runDriftCheck below:
+        # the checkout is located via `cargo metadata`, which needs the workspace to
+        # resolve (the .tb-client path dep) and no sccache probe (.cargo/config.toml).
+        # `bash` explicitly: the script needs bash ≥ 4 (`mapfile`), and `exec bash`
+        # would otherwise pick up macOS's system 3.2 from PATH.
         runConciergePinCheck = pkgs.writeShellApplication {
           name = "run-concierge-pin-check";
-          runtimeInputs = with pkgs; [ rust git jq gnused coreutils gnugrep ];
+          runtimeInputs = with pkgs; [ bash rust git jq gnused coreutils gnugrep ];
           text = ''
             cd "$(git rev-parse --show-toplevel)"
             ${linkTbClient}
