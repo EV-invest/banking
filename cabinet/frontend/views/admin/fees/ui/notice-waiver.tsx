@@ -27,7 +27,11 @@ import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { formatMoment } from "@/shared/lib/datetime";
 import { revalidateTag } from "@/shared/lib/resource";
-import { noticeSummary, type Waiver, waiverRecord } from "@/views/admin/fees/lib/notices";
+import { noticeSummary, type Waiver, waiverName, waiverRecord } from "@/views/admin/fees/lib/notices";
+
+// The sentence names the operator by email; the id stays one hover away as the record's
+// own fact. Nothing to hover when the id is what the sentence already says.
+const idTooltip = (waiver: Pick<Waiver, "by" | "email">): string | undefined => (waiver.email?.trim() && waiver.by ? waiver.by : undefined);
 
 export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
   const t = useT();
@@ -40,11 +44,10 @@ export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
       return <p className="text-xs text-ink-soft">{t("admin.fees.notices.queued", { n: summary.queued })}</p>;
     case "waived": {
       const at = formatMoment(summary.at, locale);
+      const by = waiverName(summary);
       return (
-        <p className="text-xs text-ink-soft">
-          {summary.by
-            ? t("admin.fees.waiver.acknowledged", { by: summary.by, at, n: summary.holders })
-            : t("admin.fees.waiver.acknowledgedAnon", { at, n: summary.holders })}
+        <p className="text-xs text-ink-soft" title={idTooltip(summary)}>
+          {by ? t("admin.fees.waiver.acknowledged", { by, at, n: summary.holders }) : t("admin.fees.waiver.acknowledgedAnon", { at, n: summary.holders })}
         </p>
       );
     }
@@ -59,6 +62,7 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const waiverBy = waiver ? waiverName(waiver) : null;
   // Focus follows the step both ways: in, onto the safe answer (see `./pending-card.tsx`);
   // out by "Keep waiting", back onto the button that opened it — which is remounted, so
   // the browser would otherwise drop focus to `body`.
@@ -104,9 +108,9 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
           {queued > 0 && <> {t("admin.fees.notices.moreQueued", { n: queued })}</>}
         </p>
         {waiver && (
-          <p className="text-sm leading-relaxed">
-            {waiver.by
-              ? t("admin.fees.notices.alreadyWaived", { by: waiver.by, at: formatMoment(waiver.at, locale), n: waiver.holders })
+          <p className="text-sm leading-relaxed" title={idTooltip(waiver)}>
+            {waiverBy
+              ? t("admin.fees.notices.alreadyWaived", { by: waiverBy, at: formatMoment(waiver.at, locale), n: waiver.holders })
               : t("admin.fees.notices.alreadyWaivedAnon", { at: formatMoment(waiver.at, locale), n: waiver.holders })}
           </p>
         )}
@@ -154,9 +158,10 @@ export function WaiverNote({ change }: { change: FeePolicyChange }) {
   const t = useT();
   const waiver = waiverRecord(change);
   if (!waiver) return null;
+  const by = waiverName(waiver);
   return (
-    <p className="mt-1 text-xs text-ink-soft">
-      {waiver.by ? t("admin.fees.waiver.row", { by: waiver.by, n: waiver.holders }) : t("admin.fees.waiver.rowAnon", { n: waiver.holders })}
+    <p className="mt-1 text-xs text-ink-soft" title={idTooltip(waiver)}>
+      {by ? t("admin.fees.waiver.row", { by, n: waiver.holders }) : t("admin.fees.waiver.rowAnon", { n: waiver.holders })}
     </p>
   );
 }

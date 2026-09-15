@@ -14,9 +14,21 @@
 
 /** Somebody took responsibility: who, when (unix seconds as a string), and over how many. */
 export interface Waiver {
+  /** The operator's user id — the fact on the record; `""` when blanked for the reader. */
   by: string;
+  /** The same operator by email, `null` when the directory could not name the id. */
+  email: string | null;
   at: string;
   holders: number;
+}
+
+/**
+ * The name a reader is shown for the waiver's author: the email when the directory knows
+ * one, the id otherwise — a UUID is a poor name but a true one, and hiding it would read as
+ * an anonymous act. `null` when the author is blanked for the reader.
+ */
+export function waiverName(waiver: Pick<Waiver, "by" | "email">): string | null {
+  return waiver.email?.trim() || waiver.by.trim() || null;
 }
 
 export type NoticeSummary =
@@ -34,6 +46,7 @@ export type NoticeSummary =
 export interface NoticeSource {
   state: string;
   notices_waived_by: string | null;
+  notices_waived_by_email: string | null;
   notices_waived_at: string;
   notices_waived_users: string[];
   undelivered_notices: number;
@@ -50,7 +63,7 @@ export interface NoticeSource {
 export function waiverRecord(change: NoticeSource): Waiver | null {
   const waivedAt = Number(change.notices_waived_at);
   if ((Number.isFinite(waivedAt) && waivedAt > 0) || (change.notices_waived_by ?? "").trim()) {
-    return { by: change.notices_waived_by ?? "", at: change.notices_waived_at, holders: change.notices_waived_users.length };
+    return { by: change.notices_waived_by ?? "", email: change.notices_waived_by_email, at: change.notices_waived_at, holders: change.notices_waived_users.length };
   }
   return null;
 }
