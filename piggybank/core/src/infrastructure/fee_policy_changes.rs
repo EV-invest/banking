@@ -169,7 +169,8 @@ struct UndeliveredNotice {
 /// period would otherwise let a change bind the very minute nobody could have been told.
 /// Counted over the holders of RIGHT NOW: a recipient who has since redeemed every unit has
 /// no terms to be warned about, and must not hold the change for those who stayed. The ONE
-/// rule behind the figures on the wire, the tightening gate and the acknowledgement's list.
+/// rule behind the figures on the wire, the tightening gate and the acknowledgement's list
+/// (which keeps only the given-up half).
 async fn undelivered_notices(conn: &mut PgConnection, id: FeePolicyChangeId, service: &ServiceId) -> Result<Vec<UndeliveredNotice>, DomainError> {
 	let rows: Vec<(Uuid, bool)> = sqlx::query_as(
 		"SELECT m.user_id, m.attempts >= $3 FROM consilium_mail m \
@@ -583,7 +584,18 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 				"every holder notice for this change has been delivered — there is nothing to acknowledge".into(),
 			));
 		}
-		let users: Vec<Uuid> = undelivered.iter().map(|notice| notice.user_id.raw()).collect();
+		// Only the notices the mailer has GIVEN UP on: a notice still being tried may yet
+		// arrive, and a holder it reaches was told — waiving their notice before the mailer
+		// has finished trying would take responsibility for holders nobody has failed to
+		// reach. A holder still in the queue at this moment holds the change until their
+		// notice is delivered or given up on, and a later acknowledgement can name them.
+		let users: Vec<Uuid> = undelivered.iter().filter(|notice| notice.given_up).map(|notice| notice.user_id.raw()).collect();
+		if users.is_empty() {
+			return Err(DomainError::Conflict(format!(
+				"{} holder notice(s) for this change are still being delivered and none has been given up on yet — there is nothing to acknowledge until the mailer gives up",
+				undelivered.len()
+			)));
+		}
 		sqlx::query("UPDATE fee_policy_changes SET notices_waived_by = $2, notices_waived_at = to_timestamp($3), notices_waived_users = $4 WHERE id = $1")
 			.bind(id.raw())
 			.bind(by)
@@ -666,10 +678,11 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 		// Terms that get DEARER for them do not bind over them: the change stays `scheduled`,
 		// a relay coming back delivers and the next tick promotes, a notice given up on needs
 		// the operator, and the sweeper's failure streak turns the refusal into an error.
-		// The operator's move is the acknowledgement: it names the holders whose notice was
-		// undelivered when it was given, and the terms bind over THOSE — a holder it does not
-		// name (one who had redeemed at the time and has since bought back in) still holds
-		// the change, so an acknowledgement never widens by itself.
+		// The operator's move is the acknowledgement: it names the holders whose notice had
+		// been given up on when it was given, and the terms bind over THOSE — a holder it does
+		// not name (one still in the mailer's queue at the time, or one who had redeemed and
+		// has since bought back in) still holds the change, so an acknowledgement never
+		// widens by itself.
 		// Terms that only get cheaper bind regardless, on the record: a holder the identity
 		// plane cannot reach (an unverified mailbox, no mirrored id) would otherwise pin a
 		// product's terms forever — the loosening, and the lowering of a legacy rate above

@@ -309,6 +309,16 @@ async fn retire_notices(h: &Harness, change: &FeePolicyChange) {
 		.unwrap();
 }
 
+/// Stand in for the mailer having given up on ONE holder's notice, the rest still in the queue.
+async fn retire_notice(h: &Harness, change: &FeePolicyChange, user: UserId) {
+	sqlx::query("UPDATE consilium_mail SET attempts = 10, last_error = 'recipient has no mirrored concierge user id' WHERE fee_policy_change_id = $1 AND user_id = $2 AND sent_at IS NULL")
+		.bind(change.id.raw())
+		.bind(user.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+}
+
 /// Stand in for the notice period having run: pull a scheduled change's moment into the past.
 async fn let_the_notice_run(h: &Harness, change: &FeePolicyChange) {
 	sqlx::query("UPDATE fee_policy_changes SET effective_from = now() - interval '1 hour' WHERE id = $1")
@@ -1771,6 +1781,56 @@ async fn there_is_nothing_to_acknowledge_on_a_change_that_is_not_scheduled_or_wh
 	let elsewhere = schedule(&h, UserId::new(), &other, cheaper, 0, "").await.unwrap();
 	let err = acknowledge(&h, &service, &elsewhere, roster[1]).await.unwrap_err();
 	assert!(matches!(err, DomainError::NotFound { .. }), "{err:?}");
+}
+
+#[tokio::test]
+async fn an_acknowledgement_waits_for_the_mailer_to_give_up_and_names_only_those_it_gave_up_on() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	install(&h, &service, cheaper).await;
+	let stuck = holder(&h, &service, "1000").await;
+	let queued = holder(&h, &service, "500").await;
+	let requester = UserId::new();
+	let change = schedule(&h, requester, &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	assert_eq!((change.undelivered_notices, change.notices_given_up), (2, 0));
+
+	// Both notices are still in the mailer's queue — nobody has failed to be reached yet,
+	// so there is nobody to take responsibility for. The requester's "I take
+	// responsibility" a minute after scheduling must not sweep up every holder.
+	let err = acknowledge(&h, &service, &change, requester).await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "{err:?}");
+	assert!(err.to_string().contains("none has been given up on yet"), "{err}");
+	assert_eq!(waiver_row(&h, &change).await, (None, None, None));
+
+	// The mailer gives up on `stuck` alone: the acknowledgement names them and nobody else.
+	retire_notice(&h, &change, stuck).await;
+	let acknowledged = acknowledge(&h, &service, &change, requester).await.unwrap();
+	let waiver = acknowledged.notices_waiver.clone().expect("acknowledged");
+	assert_eq!(waiver.users, vec![stuck], "only the holder the mailer gave up on");
+	assert_eq!((acknowledged.undelivered_notices, acknowledged.notices_given_up), (2, 1));
+	assert_eq!(waiver_row(&h, &change).await, (Some(requester.to_string()), Some(waiver.at_unix), Some(vec![stuck.raw()])));
+
+	// `queued` is still being tried: the change waits on them, acknowledgement or not.
+	let_the_notice_run(&h, &change).await;
+	let refused = h.changes.promote(change.id, now()).await.unwrap_err();
+	assert!(matches!(refused, DomainError::Conflict(_)), "{refused:?}");
+	assert!(refused.to_string().contains("1 of them to holders the acknowledgement by"), "{refused}");
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(cheaper));
+
+	// Their notice arrives: the terms bind — over `stuck` on the record, over `queued`
+	// because they were told.
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE fee_policy_change_id = $1 AND user_id = $2")
+		.bind(change.id.raw())
+		.bind(queued.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+	assert_eq!(change_of(&h, &change).await.notices_waiver, Some(waiver));
 }
 
 #[tokio::test]
