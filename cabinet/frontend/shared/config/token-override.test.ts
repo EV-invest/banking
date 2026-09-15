@@ -120,9 +120,13 @@ function declarations(css: string): Declaration[] {
   return out;
 }
 
+// `#E6E1D3` and `#e6e1d3`, or a re-spaced `color-mix(...)`, are the same value: compare
+// canonical forms, or a dead override survives a bump that merely re-typed it.
+const canonical = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+
 const kit = new Map<string, Set<string>>();
 for (const { name, value } of declarations(readFileSync(KIT_TOKENS, "utf8"))) {
-  kit.set(name, (kit.get(name) ?? new Set()).add(value));
+  kit.set(name, (kit.get(name) ?? new Set()).add(canonical(value)));
 }
 
 test("the kit's sheet is the one this test knows how to read", () => {
@@ -155,7 +159,7 @@ test("a temporary override is deleted once the kit ships the same value", () => 
     for (const { name, value, line, inBlock } of declarations(readFileSync(file, "utf8"))) {
       if (!inBlock) continue;
       assert.ok(kit.has(name), `${relative(FRONTEND_ROOT, file)}:${line}: ${name} is not a kit token, so it does not belong in the override block`);
-      if (kit.get(name)!.has(value)) stale.push(`${relative(FRONTEND_ROOT, file)}:${line}: ${name}: ${value}`);
+      if (kit.get(name)!.has(canonical(value))) stale.push(`${relative(FRONTEND_ROOT, file)}:${line}: ${name}: ${value}`);
     }
   }
   assert.deepEqual(stale, [], `the installed uikit already ships these values — delete the override:\n${stale.join("\n")}`);
