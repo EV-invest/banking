@@ -1919,6 +1919,14 @@
     "en": "Post valuation",
     "t": "Publier la valorisation"
   },
+  "admin.valuation.postedBody": {
+    "en": "NAV {nav} at {aum} USDT AUM",
+    "t": "VL {nav} pour un AUM de {aum} USDT"
+  },
+  "admin.valuation.postedTitle": {
+    "en": "Marked",
+    "t": "Valorisé"
+  },
   "admin.valuation.propose": {
     "en": "Propose to the owners",
     "t": "Proposer aux propriétaires"

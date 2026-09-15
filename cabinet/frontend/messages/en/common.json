@@ -479,6 +479,8 @@
   "admin.valuation.openConsilium": "Open the consilium",
   "admin.valuation.pickAFund": "Pick a fund above to see and resize its authorised unit supply.",
   "admin.valuation.postValuation": "Post valuation",
+  "admin.valuation.postedBody": "NAV {nav} at {aum} USDT AUM",
+  "admin.valuation.postedTitle": "Marked",
   "admin.valuation.propose": "Propose to the owners",
   "admin.valuation.proposeHint": "A move past the guard is put to the owners' vote instead of being posted.",
   "admin.valuation.proposedBody": "Nothing is marked yet. Every owner has been emailed a link; once more than half of them agree, {service} is marked at {aum} USDT. The live tally is in the consilium.",
