@@ -25,11 +25,11 @@ import { useT } from "@evinvest/i18n/react";
 const COLUMNS = { "--activity-columns": "110px 1fr 150px 130px" } as CSSProperties;
 
 const STATUS_STYLES: Record<string, string> = {
-  queued: "bg-main-accent-t3/15 text-main-accent-t3",
-  processing: "bg-main-accent-t1/15 text-main-accent-t1",
-  completed: "bg-main-accent-t2/15 text-main-accent-t2",
-  credited: "bg-main-accent-t2/15 text-main-accent-t2",
-  failed: "bg-main-accent-t4/15 text-main-accent-t4",
+  queued: "bg-accent-warn/15 text-accent-warn",
+  processing: "bg-accent-debug/15 text-accent-debug",
+  completed: "bg-positive/15 text-positive",
+  credited: "bg-positive/15 text-positive",
+  failed: "bg-chart-4/15 text-chart-4",
   cancelled: "bg-muted text-ink-soft",
 };
 
@@ -171,8 +171,8 @@ function EmptyState() {
   const t = useT();
   return (
     <div className={cn(WALLET_CARD, "flex flex-col items-center gap-3 px-6 py-12 text-center lg:max-w-100")}>
-      <span className="flex size-11 items-center justify-center rounded-xl bg-main-accent-t1/15">
-        <ArrowUpRight className="size-5 text-main-accent-t1" />
+      <span className="flex size-11 items-center justify-center rounded-xl bg-accent-debug/15">
+        <ArrowUpRight className="size-5 text-accent-debug" />
       </span>
       <p className="text-sm font-semibold text-ink">{t("wallet.noActivity")}</p>
       <p className="max-w-65 text-xs text-ink-soft">{t("wallet.noActivityHint")}</p>

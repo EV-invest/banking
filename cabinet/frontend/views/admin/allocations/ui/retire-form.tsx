@@ -31,7 +31,7 @@ export function RetireForm({ draft, companyUnits, onChange, onReview, onCancel }
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <div className="grid gap-2.5">
         <div className="flex flex-col gap-1.5">
           <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.holder")}</span>

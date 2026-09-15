@@ -171,8 +171,8 @@ export function DepositView({ initialNetwork }: { initialNetwork?: string }) {
                 )}
               </div>
 
-              <div className="flex gap-2.5 rounded-xl border border-main-accent-t3 bg-main-accent-t3/5 px-4 py-3.5 lg:gap-3 lg:px-4.5 lg:py-4">
-                <TriangleAlert className="mt-px size-4 shrink-0 text-main-accent-t3" />
+              <div className="flex gap-2.5 rounded-xl border border-accent-warn bg-accent-warn/5 px-4 py-3.5 lg:gap-3 lg:px-4.5 lg:py-4">
+                <TriangleAlert className="mt-px size-4 shrink-0 text-accent-warn" />
                 <div className="flex min-w-0 flex-col gap-1">
                   {/* `wallet.deposit.rail-hazard` is a section-type tip (a descriptor block, not an
                       inline ⓘ) — this card already carries that copy, so it isn't anchored here. */}

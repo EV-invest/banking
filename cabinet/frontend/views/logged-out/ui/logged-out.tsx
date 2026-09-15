@@ -14,7 +14,7 @@ export async function LoggedOutView() {
   return (
     <div className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-6 rounded-xl border border-border bg-card p-8 text-center">
-        <Logo className="mx-auto h-8 w-auto text-main-mist" />
+        <Logo className="mx-auto h-8 w-auto text-ink" />
 
         <div className="space-y-1">
           <h1 className="text-2xl">{t("auth.signedOut")}</h1>

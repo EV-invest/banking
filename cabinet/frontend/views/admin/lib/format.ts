@@ -183,11 +183,11 @@ export function statusTone(status: string): string {
   switch (status) {
     case "active":
     case "healthy":
-      return "text-main-accent-t2";
+      return "text-positive";
     case "onboarding":
     case "degraded":
     case "staged":
-      return "text-main-accent-t3";
+      return "text-accent-warn";
     case "blocked":
     case "disabled":
     case "error":

@@ -51,7 +51,7 @@ export function SystemBanner() {
       {platform.maintenance_mode && <AmberStrip>{t("sys.maintenance")}</AmberStrip>}
       {platform.read_only && <AmberStrip>{t("sys.readOnly")}</AmberStrip>}
       {showAnnouncement && (
-        <div className="flex items-start gap-3 rounded-lg border border-border bg-main-card px-4 py-2.5 text-sm">
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-2.5 text-sm">
           <div className="min-w-0 flex-1">
             <span className="font-semibold">{platform.announcement_title}</span>
             {platform.announcement_body && <span className="text-ink-soft"> — {platform.announcement_body}</span>}
@@ -72,7 +72,7 @@ export function SystemBanner() {
 
 function AmberStrip({ children }: { children: string }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/10 px-4 py-2.5 text-sm text-main-accent-t3">
+    <div className="flex items-center gap-2.5 rounded-lg border border-accent-warn/40 bg-accent-warn/10 px-4 py-2.5 text-sm text-accent-warn">
       <TriangleAlert className="size-4 shrink-0" />
       {children}
     </div>

@@ -95,7 +95,7 @@ export function OverviewView() {
       {error && <ResourceError message={error} />}
 
       <StaggerItem className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Kpi label={t("admin.overview.kpi.servicesHealthy")} value={overview ? `${healthy}/${totalServices}` : undefined} tone="text-main-accent-t2" />
+        <Kpi label={t("admin.overview.kpi.servicesHealthy")} value={overview ? `${healthy}/${totalServices}` : undefined} tone="text-positive" />
         <Kpi
           label={t("admin.overview.kpi.parkedRows")}
           value={overview?.parked_rows}
@@ -158,7 +158,7 @@ export function OverviewView() {
         <Card>
           <CardContent className="space-y-3 py-5">
             <div className="flex items-center gap-2">
-              <Activity className="size-4 text-main-accent-t1" />
+              <Activity className="size-4 text-accent-debug" />
               <h2 className="text-base font-semibold">{t("admin.overview.errorsAnalytics")}</h2>
             </div>
             {/* `Sentry` and `PostHog` are product names and stay English by policy. */}
@@ -181,7 +181,7 @@ export function OverviewView() {
             </p>
           )}
           {refetchError && (
-            <p className="flex items-center gap-2 text-xs text-main-accent-t3">
+            <p className="flex items-center gap-2 text-xs text-accent-warn">
               <TriangleAlert className="size-3.5" /> {t("admin.overview.unparkRefetchFailed", { error: refetchError })}
             </p>
           )}
@@ -235,7 +235,7 @@ export function OverviewView() {
                           </span>
                         )}
                         {unparked.has(e.seq) && (
-                          <span className="whitespace-nowrap rounded-full bg-main-accent-t2/15 px-2 py-0.5 text-xs font-medium text-main-accent-t2">{t("admin.overview.unparked")}</span>
+                          <span className="whitespace-nowrap rounded-full bg-positive/15 px-2 py-0.5 text-xs font-medium text-positive">{t("admin.overview.unparked")}</span>
                         )}
                         <Button
                           type="button"

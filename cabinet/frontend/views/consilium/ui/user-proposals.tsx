@@ -124,7 +124,7 @@ function UserProposalCard({ proposal, userId }: { proposal: UserProposal; userId
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">{t("consilium.removal.reason")}</span>
-          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
+          <p className="whitespace-pre-line rounded-lg bg-secondary px-3.5 py-3 text-sm leading-relaxed text-ink">
             {proposal.reason?.trim() || t("consilium.removal.noReason")}
           </p>
         </div>

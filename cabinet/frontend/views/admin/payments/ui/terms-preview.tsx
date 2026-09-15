@@ -20,7 +20,7 @@ export function TermsPreview({ source, destination }: { source: EndDraft; destin
   const tier = previewTier(destination);
   const requirement = previewRequirement(source);
   return (
-    <dl className="grid gap-3 rounded-lg border border-border bg-main-surface p-3 sm:grid-cols-2">
+    <dl className="grid gap-3 rounded-lg border border-border bg-secondary p-3 sm:grid-cols-2">
       <div className="min-w-0 space-y-0.5">
         <dt className="text-xs text-ink-soft">{t("admin.payments.tier")}</dt>
         <dd className="text-sm font-medium text-ink">{tierLabel(tier, t)}</dd>
@@ -60,7 +60,7 @@ export function ReviewPanel({
   const t = useT();
   const requirement = previewRequirement(source);
   return (
-    <div className="space-y-3 rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/5 p-3">
+    <div className="space-y-3 rounded-lg border border-accent-warn/40 bg-accent-warn/5 p-3">
       {/* One sentence, one key: the order of amount, source and destination is a
           per-language decision. `break-words` because an address is 40-plus unbroken
           characters. The amount is the exact wire decimal — the figure the hash covers. */}
@@ -72,7 +72,7 @@ export function ReviewPanel({
         })}
       </p>
       {/* The operator's own words, set apart: this is what the approvers will read. */}
-      <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-ink">{reason.trim()}</blockquote>
+      <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{reason.trim()}</blockquote>
       <p className="text-xs text-ink-soft">{t(`admin.payments.reviewNote.${requirement}`)}</p>
       <div className="flex gap-2">
         <Button type="button" size="sm" disabled={busy} aria-busy={busy} onClick={onConfirm}>

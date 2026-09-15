@@ -149,7 +149,7 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">{t("consilium.removal.reason")}</span>
-          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
+          <p className="whitespace-pre-line rounded-lg bg-secondary px-3.5 py-3 text-sm leading-relaxed text-ink">
             {removal.reason?.trim() || t("consilium.removal.noReason")}
           </p>
         </div>
@@ -171,7 +171,7 @@ function RemovalCard({ removal, userId }: { removal: OwnerRemoval; userId: strin
             // With two owners the eligible set is empty, and "everyone in an empty set
             // agreed" would let either owner expel the other. The rule requires at least one
             // peer voter, so this removal can only ever carry on the target's own answer.
-            <p className="text-xs text-main-accent-t3">{t("consilium.removal.noPeers")}</p>
+            <p className="text-xs text-accent-warn">{t("consilium.removal.noPeers")}</p>
           ) : (
             <ItemGroup>
               {peers.map((peer, i) => (
@@ -248,13 +248,13 @@ function TargetAnswer({ removal }: { removal: OwnerRemoval }) {
   const answer = targetAnswer(removal);
   if (answer === "remove") {
     return (
-      <p className="text-sm text-main-accent-t2">
+      <p className="text-sm text-positive">
         {t("consilium.removal.targetAccepted", { target: removal.target_email, at: formatMoment(removal.target_decided_at ?? undefined, locale) })}
       </p>
     );
   }
   if (answer === "keep") {
-    return <p className="text-sm text-main-accent-t3">{t("consilium.removal.targetRefused", { target: removal.target_email })}</p>;
+    return <p className="text-sm text-accent-warn">{t("consilium.removal.targetRefused", { target: removal.target_email })}</p>;
   }
   return (
     <p className="text-sm text-ink-soft">
@@ -409,7 +409,7 @@ export function ProposeRemoval({
 
               {error !== null && <ResourceError message={errorMessage(error, t)} />}
               {opened && (
-                <p className="text-sm text-main-accent-t2" role="status">
+                <p className="text-sm text-positive" role="status">
                   {t("consilium.propose.opened")}
                 </p>
               )}

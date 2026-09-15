@@ -26,7 +26,7 @@ const HINT: Record<AllocationBacking, string> = {
 // Amber, like `closed`: a fact about how the product exits, not a fault.
 const TONE: Record<AllocationBacking, string> = {
   cash: "border-border text-ink-soft",
-  in_kind: "border-main-accent-t3/40 text-main-accent-t3",
+  in_kind: "border-accent-warn/40 text-accent-warn",
 };
 
 export function BackingBadge({ backing, verbose, className }: { backing: AllocationBacking; verbose?: boolean; className?: string }) {

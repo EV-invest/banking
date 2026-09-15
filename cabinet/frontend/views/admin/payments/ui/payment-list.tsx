@@ -50,7 +50,7 @@ export function PaymentList() {
         <div className="ml-auto inline-flex items-center gap-2 text-sm">
           <span className="text-ink-soft">{t("admin.col.state")}:</span>
           <Select value={state} onValueChange={setState}>
-            <SelectTrigger size="sm" className="border-border bg-main-surface">
+            <SelectTrigger size="sm" className="border-border bg-secondary">
               <span className="truncate">{state ? paymentStateLabel(state, t) : t("ui.all")}</span>
             </SelectTrigger>
             <SelectContent>

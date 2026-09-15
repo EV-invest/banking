@@ -31,14 +31,14 @@ export function PaymentTerms({ terms }: { terms: ConsiliumPaymentTerms }) {
         </div>
       </div>
       {external && (
-        <p className="break-all rounded-lg border border-border bg-main-surface px-3.5 py-3 font-mono-tech text-base leading-relaxed text-ink">
+        <p className="break-all rounded-lg border border-border bg-secondary px-3.5 py-3 font-mono-tech text-base leading-relaxed text-ink">
           {terms.destination.address || "—"}
         </p>
       )}
       <div className="flex flex-col gap-1">
         <span className="text-xs font-medium text-ink-soft">{t("consilium.payment.reason")}</span>
         {/* The initiator's words, whole, set apart from the room's own. */}
-        <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
+        <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
       </div>
       <span className="text-xs text-ink-soft">{t("consilium.payment.tier", { tier: tierLabel(terms.tier, t) })}</span>
     </div>

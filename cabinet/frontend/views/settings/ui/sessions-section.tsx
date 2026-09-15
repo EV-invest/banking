@@ -69,7 +69,7 @@ export function SessionsSection({
                   the ip/last-seen meta were being clipped to an ellipsis on a phone. */}
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 py-3.5">
                 <div className="flex min-w-0 items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-main-surface text-ink">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-secondary text-ink">
                     <Icon className="size-4.5" />
                   </span>
                   <div className="min-w-0 flex-1">
@@ -92,7 +92,7 @@ export function SessionsSection({
                         size="sm"
                         disabled={busy}
                         onClick={() => s.id && onRevoke(s.id)}
-                        className="border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
+                        className="border-chart-4/40 text-chart-4 hover:text-chart-4"
                       >
                         {t("settings.revoke")}
                       </Button>
@@ -117,7 +117,7 @@ export function SessionsSection({
             variant="outline"
             disabled={busy}
             onClick={onRevokeOthers}
-            className="w-full min-w-0 shrink truncate border-main-accent-t4/40 text-main-accent-t4 hover:text-main-accent-t4"
+            className="w-full min-w-0 shrink truncate border-chart-4/40 text-chart-4 hover:text-chart-4"
           >
             {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />} {t("settings.signOutOthers")}
           </Button>

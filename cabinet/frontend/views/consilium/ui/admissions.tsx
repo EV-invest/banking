@@ -154,7 +154,7 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">{t("consilium.admission.reason")}</span>
-          <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
+          <p className="whitespace-pre-line rounded-lg bg-secondary px-3.5 py-3 text-sm leading-relaxed text-ink">
             {admission.reason?.trim() || t("consilium.admission.noReason")}
           </p>
         </div>
@@ -176,7 +176,7 @@ function AdmissionCard({ admission, userId }: { admission: OwnerAdmission; userI
             // The plane refuses to open an admission with nobody to agree, so this is a
             // proposal that has lost its peers since — not one waiting on a mailbox. There
             // is no second path to fall back on, unlike a removal.
-            <p className="text-xs text-main-accent-t3">{t("consilium.admission.noPeers")}</p>
+            <p className="text-xs text-accent-warn">{t("consilium.admission.noPeers")}</p>
           ) : (
             <ItemGroup>
               {peers.map((peer, i) => (
@@ -352,7 +352,7 @@ export function ProposeAdmission({
                   direct-grant route beside it at any roster size: `SetRole` refuses
                   `owner` unconditionally (docs/CONSILIUM.md, § Genesis, policy 21). */}
               {seated !== null && seated < 2 && (
-                <p className="rounded-lg border border-main-accent-t3/40 bg-main-accent-t3/10 px-3.5 py-3 text-sm leading-relaxed text-ink">
+                <p className="rounded-lg border border-accent-warn/40 bg-accent-warn/10 px-3.5 py-3 text-sm leading-relaxed text-ink">
                   {t("consilium.admit.genesis", { n: seated })}
                 </p>
               )}
@@ -399,7 +399,7 @@ export function ProposeAdmission({
 
               {error !== null && <ResourceError message={errorMessage(error, t)} />}
               {opened && (
-                <p className="text-sm text-main-accent-t2" role="status">
+                <p className="text-sm text-positive" role="status">
                   {t("consilium.admit.opened")}
                 </p>
               )}

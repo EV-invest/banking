@@ -19,7 +19,7 @@ import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 
-const CARD = "rounded-xl border border-border bg-main-card";
+const CARD = "rounded-xl border border-border bg-card";
 // Every control on this screen is hand-written rather than a uikit Button, so the keyboard
 // focus ring has to be written out — once, here, so the four of them cannot drift apart.
 const FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -142,7 +142,7 @@ export function NotificationsView() {
 
       {/* `inline-flex` on the bar itself, so the item that carries it has to stay inline
           too — a block wrapper would stretch the pill pair across the page. */}
-      <StaggerItem className="mt-5 inline-flex gap-0.5 rounded-lg border border-border/60 bg-main-surface p-1">
+      <StaggerItem className="mt-5 inline-flex gap-0.5 rounded-lg border border-border/60 bg-secondary p-1">
         {(["all", "unread"] as const).map((f) => (
           <button
             key={f}
@@ -206,7 +206,7 @@ function Row({ n, first, onOpen, locale, t }: { n: Notification; first: boolean;
   const unread = isUnread(n);
   const body = (
     <div className={cn("flex items-center gap-3.5 text-left", ROW_PAD, unread && "bg-ink/5")}>
-      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", unread ? "bg-main-accent-t1" : "bg-transparent")} />
+      <span aria-hidden className={cn("size-2 shrink-0 rounded-full", unread ? "bg-accent-debug" : "bg-transparent")} />
       <div className="min-w-0 flex-1">
         {/* Read and unread titles share a step on the type scale, so the state is carried
             by weight and colour instead of the 1px that used to separate them. */}
@@ -237,8 +237,8 @@ function Row({ n, first, onOpen, locale, t }: { n: Notification; first: boolean;
 function EmptyState({ filter, t }: { filter: Filter; t: Translate }) {
   return (
     <div className="flex flex-col items-center px-10 py-16 text-center">
-      <span className="flex size-14 items-center justify-center rounded-xl bg-main-accent-t1/15">
-        <Bell className="size-6 text-main-accent-t1" />
+      <span className="flex size-14 items-center justify-center rounded-xl bg-accent-debug/15">
+        <Bell className="size-6 text-accent-debug" />
       </span>
       <p className="mt-5 text-base font-semibold text-ink">{t(filter === "unread" ? "notif.nothingUnread" : "notif.nothingYet")}</p>
       <p className="mt-2 max-w-108 text-sm text-ink-soft">{t(filter === "unread" ? "notif.allCaughtUp" : "notif.emptyHint")}</p>

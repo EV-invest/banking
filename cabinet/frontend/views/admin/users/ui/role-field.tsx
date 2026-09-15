@@ -56,7 +56,7 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
             it is one press away. The current role renders on the trigger even when it is not
             among the items, the same way `KycField` shows a tier it cannot re-send. */}
         <Select value={role} onValueChange={(next) => void run("role", () => setUserRole(userId, next))}>
-          <SelectTrigger size="sm" className="border-border bg-main-surface" disabled={working || seated}>
+          <SelectTrigger size="sm" className="border-border bg-secondary" disabled={working || seated}>
             <span className="flex items-center gap-1.5">
               {working && <Loader2 className="size-3 animate-spin" />}
               {roleLabel(role, t)}

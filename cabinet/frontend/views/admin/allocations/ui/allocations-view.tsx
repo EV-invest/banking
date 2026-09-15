@@ -20,7 +20,7 @@ import { AllocationsTable } from "@/views/admin/allocations/ui/allocations-table
 import { RegisterForm } from "@/views/admin/allocations/ui/register-form";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
 
 export function AllocationsView() {
   const t = useT();
@@ -79,7 +79,7 @@ export function AllocationsView() {
         <div className="min-w-0 flex-1 space-y-3">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
             {t("admin.alloc.registry")}
-            {rows && <span className="rounded-full bg-main-accent-t1/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t1">{rows.length}</span>}
+            {rows && <span className="rounded-full bg-accent-debug/15 px-2 py-0.5 text-xs font-semibold text-accent-debug">{rows.length}</span>}
           </p>
           <AllocationsTable
             rows={rows}

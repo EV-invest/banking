@@ -16,7 +16,7 @@ import type { Allocation, AllocationIcon } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { IconSelect } from "@/views/admin/allocations/ui/pickers";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
 
 export function AllocationEditor({ row, busy, onSave }: { row: Allocation; busy: boolean; onSave: (body: AllocationWrite) => void }) {
   const t = useT();

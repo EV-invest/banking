@@ -208,7 +208,7 @@ export function SettingsView() {
             <div className="flex shrink-0 items-center gap-3">
               {saved && (
                 // i18n-max: 11
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-main-accent-t2">
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-positive">
                   <Check className="size-4" /> {t("ui.saved")}
                 </span>
               )}
@@ -228,7 +228,7 @@ export function SettingsView() {
         {/* Not a section: "Saved" appears in answer to a click, long after the page
             arrived, and belongs to the save rather than to the screen. */}
         {saved && (
-          <p className="inline-flex items-center gap-1 text-sm font-medium text-main-accent-t2 lg:hidden">
+          <p className="inline-flex items-center gap-1 text-sm font-medium text-positive lg:hidden">
             <Check className="size-4" /> {t("ui.saved")}
           </p>
         )}
@@ -273,7 +273,7 @@ export function SettingsView() {
                   onClick={() => setSection(item.id)}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                    active ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "text-ink hover:bg-ink/5",
+                    active ? "bg-accent-debug/15 font-semibold text-accent-debug" : "text-ink hover:bg-ink/5",
                   )}
                 >
                   <Icon className="size-4.5" />

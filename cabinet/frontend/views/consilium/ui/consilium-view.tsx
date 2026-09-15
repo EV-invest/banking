@@ -182,8 +182,8 @@ export function ConsiliumView() {
         // that changes what it can do, and it is the first thing an owner should know.
         // Body copy is `text-ink`, not muted — muted on a tinted ground is the
         // contrast failure AGENTS.md calls out by name.
-        <StaggerItem className="flex items-start gap-3 rounded-xl border border-main-accent-t3/40 bg-main-accent-t3/10 px-4 py-3.5 xl:col-span-2">
-          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-main-accent-t3" />
+        <StaggerItem className="flex items-start gap-3 rounded-xl border border-accent-warn/40 bg-accent-warn/10 px-4 py-3.5 xl:col-span-2">
+          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-accent-warn" />
           <div className="flex min-w-0 flex-col gap-1">
             <p className="text-sm font-semibold text-ink">{t("consilium.floor.title")}</p>
             <p className="text-sm leading-relaxed text-ink">{t("consilium.floor.body", { n: roster.items?.length ?? 0 })}</p>
@@ -259,7 +259,7 @@ function StreamChip({ status }: { status: StreamStatus }) {
       <span
         className={cn(
           "size-1.5 rounded-full",
-          live ? "bg-main-accent-t2" : status === "paused" ? "bg-ink-soft" : "animate-pulse bg-main-accent-t3",
+          live ? "bg-positive" : status === "paused" ? "bg-ink-soft" : "animate-pulse bg-accent-warn",
         )}
       />
       {t(live ? "consilium.stream.live" : status === "paused" ? "consilium.stream.paused" : "consilium.stream.reconnecting")}
@@ -347,7 +347,7 @@ function Roster({
                   {i > 0 && <ItemSeparator />}
                   <Item size="sm" className="px-0">
                     <ItemMedia>
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-debug/15 text-xs font-semibold text-accent-debug">
                         {initialsOf(owner.email)}
                       </span>
                     </ItemMedia>
@@ -536,7 +536,7 @@ function OpenPayout({ consilium }: { consilium: Consilium }) {
         // Full, monospace, wrapped rather than truncated — the same rule as the approval
         // email and the approval page. An owner who checks the address here and approves it
         // there must be looking at the same characters (policy 13).
-        <p className="break-all rounded-lg border border-border bg-main-surface px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-ink">
+        <p className="break-all rounded-lg border border-border bg-secondary px-3 py-2.5 font-mono-tech text-xs leading-relaxed text-ink">
           {payout?.address || "—"}
         </p>
       )}
@@ -631,7 +631,7 @@ function ResignCard({ email, loadingProfile }: { email: string; loadingProfile: 
       </CardHeader>
       <CardContent className="flex flex-col gap-3.5">
         {done ? (
-          <p className="text-sm text-main-accent-t2" role="status">
+          <p className="text-sm text-positive" role="status">
             {t("consilium.resign.done")}
           </p>
         ) : loadingProfile ? (

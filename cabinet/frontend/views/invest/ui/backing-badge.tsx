@@ -17,7 +17,7 @@ export function InKindBadge() {
   const t = useT();
   return (
     // Inside the header's `flex-wrap` row, like `ProductBadges` — safe at any length.
-    <Badge variant="outline" className="gap-1 border-main-accent-t3/40 text-main-accent-t3" title={t("invest.backing.inKindNote")}>
+    <Badge variant="outline" className="gap-1 border-accent-warn/40 text-accent-warn" title={t("invest.backing.inKindNote")}>
       <Package className="size-3" /> {t("invest.backing.inKind")}
     </Badge>
   );

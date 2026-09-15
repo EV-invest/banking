@@ -61,7 +61,7 @@ export function OperationDetail({ operation, title, onManage }: { operation: Ope
               <div key={i} className="flex items-center gap-2.5">
                 <span
                   aria-hidden
-                  className={cn("size-2.5 shrink-0 rounded-full", step.state === "done" ? "bg-main-accent-t2" : step.state === "active" ? "bg-main-accent-t3" : "bg-ink-soft/40")}
+                  className={cn("size-2.5 shrink-0 rounded-full", step.state === "done" ? "bg-positive" : step.state === "active" ? "bg-accent-warn" : "bg-ink-soft/40")}
                 />
                 <span className="flex min-w-0 flex-col">
                   <span className={cn("truncate text-sm", step.state === "todo" ? "text-ink-soft" : "font-medium text-ink")}>{step.label}</span>

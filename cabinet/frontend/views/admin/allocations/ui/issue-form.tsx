@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/cn";
 import { EMPTY_ISSUE_DRAFT, afterIssued, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft, type SubmissionKey } from "@/views/admin/allocations/lib/issuance";
 import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-picker";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
 
 export function IssueForm({ service, busy, onSubmit }: { service: string; busy: boolean; onSubmit: (body: IssueUnitsBody, holderLabel: string) => Promise<boolean> }) {
   const t = useT();
@@ -53,7 +53,7 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <div className="grid gap-2.5">
         {/* Not a `<label>`: the toggle is a pair of buttons, and wrapping them would make
             the caption a third click target. */}

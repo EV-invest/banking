@@ -37,7 +37,7 @@ export function GeneralSection({
         <Field label={t("profile.legalName")}>
           {ready ? (
             <div className="min-w-0 flex-1">
-              <Input value={form.legal_name} onChange={(e) => onChange("legal_name", e.target.value)} className={fieldErrors.legal_name ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"} />
+              <Input value={form.legal_name} onChange={(e) => onChange("legal_name", e.target.value)} className={fieldErrors.legal_name ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"} />
               {fieldErrors.legal_name && <p className="mt-1 text-xs text-accent-error">{fieldErrors.legal_name}</p>}
             </div>
           ) : <FieldSkeleton />}
@@ -45,13 +45,13 @@ export function GeneralSection({
         <Field label={t("profile.preferredName")}>
           {ready ? (
             <div className="min-w-0 flex-1">
-              <Input value={form.preferred_name} onChange={(e) => onChange("preferred_name", e.target.value)} className={fieldErrors.preferred_name ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"} />
+              <Input value={form.preferred_name} onChange={(e) => onChange("preferred_name", e.target.value)} className={fieldErrors.preferred_name ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"} />
               {fieldErrors.preferred_name && <p className="mt-1 text-xs text-accent-error">{fieldErrors.preferred_name}</p>}
             </div>
           ) : <FieldSkeleton />}
         </Field>
         <Field label={t("ui.emailAddress")} trailing={verified ? <VerifiedTag /> : undefined}>
-          {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-main-surface text-ink-soft" />}
+          {loading ? <FieldSkeleton /> : <Input value={formatEmail(email)} readOnly className="border-border bg-secondary text-ink-soft" />}
         </Field>
         <Field label={t("profile.phoneNumber")}>
           {ready ? <PhoneField initial={form.phone} onChange={(v) => onChange("phone", v)} error={fieldErrors.phone} /> : <FieldSkeleton />}

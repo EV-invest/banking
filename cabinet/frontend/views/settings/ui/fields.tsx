@@ -46,7 +46,7 @@ export function FieldSkeleton() {
 export function VerifiedTag() {
   const t = useT();
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-main-accent-t1">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent-debug">
       {/* i18n-max: 12 — sits beside a field label in a `justify-between` header row. */}
       <BadgeCheck className="size-3" /> {t("ui.verified")}
     </span>
@@ -69,7 +69,7 @@ export function ThemedSelect({
   return (
     <div className="min-w-0 flex-1">
       <Select value={value || undefined} onValueChange={onChange}>
-        <SelectTrigger className="w-full border-border bg-main-surface">
+        <SelectTrigger className="w-full border-border bg-secondary">
           {/* Not `SelectValue`: the uikit's renders the raw stored value, so the trigger
               read "en" / "Asia/Ho_Chi_Minh" instead of the option label the design shows. */}
           <span className={cn("truncate", !value && "text-ink-soft")}>{value ? labelOf(options, value) : placeholder}</span>
@@ -105,7 +105,7 @@ export function PhoneField({ initial, onChange, error }: { initial: string; onCh
 
   return (
     <div className="min-w-0 flex-1">
-      <Input {...inputProps} className={error ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"} />
+      <Input {...inputProps} className={error ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"} />
       {error && <p className="mt-1 text-xs text-accent-error">{error}</p>}
     </div>
   );

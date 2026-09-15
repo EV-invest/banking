@@ -22,7 +22,7 @@ import { StaggerItem } from "@/shared/ui/motion";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
 
 const GAS_SYMBOLS: Record<string, string> = {
   bep20: "BNB",
@@ -150,7 +150,7 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
             <div className="flex flex-col gap-1.5">
               <span className="text-sm text-ink-soft">{t("admin.rail")}</span>
               <Select value={network} onValueChange={setNetwork}>
-                <SelectTrigger className="w-full border-border bg-main-surface" disabled={options.length === 0}>
+                <SelectTrigger className="w-full border-border bg-secondary" disabled={options.length === 0}>
                   {/* The placeholder is trigger text, not a selectable item — "Select a
                       rail…" is not a rail. */}
                   <span className={cn("flex min-w-0 items-center gap-1.5", !network && "text-ink-soft")}>
@@ -200,11 +200,11 @@ function RecordArrival({ rails, onRecorded }: { rails: RailLiquidity[] | undefin
             </p>
           )}
           {state.result?.recorded && (
-            <p className="text-sm text-main-accent-t1">
+            <p className="text-sm text-accent-debug">
               {t("admin.treasury.recorded", { amount: formatUsd(state.result.amount), party: partyLabel(state.result, t) })}
             </p>
           )}
-          {state.result && !state.result.recorded && <p className="text-sm text-main-accent-t3">{t("admin.treasury.alreadyRecorded")}</p>}
+          {state.result && !state.result.recorded && <p className="text-sm text-accent-warn">{t("admin.treasury.alreadyRecorded")}</p>}
 
           <Button type="button" className={cn("ml-auto flex", TEAL_CTA)} disabled={state.busy || !network || !txRef.trim()} onClick={submit}>
             {state.busy ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -244,7 +244,7 @@ function MoneyCard({ label, network, value, hint, loading, unavailable, footer, 
         ) : (
           <p className="text-3xl font-semibold tabular-nums">{formatUsd(value)}</p>
         )}
-        {hint && !loading && !unavailable && <p className="text-xs text-main-accent-t2">{hint}</p>}
+        {hint && !loading && !unavailable && <p className="text-xs text-positive">{hint}</p>}
         {footer && !loading && footer}
       </CardContent>
     </Card>
@@ -283,7 +283,7 @@ function RailFunding({ rail }: { rail: RailLiquidity }) {
                 and its own colour rather than being folded into the label. */}
             <p className="text-xs text-ink-soft">
               {t("admin.treasury.gasStation")}{" "}
-              <span className="text-main-accent-t2">{t("admin.treasury.gasStationHint", { symbol: gasSymbol || t("admin.treasury.gasWord") })}</span>
+              <span className="text-positive">{t("admin.treasury.gasStationHint", { symbol: gasSymbol || t("admin.treasury.gasWord") })}</span>
             </p>
             <TipAnchor anchor="admin.treasury.rail.gas-station" />
           </div>
@@ -323,7 +323,7 @@ function CopyableAddress({ address, label }: { address: string; label?: string }
     <div className="space-y-1">
       {label && <p className="text-xs text-ink-soft">{label}</p>}
       <div className="flex items-center gap-1.5">
-        <code className="flex-1 min-w-0 truncate rounded border border-border bg-main-surface px-2 py-1 font-mono-tech text-xs text-ink-soft" title={address}>
+        <code className="flex-1 min-w-0 truncate rounded border border-border bg-secondary px-2 py-1 font-mono-tech text-xs text-ink-soft" title={address}>
           {address}
         </code>
         <Button type="button" variant="outline" icon onClick={copy} aria-label={t("admin.treasury.a11y.copy", { what: label ?? t("ui.address") })}>

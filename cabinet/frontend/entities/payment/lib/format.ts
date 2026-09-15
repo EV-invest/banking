@@ -31,10 +31,10 @@ export function paymentStateLabel(state: string, t: Translate): string {
 export function paymentStateTone(state: string): string {
   switch (state) {
     case "executed":
-      return "text-main-accent-t2";
+      return "text-positive";
     case "pending":
     case "approved":
-      return "text-main-accent-t1";
+      return "text-accent-debug";
     case "rejected":
     case "execution_failed":
       return "text-accent-error";
@@ -75,7 +75,7 @@ export function consentLabel(consent: PaymentConsent, t: Translate): string {
 export function consentTone(consent: PaymentConsent): string {
   if (consent.invalidated) return "text-accent-error";
   const settled = settledConsent(consent.decision);
-  if (settled === "approve") return "text-main-accent-t2";
+  if (settled === "approve") return "text-positive";
   if (settled === "reject") return "text-accent-error";
-  return "text-main-accent-t1";
+  return "text-accent-debug";
 }

@@ -48,7 +48,7 @@ export function ApprovalPage({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] justify-center px-4 py-10 lg:py-16">
       <div className="flex w-full max-w-160 flex-col gap-6">
-        <Logo className="h-8 w-auto text-main-mist" />
+        <Logo className="h-8 w-auto text-ink" />
         {children}
       </div>
     </main>
@@ -99,7 +99,7 @@ export function FullAddress({ label, address }: { label: string; address: string
   return (
     <div className="flex flex-col gap-1.5">
       <FieldCaption>{label}</FieldCaption>
-      <p className="break-all rounded-lg border border-border bg-main-surface px-3.5 py-3 font-mono-tech text-base leading-relaxed text-ink">
+      <p className="break-all rounded-lg border border-border bg-secondary px-3.5 py-3 font-mono-tech text-base leading-relaxed text-ink">
         {address}
       </p>
     </div>

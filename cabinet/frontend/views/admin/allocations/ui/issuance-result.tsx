@@ -36,7 +36,7 @@ export function IssuanceResult({ outcome, kind }: { outcome: IssuanceOutcome; ki
   const applied = outcome.issuance.state === "applied";
   const args = { units: formatUnits(outcome.issuance.units), holder: outcome.holderLabel };
   return (
-    <p className="flex items-start gap-2 text-xs text-main-accent-t2">
+    <p className="flex items-start gap-2 text-xs text-positive">
       {applied ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" /> : <Clock className="mt-0.5 size-3.5 shrink-0" />}
       <span>
         {t(COPY[kind][applied ? "applied" : "queued"], args)}

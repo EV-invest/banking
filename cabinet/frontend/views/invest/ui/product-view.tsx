@@ -211,7 +211,7 @@ function HoldingStats({ position }: { position: Position }) {
         value={`${formatSignedUsdt(position.pnl)} USDT`}
         tip="invest.position.pnl"
         emphasis
-        tone={loss && !flat ? "text-main-accent-t4" : "text-main-accent-t2"}
+        tone={loss && !flat ? "text-chart-4" : "text-positive"}
         icon={<TrendingUp className={cn("size-3.5", loss && !flat && "rotate-180")} />}
       />
     </div>

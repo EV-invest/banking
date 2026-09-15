@@ -35,9 +35,9 @@ export function UserSearch({ value, onChange }: { value: string; onChange: (id: 
 
   if (value) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-main-surface px-3 py-2">
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary px-3 py-2">
         <span className="flex min-w-0 items-center gap-2 text-sm">
-          <Check className="size-4 shrink-0 text-main-accent-t2" />
+          <Check className="size-4 shrink-0 text-positive" />
           <span className="truncate">{pickedEmail || value}</span>
         </span>
         <Button type="button" size="sm" variant="ghost" onClick={() => onChange("", "")}>

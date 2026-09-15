@@ -145,7 +145,7 @@ export function RemovalApprovalView({ token }: { token: string }) {
             {/* The reason is someone else's words about the reader. It is shown whole, in
                 their own phrasing, with no summarising and no quotation marks that would
                 let the fund distance itself from it. */}
-            <p className="whitespace-pre-line rounded-lg bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
+            <p className="whitespace-pre-line rounded-lg bg-secondary px-3.5 py-3 text-sm leading-relaxed text-ink">
               {invitation.reason?.trim() || t("approval.removal.noReason")}
             </p>
           </div>

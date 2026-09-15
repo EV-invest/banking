@@ -7,7 +7,7 @@ import { cn } from "@/shared/lib/cn";
 
 // The card + row vocabulary the Settings and Profile surfaces are built from
 // (Figma `cabinet/mobile/settings` node 498:259 and `cabinet/mobile/profile` node
-// 503:266): a card on `main-card`, a compact section title, and rows split by
+// 503:266): a card on `card`, a compact section title, and rows split by
 // hairlines. Section titles take `tracking-normal` — at this size the global
 // `h1,h2,h3` tightening reads as cramped.
 //
@@ -17,7 +17,7 @@ import { cn } from "@/shared/lib/cn";
 // `gap-6 py-6 shadow-sm` — cannot be without being unset at every one. It is the
 // same string as the wallet screens' `WALLET_CARD`.
 
-export const CARD = "rounded-xl border border-border bg-main-card";
+export const CARD = "rounded-xl border border-border bg-card";
 
 export function ListCard({ className, children }: { className?: string; children: ReactNode }) {
   return <section className={cn(CARD, "flex w-full min-w-0 flex-col px-4 pb-1.5 pt-1", className)}>{children}</section>;
@@ -74,8 +74,8 @@ export function Chevron({ className }: { className?: string }) {
 }
 
 const PILL_TONE = {
-  positive: "bg-main-accent-t1/15 text-main-accent-t1",
-  pending: "bg-main-accent-t3/15 text-main-accent-t3",
+  positive: "bg-accent-debug/15 text-accent-debug",
+  pending: "bg-accent-warn/15 text-accent-warn",
   neutral: "bg-ink/5 text-ink-soft",
 } as const;
 

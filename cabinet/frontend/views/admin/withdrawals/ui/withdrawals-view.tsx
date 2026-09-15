@@ -72,7 +72,7 @@ export function WithdrawalsView() {
           {/* The count pill lands on the same step as the label it trails, so its fill and
               accent colour — not a smaller size — are what set it apart. */}
           {queue && (
-            <span className="whitespace-nowrap rounded-full bg-main-accent-t3/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t3">
+            <span className="whitespace-nowrap rounded-full bg-accent-warn/15 px-2 py-0.5 text-xs font-semibold text-accent-warn">
               {t("admin.withdrawals.openCount", { n: queue.length })}
             </span>
           )}
@@ -186,7 +186,7 @@ function WithdrawalRow({
               earnings out. Naming that beats rendering a blank User cell, and it tells
               the operator whose money the dispatch/settle below is about to move. */}
           {item.source === "revenue" ? (
-            <p className="font-medium text-main-accent-t2">{t("admin.fundRevenue")}</p>
+            <p className="font-medium text-positive">{t("admin.fundRevenue")}</p>
           ) : (
             <p className="font-medium">{item.email || item.user_id.slice(0, 8)}</p>
           )}
@@ -211,7 +211,7 @@ function WithdrawalRow({
           <p className="text-xs text-ink-soft">{t("admin.withdrawals.netSuffix", { amount: formatUsd(item.net_amount) })}</p>
         </td>
         <td className="px-5 py-3">
-          <span className={queued ? "text-main-accent-t3" : "text-main-accent-t2"}>{stateLabel(item.state, t)}</span>
+          <span className={queued ? "text-accent-warn" : "text-positive"}>{stateLabel(item.state, t)}</span>
         </td>
         <td className="px-5 py-3 text-ink-soft">{ago(item.created_at, t)}</td>
         <td className="px-5 py-3">

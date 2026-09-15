@@ -40,7 +40,7 @@ export function EndPicker({
       {/* The id is cleared with the kind: a product slug is not a user id, and keeping one
           across the switch would send a name on the wrong claim. */}
       <Select value={value.kind} onValueChange={(next) => set({ kind: END_KINDS.find((k) => k === next) ?? value.kind, id: "", name: "" })}>
-        <SelectTrigger className="w-full border-border bg-main-surface">
+        <SelectTrigger className="w-full border-border bg-secondary">
           <span className="truncate">{endKindLabel(value.kind, t)}</span>
         </SelectTrigger>
         <SelectContent>
@@ -84,7 +84,7 @@ function ProductSelect({ value, onChange }: { value: string; onChange: (id: stri
   const picked = products.find((p) => p.service === value);
   return (
     <Select value={value} onValueChange={(next) => onChange(next, products.find((p) => p.service === next)?.title ?? next)}>
-      <SelectTrigger className="w-full border-border bg-main-surface">
+      <SelectTrigger className="w-full border-border bg-secondary">
         <span className="flex min-w-0 items-center gap-2">
           {picked && <ProductIcon icon={picked.icon} className="size-4 shrink-0" />}
           <span className="truncate">{picked ? picked.title : t("admin.payments.pickProduct")}</span>

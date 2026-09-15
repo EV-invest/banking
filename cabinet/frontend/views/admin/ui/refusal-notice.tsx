@@ -28,27 +28,27 @@ export function RefusalNotice({ refusal, liftsAt }: { refusal: ConsiliumRefusal;
   const { icon, title, body } =
     refusal.kind === "mail-not-configured"
       ? {
-          icon: <MailWarning className="size-4 text-main-accent-t3" />,
+          icon: <MailWarning className="size-4 text-accent-warn" />,
           title: t("admin.refusal.mailTitle"),
           body: t("admin.refusal.mailBody"),
         }
       : refusal.kind === "cooling-off"
         ? {
-            icon: <Clock className="size-4 text-main-accent-t3" />,
+            icon: <Clock className="size-4 text-accent-warn" />,
             title: t("admin.refusal.coolingTitle"),
             // Without a parseable deadline the condition is still named — better than a
             // sentence with a hole in it where the time should be.
             body: liftsAt ? t("admin.refusal.coolingBody", { at: formatMoment(liftsAt, locale) }) : t("admin.refusal.coolingBodyNoTime"),
           }
         : {
-            icon: <ShieldAlert className="size-4 text-main-accent-t3" />,
+            icon: <ShieldAlert className="size-4 text-accent-warn" />,
             title: t("admin.refusal.floorTitle"),
             body: refusal.ownerCount === null ? t("admin.refusal.floorBodyNoCount") : t("admin.refusal.floorBody", { n: refusal.ownerCount }),
           };
 
   // The house callout: `Alert` with the amber tint, as `BreakGlassNotice` draws it.
   return (
-    <Alert role="status" className="border-main-accent-t3/40 bg-main-accent-t3/10">
+    <Alert role="status" className="border-accent-warn/40 bg-accent-warn/10">
       {icon}
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription className="text-ink">{body}</AlertDescription>

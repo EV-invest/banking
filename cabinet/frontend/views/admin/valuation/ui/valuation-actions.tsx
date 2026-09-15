@@ -20,7 +20,7 @@ import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
 import { PostedMark } from "@/views/admin/valuation/ui/posted-mark";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
 
 type Route = "post" | "propose";
 
@@ -78,8 +78,8 @@ export function ValuationActions({
       {proposed && (
         // Leads with PROPOSED, not "done": nothing is marked until the vote carries, and
         // the room with the live tally is one link away (same receipt as a payment).
-        <Alert role="status" className="border-main-accent-t2/40 bg-main-accent-t2/10">
-          <CheckCircle2 className="size-4 text-main-accent-t2" />
+        <Alert role="status" className="border-positive/40 bg-positive/10">
+          <CheckCircle2 className="size-4 text-positive" />
           <AlertTitle>{t("admin.valuation.proposedTitle")}</AlertTitle>
           <AlertDescription className="gap-3 text-ink">
             <p className="leading-relaxed tabular-nums">

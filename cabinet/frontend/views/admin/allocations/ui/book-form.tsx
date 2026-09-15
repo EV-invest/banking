@@ -22,7 +22,7 @@ import { backingOf } from "@/views/admin/allocations/lib/backing";
 import { bookPolicyDraft, bookPolicyProblem, hasAdvancedTerms, needsAcknowledgement, setBookPolicyBody, type BookPolicyDraft } from "@/views/admin/allocations/lib/book-policy";
 import { BookUnbackedAck } from "@/views/admin/allocations/ui/book-unbacked-ack";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
 
 export function BookForm({ allocation, policy, busy, saved, onSubmit }: { allocation: Allocation; policy: BookPolicy | null; busy: boolean; saved: boolean; onSubmit: (body: SetBookPolicyBody) => Promise<boolean> }) {
   const t = useT();
@@ -40,7 +40,7 @@ export function BookForm({ allocation, policy, busy, saved, onSubmit }: { alloca
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       {/* Not a `<label>`: the switch is a button, and the caption would be a second target. */}
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -71,7 +71,7 @@ export function BookForm({ allocation, policy, busy, saved, onSubmit }: { alloca
         {t("admin.alloc.book.submit")}
       </Button>
       {saved && (
-        <p className="flex items-center gap-2 text-xs text-main-accent-t2">
+        <p className="flex items-center gap-2 text-xs text-positive">
           <CheckCircle2 className="size-3.5" /> {t("admin.alloc.book.saved")}
         </p>
       )}

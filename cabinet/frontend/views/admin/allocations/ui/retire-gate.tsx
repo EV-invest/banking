@@ -24,7 +24,7 @@ export function RetireGate({ force, onForce }: { force: boolean; onForce: (force
         </label>
       </div>
       {force && (
-        <p className="flex items-start gap-2 text-xs text-main-accent-t3">
+        <p className="flex items-start gap-2 text-xs text-accent-warn">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.retire.forceWarning")}
         </p>
       )}

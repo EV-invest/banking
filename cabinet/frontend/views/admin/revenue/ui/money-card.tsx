@@ -18,9 +18,9 @@ export function MoneyCard({ label, value, hint, loading, unavailable, emphasis }
         ) : (
           // One step for every figure; the payable one carries the difference in colour,
           // not in size, so the row keeps a single baseline.
-          <p className={emphasis ? "text-3xl font-semibold tabular-nums text-main-accent-t2" : "text-3xl font-semibold tabular-nums"}>{formatUsd(value)}</p>
+          <p className={emphasis ? "text-3xl font-semibold tabular-nums text-positive" : "text-3xl font-semibold tabular-nums"}>{formatUsd(value)}</p>
         )}
-        {!loading && !unavailable && <p className="text-xs text-main-accent-t2">{hint}</p>}
+        {!loading && !unavailable && <p className="text-xs text-positive">{hint}</p>}
       </CardContent>
     </Card>
   );

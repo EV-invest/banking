@@ -89,10 +89,10 @@ export function WalletOverviewView() {
             and a tip. i18n-max: 7 on every `label`; the `wideLabel` forms only render from
             `lg`, where the chips size to their content. */}
         <div className="grid grid-cols-2 gap-2.5 lg:flex lg:shrink-0">
-          <Chip label={t("wallet.chip.availShort")} wideLabel={t("wallet.chip.avail")} dot="bg-main-accent-t2" value={balance?.available} loading={loading} tip="wallet.balance.available" />
-          <Chip label={t("wallet.chip.inOrdersShort")} wideLabel={t("wallet.chip.inOrders")} dot="bg-main-accent-t4" value={balance?.in_orders} loading={loading} tip="wallet.balance.in-orders" />
-          <Chip label={t("wallet.chip.investShort")} wideLabel={t("wallet.chip.invest")} dot="bg-main-accent-t3" value={balance?.invested} loading={loading} tip="wallet.balance.invested" />
-          <Chip label={t("wallet.pendWd")} wideLabel={t("wallet.chip.pendingWd")} dot="bg-main-accent-t1" value={balance?.pending_withdrawal} loading={loading} tip="wallet.balance.pending-withdrawal" />
+          <Chip label={t("wallet.chip.availShort")} wideLabel={t("wallet.chip.avail")} dot="bg-positive" value={balance?.available} loading={loading} tip="wallet.balance.available" />
+          <Chip label={t("wallet.chip.inOrdersShort")} wideLabel={t("wallet.chip.inOrders")} dot="bg-chart-4" value={balance?.in_orders} loading={loading} tip="wallet.balance.in-orders" />
+          <Chip label={t("wallet.chip.investShort")} wideLabel={t("wallet.chip.invest")} dot="bg-accent-warn" value={balance?.invested} loading={loading} tip="wallet.balance.invested" />
+          <Chip label={t("wallet.pendWd")} wideLabel={t("wallet.chip.pendingWd")} dot="bg-accent-debug" value={balance?.pending_withdrawal} loading={loading} tip="wallet.balance.pending-withdrawal" />
         </div>
       </StaggerItem>
 
@@ -112,7 +112,7 @@ export function WalletOverviewView() {
       <StaggerItem className="flex items-center justify-between">
         <p className="text-sm font-semibold text-ink">{t("ui.networks")}</p>
         {/* The Figma frames leave the activity screen with no entry point; this is it. */}
-        <Link href="/wallet/activity" className="rounded-md text-xs text-main-accent-t1 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
+        <Link href="/wallet/activity" className="rounded-md text-xs text-accent-debug outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
           {t("ui.activity")}
         </Link>
         <p className="hidden text-xs text-ink-soft lg:block">{t("wallet.railsCaption")}</p>

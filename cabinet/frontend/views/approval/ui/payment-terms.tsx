@@ -80,7 +80,7 @@ export function PaymentTermsBlock({
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{reasonLabel}</FieldCaption>
         {/* The initiator's own words, whole and unsummarised, set apart from the page's. */}
-        <blockquote className="whitespace-pre-line rounded-lg border-l-2 border-main-accent-t3/60 bg-main-surface px-3.5 py-3 text-sm leading-relaxed text-ink">
+        <blockquote className="whitespace-pre-line rounded-lg border-l-2 border-accent-warn/60 bg-secondary px-3.5 py-3 text-sm leading-relaxed text-ink">
           {terms.reason?.trim() || "—"}
         </blockquote>
       </div>

@@ -22,7 +22,7 @@ export function WalletScreen({ title, subtitle, back, actions, children }: { tit
   const t = useT();
   return (
     <div className="flex flex-col">
-      <Reveal className="flex items-center gap-3 border-b border-border bg-main-surface px-5 pb-3.5 pt-4 lg:hidden">
+      <Reveal className="flex items-center gap-3 border-b border-border bg-secondary px-5 pb-3.5 pt-4 lg:hidden">
         {back && (
           <Link
             href={back}
@@ -50,7 +50,7 @@ export function WalletScreen({ title, subtitle, back, actions, children }: { tit
   );
 }
 
-export const WALLET_CARD = "rounded-xl border border-border bg-main-card";
+export const WALLET_CARD = "rounded-xl border border-border bg-card";
 // The teal primary and the hairline-outlined secondary, shared by every wallet CTA. Both are
 // hand-written rather than uikit Buttons, so the keyboard focus ring rides along here — every
 // wallet CTA is a link or a button built from one of these two strings.

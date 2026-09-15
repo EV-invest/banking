@@ -39,10 +39,10 @@ const RANGE_LABEL_KEYS: Readonly<Record<(typeof RANGES)[number], string>> = {
 // Progress paints track and indicator from `--primary`, and the child selector is the only
 // way to reach the indicator without forking the component.
 const ACCENTS = [
-  { dot: "bg-main-accent-t1", bar: "bg-main-accent-t1/20 *:bg-main-accent-t1" },
-  { dot: "bg-main-accent-t2", bar: "bg-main-accent-t2/20 *:bg-main-accent-t2" },
-  { dot: "bg-main-accent-t3", bar: "bg-main-accent-t3/20 *:bg-main-accent-t3" },
-  { dot: "bg-main-accent-t4", bar: "bg-main-accent-t4/20 *:bg-main-accent-t4" },
+  { dot: "bg-accent-debug", bar: "bg-accent-debug/20 *:bg-accent-debug" },
+  { dot: "bg-positive", bar: "bg-positive/20 *:bg-positive" },
+  { dot: "bg-accent-warn", bar: "bg-accent-warn/20 *:bg-accent-warn" },
+  { dot: "bg-chart-4", bar: "bg-chart-4/20 *:bg-chart-4" },
 ] as const;
 
 type Accent = (typeof ACCENTS)[number];
@@ -218,14 +218,14 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
     <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5 xl:h-full", CARD_FROM_LG, className)}>
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-main-accent-t1">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-accent-debug">
             {t("dash.portfolioValue")}
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </p>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
             {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={formatUsd} /></p>}
             {allTimePct !== null && (
-              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-accent-error/40 text-accent-error" : "border-main-accent-t3/40 text-main-accent-t3")}>
+              <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-accent-error/40 text-accent-error" : "border-accent-warn/40 text-accent-warn")}>
                 {down ? <TrendingDown /> : <TrendingUp />}
                 {t("dash.allTimeSuffix", { pct: formatPct(allTimePct) })}
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
@@ -234,7 +234,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
           </div>
         </div>
         {/* Hand-written segmented control — uikit has no equivalent, so it carries its own focus ring. */}
-        <div className="grid shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-main-surface p-1 lg:flex">
+        <div className="grid shrink-0 grid-cols-4 gap-0.5 rounded-lg border border-border bg-secondary p-1 lg:flex">
           {RANGES.map((r) => (
             <button
               key={r}
@@ -243,7 +243,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
               onClick={() => setRange(r)}
               className={cn(
                 "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-1.5 lg:text-xs",
-                r === range ? "bg-main-accent-t1/15 font-semibold text-main-accent-t1" : "font-medium text-ink-soft hover:text-ink",
+                r === range ? "bg-accent-debug/15 font-semibold text-accent-debug" : "font-medium text-ink-soft hover:text-ink",
               )}
             >
               {t(RANGE_LABEL_KEYS[r])}
@@ -253,8 +253,8 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
       </div>
       <CardContent className="flex flex-col gap-3 px-0 lg:gap-5 lg:px-6 xl:flex-1">
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
-          <Legend dot="bg-main-accent-t3" label={t("dash.fundPerformance")} />
-          <Legend dot="bg-main-accent-t2" label={t("dash.yourParticipation")} />
+          <Legend dot="bg-accent-warn" label={t("dash.fundPerformance")} />
+          <Legend dot="bg-positive" label={t("dash.yourParticipation")} />
         </div>
         {/* No performance series exists in `shared/contracts` yet, so the plot area says so
             rather than drawing a line that traces back to nothing. */}
@@ -298,7 +298,7 @@ function MoveMoney({ className }: { className?: string }) {
             <Link href="/wallet/withdraw">{t("ui.withdraw")}</Link>
           </Button>
         </div>
-        <Item variant="outline" size="sm" className="rounded-lg bg-main-surface">
+        <Item variant="outline" size="sm" className="rounded-lg bg-secondary">
           <ItemContent className="gap-0.5">
             <ItemTitle id="auto-deploy-label" className="gap-1.5">
               {t("dash.autoDeploy")}
@@ -373,8 +373,8 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
 // `format` has to be a stable reference (all of these are module functions from
 // shared/lib/money) or the count restarts on every parent render.
 function Stat({ label, value, format, tone, hint, tip }: { label: string; value: number | null; format: (n: number) => string; tone?: "gain" | "loss"; hint: string; tip?: TipKey }) {
-  const valueClass = tone === "gain" ? "text-main-accent-t2" : tone === "loss" ? "text-accent-error" : "text-ink";
-  const hintClass = tone === "gain" ? "text-main-accent-t2/80" : tone === "loss" ? "text-accent-error/80" : "text-ink-soft";
+  const valueClass = tone === "gain" ? "text-positive" : tone === "loss" ? "text-accent-error" : "text-ink";
+  const hintClass = tone === "gain" ? "text-positive/80" : tone === "loss" ? "text-accent-error/80" : "text-ink-soft";
   return (
     // Its own tile on mobile, a cell of the shared strip from `lg`.
     <Card className="min-w-0 flex-1 gap-1 px-3.5 py-3 lg:min-w-30 lg:gap-1.5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">

@@ -95,7 +95,7 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
   return (
     // The tint sits on the root, not the icon: the uikit `Alert` paints its icon
     // `currentColor` with a selector that outranks a colour class on the `svg` itself.
-    <Alert role="status" className="border-main-accent-t3/40 bg-main-accent-t3/10 text-main-accent-t3">
+    <Alert role="status" className="border-accent-warn/40 bg-accent-warn/10 text-accent-warn">
       <MailWarning className="size-4" />
       <AlertTitle className="text-ink">{t("admin.fees.notices.givenUpTitle", { n: givenUp })}</AlertTitle>
       <AlertDescription className="gap-3 text-ink">

@@ -68,7 +68,7 @@ export function AssessmentsCard({ service }: { service: string }) {
                   {/* Non-zero means the holding could not cover the charge and the rest
                       rides to the next one. Worth its own column: it is the only reason
                       a charge collects less than it assessed. */}
-                  <TableCell className={cn("text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-main-accent-t3" : "text-ink-soft")}>
+                  <TableCell className={cn("text-right tabular-nums", Number(a.debt_carried) > 0 ? "text-accent-warn" : "text-ink-soft")}>
                     {formatUsdt(a.debt_carried)}
                   </TableCell>
                 </TableRow>

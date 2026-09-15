@@ -60,7 +60,7 @@ function Outcome({ state, className }: { state: StartState; className?: string }
         {t("profile.kyc.unavailable")}{" "}
         <a
           href={`mailto:${contact}`}
-          className="font-medium text-main-accent-t1 underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="font-medium text-accent-debug underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t("profile.kyc.contact", { contact })}
         </a>

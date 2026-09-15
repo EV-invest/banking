@@ -23,7 +23,7 @@ export function TransferStakeForm({ draft, companyUnits, onChange, onReview, onC
   const picked = draft.recipient ? { userId: draft.recipient.userId, email: draft.recipient.label } : null;
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <div className="grid gap-2.5">
         <div className="flex flex-col gap-1.5">
           <span className="text-xs text-ink-soft">{t("admin.alloc.transfer.field.recipient")}</span>

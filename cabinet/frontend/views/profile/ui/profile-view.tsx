@@ -204,7 +204,7 @@ export function ProfileView() {
         <StaggerItem className="flex flex-col gap-4 lg:hidden">
           <ListCard>
             <ListCardTitle
-              sub={profile?.role ? <span className="text-main-accent-t1/85">{t("profile.roleAccount", { role: enumLabel("admin.role", profile.role, t) })}</span> : undefined}
+              sub={profile?.role ? <span className="text-accent-debug/85">{t("profile.roleAccount", { role: enumLabel("admin.role", profile.role, t) })}</span> : undefined}
             >
               {t("profile.personalInformation")}
             </ListCardTitle>
@@ -222,7 +222,7 @@ export function ProfileView() {
                         <Input
                           value={form[key]}
                           onChange={(e) => set(key, e.target.value)}
-                          className={fieldErrors[key] ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"}
+                          className={fieldErrors[key] ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"}
                         />
                         {fieldErrors[key] && <p className="mt-1 text-xs text-accent-error">{fieldErrors[key]}</p>}
                       </div>
@@ -265,7 +265,7 @@ export function ProfileView() {
                         <Input
                           value={form[key]}
                           onChange={(e) => set(key, e.target.value)}
-                          className={fieldErrors[key] ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"}
+                          className={fieldErrors[key] ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"}
                         />
                         {fieldErrors[key] && <p className="mt-1 text-xs text-accent-error">{fieldErrors[key]}</p>}
                       </div>
@@ -361,7 +361,7 @@ function ReadValue({ value, muted }: { value?: string; muted?: boolean }) {
   return (
     <div
       className={cn(
-        "flex min-h-10.5 items-center rounded-lg border border-border bg-main-surface px-3.5 py-3 text-sm",
+        "flex min-h-10.5 items-center rounded-lg border border-border bg-secondary px-3.5 py-3 text-sm",
         v && !muted ? "text-ink" : "text-ink-soft",
       )}
       title={raw.length > MAX_DISPLAY_VALUE ? raw : undefined}
@@ -374,7 +374,7 @@ function ReadValue({ value, muted }: { value?: string; muted?: boolean }) {
 function VerifiedTag() {
   const t = useT();
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-main-accent-t1">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent-debug">
       {/* i18n-max: 12 — beside a field label in a `justify-between` header row. */}
       <BadgeCheck className="size-3" /> {t("ui.verified")}
       <TipAnchor anchor="profile.email.verified" />
@@ -432,7 +432,7 @@ function PhoneField({ initial, onChange, error }: { initial: string; onChange: (
 
   return (
     <div className="min-w-0 flex-1">
-      <Input {...inputProps} className={error ? "border-accent-error bg-accent-error/5" : "border-border bg-main-surface"} />
+      <Input {...inputProps} className={error ? "border-accent-error bg-accent-error/5" : "border-border bg-secondary"} />
       {error && <p className="mt-1 text-xs text-accent-error">{error}</p>}
     </div>
   );

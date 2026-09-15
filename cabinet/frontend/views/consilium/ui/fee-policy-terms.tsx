@@ -31,7 +31,7 @@ export function FeePolicyTerms({ terms }: { terms: ConsiliumFeePolicyTerms }) {
       <div className="flex flex-col gap-1">
         <span className="text-xs font-medium text-ink-soft">{t("consilium.feePolicy.reason")}</span>
         {/* The requester's words, whole, set apart from the room's own. */}
-        <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
+        <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
       </div>
     </div>
   );

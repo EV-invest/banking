@@ -121,10 +121,10 @@ function PayoutRow({ payout, busy, onCancel }: { payout: RevenuePayout; busy: bo
 function stateTone(state: string): string {
   switch (state) {
     case "completed":
-      return "text-main-accent-t2";
+      return "text-positive";
     case "queued":
     case "processing":
-      return "text-main-accent-t3";
+      return "text-accent-warn";
     case "failed":
       return "text-accent-error";
     default:

@@ -36,7 +36,7 @@ export function FeePolicyTermsBlock({ terms, payloadHash }: { terms: ConsiliumFe
 
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{t("consilium.feePolicy.reason")}</FieldCaption>
-        <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
+        <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
       </div>
 
       <div className="flex flex-col gap-2.5">

@@ -27,7 +27,7 @@ export function BookUnbackedAck({ checked, onChange, backing, required, disabled
           {t("admin.alloc.book.unbacked.ack")}
         </label>
       </div>
-      <p className={cn("flex items-start gap-2 text-xs", inKind ? "text-main-accent-t3" : "text-ink-soft")}>
+      <p className={cn("flex items-start gap-2 text-xs", inKind ? "text-accent-warn" : "text-ink-soft")}>
         <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.book.unbacked.warning")}
       </p>
       {required && <p className="text-xs text-accent-error">{t("admin.alloc.book.unbacked.required")}</p>}
@@ -42,7 +42,7 @@ export function UnbackedAckBadge({ acknowledged }: { acknowledged: boolean }) {
   if (!acknowledged) return null;
   return (
     // i18n-max: 32 — a chip above the form.
-    <Badge variant="outline" className="whitespace-nowrap border-main-accent-t3/40 text-main-accent-t3" title={t("admin.alloc.book.unbacked.warning")}>
+    <Badge variant="outline" className="whitespace-nowrap border-accent-warn/40 text-accent-warn" title={t("admin.alloc.book.unbacked.warning")}>
       {t("admin.alloc.book.unbacked.acknowledged")}
     </Badge>
   );

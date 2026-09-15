@@ -104,7 +104,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
       ) : settled ? (
         <ApprovalOutcome
           icon={settled === "approve" ? <CheckCircle2 /> : <XCircle />}
-          tone={settled === "approve" ? "text-main-accent-t2" : "text-ink-soft"}
+          tone={settled === "approve" ? "text-positive" : "text-ink-soft"}
           title={t(settled === "approve" ? "consent.decided.approvedTitle" : "consent.decided.rejectedTitle")}
           description={t(justDecided ? (settled === "approve" ? "consent.decided.approvedFresh" : "consent.decided.rejectedFresh") : "approval.decided.body")}
         />

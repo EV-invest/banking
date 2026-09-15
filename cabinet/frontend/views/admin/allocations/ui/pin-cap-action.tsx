@@ -21,7 +21,7 @@ import { compactUnits, formatUnits } from "@/shared/lib/money";
 import { revalidateTag } from "@/shared/lib/resource";
 import { pinCapVerdict, type PinCapVerdict } from "@/views/admin/allocations/lib/pin-cap";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
 
 export function PinCapAction({ allocation, holders }: { allocation: Allocation; holders: UnitHolders }) {
   const t = useT();
@@ -54,7 +54,7 @@ export function PinCapAction({ allocation, holders }: { allocation: Allocation; 
   return (
     <div className="space-y-2">
       {confirming && verdict.kind === "pinnable" ? (
-        <div className="space-y-2 rounded-lg border border-border bg-main-surface p-3">
+        <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
           <p className="text-xs tabular-nums">{t("admin.alloc.pinCap.confirm", { from: compactUnits(verdict.from), to: formatUnits(verdict.to) })}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy} onClick={() => setConfirming(false)}>

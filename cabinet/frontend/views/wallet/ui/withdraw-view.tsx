@@ -179,23 +179,23 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     setAmount(opts?.withdrawable ?? "0");
                     setConfirming(null);
                   }}
-                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-main-accent-t1 outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring"
+                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-accent-debug outline-none transition-colors hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {t("ui.max")}
                 </button>
               </span>
             </label>
 
-            <div className="flex flex-col gap-2.5 rounded-lg bg-main-surface px-3.5 py-3">
+            <div className="flex flex-col gap-2.5 rounded-lg bg-secondary px-3.5 py-3">
               <Row label={t("wallet.networkFee")} value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} tip="wallet.withdraw.network-fee" />
               <div className="h-px w-full bg-border" />
-              <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(youReceive)} USDT`} tone="text-main-accent-t2" tip="wallet.withdraw.you-receive" />
+              <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(youReceive)} USDT`} tone="text-positive" tip="wallet.withdraw.you-receive" />
             </div>
 
             {/* `wallet.withdraw.queueing` / `.review` are section-type tips (descriptor blocks,
                 not inline ⓘ), so that copy is stated inline here rather than anchored. */}
             {queuedUnits > 0n && amountUnits > 0n && (
-              <p className="text-xs text-main-accent-t3">{t("wallet.exceedsInstant", { amount: formatUsdt(fromBaseUnits(queuedUnits)), network: label })}</p>
+              <p className="text-xs text-accent-warn">{t("wallet.exceedsInstant", { amount: formatUsdt(fromBaseUnits(queuedUnits)), network: label })}</p>
             )}
             <p className="text-xs text-ink-soft">
               {t("wallet.minInstantQueued", { min: formatUsdt(opts?.min_withdrawal), network: label, instant: formatUsdt(opts?.instant) })}
@@ -219,7 +219,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             <PanelPresence>
               {done && (
                 <Panel key="receipt" from="bottom" className={cn(WALLET_CARD, "flex gap-3 p-4.5 lg:p-5")}>
-                  <Clock className="mt-0.5 size-4 shrink-0 text-main-accent-t3" />
+                  <Clock className="mt-0.5 size-4 shrink-0 text-accent-warn" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-ink">{t(done.state === "queued" ? "wallet.withdrawalQueued" : "wallet.withdrawalSubmitted")}</p>
                     <p className="text-xs text-ink-soft">
@@ -258,11 +258,11 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     <Row label={t("ui.amount")} value={`${formatUsdt(confirming.amount)} USDT`} />
                     <Row label={t("wallet.networkFee")} value={`${formatUsdt(confirming.fee)} USDT`} />
                     <div className="h-px w-full bg-border" />
-                    <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-main-accent-t2" />
+                    <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-positive" />
                   </div>
                   <p className="break-all font-mono-tech text-xs text-ink-soft">{t("wallet.toAddressLine", { address: confirming.address })}</p>
                   {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
-                    <p className="text-xs text-main-accent-t3">
+                    <p className="text-xs text-accent-warn">
                       {t("wallet.exceedsInstant", {
                         amount: formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant))),
                         network: networkLabel(confirming.network),

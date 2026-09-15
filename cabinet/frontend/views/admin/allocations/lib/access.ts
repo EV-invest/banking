@@ -27,9 +27,9 @@ export function accessLabel(level: AllocationAccessLevel, t: Translate): string 
 export function accessTone(level: AllocationAccessLevel): string {
   switch (level) {
     case "invest":
-      return "border-main-accent-t2/40 bg-main-accent-t2/10 text-main-accent-t2";
+      return "border-positive/40 bg-positive/10 text-positive";
     case "view":
-      return "border-main-accent-t3/40 bg-main-accent-t3/10 text-main-accent-t3";
+      return "border-accent-warn/40 bg-accent-warn/10 text-accent-warn";
     case "hidden":
       return "border-border text-ink-soft";
   }

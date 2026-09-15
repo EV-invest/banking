@@ -82,7 +82,7 @@ export function CollectCard({ service }: { service: string }) {
             the payout screen stay separate keys; the screen's own name is interpolated so it
             tracks whatever the nav calls it. The emphasis on that name is the one casualty
             of keeping the sentence whole for translators. */}
-        {done && !problem && <p className="text-xs text-main-accent-t2">{`${done} ${t("admin.fees.withdrawableFrom", { screen: t("nav.revenue") })}`}</p>}
+        {done && !problem && <p className="text-xs text-positive">{`${done} ${t("admin.fees.withdrawableFrom", { screen: t("nav.revenue") })}`}</p>}
 
         <Button type="button" variant="outline" onClick={settle} disabled={busy || data === null || nothing}>
           {busy && <Loader2 className="size-4 animate-spin" />}

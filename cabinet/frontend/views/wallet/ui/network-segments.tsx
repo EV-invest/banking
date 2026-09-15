@@ -10,7 +10,7 @@ import { networkLabel } from "@/views/wallet/lib/format";
 // Hand-written — uikit has no equivalent, so the segments carry their own focus ring.
 export function NetworkSegments({ networks, value, onChange, label }: { networks: string[]; value: string; onChange: (network: string) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex w-full rounded-lg bg-main-surface p-1">
+    <div role="radiogroup" aria-label={label} className="flex w-full rounded-lg bg-secondary p-1">
       {networks.map((network) => {
         const selected = network === value;
         return (

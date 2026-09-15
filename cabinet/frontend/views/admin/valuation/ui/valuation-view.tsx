@@ -22,7 +22,7 @@ import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, st
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 import { ValuationActions } from "@/views/admin/valuation/ui/valuation-actions";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
 
 // "EV Trading (trading)", with the state trailing when it is not the plain open case.
 // Two keys rather than one with an optional tail: the punctuation joining a name to a
@@ -120,7 +120,7 @@ export function ValuationView() {
                 >
                   {/* `disabled` lives on the trigger — `Select` itself is a pure state
                       container and takes no such prop. */}
-                  <SelectTrigger className="w-full border-border bg-main-surface" disabled={!allocations || allocations.length === 0}>
+                  <SelectTrigger className="w-full border-border bg-secondary" disabled={!allocations || allocations.length === 0}>
                     {/* Not `SelectValue`: the uikit's renders the raw stored value, so the
                         trigger would read the bare slug instead of the product's title. */}
                     <span className={cn("truncate", !selected && "text-ink-soft")}>
@@ -151,8 +151,8 @@ export function ValuationView() {
                 {/* Read-only on purpose: NAV is derived (AUM / units read live from the
                     ledger), never posted directly — an editable field here would imply
                     an operator can set a price. */}
-                <div className="flex h-9 items-center rounded-md border border-main-accent-t1/40 bg-main-accent-t1/10 px-3 text-sm" aria-readonly="true">
-                  <span className="font-semibold text-main-accent-t1 tabular-nums">{derivedNav ? formatNav(derivedNav) : "—"}</span>
+                <div className="flex h-9 items-center rounded-md border border-accent-debug/40 bg-accent-debug/10 px-3 text-sm" aria-readonly="true">
+                  <span className="font-semibold text-accent-debug tabular-nums">{derivedNav ? formatNav(derivedNav) : "—"}</span>
                   {/* An ICU plural, so `units` agrees with the count and `#` groups the
                       digits in the reader's convention — the hard-coded `en-US` is gone. */}
                   {units > 0 && <span className="ml-2 text-xs tabular-nums text-ink-soft">{t("admin.valuation.derivedFormula", { n: units })}</span>}
@@ -168,7 +168,7 @@ export function ValuationView() {
                 {t("admin.valuation.noUnitsNote", { formula: t("admin.valuation.navFormula") })}
               </div>
             ) : (
-              <div className="rounded-lg border border-main-accent-t3/30 bg-main-accent-t3/5 px-4 py-2.5 text-sm text-main-accent-t3">
+              <div className="rounded-lg border border-accent-warn/30 bg-accent-warn/5 px-4 py-2.5 text-sm text-accent-warn">
                 <TriangleAlert className="mr-2 inline size-4" />
                 {t("admin.valuation.navGuardNote")}
               </div>
@@ -223,7 +223,7 @@ export function ValuationView() {
           {/* The count pill lands on the same step as the label it trails, so its fill and
               accent colour — not a smaller size — are what set it apart. */}
           {queue && (
-            <span className="whitespace-nowrap rounded-full bg-main-accent-t3/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t3">
+            <span className="whitespace-nowrap rounded-full bg-accent-warn/15 px-2 py-0.5 text-xs font-semibold text-accent-warn">
               {t("admin.valuation.queuedCount", { n: queue.length })}
             </span>
           )}
@@ -373,14 +373,14 @@ function SupplyCapCard({
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-sm text-ink-soft">{t("admin.valuation.unitsIssuedIn", { service: allocation.service })}</span>
-            <span className={cn("text-sm font-semibold tabular-nums", nearCap ? "text-main-accent-t3" : "text-ink")}>
+            <span className={cn("text-sm font-semibold tabular-nums", nearCap ? "text-accent-warn" : "text-ink")}>
               {t("admin.valuation.issuedOfCap", { issued: compactUnits(issued), cap: compactUnits(cap) })}
             </span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
             {/* Proportional, no minimum sliver — see `SupplyBar`. The exact issued figure
                 sits directly above it. */}
-            <div className={cn("h-full rounded-full", nearCap ? "bg-main-accent-t3" : "bg-main-accent-t1")} style={{ width: `${fraction * 100}%` }} />
+            <div className={cn("h-full rounded-full", nearCap ? "bg-accent-warn" : "bg-accent-debug")} style={{ width: `${fraction * 100}%` }} />
           </div>
           {/* Two whole sentences rather than a shared " — …" tail: a suffix key would be a
               fragment no translator could place, and the loading branch reads differently
@@ -405,7 +405,7 @@ function SupplyCapCard({
               {t("ui.reset")}
             </Button>
           )}
-          <p className={cn("min-w-48 flex-1 text-xs", invalid ? "text-accent-error" : belowIssued ? "text-main-accent-t3" : "text-ink-soft")}>
+          <p className={cn("min-w-48 flex-1 text-xs", invalid ? "text-accent-error" : belowIssued ? "text-accent-warn" : "text-ink-soft")}>
             {invalid
               ? t("admin.valuation.capInvalid")
               : belowIssued

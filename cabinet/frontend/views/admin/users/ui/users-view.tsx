@@ -125,7 +125,7 @@ export function UsersView() {
                       <tr
                         key={u.user_id}
                         onClick={() => setSelected(u)}
-                        className={cn("cursor-pointer transition-colors hover:bg-ink/5", selected?.user_id === u.user_id && "bg-main-accent-t1/10")}
+                        className={cn("cursor-pointer transition-colors hover:bg-ink/5", selected?.user_id === u.user_id && "bg-accent-debug/10")}
                       >
                         <td className="px-5 py-3">
                           {/* The row is clickable for the mouse, but the identity cell carries the
@@ -223,7 +223,7 @@ function FilterSelect({
     <div className="inline-flex items-center gap-2 text-sm">
       <span className="text-ink-soft">{label}:</span>
       <Select value={value ?? ""} onValueChange={(v) => onChange(v || undefined)}>
-        <SelectTrigger size="sm" className="border-border bg-main-surface">
+        <SelectTrigger size="sm" className="border-border bg-secondary">
           <span className="truncate">{value === undefined ? t("ui.all") : optionLabel(value)}</span>
         </SelectTrigger>
         <SelectContent>
@@ -246,7 +246,7 @@ function Avatar({ email }: { email: string }) {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
-  return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-main-accent-t1/15 text-xs font-semibold text-main-accent-t1">{initials || "?"}</span>;
+  return <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-debug/15 text-xs font-semibold text-accent-debug">{initials || "?"}</span>;
 }
 
 function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {
@@ -418,7 +418,7 @@ function KycField({ level, busy, onSave }: { level: number; busy: boolean; onSav
           <TipAnchor anchor="admin.users.access.kyc-level" />
         </span>
         <Select value={String(draft)} onValueChange={(v) => setDraft(Number(v))}>
-          <SelectTrigger size="sm" className="border-border bg-main-surface" disabled={busy}>
+          <SelectTrigger size="sm" className="border-border bg-secondary" disabled={busy}>
             <span className="truncate">{kycLevelLabel(draft, t)}</span>
           </SelectTrigger>
           <SelectContent>
@@ -493,7 +493,7 @@ function Chip({ children }: { children: ReactNode }) {
 function BreakGlassMark() {
   const t = useT();
   return (
-    <Badge variant="outline" className="gap-1 whitespace-nowrap border-main-accent-t3/40 text-main-accent-t3">
+    <Badge variant="outline" className="gap-1 whitespace-nowrap border-accent-warn/40 text-accent-warn">
       <KeyRound className="size-3" aria-hidden />
       {/* i18n-max: 14 — this sits in a table column sized from an 8-character header. */}
       {t("admin.users.breakGlassRole")}

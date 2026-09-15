@@ -100,7 +100,7 @@ function onProduct(pathname: string, service: string): boolean {
 // every surface in this theme, under the 3:1 SC 1.4.11 floor, where solid clears it
 // everywhere. The offset keeps the ring legible around the active row, whose fill is that
 // same teal.
-const NAV_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-main-surface";
+const NAV_FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-secondary";
 
 // The signed-in app shell's left rail (Figma cabinet sidebar). Persistent across the
 // `(app)` route group; auth is enforced upstream in `proxy.ts`. Positioned by a
@@ -141,7 +141,7 @@ export function Sidebar() {
   const crossed = useCrossedSection(pathname, activeSection);
 
   return (
-    <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-main-surface px-4.5 pb-5 pt-6">
+    <aside className="flex h-full w-[var(--cabinet-rail-w)] flex-col gap-7 overflow-y-auto border-r border-border bg-secondary px-4.5 pb-5 pt-6">
       <nav aria-label={t("nav.a11y.primary")} className="flex flex-col gap-4.5">
         <Group label={t("nav.group.fund")}>
           {FUND.map((item) => (
@@ -327,7 +327,7 @@ function UnreadPill({ count, active }: { count: number; active: boolean }) {
       aria-label={t("notif.unreadCount", { n: count })}
       className={cn(
         "rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
-        active ? "bg-main-black text-ink" : "bg-main-accent-t1/15 text-main-accent-t1",
+        active ? "bg-background text-ink" : "bg-accent-debug/15 text-accent-debug",
       )}
     >
       {count > 99 ? "99+" : count}

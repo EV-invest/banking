@@ -41,7 +41,7 @@ export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefin
               <tr key={row.key} className="border-b border-border/50 last:border-0">
                 <td className="px-3 py-2 text-ink-soft">{t(row.key)}</td>
                 <td className="px-3 py-2 tabular-nums text-ink-soft">{row.now ?? t("consilium.feePolicy.nothingCharged")}</td>
-                <td className={cn("px-3 py-2 tabular-nums", moved ? "font-semibold text-main-accent-t3" : "text-ink")}>{row.next}</td>
+                <td className={cn("px-3 py-2 tabular-nums", moved ? "font-semibold text-accent-warn" : "text-ink")}>{row.next}</td>
               </tr>
             );
           })}

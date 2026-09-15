@@ -54,7 +54,7 @@ export function BackingAction({ allocation }: { allocation: Allocation }) {
         <BackingBadge backing={backing} verbose className="shrink-0" />
       </div>
       {confirming ? (
-        <div className="space-y-2 rounded-lg border border-border bg-main-surface p-3">
+        <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
           <p className="text-xs">{t(next === "cash" ? "admin.alloc.backing.confirmCash" : "admin.alloc.backing.confirmInKind", { service: allocation.service })}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy} onClick={() => setConfirming(false)}>

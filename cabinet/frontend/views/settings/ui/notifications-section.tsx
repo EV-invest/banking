@@ -130,7 +130,7 @@ export function NotificationsSection() {
                       onClick={() => void run(() => setTopicSubscription(topic.topic, !topic.subscribed, topic.email_enabled))}
                       className={cn(
                         "rounded-lg px-3 py-1.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40",
-                        topic.subscribed ? "border border-border/60 text-ink hover:bg-ink/5" : "border border-main-accent-t1/50 text-main-accent-t1 hover:bg-main-accent-t1/10",
+                        topic.subscribed ? "border border-border/60 text-ink hover:bg-ink/5" : "border border-accent-debug/50 text-accent-debug hover:bg-accent-debug/10",
                       )}
                     >
                       {topic.subscribed ? t("notif.following") : t("notif.follow")}
