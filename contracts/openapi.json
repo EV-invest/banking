@@ -14177,11 +14177,24 @@
           "reason": {
             "type": "string",
             "title": "reason"
+          },
+          "fund": {
+            "type": "string",
+            "title": "fund",
+            "description": "The fee terms description. Empty for a payout and for a payment. Same rules as\n FeePolicyApprovalMail: `fund` is words a person recognises and may not carry a\n link, `current` is absent when the fund charged nothing (a real state, not a\n missing field), `proposed` is required, and `reason` — the operator's words, shown\n attributed — is empty under the burn kind."
+          },
+          "current": {
+            "title": "current",
+            "$ref": "#/components/schemas/concierge.v1.FeeTerms"
+          },
+          "proposed": {
+            "title": "proposed",
+            "$ref": "#/components/schemas/concierge.v1.FeeTerms"
           }
         },
         "title": "PayoutOutcomeMail",
         "additionalProperties": false,
-        "description": "How a consilium ended — over a revenue payout OR over a payment — and, under\n APPROVAL_TOKEN_BURNED, that one of its tokens burned.\n\n ONE message for both subjects, additively. The burn notice already rides this shape\n under its own kind, so a payment consilium's outcome and burn ride it too rather than\n each growing a message of their own: `network` + `address` describe a payout,\n `source` + `destination` (+ `tier`, `reason`) describe a payment, and the renderer\n switches on which pair is filled. A caller sets one pair and leaves the other empty."
+        "description": "How a consilium ended — over a revenue payout, over a payment, or over a fund's fee\n terms — and, under APPROVAL_TOKEN_BURNED, that one of its tokens burned.\n\n ONE message for three subjects, additively. The burn notice already rides this shape\n under its own kind, so a payment consilium's outcome and burn ride it too, and so do a\n fee-policy consilium's, rather than each growing a message of their own: `network` +\n `address` describe a payout, `source` + `destination` (+ `tier`, `reason`) describe a\n payment, `fund` + `proposed` (+ `current`, `reason`) describe fee terms, and the\n renderer switches on which description is filled. A caller fills exactly one and\n leaves the other two empty."
       },
       "concierge.v1.ProposalVote": {
         "type": "string",

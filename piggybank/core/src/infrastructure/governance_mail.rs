@@ -141,6 +141,9 @@ pub mod wired {
 						source: outcome.source.clone(),
 						destination: outcome.destination.clone(),
 						reason: outcome.reason.clone(),
+						fund: outcome.fund.clone(),
+						current: outcome.current.as_ref().map(fee_terms),
+						proposed: outcome.proposed.as_ref().map(fee_terms),
 					});
 				}
 				GovernanceMail::PaymentConsent(consent) => {

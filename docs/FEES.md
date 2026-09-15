@@ -219,6 +219,27 @@ the moment they bind and the cabinet-relative product page (`/invest/<service>`,
 concierge's own origin). On the administrator's path the same mails go out the moment the
 change is scheduled.
 
+The owners, for their part, are told how the consilium ended: one outcome mail
+(`GovernanceMail::PayoutOutcome`) to the initiator and to every seat on each closed state —
+rejected, expired, cancelled, executed, execution failed — and one burn notice
+(`GovernanceMail::TokenBurned`) to the same audience when a seat's token burns on five wrong
+codes, exactly as for a payout or a payment. Both ride the same `PayoutOutcomeMail` and
+describe the TERMS, not money: the fund line (from `fee_mail_fund` — the title, clipped, with
+the slug, or the slug alone), the terms in force when the change was proposed (absent when
+the fund charged nothing) and the proposed terms; the rail and the payment fields stay
+empty, because the relay renders exactly one description. The initiator's reason rides the
+outcome mail only — the burn notice carries none, as the contract has it, so an alert about
+a brute-force attempt is not captioned with the initiator's words.
+
+The mail is correct only against concierge **v0.8.0 or later** (concierge#72), which is
+where the relay learned the fee description. An older relay does NOT refuse it: prost drops
+the unknown fields 11–13 (`fund`, `current`, `proposed`), what is left names neither a rail
+nor a payment, and v0.7.0 takes that as a payout with an empty rail and sends the owners a
+"Payout rejected" (or "Payout token_burned") mail with blank Network and Address rows —
+wrong, and delivered. So the order of the roll-out matters: concierge v0.8.0 first (in
+production since 2026-09-15), this banking release after it. Rolled out the other way round,
+the owners get a misleading letter, not a bounce.
+
 ### Versions and states
 
 `fee_policy_changes` is the history. Every row carries the full five-field terms, a
