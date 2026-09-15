@@ -13,11 +13,8 @@
 use std::{
 	future::Future,
 	net::SocketAddr,
-	sync::{
-		Arc,
-		atomic::{AtomicUsize, Ordering},
-	},
-	time::Duration,
+	sync::{Arc, Mutex},
+	time::{Duration, Instant},
 };
 
 use evconcierge_contracts::concierge::v1::{
@@ -757,38 +754,54 @@ async fn a_replayed_parked_event_does_not_roll_the_address_back() {
 // ── #181: the two ways a poll cycle can misbehave ────────────────────────────────────
 //
 // Both of these are about the SHAPE of the retry, not about an event being mirrored, so
-// they drive the consumer against a deliberately broken server and watch how often it
-// comes back. They share [`drive_misbehaving`] rather than [`drive`]: a consumer stuck in
-// a hot loop never reaches the `select!` that observes the shutdown token, so the consumer
-// branch has to be bounded by a timeout — otherwise a regression would hang the suite
-// instead of failing it, and a hang says nothing about which invariant broke.
+// they drive the consumer against a deliberately broken server and watch WHEN it comes
+// back. Each measures the time the consumer took to make a fixed number of pulls and
+// asserts a LOWER bound on it. That direction is deliberate: a loaded machine can only
+// stretch those gaps, so the assertion cannot fail because the suite ran beside something
+// else — the price is that enough load could hide a regression, which is the right way
+// round for a test that would otherwise be one more flake in this repository.
+//
+// They share [`drive_misbehaving`] rather than [`drive`]: a consumer stuck in a hot loop
+// never reaches the `select!` that observes the shutdown token, so the consumer branch has
+// to be bounded by a timeout — otherwise a regression would hang the suite instead of
+// failing it, and a hang says nothing about which invariant broke.
 
-/// Poll interval for the backoff test. Small enough that "retried at the poll interval" and
-/// "backed off" are hundreds of milliseconds apart rather than tens of seconds.
-const FAILING_POLL: Duration = Duration::from_millis(50);
+/// When each pull reached the fake server. The critical section holds no `.await`, so a
+/// `std` mutex is the right one.
+type PullLog = Arc<Mutex<Vec<Instant>>>;
 
-/// Poll interval for the stuck-cursor test, and the whole of its measurement: a consumer
-/// that ends the drain pulls once per interval, while one that re-pulls the same batch is
-/// paced only by how long applying it takes. Long enough that the two rates cannot be
-/// confused for each other on a loaded machine.
-const STUCK_POLL: Duration = Duration::from_millis(1000);
+fn pull_log() -> PullLog {
+	Arc::new(Mutex::new(Vec::new()))
+}
 
-/// How long the consumer branch is allowed to take after cancellation. Generous: it only
-/// has to tell a spin apart from an orderly wind-down.
-const CONSUMER_GRACE: Duration = Duration::from_secs(5);
+fn record(log: &PullLog) {
+	log.lock().expect("pull log").push(Instant::now());
+}
+
+/// Elapsed time from the first pull to the `n`th, or `None` when fewer than `n` arrived.
+fn span_of_first(log: &PullLog, n: usize) -> Option<Duration> {
+	let stamps = log.lock().expect("pull log");
+	(stamps.len() >= n).then(|| stamps[n - 1] - stamps[0])
+}
+
+/// How long the consumer branch is allowed to take after cancellation, and how long
+/// [`drive_misbehaving`] waits for the pulls it was asked to observe. Generous: every real
+/// assertion here is a lower bound, so the only thing these bound is a hang.
+const CONSUMER_GRACE: Duration = Duration::from_secs(30);
+const OBSERVE_CAP: Duration = Duration::from_secs(20);
 
 /// A server that breaks the pull contract: it hands back a FULL batch every time — which
 /// is what makes `drain` loop for more — while leaving `next_position` at the cursor the
 /// consumer sent, so the next pull asks the same question and gets the same answer.
 struct StuckUserEvents {
 	event: UserLifecycleEvent,
-	pulls: Arc<AtomicUsize>,
+	pulls: PullLog,
 }
 
 #[tonic::async_trait]
 impl UserEvents for StuckUserEvents {
 	async fn pull_user_lifecycle(&self, request: Request<PullUserLifecycleRequest>) -> Result<Response<PullUserLifecycleResponse>, Status> {
-		self.pulls.fetch_add(1, Ordering::SeqCst);
+		record(&self.pulls);
 		let req = request.into_inner();
 		Ok(Response::new(PullUserLifecycleResponse {
 			// `limit` is what the consumer asked for, so a batch of that size is a full one
@@ -802,26 +815,26 @@ impl UserEvents for StuckUserEvents {
 /// A concierge that is simply unreachable for this consumer: every pull is an error, the
 /// way a restarting pod or a rejected token looks from here.
 struct FailingUserEvents {
-	pulls: Arc<AtomicUsize>,
+	pulls: PullLog,
 }
 
 #[tonic::async_trait]
 impl UserEvents for FailingUserEvents {
 	async fn pull_user_lifecycle(&self, _request: Request<PullUserLifecycleRequest>) -> Result<Response<PullUserLifecycleResponse>, Status> {
-		self.pulls.fetch_add(1, Ordering::SeqCst);
+		record(&self.pulls);
 		Err(Status::unavailable("concierge is down"))
 	}
 }
 
-/// Run `service` against the real consumer for `observe_for`, then cancel and wind down.
-/// Returns whether the consumer actually finished within [`CONSUMER_GRACE`] of being told
-/// to stop.
+/// Run `service` against the real consumer at `poll` until `pulls` holds `want` entries (or
+/// [`OBSERVE_CAP`] passes), then cancel and wind down. Returns whether the consumer
+/// actually finished within [`CONSUMER_GRACE`] of being told to stop.
 ///
 /// Deliberately takes no assertion closure: the bridge cursor is one global row, so this
 /// holds the suite's advisory lock for the drive, and an assertion that unwound inside the
 /// `join!` would leave that lock on a pooled connection and wedge every later test. The
-/// caller asserts afterwards, on the counter it passed in and on the database.
-async fn drive_misbehaving<S: UserEvents>(pool: &PgPool, service: S, poll: Duration, observe_for: Duration) -> bool {
+/// caller asserts afterwards, on the log it passed in and on the database.
+async fn drive_misbehaving<S: UserEvents>(pool: &PgPool, service: S, poll: Duration, pulls: PullLog, want: usize) -> bool {
 	let mut guard = pool.acquire().await.expect("lock connection");
 	sqlx::query("SELECT pg_advisory_lock($1)")
 		.bind(BRIDGE_TEST_LOCK)
@@ -859,8 +872,12 @@ async fn drive_misbehaving<S: UserEvents>(pool: &PgPool, service: S, poll: Durat
 
 	let stopper = {
 		let stop = stop.clone();
+		let pulls = pulls.clone();
 		async move {
-			tokio::time::sleep(observe_for).await;
+			let deadline = Instant::now() + OBSERVE_CAP;
+			while span_of_first(&pulls, want).is_none() && Instant::now() < deadline {
+				tokio::time::sleep(Duration::from_millis(20)).await;
+			}
 			stop.cancel();
 		}
 	};
@@ -904,30 +921,32 @@ async fn a_pull_that_cannot_move_the_cursor_ends_the_drain_instead_of_spinning()
 		.await
 		.unwrap();
 
-	let pulls = Arc::new(AtomicUsize::new(0));
-	let observe_for = Duration::from_millis(3000);
+	// One second apart is a gap nothing else in this test can manufacture: a consumer that
+	// ends the drain waits the poll interval before asking again, while one that re-pulls
+	// the batch it cannot move past is paced only by how long applying it takes.
+	const POLL: Duration = Duration::from_secs(1);
+	const WANT: usize = 3;
+	let pulls = pull_log();
 	let finished = drive_misbehaving(
 		&pool,
 		StuckUserEvents {
 			event: event(&subject, Kind::SessionsRevoked, 1),
 			pulls: pulls.clone(),
 		},
-		STUCK_POLL,
-		observe_for,
+		POLL,
+		pulls.clone(),
+		WANT,
 	)
 	.await;
 
 	assert!(finished, "the consumer winds down on cancellation");
-	let attempts = pulls.load(Ordering::SeqCst);
-	// THE PULL RATE IS THE ASSERTION. A consumer that ends the drain asks once per poll
-	// interval — three or four times in three seconds. One that keeps re-pulling is paced
-	// only by how long applying a full batch takes (~150 ms here), so it lands several
-	// times higher; the bound sits between the two with room on both sides. (Cancellation
-	// alone proves nothing: it stops the fake server, the next pull then fails, and even a
-	// spinning `drain` returns on that error.)
+	let span = span_of_first(&pulls, WANT).expect("the consumer pulled at least three times");
+	// Two poll intervals is 2 s; a spinning drain covers three pulls in a fraction of one.
+	// (Cancellation alone proves nothing here: it stops the fake server, the next pull then
+	// fails, and even a spinning `drain` returns on that error.)
 	assert!(
-		(1..=8).contains(&attempts),
-		"the drain re-pulled the batch it could not move past instead of ending — {attempts} pulls in {observe_for:?} at a {STUCK_POLL:?} poll"
+		span >= Duration::from_millis(1500),
+		"the drain re-pulled the batch it could not move past instead of ending — {WANT} pulls inside {span:?} at a {POLL:?} poll"
 	);
 	assert_eq!(
 		cursor_position(&pool).await,
@@ -947,17 +966,17 @@ async fn a_failing_cycle_backs_off_instead_of_retrying_at_the_poll_interval() {
 	let Some(pool) = pool().await else {
 		return;
 	};
-	let pulls = Arc::new(AtomicUsize::new(0));
-	let observe_for = Duration::from_millis(1200);
-	let finished = drive_misbehaving(&pool, FailingUserEvents { pulls: pulls.clone() }, FAILING_POLL, observe_for).await;
+	// Seven attempts at a 50 ms poll: 0.3 s if every retry waits the interval, 3.1 s once
+	// the wait doubles each time (50 + 100 + 200 + 400 + 800 + 1600).
+	const POLL: Duration = Duration::from_millis(50);
+	const WANT: usize = 7;
+	let pulls = pull_log();
+	let finished = drive_misbehaving(&pool, FailingUserEvents { pulls: pulls.clone() }, POLL, pulls.clone(), WANT).await;
 
 	assert!(finished, "a backing-off consumer still winds down on cancellation rather than sleeping through it");
-	let attempts = pulls.load(Ordering::SeqCst);
-	// At a 50 ms poll, retrying at the interval is ~24 attempts in 1.2 s; backing off
-	// 50 → 100 → 200 → 400 → 800 is five. The bound keeps a wide margin for a loaded
-	// machine while staying far below the un-backed-off count.
+	let span = span_of_first(&pulls, WANT).expect("the consumer retried at least seven times");
 	assert!(
-		(2..=10).contains(&attempts),
-		"a failing cycle must back off, not retry at the poll interval — {attempts} attempts in {observe_for:?} at a {FAILING_POLL:?} poll"
+		span >= Duration::from_millis(1500),
+		"a failing cycle must back off, not retry at the poll interval — {WANT} attempts inside {span:?} at a {POLL:?} poll"
 	);
 }
