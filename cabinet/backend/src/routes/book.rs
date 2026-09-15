@@ -415,6 +415,7 @@ mod book_route_tests {
 				price_tick: if r.price_tick.is_empty() { "0.01".into() } else { r.price_tick.clone() },
 				lot_size: if r.lot_size.is_empty() { "0.0001".into() } else { r.lot_size.clone() },
 				market_slippage_bps: r.market_slippage_bps,
+				allow_unbacked_trading: r.allow_unbacked_trading,
 				updated_at: 1_750_000_300,
 			},
 			None => bk::BookPolicy {
@@ -424,6 +425,7 @@ mod book_route_tests {
 				price_tick: "0.01".into(),
 				lot_size: "0.0001".into(),
 				market_slippage_bps: 100,
+				allow_unbacked_trading: true,
 				updated_at: 1_750_000_300,
 			},
 		}
@@ -1073,6 +1075,7 @@ mod book_route_tests {
 		assert_eq!(body["price_tick"], "0.01");
 		assert_eq!(body["lot_size"], "0.0001");
 		assert_eq!(body["market_slippage_bps"], 100);
+		assert_eq!(body["allow_unbacked_trading"], true, "the terminal reads the acknowledgement to show its notice");
 		assert_eq!(body["updated_at"], "1750000300");
 	}
 
@@ -1225,6 +1228,28 @@ mod book_route_tests {
 		assert!(!forwarded.book_open);
 		assert_eq!((forwarded.taker_fee_bps, forwarded.market_slippage_bps), (0, 0));
 		assert_eq!((forwarded.price_tick.as_str(), forwarded.lot_size.as_str()), ("", ""));
+	}
+
+	/// The unbacked-trading acknowledgement crosses as given and comes back on the policy;
+	/// left out, it crosses as `false` — the hub, not the BFF, decides whether the product
+	/// needed it.
+	#[tokio::test]
+	async fn the_unbacked_trading_acknowledgement_is_forwarded_and_echoed() {
+		let hub = Hub::new("admin");
+		let seen = hub.seen.clone();
+		let app = app(serve(hub).await);
+
+		let body = r#"{"service":"quy-nhon","book_open":true,"taker_fee_bps":0,"allow_unbacked_trading":true}"#;
+		let (status, response) = send(&app, signed("POST", "/api/admin/allocations/book", Some(body), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(response["allow_unbacked_trading"], true);
+		assert!(seen.lock().unwrap().set_policy.clone().expect("the hub saw the write").allow_unbacked_trading);
+
+		let body = r#"{"service":"quy-nhon","book_open":true,"taker_fee_bps":0}"#;
+		let (status, response) = send(&app, signed("POST", "/api/admin/allocations/book", Some(body), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(response["allow_unbacked_trading"], false);
+		assert!(!seen.lock().unwrap().set_policy.clone().expect("the hub saw the write").allow_unbacked_trading);
 	}
 
 	/// `book_open` and the taker fee are read as a whole: a missing or malformed one must

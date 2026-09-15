@@ -116,6 +116,14 @@ export function isLocked(product: Product): boolean {
   return !isClosed(product) && product.allocation?.caller_access === "view";
 }
 
+/** The units stand for an asset held off-platform and the fund holds no cash for them:
+ *  `Redeem` is refused (412) and holders exit through the book. A product known only by
+ *  a holding reads as cash-backed — the honest default until the detail lands, and the
+ *  hub's own default for an unset product. */
+export function isInKind(product: Product): boolean {
+  return product.allocation?.backing === "in_kind";
+}
+
 /** `floor(cash / nav)` in exact base units — mirrors `Shares::from_cash` on the hub, so
  *  the preview cannot disagree with what the ledger actually mints. */
 export function unitsForCash(amount: string, nav: string | undefined): bigint | null {

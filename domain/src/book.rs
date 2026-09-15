@@ -30,6 +30,7 @@ use ev::architecture::{DomainEvent, Id};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+	allocations::AllocationBacking,
 	balance::ServiceId,
 	error::DomainError,
 	money::{Nav, SCALE, Shares, Usdt, mul_div_floor},
@@ -409,6 +410,13 @@ impl OrderSize {
 /// One allocation's trading terms. Set by an `AllocationManage` holder; a product with no
 /// policy row trades under [`BookPolicy::default`], whose `book_open` is `false` — the
 /// book is opt-in per product, exactly as the fee is.
+///
+/// `allow_unbacked_trading` is the operator's acknowledgement that the book may trade
+/// units the fund holds no cash for ([`AllocationBacking::InKind`]): a buyer on such a
+/// book pays cash for a claim on an asset held in kind, and cannot redeem it — the
+/// terminal shows them that. Without the flag an `in_kind` product's book neither opens
+/// nor takes an order ([`Self::ensure_tradable_for`]). Harmless on a `cash` product: it
+/// acknowledges in advance what the first in-kind mint would otherwise make a surprise.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct BookPolicy {
 	book_open: bool,
@@ -416,6 +424,10 @@ pub struct BookPolicy {
 	price_tick: Price,
 	lot_size: Shares,
 	market_slippage_bps: u32,
+	// `default` so a policy serialized before the field existed still reads — as
+	// unacknowledged, the side that refuses rather than trades.
+	#[serde(default)]
+	allow_unbacked_trading: bool,
 }
 
 impl BookPolicy {
@@ -429,7 +441,7 @@ impl BookPolicy {
 	/// Validate a full set of terms. Every bps figure is at most one hundred percent;
 	/// tick and lot are positive, because a zero grid admits every price and every size
 	/// and would make "aligned" meaningless.
-	pub fn new(book_open: bool, taker_fee_bps: u32, price_tick: Price, lot_size: Shares, market_slippage_bps: u32) -> Result<Self, DomainError> {
+	pub fn new(book_open: bool, taker_fee_bps: u32, price_tick: Price, lot_size: Shares, market_slippage_bps: u32, allow_unbacked_trading: bool) -> Result<Self, DomainError> {
 		if u128::from(taker_fee_bps) > BPS_DENOMINATOR {
 			return Err(DomainError::Validation(format!("taker fee must be at most {BPS_DENOMINATOR} bps")));
 		}
@@ -448,11 +460,37 @@ impl BookPolicy {
 			price_tick,
 			lot_size,
 			market_slippage_bps,
+			allow_unbacked_trading,
 		})
 	}
 
 	pub fn book_open(&self) -> bool {
 		self.book_open
+	}
+
+	pub fn allow_unbacked_trading(&self) -> bool {
+		self.allow_unbacked_trading
+	}
+
+	/// Whether an order may be taken on `service`'s book under these terms, given what
+	/// stands behind its units. Two gates: the book must be open, and an `in_kind` product
+	/// needs the operator's acknowledgement (`allow_unbacked_trading`). Both are
+	/// `Precondition` — the caller and the order are fine; an operator's decision is what
+	/// is missing. Run on every placement and not only when the book opens, because the
+	/// backing can flip *after* the book opened (the first in-kind mint on a `cash`
+	/// product), and a book that then kept trading would sell unbacked units nobody
+	/// acknowledged.
+	pub fn ensure_tradable_for(&self, service: &ServiceId, backing: AllocationBacking) -> Result<(), DomainError> {
+		if !self.book_open {
+			return Err(DomainError::Precondition(format!("the book for '{service}' is closed")));
+		}
+		match backing {
+			AllocationBacking::Cash => Ok(()),
+			AllocationBacking::InKind if self.allow_unbacked_trading => Ok(()),
+			AllocationBacking::InKind => Err(DomainError::Precondition(format!(
+				"the book on '{service}' trades units that are not backed by fund cash — an operator must acknowledge unbacked trading (allow_unbacked_trading) before the book opens"
+			))),
+		}
 	}
 
 	pub fn taker_fee_bps(&self) -> u32 {
@@ -536,6 +574,7 @@ impl Default for BookPolicy {
 			price_tick: Self::DEFAULT_PRICE_TICK,
 			lot_size: Self::DEFAULT_LOT_SIZE,
 			market_slippage_bps: Self::DEFAULT_MARKET_SLIPPAGE_BPS,
+			allow_unbacked_trading: false,
 		}
 	}
 }
@@ -1014,7 +1053,7 @@ mod tests {
 	}
 
 	fn open_policy(fee_bps: u32) -> BookPolicy {
-		BookPolicy::new(true, fee_bps, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500).unwrap()
+		BookPolicy::new(true, fee_bps, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, false).unwrap()
 	}
 
 	fn incoming(user: UserId, side: Side, tif: Tif, at: &str, size: &str) -> IncomingOrder {
@@ -1094,15 +1133,53 @@ mod tests {
 		assert_eq!(policy.price_tick().to_decimal_string(), "0.01");
 		assert_eq!(policy.lot_size().to_decimal_string(), "0.0001");
 		assert_eq!(policy.market_slippage_bps(), 500);
+		assert!(!policy.allow_unbacked_trading(), "unbacked trading is acknowledged, never presumed");
 	}
 
 	#[test]
 	fn policy_terms_are_bounded() {
-		assert!(BookPolicy::new(true, 10_000, price("0.01"), shares("1"), 0).is_ok());
-		assert!(BookPolicy::new(true, 10_001, price("0.01"), shares("1"), 0).is_err(), "a fee above 100% is refused");
-		assert!(BookPolicy::new(true, 0, price("0.01"), shares("1"), 10_001).is_err(), "slippage above 100% is refused");
-		assert!(BookPolicy::new(true, 0, Price::from_base_units(0), shares("1"), 0).is_err(), "a zero tick admits every price");
-		assert!(BookPolicy::new(true, 0, price("0.01"), Shares::ZERO, 0).is_err(), "a zero lot admits every size");
+		assert!(BookPolicy::new(true, 10_000, price("0.01"), shares("1"), 0, false).is_ok());
+		assert!(BookPolicy::new(true, 10_001, price("0.01"), shares("1"), 0, false).is_err(), "a fee above 100% is refused");
+		assert!(BookPolicy::new(true, 0, price("0.01"), shares("1"), 10_001, false).is_err(), "slippage above 100% is refused");
+		assert!(
+			BookPolicy::new(true, 0, Price::from_base_units(0), shares("1"), 0, false).is_err(),
+			"a zero tick admits every price"
+		);
+		assert!(BookPolicy::new(true, 0, price("0.01"), Shares::ZERO, 0, false).is_err(), "a zero lot admits every size");
+	}
+
+	#[test]
+	fn an_in_kind_book_trades_only_once_unbacked_trading_is_acknowledged() {
+		let unacknowledged = open_policy(0);
+		unacknowledged
+			.ensure_tradable_for(&svc(), AllocationBacking::Cash)
+			.expect("cash-backed units trade on any open book");
+		let err = unacknowledged.ensure_tradable_for(&svc(), AllocationBacking::InKind).unwrap_err();
+		assert!(
+			matches!(err, DomainError::Precondition(ref m) if m.contains("allow_unbacked_trading") && m.contains("service_arb")),
+			"got {err:?}"
+		);
+
+		let acknowledged = BookPolicy::new(true, 0, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, true).unwrap();
+		assert!(acknowledged.allow_unbacked_trading());
+		acknowledged.ensure_tradable_for(&svc(), AllocationBacking::InKind).expect("acknowledged, so it trades");
+		acknowledged.ensure_tradable_for(&svc(), AllocationBacking::Cash).expect("the flag is harmless on a cash product");
+
+		// A closed book is closed whatever the backing and whatever was acknowledged.
+		let closed = BookPolicy::new(false, 0, BookPolicy::DEFAULT_PRICE_TICK, BookPolicy::DEFAULT_LOT_SIZE, 500, true).unwrap();
+		for backing in [AllocationBacking::Cash, AllocationBacking::InKind] {
+			let err = closed.ensure_tradable_for(&svc(), backing).unwrap_err();
+			assert!(matches!(err, DomainError::Precondition(ref m) if m.contains("closed")), "got {err:?}");
+		}
+	}
+
+	#[test]
+	fn a_policy_serialized_before_the_acknowledgement_existed_reads_as_unacknowledged() {
+		let mut json = serde_json::to_value(open_policy(25)).unwrap();
+		json.as_object_mut().unwrap().remove("allow_unbacked_trading").expect("the field is serialized");
+		let policy: BookPolicy = serde_json::from_value(json).unwrap();
+		assert!(!policy.allow_unbacked_trading());
+		assert_eq!(policy, open_policy(25));
 	}
 
 	#[test]
@@ -1139,7 +1216,7 @@ mod tests {
 		assert_eq!(policy.market_limit(Side::Buy, price("1.03")).unwrap(), price("1.09"));
 		assert_eq!(policy.market_limit(Side::Sell, price("1.03")).unwrap(), price("0.97"));
 		// Full slippage on a sell rounds to nothing — refused, never sold for zero.
-		let all_the_way = BookPolicy::new(true, 0, price("0.01"), shares("1"), 10_000).unwrap();
+		let all_the_way = BookPolicy::new(true, 0, price("0.01"), shares("1"), 10_000, false).unwrap();
 		assert!(all_the_way.market_limit(Side::Sell, price("1")).is_err());
 	}
 

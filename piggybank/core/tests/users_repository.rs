@@ -9,19 +9,11 @@ use domain::{
 	auth::AuthSubject,
 	users::{ConciergeUserId, Email, UserId, UserStatus},
 };
-use piggybank_core::{
-	infrastructure::{db, users::PgUsers},
-	ports::UserRepository,
-};
-use sqlx::PgPool;
+use piggybank_core::{infrastructure::users::PgUsers, ports::UserRepository};
 use uuid::Uuid;
 
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-	Some(pool)
-}
+mod common;
+use common::pool;
 
 async fn repo() -> Option<PgUsers> {
 	Some(PgUsers::new(pool().await?))

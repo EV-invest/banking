@@ -18,13 +18,16 @@ use evconcierge_contracts::concierge::v1::{
 	user_lifecycle_event::Kind,
 };
 use piggybank_core::{
-	infrastructure::{bridge, bridge::BridgeConsumer, db, outflow::PgOutflowPolicy, users::PgUsers},
+	infrastructure::{bridge, bridge::BridgeConsumer, outflow::PgOutflowPolicy, users::PgUsers},
 	ports::{OutflowPolicy, UserRepository},
 };
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tonic::{Request, Response, Status, transport::Server};
+
+mod common;
+use common::pool;
 
 const BRIDGE_TOKEN: &str = "test-bridge-token";
 
@@ -40,13 +43,6 @@ async fn blocked(pool: &PgPool, user_id: uuid::Uuid) -> bool {
 }
 /// Fixed advisory-lock key serializing the two tests' drains over the single global cursor row.
 const BRIDGE_TEST_LOCK: i64 = 0x4556_4252_4944_4745;
-
-async fn pool() -> Option<PgPool> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-	Some(pool)
-}
 
 fn unique_subject() -> String {
 	format!("itest-bridge-{}", uuid::Uuid::new_v4())

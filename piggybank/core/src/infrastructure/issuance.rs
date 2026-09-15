@@ -171,7 +171,10 @@ impl UnitIssuanceRepository for PgUnitIssuances {
 	async fn queued_mint_units(&self, service: &ServiceId) -> Result<Shares, DomainError> {
 		// `units` is a base-unit digit string; summed as numeric so a u128 never has to
 		// round-trip through a Postgres integer, and cast back to text for the parser.
-		// TODO(#271): retire (PR #278) shrinks supply — subtract queued retires once it lands.
+		// Mints only, deliberately: a queued `retire` shrinks the supply, and a cap pinned
+		// above where it lands is harmless — retires are allowed on closed products, where
+		// nothing subscribes up to the cap anyway. Netting it would also push the figure
+		// below zero when a retire waits with no mint beside it.
 		let total: String = sqlx::query_scalar(
 			"SELECT COALESCE(SUM(units::numeric), 0)::text FROM unit_issuances \
 			 WHERE service = $1 AND state = 'queued' AND source = 'mint'",

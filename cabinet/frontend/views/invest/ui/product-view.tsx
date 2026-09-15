@@ -29,8 +29,9 @@ import { TipAnchor } from "@/shared/tips";
 import { ProductIcon, productTone } from "@/shared/ui/icons/products";
 import { SECTION_STAGGER, Stagger, StaggerItem } from "@/shared/ui/motion";
 import { formatSignedUsdt, formatUnits, formatUsdt, isNegative, isZero } from "@/views/invest/lib/format";
-import { blockedReasonKey, isClosed, isLocked, selectProduct } from "@/views/invest/lib/product";
+import { blockedReasonKey, isClosed, isInKind, isLocked, selectProduct } from "@/views/invest/lib/product";
 import { Note, ProductBadges, Stat, TEAL_CTA } from "@/views/invest/ui/atoms";
+import { InKindBadge, InKindNote } from "@/views/invest/ui/backing-badge";
 import { QueuedList, RedeemPanel, SubscribePanel } from "@/views/invest/ui/deal-panels";
 import { FeeCard, SupplyCard } from "@/views/invest/ui/product-cards";
 import { TradeLink } from "@/views/invest/ui/trade-link";
@@ -99,6 +100,7 @@ export function ProductView({ service }: { service: string }) {
   const held = product.position && !isZero(product.position.units) ? product.position : null;
   const closed = isClosed(product);
   const locked = isLocked(product);
+  const inKind = isInKind(product);
   const stale = nav?.stale ?? false;
   // `posted_at` is 0 until an operator marks the fund, which is exactly when the hub is
   // still pricing at the bootstrap NAV of 1.0.
@@ -122,6 +124,7 @@ export function ProductView({ service }: { service: string }) {
             </span>
             <h1 className="text-3xl font-semibold">{product.title}</h1>
             <ProductBadges closed={closed} locked={locked} stale={stale} />
+            {inKind && <InKindBadge />}
           </div>
           <p className="font-mono-tech text-xs text-muted-foreground">{product.service}</p>
           {product.summary && <p className="max-w-xl pt-1 text-sm text-muted-foreground">{product.summary}</p>}
@@ -165,9 +168,12 @@ export function ProductView({ service }: { service: string }) {
           {/* The gates, stated before the action rather than after a failed submit. */}
           {blocked && <Note tone="amber">{t(blocked)}</Note>}
           {unmarked && !closed && <Note tone="muted">{t("invest.unmarkedNote")}</Note>}
+          {inKind && <InKindNote />}
 
           {panel === "subscribe" && !blocked && <SubscribePanel service={product.service} nav={nav} />}
-          {panel === "redeem" && held && <RedeemPanel service={product.service} position={held} nav={nav} />}
+          {/* An in-kind product still opens the panel: the refusal is explained on the
+              form, with the way out beside it, rather than met as a 412 after the click. */}
+          {panel === "redeem" && held && <RedeemPanel service={product.service} position={held} nav={nav} inKind={inKind} />}
 
           {queued.length > 0 && <QueuedList items={queued} />}
         </div>

@@ -182,6 +182,10 @@ export function ValuationView() {
                 // The POST answers with the new mark, so it is published straight in rather
                 // than re-read — and every investor surface showing this fund's price follows.
                 fundNavResource.publish(mark, service);
+                // The publish only covers this fund's price. A mark also moves what the
+                // supply card and the investor catalog read (banking#253) — the same three
+                // tags the cap pin names, so those surfaces refresh without a reload.
+                revalidateTag(TAG.nav, TAG.catalog, TAG.adminAllocations);
                 setAum("");
                 await queueRead.refresh();
               }}

@@ -19,6 +19,9 @@
 //! operator ─ SetAllocationUnitCap ▶ supply  (how many units may ever be issued)
 //! operator ─ IssueUnits ─────────▶ units minted IN KIND to a user or the company
 //! operator ─ TransferCompanyStake ▶ the company's units handed to a user, supply unchanged
+//! operator ─ RetireUnits ────────▶ a holder's units burnt IN KIND, supply shrinks
+//! operator ─ SetAllocationBacking ▶ cash | in_kind — whether Redeem may pay out
+//! investor ─ FundsService.Redeem ───────▶ refused while `in_kind` (sell on the book instead)
 //! operator ─ ListUnitHolders ────▶ company / fee / investor split of the supply
 //! operator ─ RevokeAllocationAccess ▶ the investor falls back to the default
 //! operator ─ SetAllocationState ─▶ closed   (redeem only — never traps an investor)
@@ -38,17 +41,20 @@
 //! exception is `IssueUnits`: supply an operator mints **in kind** — no cash leg — to a
 //! [`holder`] that is an investor or the company itself, for a product registered
 //! against an asset that already has owners — and `TransferCompanyStake`, the way those
-//! units come back out of the company to a named user without the supply moving. Its
-//! vocabularies ([`holder`], [`issuance_source`], [`issuance_state`]) are pinned here
-//! like the others.
+//! units come back out of the company to a named user without the supply moving — and
+//! `RetireUnits`, the mint's mirror. Its vocabularies ([`holder`], [`issuance_source`],
+//! [`issuance_state`]) are pinned here like the others, as is [`backing`]: whether a
+//! product's units have the fund's cash behind them, which is what decides whether
+//! `Redeem` may pay them out.
 
 pub use crate::banking::v1::{
 	Allocation, AllocationAccessGrant, AllocationAccessGrantList, AllocationList, GetAllocationRequest, GrantAllocationAccessRequest, IssueUnitsRequest, ListAllocationAccessGrantsRequest,
-	ListAllocationsRequest, ListUnitHoldersRequest, RegisterAllocationRequest, RevokeAllocationAccessRequest, RevokeAllocationAccessResponse, SetAllocationAccessRequest,
-	SetAllocationStateRequest, SetAllocationUnitCapRequest, TransferCompanyStakeRequest, UnitHolders, UnitIssuance, UpdateAllocationRequest,
+	ListAllocationsRequest, ListUnitHoldersRequest, RegisterAllocationRequest, RetireUnitsRequest, RevokeAllocationAccessRequest, RevokeAllocationAccessResponse, SetAllocationAccessRequest,
+	SetAllocationBackingRequest, SetAllocationStateRequest, SetAllocationUnitCapRequest, TransferCompanyStakeRequest, UnitHolders, UnitIssuance, UpdateAllocationRequest,
 	allocations_service_client::AllocationsServiceClient,
 	allocations_service_server::{AllocationsService, AllocationsServiceServer},
 	issue_units_request::Holder as IssueUnitsHolder,
+	retire_units_request::Holder as RetireUnitsHolder,
 };
 
 /// The unit cap a `RegisterAllocation` lands on, as its wire decimal — 100,000,000
@@ -196,6 +202,42 @@ pub mod icon {
 	}
 }
 
+/// The canonical `Allocation.backing` strings — what stands behind a product's units.
+///
+/// The fourth vocabulary of the contract. The hub's `domain::allocations::
+/// AllocationBacking` serializes to exactly these (`allocation_backing_strings_are_canonical`
+/// and `domain_backing_matches_the_wire_contract` guard the two sides). It gates money on
+/// the way OUT: `Redeem` pays cash out of the fund's claim, and a product whose units
+/// were minted in kind has none there, so `Redeem` is refused while the backing is
+/// [`IN_KIND`] and the holder's exit is the book. A client renders the redeem control off
+/// this, never off `state` alone.
+pub mod backing {
+	/// The units were paid for with cash into the fund's claim; a redemption pays out of
+	/// it. What a registration lands on.
+	pub const CASH: &str = "cash";
+	/// The units stand for an asset held in kind; the fund holds no cash for them.
+	/// `Redeem` is refused. Set automatically by the first `IssueUnits`.
+	pub const IN_KIND: &str = "in_kind";
+
+	/// Every backing.
+	pub const ALL: [&str; 2] = [CASH, IN_KIND];
+
+	/// The backing a product carries from registration until a mint or an operator
+	/// changes it.
+	pub const DEFAULT: &str = CASH;
+
+	/// Whether `backing` is one this contract defines.
+	pub fn is_known(backing: &str) -> bool {
+		ALL.contains(&backing)
+	}
+
+	/// Whether a product at `backing` lets holders redeem for cash. The authoritative
+	/// check runs hub-side on `Redeem`; this is for a client deciding which exit to draw.
+	pub fn permits_redemptions(backing: &str) -> bool {
+		backing == CASH
+	}
+}
+
 /// The canonical `UnitIssuance.holder_kind` strings — who an in-kind issuance minted
 /// units to.
 ///
@@ -223,16 +265,19 @@ pub mod holder {
 /// The hub's `domain::issuance::IssuanceSource` stores exactly these
 /// (`issuance_source_strings_are_canonical` guards that side). A `mint` grew the
 /// supply by the row's `units`; a `company` row moved them out of the company's stake
-/// and left the supply alone — a client summing issuances into "units created" must
-/// count only the first.
+/// and left the supply alone; a `retire` row burnt them and shrank the supply. `units`
+/// is always the magnitude — a client summing issuances into "units created" adds the
+/// first, ignores the second and subtracts the third.
 pub mod issuance_source {
 	/// Minted in kind (`IssueUnits`).
 	pub const MINT: &str = "mint";
 	/// Handed over out of the company's stake (`TransferCompanyStake`).
 	pub const COMPANY: &str = "company";
+	/// Burnt out of the holder's account (`RetireUnits`).
+	pub const RETIRE: &str = "retire";
 
 	/// Every source.
-	pub const ALL: [&str; 2] = [MINT, COMPANY];
+	pub const ALL: [&str; 3] = [MINT, COMPANY, RETIRE];
 
 	/// Whether `source` is one this contract defines.
 	pub fn is_known(source: &str) -> bool {
@@ -270,7 +315,7 @@ pub mod issuance_state {
 
 #[cfg(test)]
 mod tests {
-	use super::{access, holder, icon, issuance_source, issuance_state, state};
+	use super::{access, backing, holder, icon, issuance_source, issuance_state, state};
 
 	#[test]
 	fn the_access_vocabulary_is_ranked_closed_and_canonical() {
@@ -363,9 +408,10 @@ mod tests {
 	fn the_issuance_source_vocabulary_is_closed_and_canonical() {
 		// Byte-identical with `domain::issuance::IssuanceSource::as_str`
 		// (`issuance_source_strings_are_canonical` guards the other side).
-		assert_eq!(issuance_source::ALL, ["mint", "company"]);
+		assert_eq!(issuance_source::ALL, ["mint", "company", "retire"]);
 		assert!(issuance_source::ALL.iter().all(|s| issuance_source::is_known(s)));
 		assert!(!issuance_source::is_known("transfer"));
+		assert!(!issuance_source::is_known("burn"));
 		assert!(!issuance_source::is_known(""));
 		assert!(!issuance_source::is_known("Company"), "the wire form is lowercase");
 	}
@@ -379,6 +425,21 @@ mod tests {
 		assert!(!issuance_state::is_known("minted"));
 		assert!(issuance_state::is_applied(issuance_state::APPLIED));
 		assert!(!issuance_state::is_applied(issuance_state::QUEUED));
+	}
+
+	#[test]
+	fn the_backing_vocabulary_is_closed_canonical_and_gates_the_exit() {
+		// Byte-identical with `domain::allocations::AllocationBacking::as_str`
+		// (`allocation_backing_strings_are_canonical` guards the other side).
+		assert_eq!(backing::ALL, ["cash", "in_kind"]);
+		assert!(backing::ALL.iter().all(|b| backing::is_known(b)));
+		assert!(!backing::is_known("asset"));
+		assert!(!backing::is_known(""));
+		assert!(!backing::is_known("InKind"), "the wire form is lowercase snake_case");
+		// A registration is cash-backed, and that is the only backing a redemption pays on.
+		assert_eq!(backing::DEFAULT, backing::CASH);
+		assert!(backing::permits_redemptions(backing::CASH));
+		assert!(!backing::permits_redemptions(backing::IN_KIND));
 	}
 
 	#[test]

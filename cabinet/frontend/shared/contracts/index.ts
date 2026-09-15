@@ -59,6 +59,7 @@ export type {
   AllocationAccessGrant,
   AllocationAccessGrantList,
   AllocationAccessLevel,
+  AllocationBacking,
   AllocationGrantLevel,
   AllocationIcon,
   AllocationList,

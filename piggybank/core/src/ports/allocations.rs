@@ -24,12 +24,12 @@
 
 use async_trait::async_trait;
 use domain::{
-	allocations::{Allocation, AllocationAccess, AllocationIcon},
+	allocations::{Allocation, AllocationAccess, AllocationBacking, AllocationIcon},
 	architecture::{Reader, Repository},
 	balance::ServiceId,
 	error::DomainError,
 	money::Shares,
-	users::UserId,
+	users::{ConciergeUserId, UserId},
 };
 
 #[async_trait]
@@ -68,6 +68,11 @@ pub trait AllocationRegistry: Repository<Aggregate = Allocation> + Reader<Aggreg
 	/// [`Allocation::set_access`] (idempotent). Grants are untouched. `NotFound` if
 	/// unregistered.
 	async fn set_access(&self, service: &ServiceId, access: AllocationAccess) -> Result<Allocation, DomainError>;
+
+	/// Set what stands behind the units under the row lock, applying
+	/// [`Allocation::set_backing`] (idempotent). Both the first in-kind mint (`in_kind`)
+	/// and the operator's explicit command go through here. `NotFound` if unregistered.
+	async fn set_backing(&self, service: &ServiceId, backing: AllocationBacking) -> Result<Allocation, DomainError>;
 
 	/// Raise `user` to `level` on `service`, recording `granted_by`. A repeat grant for
 	/// the same user overwrites the level; one that changes nothing raises no event.
@@ -118,12 +123,19 @@ pub struct AllocationRecord {
 }
 
 /// One investor raised above a product's default level.
+///
+/// `user_id` and `granted_by` are the hub's own ids — what the grants table stores and
+/// what the subscribe gate reads. The concierge mirrors ride along because the console
+/// names people by their identity-plane id, and answering "who is this" would otherwise
+/// cost a second read per row. `None` when the bridge has not mirrored the user yet.
 #[derive(Debug)]
 pub struct AllocationAccessGrant {
 	pub service: ServiceId,
 	pub user_id: UserId,
+	pub concierge_user_id: Option<ConciergeUserId>,
 	pub level: AllocationAccess,
 	pub granted_by: UserId,
+	pub granted_by_concierge_id: Option<ConciergeUserId>,
 	/// Unix seconds the grant was (last) written.
 	pub granted_at: i64,
 }

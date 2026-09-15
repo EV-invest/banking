@@ -27,6 +27,42 @@
     "en": "View only",
     "t": "Lecture seule"
   },
+  "admin.alloc.backing.cash": {
+    "en": "Cash-backed",
+    "t": "Adossé au cash"
+  },
+  "admin.alloc.backing.cashHint": {
+    "en": "Units were paid for into the fund's cash, and a redemption pays out of it at NAV.",
+    "t": "Les parts ont été payées dans la trésorerie du fonds, et un rachat est réglé à partir d'elle à la VL."
+  },
+  "admin.alloc.backing.confirmCash": {
+    "en": "Mark {service} as cash-backed. Redeem will pay holders out of the fund's cash at NAV — make sure that cash is actually there.",
+    "t": "Marquer « {service} » comme adossé au cash. Redeem paiera les porteurs à partir de la trésorerie du fonds à la VL — assurez-vous que cette trésorerie existe réellement."
+  },
+  "admin.alloc.backing.confirmInKind": {
+    "en": "Mark {service} as in-kind. Redeem will be refused, and holders exit by selling their units on the book.",
+    "t": "Marquer « {service} » comme en nature. Redeem sera refusé, et les porteurs sortent en vendant leurs parts sur le carnet."
+  },
+  "admin.alloc.backing.inKind": {
+    "en": "In kind",
+    "t": "En nature"
+  },
+  "admin.alloc.backing.inKindHint": {
+    "en": "Units stand for an asset the holders own off-platform. The fund holds no cash for them, so Redeem is refused and holders exit through the book.",
+    "t": "Les parts représentent un actif que les porteurs détiennent hors plateforme. Le fonds ne détient pas de cash pour elles : Redeem est refusé et la sortie passe par le carnet."
+  },
+  "admin.alloc.backing.markCash": {
+    "en": "Mark as cash-backed",
+    "t": "Marquer comme adossé au cash"
+  },
+  "admin.alloc.backing.markInKind": {
+    "en": "Mark as in-kind",
+    "t": "Marquer comme en nature"
+  },
+  "admin.alloc.backing.title": {
+    "en": "Backing",
+    "t": "Adossement"
+  },
   "admin.alloc.book.action": {
     "en": "Book",
     "t": "Carnet"
@@ -98,6 +134,22 @@
   "admin.alloc.book.title": {
     "en": "Order book",
     "t": "Carnet d'ordres"
+  },
+  "admin.alloc.book.unbacked.ack": {
+    "en": "Allow trading of units not backed by fund cash",
+    "t": "Autoriser la négociation de parts non adossées au cash du fonds"
+  },
+  "admin.alloc.book.unbacked.acknowledged": {
+    "en": "Unbacked trading acknowledged",
+    "t": "Négociation non adossée reconnue"
+  },
+  "admin.alloc.book.unbacked.required": {
+    "en": "This product is held in kind: tick the acknowledgement before opening its book.",
+    "t": "Ce produit est détenu en nature : cochez la reconnaissance avant d'ouvrir son carnet."
+  },
+  "admin.alloc.book.unbacked.warning": {
+    "en": "Buyers pay cash for a claim on an asset held in kind and cannot redeem it — the book is their only exit",
+    "t": "Les acheteurs paient en cash une créance sur un actif détenu en nature et ne peuvent pas la racheter — le carnet est leur seule sortie"
   },
   "admin.alloc.close": {
     "en": "Close",
@@ -275,6 +327,10 @@
     "en": "Yield",
     "t": "Rendement"
   },
+  "admin.alloc.issuance.source.retire": {
+    "en": "retired",
+    "t": "retirées"
+  },
   "admin.alloc.issue.action": {
     "en": "Issue",
     "t": "Émettre"
@@ -370,6 +426,54 @@
   "admin.alloc.issuance.source.mint": {
     "en": "minted",
     "t": "émis"
+  },
+  "admin.alloc.retire.action": {
+    "en": "Retire units",
+    "t": "Retirer des parts"
+  },
+  "admin.alloc.retire.closeFirst": {
+    "en": "Close the product first — units are retired out of a wound-down product.",
+    "t": "Fermez d'abord le produit — les parts se retirent d'un produit en liquidation."
+  },
+  "admin.alloc.retire.confirm": {
+    "en": "Retire {units} units from {holder} — the supply shrinks. No cash moves.",
+    "t": "Retirer {units} parts de {holder} — l'encours diminue. Aucun mouvement de cash."
+  },
+  "admin.alloc.retire.costBasisHint": {
+    "en": "Optional — the book value written off, defaults to units × NAV at the current mark.",
+    "t": "Facultatif — la valeur comptable passée en perte, par défaut parts × VL à la valorisation courante."
+  },
+  "admin.alloc.retire.force": {
+    "en": "Retire anyway (force)",
+    "t": "Retirer quand même (force)"
+  },
+  "admin.alloc.retire.forceConfirm": {
+    "en": "Forced: the product is not closed.",
+    "t": "Forcé : le produit n'est pas fermé."
+  },
+  "admin.alloc.retire.forceWarning": {
+    "en": "The product is still live — units will be burned out of it while it accepts money. The hub records the override.",
+    "t": "Le produit est encore actif — des parts en seront détruites alors qu'il accepte de l'argent. Le hub enregistre le forçage."
+  },
+  "admin.alloc.retire.investorHint": {
+    "en": "Up to what the investor holds — the hub refuses more, and says so.",
+    "t": "Au plus ce que l'investisseur détient — le hub refuse davantage et en donne la raison."
+  },
+  "admin.alloc.retire.resultApplied": {
+    "en": "{units} units retired from {holder}.",
+    "t": "{units} parts retirées de {holder}."
+  },
+  "admin.alloc.retire.resultQueued": {
+    "en": "{units} units from {holder} queued for retirement — the relay posts the burn shortly, and the split below follows.",
+    "t": "{units} parts de {holder} mises en file pour retrait — le relais comptabilise la destruction sous peu, et la répartition ci-dessous suit."
+  },
+  "admin.alloc.retire.review": {
+    "en": "Review retirement",
+    "t": "Vérifier le retrait"
+  },
+  "admin.alloc.retire.submit": {
+    "en": "Retire",
+    "t": "Retirer"
   },
   "admin.alloc.transfer.action": {
     "en": "Transfer company stake",
@@ -1327,6 +1431,38 @@
     "en": "TRC20 · TRON",
     "t": "TRC20 · TRON"
   },
+  "admin.refusal.coolingBody": {
+    "en": "The list of owners changed within the last 48 hours. Payouts resume at {at}. The pause is deliberate: it keeps a change of ownership and a payout as two separate, visible events rather than one motion.",
+    "t": "La liste des propriétaires a changé au cours des 48 dernières heures. Les versements reprennent à {at}. Cette pause est voulue : elle garde un changement de propriétaire et un versement comme deux événements distincts et visibles, plutôt qu'un seul mouvement."
+  },
+  "admin.refusal.coolingBodyNoTime": {
+    "en": "The list of owners changed within the last 48 hours, and payouts stay paused until that period lifts. The pause is deliberate: it keeps a change of ownership and a payout as two separate, visible events rather than one motion.",
+    "t": "La liste des propriétaires a changé au cours des 48 dernières heures, et les versements restent en pause jusqu'à la fin de ce délai. Cette pause est voulue : elle garde un changement de propriétaire et un versement comme deux événements distincts et visibles, plutôt qu'un seul mouvement."
+  },
+  "admin.refusal.coolingTitle": {
+    "en": "Payouts are paused while the roster settles",
+    "t": "Les versements sont en pause tant que la liste des propriétaires se stabilise"
+  },
+  "admin.refusal.floorBody": {
+    "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it.",
+    "t": "Un versement exige l'accord de plus de la moitié des propriétaires, et avec {n, plural, one {# propriétaire} many {# propriétaires} other {# propriétaires}} ce seuil ne peut jamais être atteint. Ajouter des propriétaires le rétablit."
+  },
+  "admin.refusal.floorBodyNoCount": {
+    "en": "A payout needs more than half of the owners to agree, and this fund has too few owners for that bar to be met. Adding owners restores it.",
+    "t": "Un versement exige l'accord de plus de la moitié des propriétaires, et ce fonds en compte trop peu pour que ce seuil soit atteint. Ajouter des propriétaires le rétablit."
+  },
+  "admin.refusal.floorTitle": {
+    "en": "This fund cannot authorise a payout",
+    "t": "Ce fonds ne peut pas autoriser de versement"
+  },
+  "admin.refusal.mailBody": {
+    "en": "Owners receive their approval link by email, and no mailer is wired — so a proposal opened now could never be voted on and would simply expire. This has to be configured before the fund can pay itself out.",
+    "t": "Les propriétaires reçoivent leur lien d'approbation par e-mail, et aucun service d'envoi n'est branché — une proposition ouverte maintenant ne pourrait donc jamais être votée et expirerait simplement. Cela doit être configuré avant que le fonds puisse se verser quoi que ce soit."
+  },
+  "admin.refusal.mailTitle": {
+    "en": "Governance mail is not configured",
+    "t": "L'e-mail de gouvernance n'est pas configuré"
+  },
   "admin.revenue.amountUsdt": {
     "en": "Amount (USDT)",
     "t": "Montant (USDT)"
@@ -1895,6 +2031,14 @@
     "en": "Post valuation",
     "t": "Publier la valorisation"
   },
+  "admin.valuation.postedBody": {
+    "en": "NAV {nav} at {aum} USDT AUM",
+    "t": "VL {nav} pour un AUM de {aum} USDT"
+  },
+  "admin.valuation.postedTitle": {
+    "en": "Marked",
+    "t": "Valorisé"
+  },
   "admin.valuation.propose": {
     "en": "Propose to the owners",
     "t": "Proposer aux propriétaires"
@@ -1995,6 +2139,82 @@
     "en": "Dispatch, settle, or fail withdrawals — investors' and the fund's own payouts",
     "t": "Expédier, régler ou faire échouer les retraits — ceux des investisseurs et les versements du fonds"
   },
+  "approval.amount": {
+    "en": "Amount",
+    "t": "Montant"
+  },
+  "approval.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and no money has moved. Ask whoever opened the request to send a new one.",
+    "t": "Le code a été saisi incorrectement trop de fois : le lien a donc été fermé et chaque propriétaire en a été informé. Rien n'a été approuvé et aucun argent n'a bougé. Demandez à la personne qui a ouvert la demande d'en envoyer une nouvelle."
+  },
+  "approval.burned.title": {
+    "en": "This link has been closed",
+    "t": "Ce lien a été fermé"
+  },
+  "approval.codeHint": {
+    "en": "Ten characters, printed in the message that brought you here. It is what tells us a person opened this, and not an automatic link checker.",
+    "t": "Dix caractères, imprimés dans le message qui vous a conduit ici. C'est ce qui nous indique qu'une personne a ouvert ceci, et non un vérificateur de liens automatique."
+  },
+  "approval.codeLabel": {
+    "en": "Code from your email",
+    "t": "Code reçu par e-mail"
+  },
+  "approval.codePlaceholder": {
+    "en": "e.g. K3M9XR2Q7T",
+    "t": "ex. K3M9XR2Q7T"
+  },
+  "approval.codeWrong": {
+    "en": "That code didn't match. {n, plural, one {# attempt remains} other {# attempts remain}} before this link closes for good.",
+    "t": "Ce code ne correspond pas. {n, plural, one {Il reste # tentative} many {Il reste # tentatives} other {Il reste # tentatives}} avant que ce lien ne se ferme pour de bon."
+  },
+  "approval.decided.body": {
+    "en": "You answered this earlier, and that answer stands. An answer cannot be changed once it is given.",
+    "t": "Vous avez déjà répondu, et cette réponse tient. Une réponse ne peut pas être modifiée une fois donnée."
+  },
+  "approval.decisionLead": {
+    "en": "Both answers need the code from your email. Enter it once, then choose.",
+    "t": "Les deux réponses exigent le code reçu par e-mail. Saisissez-le une fois, puis choisissez."
+  },
+  "approval.decisionTitle": {
+    "en": "Your decision",
+    "t": "Votre décision"
+  },
+  "approval.destination": {
+    "en": "Destination address",
+    "t": "Adresse de destination"
+  },
+  "approval.expired.title": {
+    "en": "The deadline for this request has passed",
+    "t": "Le délai de cette demande est dépassé"
+  },
+  "approval.expiredNote": {
+    "en": "The deadline for this request has passed, so it can no longer be answered. Nothing was decided.",
+    "t": "Le délai de cette demande est dépassé, il n'est donc plus possible d'y répondre. Rien n'a été décidé."
+  },
+  "approval.expires": {
+    "en": "Expires",
+    "t": "Expire"
+  },
+  "approval.expiresValue": {
+    "en": "{at} · {left}",
+    "t": "{at} · {left}"
+  },
+  "approval.expiry.days": {
+    "en": "{n, plural, one {# day left} other {# days left}}",
+    "t": "{n, plural, one {# jour restant} many {# jours restants} other {# jours restants}}"
+  },
+  "approval.expiry.hours": {
+    "en": "{n, plural, one {# hour left} other {# hours left}}",
+    "t": "{n, plural, one {# heure restante} many {# heures restantes} other {# heures restantes}}"
+  },
+  "approval.expiry.minutes": {
+    "en": "{n, plural, one {# minute left} other {# minutes left}}",
+    "t": "{n, plural, one {# minute restante} many {# minutes restantes} other {# minutes restantes}}"
+  },
+  "approval.expiry.passed": {
+    "en": "The deadline has passed",
+    "t": "Le délai est dépassé"
+  },
   "approval.feePolicy.approve": {
     "en": "Approve this change",
     "t": "Approuver ce changement"
@@ -2030,6 +2250,50 @@
   "approval.feePolicy.title": {
     "en": "Approve a change of fee terms",
     "t": "Approuver un changement des conditions de frais"
+  },
+  "approval.footnote": {
+    "en": "This link was made for you alone. It works once, expires 72 hours after it was sent, and should not be forwarded.",
+    "t": "Ce lien a été créé pour vous seul. Il fonctionne une fois, expire 72 heures après son envoi et ne doit pas être transféré."
+  },
+  "approval.gone.body": {
+    "en": "Approval links work once and expire after 72 hours. This one may have been used already, run out of time, or been closed — which of those it was cannot be told from here. Ask whoever opened the request to send a new one.",
+    "t": "Les liens d'approbation fonctionnent une fois et expirent après 72 heures. Celui-ci a peut-être déjà été utilisé, a expiré ou a été fermé — impossible de dire lequel d'ici. Demandez à la personne qui a ouvert la demande d'en envoyer une nouvelle."
+  },
+  "approval.gone.title": {
+    "en": "This link can no longer be used",
+    "t": "Ce lien ne peut plus être utilisé"
+  },
+  "approval.loadFailed": {
+    "en": "We couldn't load this request",
+    "t": "Impossible de charger cette demande"
+  },
+  "approval.loadFailedHint": {
+    "en": "The link itself may be perfectly fine — this looks like a problem reaching us. Try again in a moment.",
+    "t": "Le lien lui-même est peut-être parfaitement valide — cela ressemble à un problème pour nous joindre. Réessayez dans un instant."
+  },
+  "approval.memo": {
+    "en": "Memo",
+    "t": "Mémo"
+  },
+  "approval.network": {
+    "en": "Network",
+    "t": "Réseau"
+  },
+  "approval.openedAt": {
+    "en": "Opened",
+    "t": "Ouverte le"
+  },
+  "approval.openedBy": {
+    "en": "Opened by",
+    "t": "Ouverte par"
+  },
+  "approval.payloadHash": {
+    "en": "Request fingerprint",
+    "t": "Empreinte de la demande"
+  },
+  "approval.payloadHashHint": {
+    "en": "The fingerprint is taken over the amount, the address, the network and the memo above. It is checked again before any money moves, so a request cannot be edited after you have agreed to it.",
+    "t": "L'empreinte est calculée sur le montant, l'adresse, le réseau et le mémo ci-dessus. Elle est vérifiée à nouveau avant tout mouvement d'argent, si bien qu'une demande ne peut pas être modifiée après votre accord."
   },
   "approval.payment.approve": {
     "en": "Approve this payment",
@@ -2099,6 +2363,106 @@
     "en": "Approve a fund payout",
     "t": "Approuver un versement du fonds"
   },
+  "approval.reject": {
+    "en": "Reject",
+    "t": "Rejeter"
+  },
+  "approval.removal.about": {
+    "en": "About",
+    "t": "Concerne"
+  },
+  "approval.removal.accept": {
+    "en": "Accept and give up my seat",
+    "t": "Accepter et céder mon siège"
+  },
+  "approval.removal.accepted.body": {
+    "en": "You accepted this earlier. Your ownership has ended.",
+    "t": "Vous avez accepté plus tôt. Votre propriété a pris fin."
+  },
+  "approval.removal.accepted.freshBody": {
+    "en": "Your ownership has ended and the other owners have been told. Nothing else about your account has changed.",
+    "t": "Votre propriété a pris fin et les autres propriétaires en ont été informés. Rien d'autre n'a changé sur votre compte."
+  },
+  "approval.removal.accepted.title": {
+    "en": "You gave up your seat",
+    "t": "Vous avez cédé votre siège"
+  },
+  "approval.removal.confirmAction": {
+    "en": "Give up my seat",
+    "t": "Céder mon siège"
+  },
+  "approval.removal.confirmBody": {
+    "en": "Your owner seat ends immediately and cannot be restored from here. You would need the remaining owners to make you an owner again. Nothing else about your account changes.",
+    "t": "Votre siège de propriétaire prend fin immédiatement et ne peut pas être rétabli d'ici. Il faudrait que les propriétaires restants vous nomment de nouveau propriétaire. Rien d'autre ne change sur votre compte."
+  },
+  "approval.removal.confirmTitle": {
+    "en": "This ends your ownership",
+    "t": "Ceci met fin à votre propriété"
+  },
+  "approval.removal.decisionLead": {
+    "en": "You can accept this or refuse it, and either answer needs the code from your email. Refusing does not end the matter: the other owners can still decide it between them, and that takes all of them agreeing.",
+    "t": "Vous pouvez accepter ou refuser, et chaque réponse exige le code reçu par e-mail. Refuser ne clôt pas l'affaire : les autres propriétaires peuvent encore en décider entre eux, et cela exige l'accord de chacun d'eux."
+  },
+  "approval.removal.decisionTitle": {
+    "en": "Your answer",
+    "t": "Votre réponse"
+  },
+  "approval.removal.irreversible": {
+    "en": "Accepting is final. Your ownership ends as soon as it is recorded, and it cannot be undone from this page or any other.",
+    "t": "Accepter est définitif. Votre propriété prend fin dès l'enregistrement, et cela ne peut être annulé ni depuis cette page ni depuis aucune autre."
+  },
+  "approval.removal.lead": {
+    "en": "{initiator} has proposed that you stop being an owner of the fund. You have a say in it, and there is a deadline.",
+    "t": "{initiator} a proposé que vous cessiez d'être propriétaire du fonds. Vous avez votre mot à dire, et il y a un délai."
+  },
+  "approval.removal.noReason": {
+    "en": "No reason was given.",
+    "t": "Aucune raison n'a été donnée."
+  },
+  "approval.removal.proposedBy": {
+    "en": "Proposed by",
+    "t": "Proposé par"
+  },
+  "approval.removal.reasonLabel": {
+    "en": "Reason given",
+    "t": "Raison donnée"
+  },
+  "approval.removal.refuse": {
+    "en": "Refuse — keep my seat",
+    "t": "Refuser — garder mon siège"
+  },
+  "approval.removal.refused.body": {
+    "en": "Your answer has been recorded. You keep your seat unless every other eligible owner agrees to end it, and you will be told either way.",
+    "t": "Votre réponse a été enregistrée. Vous gardez votre siège à moins que chaque autre propriétaire habilité n'accepte d'y mettre fin, et vous serez informé dans les deux cas."
+  },
+  "approval.removal.refused.title": {
+    "en": "You refused this",
+    "t": "Vous avez refusé"
+  },
+  "approval.removal.title": {
+    "en": "A request to end your ownership",
+    "t": "Une demande de mettre fin à votre propriété"
+  },
+  "approval.tally": {
+    "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}} so far",
+    "t": "{approvals} sur {threshold, plural, one {# approbation} many {# approbations} other {# approbations}} pour l'instant"
+  },
+  "approval.tallyHint": {
+    "en": "More than half of the owners must approve before any money moves. You are one of them.",
+    "t": "Plus de la moitié des propriétaires doivent approuver avant tout mouvement d'argent. Vous en faites partie."
+  },
+  "approval.tallyOwners": {
+    "en": "{owners, plural, one {# owner} other {# owners}} in total",
+    "t": "{owners, plural, one {# propriétaire} many {# propriétaires} other {# propriétaires}} au total"
+  },
+  "approval.unavailableBody": {
+    "en": "The terms of this payout didn't arrive, so there is nothing here to agree to and no decision is offered. This is a problem on our side, not with your link. Try again in a moment.",
+    "t": "Les conditions de ce versement ne sont pas arrivées, il n'y a donc rien ici à approuver et aucune décision n'est proposée. Le problème vient de chez nous, pas de votre lien. Réessayez dans un instant."
+  },
+  "approval.unavailableTitle": {
+    "en": "We can't show this request",
+    "t": "Impossible d'afficher cette demande"
+  },
   "approval.valuation.approve": {
     "en": "Approve this mark",
     "t": "Approuver cette valorisation"
@@ -2138,6 +2502,10 @@
   "approval.valuation.title": {
     "en": "Approve a NAV mark",
     "t": "Approuver une valorisation de VL"
+  },
+  "approval.votingAs": {
+    "en": "You are answering as {email}.",
+    "t": "Vous répondez en tant que {email}."
   },
   "auth.brandBlurb": {
     "en": "Institutional-grade access to vetted coastal real-estate and infrastructure funds — managed end to end.",
@@ -2275,9 +2643,157 @@
     "en": "Whose money",
     "t": "À qui est l'argent"
   },
+  "consilium.admission.cancel": {
+    "en": "Withdraw this proposal",
+    "t": "Retirer cette proposition"
+  },
+  "consilium.admission.expires": {
+    "en": "Expires {at} · {left}",
+    "t": "Expire {at} · {left}"
+  },
+  "consilium.admission.heading": {
+    "en": "Admit {candidate}",
+    "t": "Admettre {candidate}"
+  },
+  "consilium.admission.noPeers": {
+    "en": "There is no owner left to agree, so this admission can no longer pass. Unlike a removal, it has no second route.",
+    "t": "Il ne reste aucun propriétaire pour donner son accord, cette admission ne peut donc plus passer. Contrairement à une révocation, elle n'a pas de seconde voie."
+  },
+  "consilium.admission.noReason": {
+    "en": "No reason was given.",
+    "t": "Aucune raison n'a été donnée."
+  },
+  "consilium.admission.notAVoter": {
+    "en": "The owners who may vote were fixed when this was proposed, and you were not among them. An owner seated since cannot be added to that set — otherwise new owners could be created to carry a vote.",
+    "t": "Les propriétaires habilités à voter ont été fixés au moment de la proposition, et vous n'en faisiez pas partie. Un propriétaire admis depuis ne peut pas être ajouté à cet ensemble — sinon on pourrait créer de nouveaux propriétaires pour emporter un vote."
+  },
+  "consilium.admission.oneRejectEnds": {
+    "en": "One refusal ends an admission — this one can no longer pass.",
+    "t": "Un seul refus met fin à une admission — celle-ci ne peut plus passer."
+  },
+  "consilium.admission.openedBy": {
+    "en": "Proposed by {initiator} · {at}",
+    "t": "Proposé par {initiator} · {at}"
+  },
+  "consilium.admission.peerTally": {
+    "en": "{admitted} of {total} owners have agreed",
+    "t": "{admitted} propriétaires sur {total} ont donné leur accord"
+  },
+  "consilium.admission.reason": {
+    "en": "Reason",
+    "t": "Raison"
+  },
+  "consilium.admission.unanimityNote": {
+    "en": "All of them must agree",
+    "t": "Tous doivent donner leur accord"
+  },
+  "consilium.admission.voteAdmit": {
+    "en": "Admit as an owner",
+    "t": "Admettre comme propriétaire"
+  },
+  "consilium.admission.voteReject": {
+    "en": "Refuse",
+    "t": "Refuser"
+  },
+  "consilium.admission.youAreCandidate": {
+    "en": "This admission is about your own seat, so you take no part in deciding it.",
+    "t": "Cette admission concerne votre propre siège, vous ne prenez donc aucune part à la décision."
+  },
+  "consilium.admission.youOpened": {
+    "en": "You proposed admitting {candidate}, so you have no vote on it — the bar you have to clear is every other owner agreeing, and opening a proposal must not be a way to lower it.",
+    "t": "Vous avez proposé d'admettre {candidate}, vous n'avez donc pas de vote — le seuil à franchir est l'accord de chaque autre propriétaire, et ouvrir une proposition ne doit pas être un moyen de l'abaisser."
+  },
+  "consilium.admission.youVoted": {
+    "en": "You answered: {vote}.",
+    "t": "Vous avez répondu : {vote}."
+  },
+  "consilium.admissionVote.admit": {
+    "en": "Admit",
+    "t": "Admettre"
+  },
+  "consilium.admissionVote.reject": {
+    "en": "Refuse",
+    "t": "Refuser"
+  },
+  "consilium.admissions.emptyBody": {
+    "en": "No admission is open. Proposing one is what starts it, and every other owner then has to agree.",
+    "t": "Aucune admission n'est ouverte. C'est une proposition qui la lance, et chaque autre propriétaire doit ensuite donner son accord."
+  },
+  "consilium.admissions.emptyTitle": {
+    "en": "Nobody is being admitted",
+    "t": "Personne n'est en cours d'admission"
+  },
+  "consilium.admissions.failedBody": {
+    "en": "Until it loads, the page cannot say whether anyone is being let into the fund, so it says nothing rather than guessing at it. The rest of the page is unaffected.",
+    "t": "Tant que cela n'est pas chargé, la page ne peut pas dire si quelqu'un est en train d'entrer dans le fonds, elle ne dit donc rien plutôt que de le deviner. Le reste de la page n'est pas affecté."
+  },
+  "consilium.admissions.failedTitle": {
+    "en": "Admissions did not load",
+    "t": "Les admissions ne se sont pas chargées"
+  },
+  "consilium.admissions.sub": {
+    "en": "Granting a seat is the only way to become an owner, and it is decided here.",
+    "t": "Accorder un siège est la seule façon de devenir propriétaire, et cela se décide ici."
+  },
+  "consilium.admissions.title": {
+    "en": "Admissions",
+    "t": "Admissions"
+  },
+  "consilium.admit.candidateHint": {
+    "en": "A candidate is not an owner yet, so the roster cannot list them. Their user ID is on their row in Users.",
+    "t": "Un candidat n'est pas encore propriétaire, la liste des propriétaires ne peut donc pas le mentionner. Son identifiant utilisateur figure sur sa ligne dans Utilisateurs."
+  },
+  "consilium.admit.candidateLabel": {
+    "en": "Account",
+    "t": "Compte"
+  },
+  "consilium.admit.candidatePlaceholder": {
+    "en": "User ID",
+    "t": "Identifiant utilisateur"
+  },
   "consilium.admit.genesis": {
     "en": "This fund has {n, plural, =0 {no seated owners} one {# seated owner} other {# seated owners}}. An admission needs at least one owner besides whoever proposes it, so it cannot seat the founders: they are written by the service itself at start-up, from the genesis list, and only while the register is empty. That boot closes the window for good, and from then on this form is the only way in.",
     "t": "Ce fonds compte {n, plural, =0 {aucun propriétaire siégeant} one {# propriétaire siégeant} many {# propriétaires siégeants} other {# propriétaires siégeants}}. Une admission exige au moins un propriétaire autre que celui qui la propose : elle ne peut donc pas installer les fondateurs. Ceux-là sont inscrits par le service lui-même au démarrage, depuis la liste de genèse, et seulement tant que le registre est vide. Ce démarrage referme la fenêtre pour de bon, et ce formulaire devient la seule voie d'entrée."
+  },
+  "consilium.admit.opened": {
+    "en": "Proposed. Every other owner has been asked to answer.",
+    "t": "Proposé. Chaque autre propriétaire a été invité à répondre."
+  },
+  "consilium.admit.reasonHint": {
+    "en": "Every owner reads this before answering, in these words.",
+    "t": "Chaque propriétaire lit ceci avant de répondre, dans ces mots exacts."
+  },
+  "consilium.admit.reasonLabel": {
+    "en": "Reason",
+    "t": "Raison"
+  },
+  "consilium.admit.reasonPlaceholder": {
+    "en": "Why this person should hold a seat",
+    "t": "Pourquoi cette personne devrait occuper un siège"
+  },
+  "consilium.admit.sub": {
+    "en": "The only way a seat is granted. Every other owner has to agree.",
+    "t": "La seule façon d'accorder un siège. Chaque autre propriétaire doit donner son accord."
+  },
+  "consilium.admit.submit": {
+    "en": "Propose admission",
+    "t": "Proposer l'admission"
+  },
+  "consilium.admit.title": {
+    "en": "Admit an owner",
+    "t": "Admettre un propriétaire"
+  },
+  "consilium.admit.unanimityWarning": {
+    "en": "An admission passes only if every owner except you agrees, and there has to be at least one of them. This is stricter than a removal: a majority is not enough, and a single refusal ends it. A minority must never be able to grow itself into a majority.",
+    "t": "Une admission ne passe que si chaque propriétaire sauf vous donne son accord, et il doit y en avoir au moins un. C'est plus strict qu'une révocation : une majorité ne suffit pas, et un seul refus y met fin. Une minorité ne doit jamais pouvoir se transformer elle-même en majorité."
+  },
+  "consilium.admit.unknownBody": {
+    "en": "Without it the page cannot say how many owners would have to agree, so it is not offering the form rather than offering one it cannot explain.",
+    "t": "Sans elle, la page ne peut pas dire combien de propriétaires devraient donner leur accord ; elle ne propose donc pas le formulaire plutôt que d'en proposer un qu'elle ne peut pas expliquer."
+  },
+  "consilium.admit.unknownTitle": {
+    "en": "The owner list did not load",
+    "t": "La liste des propriétaires ne s'est pas chargée"
   },
   "consilium.feePolicy.asSoonAsAllowed": {
     "en": "As soon as allowed — 24 hours after the owners carry it, while anyone holds units",
@@ -2323,6 +2839,22 @@
     "en": "Reason given",
     "t": "Motif donné"
   },
+  "consilium.floor.body": {
+    "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can no longer be cleared. Adding owners restores it.",
+    "t": "Un versement exige l'accord de plus de la moitié des propriétaires, et avec {n, plural, one {# propriétaire} many {# propriétaires} other {# propriétaires}} ce seuil ne peut plus être franchi. Ajouter des propriétaires le rétablit."
+  },
+  "consilium.floor.title": {
+    "en": "The fund cannot authorise a payout",
+    "t": "Le fonds ne peut pas autoriser de versement"
+  },
+  "consilium.forbidden.body": {
+    "en": "Only owners can see and take part in what is decided here. If that should include you, ask an existing owner.",
+    "t": "Seuls les propriétaires peuvent voir et prendre part à ce qui se décide ici. Si cela devrait vous inclure, demandez à un propriétaire actuel."
+  },
+  "consilium.forbidden.title": {
+    "en": "This room is for the fund's owners",
+    "t": "Cette salle est réservée aux propriétaires du fonds"
+  },
   "consilium.kind.fee_policy": {
     "en": "Fee terms",
     "t": "Conditions de frais"
@@ -2355,6 +2887,18 @@
     "en": "To",
     "t": "Vers"
   },
+  "consilium.payout.cancel": {
+    "en": "Cancel this request",
+    "t": "Annuler cette demande"
+  },
+  "consilium.payout.cancelConfirm": {
+    "en": "Cancel and void the votes",
+    "t": "Annuler et invalider les votes"
+  },
+  "consilium.payout.cancelWarning": {
+    "en": "Cancelling voids every approval collected so far. Votes are not carried over if the request is reopened, so the owners who have already answered would each have to answer again.",
+    "t": "L'annulation invalide chaque approbation recueillie jusqu'ici. Les votes ne sont pas reportés si la demande est rouverte : les propriétaires qui ont déjà répondu devraient donc chacun répondre à nouveau."
+  },
   "consilium.payout.emptyAction": {
     "en": "Go to payments",
     "t": "Aller aux paiements"
@@ -2367,13 +2911,365 @@
     "en": "No request is open",
     "t": "Aucune demande ouverte"
   },
+  "consilium.payout.expires": {
+    "en": "Expires {at} · {left}",
+    "t": "Expire {at} · {left}"
+  },
+  "consilium.payout.failedBody": {
+    "en": "Until it loads, the page cannot tell you whether a payout is open and waiting on the other owners — so do not read this as there being none. The rest of the page is unaffected.",
+    "t": "Tant que cela n'est pas chargé, la page ne peut pas vous dire si un versement est ouvert et attend les autres propriétaires — n'en concluez donc pas qu'il n'y en a aucun. Le reste de la page n'est pas affecté."
+  },
+  "consilium.payout.failedTitle": {
+    "en": "Fund payouts did not load",
+    "t": "Les versements du fonds ne se sont pas chargés"
+  },
+  "consilium.payout.fingerprint": {
+    "en": "Fingerprint · {hash}",
+    "t": "Empreinte · {hash}"
+  },
+  "consilium.payout.network": {
+    "en": "Network · {network}",
+    "t": "Réseau · {network}"
+  },
+  "consilium.payout.openedBy": {
+    "en": "Opened by {initiator}",
+    "t": "Ouverte par {initiator}"
+  },
+  "consilium.payout.owners": {
+    "en": "{n, plural, one {# owner} other {# owners}}",
+    "t": "{n, plural, one {# propriétaire} many {# propriétaires} other {# propriétaires}}"
+  },
+  "consilium.payout.past": {
+    "en": "Earlier requests",
+    "t": "Demandes antérieures"
+  },
   "consilium.payout.sub": {
     "en": "Moving money the fund owns — a revenue payout or a payment order — marking a fund past the NAV-move guard, and changing what a product charges. One request at a time, and never one person's decision.",
     "t": "Déplacer l'argent du fonds — un versement de revenus ou un ordre de paiement —, valoriser un fonds au-delà du garde-fou de variation de VL et changer ce qu'un produit prélève. Une demande à la fois, et jamais la décision d'une seule personne."
   },
+  "consilium.payout.tally": {
+    "en": "{approvals} of {threshold, plural, one {# approval} other {# approvals}}",
+    "t": "{approvals} sur {threshold, plural, one {# approbation} many {# approbations} other {# approbations}}"
+  },
   "consilium.payout.title": {
     "en": "Fund payouts and payments",
     "t": "Versements et paiements du fonds"
+  },
+  "consilium.payout.voteByEmail": {
+    "en": "Owners answer from the link emailed to them, not from this page — the code in that message is what makes an answer deliberate.",
+    "t": "Les propriétaires répondent depuis le lien qui leur est envoyé par e-mail, pas depuis cette page — c'est le code contenu dans ce message qui rend une réponse délibérée."
+  },
+  "consilium.proposalKind.admin_admission": {
+    "en": "Admin seat",
+    "t": "Siège d'admin"
+  },
+  "consilium.proposalKind.reinstatement": {
+    "en": "Letting back in",
+    "t": "Réadmission"
+  },
+  "consilium.proposalKind.suspension": {
+    "en": "Permanent block",
+    "t": "Blocage définitif"
+  },
+  "consilium.proposalVerb.admin_admission.against": {
+    "en": "Refuse",
+    "t": "Refuser"
+  },
+  "consilium.proposalVerb.admin_admission.for": {
+    "en": "Grant admin",
+    "t": "Accorder l'admin"
+  },
+  "consilium.proposalVerb.reinstatement.against": {
+    "en": "Keep blocked",
+    "t": "Maintenir le blocage"
+  },
+  "consilium.proposalVerb.reinstatement.for": {
+    "en": "Let back in",
+    "t": "Réadmettre"
+  },
+  "consilium.proposalVerb.suspension.against": {
+    "en": "Do not block",
+    "t": "Ne pas bloquer"
+  },
+  "consilium.proposalVerb.suspension.for": {
+    "en": "Block permanently",
+    "t": "Bloquer définitivement"
+  },
+  "consilium.proposalVote.against": {
+    "en": "Against",
+    "t": "Contre"
+  },
+  "consilium.proposalVote.for": {
+    "en": "For",
+    "t": "Pour"
+  },
+  "consilium.proposals.bystander": {
+    "en": "You were not seated when this opened, so you are not among its voters.",
+    "t": "Vous n'aviez pas de siège à l'ouverture, vous ne faites donc pas partie de ses votants."
+  },
+  "consilium.proposals.emptyBody": {
+    "en": "A hold an operator wants made permanent, a block to undo, or an admin seat to grant would appear here for you to vote on. Operators open these from the user console.",
+    "t": "Un blocage qu'un opérateur veut rendre définitif, un blocage à lever ou un siège d'admin à accorder apparaîtraient ici pour votre vote. Les opérateurs les ouvrent depuis la console des utilisateurs."
+  },
+  "consilium.proposals.emptyTitle": {
+    "en": "Nobody's standing is in question",
+    "t": "La situation de personne n'est en question"
+  },
+  "consilium.proposals.expires": {
+    "en": "Closes {at} · {left}",
+    "t": "Se clôt {at} · {left}"
+  },
+  "consilium.proposals.failedBody": {
+    "en": "Until they do, this page cannot say whether anyone's standing is being decided — including a 24-hour hold that lapses if nobody ratifies it.",
+    "t": "Tant qu'elles ne sont pas chargées, cette page ne peut pas dire si la situation de quelqu'un est en cours de décision — y compris un blocage de 24 heures qui s'éteint si personne ne le ratifie."
+  },
+  "consilium.proposals.failedTitle": {
+    "en": "The people proposals did not load",
+    "t": "Les propositions concernant les personnes ne se sont pas chargées"
+  },
+  "consilium.proposals.majorityNote": {
+    "en": "A simple majority of the owners who were seated when this opened carries it. The bar was frozen then and does not move with the roster.",
+    "t": "Une majorité simple des propriétaires qui avaient un siège à l'ouverture l'emporte. Le seuil a été figé à ce moment-là et ne suit pas la liste des propriétaires."
+  },
+  "consilium.proposals.openedBy": {
+    "en": "Opened by {initiator} on {at}",
+    "t": "Ouverte par {initiator} le {at}"
+  },
+  "consilium.proposals.sub": {
+    "en": "What the owners are deciding about one person's standing — a permanent block, letting someone back in, or the admin seat.",
+    "t": "Ce que les propriétaires décident de la situation d'une personne — un blocage définitif, une réadmission ou le siège d'admin."
+  },
+  "consilium.proposals.subject": {
+    "en": "Subject",
+    "t": "Personne concernée"
+  },
+  "consilium.proposals.tally": {
+    "en": "{n} of {threshold} needed",
+    "t": "{n} sur {threshold} requis"
+  },
+  "consilium.proposals.tallyDetail": {
+    "en": "{against} against · {waiting} yet to answer",
+    "t": "{against} contre · {waiting} sans réponse"
+  },
+  "consilium.proposals.title": {
+    "en": "People",
+    "t": "Personnes"
+  },
+  "consilium.proposals.unreachable": {
+    "en": "Enough owners have voted against that the threshold can no longer be reached.",
+    "t": "Assez de propriétaires ont voté contre pour que le seuil ne puisse plus être atteint."
+  },
+  "consilium.proposals.withdraw": {
+    "en": "Withdraw",
+    "t": "Retirer"
+  },
+  "consilium.proposals.youAreSubject": {
+    "en": "This is about you. You are not among its voters.",
+    "t": "Ceci vous concerne. Vous ne faites pas partie de ses votants."
+  },
+  "consilium.proposals.youInitiated": {
+    "en": "You opened this. The initiator does not vote — proposing is not agreeing.",
+    "t": "Vous avez ouvert ceci. L'initiateur ne vote pas — proposer n'est pas approuver."
+  },
+  "consilium.proposals.youVoted": {
+    "en": "You voted {vote}.",
+    "t": "Vous avez voté {vote}."
+  },
+  "consilium.propose.floorWarning": {
+    "en": "A fund needs at least three owners to authorise a payout, so a removal that would leave fewer than three is refused.",
+    "t": "Un fonds a besoin d'au moins trois propriétaires pour autoriser un versement ; une révocation qui en laisserait moins de trois est donc refusée."
+  },
+  "consilium.propose.noneBody": {
+    "en": "You are the only owner listed. A removal is always about someone else — to stand down yourself, use Stand down as an owner.",
+    "t": "Vous êtes le seul propriétaire listé. Une révocation concerne toujours quelqu'un d'autre — pour vous retirer vous-même, utilisez Se retirer comme propriétaire."
+  },
+  "consilium.propose.noneTitle": {
+    "en": "There is nobody to propose",
+    "t": "Il n'y a personne à proposer"
+  },
+  "consilium.propose.opened": {
+    "en": "Proposed. Everyone who can vote has been emailed, and so has the person it concerns.",
+    "t": "Proposé. Toutes les personnes qui peuvent voter ont reçu un e-mail, ainsi que la personne concernée."
+  },
+  "consilium.propose.reasonHint": {
+    "en": "This is emailed to them, in these words, and stays on the record. Write it as though they are reading it, because they are.",
+    "t": "Ceci lui est envoyé par e-mail, dans ces mots exacts, et reste au dossier. Écrivez-le comme si la personne le lisait, car c'est le cas."
+  },
+  "consilium.propose.reasonLabel": {
+    "en": "Reason",
+    "t": "Raison"
+  },
+  "consilium.propose.reasonPlaceholder": {
+    "en": "Why this seat should end",
+    "t": "Pourquoi ce siège devrait prendre fin"
+  },
+  "consilium.propose.sub": {
+    "en": "Ends someone's ownership if it carries. They are told at once, in your words.",
+    "t": "Met fin à la propriété de quelqu'un si elle l'emporte. La personne en est informée aussitôt, dans vos mots."
+  },
+  "consilium.propose.submit": {
+    "en": "Propose removal",
+    "t": "Proposer la révocation"
+  },
+  "consilium.propose.targetLabel": {
+    "en": "Owner",
+    "t": "Propriétaire"
+  },
+  "consilium.propose.targetPlaceholder": {
+    "en": "Choose an owner",
+    "t": "Choisir un propriétaire"
+  },
+  "consilium.propose.title": {
+    "en": "Propose a removal",
+    "t": "Proposer une révocation"
+  },
+  "consilium.propose.unknownBody": {
+    "en": "Proposing a removal means choosing an owner, and the owner list did not load — so the page does not know who could be proposed, or whether there is anyone here but you. Load it and this form comes back.",
+    "t": "Proposer une révocation suppose de choisir un propriétaire, et la liste des propriétaires ne s'est pas chargée — la page ne sait donc pas qui pourrait être proposé, ni s'il y a ici quelqu'un d'autre que vous. Chargez-la et ce formulaire revient."
+  },
+  "consilium.propose.unknownTitle": {
+    "en": "This cannot be offered right now",
+    "t": "Ceci ne peut pas être proposé pour le moment"
+  },
+  "consilium.removal.cancel": {
+    "en": "Withdraw this proposal",
+    "t": "Retirer cette proposition"
+  },
+  "consilium.removal.expires": {
+    "en": "Expires {at} · {left}",
+    "t": "Expire {at} · {left}"
+  },
+  "consilium.removal.heading": {
+    "en": "Removing {target}",
+    "t": "Révocation de {target}"
+  },
+  "consilium.removal.noPeers": {
+    "en": "With this few owners there is nobody eligible to vote, so this can only carry if the person it concerns accepts it themselves. That is deliberate: otherwise either of two owners could remove the other unopposed.",
+    "t": "Avec si peu de propriétaires, personne n'est habilité à voter ; ceci ne peut donc l'emporter que si la personne concernée l'accepte elle-même. C'est voulu : sinon l'un de deux propriétaires pourrait révoquer l'autre sans opposition."
+  },
+  "consilium.removal.noReason": {
+    "en": "No reason was given.",
+    "t": "Aucune raison n'a été donnée."
+  },
+  "consilium.removal.notAVoter": {
+    "en": "The owners who may vote on this were fixed when it was opened, so it is not yours to answer. That is what stops new owners being added to reach a result. Nothing is hidden from you — everything about it is on this page.",
+    "t": "Les propriétaires habilités à voter ont été fixés à l'ouverture, ce n'est donc pas à vous de répondre. C'est ce qui empêche d'ajouter de nouveaux propriétaires pour obtenir un résultat. Rien ne vous est caché — tout ce qui la concerne est sur cette page."
+  },
+  "consilium.removal.openedBy": {
+    "en": "Opened by {initiator} on {at}",
+    "t": "Ouverte par {initiator} le {at}"
+  },
+  "consilium.removal.peerTally": {
+    "en": "{removed} of {total, plural, one {# owner} other {# owners}} voted to remove",
+    "t": "{removed} sur {total, plural, one {# propriétaire} many {# propriétaires} other {# propriétaires}} ont voté la révocation"
+  },
+  "consilium.removal.reason": {
+    "en": "Reason given",
+    "t": "Raison donnée"
+  },
+  "consilium.removal.targetAccepted": {
+    "en": "{target} accepted this on {at}.",
+    "t": "{target} a accepté le {at}."
+  },
+  "consilium.removal.targetNotYetTold": {
+    "en": "{target} has not been notified yet.",
+    "t": "{target} n'a pas encore été notifié."
+  },
+  "consilium.removal.targetPending": {
+    "en": "{target} has been emailed and has not answered yet.",
+    "t": "{target} a reçu un e-mail et n'a pas encore répondu."
+  },
+  "consilium.removal.targetRefused": {
+    "en": "{target} has refused this.",
+    "t": "{target} a refusé."
+  },
+  "consilium.removal.unanimityNote": {
+    "en": "All of them must agree",
+    "t": "Tous doivent donner leur accord"
+  },
+  "consilium.removal.voteKeep": {
+    "en": "Keep the seat",
+    "t": "Garder le siège"
+  },
+  "consilium.removal.voteRemove": {
+    "en": "Vote to remove",
+    "t": "Voter la révocation"
+  },
+  "consilium.removal.youAreTarget": {
+    "en": "This is about your seat. Your answer is not given here — it is in the message sent to your own mailbox, so it stays yours alone to give.",
+    "t": "Ceci concerne votre siège. Votre réponse ne se donne pas ici — elle se trouve dans le message envoyé à votre propre boîte de réception, afin qu'elle reste la vôtre seule."
+  },
+  "consilium.removal.youOpened": {
+    "en": "You opened this, so you have no vote on removing {target}. You are still counted in the number it has to clear: if opening a request took you out of that count, opening one would be a way to lower the bar.",
+    "t": "Vous avez ouvert ceci, vous n'avez donc pas de vote sur la révocation de {target}. Vous comptez toujours dans le nombre à atteindre : si ouvrir une demande vous retirait de ce compte, en ouvrir une serait un moyen d'abaisser le seuil."
+  },
+  "consilium.removal.youVoted": {
+    "en": "You voted: {vote}. A vote cannot be changed once it is cast.",
+    "t": "Vous avez voté : {vote}. Un vote ne peut pas être modifié une fois exprimé."
+  },
+  "consilium.removals.emptyBody": {
+    "en": "No removal has been proposed. If one is, it appears here with every vote on it, and the person it concerns is told at the same time as everyone else.",
+    "t": "Aucune révocation n'a été proposée. S'il y en a une, elle apparaît ici avec chaque vote qui la concerne, et la personne visée est informée en même temps que tout le monde."
+  },
+  "consilium.removals.emptyTitle": {
+    "en": "Nothing is being decided",
+    "t": "Rien n'est en cours de décision"
+  },
+  "consilium.removals.failedBody": {
+    "en": "Until it loads, the page cannot tell you whether anyone's ownership is being decided right now — so do not read this as nothing being underway. The rest of the page is unaffected.",
+    "t": "Tant que cela n'est pas chargé, la page ne peut pas vous dire si la propriété de quelqu'un est en cours de décision — n'en concluez donc pas que rien n'est en cours. Le reste de la page n'est pas affecté."
+  },
+  "consilium.removals.failedTitle": {
+    "en": "Owner removals did not load",
+    "t": "Les révocations de propriétaires ne se sont pas chargées"
+  },
+  "consilium.removals.sub": {
+    "en": "Proposals to end someone's ownership.",
+    "t": "Propositions de mettre fin à la propriété de quelqu'un."
+  },
+  "consilium.removals.title": {
+    "en": "Owner removals",
+    "t": "Révocations de propriétaires"
+  },
+  "consilium.resign.confirm": {
+    "en": "Stand down as an owner",
+    "t": "Se retirer comme propriétaire"
+  },
+  "consilium.resign.confirmLabel": {
+    "en": "Type {email} to confirm",
+    "t": "Saisissez {email} pour confirmer"
+  },
+  "consilium.resign.done": {
+    "en": "You are no longer an owner.",
+    "t": "Vous n'êtes plus propriétaire."
+  },
+  "consilium.resign.floorWarning": {
+    "en": "A fund needs at least three owners to authorise a payout. If standing down would leave fewer than three, it is refused.",
+    "t": "Un fonds a besoin d'au moins trois propriétaires pour autoriser un versement. Si votre retrait en laissait moins de trois, il est refusé."
+  },
+  "consilium.resign.start": {
+    "en": "Stand down",
+    "t": "Se retirer"
+  },
+  "consilium.resign.sub": {
+    "en": "Give up your own seat. Nobody has to agree to let you leave.",
+    "t": "Cédez votre propre siège. Personne n'a à donner son accord pour vous laisser partir."
+  },
+  "consilium.resign.title": {
+    "en": "Stand down as an owner",
+    "t": "Se retirer comme propriétaire"
+  },
+  "consilium.resign.unavailable": {
+    "en": "We couldn't load your account, so this can't be confirmed right now. Reload the page and try again.",
+    "t": "Impossible de charger votre compte, ceci ne peut donc pas être confirmé pour le moment. Rechargez la page et réessayez."
+  },
+  "consilium.resign.warning": {
+    "en": "Your ownership ends as soon as this is recorded. You would need the remaining owners to make you an owner again. Nothing else about your account changes.",
+    "t": "Votre propriété prend fin dès l'enregistrement. Il faudrait que les propriétaires restants vous nomment de nouveau propriétaire. Rien d'autre ne change sur votre compte."
+  },
+  "consilium.roster.count": {
+    "en": "{n, plural, one {# owner} other {# owners}}",
+    "t": "{n, plural, one {# propriétaire} many {# propriétaires} other {# propriétaires}}"
   },
   "consilium.roster.emptyBody": {
     "en": "Genesis has not run yet. At start-up the service seats everyone on the OWNER_SUBJECTS list who already has an account — but only if at least two of them resolve. A sole owner could never admit the second, so seating one is refused outright rather than left as a dead end.",
@@ -2382,6 +3278,106 @@
   "consilium.roster.emptyNext": {
     "en": "Add the missing people to OWNER_SUBJECTS, have each of them sign in once so the account exists, and restart the service. Until the first seat is written, the operators on that list are working under emergency access — temporary by construction: the first successful seeding closes it permanently, and from then on a seat is only ever granted by a consilium of the existing owners.",
     "t": "Ajoutez les personnes manquantes à OWNER_SUBJECTS, faites-les se connecter une fois chacune pour que le compte existe, puis redémarrez le service. Tant que le premier siège n'est pas inscrit, les opérateurs de cette liste agissent en accès d'urgence — temporaire par construction : le premier amorçage réussi le referme définitivement, et dès lors un siège n'est accordé que par un consilium des propriétaires en exercice."
+  },
+  "consilium.roster.emptyTitle": {
+    "en": "No owner holds a seat yet",
+    "t": "Aucun propriétaire n'occupe encore de siège"
+  },
+  "consilium.roster.failedBody": {
+    "en": "Until it loads, the page cannot say who owns this fund or how many owners it has, so it says nothing rather than guessing at it. The rest of the page is unaffected.",
+    "t": "Tant qu'elle n'est pas chargée, la page ne peut pas dire à qui appartient ce fonds ni combien de propriétaires il compte, elle ne dit donc rien plutôt que de le deviner. Le reste de la page n'est pas affecté."
+  },
+  "consilium.roster.failedTitle": {
+    "en": "The owner list did not load",
+    "t": "La liste des propriétaires ne s'est pas chargée"
+  },
+  "consilium.roster.since": {
+    "en": "Owner since {at}",
+    "t": "Propriétaire depuis {at}"
+  },
+  "consilium.roster.title": {
+    "en": "Owners",
+    "t": "Propriétaires"
+  },
+  "consilium.roster.you": {
+    "en": "(you)",
+    "t": "(vous)"
+  },
+  "consilium.state.approved": {
+    "en": "Approved",
+    "t": "Approuvée"
+  },
+  "consilium.state.cancelled": {
+    "en": "Cancelled",
+    "t": "Annulée"
+  },
+  "consilium.state.executed": {
+    "en": "Paid out",
+    "t": "Versée"
+  },
+  "consilium.state.executionfailed": {
+    "en": "Payout failed",
+    "t": "Versement échoué"
+  },
+  "consilium.state.expired": {
+    "en": "Expired",
+    "t": "Expirée"
+  },
+  "consilium.state.failed": {
+    "en": "Failed",
+    "t": "Échouée"
+  },
+  "consilium.state.kept": {
+    "en": "Seat kept",
+    "t": "Siège conservé"
+  },
+  "consilium.state.open": {
+    "en": "Open",
+    "t": "Ouverte"
+  },
+  "consilium.state.pending": {
+    "en": "Pending",
+    "t": "En attente"
+  },
+  "consilium.state.rejected": {
+    "en": "Rejected",
+    "t": "Rejetée"
+  },
+  "consilium.state.removed": {
+    "en": "Removed",
+    "t": "Révoqué"
+  },
+  "consilium.state.void": {
+    "en": "Void",
+    "t": "Nulle"
+  },
+  "consilium.stream.live": {
+    "en": "Live",
+    "t": "En direct"
+  },
+  "consilium.stream.paused": {
+    "en": "Paused",
+    "t": "En pause"
+  },
+  "consilium.stream.reconnecting": {
+    "en": "Reconnecting",
+    "t": "Reconnexion"
+  },
+  "consilium.sub": {
+    "en": "The owners' room — who the owners are, and what is being decided.",
+    "t": "La salle des propriétaires — qui sont les propriétaires, et ce qui est en cours de décision."
+  },
+  "consilium.title": {
+    "en": "Consilium",
+    "t": "Consilium"
+  },
+  "consilium.unavailable.body": {
+    "en": "Every one of the reads this room is built from failed, so the page cannot show who owns the fund, what is being decided, or where any vote stands. Nothing here should be trusted until it loads. Try again — and if it keeps failing, this data is unreachable rather than empty, which is worth raising.",
+    "t": "Chacune des lectures dont cette salle est constituée a échoué : la page ne peut donc montrer ni à qui appartient le fonds, ni ce qui se décide, ni où en est un vote. Rien ici ne doit être tenu pour fiable tant que ce n'est pas chargé. Réessayez — et si cela continue d'échouer, ces données sont inaccessibles plutôt que vides, ce qui mérite d'être signalé."
+  },
+  "consilium.unavailable.title": {
+    "en": "The owners' room could not be loaded",
+    "t": "La salle des propriétaires n'a pas pu être chargée"
   },
   "consilium.valuation.executes": {
     "en": "If it passes, the fund is marked at this AUM whatever the NAV-move guard would have said, and its queued redemptions settle at the NAV that follows.",
@@ -2394,6 +3390,18 @@
   "consilium.valuation.product": {
     "en": "Product",
     "t": "Produit"
+  },
+  "consilium.vote.keep": {
+    "en": "To keep",
+    "t": "Pour garder"
+  },
+  "consilium.vote.remove": {
+    "en": "To remove",
+    "t": "Pour révoquer"
+  },
+  "consilium.vote.waiting": {
+    "en": "Not answered",
+    "t": "Sans réponse"
   },
   "dash.activeStrategies": {
     "en": "Active strategies",
@@ -2707,6 +3715,14 @@
     "en": "Awaiting settlement",
     "t": "En attente de règlement"
   },
+  "invest.backing.inKind": {
+    "en": "In kind",
+    "t": "En nature"
+  },
+  "invest.backing.inKindNote": {
+    "en": "Units of this product represent an asset held off-platform. The fund holds no cash for them, so they are sold on the book rather than redeemed.",
+    "t": "Les parts de ce produit représentent un actif détenu hors plateforme. Le fonds ne détient pas de cash pour elles : elles se vendent sur le carnet au lieu d'être rachetées."
+  },
   "invest.badge.locked": {
     "en": "Locked",
     "t": "Verrouillé"
@@ -2899,6 +3915,10 @@
     "en": "Your units are reserved the moment you submit, but the cash is priced when the redemption settles — not now. A figure shown here is an estimate at today's NAV.",
     "t": "Vos parts sont réservées dès la soumission, mais le montant en cash est fixé au règlement du rachat, pas maintenant. Tout chiffre affiché ici est une estimation à la VL du jour."
   },
+  "invest.redeemUnbacked": {
+    "en": "Units of this product are not backed by fund cash — sell them on the book instead of redeeming.",
+    "t": "Les parts de ce produit ne sont pas adossées à la trésorerie du fonds — vendez-les sur le carnet au lieu de les racheter."
+  },
   "invest.remainingCapacity": {
     "en": "Remaining capacity",
     "t": "Capacité restante"
@@ -3018,6 +4038,10 @@
   "nav.cabinet": {
     "en": "Cabinet",
     "t": "Mon espace"
+  },
+  "nav.consilium": {
+    "en": "Consilium",
+    "t": "Consilium"
   },
   "nav.fees": {
     "en": "Fees",
@@ -5014,6 +6038,10 @@
   "trade.ticker.volume": {
     "en": "24h volume",
     "t": "Volume 24 h"
+  },
+  "trade.unbackedNotice": {
+    "en": "Units of this product are a claim on an off-platform asset and cannot be redeemed for fund cash — the book is the only exit.",
+    "t": "Les parts de ce produit sont une créance sur un actif hors plateforme et ne peuvent pas être rachetées contre le cash du fonds — le carnet est la seule sortie."
   },
   "ui.account": {
     "en": "Account",

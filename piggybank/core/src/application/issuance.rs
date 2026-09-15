@@ -14,9 +14,17 @@
 //!
 //! [`transfer_company_stake`] is the way back out of `CompanyShares`: the same record
 //! and the same gates, minus the cap (supply does not move) and plus a Read-First on
-//! what the company actually holds.
+//! what the company actually holds. [`retire_units`] is the mint's mirror — a holder's
+//! units burnt with no cash leg — with a Read-First on what the holder has free and a
+//! closed-door gate that `force` overrides.
+//!
+//! A mint also flips the product's backing to `in_kind` (see
+//! [`AllocationBacking`](domain::allocations::AllocationBacking)): the units it creates
+//! have no cash in the fund's claim, so the redeem path has to know before the first
+//! holder asks to be paid out of it.
 
 use domain::{
+	allocations::{AllocationBacking, AllocationState},
 	balance::{LedgerAccountKey, ServiceId},
 	error::DomainError,
 	issuance::{IdempotencyKey, IssuanceSource, UnitHolder, UnitIssuance, UnitIssuanceId},
@@ -57,6 +65,17 @@ pub struct TransferCompanyStakeRequest {
 	pub idempotency_key: IdempotencyKey,
 }
 
+/// One retirement as the operator asked for it. `cost_basis: None` records `units × NAV`
+/// as the book value written off; `force` burns out of a product that is not `closed`.
+pub struct RetireUnitsRequest {
+	pub service: ServiceId,
+	pub holder: UnitHolder,
+	pub units: Shares,
+	pub cost_basis: Option<Usdt>,
+	pub idempotency_key: IdempotencyKey,
+	pub force: bool,
+}
+
 /// A fund's issued supply broken down by who holds it. `investor_units` is derived
 /// (`outstanding − company − fee`) rather than summed over holders: the ledger keeps
 /// one account per investor and reading them all to answer a three-line summary would
@@ -91,6 +110,15 @@ pub struct UnitHoldersView {
 /// ([`Allocation::ensure_capacity`](domain::allocations::Allocation::ensure_capacity)),
 /// with the same issuance-gate-not-invariant caveats as a subscription. An operator
 /// sizing a product below what they mean to issue raises the cap first.
+///
+/// Once every gate has passed and before the row is written, a `cash` product is marked
+/// `in_kind`: its units are about to include some the fund holds no cash for, and the
+/// redeem gate must see that before a holder asks to be paid. Idempotent, so the second
+/// mint on the same product touches nothing. The order is deliberate: if the flip lands
+/// and the record then fails, the product is `in_kind` with no mint behind it — an
+/// operator undoes that with one command, and nothing was at risk in between. The
+/// reverse (a mint recorded on a product still `cash`) would let the next redemption
+/// price units the fund cannot pay for, which is the failure this flag exists to stop.
 pub async fn issue_units(
 	ports: &FundPorts<'_>,
 	issuances: &dyn UnitIssuanceRepository,
@@ -123,6 +151,9 @@ pub async fn issue_units(
 		request.cost_basis,
 		request.idempotency_key.clone(),
 	)?;
+	if allocation.backing() == AllocationBacking::Cash {
+		ports.allocations.set_backing(&request.service, AllocationBacking::InKind).await?;
+	}
 	record(ports, issuances, issuance, &identity).await
 }
 
@@ -176,6 +207,72 @@ pub async fn transfer_company_stake(
 		UnitIssuanceId::new(),
 		request.service.clone(),
 		request.user,
+		request.units,
+		price,
+		request.cost_basis,
+		request.idempotency_key.clone(),
+	)?;
+	record(ports, issuances, issuance, &identity).await
+}
+
+/// Burn `request.units` of `request.service` out of `request.holder`'s account: `Dr
+/// SharesOutstanding / Cr <holder shares>` by the relay, supply shrinking by exactly
+/// that, no cash moving — the mirror of [`issue_units`], for units that should never
+/// have been minted or that stand for an asset the holder no longer owns.
+///
+/// Same record, same key contract as the other two (a repeat with the same holder and
+/// units returns the row; the same key for a different request, a mint included, is a
+/// [`DomainError::Conflict`]). Gates, in order: the key is read first; the allocation
+/// must be registered and — unless `force` — `closed` ([`DomainError::Precondition`]
+/// otherwise: burning a holder's units out of a live product is a decision that
+/// deserves a closed door first, and `force` is the operator saying so explicitly); a
+/// user holder must exist; the NAV must be fresh (recorded on the row, and the default
+/// basis is `units × NAV`); and the holder must have at least `units` **available** on
+/// the ledger (Read-First; a shortfall is a [`DomainError::Validation`]) — units
+/// resting on the book or reserved by a redemption are spoken for and stay. No cap
+/// check: supply only shrinks. The holder's account is debit-normal with the
+/// non-negative flag, so an over-retire that races the read parks.
+pub async fn retire_units(
+	ports: &FundPorts<'_>,
+	issuances: &dyn UnitIssuanceRepository,
+	users: &dyn UserRepository,
+	request: RetireUnitsRequest,
+	now_unix: i64,
+) -> Result<UnitIssuanceRecord, DomainError> {
+	let identity = RequestIdentity {
+		service: &request.service,
+		holder: request.holder,
+		source: IssuanceSource::Retire,
+		units: request.units,
+		idempotency_key: &request.idempotency_key,
+	};
+	if let Some(existing) = issuances.find_by_key(&request.service, &request.idempotency_key).await? {
+		return identity.same_request_or_conflict(existing);
+	}
+	let allocation = allocations_app::get(ports.allocations, &request.service).await?;
+	if allocation.state() != AllocationState::Closed && !request.force {
+		return Err(DomainError::Precondition(format!(
+			"allocation '{}' is open — close it before retiring units, or set force to retire on a live product",
+			request.service
+		)));
+	}
+	if let UnitHolder::User(user) = request.holder {
+		require_user(users, user).await?;
+	}
+	let price = funds_app::dealing_nav(ports.nav, &request.service, now_unix).await?;
+	let held = Shares::from_base_units(ports.ledger.balance(&request.holder.shares_key(&request.service)).await?.available());
+	if held < request.units {
+		return Err(DomainError::Validation(format!(
+			"holder holds {} available units of '{}' (units resting on the book or reserved by a redemption cannot be retired), cannot retire {}",
+			held.to_decimal_string(),
+			request.service,
+			request.units.to_decimal_string()
+		)));
+	}
+	let issuance = UnitIssuance::retire(
+		UnitIssuanceId::new(),
+		request.service.clone(),
+		request.holder,
 		request.units,
 		price,
 		request.cost_basis,

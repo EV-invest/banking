@@ -137,23 +137,36 @@ bound is the plane's five-attempt token burn.
 
 An operator's supply surface for one product, over `AllocationsService`. Units cross as
 decimal strings; every `POST` needs the admin session plus CSRF and forwards the banking
-money token. `UnitIssuance` is one shape for both writes — `source` says whether the row
-grew the supply (`mint`) or moved units out of the company's stake (`company`, supply
-unchanged); `state` is `queued` until the hub's relay posts the leg, then `applied`.
+money token. `UnitIssuance` is one shape for the three writes — `source` says whether
+the row grew the supply (`mint`), moved units out of the company's stake (`company`,
+supply unchanged) or burnt them (`retire`, supply shrank); `units` is always the
+magnitude. `state` is `queued` until the hub's relay posts the leg, then `applied`.
 
 | Route | Query / body | Answer | Gates |
 | ----- | ------------ | ------ | ----- |
 | `GET /api/admin/allocations/holders` | `service` | `UnitHolders` — `units_outstanding`, `company_units`, `fee_units`, `investor_units`, `queued_units` (mints not yet posted — do not pin the cap while non-zero) | admin |
 | `POST /api/admin/allocations/issue` | `{ service, units, idempotency_key, cost_basis?, user_id \| company: true }` | `UnitIssuance` (`source: "mint"`) | admin + CSRF |
 | `POST /api/admin/allocations/transfer-stake` | `{ service, user_id, units, idempotency_key, cost_basis? }` | `UnitIssuance` (`source: "company"`, `holder_kind: "user"`) | admin + CSRF |
+| `POST /api/admin/allocations/retire` | `{ service, units, idempotency_key, cost_basis?, force?, user_id \| company: true }` | `UnitIssuance` (`source: "retire"`, positive `units`) | admin + CSRF |
+| `POST /api/admin/allocations/backing` | `{ service, backing }` — `cash \| in_kind` | `Allocation` | admin + CSRF |
 
 `idempotency_key` (1..64 chars) is the retry contract, one key space per product across
-both writes: the console generates one per form submission and re-sends the same one on a
-timeout, so a double click lands one row. A repeat of the same request answers the row
-as it stands (`200`); the same key for a different request — a mint and then a hand-over
-included — is `409`. `cost_basis` absent or empty defaults hub-side to `units × NAV` at
-the dealing mark. A hand-over of more than the company holds, or a mint past the unit
-cap, is `400`; an unknown `service` or `user_id` is `404`.
+the three writes: the console generates one per form submission and re-sends the same
+one on a timeout, so a double click lands one row. A repeat of the same request answers
+the row as it stands (`200`); the same key for a different request — a mint and then a
+hand-over included — is `409`. `cost_basis` absent or empty defaults hub-side to
+`units × NAV` at the dealing mark. A hand-over of more than the company holds, a mint
+past the unit cap, or a retirement of more than the holder has AVAILABLE (units resting
+on the book or reserved by a redemption do not count) is `400`; an unknown `service` or
+`user_id` is `404`. A retirement out of a product that is not `closed` is `412` unless
+the body carries `force: true`.
+
+`Allocation.backing` (`cash` | `in_kind`) says what stands behind the units. The hub
+flips a product to `in_kind` on its first mint; `/allocations/backing` is how an operator
+says the fund now holds cash for the units — or corrects a product back. While a product
+is `in_kind`, `POST /api/funds/redeem` on it is `412` with the hub's reason (holders exit
+through the book instead); the client draws the redeem control off `backing`, never off
+`state` alone.
 
 ## Run
 
