@@ -4791,6 +4791,26 @@
     "en": "Contact {contact}",
     "t": "Liên hệ {contact}"
   },
+  "profile.kyc.caseTitle": {
+    "en": "Verification in progress",
+    "t": "Đang xác minh"
+  },
+  "profile.kyc.casePill": {
+    "en": "In review",
+    "t": "Đang duyệt"
+  },
+  "profile.kyc.caseResumeSub": {
+    "en": "You've already started — pick up where you left off",
+    "t": "Bạn đã bắt đầu — hãy tiếp tục từ chỗ đang dở"
+  },
+  "profile.kyc.caseReviewSub": {
+    "en": "Your documents are with our reviewers — we'll email you the decision",
+    "t": "Hồ sơ của bạn đang được xét duyệt — chúng tôi sẽ gửi kết quả qua email"
+  },
+  "profile.kyc.continue": {
+    "en": "Continue",
+    "t": "Tiếp tục"
+  },
   "profile.kyc.start": {
     "en": "Start",
     "t": "Bắt đầu"

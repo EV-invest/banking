@@ -4791,6 +4791,26 @@
     "en": "Contact {contact}",
     "t": "Написать на {contact}"
   },
+  "profile.kyc.caseTitle": {
+    "en": "Verification in progress",
+    "t": "Проверка идёт"
+  },
+  "profile.kyc.casePill": {
+    "en": "In review",
+    "t": "На проверке"
+  },
+  "profile.kyc.caseResumeSub": {
+    "en": "You've already started — pick up where you left off",
+    "t": "Вы уже начали — продолжите с того же места"
+  },
+  "profile.kyc.caseReviewSub": {
+    "en": "Your documents are with our reviewers — we'll email you the decision",
+    "t": "Документы у проверяющих — решение пришлём на почту"
+  },
+  "profile.kyc.continue": {
+    "en": "Continue",
+    "t": "Продолжить"
+  },
   "profile.kyc.start": {
     "en": "Start",
     "t": "Начать"
