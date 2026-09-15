@@ -15,10 +15,11 @@ import { Alert, AlertDescription, Badge, Button, Card, CardContent } from "@evin
 
 import { cancelFeePolicyChange } from "@/entities/admin/api/admin-client";
 import type { FeePolicyChange } from "@/shared/contracts/admin";
-import { errorMessage } from "@/shared/lib/api-client";
+import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { cn } from "@/shared/lib/cn";
 import { formatMoment } from "@/shared/lib/datetime";
+import { stripTransportPrefix } from "@/shared/lib/hub-refusal";
 import { revalidateTag } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { changeStateLabel, changeStateTone, termsSummary } from "@/views/admin/fees/lib/format";
@@ -55,7 +56,12 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
       setConfirming(false);
       onCancelled();
     } catch (e) {
-      setProblem(errorMessage(e, t));
+      // A 409 — "the change is active", a colleague cancelled it first — says this card is
+      // about a change that no longer is what it shows. The same reread that answers a
+      // success brings in what it became (banking#326): the card goes, the history row
+      // turns. The sentence is shown meanwhile, without the BFF's variant prefix on it.
+      if (e instanceof RequestError && e.status === 409) revalidateTag(TAG.adminFees);
+      setProblem(stripTransportPrefix(errorMessage(e, t)));
     } finally {
       setBusy(false);
     }

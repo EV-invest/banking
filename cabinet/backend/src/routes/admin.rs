@@ -336,8 +336,9 @@ pub async fn record_treasury_deposit(State(st): State<AppState>, jar: CookieJar,
 pub async fn list_fee_policies(State(st): State<AppState>, jar: CookieJar) -> Result<Json<dto::FeePolicyList>, ApiError> {
 	require_fee_admin(&st, &jar).await?;
 	let token = require_money_token(&st, &jar).await?;
-	let list = st.grpc.fee_policies(&token).await.map_err(|s| ApiError::read(s, "fee policies unavailable"))?;
-	Ok(Json(list.into()))
+	let mut list: dto::FeePolicyList = st.grpc.fee_policies(&token).await.map_err(|s| ApiError::read(s, "fee policies unavailable"))?.into();
+	name_notice_waivers(&st, &jar, list.policies.iter_mut().filter_map(|policy| policy.pending.as_mut())).await?;
+	Ok(Json(list))
 }
 
 /// `POST /api/admin/fees/policy` — propose a change of a fund's terms.
@@ -399,8 +400,9 @@ pub async fn cancel_fee_policy_change(State(st): State<AppState>, jar: CookieJar
 		return Err(ApiError::BadRequest("service and change_id are required".into()));
 	};
 	let token = require_money_token(&st, &jar).await?;
-	let change = st.grpc.cancel_fee_policy_change(&token, &service, &change_id).await?;
-	Ok(Json(change.into()))
+	let mut change: dto::FeePolicyChange = st.grpc.cancel_fee_policy_change(&token, &service, &change_id).await?.into();
+	name_notice_waivers(&st, &jar, std::iter::once(&mut change)).await?;
+	Ok(Json(change))
 }
 
 /// `POST /api/admin/fees/policy/acknowledge-notices` — take responsibility for the holders
@@ -416,8 +418,9 @@ pub async fn acknowledge_undelivered_notices(State(st): State<AppState>, jar: Co
 		return Err(ApiError::BadRequest("service and change_id are required".into()));
 	};
 	let token = require_money_token(&st, &jar).await?;
-	let change = st.grpc.acknowledge_undelivered_notices(&token, &service, &change_id).await?;
-	Ok(Json(change.into()))
+	let mut change: dto::FeePolicyChange = st.grpc.acknowledge_undelivered_notices(&token, &service, &change_id).await?.into();
+	name_notice_waivers(&st, &jar, std::iter::once(&mut change)).await?;
+	Ok(Json(change))
 }
 
 /// `GET /api/admin/fees/changes?service=` — a fund's whole history of terms, newest first.
@@ -427,12 +430,14 @@ pub async fn list_fee_policy_changes(State(st): State<AppState>, jar: CookieJar,
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
 	let token = require_money_token(&st, &jar).await?;
-	let list = st
+	let mut list: dto::FeePolicyChangeList = st
 		.grpc
 		.fee_policy_changes(&token, &service)
 		.await
-		.map_err(|s| ApiError::read(s, "fee policy history unavailable"))?;
-	Ok(Json(list.into()))
+		.map_err(|s| ApiError::read(s, "fee policy history unavailable"))?
+		.into();
+	name_notice_waivers(&st, &jar, list.changes.iter_mut()).await?;
+	Ok(Json(list))
 }
 
 /// `GET /api/admin/fees/shares?service=` — uncollected fee units in one fund, and their value.
@@ -678,20 +683,12 @@ pub async fn set_allocation_backing(State(st): State<AppState>, jar: CookieJar, 
 /// directory cannot name — a banking-only mirror, a lapsed account, an outage — lists
 /// with `email: null` rather than hiding a grant that stands (banking#252).
 pub async fn list_allocation_access_grants(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::AllocationAccessGrantList>, ApiError> {
-	use std::sync::Arc;
-
-	use tokio::{sync::Semaphore, task::JoinSet};
-
-	/// A product's grant list is short, but the bound is what keeps one console page
-	/// from turning into a burst against the identity plane if it ever is not.
-	const LOOKUPS_IN_FLIGHT: usize = 8;
-
 	require_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
 	let money_token = require_money_token(&st, &jar).await?;
-	let identity_token: Arc<str> = require_token(&st, &jar).await?.into();
+	let identity_token = require_token(&st, &jar).await?;
 	let mut list: dto::AllocationAccessGrantList = st
 		.grpc
 		.list_allocation_access_grants(&money_token, &service)
@@ -699,14 +696,38 @@ pub async fn list_allocation_access_grants(State(st): State<AppState>, jar: Cook
 		.map_err(|s| ApiError::read(s, "allocation access grants unavailable"))?
 		.into();
 
+	let ids: Vec<String> = list.grants.iter().map(|grant| grant.user_id.clone()).collect();
+	for (grant, email) in list.grants.iter_mut().zip(lookup_emails(&st, &identity_token, ids).await) {
+		grant.email = email;
+	}
+	Ok(Json(list))
+}
+
+/// How the identity plane names each of `ids`, in the same order — one `GetUser` per id,
+/// fanned out under a small bound, with the concierge token (`GetUser` is an identity RPC;
+/// the money token stays on the hub call). Best-effort by design: an id the directory
+/// cannot name — a banking-only mirror, a lapsed account, an outage — answers `None`, so
+/// the caller lists what stands rather than hiding it or failing the page.
+async fn lookup_emails(st: &AppState, identity_token: &str, ids: Vec<String>) -> Vec<Option<String>> {
+	use std::sync::Arc;
+
+	use tokio::{sync::Semaphore, task::JoinSet};
+
+	/// A console page names a handful of people, but the bound is what keeps one page
+	/// from turning into a burst against the identity plane if it ever does not.
+	const LOOKUPS_IN_FLIGHT: usize = 8;
+
+	let identity_token: Arc<str> = identity_token.into();
+	let mut emails: Vec<Option<String>> = vec![None; ids.len()];
+
 	// The permit is taken BEFORE the spawn and moved into the task, so the loop itself
 	// blocks at the bound; the `JoinSet` aborts whatever is still in flight if the
 	// caller goes away mid-page.
 	let lookups = Arc::new(Semaphore::new(LOOKUPS_IN_FLIGHT));
 	let mut set = JoinSet::new();
-	for (index, grant) in list.grants.iter().enumerate() {
+	for (index, user_id) in ids.iter().cloned().enumerate() {
 		let permit = lookups.clone().acquire_owned().await.expect("the lookup semaphore is never closed");
-		let (grpc, token, user_id) = (st.grpc.clone(), identity_token.clone(), grant.user_id.clone());
+		let (grpc, token) = (st.grpc.clone(), identity_token.clone());
 		set.spawn(async move {
 			let looked_up = grpc.admin_get_user(&token, &user_id).await;
 			drop(permit);
@@ -715,14 +736,39 @@ pub async fn list_allocation_access_grants(State(st): State<AppState>, jar: Cook
 	}
 	while let Some(joined) = set.join_next().await {
 		match joined {
-			Ok((index, Ok(profile))) => list.grants[index].email = Some(profile.email).filter(|email| !email.is_empty()),
+			Ok((index, Ok(profile))) => emails[index] = Some(profile.email).filter(|email| !email.is_empty()),
 			Ok((index, Err(status))) => {
-				tracing::debug!(code = ?status.code(), user_id = %list.grants[index].user_id, "grant holder not resolvable in the directory; listing without email");
+				tracing::debug!(code = ?status.code(), user_id = %ids[index], "user not resolvable in the directory; listing without email");
 			}
-			Err(join) => tracing::warn!(error = %join, "a grant email lookup task ended abnormally; listing without email"),
+			Err(join) => tracing::warn!(error = %join, "an email lookup task ended abnormally; listing without email"),
 		}
 	}
-	Ok(Json(list))
+	emails
+}
+
+/// Names on the identity plane whoever acknowledged each change's undelivered notices.
+///
+/// `notices_waived_by` is the banking user id the hub recorded, and the console showed it
+/// raw — "Notices waived by 78670fa7-…" (banking#328). Same best-effort lookup as the
+/// grants list, one `GetUser` per distinct id: a waiver the directory cannot name keeps
+/// `notices_waived_by_email: null`, and a directory outage never fails the page. Changes
+/// nobody has acknowledged are skipped, so a history with no waivers costs no lookup.
+async fn name_notice_waivers<'a>(st: &AppState, jar: &CookieJar, changes: impl IntoIterator<Item = &'a mut dto::FeePolicyChange>) -> Result<(), ApiError> {
+	use std::collections::HashMap;
+
+	let waived: Vec<&mut dto::FeePolicyChange> = changes.into_iter().filter(|change| change.notices_waived_by.is_some()).collect();
+	if waived.is_empty() {
+		return Ok(());
+	}
+	let identity_token = require_token(st, jar).await?;
+	let mut ids: Vec<String> = waived.iter().filter_map(|change| change.notices_waived_by.clone()).collect();
+	ids.sort_unstable();
+	ids.dedup();
+	let emails: HashMap<String, Option<String>> = ids.clone().into_iter().zip(lookup_emails(st, &identity_token, ids).await).collect();
+	for change in waived {
+		change.notices_waived_by_email = change.notices_waived_by.as_ref().and_then(|id| emails.get(id).cloned().flatten());
+	}
+	Ok(())
 }
 
 /// `POST /api/admin/allocations/grants/grant` — raise one investor to `view` | `invest`
@@ -1565,7 +1611,12 @@ mod admin_route_tests {
 					updated_at: 1_750_000_000,
 					version: 1,
 					effective_from: 1_750_000_000,
-					pending: Some(stub_change(CHANGE_ID, "scheduled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, "")),
+					pending: Some(bk::FeePolicyChange {
+						notices_waived_by: KNOWN_INVESTOR.into(),
+						notices_waived_at: 1_750_050_000,
+						notices_waived_users: vec![UNTOLD_HOLDER.into()],
+						..stub_change(CHANGE_ID, "scheduled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, "")
+					}),
 				}],
 			}))
 		}
@@ -1618,11 +1669,21 @@ mod admin_route_tests {
 			self.guard_money_plane(&request)?;
 			Ok(GrpcResponse::new(bk::FeePolicyChangeList {
 				changes: vec![
-					stub_change(CHANGE_ID, "scheduled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, ""),
+					// Acknowledged by the one person the directory can name…
+					bk::FeePolicyChange {
+						notices_waived_by: KNOWN_INVESTOR.into(),
+						notices_waived_at: 1_750_050_000,
+						notices_waived_users: vec![UNTOLD_HOLDER.into()],
+						..stub_change(CHANGE_ID, "scheduled", 250, 2_000, 500, "invested_capital", "annual", 1_750_100_000, "")
+					},
+					// …and, back then, by one it cannot.
 					bk::FeePolicyChange {
 						version: 1,
 						state: "active".into(),
 						applied_at: 1_750_000_000,
+						notices_waived_by: UNMIRRORED_INVESTOR.into(),
+						notices_waived_at: 1_749_950_000,
+						notices_waived_users: vec![UNTOLD_HOLDER.into()],
 						..stub_change("0d5f3b7e-7d3c-4a58-9b2d-2c9f0c9f1e01", "active", 200, 2_000, 500, "invested_capital", "annual", 1_750_000_000, "")
 					},
 				],
@@ -2278,6 +2339,10 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::OK);
 		assert_eq!(response["state"], "scheduled");
 		assert_eq!(response["notices_waived_by"], "user-1");
+		assert!(
+			response["notices_waived_by_email"].is_null(),
+			"a waiver the directory cannot name still reads back, without an email: {response}"
+		);
 		assert_eq!(response["notices_waived_at"], "1750050000");
 		assert_eq!(response["notices_waived_users"], serde_json::json!([UNTOLD_HOLDER]));
 		assert_eq!(response["undelivered_notices"], 1);
@@ -2314,6 +2379,45 @@ mod admin_route_tests {
 		assert_eq!(policy["effective_from"], "1750000000");
 		assert_eq!(policy["pending"]["id"], CHANGE_ID);
 		assert_eq!(policy["pending"]["state"], "scheduled");
+	}
+
+	/// The pending card and the history showed the acknowledger of undelivered notices as
+	/// a raw id — "Notices waived by 78670fa7-…" (banking#328). The email comes from the
+	/// identity plane beside the id, on every surface that carries a change; a waiver the
+	/// directory cannot name keeps `notices_waived_by_email: null`, never a dropped row or a
+	/// failed page, and a change nobody acknowledged asks the directory for nothing.
+	#[tokio::test]
+	async fn a_notice_waiver_is_named_by_email_when_the_directory_can() {
+		let app = app(serve(Hub::new("admin")).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/changes?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+		let changes = body["changes"].as_array().expect("a list of changes");
+		assert_eq!(changes.len(), 2, "an unresolvable waiver must not drop the change out of the history");
+		assert_eq!(changes[0]["notices_waived_by"], KNOWN_INVESTOR);
+		assert_eq!(changes[0]["notices_waived_by_email"], KNOWN_INVESTOR_EMAIL);
+		assert_eq!(changes[1]["notices_waived_by"], UNMIRRORED_INVESTOR);
+		assert!(
+			changes[1]["notices_waived_by_email"].is_null(),
+			"an id the directory cannot name has no email to show, not a made-up one: {}",
+			changes[1]
+		);
+		assert!(
+			changes[1].get("notices_waived_by_email").is_some(),
+			"the key is present so the client can tell 'unknown' from 'not asked'"
+		);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/fees/policies", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+		let pending = &body["policies"][0]["pending"];
+		assert_eq!(pending["notices_waived_by"], KNOWN_INVESTOR);
+		assert_eq!(pending["notices_waived_by_email"], KNOWN_INVESTOR_EMAIL, "the pending card names the person too: {pending}");
+
+		let body = format!(r#"{{"service":"quy-nhon","change_id":"{CHANGE_ID}"}}"#);
+		let (status, response) = send(&app, signed("POST", "/api/admin/fees/policy/cancel", Some(&body), true)).await;
+		assert_eq!(status, StatusCode::OK);
+		assert!(response["notices_waived_by"].is_null());
+		assert!(response["notices_waived_by_email"].is_null(), "no waiver, no name: {response}");
 	}
 
 	/// A fee schedule is read as a whole, so the write is all-or-nothing rather than a

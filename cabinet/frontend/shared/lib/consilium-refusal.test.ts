@@ -78,6 +78,21 @@ test("the owner floor classifies the same whichever kind of consilium was refuse
   }
 });
 
+test("the transport prefix and the status the BFF wraps a refusal in change nothing", () => {
+  // `DomainError`'s Display puts "validation failed: " / "conflict: " in front of the hub's
+  // sentence, and the fee-policy form meets the owner floor as a 400 where the payments
+  // form met it as a 409 (banking#323). The condition is read out of the prose either way.
+  class BadRequest extends Error {
+    status = 400;
+  }
+  assert.deepEqual(classifyConsiliumRefusal(new BadRequest(`validation failed: ${TOO_FEW_FEE_POLICY}`)), { kind: "too-few-owners", ownerCount: 2 });
+  assert.deepEqual(
+    classifyConsiliumRefusal(new WireError("conflict: the owner roster changed less than 48h ago; a fee-policy consilium cannot be opened until the cooling-off period lifts in 47h 59m")),
+    { kind: "cooling-off", hours: 47, minutes: 59 },
+  );
+  assert.deepEqual(classifyConsiliumRefusal(new WireError(`conflict: ${MAIL}`)), { kind: "mail-not-configured" });
+});
+
 test("anything else is left to the caller's existing error handling", () => {
   // Failing safe matters more than matching widely: an unrecognised message falls through
   // to the backend's own prose, which is what the screen showed before this existed.

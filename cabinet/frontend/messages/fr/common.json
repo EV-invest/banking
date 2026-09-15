@@ -1535,6 +1535,34 @@
     "en": "Payouts are paused while the roster settles",
     "t": "Les versements sont en pause tant que la liste des propriétaires se stabilise"
   },
+  "admin.refusal.feePolicy.coolingBody": {
+    "en": "The list of owners changed within the last 48 hours. The owners can be asked again at {at}. The pause is deliberate: it keeps a change of ownership and a change of terms as two separate, visible events rather than one motion.",
+    "t": "La liste des propriétaires a changé au cours des 48 dernières heures. Les propriétaires pourront être sollicités à nouveau à {at}. Cette pause est voulue : elle garde un changement de propriétaire et un changement de conditions comme deux événements distincts et visibles, plutôt qu'un seul mouvement."
+  },
+  "admin.refusal.feePolicy.coolingBodyNoTime": {
+    "en": "The list of owners changed within the last 48 hours, and changes of terms stay paused until that period lifts. The pause is deliberate: it keeps a change of ownership and a change of terms as two separate, visible events rather than one motion.",
+    "t": "La liste des propriétaires a changé au cours des 48 dernières heures, et les changements de conditions restent suspendus jusqu'à la fin de cette période. Cette pause est voulue : elle garde un changement de propriétaire et un changement de conditions comme deux événements distincts et visibles, plutôt qu'un seul mouvement."
+  },
+  "admin.refusal.feePolicy.coolingTitle": {
+    "en": "Changes of terms are paused while the roster settles",
+    "t": "Les changements de conditions sont suspendus le temps que la liste des propriétaires se stabilise"
+  },
+  "admin.refusal.feePolicy.floorBody": {
+    "en": "Tightening the terms beyond the house envelope needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it; a change within the envelope needs no vote.",
+    "t": "Durcir les conditions au-delà de l'enveloppe maison exige l'accord de plus de la moitié des propriétaires, et avec {n, plural, one {# propriétaire} many {# propriétaires} other {# propriétaires}} ce seuil ne peut jamais être atteint. Ajouter des propriétaires le rétablit ; un changement dans l'enveloppe ne demande aucun vote."
+  },
+  "admin.refusal.feePolicy.floorBodyNoCount": {
+    "en": "Tightening the terms beyond the house envelope needs more than half of the owners to agree, and this fund has too few owners for that bar to be met. Adding owners restores it; a change within the envelope needs no vote.",
+    "t": "Durcir les conditions au-delà de l'enveloppe maison exige l'accord de plus de la moitié des propriétaires, et ce fonds en compte trop peu pour que ce seuil soit atteint. Ajouter des propriétaires le rétablit ; un changement dans l'enveloppe ne demande aucun vote."
+  },
+  "admin.refusal.feePolicy.floorTitle": {
+    "en": "This fund cannot put a change of terms to its owners",
+    "t": "Ce fonds ne peut pas soumettre un changement de conditions à ses propriétaires"
+  },
+  "admin.refusal.feePolicy.mailBody": {
+    "en": "Owners receive their approval link by email, and no mailer is wired — so a proposal opened now could never be voted on and would simply expire. This has to be configured before the owners can be asked about a change of terms.",
+    "t": "Les propriétaires reçoivent leur lien d'approbation par e-mail, et aucun service d'envoi n'est branché — une proposition ouverte maintenant ne pourrait jamais être votée et expirerait simplement. Cela doit être configuré avant de pouvoir consulter les propriétaires sur un changement de conditions."
+  },
   "admin.refusal.floorBody": {
     "en": "A payout needs more than half of the owners to agree, and with {n, plural, one {# owner} other {# owners}} that bar can never be met. Adding owners restores it.",
     "t": "Un versement exige l'accord de plus de la moitié des propriétaires, et avec {n, plural, one {# propriétaire} many {# propriétaires} other {# propriétaires}} ce seuil ne peut jamais être atteint. Ajouter des propriétaires le rétablit."
