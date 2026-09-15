@@ -51,8 +51,8 @@ export function AssessmentsCard({ service }: { service: string }) {
               <TableRow>
                 <TableHead className={HEAD}>{t("admin.col.when")}</TableHead>
                 <TableHead className={HEAD}>{t("admin.fees.col.trigger")}</TableHead>
-                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.field.management")}</TableHead>
-                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.field.performance")}</TableHead>
+                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.managementUsdt")}</TableHead>
+                <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.performanceUsdt")}</TableHead>
                 <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.unitsTaken")}</TableHead>
                 <TableHead className={cn(HEAD, "text-right")}>{t("admin.fees.col.deferredUsdt")}</TableHead>
               </TableRow>

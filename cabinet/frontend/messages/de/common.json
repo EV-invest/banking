@@ -659,6 +659,14 @@
     "en": "Effective",
     "t": "Gültig ab"
   },
+  "admin.fees.col.managementUsdt": {
+    "en": "Management, USDT",
+    "t": "Verwaltung, USDT"
+  },
+  "admin.fees.col.performanceUsdt": {
+    "en": "Performance, USDT",
+    "t": "Performance, USDT"
+  },
   "admin.fees.col.reason": {
     "en": "Reason",
     "t": "Grund"

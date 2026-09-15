@@ -659,6 +659,14 @@
     "en": "Effective",
     "t": "Effectif"
   },
+  "admin.fees.col.managementUsdt": {
+    "en": "Management, USDT",
+    "t": "Gestion, USDT"
+  },
+  "admin.fees.col.performanceUsdt": {
+    "en": "Performance, USDT",
+    "t": "Performance, USDT"
+  },
   "admin.fees.col.reason": {
     "en": "Reason",
     "t": "Motif"

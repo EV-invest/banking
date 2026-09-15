@@ -164,6 +164,8 @@
   "admin.fees.charges": "Charges",
   "admin.fees.col.deferredUsdt": "Deferred, USDT",
   "admin.fees.col.effective": "Effective",
+  "admin.fees.col.managementUsdt": "Management, USDT",
+  "admin.fees.col.performanceUsdt": "Performance, USDT",
   "admin.fees.col.reason": "Reason",
   "admin.fees.col.trigger": "Trigger",
   "admin.fees.col.unitsTaken": "Units taken",

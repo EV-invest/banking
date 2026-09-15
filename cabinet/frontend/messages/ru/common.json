@@ -659,6 +659,14 @@
     "en": "Effective",
     "t": "В силе с"
   },
+  "admin.fees.col.managementUsdt": {
+    "en": "Management, USDT",
+    "t": "За управление, USDT"
+  },
+  "admin.fees.col.performanceUsdt": {
+    "en": "Performance, USDT",
+    "t": "За успех, USDT"
+  },
   "admin.fees.col.reason": {
     "en": "Reason",
     "t": "Причина"

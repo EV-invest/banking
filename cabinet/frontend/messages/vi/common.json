@@ -659,6 +659,14 @@
     "en": "Effective",
     "t": "Hiệu lực"
   },
+  "admin.fees.col.managementUsdt": {
+    "en": "Management, USDT",
+    "t": "Phí quản lý, USDT"
+  },
+  "admin.fees.col.performanceUsdt": {
+    "en": "Performance, USDT",
+    "t": "Phí hiệu suất, USDT"
+  },
   "admin.fees.col.reason": {
     "en": "Reason",
     "t": "Lý do"
