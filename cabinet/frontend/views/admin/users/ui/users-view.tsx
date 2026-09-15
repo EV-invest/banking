@@ -3,7 +3,7 @@
 import { KeyRound, Loader2, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Badge, Button, Card, CardContent, Input, Select, SelectContent, SelectItem, SelectTrigger, Skeleton } from "@evinvest/uikit";
 
 import { revokeSessions, setKycLevel, type UserFilters } from "@/entities/admin/api/admin-client";
@@ -251,6 +251,7 @@ function Avatar({ email }: { email: string }) {
 
 function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: () => void }) {
   const t = useT();
+  const locale = useLocale();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -336,7 +337,7 @@ function UserDrawer({ summary, onClose }: { summary: AdminUserSummary; onClose: 
             value={t("admin.users.tokenVersionValue", { n: profile?.token_version ?? summary.token_version })}
             tip="admin.users.identity.token-version"
           />
-          <Row label={t("admin.users.balance")} value={balance ? `${formatUsd(balance.amount)} USDT` : "—"} />
+          <Row label={t("admin.users.balance")} value={balance ? `${formatUsd(balance.amount, locale)} USDT` : "—"} />
         </Section>
 
         <Section title={t("admin.users.accessSecurity")}>

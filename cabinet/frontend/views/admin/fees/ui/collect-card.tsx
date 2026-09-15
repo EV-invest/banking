@@ -10,7 +10,7 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Card, CardContent, Skeleton } from "@evinvest/uikit";
 
 import { settleFeeShares } from "@/entities/admin/api/admin-client";
@@ -24,6 +24,7 @@ import { formatUnits, formatUsdt } from "@/views/admin/lib/format";
 
 export function CollectCard({ service }: { service: string }) {
   const t = useT();
+  const locale = useLocale();
   const shares = useResource(feeSharesResource, service);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export function CollectCard({ service }: { service: string }) {
       revalidateTag(TAG.adminFees, TAG.adminRevenue);
       // Fee cash is USDT, and `formatUsdt` carries no symbol: the unit rides in the value so
       // the sentence still names it, the way the "worth" row below does.
-      setDone(t("admin.fees.settledAtNav", { cash: `${formatUsdt(settlement.cash)} USDT`, nav: settlement.nav }));
+      setDone(t("admin.fees.settledAtNav", { cash: `${formatUsdt(settlement.cash, locale)} USDT`, nav: settlement.nav }));
     } catch (e) {
       setProblem(e instanceof Error ? errorMessage(e, t) : t("err.feeSettle"));
     } finally {
@@ -70,8 +71,8 @@ export function CollectCard({ service }: { service: string }) {
           <ResourceError error={shares.error} onRetry={() => void shares.refresh()} retrying={shares.isValidating} />
         ) : (
           <dl className="space-y-2.5 text-sm">
-            <Row label={t("admin.fees.unitsHeld")} value={formatUnits(data?.units)} />
-            <Row label={t("admin.fees.worthAtNav")} value={`${formatUsdt(data?.value)} USDT`} />
+            <Row label={t("admin.fees.unitsHeld")} value={formatUnits(data?.units, locale)} />
+            <Row label={t("admin.fees.worthAtNav")} value={`${formatUsdt(data?.value, locale)} USDT`} />
           </dl>
         )}
 

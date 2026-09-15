@@ -1,10 +1,10 @@
 "use client";
 
 import { ArrowLeftRight, LineChart, type LucideIcon, PieChart, TrendingDown, TrendingUp } from "lucide-react";
-import type { Translate } from "@evinvest/i18n";
-import { useT } from "@evinvest/i18n/react";
+import type { Locale, Translate } from "@evinvest/i18n";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Link } from "@/shared/ui/cabinet-link";
-import { type CSSProperties, Fragment, useState } from "react";
+import { type CSSProperties, Fragment, useCallback, useState } from "react";
 
 import { Badge, Button, Card, CardAction, CardContent, CardHeader, CardTitle, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSeparator, ItemTitle, Progress, Separator, Skeleton, Switch } from "@evinvest/uikit";
 
@@ -68,6 +68,12 @@ const EMPTY_BOX = "border md:p-6";
 // rather than fabricated numbers.
 export function DashboardView() {
   const t = useT();
+  const locale = useLocale();
+  // Bound once per locale, not inline: AnimatedNumber restarts its count whenever the
+  // identity of `format` changes, and a fresh closure every render would restart it every
+  // render.
+  const usd = useCallback((n: number) => formatUsd(n, locale), [locale]);
+  const signedUsd = useCallback((n: number) => formatSignedUsd(n, locale), [locale]);
   // All four reads are shared with other screens and cached, so a return to Home paints the
   // balance, the holdings and the timeline on the first frame — the skeletons below are for
   // the cold first load only. The catalog is the same registry the rail lists products from:
@@ -90,7 +96,7 @@ export function DashboardView() {
 
   const titleOf = (service: string | undefined) => (service ? (catalog.find((a) => a.service === service)?.title ?? service) : t("dash.fundFallback"));
   // The hub honours `limit`, so the slice is only a shape guarantee for the card.
-  const ops = (operations.data?.operations ?? []).slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf, t));
+  const ops = (operations.data?.operations ?? []).slice(0, RECENT_OPS).map((operation, i) => toOp(operation, i, titleOf, t, locale));
 
   return (
     // One DOM order, two layouts. Mobile stacks in reading order (hero → figures →
@@ -133,13 +139,13 @@ export function DashboardView() {
 
       {/* stat strip — a 2×2 card grid on mobile, one divided strip from `lg` */}
       <StaggerItem as={Card} className={cn("grid grid-cols-2 gap-3 lg:flex lg:flex-row lg:flex-wrap lg:items-stretch lg:gap-x-7 lg:gap-y-4 lg:px-6", CARD_FROM_LG, "lg:order-4 xl:col-span-2 xl:col-start-1 xl:row-start-4")}>
-        <Stat label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={formatSignedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
+        <Stat label={t("dash.unrealizedPnl")} value={walletLoading || posLoading ? null : pnlSum} format={signedUsd} tone={pnlSum < 0 ? "loss" : "gain"} hint={t("dash.hintAcrossPositions")} tip="dashboard.stats.unrealized-pnl" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={formatUsd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
+        <Stat label={t("dash.available")} value={walletLoading ? null : num(balance?.available)} format={usd} hint={t("dash.hintAutoDeploysEod")} tip="dashboard.stats.available" />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
         <Stat label={t("dash.activeStrategies")} value={posLoading ? null : pos.length} format={formatCount} hint={t("dash.hintFundPositions")} />
         <Separator orientation="vertical" className="hidden self-stretch lg:block" />
-        <Stat label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={formatUsd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
+        <Stat label={t("dash.netContributed")} value={posLoading ? null : netContributed} format={usd} hint={t("dash.hintAtCostBasis")} tip="dashboard.stats.net-invested" />
       </StaggerItem>
 
       {/* Below `xl` the DOM order is the mobile order; `lg:order-*` restores the desktop
@@ -206,6 +212,9 @@ export function DashboardView() {
 // plot is boxed — with its legend above. From `lg` the whole block is the desktop card again.
 function PerfCard({ value, loading, allTimePct, className }: { value: string | undefined; loading: boolean; allTimePct: number | null; className?: string }) {
   const t = useT();
+  const locale = useLocale();
+  // Same reason as the `usd` binding in DashboardView: a stable identity per locale.
+  const usd = useCallback((n: number) => formatUsd(n, locale), [locale]);
   const [range, setRange] = useState<(typeof RANGES)[number]>("all");
   const down = (allTimePct ?? 0) < 0;
   return (
@@ -224,11 +233,11 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </p>
           <div className="flex flex-col items-start gap-2.5 lg:flex-row lg:items-center lg:gap-3.5">
-            {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={formatUsd} /></p>}
+            {loading ? <Skeleton className="h-10 w-40 lg:h-12 lg:w-48" /> : <p className="text-4xl font-semibold leading-none tabular-nums lg:text-5xl"><AnimatedNumber value={num(value)} format={usd} /></p>}
             {allTimePct !== null && (
               <Badge variant="outline" className={cn("gap-1 rounded-full tabular-nums", down ? "border-accent-error/40 text-accent-error" : "border-accent-warn/40 text-accent-warn")}>
                 {down ? <TrendingDown /> : <TrendingUp />}
-                {t("dash.allTimeSuffix", { pct: formatPct(allTimePct) })}
+                {t("dash.allTimeSuffix", { pct: formatPct(allTimePct, locale) })}
                 <TipAnchor anchor="dashboard.performance.all-time-return" />
               </Badge>
             )}
@@ -371,8 +380,8 @@ function WhatIOwn({ allocations, total, loading, className }: { allocations: { n
 
 // Takes the figure and its formatter rather than a finished string: a string can
 // only be swapped, and swapping is the thing AnimatedNumber exists to replace.
-// `format` has to be a stable reference (all of these are module functions from
-// shared/lib/money) or the count restarts on every parent render.
+// `format` has to be a stable reference (a module function, or a money formatter bound to
+// the locale through `useCallback`) or the count restarts on every parent render.
 function Stat({ label, value, format, tone, hint, tip }: { label: string; value: number | null; format: (n: number) => string; tone?: "gain" | "loss"; hint: string; tip?: TipKey }) {
   const valueClass = tone === "gain" ? "text-positive" : tone === "loss" ? "text-accent-error" : "text-ink";
   const hintClass = tone === "gain" ? "text-positive/80" : tone === "loss" ? "text-accent-error/80" : "text-ink-soft";
@@ -407,7 +416,7 @@ interface Op {
 // cent with a currency symbol) rather than the ledger policy the Operations page uses —
 // same data, different unit of measure for the surface it sits on. The badge, tone and
 // sign vocabulary is shared with `/operations` so a row reads identically in both places.
-function toOp(operation: Operation, index: number, titleOf: (service: string | undefined) => string, t: Translate): Op {
+function toOp(operation: Operation, index: number, titleOf: (service: string | undefined) => string, t: Translate, locale: Locale): Op {
   const meta = kindMeta(operation.kind);
   const sign = meta.direction === "in" ? "+" : meta.direction === "out" ? "\u2212" : "";
   return {
@@ -419,7 +428,7 @@ function toOp(operation: Operation, index: number, titleOf: (service: string | u
     sub: opSub(operation, t),
     // A queued redemption is not yet priced, so it shows the units it reserved — a
     // formatted zero would claim the user was paid nothing.
-    amount: operation.amount ? `${sign}${formatUsd(operation.amount)}` : t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: operation.units ?? "0" }),
+    amount: operation.amount ? `${sign}${formatUsd(operation.amount, locale)}` : t("dash.unitsAmount", { n: Number(operation.units ?? 0), units: operation.units ?? "0" }),
     amountClass: operation.amount ? amountTone(meta.direction) : "text-ink-soft",
   };
 }

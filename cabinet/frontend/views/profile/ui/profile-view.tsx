@@ -1,7 +1,7 @@
 "use client";
 
 import type { Translate } from "@evinvest/i18n";
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { BadgeCheck, Loader2 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -321,13 +321,14 @@ function VerificationCard({ loading, profile, email }: { loading: boolean; profi
 
 function SnapshotCard({ invested, strategies }: { invested: number; strategies: number }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <ListCard className="lg:px-5.5">
       <ListCardTitle>{t("profile.accountSnapshot")}</ListCardTitle>
       <Hairline />
       <Row>
         <span className="text-sm font-medium text-ink-soft">{t("profile.totalInvested")}</span>
-        <span className="text-sm font-semibold tabular-nums text-ink">{formatUsd(invested)}</span>
+        <span className="text-sm font-semibold tabular-nums text-ink">{formatUsd(invested, locale)}</span>
       </Row>
       <Hairline />
       <Row>

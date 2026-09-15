@@ -9,7 +9,7 @@
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useState } from "react";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Alert, AlertDescription, AlertTitle, Button } from "@evinvest/uikit";
 
 import { postValuation, proposeValuationOverride } from "@/entities/admin/api/admin-client";
@@ -41,6 +41,7 @@ export function ValuationActions({
   onError: (message: string | null) => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [busy, setBusy] = useState<Route | null>(null);
   // What was proposed, captured at the click: the caller clears the AUM field on success,
   // so the receipt cannot read it back from the form.
@@ -83,7 +84,7 @@ export function ValuationActions({
           <AlertTitle>{t("admin.valuation.proposedTitle")}</AlertTitle>
           <AlertDescription className="gap-3 text-ink">
             <p className="leading-relaxed tabular-nums">
-              {t("admin.valuation.proposedBody", { service: proposed.service, aum: formatExactUsdt(proposed.aum) })}
+              {t("admin.valuation.proposedBody", { service: proposed.service, aum: formatExactUsdt(proposed.aum, locale) })}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button asChild size="sm" variant="outline">

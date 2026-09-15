@@ -1,6 +1,6 @@
 "use client";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { Clock, Loader2, TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -45,6 +45,7 @@ function withdrawableFor(wallet: Wallet | null | undefined, network: string): Ne
 // snapshotted so Confirm can never submit something the user didn't see.
 export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
   const t = useT();
+  const locale = useLocale();
   const [selected, setSelected] = useState<string | null>(initialNetwork ?? null);
   const [address, setAddress] = useState("");
   const [amount, setAmount] = useState("");
@@ -156,7 +157,7 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
               <span className="flex items-center justify-between gap-2">
                 <FieldLabel>{t("wallet.amountCaps")}</FieldLabel>
                 <span className="flex items-center gap-1.5 text-xs text-ink-soft">
-                  {t("wallet.availPrefix", { amount: formatUsdt(opts?.withdrawable) })}
+                  {t("wallet.availPrefix", { amount: formatUsdt(opts?.withdrawable, locale) })}
                   <TipAnchor anchor="wallet.withdraw.available" />
                 </span>
               </span>
@@ -187,18 +188,18 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
             </label>
 
             <div className="flex flex-col gap-2.5 rounded-lg bg-secondary px-3.5 py-3">
-              <Row label={t("wallet.networkFee")} value={`${formatUsdt(opts?.withdrawal_fee)} USDT`} tip="wallet.withdraw.network-fee" />
+              <Row label={t("wallet.networkFee")} value={`${formatUsdt(opts?.withdrawal_fee, locale)} USDT`} tip="wallet.withdraw.network-fee" />
               <div className="h-px w-full bg-border" />
-              <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(youReceive)} USDT`} tone="text-positive" tip="wallet.withdraw.you-receive" />
+              <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(youReceive, locale)} USDT`} tone="text-positive" tip="wallet.withdraw.you-receive" />
             </div>
 
             {/* `wallet.withdraw.queueing` / `.review` are section-type tips (descriptor blocks,
                 not inline ⓘ), so that copy is stated inline here rather than anchored. */}
             {queuedUnits > 0n && amountUnits > 0n && (
-              <p className="text-xs text-accent-warn">{t("wallet.exceedsInstant", { amount: formatUsdt(fromBaseUnits(queuedUnits)), network: label })}</p>
+              <p className="text-xs text-accent-warn">{t("wallet.exceedsInstant", { amount: formatUsdt(fromBaseUnits(queuedUnits), locale), network: label })}</p>
             )}
             <p className="text-xs text-ink-soft">
-              {t("wallet.minInstantQueued", { min: formatUsdt(opts?.min_withdrawal), network: label, instant: formatUsdt(opts?.instant) })}
+              {t("wallet.minInstantQueued", { min: formatUsdt(opts?.min_withdrawal, locale), network: label, instant: formatUsdt(opts?.instant, locale) })}
             </p>
 
             <button
@@ -224,8 +225,8 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                     <p className="text-sm font-semibold text-ink">{t(done.state === "queued" ? "wallet.withdrawalQueued" : "wallet.withdrawalSubmitted")}</p>
                     <p className="text-xs text-ink-soft">
                       {done.state === "queued"
-                        ? t("wallet.receiptQueued", { amount: formatUsdt(done.net_amount), address: shortAddress(done.address), network: networkLabel(done.network) })
-                        : t("wallet.receiptSubmitted", { amount: formatUsdt(done.net_amount), address: shortAddress(done.address) })}
+                        ? t("wallet.receiptQueued", { amount: formatUsdt(done.net_amount, locale), address: shortAddress(done.address), network: networkLabel(done.network) })
+                        : t("wallet.receiptSubmitted", { amount: formatUsdt(done.net_amount, locale), address: shortAddress(done.address) })}
                     </p>
                   </div>
                 </Panel>
@@ -255,16 +256,16 @@ export function WithdrawView({ initialNetwork }: { initialNetwork?: string }) {
                       }
                     />
                     <Row label={t("ui.destination")} value={shortAddress(confirming.address)} />
-                    <Row label={t("ui.amount")} value={`${formatUsdt(confirming.amount)} USDT`} />
-                    <Row label={t("wallet.networkFee")} value={`${formatUsdt(confirming.fee)} USDT`} />
+                    <Row label={t("ui.amount")} value={`${formatUsdt(confirming.amount, locale)} USDT`} />
+                    <Row label={t("wallet.networkFee")} value={`${formatUsdt(confirming.fee, locale)} USDT`} />
                     <div className="h-px w-full bg-border" />
-                    <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee))} USDT`} tone="text-positive" />
+                    <Row label={t("wallet.youWillReceive")} value={`${formatUsdt(subUsdt(confirming.amount, confirming.fee), locale)} USDT`} tone="text-positive" />
                   </div>
                   <p className="break-all font-mono-tech text-xs text-ink-soft">{t("wallet.toAddressLine", { address: confirming.address })}</p>
                   {toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant) > 0n && (
                     <p className="text-xs text-accent-warn">
                       {t("wallet.exceedsInstant", {
-                        amount: formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant))),
+                        amount: formatUsdt(fromBaseUnits(toBaseUnits(confirming.amount) - toBaseUnits(confirming.instant)), locale),
                         network: networkLabel(confirming.network),
                       })}
                     </p>

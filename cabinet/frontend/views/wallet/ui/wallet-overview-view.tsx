@@ -1,6 +1,6 @@
 "use client";
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { TriangleAlert } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
@@ -22,6 +22,7 @@ import { FieldLabel, WALLET_CARD, WALLET_CTA, WALLET_CTA_GHOST, WalletScreen } f
 // straight into the right screen with the rail preselected.
 export function WalletOverviewView() {
   const t = useT();
+  const locale = useLocale();
   // The same cached balance Home, Deposit, Withdraw and Invest read, so arriving here from
   // any of them shows the figure immediately and refreshes it behind the number. A failed
   // refresh reports itself without blanking what is already on screen.
@@ -74,13 +75,13 @@ export function WalletOverviewView() {
             {loading ? (
               <Skeleton className="h-9 w-44 lg:h-12 lg:w-64" />
             ) : (
-              <p className="text-4xl font-semibold leading-none text-ink tabular-nums lg:text-5xl">{formatUsdt(balance?.total)}</p>
+              <p className="text-4xl font-semibold leading-none text-ink tabular-nums lg:text-5xl">{formatUsdt(balance?.total, locale)}</p>
             )}
             <p className="text-sm font-medium text-ink-soft lg:text-base">USDT</p>
           </div>
           {/* `wallet.balance.model` is a section-type tip (a descriptor block, not an inline ⓘ),
               so it would break this row — the chips carry the inline tips instead. */}
-          <p className="hidden whitespace-nowrap text-sm text-ink-soft lg:block">{t("wallet.oneFungibleBalance", { amount: formatUsdt(balance?.total) })}</p>
+          <p className="hidden whitespace-nowrap text-sm text-ink-soft lg:block">{t("wallet.oneFungibleBalance", { amount: formatUsdt(balance?.total, locale) })}</p>
         </div>
         {/* Four chips, one per term of the balance identity (total = available + in orders
             + invested + pending withdrawal). Two columns at 390px, not four: four leave
@@ -145,6 +146,7 @@ export function WalletOverviewView() {
 // The label shortens on mobile (`AVAIL`) and spells out from `lg` up — the Figma frames use
 // both, and the chip is too narrow at 390px for the long form.
 function Chip({ label, wideLabel, dot, value, loading, tip }: { label: string; wideLabel: string; dot: string; value: string | undefined; loading: boolean; tip: TipKey }) {
+  const locale = useLocale();
   return (
     <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-border px-2.5 py-2.5 lg:px-4 lg:py-3.5">
       <span className="flex items-center gap-1.5">
@@ -155,7 +157,7 @@ function Chip({ label, wideLabel, dot, value, loading, tip }: { label: string; w
         </span>
         <TipAnchor anchor={tip} />
       </span>
-      {loading ? <Skeleton className="h-5 w-16 lg:h-7 lg:w-20" /> : <p className="truncate text-sm font-semibold text-ink tabular-nums lg:text-lg">{formatUsdt(value)}</p>}
+      {loading ? <Skeleton className="h-5 w-16 lg:h-7 lg:w-20" /> : <p className="truncate text-sm font-semibold text-ink tabular-nums lg:text-lg">{formatUsdt(value, locale)}</p>}
     </div>
   );
 }

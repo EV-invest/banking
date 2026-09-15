@@ -5,7 +5,7 @@
 // kind of thing, to a person rather than to the supply. The button here only REVIEWS; the
 // send is the confirmation step in `TransferStakeAction`, because this moves money.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Button, Input } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
@@ -15,6 +15,7 @@ import { UserPicker } from "@/views/admin/allocations/ui/user-picker";
 
 export function TransferStakeForm({ draft, companyUnits, onChange, onReview, onCancel }: { draft: TransferDraft; companyUnits: string; onChange: (next: TransferDraft) => void; onReview: () => void; onCancel: () => void }) {
   const t = useT();
+  const locale = useLocale();
   const problem = transferDraftProblem(draft, companyUnits);
   // Under the button, only what no field already says: an unpicked recipient and untouched
   // units have no message of their own, while a malformed figure is flagged at its field.
@@ -33,7 +34,7 @@ export function TransferStakeForm({ draft, companyUnits, onChange, onReview, onC
           <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.units")}</span>
           <Input inputMode="decimal" value={draft.units} onChange={(e) => onChange({ ...draft, units: e.target.value })} className="w-full tabular-nums" />
           <span className={cn("text-xs tabular-nums", unitsProblem ? "text-accent-error" : "text-ink-soft")}>
-            {unitsProblem === "units" ? t("admin.alloc.issue.problem.units") : t("admin.alloc.transfer.available", { units: formatUnits(companyUnits) })}
+            {unitsProblem === "units" ? t("admin.alloc.issue.problem.units") : t("admin.alloc.transfer.available", { units: formatUnits(companyUnits, locale) })}
           </span>
         </label>
         <label className="flex flex-col gap-1.5">

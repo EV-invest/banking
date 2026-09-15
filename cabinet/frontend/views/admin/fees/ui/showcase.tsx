@@ -7,7 +7,7 @@
 // this screen is about to write, and the money figure is the only form in which a fee is
 // actually argued about. Neither is an input, so nothing here can drift from what saves.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 
 import { pct } from "@/shared/lib/rate";
 import { formatUsdt } from "@/views/admin/lib/format";
@@ -20,6 +20,7 @@ const REFERENCE_POSITION = 100_000;
 
 export function Showcase({ bps }: { bps: Record<RateField, number | null> }) {
   const t = useT();
+  const locale = useLocale();
 
   // Withheld rather than guessed while any rate is unparsable: a sentence assembled from
   // a field the form is about to reject would price terms nobody can save.
@@ -27,10 +28,10 @@ export function Showcase({ bps }: { bps: Record<RateField, number | null> }) {
     bps.management === null || bps.performance === null || bps.hurdle === null
       ? null
       : t(bps.hurdle > 0 ? "admin.fees.showcase.exampleHurdle" : "admin.fees.showcase.example", {
-          amount: `${formatUsdt(String(REFERENCE_POSITION))} USDT`,
+          amount: `${formatUsdt(String(REFERENCE_POSITION), locale)} USDT`,
           // Exact: bps are integers and the reference is a multiple of 10 000, so the
           // quotient is a whole number of USDT — no float residue to round away.
-          management: `${formatUsdt(String((REFERENCE_POSITION * bps.management) / 10_000))} USDT`,
+          management: `${formatUsdt(String((REFERENCE_POSITION * bps.management) / 10_000), locale)} USDT`,
           performance: pct(bps.performance),
           hurdle: pct(bps.hurdle),
         });

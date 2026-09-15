@@ -4,7 +4,7 @@
 // bar, and the state badges. They live here rather than in either screen because the
 // list and the product page must not describe the same fund two different ways.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { Clock, Lock } from "lucide-react";
 
 import { Badge } from "@evinvest/uikit";
@@ -71,6 +71,7 @@ export function Note({ tone, children }: { tone: "amber" | "muted" | "accent"; c
  */
 export function SupplyBar({ issued, cap, className }: { issued: string | undefined; cap: string | undefined; className?: string }) {
   const t = useT();
+  const locale = useLocale();
   const fraction = fractionOfCap(issued, cap);
   const full = fraction >= 1;
   const near = fraction >= 0.9;
@@ -79,7 +80,7 @@ export function SupplyBar({ issued, cap, className }: { issued: string | undefin
       <div className="flex items-baseline justify-between gap-3 text-xs">
         <span className="text-ink-soft">{t("invest.unitsIssued")}</span>
         <span className={cn("tabular-nums", near ? "font-medium text-accent-warn" : "text-ink-soft")}>
-          {compactUnits(issued)} / {compactUnits(cap)}
+          {compactUnits(issued, locale)} / {compactUnits(cap, locale)}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">

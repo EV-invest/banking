@@ -9,7 +9,7 @@
 // and anything else showing a figure a deal touched — refreshes itself. A callback per
 // panel was the same job done once per call site, which is the version that goes stale.
 
-import { useT } from "@evinvest/i18n/react";
+import { useLocale, useT } from "@evinvest/i18n/react";
 import { ArrowDownToLine, Clock, Loader2, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
@@ -28,6 +28,7 @@ import { TradeLink } from "@/views/invest/ui/trade-link";
 
 export function SubscribePanel({ service, nav }: { service: string; nav: FundNav | null }) {
   const t = useT();
+  const locale = useLocale();
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -69,7 +70,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
             <Alert>
               <Sparkles className="size-4 text-positive" />
               <AlertTitle>{t("invest.subscribeReceived")}</AlertTitle>
-              <AlertDescription>{t("invest.subscribeReceiptBody", { n: Number(done.units ?? 0), units: formatUnits(done.units), nav: formatUsdt(done.nav) })}</AlertDescription>
+              <AlertDescription>{t("invest.subscribeReceiptBody", { n: Number(done.units ?? 0), units: formatUnits(done.units, locale), nav: formatUsdt(done.nav, locale) })}</AlertDescription>
             </Alert>
           </Panel>
         )}
@@ -100,11 +101,11 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
 
       <p className={cn("text-xs", dust || overCap ? "text-accent-error" : "text-ink-soft")}>
         {dust
-          ? t("invest.dustHint", { nav: formatUsdt(nav?.nav) })
+          ? t("invest.dustHint", { nav: formatUsdt(nav?.nav, locale) })
           : overCap
-            ? t("invest.overCapHint", { n: Number(fromBaseUnits(headroom ?? 0n)), units: formatUnits(fromBaseUnits(headroom ?? 0n)) })
+            ? t("invest.overCapHint", { n: Number(fromBaseUnits(headroom ?? 0n)), units: formatUnits(fromBaseUnits(headroom ?? 0n), locale) })
             : preview !== null
-              ? t("invest.buysUnits", { n: Number(fromBaseUnits(preview)), units: formatUnits(fromBaseUnits(preview)), nav: formatUsdt(nav?.nav) })
+              ? t("invest.buysUnits", { n: Number(fromBaseUnits(preview)), units: formatUnits(fromBaseUnits(preview), locale), nav: formatUsdt(nav?.nav, locale) })
               : t("invest.subscribeIdleHint")}
       </p>
     </div>
@@ -115,6 +116,7 @@ export function SubscribePanel({ service, nav }: { service: string; nav: FundNav
  *  the form says so before the click, and offers the book instead. */
 export function RedeemPanel({ service, position, nav, inKind = false }: { service: string; position: Position; nav: FundNav | null; inKind?: boolean }) {
   const t = useT();
+  const locale = useLocale();
   const [units, setUnits] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -149,8 +151,8 @@ export function RedeemPanel({ service, position, nav, inKind = false }: { servic
               <AlertTitle>{t(done.state === "completed" ? "invest.redeemCompleted" : "invest.redeemQueued")}</AlertTitle>
               <AlertDescription>
                 {done.state === "completed"
-                  ? t("invest.redeemReceiptCompleted", { n: Number(done.units ?? 0), units: formatUnits(done.units), cash: formatUsdt(done.cash), nav: formatUsdt(done.nav) })
-                  : t("invest.redeemReceiptQueued", { n: Number(done.units ?? 0), units: formatUnits(done.units) })}
+                  ? t("invest.redeemReceiptCompleted", { n: Number(done.units ?? 0), units: formatUnits(done.units, locale), cash: formatUsdt(done.cash, locale), nav: formatUsdt(done.nav, locale) })
+                  : t("invest.redeemReceiptQueued", { n: Number(done.units ?? 0), units: formatUnits(done.units, locale) })}
               </AlertDescription>
             </Alert>
           </Panel>
@@ -207,10 +209,10 @@ export function RedeemPanel({ service, position, nav, inKind = false }: { servic
 
       <p className={cn("text-xs", overdraw ? "text-accent-error" : "text-ink-soft")}>
         {overdraw
-          ? t("invest.youHoldUnits", { n: Number(position.units ?? 0), units: formatUnits(position.units) })
+          ? t("invest.youHoldUnits", { n: Number(position.units ?? 0), units: formatUnits(position.units, locale) })
           : estimate !== null
-            ? t("invest.redeemEstimate", { amount: formatUsdt(fromBaseUnits(estimate)) })
-            : t("invest.unitsHeld", { n: Number(position.units ?? 0), units: formatUnits(position.units) })}
+            ? t("invest.redeemEstimate", { amount: formatUsdt(fromBaseUnits(estimate), locale) })
+            : t("invest.unitsHeld", { n: Number(position.units ?? 0), units: formatUnits(position.units, locale) })}
       </p>
     </div>
   );
@@ -220,6 +222,7 @@ export function RedeemPanel({ service, position, nav, inKind = false }: { servic
  *  not to a separate activity list the holder has to go and find. */
 export function QueuedList({ items }: { items: Redemption[] }) {
   const t = useT();
+  const locale = useLocale();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
 
@@ -246,7 +249,7 @@ export function QueuedList({ items }: { items: Redemption[] }) {
       {items.map((r) => (
         <div key={r.id ?? ""} className="flex items-center justify-between gap-3 text-sm">
           <span>
-            <span className="font-medium">{t("dash.unitsAmount", { n: Number(r.units ?? 0), units: formatUnits(r.units) })}</span>{" "}
+            <span className="font-medium">{t("dash.unitsAmount", { n: Number(r.units ?? 0), units: formatUnits(r.units, locale) })}</span>{" "}
             <span className="text-ink-soft">{t("invest.reservedPricedAtSettle")}</span>
           </span>
           <span className="flex items-center gap-2">
