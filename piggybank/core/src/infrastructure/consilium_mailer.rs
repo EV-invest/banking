@@ -62,6 +62,31 @@ pub async fn enqueue(conn: &mut PgConnection, subject: MailSubject, user_id: Uui
 	Ok(())
 }
 
+/// Withdraw every mail about `subject` that has not been delivered, on the caller's open
+/// transaction: the fact the mails announce is being taken back, and they must go with it or
+/// not at all. Terminal — a withdrawn row is never drained and never counted as a mail
+/// somebody is still owed — and distinct from a row given up on: nobody failed to reach
+/// anybody. A delivered mail is left as it is; the schema refuses to withdraw one. Returns
+/// how many rows were withdrawn.
+pub async fn withdraw_undelivered(conn: &mut PgConnection, subject: MailSubject) -> Result<u64, DomainError> {
+	let (sql, id) = match subject {
+		MailSubject::Consilium(id) => (
+			"UPDATE consilium_mail SET withdrawn_at = now() WHERE consilium_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
+			id,
+		),
+		MailSubject::Payment(id) => (
+			"UPDATE consilium_mail SET withdrawn_at = now() WHERE payment_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
+			id,
+		),
+		MailSubject::FeePolicyChange(id) => (
+			"UPDATE consilium_mail SET withdrawn_at = now() WHERE fee_policy_change_id = $1 AND sent_at IS NULL AND withdrawn_at IS NULL",
+			id,
+		),
+	};
+	let withdrawn = sqlx::query(sql).bind(id).execute(&mut *conn).await.map_err(repo_err)?;
+	Ok(withdrawn.rows_affected())
+}
+
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Rows per pass. Governance mail is low volume by nature — a handful per consilium.
@@ -148,12 +173,13 @@ impl ConsiliumMailer {
 	/// One pass. Returns how many messages were handed over. Public so an integration test
 	/// can drive it deterministically.
 	pub async fn drain(&self) -> Result<usize, DomainError> {
-		// A deferred row waits out its backoff; everything else undelivered and under the
-		// ceiling is due now.
+		// A deferred row waits out its backoff; a withdrawn one is never due again; everything
+		// else undelivered and under the ceiling is due now.
 		let rows = sqlx::query(
 			"SELECT m.id, m.dedupe_key, m.payload::text AS payload, u.concierge_user_id \
 			 FROM consilium_mail m JOIN users u ON u.id = m.user_id \
-			 WHERE m.sent_at IS NULL AND m.attempts < $1 AND (m.next_attempt_at IS NULL OR m.next_attempt_at <= now()) ORDER BY m.id LIMIT $2",
+			 WHERE m.sent_at IS NULL AND m.withdrawn_at IS NULL AND m.attempts < $1 AND (m.next_attempt_at IS NULL OR m.next_attempt_at <= now()) \
+			 ORDER BY m.id LIMIT $2",
 		)
 		.bind(MAX_ATTEMPTS)
 		.bind(BATCH)
@@ -318,9 +344,9 @@ fn repo_err(err: sqlx::Error) -> DomainError {
 }
 
 /// How many governance mails are still undelivered — the number the boot warning quotes when
-/// the seam is unwired.
+/// the seam is unwired. A withdrawn mail is not owed to anybody and is not counted.
 pub async fn pending_count(pool: &PgPool) -> Result<i64, DomainError> {
-	sqlx::query_scalar("SELECT COUNT(*) FROM consilium_mail WHERE sent_at IS NULL")
+	sqlx::query_scalar("SELECT COUNT(*) FROM consilium_mail WHERE sent_at IS NULL AND withdrawn_at IS NULL")
 		.fetch_one(pool)
 		.await
 		.map_err(repo_err)

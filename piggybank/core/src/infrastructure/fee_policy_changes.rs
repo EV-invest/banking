@@ -9,6 +9,9 @@
 //!   On the administrator's path it writes the change already `scheduled` and one notice
 //!   per holder in the same transaction, for the reason every governance mail is written
 //!   with the fact it announces.
+//! - [`FeePolicyChanges::cancel`] closes the change and, in the same transaction, withdraws
+//!   every holder notice the mailer has not delivered yet, so a relay outage cannot end in
+//!   holders being told about terms that will never bind.
 //! - [`FeePolicyChanges::promote`] settles every holder's management accrual at the OLD
 //!   rate as of `effective_from` (`carry_accrual` reads `fee_policies` on this same
 //!   connection, which is why it runs strictly BEFORE the upsert), then writes the new
@@ -35,7 +38,7 @@ use uuid::Uuid;
 use crate::{
 	infrastructure::{
 		consilium,
-		consilium_mailer::{MAX_ATTEMPTS, MailSubject, enqueue},
+		consilium_mailer::{MAX_ATTEMPTS, MailSubject, enqueue, withdraw_undelivered},
 		fee_accrual::carry_accrual,
 		fees::{policy_from_row, repo_err},
 	},
@@ -169,14 +172,15 @@ struct UndeliveredNotice {
 /// scheduled charges no attempt at all (`defer`), and a deferral ceiling equal to the notice
 /// period would otherwise let a change bind the very minute nobody could have been told.
 /// Counted over the holders of RIGHT NOW: a recipient who has since redeemed every unit has
-/// no terms to be warned about, and must not hold the change for those who stayed. The ONE
-/// rule behind the figures on the wire, the tightening gate and the acknowledgement's list
+/// no terms to be warned about, and must not hold the change for those who stayed. A notice
+/// WITHDRAWN with its change is owed to nobody and is not counted either. The ONE rule
+/// behind the figures on the wire, the tightening gate and the acknowledgement's list
 /// (which keeps only the given-up half, and only the holders no acknowledgement covers yet).
 async fn undelivered_notices(conn: &mut PgConnection, id: FeePolicyChangeId, service: &ServiceId) -> Result<Vec<UndeliveredNotice>, DomainError> {
 	let rows: Vec<(Uuid, bool)> = sqlx::query_as(
 		"SELECT m.user_id, m.attempts >= $3 FROM consilium_mail m \
 		 JOIN fund_positions p ON p.user_id = m.user_id AND p.service = $2 AND p.units <> '0' \
-		 WHERE m.fee_policy_change_id = $1 AND m.kind = 'fee_policy_notice' AND m.sent_at IS NULL ORDER BY m.user_id",
+		 WHERE m.fee_policy_change_id = $1 AND m.kind = 'fee_policy_notice' AND m.sent_at IS NULL AND m.withdrawn_at IS NULL ORDER BY m.user_id",
 	)
 	.bind(id.raw())
 	.bind(service.as_str())
@@ -552,6 +556,14 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 			.execute(&mut *tx)
 			.await
 			.map_err(repo_err)?;
+		// The notices go with the change, in the same transaction: one still queued behind a
+		// relay outage would otherwise tell its holder, once the relay is back, that terms
+		// which will never bind "change on <date>" (#319). Delivered ones stand — what was
+		// said was true when it was said; this plane has no "cancelled" mail to follow it with.
+		let withdrawn = withdraw_undelivered(&mut tx, MailSubject::FeePolicyChange(id.raw())).await?;
+		if withdrawn > 0 {
+			tracing::info!(change_id = %id, service = %service, withdrawn, "fee policy: withdrew undelivered holder notices with the cancelled change");
+		}
 		let stored = find_on(&mut tx, id)
 			.await?
 			.ok_or_else(|| DomainError::Repository("fee policy change vanished under lock".into()))?;

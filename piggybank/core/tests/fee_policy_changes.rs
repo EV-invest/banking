@@ -369,7 +369,30 @@ impl GovernanceMailer for SwitchedRelay {
 /// The queue is shared by every test in this binary and drained in batches of 100 by id, so
 /// a test that runs the mailer first retires the backlog the others left behind.
 async fn quiet_queue(h: &Harness) {
-	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE sent_at IS NULL").execute(&h.pool).await.unwrap();
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE sent_at IS NULL AND withdrawn_at IS NULL")
+		.execute(&h.pool)
+		.await
+		.unwrap();
+}
+
+/// Every notice row of a change as the queue holds it, by holder: `(sent, withdrawn)`.
+async fn notice_states(h: &Harness, change: &FeePolicyChange) -> std::collections::HashMap<UserId, (bool, bool)> {
+	let rows: Vec<(Uuid, bool, bool)> =
+		sqlx::query_as("SELECT user_id, sent_at IS NOT NULL, withdrawn_at IS NOT NULL FROM consilium_mail WHERE fee_policy_change_id = $1 AND kind = 'fee_policy_notice'")
+			.bind(change.id.raw())
+			.fetch_all(&h.pool)
+			.await
+			.unwrap();
+	rows.into_iter().map(|(user, sent, withdrawn)| (UserId::from_raw(user), (sent, withdrawn))).collect()
+}
+
+/// Stand in for a deferred row's backoff having run out, so the next pass asks the relay again.
+async fn let_the_backoff_run(h: &Harness, change: &FeePolicyChange) {
+	sqlx::query("UPDATE consilium_mail SET next_attempt_at = NULL WHERE fee_policy_change_id = $1")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
 }
 
 /// One notice row as the mailer left it: `(attempts, last_error, sent, subject_user_id)`.
@@ -672,6 +695,72 @@ async fn a_holder_mirrored_after_the_scheduling_is_still_told() {
 	let_the_notice_run(&h, &change).await;
 	assert!(h.changes.promote(change.id, now()).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+}
+
+/// The relay is down when a change is scheduled and still down when the change is
+/// cancelled (#319): the holders' notices are withdrawn with it, so the relay coming back
+/// does not tell anybody about terms that will never bind. A notice that had already gone
+/// out stands, and neither figures as a notice anybody is still owed.
+#[tokio::test]
+async fn cancelling_a_change_withdraws_the_notices_the_relay_has_not_taken() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	install(&h, &service, FeePolicy::HOUSE).await;
+	let told = holder(&h, &service, "1000").await;
+	let untold = holder(&h, &service, "500").await;
+	quiet_queue(&h).await;
+
+	let relay = Arc::new(SwitchedRelay::default());
+	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	let change = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	assert_eq!(notices(&h, &change).await.len(), 2);
+	// One holder was reached before the outage; the other's notice sits deferred behind it.
+	sqlx::query("UPDATE consilium_mail SET sent_at = now() WHERE fee_policy_change_id = $1 AND user_id = $2")
+		.bind(change.id.raw())
+		.bind(told.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	relay.down.store(true, Ordering::SeqCst);
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert_eq!(change_of(&h, &change).await.undelivered_notices, 1, "deferred, and still owed while the change stands");
+
+	let admin = UserId::new();
+	let cancelled = fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, admin, now()).await.unwrap();
+	assert_eq!(cancelled.state, FeePolicyChangeState::Cancelled);
+	assert_eq!(cancelled.undelivered_notices, 0, "a cancelled change waits on nobody");
+	let states = notice_states(&h, &change).await;
+	assert_eq!(states.get(&told), Some(&(true, false)), "what was delivered stands");
+	assert_eq!(states.get(&untold), Some(&(false, true)), "what was not is withdrawn, not delivered");
+
+	// The relay comes back: the withdrawn notice is not handed over — not now, not after its
+	// backoff, and it is not among the mails the boot warning would count as pending.
+	relay.down.store(false, Ordering::SeqCst);
+	let_the_backoff_run(&h, &change).await;
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert!(relay.seen.lock().unwrap().is_empty(), "nothing about the cancelled change reaches the relay");
+	assert_eq!(notice_states(&h, &change).await.get(&untold), Some(&(false, true)));
+	assert_eq!(piggybank_core::infrastructure::consilium_mailer::pending_count(&h.pool).await.unwrap(), 0);
+	// A repeat of the cancel withdraws nothing more and changes nothing.
+	fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, change.id, admin, now()).await.unwrap();
+	assert_eq!(notice_states(&h, &change).await.len(), 2);
+
+	// The slot is free: the next change over the same holders queues fresh notices, and
+	// those go out — the withdrawal was the cancelled change's alone.
+	let next = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	assert_eq!(mailer.drain().await.unwrap(), 2);
+	assert_eq!(change_of(&h, &next).await.undelivered_notices, 0);
+	assert!(
+		relay
+			.seen
+			.lock()
+			.unwrap()
+			.iter()
+			.all(|(_, mail)| matches!(mail, GovernanceMail::FeePolicyNotice(notice) if notice.effective_at == next.effective_from_unix))
+	);
 }
 
 #[tokio::test]
