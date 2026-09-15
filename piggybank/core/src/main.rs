@@ -363,11 +363,11 @@ async fn run(config: config::AppConfig) -> color_eyre::Result<()> {
 	// pool clone so its polling reads don't compete with request traffic on the
 	// relay pool.
 	let bridge = {
-		// Say it out loud when production pulls this stream from a peer it cannot
-		// authenticate. A WARN and not a refusal: production runs on h2c inside the cluster
-		// today, and refusing to boot would take the money plane down to fix a seam that is
-		// currently guarded by network reachability (#199, phase 1).
-		config::warn_if_bridge_is_unauthenticated(&config.app_env, &config.concierge_bridge_addr);
+		// Record at boot when production pulls this stream from a peer it cannot
+		// authenticate. A log line and not a refusal: production runs on h2c inside the
+		// cluster today, and refusing to boot would take the money plane down to fix a seam
+		// that is currently guarded by network reachability (#199, phase 1).
+		config::note_if_bridge_is_unauthenticated(&config.app_env, &config.concierge_bridge_addr);
 		let endpoint = bridge_endpoint(&config.concierge_bridge_addr)?;
 		let channel = endpoint.connect_lazy();
 		Some(BridgeConsumer::new(

@@ -645,19 +645,28 @@ pub fn bridge_transport(addr: &str) -> BridgeTransport {
 	if loopback { BridgeTransport::Loopback } else { BridgeTransport::Cleartext }
 }
 
-/// Say it out loud at boot when production pulls the lifecycle stream in cleartext from a
-/// peer it cannot authenticate.
+/// Record at boot that production pulls the lifecycle stream in cleartext from a peer it
+/// cannot authenticate.
 ///
-/// A WARN and not a refusal, deliberately: production runs on `http://concierge:55670`
-/// today (h2c, inside the cluster), and a hub that refuses to start would take the money
-/// plane down to fix a seam that is currently guarded by network reachability. The refusal
-/// is phase 2, once concierge terminates TLS and the CA is pinned here — the signer seam's
-/// non-loopback-requires-TLS check (`piggybank/signer/src/config.rs`) is the shape it takes.
-pub fn warn_if_bridge_is_unauthenticated(app_env: &str, addr: &str) {
+/// Neither a refusal nor a WARN, deliberately. Not a refusal because production runs on
+/// `http://concierge:55670` today (h2c, inside the cluster), and a hub that refuses to
+/// start would take the money plane down to fix a seam that is currently guarded by network
+/// reachability; the refusal is phase 2, once concierge terminates TLS and the CA is pinned
+/// here — the signer seam's non-loopback-requires-TLS check
+/// (`piggybank/signer/src/config.rs`) is the shape it takes.
+///
+/// Not a WARN because every warn-level line this service prints in production is an alert:
+/// the deploy generator routes `{service_name="piggybank-core", level="warn"}` to the
+/// `discord-banking-warn` contact point at a threshold of zero. This condition is constant
+/// until phase 2, so a WARN here would page that channel on every restart with nothing to
+/// act on — which is how a channel stops being read. INFO keeps the posture in the boot
+/// record an operator (or an incident) actually reads, and leaves the alert for the state
+/// that is new: a seam that was supposed to be TLS and is not.
+pub fn note_if_bridge_is_unauthenticated(app_env: &str, addr: &str) {
 	if app_env != "production" || bridge_transport(addr) != BridgeTransport::Cleartext {
 		return;
 	}
-	tracing::warn!(
+	tracing::info!(
 		bridge_addr = %addr,
 		"CONCIERGE_BRIDGE_ADDR is cleartext to a non-loopback peer in production: the lifecycle stream is neither encrypted nor server-authenticated, so anything that can answer to that name can mirror a KYC tier or an operator role onto the money plane (EV-invest/banking#199). Terminate TLS at concierge and set an https:// address (pin its CA with BRIDGE_TLS_CA_PEM_FILE); until then keep the seam behind a NetworkPolicy."
 	);
@@ -743,19 +752,20 @@ mod tests {
 		}
 	}
 
-	/// The WARN is production-only and cleartext-only — it must not fire in dev (where the
-	/// address is loopback anyway) nor once the seam is https, or it stops being read.
+	/// The boot notice is production-only and cleartext-only — it must not fire in dev
+	/// (where the address is loopback anyway) nor once the seam is https, or it stops
+	/// being read.
 	#[test]
-	fn the_bridge_warning_is_scoped_to_production_cleartext() {
+	fn the_bridge_boot_notice_is_scoped_to_production_cleartext() {
 		// The function logs and returns nothing; what is asserted here is the predicate it
 		// is built from, at the same four corners.
 		assert_eq!(bridge_transport("http://concierge:55670"), BridgeTransport::Cleartext);
 		assert_eq!(bridge_transport("https://concierge:55670"), BridgeTransport::Tls);
 		assert_eq!(bridge_transport("http://127.0.0.1:55670"), BridgeTransport::Loopback);
 		// Smoke: neither call may panic, in either environment.
-		warn_if_bridge_is_unauthenticated("production", "http://concierge:55670");
-		warn_if_bridge_is_unauthenticated("development", "http://concierge:55670");
-		warn_if_bridge_is_unauthenticated("production", "https://concierge:55670");
+		note_if_bridge_is_unauthenticated("production", "http://concierge:55670");
+		note_if_bridge_is_unauthenticated("development", "http://concierge:55670");
+		note_if_bridge_is_unauthenticated("production", "https://concierge:55670");
 	}
 
 	#[test]
