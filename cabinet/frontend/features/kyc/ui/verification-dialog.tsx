@@ -5,7 +5,7 @@ import { useT } from "@evinvest/i18n/react";
 import { Clock, IdCard, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@evinvest/uikit";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@evinvest/uikit";
 
 import { useStartVerification } from "@/features/kyc/model/use-start-verification";
 import { StartVerificationButton, VerificationOutcome } from "@/features/kyc/ui/verification-controls";
@@ -19,15 +19,33 @@ import { StartVerificationButton, VerificationOutcome } from "@/features/kyc/ui/
 //
 // It is controlled rather than carrying its own trigger: the banner's trigger is a whole card,
 // the profile's is a row button, and the wallet's is a link inside a rail — one `DialogTrigger`
-// could not be all three.
+// could not be all three. Being controlled is also why it is mounted beside each trigger and
+// stays mounted while closed, which is what `reset` below is for.
 
 export function VerificationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT();
   const start = useStartVerification();
 
+  function change(next: boolean) {
+    // A start in flight cannot be called back: the vendor session is created by the request,
+    // and the answer navigates this tab. Closing here would not cancel anything — it would
+    // only hide the fact that the page is about to leave, so that a reader who pressed Esc
+    // and moved on lands at the provider a second later. Esc, the overlay and the close
+    // button all arrive here, so holding the dialog open is the one place to say no.
+    if (!next && start.starting) return;
+    // The outcome belongs to the attempt, not to the component: this instance outlives the
+    // close, and `unavailable` is what nearly every reader gets today (verification is
+    // deployed unconfigured). Re-opening must not replay it as though it had just happened.
+    if (!next) start.reset();
+    onOpenChange(next);
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={change}>
+      {/* No `max-w-lg`: `DIALOG_CONTENT` already carries `sm:max-w-lg`, and passing the
+          unprefixed class made twMerge drop the `max-w-[calc(100%-2rem)]` beside it — which
+          is the only thing keeping a phone's dialog off both edges of the screen. */}
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("kyc.dialog.title")}</DialogTitle>
           {/* The gate as the hub actually applies it (#179): a deposit ADDRESS is what is
@@ -42,11 +60,17 @@ export function VerificationDialog({ open, onOpenChange }: { open: boolean; onOp
           <Step icon={ShieldCheck} title={t("kyc.dialog.afterTitle")} body={t("kyc.dialog.afterBody")} />
         </div>
 
-        {/* Above the footer, not inside it: an outcome is about the attempt just made, and a
-            reader whose 503 sits beside the button that produced it has less to reconstruct. */}
-        <VerificationOutcome start={start} />
-
         <DialogFooter>
+          {/* Inside the footer rather than above it. The live region is mounted empty and
+              stays mounted — `role="status"` inserted in the same tick as its own text is
+              unreliably announced, which also rules out `empty:hidden`, since a
+              `display: none` region is out of the accessibility tree entirely. So it always
+              occupies a slot, and the footer's `gap-2` is the cheapest slot in the dialog;
+              as its own child of the `gap-4` grid it cost twice that, permanently, for a
+              message that is absent on every normal run. */}
+          <div className="sm:mr-auto">
+            <VerificationOutcome start={start} />
+          </div>
           <StartVerificationButton start={start} label={t("kyc.dialog.action")} className="w-full sm:w-auto" />
         </DialogFooter>
       </DialogContent>
@@ -54,16 +78,22 @@ export function VerificationDialog({ open, onOpenChange }: { open: boolean; onOp
   );
 }
 
+/**
+ * `Item` and not three hand-written `div`s: the kit owns this shape (`views/dashboard` uses
+ * the same composition for operation rows), and what is overridden here is only the frame —
+ * the chip keeps the dialog's own rounding and surface, and the row drops the padding it
+ * would carry as a standalone list item.
+ */
 function Step({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
   return (
-    <div className="flex gap-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-ink-mid">
-        <Icon className="size-4" aria-hidden />
-      </span>
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-ink">{title}</p>
-        <p className="text-sm leading-snug text-ink-soft">{body}</p>
-      </div>
-    </div>
+    <Item className="items-start gap-3 rounded-none p-0">
+      <ItemMedia variant="icon" className="rounded-lg border-0 bg-secondary text-ink-mid">
+        <Icon aria-hidden />
+      </ItemMedia>
+      <ItemContent className="min-w-0">
+        <ItemTitle className="font-semibold text-ink">{title}</ItemTitle>
+        <ItemDescription className="line-clamp-none leading-snug">{body}</ItemDescription>
+      </ItemContent>
+    </Item>
   );
 }

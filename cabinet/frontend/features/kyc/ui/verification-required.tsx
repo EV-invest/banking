@@ -41,7 +41,8 @@ export function VerificationRequired({ title, description, className }: { title:
         <EmptyDescription>{description}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        {/* i18n-max: 16 — the uikit Button is shrink-0. */}
+        {/* i18n-max: 14 — the uikit Button is shrink-0. The number is the banner's, which
+            is the tighter of the two frames this key renders in; one string, one budget. */}
         <Button type="button" onClick={() => setOpen(true)}>
           {t("kyc.verifyNow")}
         </Button>

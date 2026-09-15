@@ -36,8 +36,8 @@ export interface RunningCase {
 }
 
 /**
- * May this caller be offered a start — the question the profile card, the home banner and the
- * wallet all have to answer, and the one that used to be answered from the tier alone (#190).
+ * May this caller be offered a start — the question every surface that shows the button has to
+ * answer, and the one that used to be answered from the tier alone (#190).
  *
  * Three states, not two:
  *
