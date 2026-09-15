@@ -284,6 +284,56 @@ impl AllocationIcon {
 	}
 }
 
+/// What stands behind a product's units: the fund's cash, or an asset held in kind.
+///
+/// Every unit a subscription mints has cash behind it — the investor's claim moved into
+/// the fund's, and a redemption pays that cash back out. Units minted in kind
+/// (`AllocationsService.IssueUnits`) have none: the product is registered against an
+/// asset the holders already own, and the fund's USDT claim never saw a cent for them.
+/// A redemption on such a product would price the units at NAV and pay cash the fund
+/// does not hold — it would queue forever, or worse, drain cash another product's
+/// investors put in. So `Redeem` is refused on an `InKind` product
+/// ([`Allocation::ensure_cash_backed`]) and the way out is the book, where a buyer's
+/// cash pays for the units.
+///
+/// Set automatically by the first in-kind mint (`cash → in_kind`, never the reverse on
+/// its own) and explicitly by an operator (`SetAllocationBacking`) once the fund does
+/// hold cash for the units. Orthogonal to [`AllocationState`] and [`AllocationAccess`].
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationBacking {
+	/// The units were paid for with cash into the fund's claim; a redemption pays out
+	/// of it. What every registration lands on.
+	#[default]
+	Cash,
+	/// The units stand for an asset held in kind; the fund's claim holds no cash for
+	/// them. Redemptions are refused — holders exit through the book.
+	InKind,
+}
+
+impl AllocationBacking {
+	/// The stored/wire discriminant. Keep byte-identical with
+	/// `evbanking_contracts::allocation::backing` (`allocation_backing_strings_are_canonical`
+	/// guards this side).
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Cash => "cash",
+			Self::InKind => "in_kind",
+		}
+	}
+
+	/// Parse the stored/wire form. An unrecognized value is an error rather than a
+	/// silent default, because the default is the permissive side: a corrupt row must
+	/// never quietly let a redemption price units the fund holds no cash for.
+	pub fn parse(raw: &str) -> Result<Self, DomainError> {
+		match raw {
+			"cash" => Ok(Self::Cash),
+			"in_kind" => Ok(Self::InKind),
+			other => Err(DomainError::Validation(format!("unknown allocation backing: {other}"))),
+		}
+	}
+}
+
 /// The stored shape of an [`Allocation`], as the persistence adapter reads it back —
 /// the input to [`Allocation::rehydrate`]. A struct rather than eight positional
 /// arguments for the same reason as [`UserSnapshot`](crate::users::UserSnapshot): the
@@ -298,6 +348,7 @@ pub struct AllocationSnapshot {
 	pub unit_cap: Shares,
 	pub icon: AllocationIcon,
 	pub access: AllocationAccess,
+	pub backing: AllocationBacking,
 }
 
 /// The allocation aggregate — one investable product's registry entry. Construct via
@@ -313,6 +364,7 @@ pub struct Allocation {
 	unit_cap: Shares,
 	icon: AllocationIcon,
 	access: AllocationAccess,
+	backing: AllocationBacking,
 	pending: Vec<AllocationEvent>,
 }
 
@@ -333,6 +385,7 @@ impl Allocation {
 			unit_cap: DEFAULT_UNIT_CAP,
 			icon,
 			access: AllocationAccess::DEFAULT,
+			backing: AllocationBacking::default(),
 			pending: Vec::new(),
 		};
 		allocation.pending.push(AllocationEvent::Registered {
@@ -343,6 +396,7 @@ impl Allocation {
 			unit_cap: DEFAULT_UNIT_CAP,
 			icon,
 			access: AllocationAccess::DEFAULT,
+			backing: AllocationBacking::default(),
 		});
 		Ok(allocation)
 	}
@@ -358,6 +412,7 @@ impl Allocation {
 			unit_cap: snapshot.unit_cap,
 			icon: snapshot.icon,
 			access: snapshot.access,
+			backing: snapshot.backing,
 			pending: Vec::new(),
 		}
 	}
@@ -497,6 +552,49 @@ impl Allocation {
 		});
 	}
 
+	/// Mark the units as standing for an asset held in kind — what the first in-kind
+	/// mint does on the product's behalf. Idempotent: an already `InKind` product raises
+	/// nothing, so the second and every later mint leaves the log alone. Raises
+	/// `BackingChanged`.
+	///
+	/// One-directional on purpose: nothing automatic ever flips a product back to `Cash`,
+	/// because that is the direction that lets a redemption price units the fund holds
+	/// no cash for. Only an operator does that, through [`Self::set_backing`].
+	pub fn mark_in_kind(&mut self) {
+		self.set_backing(AllocationBacking::InKind);
+	}
+
+	/// Set the backing explicitly — an operator declaring the fund now holds cash for
+	/// the units (`Cash`), or correcting a product back to `InKind`. Idempotent: the
+	/// backing it already holds raises nothing. Raises `BackingChanged`.
+	pub fn set_backing(&mut self, backing: AllocationBacking) {
+		if backing == self.backing {
+			return;
+		}
+		self.backing = backing;
+		self.pending.push(AllocationEvent::BackingChanged {
+			allocation_id: self.id,
+			service: self.service.clone(),
+			backing,
+		});
+	}
+
+	/// The second gate the redeem path runs, beside [`Self::ensure_redeemable`]: a
+	/// redemption pays cash out of the fund's claim, so the units must be backed by that
+	/// cash. Refused as a `Precondition` — the product is fine and the holder is
+	/// entitled; the *fund's* state is what stands in the way, and an operator can
+	/// change it (`set_backing`) once the cash is there. The message points at the exit
+	/// that does work: selling the units on the book.
+	pub fn ensure_cash_backed(&self) -> Result<(), DomainError> {
+		match self.backing {
+			AllocationBacking::Cash => Ok(()),
+			AllocationBacking::InKind => Err(DomainError::Precondition(format!(
+				"units of '{}' are not backed by fund cash — sell them on the book instead of redeeming",
+				self.service
+			))),
+		}
+	}
+
 	/// Record that `user` was raised to `level` on this product by `granted_by`. The
 	/// grant itself is stored beside the aggregate, keyed by user (see the module doc);
 	/// this raises the audit fact and refuses the one level a grant must never carry.
@@ -577,6 +675,10 @@ impl Allocation {
 
 	pub fn access(&self) -> AllocationAccess {
 		self.access
+	}
+
+	pub fn backing(&self) -> AllocationBacking {
+		self.backing
 	}
 
 	pub fn id(&self) -> AllocationId {
@@ -663,6 +765,11 @@ pub enum AllocationEvent {
 		/// gate decided elsewhere.
 		#[serde(default)]
 		access: AllocationAccess,
+		/// `default` for rows written before backing existed: every registration has
+		/// always landed on cash-backed, and the products that were not are flipped by the
+		/// migration's backfill, not by rereading their registration.
+		#[serde(default)]
+		backing: AllocationBacking,
 	},
 	/// Presentation fields changed; state and identity did not.
 	DetailsUpdated {
@@ -689,6 +796,14 @@ pub enum AllocationEvent {
 		allocation_id: AllocationId,
 		service: ServiceId,
 		access: AllocationAccess,
+	},
+	/// What stands behind the units changed — raised by the first in-kind mint
+	/// (`cash → in_kind`) or by an operator. Its own fact because it gates money the
+	/// other way round from `AccessChanged`: it decides whether holders can redeem.
+	BackingChanged {
+		allocation_id: AllocationId,
+		service: ServiceId,
+		backing: AllocationBacking,
 	},
 	/// One investor was raised above the default. `granted_by` is the operator — the
 	/// audit answer to "who let this investor in".
@@ -1120,5 +1235,69 @@ mod tests {
 		let json = serde_json::to_string(&event).unwrap();
 		let back: AllocationEvent = serde_json::from_str(&json).unwrap();
 		assert!(matches!(back, AllocationEvent::Registered { .. }));
+	}
+
+	#[test]
+	fn allocation_backing_strings_are_canonical() {
+		// Wire contract: these must match `evbanking_contracts::allocation::backing`.
+		assert_eq!(AllocationBacking::Cash.as_str(), "cash");
+		assert_eq!(AllocationBacking::InKind.as_str(), "in_kind");
+		for backing in [AllocationBacking::Cash, AllocationBacking::InKind] {
+			assert_eq!(AllocationBacking::parse(backing.as_str()).unwrap(), backing);
+			assert_eq!(serde_json::to_string(&backing).unwrap(), format!("\"{}\"", backing.as_str()));
+		}
+		assert!(AllocationBacking::parse("asset").is_err());
+		assert!(AllocationBacking::parse("InKind").is_err(), "the wire form is lowercase snake_case");
+		assert_eq!(AllocationBacking::default(), AllocationBacking::Cash, "a registration is cash-backed until a mint says otherwise");
+	}
+
+	#[test]
+	fn a_registration_is_cash_backed_and_redeemable_until_marked_in_kind() {
+		let mut allocation = registered();
+		allocation.open();
+		allocation.drain_events();
+		assert_eq!(allocation.backing(), AllocationBacking::Cash);
+		assert!(allocation.ensure_cash_backed().is_ok());
+
+		allocation.mark_in_kind();
+		allocation.mark_in_kind();
+		assert_eq!(allocation.backing(), AllocationBacking::InKind);
+		let events = allocation.drain_events();
+		assert_eq!(events.len(), 1, "the second mint on an in-kind product raises nothing");
+		assert!(matches!(
+			events[0],
+			AllocationEvent::BackingChanged {
+				backing: AllocationBacking::InKind,
+				..
+			}
+		));
+		// The state gate still passes — the product is open — and the backing gate is
+		// what refuses, as a precondition an operator can lift, pointing at the book.
+		assert!(allocation.ensure_redeemable().is_ok());
+		let err = allocation.ensure_cash_backed().unwrap_err();
+		assert!(
+			matches!(err, DomainError::Precondition(ref m) if m.contains("not backed by fund cash") && m.contains("book")),
+			"{err:?}"
+		);
+
+		// The operator's way back, idempotent and audited like every other setter.
+		allocation.set_backing(AllocationBacking::Cash);
+		allocation.set_backing(AllocationBacking::Cash);
+		assert_eq!(allocation.drain_events().len(), 1);
+		assert!(allocation.ensure_cash_backed().is_ok());
+	}
+
+	#[test]
+	fn a_pre_backing_registered_payload_still_deserializes() {
+		// `event_log` rows written before this field existed carry no `backing` key.
+		let mut allocation = registered();
+		let json = serde_json::to_string(&allocation.drain_events().pop().unwrap()).unwrap();
+		let legacy = json.replace(r#","backing":"cash""#, "");
+		assert!(!legacy.contains("backing"), "the legacy payload must actually lack the key: {legacy}");
+		let back: AllocationEvent = serde_json::from_str(&legacy).unwrap();
+		let AllocationEvent::Registered { backing, .. } = back else {
+			panic!("expected Registered, got {back:?}")
+		};
+		assert_eq!(backing, AllocationBacking::Cash);
 	}
 }

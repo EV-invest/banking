@@ -322,6 +322,13 @@ pub enum TransferCode {
 	/// grows supply) nor a [`Self::BookFill`] (which is paid for) — reconciliation must
 	/// be able to read a company stake shrinking with nothing minted or sold.
 	CompanyStakeTransfer,
+	/// In-kind units retired: `Dr SharesOutstanding / Cr <holder shares>` — supply
+	/// shrinks, no cash moves. The mirror of [`Self::UnitIssue`], and its own code rather
+	/// than [`Self::ShareBurn`] for the same reason: a `ShareBurn` is always paired with
+	/// a `Redeem` payout out of the service claim, a retirement never is, so
+	/// reconciliation reading the Share ledger alone can tell which burns the fund's
+	/// cash should account for.
+	UnitRetire,
 }
 
 impl TransferCode {
@@ -351,6 +358,7 @@ impl TransferCode {
 			Self::BookFill => 50,
 			Self::BookFee => 51,
 			Self::CompanyStakeTransfer => 52,
+			Self::UnitRetire => 53,
 		}
 	}
 }
@@ -661,6 +669,7 @@ mod tests {
 			TransferCode::BookFill,
 			TransferCode::BookFee,
 			TransferCode::CompanyStakeTransfer,
+			TransferCode::UnitRetire,
 		]
 		.map(TransferCode::code);
 		let mut sorted = transfer_codes;

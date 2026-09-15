@@ -237,7 +237,7 @@ The company is a holder in its own right rather than a user with a well-known id
 every investor-facing read into special-casing one UUID. `ListUnitHolders` reports the
 split — `company_units`, `fee_units`, `investor_units = outstanding − company − fee` —
 read straight from TB; `FundNav.company_units` shows an investor the company's share on
-the card. The mint posts under its own `TransferCode::UnitIssue` (46), not `ShareMint`,
+the card. The mint posts under its own `TransferCode::UnitIssue` (47), not `ShareMint`,
 so supply growth the fund's cash never paid for is distinguishable from a subscription's
 on the Share ledger alone.
 
@@ -293,6 +293,51 @@ at the mark); the company has none to reduce. It is a variant of the issuance ag
 not a second one, because from the recipient's side it *is* an issuance — units they did
 not pay cash for — and the console lists mints and hand-overs as one history
 (`UnitIssuance.source` on the wire).
+
+**Retiring units (`RetireUnits`).** The mint's mirror: units burnt out of a holder's
+account — a user's or the company's — with no cash leg, for units that should never have
+been minted or that stand for an asset the holder no longer owns. Same `unit_issuances`
+row with `source = 'retire'` (migration `0039` widens the CHECK), `units` **positive** —
+every row carries the magnitude and the source carries the direction, so the 0034 digit
+CHECK never learns a sign and the console reads one history of mints, hand-overs and
+retirements. Same key contract, same key space (a mint's key reused for a retirement is
+`Conflict`). Gates: key first; the allocation registered **and `closed`** — burning a
+holder's units out of a live product is a decision that deserves a closed door first,
+and `force` is the operator's explicit override (`Precondition` → FAILED_PRECONDITION
+without it); a user holder exists; fresh NAV (recorded, default basis `units × NAV` — the
+book value written off, not cash that moves); and a Read-First that the holder's
+`shares_key(svc).available() ≥ units` — units resting on the book or reserved by a queued
+redemption are spoken for and stay (`Validation`). No cap check: supply only shrinks. The
+relay posts `Dr SharesOutstanding / Cr <holder shares>` under `TransferCode::UnitRetire`
+(53, its own code beside `ShareBurn` for the reason `UnitIssue` sits beside `ShareMint`: a
+`ShareBurn` is always paired with a `Redeem` payout, a retirement never is) with its own
+transfer id (`tid(issuance, "issue:retire")`); the holder's debit-normal account with the
+non-negative flag parks an over-retire that races the read. The `applied` stamp is the
+same; for a user holder the projection runs the **seller's** side of a trade — `units −=`,
+`cost_basis` shed pro rata and clamped at zero — and the high-water mark is untouched,
+because nothing was realised at any price. The company has no projection to reduce.
+
+**Backing — cash vs in_kind.** Every unit a subscription mints has cash behind it: the
+investor's claim moved into the fund's, and a redemption pays that cash back out. Units
+minted in kind have **none**, so a redemption on such a product asks the fund to pay cash
+it does not hold — it queues forever or, once the fund holds cash for some other reason,
+pays out money that belongs to someone else. `Allocation.backing` (`domain::allocations::
+AllocationBacking`, migration `0039`: `cash` default, `in_kind`) names the distinction,
+orthogonal to state and access. The **first in-kind mint flips a `cash` product to
+`in_kind`** inside `issue_units`, after every gate and before the row is written
+(idempotent; the order is deliberate — a flip with no mint behind it is one operator
+command to undo, a mint on a product still `cash` lets the next redemption price units
+the fund cannot pay for); `TransferCompanyStake` and `RetireUnits` leave it alone.
+Nothing automatic ever flips it back: an operator declares the fund holds cash for the
+units with `SetAllocationBacking` (`AllocationManage`, idempotent, either value, audited
+as `BackingChanged`). The redeem gate (`allocations_app::require_redeemable`) now runs
+both checks off one load — state first, so a draft answers "never open", then
+`Allocation::ensure_cash_backed`, which refuses an `in_kind` product as a `Precondition`
+(FAILED_PRECONDITION, "units of '<svc>' are not backed by fund cash — sell them on the
+book instead of redeeming"). Access is still never consulted on the way out. The
+migration backfills by data, not by name: a product with at least one `source = 'mint'`
+row is `in_kind` (in production `service_arb` and `test_book`); a pod that predates the
+column inserts without it and lands on `cash`.
 
 ## The book — holders trading units with each other (`domain::book`, `BookService`)
 
@@ -1064,7 +1109,18 @@ the relay as its own kind) and the hand-over out of the company's stake (the 13 
 moving company → user with `SharesOutstanding` unchanged and `ListUnitHolders` showing
 the shift, the recipient's basis and mark, the shared key space refusing a mint's key
 and returning a repeat, more than the company holds refused before anything is written,
-and an unregistered service refused);
+and an unregistered service refused), the retirement (units burnt out of an investor and
+the company on a closed product with the supply, `ListUnitHolders` and the investor's
+`fund_positions` units and basis shrinking and the mark untouched, a live product refusing
+without `force` and burning with it, the shared key space returning a repeat and refusing
+a mint's key, more than the holder has **available** refused before anything is written —
+including units a queued redemption has reserved — and the widened `source` CHECK), and
+the backing (a registration landing on `cash`, the first mint flipping it to `in_kind`
+with one `BackingChanged` fact and a second mint or a hand-over leaving none, the
+operator's `set_backing` idempotent and the next mint flipping again, `Redeem` refused as
+a precondition on an `in_kind` product before any redemption is recorded and passing
+once the operator declares cash — on a closed product too — and a row written by the
+pre-0039 INSERT reading as `cash` with the column CHECK refusing anything else);
 `piggybank/core/tests/balance_allocations.rs` and
 `piggybank/core/tests/wallet_withdrawals.rs` hit **real** Postgres + TigerBeetle
 (deposit idempotency, the non-negative backstop, transfer-id idempotency; the Share-ledger
