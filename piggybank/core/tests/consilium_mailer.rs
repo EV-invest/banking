@@ -323,7 +323,8 @@ async fn a_mail_given_up_on_is_redacted_like_a_delivered_one() {
 
 /// A burn notice over a change of fee terms carries the fund line and both sets of terms
 /// through the queue and out to the relay — the description concierge v0.8.0 renders — with
-/// the reason kept, and `current` kept absent when the fund charged nothing.
+/// `current` kept absent when the fund charged nothing and no reason, as the contract has it
+/// under the burn kind; the verdict beside it keeps the initiator's reason.
 #[tokio::test]
 async fn a_fee_terms_outcome_reaches_the_relay_with_its_fund_and_terms() {
 	let _guard = QUEUE.lock().await;
@@ -343,7 +344,7 @@ async fn a_fee_terms_outcome_reaches_the_relay_with_its_fund_and_terms() {
 			tier: String::new(),
 			source: String::new(),
 			destination: String::new(),
-			reason: "the new mandate costs more to run".into(),
+			reason: String::new(),
 			fund: "Arb desk (service_arb)".into(),
 			current: None,
 			proposed: Some(terms(300)),
@@ -379,12 +380,13 @@ async fn a_fee_terms_outcome_reaches_the_relay_with_its_fund_and_terms() {
 	assert_eq!(burn.fund, "Arb desk (service_arb)");
 	assert!(burn.current.is_none(), "a fund that charged nothing has no current terms");
 	assert_eq!(burn.proposed.as_ref().map(|t| t.management_bps), Some(300));
-	assert_eq!(burn.reason, "the new mandate costs more to run");
+	assert!(burn.reason.is_empty(), "a burn notice carries no initiator's note");
 	assert!(burn.network.is_empty() && burn.source.is_empty() && burn.destination.is_empty(), "one description, not two");
 	let GovernanceMail::PayoutOutcome(outcome) = &seen[1] else {
 		panic!("the outcome keeps its kind through the queue: {:?}", seen[1]);
 	};
 	assert_eq!(outcome.outcome, "REJECTED");
+	assert_eq!(outcome.reason, "the new mandate costs more to run");
 	assert_eq!(outcome.current.as_ref().map(|t| t.management_bps), Some(200));
 	assert_eq!(outcome.proposed.as_ref().map(|t| t.crystallization.as_str()), Some("annual"));
 

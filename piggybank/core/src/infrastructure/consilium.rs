@@ -457,8 +457,7 @@ fn outcome_of(consilium: &Consilium, outcome: String, detail: String, subject: &
 			..base
 		},
 		// The same fund line and terms the approval mail carried, so an owner reads the
-		// verdict on the request they were asked about. The reason travels under the burn
-		// kind too, as a payment's does: the relay renders it as a note, never requires it.
+		// verdict on the request they were asked about.
 		ConsiliumTerms::FeePolicy(change) => PayoutOutcome {
 			fund: fee_policy_changes::fee_mail_fund(subject.fee_policy().map(|detail| detail.allocation_name).as_deref(), &change.service),
 			current: change.from.as_ref().map(fee_policy_changes::mail_terms),
@@ -730,12 +729,18 @@ async fn announce_burn(conn: &mut PgConnection, consilium: &Consilium, voter: Us
 		return Ok(());
 	}
 	let subject = subject_detail(conn, consilium).await?;
-	let mail = GovernanceMail::TokenBurned(outcome_of(
-		consilium,
-		"TOKEN_BURNED".to_owned(),
-		format!("five failed code attempts burned the approval token for seat {voter}"),
-		&subject,
-	));
+	// No initiator's note on a burn notice: the contract says the burn kind carries no
+	// reason, and the relay would render one as the initiator's words under an alert about a
+	// brute-force attempt they did not make.
+	let mail = GovernanceMail::TokenBurned(PayoutOutcome {
+		reason: String::new(),
+		..outcome_of(
+			consilium,
+			"TOKEN_BURNED".to_owned(),
+			format!("five failed code attempts burned the approval token for seat {voter}"),
+			&subject,
+		)
+	});
 	for recipient in audience(consilium) {
 		let key = format!("consilium:{}:burn:{voter}:{recipient}", consilium.id());
 		enqueue(conn, MailSubject::Consilium(consilium.id().raw()), recipient.raw(), &key, &mail).await?;

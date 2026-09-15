@@ -870,8 +870,9 @@ async fn a_refused_or_withdrawn_quorum_closes_the_change() {
 /// The owners hear how a fee-policy consilium ended, and that a token burned on one of its
 /// seats, the way they do for a payout: one outcome mail per member of the audience on the
 /// verdict, one burn notice each on the fifth wrong code — both describing the terms (the
-/// fund line the approval used, the terms now and proposed, the initiator's reason) and
-/// naming no rail and no payment, since concierge renders exactly one description.
+/// fund line the approval used, the terms now and proposed) and naming no rail and no
+/// payment, since concierge renders exactly one description. The initiator's reason rides
+/// the verdict only: a burn notice is an alert about a brute-force attempt, not their request.
 #[tokio::test]
 async fn the_owners_are_mailed_the_verdict_and_the_burn_of_a_fee_policy_consilium() {
 	let _lock = exclusive().await;
@@ -890,7 +891,7 @@ async fn the_owners_are_mailed_the_verdict_and_the_burn_of_a_fee_policy_consiliu
 	assert_eq!(outcomes.len(), 3, "the initiator and every seat hear the verdict");
 	for mail in &outcomes {
 		assert_eq!(mail["outcome"], "REJECTED");
-		assert_fee_description(mail, &service);
+		assert_fee_description(mail, &service, "the new mandate costs more to run");
 	}
 
 	// A token burned on the next proposal: the whole roster is warned, over the same terms.
@@ -911,7 +912,7 @@ async fn the_owners_are_mailed_the_verdict_and_the_burn_of_a_fee_policy_consiliu
 	for mail in &burns {
 		assert_eq!(mail["outcome"], "TOKEN_BURNED");
 		assert!(mail["detail"].as_str().unwrap().contains(&roster[1].to_string()), "the seat is named: {}", mail["detail"]);
-		assert_fee_description(mail, &service);
+		assert_fee_description(mail, &service, "");
 	}
 	assert_eq!(consilium_state(&h, consilium).await, ConsiliumState::Open, "one burned token does not disarm the consilium");
 }
@@ -930,13 +931,14 @@ async fn outcome_mails(h: &Harness, consilium: ConsiliumId, kind: &str) -> Vec<s
 }
 
 /// What an outcome or burn mail over a fee-policy consilium says — the fee description of
-/// the approval mail, and nothing of a payout's or a payment's.
-fn assert_fee_description(mail: &serde_json::Value, service: &ServiceId) {
+/// the approval mail, and nothing of a payout's or a payment's. `reason` is the initiator's
+/// note the mail is expected to carry: theirs on a verdict, none on a burn notice.
+fn assert_fee_description(mail: &serde_json::Value, service: &ServiceId, reason: &str) {
 	assert_eq!(mail["fund"], format!("EV Trading ({service})"), "the title, and the slug it is known by");
 	assert_eq!(mail["current"]["management_bps"], 200, "the house terms in force when it was proposed");
 	assert_eq!(mail["proposed"]["management_bps"], 300);
 	assert_eq!(mail["proposed"]["basis"], "invested_capital");
-	assert_eq!(mail["reason"], "the new mandate costs more to run");
+	assert_eq!(mail["reason"], reason, "the initiator's note rides the verdict, never the burn notice");
 	for empty in ["network", "address", "amount", "tier", "source", "destination"] {
 		assert_eq!(mail[empty], "", "a fee outcome names no rail and no payment: {empty}");
 	}
