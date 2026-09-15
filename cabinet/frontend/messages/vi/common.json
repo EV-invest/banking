@@ -2471,6 +2471,10 @@
     "en": "Proposed AUM",
     "t": "AUM đề xuất"
   },
+  "approval.valuation.burned.body": {
+    "en": "The code was entered incorrectly too many times, so the link was closed and every owner has been told. Nothing was approved and the fund's NAV mark is unchanged. Ask whoever opened the request to send a new one.",
+    "t": "Mã đã bị nhập sai quá nhiều lần nên liên kết đã bị đóng và mọi chủ sở hữu đã được thông báo. Không có gì được chấp thuận và mức định giá NAV của quỹ không thay đổi. Hãy đề nghị người đã mở yêu cầu gửi một yêu cầu mới."
+  },
   "approval.valuation.decided.approvedTitle": {
     "en": "You approved this mark",
     "t": "Bạn đã phê duyệt mức định giá này"
@@ -2498,6 +2502,10 @@
   "approval.valuation.product": {
     "en": "Product",
     "t": "Sản phẩm"
+  },
+  "approval.valuation.tallyHint": {
+    "en": "More than half of the owners must approve before the fund is marked. You are one of them.",
+    "t": "Hơn một nửa số chủ sở hữu phải chấp thuận trước khi quỹ được định giá. Bạn là một trong số họ."
   },
   "approval.valuation.title": {
     "en": "Approve a NAV mark",
