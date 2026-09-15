@@ -11,7 +11,7 @@ mod common;
 
 #[tokio::test]
 async fn relay_uses_a_distinct_smaller_pool() {
-	let Some(url) = common::database_url() else {
+	let Some(url) = common::database_url().await else {
 		eprintln!("DATABASE_URL unset — skipping db pool sizing test");
 		return;
 	};
