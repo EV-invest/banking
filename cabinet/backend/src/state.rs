@@ -352,6 +352,16 @@ impl Grpc {
 		Ok(self.fees().cancel_fee_policy_change(bearer(token, req)?).await?.into_inner())
 	}
 
+	/// Take responsibility for the holders of a scheduled change who could not be told, so a
+	/// tightening binds over them. The hub decides who may: the requester or an owner.
+	pub async fn acknowledge_undelivered_notices(&self, token: &str, service: &str, change_id: &str) -> Result<bk::FeePolicyChange, Status> {
+		let req = bk::AcknowledgeUndeliveredNoticesRequest {
+			service: service.to_string(),
+			change_id: change_id.to_string(),
+		};
+		Ok(self.fees().acknowledge_undelivered_notices(bearer(token, req)?).await?.into_inner())
+	}
+
 	/// A fund's whole history of terms, newest version first.
 	pub async fn fee_policy_changes(&self, token: &str, service: &str) -> Result<bk::FeePolicyChangeList, Status> {
 		let req = bk::ListFeePolicyChangesRequest { service: service.to_string() };

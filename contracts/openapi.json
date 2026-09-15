@@ -3484,6 +3484,65 @@
         }
       }
     },
+    "/banking.v1.FeesService/AcknowledgeUndeliveredNotices": {
+      "post": {
+        "tags": [
+          "banking.v1.FeesService"
+        ],
+        "summary": "AcknowledgeUndeliveredNotices",
+        "description": "Take responsibility for the holders of a scheduled change who could not be told\n (AllocationManage, AND the caller must be the one who requested the change or a fund\n owner). A change that TIGHTENS the terms does not bind while a holder's notice is\n undelivered; for a holder the identity plane can never reach that is forever. This\n records who acknowledged, when, and exactly which holders' notices the mailer had\n GIVEN UP on by that moment (`notices_given_up`, never a notice still being tried), and\n the change then binds over those holders — and over nobody else who turns out untold\n later. A later call ADDS the holders given up on since (`notices_unacknowledged`) and\n stands as the latest: its caller and moment replace the record's, taking\n responsibility for the whole list. A repeat that would add nobody returns the record\n unchanged. ALREADY_EXISTS when the change is not scheduled, only loosens the terms (it\n binds by itself), or has no notice given up on yet that is not already covered —\n there is nothing to take responsibility for; PERMISSION_DENIED for a caller who is\n neither the requester nor an owner.",
+        "operationId": "banking.v1.FeesService.AcknowledgeUndeliveredNotices",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/banking.v1.AcknowledgeUndeliveredNoticesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/banking.v1.FeePolicyChange"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/banking.v1.FeesService/CancelFeePolicyChange": {
       "post": {
         "tags": [
@@ -8006,6 +8065,21 @@
         "additionalProperties": false,
         "description": "What a holding owes right now. `configured` is false when the fund charges no fee."
       },
+      "banking.v1.AcknowledgeUndeliveredNoticesRequest": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "service"
+          },
+          "change_id": {
+            "type": "string",
+            "title": "change_id"
+          }
+        },
+        "title": "AcknowledgeUndeliveredNoticesRequest",
+        "additionalProperties": false
+      },
       "banking.v1.AdminBalanceRequest": {
         "type": "object",
         "properties": {
@@ -9338,6 +9412,41 @@
             "type": "string",
             "title": "reason",
             "description": "Why, in the requester's words; empty when none was given."
+          },
+          "notices_waived_by": {
+            "type": "string",
+            "title": "notices_waived_by",
+            "description": "The operator's acknowledgement of holders who could not be told (see\n AcknowledgeUndeliveredNotices): who took responsibility — the latest to, when the\n record was extended — governance detail, shown to operators and blank for everyone\n else."
+          },
+          "notices_waived_at": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "notices_waived_at",
+            "format": "int64",
+            "description": "Unix seconds the (latest) acknowledgement was given; 0 when the notices were never\n waived. Public like every other moment on the change."
+          },
+          "notices_waived_users": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "notices_waived_users",
+            "description": "The ids of the holders whose notice the mailer had given up on by that moment — the\n holders the change binds over untold. Operators only; empty for everyone else."
+          },
+          "undelivered_notices": {
+            "type": "integer",
+            "title": "undelivered_notices",
+            "description": "Notices of this change not yet delivered to a CURRENT holder, how many of those the\n mailer has given up on — the figures a tightening waits on — and how many of the\n given-up ones the acknowledgement does not cover (all of them while there is none):\n the holders a (further) AcknowledgeUndeliveredNotices would name, so it is worth\n offering exactly while this is non-zero. Counted only while `scheduled` (0 in every\n other state), and shown to operators only."
+          },
+          "notices_given_up": {
+            "type": "integer",
+            "title": "notices_given_up"
+          },
+          "notices_unacknowledged": {
+            "type": "integer",
+            "title": "notices_unacknowledged"
           }
         },
         "title": "FeePolicyChange",

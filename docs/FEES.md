@@ -293,10 +293,37 @@ A loosening binds regardless, with a `warn!` naming the undelivered count: nobod
 off, and a holder the identity plane cannot reach (an unverified mailbox, no mirrored id —
 their notice is retired within minutes of every scheduling) would otherwise pin a product's
 terms forever, the lowering of a legacy rate above today's ceiling included. A tightening
-over such a holder has no way through yet: the relay coming back promotes it by itself on
-the next tick, a notice given up on needs the operator to cancel and schedule again once
-the holder can be reached, and for a holder who stays unreachable an explicit
-acknowledgement RPC is the missing piece (see the follow-up issue).
+over such a holder has one way through: the relay coming back promotes it by itself on the
+next tick; for a holder who stays unreachable, an operator takes responsibility explicitly.
+
+`AcknowledgeUndeliveredNotices` (`AllocationManage`, and the caller must be the one who
+requested the change or a fund owner — the same rule as withdrawing a consilium-gated
+change, so the holders' notice is never one administrator away from being waived on
+somebody else's change) records on the change who acknowledged, when, and the banking ids
+of exactly the holders whose notice the mailer had GIVEN UP on at that moment
+(`fee_policy_changes.notices_waived_by / notices_waived_at / notices_waived_users`,
+migration `0042`). Given up on, not merely undelivered: a notice still in the queue may yet
+arrive, and its holder is then told — waiving it before the mailer has finished trying would
+take responsibility for holders nobody has failed to reach (the requester pressing "take
+responsibility" in the first minute after scheduling would otherwise name every holder).
+Such a holder keeps holding the change until their notice is delivered or given up on.
+`promote` then binds the tightening over the named holders and logs a `warn!` naming them by
+id — and still refuses over anyone the record does not cover: a holder still in the queue
+at the time, or one who had redeemed and bought back in untold, holds the change again, so
+an acknowledgement never widens by itself. An acknowledgement covers every notice given up
+on so far; a later one ADDS the holders given up on since and stands as the latest — the
+list only grows, and the caller who extends it becomes `notices_waived_by` at `_at`, taking
+responsibility for the whole list (the console's confirmation says as much). A repeat that
+would add nobody returns the record unchanged, and the service's audit `warn!` is written
+only by a call that recorded or extended it. A change that is not `scheduled`, one that
+only loosens the terms (it binds by itself, so there is no protection to waive), or one
+with no uncovered notice given up on yet has nothing to acknowledge and is refused rather
+than silently stamped — an acknowledgement covering nobody would be a misleading line in
+the history, and the schema refuses one too. Every change carries `undelivered_notices` /
+`notices_given_up` / `notices_unacknowledged` on the wire (counted only while `scheduled`,
+operators only) — the last being the given-up notices no acknowledgement covers, which is
+what the admin console's "N holders could not be told" and its "take responsibility" offer
+read: the acknowledgement is offered exactly while `notices_unacknowledged > 0`.
 
 ## Still open
 
@@ -316,6 +343,6 @@ performance half is the remaining work.
 | Settling the accrual before a basis moves | `piggybank/core/src/infrastructure/fee_accrual.rs` |
 | The periodic worker | `piggybank/core/src/infrastructure/fee_sweeper.rs` |
 | Changing the terms: history, notice, promotion | `piggybank/core/src/infrastructure/fee_policy_changes.rs` |
-| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql`, `0041_fee_assessment_deferred_charge.sql` |
+| Schema | `piggybank/core/migrations/0023_fee_policy.sql`, `0036_fee_policy_changes.sql`, `0041_fee_assessment_deferred_charge.sql`, `0042_fee_policy_notice_waiver.sql` |
 | Wire contract | `contracts/proto/banking/v1/fees.proto` |
 | Integration tests (real PG + TigerBeetle) | `piggybank/core/tests/fee_policy.rs` |

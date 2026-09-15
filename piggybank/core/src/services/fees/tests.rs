@@ -8,13 +8,14 @@ use domain::{
 	balance::ServiceId,
 	consilium::ConsiliumId,
 	fees::{ChangeRequirement, CrystallizationPeriod, FeePolicy, FeePolicyChangeId, FeePolicyChangeState, ManagementBasis},
+	users::UserId,
 };
 use uuid::Uuid;
 
 use super::{Audience, change_to_proto, policy_to_proto};
 use crate::{
 	application::fees::PolicyView,
-	ports::fees::{FeePolicyChange, PolicyRecord},
+	ports::fees::{FeePolicyChange, NoticeWaiver, PolicyRecord},
 };
 
 fn consilium_gated_change() -> FeePolicyChange {
@@ -32,6 +33,28 @@ fn consilium_gated_change() -> FeePolicyChange {
 		reason: "the new mandate costs more to run".to_owned(),
 		scheduled_at_unix: None,
 		applied_at_unix: None,
+		undelivered_notices: 0,
+		notices_given_up: 0,
+		notices_unacknowledged: 0,
+		notices_waiver: None,
+	}
+}
+
+/// A scheduled change acknowledged by the requester, with a holder given up on since — the
+/// figures are only checked for reaching the wire, not for adding up.
+fn acknowledged_change() -> FeePolicyChange {
+	FeePolicyChange {
+		state: FeePolicyChangeState::Scheduled,
+		scheduled_at_unix: Some(1_700_000_500),
+		undelivered_notices: 2,
+		notices_given_up: 1,
+		notices_unacknowledged: 1,
+		notices_waiver: Some(NoticeWaiver {
+			by: "8f0d2a8e-2b3e-4a1a-9a53-6d5a0d1d2e3f".to_owned(),
+			at_unix: 1_700_050_000,
+			users: vec![UserId::from_raw(Uuid::from_u128(0xa1)), UserId::from_raw(Uuid::from_u128(0xa2))],
+		}),
+		..consilium_gated_change()
 	}
 }
 
@@ -60,6 +83,36 @@ fn an_operator_is_shown_who_asked_and_which_consilium_decides() {
 
 	assert_eq!(shown.requested_by, "8f0d2a8e-2b3e-4a1a-9a53-6d5a0d1d2e3f");
 	assert_eq!(shown.consilium_id, ConsiliumId::from_raw(Uuid::from_u128(0xc0)).to_string());
+}
+
+#[test]
+fn the_waiver_and_the_undelivered_figures_are_governance_detail() {
+	let change = acknowledged_change();
+
+	let operator = change_to_proto(&change, Audience::Operator);
+	assert_eq!(operator.notices_waived_by, "8f0d2a8e-2b3e-4a1a-9a53-6d5a0d1d2e3f");
+	assert_eq!(operator.notices_waived_at, 1_700_050_000);
+	assert_eq!(
+		operator.notices_waived_users,
+		vec![UserId::from_raw(Uuid::from_u128(0xa1)).to_string(), UserId::from_raw(Uuid::from_u128(0xa2)).to_string()]
+	);
+	assert_eq!(operator.undelivered_notices, 2);
+	assert_eq!(operator.notices_given_up, 1);
+	assert_eq!(operator.notices_unacknowledged, 1);
+
+	let investor = change_to_proto(&change, Audience::Investor);
+	assert_eq!(investor.notices_waived_by, "", "who took responsibility is governance detail");
+	assert!(investor.notices_waived_users.is_empty(), "other holders' ids are never shown to an investor");
+	assert_eq!(investor.undelivered_notices, 0);
+	assert_eq!(investor.notices_given_up, 0);
+	assert_eq!(investor.notices_unacknowledged, 0);
+	// That the notice was waived, and when, is a fact about the terms they are on.
+	assert_eq!(investor.notices_waived_at, 1_700_050_000);
+
+	let untouched = change_to_proto(&consilium_gated_change(), Audience::Operator);
+	assert_eq!(untouched.notices_waived_at, 0);
+	assert_eq!(untouched.notices_waived_by, "");
+	assert!(untouched.notices_waived_users.is_empty());
 }
 
 #[test]

@@ -136,6 +136,7 @@ fn requests(state: AppState) -> Router {
 		.route("/api/admin/fees/policies", get(admin::list_fee_policies))
 		.route("/api/admin/fees/policy", post(admin::schedule_fee_policy))
 		.route("/api/admin/fees/policy/cancel", post(admin::cancel_fee_policy_change))
+		.route("/api/admin/fees/policy/acknowledge-notices", post(admin::acknowledge_undelivered_notices))
 		.route("/api/admin/fees/changes", get(admin::list_fee_policy_changes))
 		.route("/api/admin/fees/shares", get(admin::fee_shares))
 		.route("/api/admin/fees/settle", post(admin::settle_fee_shares))

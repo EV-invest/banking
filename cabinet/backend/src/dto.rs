@@ -699,11 +699,11 @@ impl From<bk::FeePolicy> for FeePolicy {
 	}
 }
 
-/// One row of a fund's fee-policy history — the shape `ScheduleFeePolicy` and
-/// `CancelFeePolicyChange` answer with, and the rows of `/api/admin/fees/changes`.
-/// `state` is awaiting_consilium | scheduled | active | superseded | rejected | cancelled;
-/// `requirement` is admin | owner_consilium. Timestamps are unix seconds as strings, `"0"`
-/// where the moment has not come.
+/// One row of a fund's fee-policy history — the shape `ScheduleFeePolicy`,
+/// `CancelFeePolicyChange` and `AcknowledgeUndeliveredNotices` answer with, and the rows of
+/// `/api/admin/fees/changes`. `state` is awaiting_consilium | scheduled | active |
+/// superseded | rejected | cancelled; `requirement` is admin | owner_consilium. Timestamps
+/// are unix seconds as strings, `"0"` where the moment has not come.
 #[derive(Serialize)]
 pub struct FeePolicyChange {
 	pub id: String,
@@ -724,6 +724,20 @@ pub struct FeePolicyChange {
 	pub scheduled_at: String,
 	pub applied_at: String,
 	pub reason: String,
+	/// Who took responsibility for holders who could not be told — the latest to, when the
+	/// record was extended; `null` until someone did.
+	pub notices_waived_by: Option<String>,
+	/// When; `"0"` until someone did.
+	pub notices_waived_at: String,
+	/// The holders (banking user ids) the acknowledgement covers; empty until someone did.
+	pub notices_waived_users: Vec<String>,
+	/// Notices of this change not yet delivered to a current holder, how many of those the
+	/// mailer has given up on — what the pending card says "N holders could not be told"
+	/// from — and how many of the given-up ones no acknowledgement covers yet: the ones a
+	/// (further) acknowledgement is offered over. Counted only while `scheduled`.
+	pub undelivered_notices: u32,
+	pub notices_given_up: u32,
+	pub notices_unacknowledged: u32,
 }
 
 impl From<bk::FeePolicyChange> for FeePolicyChange {
@@ -746,6 +760,12 @@ impl From<bk::FeePolicyChange> for FeePolicyChange {
 			scheduled_at: c.scheduled_at.to_string(),
 			applied_at: c.applied_at.to_string(),
 			reason: c.reason,
+			notices_waived_by: non_empty(c.notices_waived_by),
+			notices_waived_at: c.notices_waived_at.to_string(),
+			notices_waived_users: c.notices_waived_users,
+			undelivered_notices: c.undelivered_notices,
+			notices_given_up: c.notices_given_up,
+			notices_unacknowledged: c.notices_unacknowledged,
 		}
 	}
 }

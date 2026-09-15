@@ -16,6 +16,7 @@ import { formatMoment, hasStamp } from "@/shared/lib/datetime";
 import { useResource } from "@/shared/lib/resource";
 import { ResourceError } from "@/shared/ui/resource-error";
 import { changeStateLabel, changeStateTone, termsSummary } from "@/views/admin/fees/lib/format";
+import { WaiverNote } from "@/views/admin/fees/ui/notice-waiver";
 
 // The house table idiom (`views/trade/ui/fills-table.tsx`): uikit's `Table` carries the
 // borders, the cell padding and the scroll wrapper; only the header treatment is ours.
@@ -66,6 +67,7 @@ export function ChangeHistory({ service }: { service: string }) {
                     <Badge variant="outline" className={cn(changeStateTone(c.state))}>
                       {changeStateLabel(c.state, t)}
                     </Badge>
+                    <WaiverNote change={c} />
                   </TableCell>
                   <TableCell className="align-top tabular-nums">{termsSummary(c, t)}</TableCell>
                   {/* "0" while a change awaits the owners: the moment is not known until

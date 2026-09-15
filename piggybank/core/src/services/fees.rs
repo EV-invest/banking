@@ -149,6 +149,35 @@ impl FeesService for FeesSvc {
 		Ok(Response::new(change_to_proto(&change, Audience::Operator)))
 	}
 
+	async fn acknowledge_undelivered_notices(&self, request: Request<pb::AcknowledgeUndeliveredNoticesRequest>) -> Result<Response<pb::FeePolicyChange>, Status> {
+		require_permission(&self.state, &request, Permission::AllocationManage).await?;
+		let by = caller_id(&request)?;
+		let req = request.get_ref();
+		let service = ServiceId::parse(&req.service).map_err(map_err)?;
+		let id = parse_change_id(&req.change_id)?;
+		let now = unix_now();
+		let change = fee_app::acknowledge_undelivered_notices(self.state.fees.changes.as_ref(), self.state.consilia.as_ref(), &service, id, by, now)
+			.await
+			.map_err(map_err)?;
+		// WARN on success, as scheduling is: somebody just took responsibility for holders
+		// who were never told their terms are getting dearer. Worth a line that stands out —
+		// but only when THIS call wrote the record (first, or extended by holders given up on
+		// since: either way the row carries this caller and this moment). A repeat that added
+		// nobody returns the standing record, somebody else's or an earlier one of the
+		// caller's own, and the audit log must not report an acknowledgement that did not
+		// happen. The record is recognised by the caller and the moment this call passed in.
+		if let Some(waiver) = change.notices_waiver.as_ref().filter(|waiver| waiver.by == by.to_string() && waiver.at_unix == now) {
+			tracing::warn!(
+				change_id = %change.id,
+				service = %change.service,
+				acknowledged_by = %waiver.by,
+				holders = ?waiver.users,
+				"acknowledged undelivered holder notices on a fee-policy change"
+			);
+		}
+		Ok(Response::new(change_to_proto(&change, Audience::Operator)))
+	}
+
 	async fn list_fee_policy_changes(&self, request: Request<pb::ListFeePolicyChangesRequest>) -> Result<Response<pb::FeePolicyChangeList>, Status> {
 		let (reader, audience) = reader_of(&self.state, &request).await?;
 		let service = ServiceId::parse(&request.get_ref().service).map_err(map_err)?;
@@ -337,6 +366,19 @@ fn change_to_proto(change: &FeePolicyChange, audience: Audience) -> pb::FeePolic
 		scheduled_at: change.scheduled_at_unix.unwrap_or_default(),
 		applied_at: change.applied_at_unix.unwrap_or_default(),
 		reason: change.reason.clone(),
+		// The moment is public like every other moment on the change; who waived, for whom,
+		// and how many are still waiting are governance detail.
+		notices_waived_by: change.notices_waiver.as_ref().filter(|_| operator).map(|waiver| waiver.by.clone()).unwrap_or_default(),
+		notices_waived_at: change.notices_waiver.as_ref().map(|waiver| waiver.at_unix).unwrap_or_default(),
+		notices_waived_users: change
+			.notices_waiver
+			.as_ref()
+			.filter(|_| operator)
+			.map(|waiver| waiver.users.iter().map(ToString::to_string).collect())
+			.unwrap_or_default(),
+		undelivered_notices: if operator { change.undelivered_notices } else { 0 },
+		notices_given_up: if operator { change.notices_given_up } else { 0 },
+		notices_unacknowledged: if operator { change.notices_unacknowledged } else { 0 },
 	}
 }
 

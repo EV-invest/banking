@@ -23,6 +23,7 @@ import { revalidateTag } from "@/shared/lib/resource";
 import { Link } from "@/shared/ui/cabinet-link";
 import { changeStateLabel, changeStateTone, termsSummary } from "@/views/admin/fees/lib/format";
 import { receiptKind } from "@/views/admin/fees/lib/receipt";
+import { NoticeWaiver } from "@/views/admin/fees/ui/notice-waiver";
 import { ago } from "@/views/admin/lib/format";
 
 export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; onCancelled: () => void }) {
@@ -81,6 +82,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
           <blockquote className="border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed">{change.reason.trim()}</blockquote>
         )}
         <p className="text-xs text-muted-foreground">{t("admin.fees.pending.requested", { when: ago(change.requested_at, t) })}</p>
+        <NoticeWaiver change={change} />
 
         {problem && <p className="text-xs text-destructive">{problem}</p>}
 

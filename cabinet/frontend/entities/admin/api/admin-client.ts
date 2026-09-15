@@ -5,6 +5,7 @@
 
 import { getJson, postJson } from "@/shared/lib/api-client";
 import type {
+  AcknowledgeUndeliveredNoticesRequest,
   AdminOverview,
   Allocation,
   AllocationAccessGrant,
@@ -259,6 +260,11 @@ export const fetchFeeAssessments = (service: string): Promise<FeeAssessmentList>
 export const scheduleFeePolicy = (body: ScheduleFeePolicyRequest): Promise<FeePolicyChange> => postJson("/api/admin/fees/policy", body);
 
 export const cancelFeePolicyChange = (body: CancelFeePolicyChangeRequest): Promise<FeePolicyChange> => postJson("/api/admin/fees/policy/cancel", body);
+
+/** Take responsibility for the holders of a scheduled change who could not be told, so a
+ *  tightening binds over them. The hub decides who may (the requester or an owner — 403
+ *  otherwise) and whether there is anything left to acknowledge (409 when not). */
+export const acknowledgeUndeliveredNotices = (body: AcknowledgeUndeliveredNoticesRequest): Promise<FeePolicyChange> => postJson("/api/admin/fees/policy/acknowledge-notices", body);
 
 /** A fund's whole history of terms, newest version first. */
 export const fetchFeePolicyChanges = (service: string): Promise<FeePolicyChangeList> => getJson(`/api/admin/fees/changes?service=${encodeURIComponent(service)}`);

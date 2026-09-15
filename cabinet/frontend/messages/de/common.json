@@ -1083,6 +1083,70 @@
     "en": "Worth at current NAV",
     "t": "Wert zum aktuellen NAV"
   },
+  "admin.fees.notices.acknowledge": {
+    "en": "Take responsibility and bind anyway",
+    "t": "Verantwortung übernehmen und trotzdem anwenden"
+  },
+  "admin.fees.notices.acknowledgeBack": {
+    "en": "Keep waiting",
+    "t": "Weiter warten"
+  },
+  "admin.fees.notices.acknowledgeConfirm": {
+    "en": "Take responsibility",
+    "t": "Verantwortung übernehmen"
+  },
+  "admin.fees.notices.acknowledgeWarning": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
+    "t": "Die Bedingungen werden für {n, plural, one {diesen Anleger} other {diese # Anleger}} ohne Benachrichtigung wirksam — strengere Bedingungen, von denen sie nie erfahren haben. Ihr Name, der Zeitpunkt und genau die betroffenen Anleger werden auf der Änderung festgehalten und bleiben in ihrer Historie."
+  },
+  "admin.fees.notices.acknowledgeWarningExtend": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name and the moment replace the earlier acknowledgement's on the change, which will then cover {total, plural, one {# holder} other {all # holders}}, and stay in its history.",
+    "t": "Die Bedingungen werden für {n, plural, one {diesen Anleger} other {diese # Anleger}} ohne Benachrichtigung wirksam — strengere Bedingungen, von denen sie nie erfahren haben. Ihr Name und der Zeitpunkt ersetzen die frühere Bestätigung auf der Änderung, die dann {total, plural, one {# Anleger} other {alle # Anleger}} abdeckt, und bleiben in ihrer Historie."
+  },
+  "admin.fees.notices.alreadyWaived": {
+    "en": "{by} already took responsibility on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "{by} hat am {at} bereits die Verantwortung für {n, plural, one {# Anleger} other {# Anleger}} übernommen, bei denen der Versand bis dahin aufgegeben hatte. Seitdem hat er bei weiteren aufgegeben; dieser Schritt fügt sie demselben Eintrag hinzu."
+  },
+  "admin.fees.notices.alreadyWaivedAnon": {
+    "en": "Responsibility was already taken on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "Die Verantwortung für {n, plural, one {# Anleger} other {# Anleger}}, bei denen der Versand bis dahin aufgegeben hatte, wurde am {at} bereits übernommen. Seitdem hat er bei weiteren aufgegeben; dieser Schritt fügt sie demselben Eintrag hinzu."
+  },
+  "admin.fees.notices.err.forbidden": {
+    "en": "Only the requester of this change or an owner can take responsibility for it.",
+    "t": "Nur wer diese Änderung beantragt hat oder ein Eigentümer kann die Verantwortung dafür übernehmen."
+  },
+  "admin.fees.notices.givenUpBody": {
+    "en": "The mailer has given up on {n, plural, one {this holder's notice} other {these # notices}}. A change that tightens the terms does not bind over a holder who was never told, so it is held up until somebody takes responsibility for them.",
+    "t": "Der Versand hat bei {n, plural, one {der Benachrichtigung dieses Anlegers} other {diesen # Benachrichtigungen}} aufgegeben. Eine Änderung, die die Bedingungen verschärft, wird für einen nie benachrichtigten Anleger nicht wirksam und bleibt aufgehalten, bis jemand die Verantwortung für sie übernimmt."
+  },
+  "admin.fees.notices.givenUpTitle": {
+    "en": "{n, plural, one {# holder} other {# holders}} could not be told",
+    "t": "{n, plural, one {# Anleger konnte} other {# Anleger konnten}} nicht benachrichtigt werden"
+  },
+  "admin.fees.notices.moreQueued": {
+    "en": "{n, plural, one {# more notice is still being delivered and is not covered by this act.} other {# more notices are still being delivered and are not covered by this act.}}",
+    "t": "{n, plural, one {# weitere Benachrichtigung wird} other {# weitere Benachrichtigungen werden}} noch zugestellt und davon nicht erfasst."
+  },
+  "admin.fees.notices.queued": {
+    "en": "{n, plural, one {# notice is} other {# notices are}} still being delivered. A change that tightens the terms waits for every holder to be told; there is nothing to do unless the mailer gives up on one.",
+    "t": "{n, plural, one {# Benachrichtigung wird} other {# Benachrichtigungen werden}} noch zugestellt. Eine Änderung, die die Bedingungen verschärft, wartet, bis jeder Anleger benachrichtigt ist; es gibt nichts zu tun, solange der Versand bei keiner aufgibt."
+  },
+  "admin.fees.waiver.acknowledged": {
+    "en": "Notices waived by {by} on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
+    "t": "Benachrichtigungen erlassen von {by} am {at}, für {n, plural, one {# Anleger} other {# Anleger}}, die nicht erreicht werden konnten."
+  },
+  "admin.fees.waiver.acknowledgedAnon": {
+    "en": "Notices waived on {at}, over {n, plural, one {# holder} other {# holders}} who could not be told.",
+    "t": "Benachrichtigungen erlassen am {at}, für {n, plural, one {# Anleger} other {# Anleger}}, die nicht erreicht werden konnten."
+  },
+  "admin.fees.waiver.row": {
+    "en": "Notices waived by {by} · {n, plural, one {# holder} other {# holders}}",
+    "t": "Benachrichtigungen erlassen von {by} · {n, plural, one {# Anleger} other {# Anleger}}"
+  },
+  "admin.fees.waiver.rowAnon": {
+    "en": "Notices waived · {n, plural, one {# holder} other {# holders}}",
+    "t": "Benachrichtigungen erlassen · {n, plural, one {# Anleger} other {# Anleger}}"
+  },
   "admin.fundRevenue": {
     "en": "Fund revenue",
     "t": "Fondseinnahmen"
