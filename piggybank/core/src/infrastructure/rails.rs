@@ -85,9 +85,10 @@ pub(super) enum SweepError {
 	/// the custodian's policy said no, the request is malformed, or the custodian parked
 	/// the activity for a human (`activity_id` set — the `turnkey-activity-id` trailer).
 	/// Re-asking every poll would only mint another pending activity per cycle, so the
-	/// address is held back with an exponential backoff instead ([`RefusalBackoff`]).
+	/// refused key (`key`) is held back with an exponential backoff instead
+	/// ([`RefusalBackoff`]).
 	#[error("signer refused: {detail}")]
-	SignerRefused { detail: String, activity_id: Option<String> },
+	SignerRefused { detail: String, activity_id: Option<String>, key: HoldKey },
 	#[error("db: {0}")]
 	Db(String),
 	#[error("config: {0}")]
@@ -106,28 +107,41 @@ pub(super) fn read_err(err: impl Display) -> SweepError {
 /// the signer crate, so this mirrors its `ACTIVITY_ID_METADATA_KEY` rather than importing it.
 pub(super) const ACTIVITY_ID_METADATA_KEY: &str = "turnkey-activity-id";
 
-/// Classify a signer status on a sweep's signing call, `what` naming the attempt for the log.
+/// Classify a signer status on a sweep's signing call, `what` naming the attempt for the log
+/// and `key` the wallet whose signing was refused.
 ///
 /// The split mirrors the withdrawal path (`custody.rs`: only `Unavailable`/`DeadlineExceeded`
 /// retry) on the codes that matter here. A refusal on the merits — `FailedPrecondition`
-/// (custodian approval, an unprovisioned wallet), `PermissionDenied` (the custodian's policy
-/// or our own spend policy), `InvalidArgument` (a request the signer will never accept) — is
+/// (custodian approval, an unprovisioned wallet), `PermissionDenied` (the custodian's
+/// policy), `InvalidArgument` (a request the signer will never accept) — is
 /// [`SweepError::SignerRefused`], and the sweep backs off. Everything else keeps the
 /// per-cycle retry: an `Unavailable` is a blip, and an `Internal` is the dead-key alarm that
 /// `telemetry::note_signer_error` counts on every hit — slowing that count down would mute
 /// the signal an operator watches.
-pub(super) fn signer_err(what: impl Display, status: &Status) -> SweepError {
+pub(super) fn signer_err(what: impl Display, key: HoldKey, status: &Status) -> SweepError {
 	let detail = format!("{what}: {}", status.message());
 	match status.code() {
 		Code::FailedPrecondition | Code::PermissionDenied | Code::InvalidArgument => SweepError::SignerRefused {
 			detail,
 			activity_id: status.metadata().get(ACTIVITY_ID_METADATA_KEY).and_then(|value| value.to_str().ok()).map(str::to_owned),
+			key,
 		},
 		_ => SweepError::Signer(detail),
 	}
 }
 
-/// Per-address hold-off after a terminal signer refusal — the sweep's stand-in for the
+/// The wallet a signer refusal is held against. A refusal is a property of the KEY that was
+/// asked to sign, so the hold follows the key: a user's sweep is held per deposit address,
+/// while a gas top-up is signed by the one gas-station key for every address — held per
+/// address, a station under custodian consensus would still mint one pending activity per
+/// address per hold, N times the noise the backoff exists to remove.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(super) enum HoldKey {
+	Address(String),
+	GasStation,
+}
+
+/// Per-key hold-off after a terminal signer refusal — the sweep's stand-in for the
 /// withdrawal path's park.
 ///
 /// A withdrawal that the custodian parks stays parked: the relay never re-signs it, an
@@ -135,13 +149,13 @@ pub(super) fn signer_err(what: impl Display, status: &Status) -> SweepError {
 /// unpark RPC, and re-signing IS the only way it ever resumes once the operator has fixed
 /// the policy or approved the activity. So instead of "never again" it is "less and less
 /// often": each refusal doubles the hold from the poll interval up to [`CAP`](Self::CAP),
-/// which turns ~2 880 pending activities per address per day into ~24, and a success
-/// clears the record. Held addresses cost no RPC and no signer call.
+/// which turns ~2 880 pending activities per key per day into ~24, and a success clears the
+/// record. A held key costs no RPC and no signer call.
 ///
 /// The clock is passed in rather than read, so the arithmetic is testable without sleeping.
 #[derive(Default)]
 pub(super) struct RefusalBackoff {
-	holds: HashMap<String, Hold>,
+	holds: HashMap<HoldKey, Hold>,
 }
 
 struct Hold {
@@ -162,22 +176,22 @@ impl RefusalBackoff {
 	/// (one activity per address per hour, at worst) and the wait after an operator acts.
 	pub(super) const CAP: Duration = Duration::from_secs(60 * 60);
 
-	/// Whether `address` is still inside its hold at `now`.
-	pub(super) fn is_held(&self, address: &str, now: Instant) -> bool {
-		self.holds.get(address).is_some_and(|hold| now < hold.until)
+	/// Whether `key` is still inside its hold at `now`.
+	pub(super) fn is_held(&self, key: &HoldKey, now: Instant) -> bool {
+		self.holds.get(key).is_some_and(|hold| now < hold.until)
 	}
 
 	/// Record a refusal: the hold starts at `base` and doubles per consecutive strike, capped.
-	pub(super) fn strike(&mut self, address: &str, now: Instant, base: Duration) -> Strike {
-		let strikes = self.holds.get(address).map_or(1, |hold| hold.strikes.saturating_add(1));
+	pub(super) fn strike(&mut self, key: HoldKey, now: Instant, base: Duration) -> Strike {
+		let strikes = self.holds.get(&key).map_or(1, |hold| hold.strikes.saturating_add(1));
 		let hold = base.saturating_mul(1u32 << (strikes - 1).min(31)).min(Self::CAP);
-		self.holds.insert(address.to_owned(), Hold { until: now + hold, strikes });
+		self.holds.insert(key, Hold { until: now + hold, strikes });
 		Strike { hold, strikes }
 	}
 
-	/// The signer accepted a request for `address` again: forget its strikes.
-	pub(super) fn release(&mut self, address: &str) {
-		self.holds.remove(address);
+	/// The signer accepted a request for `key` again: forget its strikes.
+	pub(super) fn release(&mut self, key: &HoldKey) {
+		self.holds.remove(key);
 	}
 }
 
@@ -251,14 +265,19 @@ mod tests {
 	const ACTIVITY_ID: &str = "0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b";
 	const POLL: Duration = Duration::from_secs(30);
 
+	fn addr(address: &str) -> HoldKey {
+		HoldKey::Address(address.to_owned())
+	}
+
 	#[test]
 	fn requires_approval_is_a_refusal_that_carries_the_activity_id() {
 		let mut status = Status::failed_precondition(format!("key custodian requires approval for activity {ACTIVITY_ID}"));
 		status.metadata_mut().insert(ACTIVITY_ID_METADATA_KEY, MetadataValue::try_from(ACTIVITY_ID).unwrap());
-		match signer_err("sweep 0xabc", &status) {
-			SweepError::SignerRefused { detail, activity_id } => {
+		match signer_err("sweep 0xabc", addr("0xabc"), &status) {
+			SweepError::SignerRefused { detail, activity_id, key } => {
 				assert_eq!(activity_id.as_deref(), Some(ACTIVITY_ID));
 				assert!(detail.starts_with("sweep 0xabc: "), "{detail}");
+				assert_eq!(key, addr("0xabc"));
 			}
 			other => panic!("RequiresApproval must not be retried every poll: {other}"),
 		}
@@ -273,7 +292,14 @@ mod tests {
 		] {
 			let code = status.code();
 			assert!(
-				matches!(signer_err("sweep", &status), SweepError::SignerRefused { activity_id: None, .. }),
+				matches!(
+					signer_err("sweep", HoldKey::GasStation, &status),
+					SweepError::SignerRefused {
+						activity_id: None,
+						key: HoldKey::GasStation,
+						..
+					}
+				),
 				"{code:?} is terminal for this request"
 			);
 		}
@@ -288,7 +314,7 @@ mod tests {
 			Status::unauthenticated("token expired"),
 		] {
 			let code = status.code();
-			assert!(matches!(signer_err("sweep", &status), SweepError::Signer(_)), "{code:?} retries next poll");
+			assert!(matches!(signer_err("sweep", addr("a"), &status), SweepError::Signer(_)), "{code:?} retries next poll");
 		}
 	}
 
@@ -296,19 +322,29 @@ mod tests {
 	fn a_held_address_is_skipped_until_its_hold_expires() {
 		let mut backoff = RefusalBackoff::default();
 		let t0 = Instant::now();
-		assert!(!backoff.is_held("a", t0), "never refused ⇒ never held");
-		let strike = backoff.strike("a", t0, POLL);
+		assert!(!backoff.is_held(&addr("a"), t0), "never refused ⇒ never held");
+		let strike = backoff.strike(addr("a"), t0, POLL);
 		assert_eq!((strike.strikes, strike.hold), (1, POLL));
-		assert!(backoff.is_held("a", t0 + POLL / 2));
-		assert!(!backoff.is_held("a", t0 + POLL), "the hold is half-open: due exactly at its end");
-		assert!(!backoff.is_held("b", t0), "holds are per address");
+		assert!(backoff.is_held(&addr("a"), t0 + POLL / 2));
+		assert!(!backoff.is_held(&addr("a"), t0 + POLL), "the hold is half-open: due exactly at its end");
+		assert!(!backoff.is_held(&addr("b"), t0), "holds are per address");
+		assert!(!backoff.is_held(&HoldKey::GasStation, t0), "a user key's refusal says nothing about the gas station");
+	}
+
+	#[test]
+	fn the_gas_station_is_one_key_held_for_every_address() {
+		let mut backoff = RefusalBackoff::default();
+		let t0 = Instant::now();
+		backoff.strike(HoldKey::GasStation, t0, POLL);
+		assert!(backoff.is_held(&HoldKey::GasStation, t0));
+		assert!(!backoff.is_held(&addr("a"), t0), "the addresses themselves stay sweepable when they hold gas");
 	}
 
 	#[test]
 	fn consecutive_refusals_double_the_hold_up_to_the_cap() {
 		let mut backoff = RefusalBackoff::default();
 		let t0 = Instant::now();
-		let holds: Vec<Duration> = (0..10u32).map(|i| backoff.strike("a", t0 + POLL * i, POLL).hold).collect();
+		let holds: Vec<Duration> = (0..10u32).map(|i| backoff.strike(addr("a"), t0 + POLL * i, POLL).hold).collect();
 		assert_eq!(&holds[..4], &[POLL, POLL * 2, POLL * 4, POLL * 8]);
 		assert_eq!(holds[9], RefusalBackoff::CAP, "30s doubled nine times is 4h16m — clamped to the cap");
 		assert!(holds.windows(2).all(|w| w[0] <= w[1]), "never shrinks while refusals continue");
@@ -318,20 +354,20 @@ mod tests {
 	fn a_success_clears_the_strikes() {
 		let mut backoff = RefusalBackoff::default();
 		let t0 = Instant::now();
-		backoff.strike("a", t0, POLL);
-		backoff.strike("a", t0, POLL);
-		backoff.release("a");
-		assert!(!backoff.is_held("a", t0));
-		assert_eq!(backoff.strike("a", t0, POLL).strikes, 1, "the count restarts after a success");
+		backoff.strike(addr("a"), t0, POLL);
+		backoff.strike(addr("a"), t0, POLL);
+		backoff.release(&addr("a"));
+		assert!(!backoff.is_held(&addr("a"), t0));
+		assert_eq!(backoff.strike(addr("a"), t0, POLL).strikes, 1, "the count restarts after a success");
 	}
 
 	#[test]
 	fn the_shift_cannot_overflow_after_many_strikes() {
 		let mut backoff = RefusalBackoff::default();
 		let t0 = Instant::now();
-		let mut last = backoff.strike("a", t0, POLL);
+		let mut last = backoff.strike(addr("a"), t0, POLL);
 		for _ in 1..100 {
-			last = backoff.strike("a", t0, POLL);
+			last = backoff.strike(addr("a"), t0, POLL);
 		}
 		assert_eq!((last.strikes, last.hold), (100, RefusalBackoff::CAP));
 	}

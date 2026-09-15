@@ -114,11 +114,13 @@ assemble(Parts, Signature) -> SignedTx
 состояние свипа живёт в памяти, RPC «распарковать» нет, а повторная подпись после того, как
 оператор поправил политику или одобрил активность, — единственный путь к консолидации. Поэтому
 отказ по существу (`FailedPrecondition`, `PermissionDenied`, `InvalidArgument`) не ретраится
-каждый опрос, а откладывает адрес с экспоненциальным бэкоффом от `poll_secs` до потолка в час
-(`rails::RefusalBackoff`); первый отказ — `error!` с `activity_id`, следующие — `warn!`. Ошибки
-адресных RPC хаба (`RotateDepositAddress`, `MigrateDepositAddressToCustodian`) пробрасывают
-`FailedPrecondition` как есть, с id активности в тексте статуса; сам трейлер за границу хаба
-не выходит.
+каждый опрос, а откладывает отказавший ключ с экспоненциальным бэкоффом от `poll_secs` до
+потолка в час (`rails::RefusalBackoff`): свип — по адресу пользователя, газовый топ-ап — по
+ключу gas station целиком, один на все адреса (`HoldKey`); первый отказ — `error!` с
+`activity_id`, следующие — `warn!`. Ошибки адресных RPC хаба (`RotateDepositAddress`,
+`MigrateDepositAddressToCustodian`) пробрасывают код как есть: `FailedPrecondition` с id
+активности в тексте статуса, `PermissionDenied` (отказ кастодиана по существу) — с причиной;
+сам трейлер за границу хаба не выходит.
 
 ### 4. Троттлинг под 1 RPS
 

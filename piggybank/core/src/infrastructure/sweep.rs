@@ -59,7 +59,7 @@ use crate::{
 	config::{EvmConfig, SweepConfig},
 	infrastructure::{
 		evm_rpc::{EvmRpc, RpcError},
-		rails::{self, GAS_STATION, RefusalBackoff, SweepError, read_err, signer_err},
+		rails::{self, GAS_STATION, HoldKey, RefusalBackoff, SweepError, read_err, signer_err},
 	},
 };
 
@@ -143,36 +143,51 @@ impl Sweep {
 			if address.eq_ignore_ascii_case(&treasury) || address.eq_ignore_ascii_case(&gas_station) {
 				continue;
 			}
-			if self.refusals.lock().is_ok_and(|held| held.is_held(&address, Instant::now())) {
+			let key = HoldKey::Address(address.clone());
+			if self.is_held(&key) {
 				continue;
 			}
 			// One bad address (RPC blip, an out-of-gas sender) must not stop the others.
 			match self.sweep_address(user_id, &address, &treasury, &gas_station).await {
-				Ok(()) =>
-					if let Ok(mut held) = self.refusals.lock() {
-						held.release(&address);
-					},
-				Err(SweepError::SignerRefused { detail, activity_id }) => self.hold(&address, &detail, activity_id.as_deref()),
+				Ok(()) => self.release(&key),
+				Err(SweepError::SignerRefused { detail, activity_id, key }) => self.hold(key, &detail, activity_id.as_deref()),
 				Err(err) => warn!(%address, "sweep: address cycle failed (continuing): {err}"),
 			}
 		}
 		Ok(())
 	}
 
-	/// Back `address` off after a terminal signer refusal. The FIRST refusal is the alert —
-	/// with the custodian's activity id when there is one, so the operator can find it on the
-	/// custodian's side — and every later one is the routine note that the hold keeps growing.
-	fn hold(&self, address: &str, detail: &str, activity_id: Option<&str>) {
+	/// Back the refused `key` off after a terminal signer refusal. The FIRST refusal is the
+	/// alert — with the custodian's activity id when there is one, so the operator can find it
+	/// on the custodian's side — and every later one is the routine note that the hold keeps
+	/// growing.
+	fn hold(&self, key: HoldKey, detail: &str, activity_id: Option<&str>) {
 		let Ok(mut held) = self.refusals.lock() else {
 			return;
 		};
-		let strike = held.strike(address, Instant::now(), Duration::from_secs(self.config.poll_secs));
+		let strike = held.strike(key.clone(), Instant::now(), Duration::from_secs(self.config.poll_secs));
 		let retry_in_secs = strike.hold.as_secs();
 		let activity_id = activity_id.unwrap_or("none");
 		if strike.strikes == 1 {
-			error!(network = %self.network, %address, activity_id, retry_in_secs, "sweep: signer refused on the merits — address held back with exponential backoff; an activity id means a human must approve it at the custodian: {detail}");
+			error!(network = %self.network, ?key, activity_id, retry_in_secs, "sweep: signer refused on the merits — address held back with exponential backoff; an activity id means a human must approve it at the custodian: {detail}");
 		} else {
-			warn!(%address, activity_id, strikes = strike.strikes, retry_in_secs, "sweep: signer refused again — hold extended: {detail}");
+			warn!(
+				?key,
+				activity_id,
+				strikes = strike.strikes,
+				retry_in_secs,
+				"sweep: signer refused again — hold extended: {detail}"
+			);
+		}
+	}
+
+	fn is_held(&self, key: &HoldKey) -> bool {
+		self.refusals.lock().is_ok_and(|held| held.is_held(key, Instant::now()))
+	}
+
+	fn release(&self, key: &HoldKey) {
+		if let Ok(mut held) = self.refusals.lock() {
+			held.release(key);
 		}
 	}
 
@@ -207,6 +222,11 @@ impl Sweep {
 		{
 			return Ok(());
 		}
+		// The station is ONE key for every address: while the signer refuses it, no address
+		// gets a top-up, or each would mint its own pending activity per cycle.
+		if self.is_held(&HoldKey::GasStation) {
+			return Ok(());
+		}
 		let nonce = self.next_gas_nonce(gas_station).await?;
 		let drop = needed.saturating_mul(self.config.gas_drop_multiple).max(self.config.min_gas_drop_wei);
 		let (raw, hash) = match self.sign_native(address, drop, nonce, gas_price).await {
@@ -216,6 +236,7 @@ impl Sweep {
 				return Err(err);
 			}
 		};
+		self.release(&HoldKey::GasStation);
 		// Record before broadcasting so a slow/failed send still dedups the next cycle.
 		if let Ok(mut state) = self.state.lock() {
 			state.recent_topups.insert(address.to_owned(), Instant::now());
@@ -291,7 +312,7 @@ impl Sweep {
 			.await
 			.map_err(|s| {
 				super::telemetry::note_signer_error("sweep", address, s.message());
-				signer_err(format!("sweep {address}"), &s)
+				signer_err(format!("sweep {address}"), HoldKey::Address(address.to_owned()), &s)
 			})?
 			.into_inner();
 		Ok((response.raw_tx, response.tx_hash))
@@ -318,7 +339,7 @@ impl Sweep {
 			.await
 			.map_err(|s| {
 				super::telemetry::note_signer_error("gas top-up", "gas-station", s.message());
-				signer_err(format!("gas top-up {to}"), &s)
+				signer_err(format!("gas top-up {to}"), HoldKey::GasStation, &s)
 			})?
 			.into_inner();
 		Ok((response.raw_tx, response.tx_hash))
