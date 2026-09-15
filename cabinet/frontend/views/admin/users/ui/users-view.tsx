@@ -113,9 +113,12 @@ export function UsersView() {
                 // fixed layout keeps squeezing below any width, and at 400px the User
                 // and Role cells were drawn over each other. Under the floor the table
                 // scrolls inside its own box instead, the way the payments and payout
-                // tables do; above it nothing changes.
+                // tables do. The floor stops at `lg`: from there the rail takes 248px
+                // and the open drawer another 364px, which leaves the card under 560px
+                // at 1024px — and there the squeeze above is the wanted behaviour, not a
+                // sideways scroll that hides KYC and Status behind the scrollbar.
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-140 table-fixed text-sm">
+                  <table className="w-full table-fixed text-sm max-lg:min-w-140">
                     <thead>
                       {/* i18n-max: 8 per header — `table-fixed` sizes the columns from this
                           row, so a header that does not fit wraps instead of widening, and
