@@ -1,12 +1,15 @@
-// The slice's whole contract: the places a user can be offered verification, and the one
-// explanation of it they are offered. The client, the hook and their result types stay
-// internal — a second caller of `startVerification` would be a second place deciding what a
-// 503 looks like, which is exactly what these presentations exist to share instead.
+// The slice's whole contract: the three places a user can be offered verification — a row in
+// the profile's identity card, a banner on the home screen, and the block a money screen
+// shows instead of a surface the hub has closed to them.
 //
-// `VerificationDialog` is exported because the wallet opens it too (#215) and a money screen
-// may not reach into `features/kyc/ui/...` for it. It is controlled: the caller owns `open`,
-// because the trigger is a row button here, a card there, and a link inside a rail elsewhere.
+// Everything else stays internal, `VerificationDialog` included. It is the one explanation of
+// verification in the cabinet, but the three presentations above are the only things that
+// open it, and they are all inside this slice: exporting it named a consumer outside that
+// never materialised (#215 was answered by giving the wallet `VerificationRequired`, not the
+// dialog), and a public export with no caller is a contract kept for nobody. The client, the
+// hooks and their result types stay internal for the older reason — a second caller of
+// `startVerification` would be a second place deciding what a 503 looks like, which is
+// exactly what these presentations exist to share instead.
 export { StartVerificationRow } from "@/features/kyc/ui/start-verification-row";
 export { VerificationBanner } from "@/features/kyc/ui/verification-banner";
-export { VerificationDialog } from "@/features/kyc/ui/verification-dialog";
 export { VerificationRequired } from "@/features/kyc/ui/verification-required";

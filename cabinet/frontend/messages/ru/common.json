@@ -6691,6 +6691,18 @@
     "en": "No deposit or withdrawal rails are available right now — check back soon.",
     "t": "Каналы пополнения и вывода сейчас недоступны — загляните позже."
   },
+  "wallet.noRailsTitle": {
+    "en": "No networks available yet",
+    "t": "Пока нет доступных сетей"
+  },
+  "wallet.overviewVerifyTitle": {
+    "en": "Verify your identity to use these networks",
+    "t": "Подтвердите личность, чтобы пользоваться сетями"
+  },
+  "wallet.overviewVerifyBody": {
+    "en": "Deposit addresses are issued and withdrawals open once your identity is verified. Your balance above is unaffected.",
+    "t": "Адреса для пополнения выдаём и вывод открываем после подтверждения личности. Баланс выше при этом не меняется."
+  },
   "wallet.noWithdrawRails": {
     "en": "No withdrawal rails are available right now — check back soon.",
     "t": "Каналы вывода сейчас недоступны — загляните позже."
