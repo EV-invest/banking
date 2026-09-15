@@ -23,6 +23,7 @@ use piggybank_core::{
 	infrastructure::{
 		db,
 		ledger::{self, TbLedger},
+		relay::Relay,
 		tigerbeetle::TigerBeetle,
 	},
 	ports::ledger::Ledger,
@@ -30,23 +31,88 @@ use piggybank_core::{
 use sqlx::{AssertSqlSafe, Connection, PgConnection, PgPool, migrate::MigrateError, postgres::PgPoolOptions};
 use tokio::sync::OnceCell;
 
-/// Serializes the tests that own the relay as a *process* would: those that run
-/// [`Relay::run`](piggybank_core::infrastructure::relay::Relay::run) or hold its
-/// session-level outbox advisory lock (`acquire_outbox_lock`). The lock is one per
-/// database, so two such tests in one binary would block each other on it — a driver
-/// polling for "the relay applied my row" then times out while `run` is still queued
-/// behind the sibling's lock. A test that only calls the unfenced `drain()` does not
-/// take this: it never touches the lock.
+/// Serializes every test that works this binary's outbox — the one rule production gets
+/// from the relay's advisory lock, restated for a process that runs several relays.
 ///
-/// Scope: the outbox lock lives in this binary's own database (see [`database_url`]), so
-/// another binary — even one running at the same time — can never hold it. What remains to
-/// serialize is the tests *inside* one binary, and a `LazyLock` in one process is exactly
-/// that.
-static RELAY: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
+/// Two ways in, one lock, deliberately. A test that runs
+/// [`Relay::run`](piggybank_core::infrastructure::relay::Relay::run) or takes the outbox
+/// advisory lock (`acquire_outbox_lock`) needs it because the lock is one per database, so a
+/// sibling doing the same blocks — a driver polling for "the relay applied my row" then times
+/// out while `run` is still queued behind it. A test that only calls the unfenced
+/// `Relay::drain` never touches that lock, but shares the table it drains, and two of a
+/// binary's relays draining at once pick up the same row and both act on it. Two shapes have
+/// been observed. The loser's `saga_steps` insert trips the table's second unique key
+/// (`tb_transfer_id`), which its `ON CONFLICT (event_id, leg)` does not cover; the relay files
+/// that as a transient failure and `drain()` returns early, leaving the calling test's own
+/// rows queued, so it reads a balance the relay has not landed yet (#294/#298). And a row ends
+/// up with `dispatched_at` *and* `parked_at` set, each written by a different custody fake —
+/// the mechanism behind the `relay_recovery` flakes.
+///
+/// One lock for both, not one per reason: a mutex per reason serializes each class against
+/// itself and neither against the other, so a `run` test and a `drain` test in one binary
+/// would race over the same outbox with both guards held and nothing to show for it. Take it
+/// once per test — `tokio::sync::Mutex` is not reentrant.
+///
+/// Scope: the outbox and its lock live in this binary's own database (see [`database_url`]),
+/// so another binary — even one running at the same time — can never reach them. What remains
+/// to serialize is the tests *inside* one binary, and a `LazyLock` in one process is exactly
+/// that. Production has a single drainer under the advisory lock and needs none of this.
+static OUTBOX: LazyLock<tokio::sync::Mutex<()>> = LazyLock::new(|| tokio::sync::Mutex::new(()));
 
-/// Hold for the duration of a test that runs `Relay::run` or takes the outbox lock.
-pub async fn relay_exclusive() -> tokio::sync::MutexGuard<'static, ()> {
-	RELAY.lock().await
+/// Hold for the whole life of a test that runs `Relay::run`, takes the outbox lock, or calls
+/// `Relay::drain` — not just around the call. Rows are visible to a sibling's drain from the
+/// moment they commit, which is before the enqueuing test gets to its own `drain()`. Suites
+/// keep the guard in their harness so no test can forget it. See [`OUTBOX`].
+pub async fn outbox_serial() -> tokio::sync::MutexGuard<'static, ()> {
+	OUTBOX.lock().await
+}
+
+/// Drain the outbox to quiescence. `Relay::drain` applies one pass and answers `true` when
+/// a transient failure told it to back off — `Relay::run` sleeps and comes back, so a test
+/// that took one pass for "everything landed" read the ledger before its own rows did
+/// (#294). A few passes, each after a short pause, cover a real hiccup — a ledger that is
+/// away for tens of milliseconds, not microseconds; a backlog still standing after them is a
+/// finding, named by the outbox's own reasons instead of surfacing as a wrong balance later.
+///
+/// A park is the other way an event fails to land, and `drain` cannot report it: `next_batch`
+/// skips parked rows, so the pass after a park returns `Drained` — "the outbox is empty" and
+/// "the last live row was parked" are the same `false`. Reading that as "it all landed" is
+/// exactly the silent wrong balance this helper exists to prevent, and it is reachable rather
+/// than theoretical — the settle-time liquidity pre-check parks a whole disbursement when the
+/// rail is short. So a park raised during the call is reported here, with the relay's reason.
+///
+/// The caller holds [`outbox_serial`]: without it a sibling's relay is draining the same
+/// table, and the early return this loop retries past is exactly what that race produces.
+pub async fn drain_to_quiescence(relay: &Relay, pool: &PgPool) {
+	const PASSES: usize = 5;
+	const BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
+	// Parked is terminal and the outbox is one table per binary, so a row parked earlier in
+	// the run stays there: only the rows this call parked are this caller's finding.
+	let parked_before: Vec<i64> = sqlx::query_scalar("SELECT seq FROM outbox WHERE parked_at IS NOT NULL")
+		.fetch_all(pool)
+		.await
+		.expect("read the outbox's parked rows");
+	for _ in 0..PASSES {
+		if !relay.drain().await {
+			let parked: Vec<(i64, String, Option<String>)> = sqlx::query_as("SELECT seq, kind, last_error FROM outbox WHERE parked_at IS NOT NULL AND seq <> ALL($1) ORDER BY seq")
+				.bind(parked_before.as_slice())
+				.fetch_all(pool)
+				.await
+				.expect("read the outbox's parked rows");
+			assert!(parked.is_empty(), "the relay parked an event instead of applying it: {parked:?}");
+			return;
+		}
+		tokio::time::sleep(BACKOFF).await;
+	}
+	let backlog: Vec<(i64, String, Option<String>)> = sqlx::query_as("SELECT seq, kind, last_error FROM outbox WHERE dispatched_at IS NULL AND parked_at IS NULL ORDER BY seq")
+		.fetch_all(pool)
+		.await
+		.expect("read the outbox backlog");
+	assert!(
+		!backlog.is_empty(),
+		"drain kept throttling for {PASSES} passes with nothing left queued — the relay's own read of the outbox is what failed (see its `relay:` warnings)"
+	);
+	panic!("the outbox still holds a backlog after {PASSES} relay passes: {backlog:?}");
 }
 
 /// True under CI: `CI` is set, non-empty and not `"0"`/`"false"`. GitHub Actions exports
