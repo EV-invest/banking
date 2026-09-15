@@ -645,6 +645,84 @@ pub fn bridge_transport(addr: &str) -> BridgeTransport {
 	if loopback { BridgeTransport::Loopback } else { BridgeTransport::Cleartext }
 }
 
+/// Why a file pinned by `BRIDGE_TLS_CA_PEM_FILE` cannot serve as a trust anchor.
+///
+/// Every variant below ends the same way if it is let through: a root store holding fewer
+/// anchors than the operator pinned — none at all, in each of these cases.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PinnedCaProblem {
+	/// Not a PEM: an empty file, raw DER, a block whose `-----END …-----` never arrives, or
+	/// a path left pointing at something that was never a certificate bundle.
+	#[error("it holds no complete PEM block — an empty file, DER bytes, a truncated block, or a path pointing at something else")]
+	NotPem,
+	/// PEM, but no certificate among it. A private key handed to the CA slot is the shape
+	/// this catches.
+	#[error("it holds no CERTIFICATE block, only: {0}")]
+	NoCertificate(String),
+	/// Certificates, beside a block the PEM reader will skip. A `PRIVATE KEY` here means key
+	/// material is sitting in the one file the deployment treats as a public trust anchor.
+	#[error("it holds a {0} block beside the certificates; a trust anchor is certificates and nothing else")]
+	ForeignBlock(String),
+}
+
+/// `-----BEGIN CERTIFICATE-----` ⇒ `CERTIFICATE`, given `marker = "-----BEGIN "`.
+fn pem_label<'a>(line: &'a str, marker: &str) -> Option<&'a str> {
+	line.strip_prefix(marker)?.strip_suffix("-----").filter(|label| !label.is_empty())
+}
+
+/// The label of every complete PEM block in `raw`, in order: a `-----BEGIN <label>-----`,
+/// at least one line of body, and the matching `-----END <label>-----`. Anything outside a
+/// block — openssl's text dump above a certificate, a comment, trailing junk — is skipped,
+/// and an unterminated block is not a block.
+fn pem_block_labels(raw: &str) -> Vec<&str> {
+	let mut labels = Vec::new();
+	let mut open: Option<(&str, bool)> = None;
+	for line in raw.lines() {
+		let line = line.trim();
+		let Some((label, has_body)) = open else {
+			open = pem_label(line, "-----BEGIN ").map(|label| (label, false));
+			continue;
+		};
+		if pem_label(line, "-----END ") == Some(label) {
+			if has_body {
+				labels.push(label);
+			}
+			open = None;
+		} else if !line.is_empty() {
+			open = Some((label, true));
+		}
+	}
+	labels
+}
+
+/// Check that a pinned CA file is a trust anchor, before it is handed to a TLS builder.
+///
+/// The PEM reader underneath tonic's `ca_certificate` skips every block it cannot use and
+/// reports nothing, so a file with no certificate in it builds an EMPTY root store: every
+/// handshake fails while the hub stays live and ready, and the seam looks configured
+/// everywhere an operator would look.
+///
+/// Searching for the BEGIN marker as a substring is not that check. It passes a key file
+/// that carries a certificate too (the private key then sits in a file mounted as public
+/// trust material), a marker quoted inside a comment, and a block that is never closed. So
+/// the blocks are parsed and every label has to be `CERTIFICATE`.
+///
+/// What this still cannot prove is that the base64 body decodes to a certificate: that
+/// parse happens inside rustls at connect time, and no crate here can reach it. The armor
+/// is the line this gate holds.
+pub fn check_pinned_ca_pem(raw: &str) -> Result<(), PinnedCaProblem> {
+	let labels = pem_block_labels(raw);
+	if labels.is_empty() {
+		return Err(PinnedCaProblem::NotPem);
+	}
+	let (certificates, foreign): (Vec<&str>, Vec<&str>) = labels.into_iter().partition(|label| *label == "CERTIFICATE");
+	match (certificates.is_empty(), foreign.first()) {
+		(true, _) => Err(PinnedCaProblem::NoCertificate(foreign.join(", "))),
+		(false, Some(label)) => Err(PinnedCaProblem::ForeignBlock((*label).to_string())),
+		(false, None) => Ok(()),
+	}
+}
+
 /// What production is told when it pulls the lifecycle stream in cleartext from a peer it
 /// cannot authenticate. The ingress NetworkPolicy named here is the control that actually
 /// holds the seam shut until phase 2 of #199 replaces it with TLS.
@@ -763,6 +841,77 @@ mod tests {
 		] {
 			assert_eq!(bridge_transport(addr), BridgeTransport::Cleartext, "{addr} is believed on the strength of a name");
 		}
+	}
+
+	/// A throwaway self-signed certificate (`openssl req -x509 -newkey rsa:2048 -nodes`,
+	/// valid to 2126), here so the gate is exercised against a real certificate and not only
+	/// against shapes of armor. No private key was kept and nothing trusts it.
+	const TEST_CA_PEM: &str = r"-----BEGIN CERTIFICATE-----
+MIIDGzCCAgOgAwIBAgIUNQD11Yz00cFGinwEzH2XA+Owz9swDQYJKoZIhvcNAQEL
+BQAwHDEaMBgGA1UEAwwRRVYgdGVzdCBicmlkZ2UgQ0EwIBcNMjYwOTE1MTg0MzQw
+WhgPMjEyNjA4MjIxODQzNDBaMBwxGjAYBgNVBAMMEUVWIHRlc3QgYnJpZGdlIENB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApmWEKLoU5f5XZwYIHZyi
+ivR2+9nizSTgbr5EEx8ifjYhU0V+h+gRzZrWfZUNMR3OPmNYC3/3VxzwCQ1lHg4r
+hgkiDXqUaI9KUMZZo/HfSn2V6h4O/iYl3Q2jVcmtKCwKC7A0eDH+4NvaOY40wmsn
+3b9kV9AlVDsUx4cBaIGNgBdEq4vN5DYjY/ZhPOoKfAiDiM4zQupW69XauEzhclFY
+qjzG/bnr11uWB4L+o7lZFu5gNN8bbmtL9jnxEYfl3KKnk4GpoAVDKHU9l5S/6oDm
+9o5/KMgZgtQCOU0h8NSTHT2s3UkLCCeSufF2Tx/Um7C9V899yryuyt34Kpy6odSQ
+cQIDAQABo1MwUTAdBgNVHQ4EFgQUlqaFS6fHa5yah2xLuk8CfaCWM9QwHwYDVR0j
+BBgwFoAUlqaFS6fHa5yah2xLuk8CfaCWM9QwDwYDVR0TAQH/BAUwAwEB/zANBgkq
+hkiG9w0BAQsFAAOCAQEAlU+v3Iui7pujKrW1fciQmJWwxiFLxuE8QFv4oAM+lzFx
+TKqj42bAOApMNXCw5flGp/Z9LhFPPoIThgxiRbYc7AyxhHXyuwfkAF22qrtB88r+
+njxEK4PFw7JoieY19UKhMqZ82gbesvW7T9Rd7deBXCksRNObzKc9LSl9O5UO+9Ks
+kNsL7Jype//j0lo3pVQcvbdq/fNno1YWnF72Y2w/mCOBV1Mc8fRX76z7sF3cHhkU
+10NvzdF+DGKDJJaUe89qas9TZrAdjCN6j9XXwrzG9Mc4Z9H9TCJ35tOJGM6GO5Qb
+gRI8JvM30gtx/NBsGEV927PGd7imCZpKdAlR1pYzGA==
+-----END CERTIFICATE-----
+";
+
+	/// PEM armor around a base64 sentence. The gate reads labels, never bodies, so no key
+	/// material has to exist for the "this is a key file" case to be real.
+	const TEST_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----\nYSB0ZXN0IHZhbHVlLCBub3QgYSBrZXk=\n-----END PRIVATE KEY-----\n";
+
+	/// A pinned CA decides which concierge the hub believes about KYC tiers and operator
+	/// roles, and the reader beneath it skips in silence what it cannot use. So each way a
+	/// file can fail to be a trust anchor is pinned here: every one of them would otherwise
+	/// boot a hub that is live, ready, TLS-configured — and trusting nothing, so the
+	/// lifecycle stream simply stops.
+	#[test]
+	fn a_pinned_ca_is_accepted_only_when_it_is_certificates_and_nothing_else() {
+		assert_eq!(check_pinned_ca_pem(TEST_CA_PEM), Ok(()), "a real certificate is the whole point of the variable");
+		assert_eq!(
+			check_pinned_ca_pem(&format!("{TEST_CA_PEM}{TEST_CA_PEM}")),
+			Ok(()),
+			"a private CA usually ships a bundle, not one anchor"
+		);
+		assert_eq!(
+			check_pinned_ca_pem(&format!("subject=CN = EV test bridge CA\n\n{TEST_CA_PEM}trailing notes\n")),
+			Ok(()),
+			"openssl's text dump around the block is not a block"
+		);
+
+		for (raw, why) in [
+			("", "an empty file — an unset secret that mounted as a file anyway"),
+			("\u{0}\u{1}\u{2}0\u{82}\u{3}\u{1}", "raw DER, the other way a certificate is spelled"),
+			("-----BEGIN CERTIFICATE-----\nMIIDGzCCAgOgAwIBAgIUNQ\n", "a block whose END never arrives is a truncated copy"),
+			(
+				"a note about -----BEGIN CERTIFICATE----- and how to make one\n",
+				"the marker quoted in prose is not a certificate",
+			),
+		] {
+			assert_eq!(check_pinned_ca_pem(raw), Err(PinnedCaProblem::NotPem), "{why}");
+		}
+
+		assert_eq!(
+			check_pinned_ca_pem(TEST_KEY_PEM),
+			Err(PinnedCaProblem::NoCertificate("PRIVATE KEY".to_string())),
+			"a key file in the CA slot is the mix-up this gate exists for"
+		);
+		assert_eq!(
+			check_pinned_ca_pem(&format!("{TEST_KEY_PEM}{TEST_CA_PEM}")),
+			Err(PinnedCaProblem::ForeignBlock("PRIVATE KEY".to_string())),
+			"a substring check passes this one, and the key then rides along in a file mounted as public trust material"
+		);
 	}
 
 	/// The boot notice is production-only and cleartext-only: it must fire on the one shape
