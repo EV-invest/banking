@@ -4113,7 +4113,55 @@
   },
   "kyc.verifyNow": {
     "en": "Verify now",
-    "t": "Подтвердить личность"
+    "t": "Подтвердить"
+  },
+  "kyc.banner.title": {
+    "en": "One step before your first top-up",
+    "t": "Один шаг до первого пополнения"
+  },
+  "kyc.banner.body": {
+    "en": "We can issue you a deposit address once your identity is verified. It takes a few minutes and is done once.",
+    "t": "Адрес для пополнения выдаём после подтверждения личности. Это занимает несколько минут и делается один раз."
+  },
+  "kyc.banner.dismiss": {
+    "en": "Dismiss",
+    "t": "Скрыть"
+  },
+  "kyc.dialog.title": {
+    "en": "Verify your identity",
+    "t": "Подтверждение личности"
+  },
+  "kyc.dialog.intro": {
+    "en": "A short identity check by our verification provider. Your deposit address and withdrawals open once it is done.",
+    "t": "Короткая проверка личности у нашего провайдера. После неё откроются адрес для пополнения и вывод средств."
+  },
+  "kyc.dialog.needTitle": {
+    "en": "What you'll need",
+    "t": "Что понадобится"
+  },
+  "kyc.dialog.needBody": {
+    "en": "A government-issued ID, and a phone or webcam for a selfie.",
+    "t": "Документ, удостоверяющий личность, и телефон или веб-камера для селфи."
+  },
+  "kyc.dialog.timeTitle": {
+    "en": "How long it takes",
+    "t": "Сколько это займёт"
+  },
+  "kyc.dialog.timeBody": {
+    "en": "A few minutes to submit. Most checks are decided within the hour.",
+    "t": "Несколько минут на отправку. Большинство проверок решаются в течение часа."
+  },
+  "kyc.dialog.afterTitle": {
+    "en": "What happens next",
+    "t": "Что дальше"
+  },
+  "kyc.dialog.afterBody": {
+    "en": "We'll email you the result. You can close the tab — the check keeps running without it.",
+    "t": "Результат пришлём на почту. Вкладку можно закрыть — проверка продолжится без неё."
+  },
+  "kyc.dialog.action": {
+    "en": "Start verification",
+    "t": "Начать проверку"
   },
   "lang.switch": {
     "en": "Language",

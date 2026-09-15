@@ -4113,7 +4113,55 @@
   },
   "kyc.verifyNow": {
     "en": "Verify now",
+    "t": "Verifizieren"
+  },
+  "kyc.banner.title": {
+    "en": "One step before your first top-up",
+    "t": "Ein Schritt bis zur ersten Einzahlung"
+  },
+  "kyc.banner.body": {
+    "en": "We can issue you a deposit address once your identity is verified. It takes a few minutes and is done once.",
+    "t": "Eine Einzahlungsadresse erhalten Sie, sobald Ihre Identität bestätigt ist. Das dauert wenige Minuten und ist einmalig."
+  },
+  "kyc.banner.dismiss": {
+    "en": "Dismiss",
+    "t": "Ausblenden"
+  },
+  "kyc.dialog.title": {
+    "en": "Verify your identity",
     "t": "Identität bestätigen"
+  },
+  "kyc.dialog.intro": {
+    "en": "A short identity check by our verification provider. Your deposit address and withdrawals open once it is done.",
+    "t": "Eine kurze Identitätsprüfung bei unserem Anbieter. Danach stehen Einzahlungsadresse und Auszahlungen offen."
+  },
+  "kyc.dialog.needTitle": {
+    "en": "What you'll need",
+    "t": "Was Sie brauchen"
+  },
+  "kyc.dialog.needBody": {
+    "en": "A government-issued ID, and a phone or webcam for a selfie.",
+    "t": "Ein amtlicher Ausweis sowie ein Telefon oder eine Webcam für ein Selfie."
+  },
+  "kyc.dialog.timeTitle": {
+    "en": "How long it takes",
+    "t": "Wie lange es dauert"
+  },
+  "kyc.dialog.timeBody": {
+    "en": "A few minutes to submit. Most checks are decided within the hour.",
+    "t": "Wenige Minuten für die Einreichung. Die meisten Prüfungen sind binnen einer Stunde entschieden."
+  },
+  "kyc.dialog.afterTitle": {
+    "en": "What happens next",
+    "t": "Was danach passiert"
+  },
+  "kyc.dialog.afterBody": {
+    "en": "We'll email you the result. You can close the tab — the check keeps running without it.",
+    "t": "Das Ergebnis senden wir per E-Mail. Sie können den Tab schließen — die Prüfung läuft weiter."
+  },
+  "kyc.dialog.action": {
+    "en": "Start verification",
+    "t": "Prüfung starten"
   },
   "lang.switch": {
     "en": "Language",
