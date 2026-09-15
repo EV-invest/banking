@@ -12,12 +12,23 @@
 //
 // No schema library: four shapes do not earn a dependency in `package.json`, and the probing
 // they need is three lines each (see `../lib/read-field`).
+//
+// The status half has no reader on THIS branch and is not meant to: it is the contract the
+// running-case gate is built on one PR up the stack (#190), which is where `KycStatus`,
+// `KycCase` and `RUNNING_CASE_STATUSES` acquire their consumer. Pinned here, with the start
+// half, because both routes are one release of the plane and drift on either is the same bug.
 
-import { hasField, readBoolean, readNumber, readObject, readString } from "../lib/read-field.ts";
+import { readBoolean, readField, readNumber, readString } from "../lib/read-field.ts";
 
 /**
- * The closed dictionary of `{ "error": … }` codes both routes publish. Anything outside it
- * is drift, and is read as "no code at all" rather than guessed at.
+ * The closed dictionary of `{ "error": … }` codes both routes WILL publish, once
+ * concierge#76 (`fen/kyc-start-contract`) ships. Anything outside it is drift, and is read
+ * as "no code at all" rather than guessed at.
+ *
+ * Against the concierge that is deployed today only `kyc_unavailable` is on the wire: every
+ * other refusal is still plain text with no JSON body (`StartError::Plain`), and
+ * `/kyc/status` does not exist at all. So the status-only fallback in `./start-outcome`
+ * is not a legacy branch — it is the branch that fires, and it stays until #76 is released.
  *
  * `kyc_unavailable` is the only one carrying a second field (`contact`), and the only one
  * whose meaning is a designed state rather than a fault.
@@ -85,10 +96,15 @@ export function parseStartResponse(body: unknown): KycStartResponse | null {
 export function parseStatus(body: unknown): KycStatus | null {
   const level = readNumber(body, "level");
   if (level === null) return null;
-  // `case: null` is the documented "nothing running", not a parse failure; a `case` key that
-  // is present and malformed IS one, and takes the whole document down with it.
-  const raw = readObject(body, "case");
-  if (raw === null) return hasField(body, "case") ? { level, case: null } : null;
+  // Three answers, not two. `case` absent is not a status document (an `Option::None` the
+  // plane started skipping would otherwise read as an affirmative "nothing running" and
+  // silently restore the pre-#190 behaviour); `case: null` IS that affirmative answer; and a
+  // `case` holding anything that is not an object — a number, a string, an array — is drift,
+  // which takes the whole document down with it rather than passing as "no attempt running"
+  // and re-opening the start gate.
+  const raw = readField(body, "case");
+  if (raw === undefined) return null;
+  if (raw === null) return { level, case: null };
   const kycCase = parseCase(raw);
   return kycCase === null ? null : { level, case: kycCase };
 }
@@ -105,14 +121,29 @@ function parseCase(raw: unknown): KycCase | null {
 /**
  * `null` when the body carries no code from {@link KYC_ERROR_CODES}.
  *
- * Both routes now answer every refusal with a body, which retires the old heuristic ("a 403
- * without a body is a stale token, a 403 with one is a refusal on the merits") — there is no
- * bodyless case left to key on.
+ * Keyed on the code and not on the status, because once concierge#76 ships every refusal
+ * carries one and the status is corroboration rather than evidence. Until then most refusals
+ * arrive bodyless and land in the status-only fallback instead — see the note on
+ * {@link KYC_ERROR_CODES}.
+ *
+ * `contact` is checked for the shape of an address, not merely for being a non-empty string.
+ * It is the one field of these bodies that the cabinet puts back into a URL — the support
+ * `mailto:` — and `real@support.tld?cc=…&body=…` there turns "write to support" into a
+ * pre-addressed letter to someone else. An address that does not look like one degrades to
+ * `null`, which every reader already handles by falling back to `SUPPORT_EMAIL`.
  */
 export function parseErrorBody(body: unknown): KycErrorBody | null {
   const error = readString(body, "error");
   if (error === null || !isKycErrorCode(error)) return null;
-  return { error, contact: error === "kyc_unavailable" ? readString(body, "contact") : null };
+  return { error, contact: error === "kyc_unavailable" ? readContact(body) : null };
+}
+
+/** Deliberately cruder than RFC 5322: it exists to exclude URL syntax, not to validate mail. */
+const CONTACT = /^[^\s@?#&/\\]+@[^\s@?#&/\\]+\.[^\s@?#&/\\]+$/;
+
+function readContact(body: unknown): string | null {
+  const contact = readString(body, "contact");
+  return contact !== null && CONTACT.test(contact) ? contact : null;
 }
 
 function isKycErrorCode(value: string): value is KycErrorCode {
