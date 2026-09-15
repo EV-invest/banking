@@ -144,9 +144,9 @@ pub trait FeePolicyChanges: Send + Sync {
 	/// else. A notice still being tried is not waived: it may yet arrive, and until it is
 	/// delivered or given up on its holder keeps holding the change. Idempotent on a change
 	/// already acknowledged (the first record stands); a conflict on a change that is not
-	/// `scheduled` or that has no notice given up on yet — there is nothing to take
-	/// responsibility for, and an acknowledgement covering nobody would be a misleading line
-	/// in the history.
+	/// `scheduled`, that only loosens the terms (it binds by itself), or that has no notice
+	/// given up on yet — there is nothing to take responsibility for, and an acknowledgement
+	/// covering nobody would be a misleading line in the history.
 	async fn acknowledge_undelivered_notices(&self, service: &ServiceId, id: FeePolicyChangeId, by: &str, now_unix: i64) -> Result<FeePolicyChange, DomainError>;
 
 	async fn find(&self, id: FeePolicyChangeId) -> Result<Option<FeePolicyChange>, DomainError>;

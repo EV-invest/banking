@@ -1758,10 +1758,25 @@ async fn there_is_nothing_to_acknowledge_on_a_change_that_is_not_scheduled_or_wh
 	assert_eq!(waiver_row(&h, &awaiting).await, (None, None, None));
 	fee_app::cancel_change(&h.changes, h.consilia.as_ref(), &service, awaiting.id, roster[0], now()).await.unwrap();
 
-	// Scheduled, every notice delivered: the figure the operator acted on is no longer true,
-	// and the change binds by itself — a refusal, not a silent no-op.
+	// A loosening, its notice given up on: it binds over the untold holder by itself, so
+	// there is no protection to waive — an acknowledgement would only put "notices waived
+	// by X" in the history of a change that never waited on anyone.
 	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
-	let change = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	let loosening = schedule(&h, UserId::new(), &service, cheaper, 0, "").await.unwrap();
+	retire_notices(&h, &loosening).await;
+	assert_eq!(change_of(&h, &loosening).await.notices_given_up, 1);
+	let err = acknowledge(&h, &service, &loosening, roster[1]).await.unwrap_err();
+	assert!(matches!(err, DomainError::Conflict(_)), "{err:?}");
+	assert!(err.to_string().contains("only get cheaper"), "{err}");
+	assert_eq!(waiver_row(&h, &loosening).await, (None, None, None));
+	let_the_notice_run(&h, &loosening).await;
+	assert!(h.changes.promote(loosening.id, now()).await.unwrap(), "a loosening binds over the untold holder regardless");
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(cheaper));
+
+	// A tightening, every notice delivered: the figure the operator acted on is no longer
+	// true, and the change binds by itself — a refusal, not a silent no-op.
+	let change = schedule(&h, UserId::new(), &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+	assert_eq!(change.state, FeePolicyChangeState::Scheduled, "within the envelope: no owners needed");
 	deliver_notices(&h, &change).await;
 	let err = acknowledge(&h, &service, &change, roster[1]).await.unwrap_err();
 	assert!(matches!(err, DomainError::Conflict(_)), "{err:?}");

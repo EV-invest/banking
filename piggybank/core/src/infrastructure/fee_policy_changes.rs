@@ -576,6 +576,15 @@ impl FeePolicyChanges for PgFeePolicyChanges {
 				change.state.as_str()
 			)));
 		}
+		// Only a tightening waits on the holders' notice — `promote` binds cheaper terms over
+		// an untold holder by itself. An acknowledgement on a loosening would be a line in the
+		// history saying somebody waived a protection nobody was owed.
+		let current = current_terms(&mut tx, service).await?;
+		if !change.policy.tightens_from(current.as_ref().unwrap_or(&FeePolicy::NONE)) {
+			return Err(DomainError::Conflict(
+				"the terms only get cheaper for the holders — a loosening binds over an undelivered notice by itself and needs no acknowledgement".into(),
+			));
+		}
 		let undelivered = undelivered_notices(&mut tx, change.id, service).await?;
 		if undelivered.is_empty() {
 			// Not a no-op: the operator saw a figure that is no longer true (the relay came

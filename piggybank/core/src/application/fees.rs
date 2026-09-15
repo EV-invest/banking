@@ -302,8 +302,8 @@ pub async fn cancel_change(
 /// anyone but the one who asked for the change or a fund owner: the holders' notice is the
 /// protection the owners' envelope and the notice period exist for, and waiving it must not
 /// be one `AllocationManage` holder away from a change somebody else proposed. Nothing to
-/// acknowledge (a change not scheduled, or no notice given up on yet) is a conflict rather
-/// than a no-op — see [`FeePolicyChanges::acknowledge_undelivered_notices`].
+/// acknowledge (a loosening, a change not scheduled, no notice given up on yet) is a
+/// conflict rather than a no-op — see [`FeePolicyChanges::acknowledge_undelivered_notices`].
 pub async fn acknowledge_undelivered_notices(
 	changes: &dyn FeePolicyChanges,
 	consilia: &dyn ConsiliumRepository,
