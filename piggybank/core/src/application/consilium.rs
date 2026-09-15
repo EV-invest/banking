@@ -10,7 +10,7 @@
 
 use domain::{
 	balance::{LedgerAccountKey, ValuationId},
-	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
+	consilium::{Consilium, ConsiliumEffect, ConsiliumId, ConsiliumKind, ConsiliumState, ConsiliumTerms, RevenuePayoutTerms, ValuationOverrideTerms, VoteDecision},
 	error::DomainError,
 	fees::FeePolicySubject,
 	money::{Nav, Network, Shares},
@@ -154,12 +154,12 @@ pub fn valuation_id(consilium: ConsiliumId) -> ValuationId {
 /// real and accepted: a legitimate roster change also delays a legitimate payout by 48h.
 pub const ROSTER_COOLING_OFF_SECS: i64 = 48 * 60 * 60;
 
-/// Refuse to open a payout proposal in the shadow of a roster change.
+/// Refuse to open a proposal of `kind` in the shadow of a roster change.
 ///
 /// Paired with [`ConsiliumRepository::void_open_for_roster_change`], which closes the other
 /// half: a change landing while a proposal is already open voids that proposal, so the
 /// window cannot be straddled by opening first and changing the roster after.
-pub(crate) async fn require_settled_roster(consilia: &dyn ConsiliumRepository, now: i64) -> Result<(), DomainError> {
+pub(crate) async fn require_settled_roster(consilia: &dyn ConsiliumRepository, kind: ConsiliumKind, now: i64) -> Result<(), DomainError> {
 	let Some(changed_at) = consilia.last_roster_change_at().await? else {
 		return Ok(());
 	};
@@ -167,12 +167,21 @@ pub(crate) async fn require_settled_roster(consilia: &dyn ConsiliumRepository, n
 	if now >= lifts_at {
 		return Ok(());
 	}
-	let hours = (lifts_at - now).div_euclid(3600);
-	let minutes = (lifts_at - now).rem_euclid(3600).div_euclid(60);
-	Err(DomainError::Conflict(format!(
-		"the owner roster changed less than {}h ago; a payout consilium cannot be opened until the cooling-off period lifts in {hours}h {minutes}m",
+	Err(cooling_off_refusal(kind, lifts_at - now))
+}
+
+/// The refusal [`require_settled_roster`] raises, `remaining_secs` before the window lifts.
+///
+/// The "cooling-off" fragment and the "lifts in {h}h {m}m" clock are what the cabinet's
+/// `consilium-refusal.ts` classifies and parses; only the noun varies between kinds.
+fn cooling_off_refusal(kind: ConsiliumKind, remaining_secs: i64) -> DomainError {
+	let hours = remaining_secs.div_euclid(3600);
+	let minutes = remaining_secs.rem_euclid(3600).div_euclid(60);
+	let noun = kind.noun();
+	DomainError::Conflict(format!(
+		"the owner roster changed less than {}h ago; a {noun} consilium cannot be opened until the cooling-off period lifts in {hours}h {minutes}m",
 		ROSTER_COOLING_OFF_SECS / 3600
-	)))
+	))
 }
 
 /// Refuse to open a consilium that nobody could ever vote on.
@@ -202,7 +211,7 @@ pub(crate) fn require_governance_mail(wired: bool) -> Result<(), DomainError> {
 
 pub async fn open_revenue_payout(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: RevenuePayoutTerms, now: i64) -> Result<ConsiliumView, DomainError> {
 	require_governance_mail(ports.governance_mail_wired)?;
-	require_settled_roster(ports.consilia, now).await?;
+	require_settled_roster(ports.consilia, ConsiliumKind::RevenuePayout, now).await?;
 	withdrawal_app::check_revenue_payout(ports.ledger, ports.configured, terms.network, terms.address.clone(), terms.amount).await?;
 	let owners = ports.consilia.owner_roster().await?;
 	let terms = ConsiliumTerms::RevenuePayout(terms);
@@ -233,7 +242,7 @@ pub async fn open_revenue_payout(ports: &ConsiliumPorts<'_>, initiator: UserId, 
 /// proposes, the owners decide.
 pub async fn open_valuation_override(ports: &ConsiliumPorts<'_>, initiator: UserId, terms: ValuationOverrideTerms, now: i64) -> Result<ConsiliumView, DomainError> {
 	require_governance_mail(ports.governance_mail_wired)?;
-	require_settled_roster(ports.consilia, now).await?;
+	require_settled_roster(ports.consilia, ConsiliumKind::ValuationOverride, now).await?;
 	allocations_app::get(ports.allocations, &terms.service).await?;
 	let units = Shares::from_base_units(ports.ledger.balance(&LedgerAccountKey::SharesOutstanding(terms.service.clone())).await?.posted);
 	Nav::from_aum(terms.aum, units)?;
@@ -532,4 +541,33 @@ fn failure_reason(err: &DomainError) -> String {
 /// Close every consilium whose window has run out. Driven by the periodic sweeper.
 pub async fn sweep_expired(consilia: &dyn ConsiliumRepository, now: i64) -> Result<usize, DomainError> {
 	consilia.expire_due(now).await
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn message(err: DomainError) -> String {
+		match err {
+			DomainError::Conflict(message) => message,
+			other => panic!("the cooling-off refusal is a conflict, got {other:?}"),
+		}
+	}
+
+	/// The payout wording is the one the cabinet's classifier was written against, so it
+	/// is pinned byte for byte; the other kinds differ from it in the noun alone.
+	#[test]
+	fn cooling_off_refusal_names_the_kind_and_keeps_the_classified_fragments() {
+		let payout = message(cooling_off_refusal(ConsiliumKind::RevenuePayout, 12 * 3600 + 30 * 60));
+		assert_eq!(
+			payout,
+			"the owner roster changed less than 48h ago; a payout consilium cannot be opened until the cooling-off period lifts in 12h 30m"
+		);
+
+		for kind in [ConsiliumKind::Payment, ConsiliumKind::ValuationOverride, ConsiliumKind::FeePolicy] {
+			let got = message(cooling_off_refusal(kind, 12 * 3600 + 30 * 60));
+			assert_eq!(got, payout.replace("a payout consilium", &format!("a {} consilium", kind.noun())), "{kind:?}");
+			assert!(got.contains("cooling-off") && got.contains("lifts in 12h 30m"), "{kind:?}: {got}");
+		}
+	}
 }

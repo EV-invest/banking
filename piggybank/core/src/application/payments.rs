@@ -17,7 +17,7 @@
 
 use domain::{
 	balance::Party,
-	consilium::{Consilium, ConsiliumId, ConsiliumTerms},
+	consilium::{Consilium, ConsiliumId, ConsiliumKind, ConsiliumTerms},
 	error::DomainError,
 	money::{Network, Usdt},
 	payments::{PaymentApproval, PaymentDestination, PaymentEffect, PaymentId, PaymentOrder, PaymentState, PaymentTerms, PaymentTier},
@@ -241,7 +241,7 @@ async fn consent_credential(ports: &PaymentPorts<'_>, subject: UserId) -> Result
 /// a settled roster, a roster large enough to reach quorum, one token and one code per
 /// eligible seat — and the order's own subject, id included, as the hashed terms.
 async fn open_consilium(ports: &PaymentPorts<'_>, initiator: UserId, order: &PaymentOrder, now: i64) -> Result<ConsiliumId, DomainError> {
-	require_settled_roster(ports.consilia, now).await?;
+	require_settled_roster(ports.consilia, ConsiliumKind::Payment, now).await?;
 	let owners = ports.consilia.owner_roster().await?;
 	let terms = ConsiliumTerms::Payment(order.subject());
 	let payload_hash = digest(&terms.canonical_bytes());

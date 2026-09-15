@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 
 use domain::{
 	balance::{LedgerAccountKey, ServiceId},
-	consilium::{Consilium, ConsiliumId, ConsiliumTerms},
+	consilium::{Consilium, ConsiliumId, ConsiliumKind, ConsiliumTerms},
 	error::DomainError,
 	fees::{self, ChangeRequirement, FeeAssessment, FeeAssessmentId, FeeCharge, FeePolicy, FeePolicyChangeId, FeePolicySubject, FeeSettlement, FeeSettlementId, PositionSnapshot, Trigger},
 	money::{Nav, Shares, Usdt},
@@ -249,7 +249,7 @@ pub async fn schedule_policy(ports: &FeePolicyPorts<'_>, requester: UserId, requ
 		ChangeRequirement::Admin => ports.changes.schedule(&change, None).await,
 		ChangeRequirement::OwnerConsilium => {
 			require_governance_mail(ports.governance_mail_wired)?;
-			require_settled_roster(ports.consilia, now).await?;
+			require_settled_roster(ports.consilia, ConsiliumKind::FeePolicy, now).await?;
 			let owners = ports.consilia.owner_roster().await?;
 			// Said in the fee plane's words before the aggregate says it in its own: an
 			// administrator who is not an owner needs to know WHY this particular change is
