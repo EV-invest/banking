@@ -851,12 +851,20 @@ async fn await_signal(shutdown: CancellationToken) {
 /// TLS — every request then fails `HttpsUriWithoutTlsSupport` and a pinned
 /// `BRIDGE_TLS_CA_PEM_FILE` is dropped on the floor, with the hub still live and ready.
 fn bridge_endpoint(addr: &str) -> color_eyre::Result<Endpoint> {
+	let ca_file = std::env::var("BRIDGE_TLS_CA_PEM_FILE").ok().filter(|s| !s.is_empty());
+	bridge_endpoint_with_ca(addr, ca_file.as_deref())
+}
+
+/// The env-free half of [`bridge_endpoint`], so both halves of the decision — which
+/// addresses get TLS, and what a pinned CA does — are reachable from a test without
+/// mutating the process environment.
+fn bridge_endpoint_with_ca(addr: &str, ca_file: Option<&str>) -> color_eyre::Result<Endpoint> {
 	let endpoint = Endpoint::from_shared(addr.to_string())
 		.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
 		.connect_timeout(Duration::from_secs(3))
 		.timeout(Duration::from_secs(10));
 	if config::bridge_transport(addr) == config::BridgeTransport::Tls {
-		return endpoint.tls_config(bridge_client_tls()?).context("failed to configure bridge TLS");
+		return endpoint.tls_config(bridge_client_tls(ca_file)?).context("failed to configure bridge TLS");
 	}
 	Ok(endpoint)
 }
@@ -869,10 +877,16 @@ fn bridge_endpoint(addr: &str) -> color_eyre::Result<Endpoint> {
 /// No client identity here, unlike the signer: the hub already proves itself with
 /// `BRIDGE_SERVICE_TOKEN`, and mTLS on this seam belongs with phase 2 of #199, once
 /// concierge terminates TLS at all.
-fn bridge_client_tls() -> color_eyre::Result<ClientTlsConfig> {
-	match std::env::var("BRIDGE_TLS_CA_PEM_FILE").ok().filter(|s| !s.is_empty()) {
+fn bridge_client_tls(ca_file: Option<&str>) -> color_eyre::Result<ClientTlsConfig> {
+	match ca_file {
 		Some(ca_file) => {
-			let ca = std::fs::read_to_string(&ca_file).with_context(|| format!("failed to read BRIDGE_TLS_CA_PEM_FILE at {ca_file}"))?;
+			let ca = std::fs::read_to_string(ca_file).with_context(|| format!("failed to read BRIDGE_TLS_CA_PEM_FILE at {ca_file}"))?;
+			// The PEM reader underneath `ca_certificate` skips what it cannot parse, so a file
+			// holding no certificate (a key, a DER, a path left pointing at the wrong config)
+			// would build an EMPTY root store: every handshake fails while the hub stays live
+			// and ready, and the lifecycle stream stops without the seam being misconfigured
+			// anywhere an operator looks. Refuse at boot instead.
+			ensure!(ca.contains("-----BEGIN CERTIFICATE-----"), "BRIDGE_TLS_CA_PEM_FILE at {ca_file} holds no PEM certificate");
 			Ok(ClientTlsConfig::new().ca_certificate(Certificate::from_pem(ca)))
 		}
 		None => Ok(ClientTlsConfig::new().with_enabled_roots()),
@@ -922,4 +936,95 @@ fn init_tracing(environment: &str) -> Option<ev::otel::Telemetry> {
 		.with(otel_layers)
 		.init();
 	otel_guard
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	/// A throwaway self-signed certificate (`openssl req -x509 -newkey rsa:2048 -nodes`,
+	/// valid to 2126), here only so the trust-anchor parse has a real DER to chew on. No
+	/// private key was kept and nothing trusts it.
+	const TEST_CA_PEM: &str = r"-----BEGIN CERTIFICATE-----
+MIIDGzCCAgOgAwIBAgIUNQD11Yz00cFGinwEzH2XA+Owz9swDQYJKoZIhvcNAQEL
+BQAwHDEaMBgGA1UEAwwRRVYgdGVzdCBicmlkZ2UgQ0EwIBcNMjYwOTE1MTg0MzQw
+WhgPMjEyNjA4MjIxODQzNDBaMBwxGjAYBgNVBAMMEUVWIHRlc3QgYnJpZGdlIENB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApmWEKLoU5f5XZwYIHZyi
+ivR2+9nizSTgbr5EEx8ifjYhU0V+h+gRzZrWfZUNMR3OPmNYC3/3VxzwCQ1lHg4r
+hgkiDXqUaI9KUMZZo/HfSn2V6h4O/iYl3Q2jVcmtKCwKC7A0eDH+4NvaOY40wmsn
+3b9kV9AlVDsUx4cBaIGNgBdEq4vN5DYjY/ZhPOoKfAiDiM4zQupW69XauEzhclFY
+qjzG/bnr11uWB4L+o7lZFu5gNN8bbmtL9jnxEYfl3KKnk4GpoAVDKHU9l5S/6oDm
+9o5/KMgZgtQCOU0h8NSTHT2s3UkLCCeSufF2Tx/Um7C9V899yryuyt34Kpy6odSQ
+cQIDAQABo1MwUTAdBgNVHQ4EFgQUlqaFS6fHa5yah2xLuk8CfaCWM9QwHwYDVR0j
+BBgwFoAUlqaFS6fHa5yah2xLuk8CfaCWM9QwDwYDVR0TAQH/BAUwAwEB/zANBgkq
+hkiG9w0BAQsFAAOCAQEAlU+v3Iui7pujKrW1fciQmJWwxiFLxuE8QFv4oAM+lzFx
+TKqj42bAOApMNXCw5flGp/Z9LhFPPoIThgxiRbYc7AyxhHXyuwfkAF22qrtB88r+
+njxEK4PFw7JoieY19UKhMqZ82gbesvW7T9Rd7deBXCksRNObzKc9LSl9O5UO+9Ks
+kNsL7Jype//j0lo3pVQcvbdq/fNno1YWnF72Y2w/mCOBV1Mc8fRX76z7sF3cHhkU
+10NvzdF+DGKDJJaUe89qas9TZrAdjCN6j9XXwrzG9Mc4Z9H9TCJ35tOJGM6GO5Qb
+gRI8JvM30gtx/NBsGEV927PGd7imCZpKdAlR1pYzGA==
+-----END CERTIFICATE-----
+";
+
+	/// Writes `contents` to a unique temp file and hands back its path; the caller unlinks it.
+	fn temp_ca_file(contents: &str) -> std::path::PathBuf {
+		let path = std::env::temp_dir().join(format!("piggybank-bridge-ca-{}.pem", uuid::Uuid::new_v4()));
+		std::fs::write(&path, contents).expect("the temp dir must be writable, or this test proves nothing");
+		path
+	}
+
+	/// TLS is decided by [`config::bridge_transport`], which case-folds the scheme, and never
+	/// by the spelling of the address. A stricter second reading here (the
+	/// `starts_with("https://")` this function carried in 6c40c86) leaves `HTTPS://…`
+	/// classified as TLS by the notice and untouched by the builder: `http::Uri` lowercases
+	/// the scheme, tonic then gets an https target with no TLS, every request fails
+	/// `HttpsUriWithoutTlsSupport` while the hub stays live and ready, and the pinned CA is
+	/// dropped on the floor. An unreadable CA path is the probe — only the TLS branch
+	/// reads it.
+	#[test]
+	fn the_bridge_endpoint_negotiates_tls_for_every_spelling_of_https_and_for_nothing_else() {
+		let missing = "/nonexistent/piggybank-bridge-ca.pem";
+		for addr in ["https://concierge:55670", "HTTPS://concierge:55670", "https://concierge.apps.svc.cluster.local/"] {
+			let Err(err) = bridge_endpoint_with_ca(addr, Some(missing)) else {
+				panic!("{addr} must take the TLS branch, which reads the pinned CA");
+			};
+			assert!(
+				err.to_string().contains("BRIDGE_TLS_CA_PEM_FILE"),
+				"a CA that cannot be read must name itself and stop the boot, not fall back to the public roots: {err}"
+			);
+		}
+		for addr in ["http://concierge:55670", "http://127.0.0.1:55670"] {
+			assert!(
+				bridge_endpoint_with_ca(addr, Some(missing)).is_ok(),
+				"{addr} is cleartext, so the CA is irrelevant and must not be read"
+			);
+		}
+		assert!(
+			bridge_endpoint_with_ca("https://concierge:55670", None).is_ok(),
+			"an unpinned https seam falls back to the public roots"
+		);
+		assert!(bridge_endpoint_with_ca("not a url", None).is_err(), "an unusable CONCIERGE_BRIDGE_ADDR must stop the boot");
+	}
+
+	/// A pinned CA is a certificate or the hub does not boot. The PEM reader underneath
+	/// `ca_certificate` silently skips what it cannot parse, so without the check this
+	/// asserts, a key file or a mistyped path builds an endpoint with an EMPTY root store:
+	/// every handshake then fails against a hub that is live, ready and configured for TLS
+	/// everywhere an operator would look.
+	#[test]
+	fn a_pinned_bridge_ca_is_parsed_at_boot_or_the_endpoint_is_refused() {
+		let good = temp_ca_file(TEST_CA_PEM);
+		let accepted = bridge_endpoint_with_ca("https://concierge:55670", Some(good.to_str().expect("a utf-8 temp path")));
+		// Best-effort cleanup: failing to unlink a temp file must not mask the assertion.
+		let _ = std::fs::remove_file(&good);
+		assert!(accepted.is_ok(), "a readable PEM CA must be accepted as the trust anchor: {:?}", accepted.err());
+
+		let junk = temp_ca_file("not a certificate\n");
+		let refused = bridge_endpoint_with_ca("https://concierge:55670", Some(junk.to_str().expect("a utf-8 temp path")));
+		let _ = std::fs::remove_file(&junk);
+		let Err(err) = refused else {
+			panic!("a CA file holding no certificate must fail the boot, not build an empty root store");
+		};
+		assert!(err.to_string().contains("BRIDGE_TLS_CA_PEM_FILE"), "the refusal must name the variable that caused it: {err}");
+	}
 }
