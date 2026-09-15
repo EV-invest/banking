@@ -40,7 +40,7 @@ export function ScheduledReceipt({ change, onDismiss }: { change: FeePolicyChang
       <AlertTitle>{t(TITLE_KEY[kind])}</AlertTitle>
       <AlertDescription className="gap-3">
         <p className="leading-relaxed">{t(BODY_KEY[kind], { version: change.version, at: formatMoment(change.effective_from, locale) })}</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 text-ink">
           {awaiting && (
             <Button asChild size="sm" variant="outline">
               <Link href="/consilium">{t("admin.payments.openConsilium")}</Link>

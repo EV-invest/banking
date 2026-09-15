@@ -34,7 +34,7 @@ export function OpenedReceipt({ payment, onDismiss }: { payment: Payment; onDism
         <p className="text-xs tabular-nums text-muted-foreground">
           {t("admin.payments.openedExpires", { at: formatMoment(payment.expires_at, locale), left: expiresIn(payment.expires_at, t) })}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 text-ink">
           {payment.consilium_id && (
             <Button asChild size="sm" variant="outline">
               <Link href="/consilium">{t("admin.payments.openConsilium")}</Link>
