@@ -843,12 +843,19 @@ async fn await_signal(shutdown: CancellationToken) {
 /// behind a mesh that terminates TLS), so the channel authenticates the server rather than
 /// trusting service discovery — the same rule the signer seam already applies. Cleartext
 /// stays permitted: production is h2c inside the cluster today (#199).
+///
+/// Whether to encrypt is asked of [`config::bridge_transport`] — the same function that
+/// decides whether to say anything at boot. A second, stricter reading here (`starts_with`)
+/// would split on spelling: `HTTPS://concierge` classifies as TLS, so the boot notice stays
+/// silent, while `http::Uri` lowercases the scheme and hands tonic an https target with no
+/// TLS — every request then fails `HttpsUriWithoutTlsSupport` and a pinned
+/// `BRIDGE_TLS_CA_PEM_FILE` is dropped on the floor, with the hub still live and ready.
 fn bridge_endpoint(addr: &str) -> color_eyre::Result<Endpoint> {
 	let endpoint = Endpoint::from_shared(addr.to_string())
 		.context("CONCIERGE_BRIDGE_ADDR must be a valid URL, e.g. http://127.0.0.1:50061")?
 		.connect_timeout(Duration::from_secs(3))
 		.timeout(Duration::from_secs(10));
-	if addr.starts_with("https://") {
+	if config::bridge_transport(addr) == config::BridgeTransport::Tls {
 		return endpoint.tls_config(bridge_client_tls()?).context("failed to configure bridge TLS");
 	}
 	Ok(endpoint)
