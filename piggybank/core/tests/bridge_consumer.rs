@@ -1025,6 +1025,69 @@ async fn a_failing_cycle_backs_off_instead_of_retrying_at_the_poll_interval() {
 	);
 }
 
+/// A CYCLE THAT CANNOT MOVE THE CURSOR MUST SLOW DOWN TOO, EVEN THOUGH IT RETURNS CLEANLY.
+///
+/// The two states this bridge can get stuck in — an unreadable kind, and a `next_position`
+/// that did not advance — both end the drain with `Ok(())`, because neither is an error:
+/// the batch WAS applied, it just cannot be consumed. Nothing about that resolves on its
+/// own; it takes a deploy or a server-side fix. So without this, the bridge re-pulls and
+/// re-applies the identical batch every poll for as long as it takes someone to notice —
+/// indefinite load on both planes, at the production interval — while looking, from the
+/// outside, exactly like a healthy cycle (#181).
+///
+/// The bound is a lower one, like its failing-cycle neighbour, and for the same reason: the
+/// only thing that can stretch seven pulls this far apart is the delay doubling.
+#[tokio::test]
+async fn a_cycle_that_cannot_move_the_cursor_backs_off_although_it_returned_ok() {
+	let Some(pool) = pool().await else {
+		eprintln!("DATABASE_URL unset — skipping real-DB test");
+		return;
+	};
+	let subject = unique_subject();
+	// A row already past the event's sequence, so every apply is the cheap redelivery no-op
+	// and what paces the pulls is the wait, not the work.
+	PgUsers::new(pool.clone())
+		.provision(
+			domain::auth::AuthSubject::parse(&subject).unwrap(),
+			domain::users::Email::parse("wedged@example.com").unwrap(),
+			true,
+		)
+		.await
+		.expect("provision the subject the wedged batch names");
+	sqlx::query("UPDATE users SET last_lifecycle_sequence = 9 WHERE auth_subject = $1")
+		.bind(&subject)
+		.execute(&pool)
+		.await
+		.unwrap();
+
+	// One event per pull, so `drain` returns on the short batch and the cycle ends in
+	// `Ok(())` — the arm under test. Seven cycles at a 50 ms poll: 0.3 s if the wedge keeps
+	// the poll interval, 3.1 s once the wait doubles each time (50 + 100 + … + 1600).
+	const POLL: Duration = Duration::from_millis(50);
+	const WANT: usize = 7;
+	let pulls = pull_log();
+	let finished = drive_misbehaving(
+		&pool,
+		StuckUserEvents {
+			event: event(&subject, Kind::SessionsRevoked, 1),
+			full: false,
+			pulls: pulls.clone(),
+		},
+		POLL,
+		pulls.clone(),
+		WANT,
+	)
+	.await;
+
+	assert!(finished, "a backing-off consumer still winds down on cancellation rather than sleeping through it");
+	let span = span_of_first(&pulls, WANT).expect("the consumer pulled at least seven times");
+	assert!(
+		span >= Duration::from_millis(1500),
+		"a cycle that could not move the cursor must back off, not re-pull at the poll interval — {WANT} pulls inside {span:?} at a {POLL:?} poll"
+	);
+	assert_eq!(cursor_position(&pool).await, 0, "the premise of the test: not one of those cycles consumed anything");
+}
+
 /// A BATCH THE CURSOR CANNOT MOVE PAST IS STILL APPLIED.
 ///
 /// Ending the drain protects the identity plane from a hot loop. It must not also stop the
