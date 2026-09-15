@@ -963,6 +963,18 @@
     "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
     "t": "Điều khoản sẽ có hiệu lực với {n, plural, other {# người nắm giữ này}} mà không có thông báo — những điều khoản chặt hơn mà họ chưa từng được biết. Tên của bạn, thời điểm và chính xác những người nắm giữ liên quan sẽ được ghi vào thay đổi và lưu trong lịch sử của nó."
   },
+  "admin.fees.notices.acknowledgeWarningExtend": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name and the moment replace the earlier acknowledgement's on the change, which will then cover {total, plural, one {# holder} other {all # holders}}, and stay in its history.",
+    "t": "Điều khoản sẽ có hiệu lực với {n, plural, other {# người nắm giữ này}} mà không có thông báo — những điều khoản chặt hơn mà họ chưa từng được biết. Tên của bạn và thời điểm sẽ thay thế xác nhận trước đó trên thay đổi, khi đó nó bao trùm {total, plural, other {tất cả # người nắm giữ}}, và được lưu trong lịch sử của nó."
+  },
+  "admin.fees.notices.alreadyWaived": {
+    "en": "{by} already took responsibility on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "{by} đã nhận trách nhiệm vào {at} cho {n, plural, other {# người nắm giữ}} mà việc gửi thư đã bỏ cuộc tính đến lúc đó. Từ đó nó đã bỏ cuộc thêm với những người khác; hành động này thêm họ vào cùng bản ghi đó."
+  },
+  "admin.fees.notices.alreadyWaivedAnon": {
+    "en": "Responsibility was already taken on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "Trách nhiệm đã được nhận vào {at} cho {n, plural, other {# người nắm giữ}} mà việc gửi thư đã bỏ cuộc tính đến lúc đó. Từ đó nó đã bỏ cuộc thêm với những người khác; hành động này thêm họ vào cùng bản ghi đó."
+  },
   "admin.fees.notices.err.forbidden": {
     "en": "Only the requester of this change or an owner can take responsibility for it.",
     "t": "Chỉ người yêu cầu thay đổi này hoặc chủ sở hữu mới có thể nhận trách nhiệm."

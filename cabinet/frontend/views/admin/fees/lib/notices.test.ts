@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { noticeSummary, type NoticeSource } from "./notices.ts";
+import { noticeSummary, type NoticeSource, waiverRecord } from "./notices.ts";
 
 const change = (over: Partial<NoticeSource> = {}): NoticeSource => ({
   state: "scheduled",
@@ -11,8 +11,13 @@ const change = (over: Partial<NoticeSource> = {}): NoticeSource => ({
   notices_waived_users: [],
   undelivered_notices: 0,
   notices_given_up: 0,
+  notices_unacknowledged: 0,
   ...over,
 });
+
+/** The hub's figures for a change nobody has acknowledged: every given-up notice is uncovered. */
+const givenUp = (undelivered: number, givenUp: number, over: Partial<NoticeSource> = {}): NoticeSource =>
+  change({ undelivered_notices: undelivered, notices_given_up: givenUp, notices_unacknowledged: givenUp, ...over });
 
 test("a scheduled change every holder was told about has nothing to say", () => {
   assert.deepEqual(noticeSummary(change()), { kind: "none" });
@@ -20,37 +25,43 @@ test("a scheduled change every holder was told about has nothing to say", () => 
 
 test("notices the mailer is still trying are queued, not holders who could not be told", () => {
   assert.deepEqual(noticeSummary(change({ undelivered_notices: 2 })), { kind: "queued", queued: 2 });
-  assert.deepEqual(noticeSummary(change({ undelivered_notices: 5, notices_given_up: 0 })), { kind: "queued", queued: 5 });
+  assert.deepEqual(noticeSummary(givenUp(5, 0)), { kind: "queued", queued: 5 });
 });
 
 test("once the mailer has given up on one, the act is offered over the given-up ones only", () => {
-  assert.deepEqual(noticeSummary(change({ undelivered_notices: 3, notices_given_up: 1 })), { kind: "givenUp", givenUp: 1, queued: 2 });
-  assert.deepEqual(noticeSummary(change({ undelivered_notices: 3, notices_given_up: 3 })), { kind: "givenUp", givenUp: 3, queued: 0 });
+  assert.deepEqual(noticeSummary(givenUp(3, 1)), { kind: "givenUp", givenUp: 1, queued: 2, waiver: null });
+  assert.deepEqual(noticeSummary(givenUp(3, 3)), { kind: "givenUp", givenUp: 3, queued: 0, waiver: null });
 });
 
 test("the given-up figure never exceeds the undelivered one it is a part of", () => {
-  assert.deepEqual(noticeSummary(change({ undelivered_notices: 1, notices_given_up: 4 })), { kind: "givenUp", givenUp: 1, queued: 0 });
+  assert.deepEqual(noticeSummary(givenUp(1, 4)), { kind: "givenUp", givenUp: 1, queued: 0, waiver: null });
 });
 
-test("a negative given-up figure is a wire fault and reads as none given up", () => {
-  assert.deepEqual(noticeSummary(change({ undelivered_notices: 2, notices_given_up: -1 })), { kind: "queued", queued: 2 });
+test("the uncovered figure never exceeds the given-up one it is a part of", () => {
+  assert.deepEqual(noticeSummary(givenUp(3, 2, { notices_unacknowledged: 5 })), { kind: "givenUp", givenUp: 2, queued: 1, waiver: null });
+});
+
+test("a negative figure is a wire fault and reads as none", () => {
+  assert.deepEqual(noticeSummary(givenUp(2, -1)), { kind: "queued", queued: 2 });
+  assert.deepEqual(noticeSummary(givenUp(2, 1, { notices_unacknowledged: -1 })), { kind: "queued", queued: 1 });
 });
 
 test("the count is read only while scheduled — no button on a change that is past that", () => {
   for (const state of ["awaiting_consilium", "active", "superseded", "rejected", "cancelled"]) {
-    assert.deepEqual(noticeSummary(change({ state, undelivered_notices: 2, notices_given_up: 2 })), { kind: "none" }, state);
+    assert.deepEqual(noticeSummary(givenUp(2, 2, { state })), { kind: "none" }, state);
   }
 });
 
-test("a waiver outranks the count: responsibility already taken is not offered again", () => {
-  const waived = change({
-    notices_waived_by: "user-1",
-    notices_waived_at: "1750050000",
-    notices_waived_users: ["a", "b"],
-    undelivered_notices: 2,
-    notices_given_up: 2,
-  });
+const record = { notices_waived_by: "user-1", notices_waived_at: "1750050000", notices_waived_users: ["a", "b"] };
+
+test("a waiver that covers every given-up notice stands alone: responsibility is not offered again", () => {
+  const waived = change({ ...record, undelivered_notices: 3, notices_given_up: 2, notices_unacknowledged: 0 });
   assert.deepEqual(noticeSummary(waived), { kind: "waived", by: "user-1", at: "1750050000", holders: 2 });
+});
+
+test("holders given up on after the waiver are offered again, over them alone, with the record to extend", () => {
+  const later = change({ ...record, undelivered_notices: 4, notices_given_up: 3, notices_unacknowledged: 1 });
+  assert.deepEqual(noticeSummary(later), { kind: "givenUp", givenUp: 1, queued: 1, waiver: { by: "user-1", at: "1750050000", holders: 2 } });
 });
 
 test("a waiver stays readable in every later state — it is history, not a pending fact", () => {
@@ -64,6 +75,14 @@ test("the waiver is told by its moment even when the author is blanked for the r
 });
 
 test("a missing moment is not a waiver", () => {
-  assert.deepEqual(noticeSummary(change({ notices_waived_at: "", undelivered_notices: 1, notices_given_up: 1 })), { kind: "givenUp", givenUp: 1, queued: 0 });
+  assert.deepEqual(noticeSummary(givenUp(1, 1, { notices_waived_at: "" })), { kind: "givenUp", givenUp: 1, queued: 0, waiver: null });
   assert.deepEqual(noticeSummary(change({ notices_waived_at: "0" })), { kind: "none" });
+});
+
+test("the record reads as history whatever the summary says", () => {
+  assert.equal(waiverRecord(change()), null);
+  const expected = { by: "user-1", at: "1750050000", holders: 2 };
+  assert.deepEqual(waiverRecord(change(record)), expected);
+  assert.deepEqual(waiverRecord(change({ ...record, undelivered_notices: 4, notices_given_up: 3, notices_unacknowledged: 1 })), expected);
+  assert.deepEqual(waiverRecord(change({ ...record, state: "active" })), expected);
 });

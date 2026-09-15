@@ -963,6 +963,18 @@
     "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
     "t": "Условия вступят в силу для {n, plural, one {этого держателя} few {этих # держателей} many {этих # держателей} other {этих # держателей}} без уведомления — более жёсткие условия, о которых им не сообщили. Ваше имя, момент и точный список держателей будут записаны в изменение и останутся в его истории."
   },
+  "admin.fees.notices.acknowledgeWarningExtend": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name and the moment replace the earlier acknowledgement's on the change, which will then cover {total, plural, one {# holder} other {all # holders}}, and stay in its history.",
+    "t": "Условия вступят в силу для {n, plural, one {этого держателя} few {этих # держателей} many {этих # держателей} other {этих # держателей}} без уведомления — более жёсткие условия, о которых им не сообщили. Ваше имя и момент заменят в изменении прежнее подтверждение, которое после этого будет покрывать {total, plural, one {# держателя} few {всех # держателей} many {всех # держателей} other {всех # держателя}}, и останутся в его истории."
+  },
+  "admin.fees.notices.alreadyWaived": {
+    "en": "{by} already took responsibility on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "Ответственность уже взята {at} ({by}) за {n, plural, one {# держателя} few {# держателей} many {# держателей} other {# держателя}}, от которых рассылка отказалась к тому моменту. С тех пор она отказалась ещё от нескольких; этот акт добавит их в ту же запись."
+  },
+  "admin.fees.notices.alreadyWaivedAnon": {
+    "en": "Responsibility was already taken on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "Ответственность уже взята {at} за {n, plural, one {# держателя} few {# держателей} many {# держателей} other {# держателя}}, от которых рассылка отказалась к тому моменту. С тех пор она отказалась ещё от нескольких; этот акт добавит их в ту же запись."
+  },
   "admin.fees.notices.err.forbidden": {
     "en": "Only the requester of this change or an owner can take responsibility for it.",
     "t": "Взять ответственность может только запросивший это изменение или владелец."

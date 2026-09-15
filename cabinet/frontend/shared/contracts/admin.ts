@@ -267,22 +267,27 @@ export interface FeePolicyChange extends FeeTerms {
   reason: string;
   /**
    * The operator who took responsibility for the holders who could not be told
-   * (`/policy/acknowledge-notices`); `null` until someone did. Operators only — blank for
-   * everyone else even once given.
+   * (`/policy/acknowledge-notices`) — the latest to, when a later act extended the record;
+   * `null` until someone did. Operators only — blank for everyone else even once given.
    */
   notices_waived_by: string | null;
-  /** Unix seconds as a string the acknowledgement was given; `"0"` until someone gave it. */
+  /** Unix seconds as a string the (latest) acknowledgement was given; `"0"` until someone gave it. */
   notices_waived_at: string;
-  /** The banking user ids whose notice was undelivered at that moment — exactly the holders
-   *  the change binds over untold, and nobody who turns out untold later. Operators only. */
+  /** The banking user ids whose notice the mailer had given up on by that moment — exactly
+   *  the holders the change binds over untold. A holder given up on later is not among them
+   *  until a further act adds them. Operators only. */
   notices_waived_users: string[];
   /**
-   * Notices not yet delivered to a CURRENT holder, and how many of those the mailer has
-   * given up on. Counted only while `scheduled` — `0` in every other state, and `0` for
-   * everyone but operators — so a non-zero figure is always about a change still on its way.
+   * Notices not yet delivered to a CURRENT holder, how many of those the mailer has given
+   * up on, and how many of the given-up ones the acknowledgement does not cover (all of
+   * them while there is none) — the holders a (further) act would name, so it is worth
+   * offering exactly while this is non-zero. Counted only while `scheduled` — `0` in every
+   * other state, and `0` for everyone but operators — so a non-zero figure is always about
+   * a change still on its way.
    */
   undelivered_notices: number;
   notices_given_up: number;
+  notices_unacknowledged: number;
 }
 
 export interface FeePolicyChangeList {

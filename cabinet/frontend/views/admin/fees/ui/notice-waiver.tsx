@@ -10,7 +10,10 @@
 // The act is offered only over notices the mailer has GIVEN UP on — the hub refuses it
 // otherwise — so a notice still in the queue is reported as exactly that, with nothing to
 // press: the half-minute after scheduling, when every notice is undelivered because none
-// has been tried yet, must not read as holders who could not be told.
+// has been tried yet, must not read as holders who could not be told. And it is offered
+// again when the mailer gives up on more holders after an acknowledgement: the record
+// covers exactly the holders it was given over, so the later ones need an act of their
+// own — one that extends the list and puts the extender's name on all of it.
 
 import { Loader2, MailWarning } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -24,7 +27,7 @@ import { errorMessage, RequestError } from "@/shared/lib/api-client";
 import { TAG } from "@/shared/lib/cache-tags";
 import { formatMoment } from "@/shared/lib/datetime";
 import { revalidateTag } from "@/shared/lib/resource";
-import { noticeSummary } from "@/views/admin/fees/lib/notices";
+import { noticeSummary, type Waiver, waiverRecord } from "@/views/admin/fees/lib/notices";
 
 export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
   const t = useT();
@@ -46,12 +49,13 @@ export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
       );
     }
     case "givenUp":
-      return <GivenUpNotices change={change} givenUp={summary.givenUp} queued={summary.queued} />;
+      return <GivenUpNotices change={change} givenUp={summary.givenUp} queued={summary.queued} waiver={summary.waiver} />;
   }
 }
 
-function GivenUpNotices({ change, givenUp, queued }: { change: FeePolicyChange; givenUp: number; queued: number }) {
+function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicyChange; givenUp: number; queued: number; waiver: Waiver | null }) {
   const t = useT();
+  const locale = useLocale();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -99,10 +103,21 @@ function GivenUpNotices({ change, givenUp, queued }: { change: FeePolicyChange; 
           {t("admin.fees.notices.givenUpBody", { n: givenUp })}
           {queued > 0 && <> {t("admin.fees.notices.moreQueued", { n: queued })}</>}
         </p>
+        {waiver && (
+          <p className="text-sm leading-relaxed">
+            {waiver.by
+              ? t("admin.fees.notices.alreadyWaived", { by: waiver.by, at: formatMoment(waiver.at, locale), n: waiver.holders })
+              : t("admin.fees.notices.alreadyWaivedAnon", { at: formatMoment(waiver.at, locale), n: waiver.holders })}
+          </p>
+        )}
         {problem && <p className="text-xs text-destructive">{problem}</p>}
         {confirming ? (
           <>
-            <p className="text-sm leading-relaxed">{t("admin.fees.notices.acknowledgeWarning", { n: givenUp })}</p>
+            <p className="text-sm leading-relaxed">
+              {waiver
+                ? t("admin.fees.notices.acknowledgeWarningExtend", { n: givenUp, total: waiver.holders + givenUp })
+                : t("admin.fees.notices.acknowledgeWarning", { n: givenUp })}
+            </p>
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <Button variant="destructive" size="sm" disabled={busy} onClick={() => void acknowledge()}>
                 {busy && <Loader2 className="size-4 animate-spin" />}
@@ -133,14 +148,15 @@ function waiverProblem(e: unknown, t: (key: string) => string): string {
   return errorMessage(e, t);
 }
 
-/** The waiver as one line of history — who, and over how many — under the row's state. */
+/** The waiver as one line of history — who, and over how many — under the row's state.
+ *  Read off the record, not the summary: it stays history while more are given up on. */
 export function WaiverNote({ change }: { change: FeePolicyChange }) {
   const t = useT();
-  const summary = noticeSummary(change);
-  if (summary.kind !== "waived") return null;
+  const waiver = waiverRecord(change);
+  if (!waiver) return null;
   return (
     <p className="mt-1 text-xs text-muted-foreground">
-      {summary.by ? t("admin.fees.waiver.row", { by: summary.by, n: summary.holders }) : t("admin.fees.waiver.rowAnon", { n: summary.holders })}
+      {waiver.by ? t("admin.fees.waiver.row", { by: waiver.by, n: waiver.holders }) : t("admin.fees.waiver.rowAnon", { n: waiver.holders })}
     </p>
   );
 }

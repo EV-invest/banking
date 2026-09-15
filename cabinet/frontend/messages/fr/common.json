@@ -963,6 +963,18 @@
     "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
     "t": "Les conditions s'appliqueront à {n, plural, one {ce détenteur} many {ces # détenteurs} other {ces # détenteurs}} sans avis — des conditions plus strictes dont ils n'ont jamais été informés. Votre nom, le moment et la liste exacte des détenteurs concernés sont consignés sur le changement et restent dans son historique."
   },
+  "admin.fees.notices.acknowledgeWarningExtend": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name and the moment replace the earlier acknowledgement's on the change, which will then cover {total, plural, one {# holder} other {all # holders}}, and stay in its history.",
+    "t": "Les conditions s'appliqueront à {n, plural, one {ce détenteur} many {ces # détenteurs} other {ces # détenteurs}} sans avis — des conditions plus strictes dont ils n'ont jamais été informés. Votre nom et le moment remplacent la reconnaissance précédente sur le changement, qui couvrira alors {total, plural, one {# détenteur} many {les # détenteurs} other {les # détenteurs}}, et restent dans son historique."
+  },
+  "admin.fees.notices.alreadyWaived": {
+    "en": "{by} already took responsibility on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "{by} a déjà pris la responsabilité le {at} de {n, plural, one {# détenteur} many {# détenteurs} other {# détenteurs}} que l'envoi avait abandonnés à ce moment-là. Il en a abandonné d'autres depuis ; cet acte les ajoute au même enregistrement."
+  },
+  "admin.fees.notices.alreadyWaivedAnon": {
+    "en": "Responsibility was already taken on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "La responsabilité de {n, plural, one {# détenteur} many {# détenteurs} other {# détenteurs}} que l'envoi avait abandonnés à ce moment-là a déjà été prise le {at}. Il en a abandonné d'autres depuis ; cet acte les ajoute au même enregistrement."
+  },
   "admin.fees.notices.err.forbidden": {
     "en": "Only the requester of this change or an owner can take responsibility for it.",
     "t": "Seul l'auteur de la demande ou un propriétaire peut en prendre la responsabilité."

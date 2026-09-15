@@ -963,6 +963,18 @@
     "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name, the moment, and exactly which holders it covers are recorded on the change and stay in its history.",
     "t": "Die Bedingungen werden für {n, plural, one {diesen Anleger} other {diese # Anleger}} ohne Benachrichtigung wirksam — strengere Bedingungen, von denen sie nie erfahren haben. Ihr Name, der Zeitpunkt und genau die betroffenen Anleger werden auf der Änderung festgehalten und bleiben in ihrer Historie."
   },
+  "admin.fees.notices.acknowledgeWarningExtend": {
+    "en": "The terms will bind over {n, plural, one {this holder} other {these # holders}} without their notice — tighter terms they were never told about. Your name and the moment replace the earlier acknowledgement's on the change, which will then cover {total, plural, one {# holder} other {all # holders}}, and stay in its history.",
+    "t": "Die Bedingungen werden für {n, plural, one {diesen Anleger} other {diese # Anleger}} ohne Benachrichtigung wirksam — strengere Bedingungen, von denen sie nie erfahren haben. Ihr Name und der Zeitpunkt ersetzen die frühere Bestätigung auf der Änderung, die dann {total, plural, one {# Anleger} other {alle # Anleger}} abdeckt, und bleiben in ihrer Historie."
+  },
+  "admin.fees.notices.alreadyWaived": {
+    "en": "{by} already took responsibility on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "{by} hat am {at} bereits die Verantwortung für {n, plural, one {# Anleger} other {# Anleger}} übernommen, bei denen der Versand bis dahin aufgegeben hatte. Seitdem hat er bei weiteren aufgegeben; dieser Schritt fügt sie demselben Eintrag hinzu."
+  },
+  "admin.fees.notices.alreadyWaivedAnon": {
+    "en": "Responsibility was already taken on {at} for {n, plural, one {# holder} other {# holders}} the mailer had given up on by then. It has given up on more since; this act adds them to that record.",
+    "t": "Die Verantwortung für {n, plural, one {# Anleger} other {# Anleger}}, bei denen der Versand bis dahin aufgegeben hatte, wurde am {at} bereits übernommen. Seitdem hat er bei weiteren aufgegeben; dieser Schritt fügt sie demselben Eintrag hinzu."
+  },
   "admin.fees.notices.err.forbidden": {
     "en": "Only the requester of this change or an owner can take responsibility for it.",
     "t": "Nur wer diese Änderung beantragt hat oder ein Eigentümer kann die Verantwortung dafür übernehmen."
