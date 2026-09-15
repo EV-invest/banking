@@ -13,13 +13,23 @@ pub struct TestDb {
 	name: String,
 }
 
+/// True under CI: `CI` is set, non-empty and not `"0"`/`"false"` (GitHub Actions and the
+/// flake's `check-rust` gate both export `CI=true`).
+fn ci() -> bool {
+	std::env::var("CI").is_ok_and(|v| !v.is_empty() && v != "0" && !v.eq_ignore_ascii_case("false"))
+}
+
 /// Create `signer_test_<uuid>` on the configured server, migrate it, hand back a pool.
-/// `None` (⇒ the caller skips) when no `SIGNER_DATABASE_URL`/`DATABASE_URL` is set.
+/// `None` (⇒ the caller skips) when no `SIGNER_DATABASE_URL`/`DATABASE_URL` is set — locally
+/// only: under CI a missing server panics, so a run that executed no tests cannot go green.
 pub async fn throwaway_db() -> Option<TestDb> {
-	let url = std::env::var("SIGNER_DATABASE_URL")
-		.ok()
-		.or_else(|| std::env::var("DATABASE_URL").ok())
-		.filter(|s| !s.is_empty())?;
+	let url = std::env::var("SIGNER_DATABASE_URL").ok().or_else(|| std::env::var("DATABASE_URL").ok()).filter(|s| !s.is_empty());
+	let Some(url) = url else {
+		if ci() {
+			panic!("integration services required in CI: SIGNER_DATABASE_URL/DATABASE_URL unset — run `nix run .#db` and export DATABASE_URL (or unset CI to skip locally)");
+		}
+		return None;
+	};
 	let name = format!("signer_test_{}", Uuid::new_v4().simple());
 	let mut admin = PgConnection::connect(&url).await.expect("connect to Postgres");
 	// The interpolated identifier is a locally generated hex uuid — not user input.

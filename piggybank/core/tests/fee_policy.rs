@@ -39,18 +39,15 @@ use piggybank_core::{
 		book::PgBook,
 		consilium::PgConsilia,
 		custody::StubCustody,
-		db,
 		deposits::PgDeposits,
 		fee_policy_changes::PgFeePolicyChanges,
 		fee_sweeper::FeeSweeper,
 		fees::{PgFeeAssessments, PgFeePolicies, PgFeeSettlements, PgPositionAccruals},
-		ledger::{self, TbLedger},
 		nav::PgNav,
 		outflow::PgOutflowPolicy,
 		redemptions::PgRedemptions,
 		relay::Relay,
 		subscriptions::PgSubscriptions,
-		tigerbeetle::TigerBeetle,
 		users::PgUsers,
 	},
 	ports::{
@@ -62,6 +59,8 @@ use piggybank_core::{
 use sqlx::PgPool;
 use tokio::sync::Notify;
 use uuid::Uuid;
+
+mod common;
 
 const YEAR: i64 = 365 * 24 * 60 * 60;
 /// Backdating by *exactly* one period lands a hair SHORT of the boundary: the accrual
@@ -95,18 +94,8 @@ struct Harness {
 }
 
 async fn harness() -> Option<Harness> {
-	let url = std::env::var("DATABASE_URL").ok().filter(|s| !s.is_empty())?;
-	let pool = db::connect(&url).await.expect("connect to Postgres");
-	db::migrate(&pool).await.expect("apply migrations");
-
-	let address = std::env::var("TIGERBEETLE_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3033".to_owned());
-	let cluster = std::env::var("TIGERBEETLE_CLUSTER_ID").ok().and_then(|s| s.parse().ok()).unwrap_or(0u128);
-	let tigerbeetle = Arc::new(TigerBeetle::connect(cluster, &address).expect("connect to TigerBeetle"));
-	let ledger: Arc<dyn Ledger> = Arc::new(TbLedger::new(tigerbeetle, pool.clone()));
-	if ledger::seed_singletons(ledger.as_ref()).await.is_err() {
-		eprintln!("TigerBeetle unreachable — skipping fee-policy test");
-		return None;
-	}
+	let pool = common::pool().await?;
+	let ledger = common::seeded_ledger(&pool, "fee-policy test").await?;
 
 	let notify = Arc::new(Notify::new());
 	Some(Harness {

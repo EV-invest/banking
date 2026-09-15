@@ -1012,6 +1012,39 @@ auto-cancelled (refunded) at 24h — the de-facto rail top-up SLA.
 
 ## Tests
 
+### Bring-up
+
+Every suite under `piggybank/core/tests` runs against a **real** Postgres and TigerBeetle
+through `tests/common/mod.rs` — no suite opens its own connection. `pool()` connects to
+`DATABASE_URL` and applies the migrations; `seeded_ledger()` connects to
+`TIGERBEETLE_ADDRESS` / `TIGERBEETLE_CLUSTER_ID` (default `127.0.0.1:3033`, cluster `0`)
+and seeds the singleton accounts; `database_url()` is for the two suites that size their
+own pool. Locally:
+
+```bash
+nix run .#db          # the shared postgres cluster; ensures the `banking` database
+nix run .#tb          # a single-replica ledger on :3033
+DATABASE_URL=postgres://postgres@localhost:5432/banking cargo test -p piggybank-core --tests
+```
+
+A missing service is a **skip locally and a failure under CI**. Without `DATABASE_URL`
+(or with a replica that does not answer) a suite prints a notice and returns early — the
+counters still read `N passed`, so the signature of a run that executed nothing is
+`finished in 0.00s`, not a zero. Under `CI=true` — GitHub Actions exports it, and
+`nix run .#check-rust` exports it too — the same condition panics with
+`integration services required in CI`, so a green tick means the money plane was actually
+exercised (#259). `check-rust` brings up its own throwaway Postgres (`:54329`) and
+TigerBeetle (`:3039`) from the flake apps, runs the workspace against them and tears them
+down on exit; move the ports with `CHECK_POSTGRES_PORT` / `CHECK_TIGERBEETLE_PORT`.
+
+Your own database, when the shared one is busy or on another branch's schema:
+`PGDATABASES="banking_<name>" nix run .#db` creates it on the shared cluster; point
+`DATABASE_URL` at it. Never downgrade a database across branches — a database that ran
+another numbering of a migration fails every suite with `migration N was previously
+applied but has been modified`; `dropdb` and `createdb` it instead. A second ledger next
+to the default one: `TIGERBEETLE_PORT=3034 TBCLUSTER=1 nix run .#tb`, then
+`TIGERBEETLE_ADDRESS=127.0.0.1:3034 TIGERBEETLE_CLUSTER_ID=1`.
+
 `domain` unit tests cover the money + NAV math (incl. the `mul_div` overflow bound and the
 share-key ledger sides), the subscription/redemption aggregates, the withdrawal
 transitions, the allocation registry's state machine, and the fee arithmetic (the flat-year
