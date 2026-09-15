@@ -442,13 +442,17 @@ impl From<bk::Allocation> for Allocation {
 list_dto! { AllocationList from bk::AllocationList { allocations: Vec<Allocation> } }
 
 /// One investor raised above a product's default level. `user_id` and `granted_by` are
-/// BANKING user ids (what the money plane stores), like the redemption queue's — the
-/// console resolves them the way it does there. `granted_at` crosses as a string like
-/// every other int64.
+/// the ids the console carries for a person — the concierge id when the bridge has
+/// mirrored them, the banking id as a fallback — the same order the hub accepts on a
+/// grant or revoke, so either can be echoed straight back. `email` is filled in by the
+/// grants route from the identity plane and is `null` when the directory cannot name
+/// the id (a banking-only mirror, or a directory outage): the grant still lists.
+/// `granted_at` crosses as a string like every other int64.
 #[derive(Serialize)]
 pub struct AllocationAccessGrant {
 	pub service: String,
 	pub user_id: String,
+	pub email: Option<String>,
 	/// `view` | `invest`.
 	pub level: String,
 	pub granted_by: String,
@@ -460,6 +464,7 @@ impl From<bk::AllocationAccessGrant> for AllocationAccessGrant {
 		Self {
 			service: g.service,
 			user_id: g.user_id,
+			email: None,
 			level: g.level,
 			granted_by: g.granted_by,
 			granted_at: g.granted_at.to_string(),

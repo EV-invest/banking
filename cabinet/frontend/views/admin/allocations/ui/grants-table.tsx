@@ -41,7 +41,20 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
       <tbody className="divide-y divide-border">
         {grants.map((g) => (
           <tr key={g.user_id}>
-            <td className="py-2 pr-2 font-mono-tech text-xs">{g.user_id}</td>
+            {/* Capped width so a long email truncates instead of pushing the other columns
+                out of the 340px panel — `truncate` alone does nothing in an auto-layout cell. */}
+            <td className="max-w-32 py-2 pr-2" title={g.user_id}>
+              {g.email ? (
+                <>
+                  <div className="truncate text-sm" title={g.email}>
+                    {g.email}
+                  </div>
+                  <div className="truncate font-mono-tech text-xs text-muted-foreground">{g.user_id}</div>
+                </>
+              ) : (
+                <div className="truncate font-mono-tech text-xs">{g.user_id}</div>
+              )}
+            </td>
             <td className="py-2 pr-2">
               <span className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", accessTone(g.level))}>{accessLabel(g.level, t)}</span>
             </td>

@@ -624,19 +624,60 @@ pub async fn set_allocation_access(State(st): State<AppState>, jar: CookieJar, h
 }
 
 /// `GET /api/admin/allocations/grants?service=` — every investor raised above the
-/// product's default, with who granted it and when.
+/// product's default, with who granted it and when, each carrying the investor's email.
+///
+/// The money plane names the investor by the id the console carries but stores no
+/// email, so it is looked up here on the identity plane — one `GetUser` per grant,
+/// fanned out under a small bound, with the concierge token (`GetUser` is an identity
+/// RPC; the money token stays on the hub call). The lookup is best-effort: an id the
+/// directory cannot name — a banking-only mirror, a lapsed account, an outage — lists
+/// with `email: null` rather than hiding a grant that stands (banking#252).
 pub async fn list_allocation_access_grants(State(st): State<AppState>, jar: CookieJar, Query(q): Query<FeeServiceQuery>) -> Result<Json<dto::AllocationAccessGrantList>, ApiError> {
+	use std::sync::Arc;
+
+	use tokio::{sync::Semaphore, task::JoinSet};
+
+	/// A product's grant list is short, but the bound is what keeps one console page
+	/// from turning into a burst against the identity plane if it ever is not.
+	const LOOKUPS_IN_FLIGHT: usize = 8;
+
 	require_admin(&st, &jar).await?;
 	let Some(service) = q.service.filter(|s| !s.trim().is_empty()) else {
 		return Err(ApiError::BadRequest("service is required".into()));
 	};
-	let token = require_money_token(&st, &jar).await?;
-	let grants = st
+	let money_token = require_money_token(&st, &jar).await?;
+	let identity_token: Arc<str> = require_token(&st, &jar).await?.into();
+	let mut list: dto::AllocationAccessGrantList = st
 		.grpc
-		.list_allocation_access_grants(&token, &service)
+		.list_allocation_access_grants(&money_token, &service)
 		.await
-		.map_err(|s| ApiError::read(s, "allocation access grants unavailable"))?;
-	Ok(Json(grants.into()))
+		.map_err(|s| ApiError::read(s, "allocation access grants unavailable"))?
+		.into();
+
+	// The permit is taken BEFORE the spawn and moved into the task, so the loop itself
+	// blocks at the bound; the `JoinSet` aborts whatever is still in flight if the
+	// caller goes away mid-page.
+	let lookups = Arc::new(Semaphore::new(LOOKUPS_IN_FLIGHT));
+	let mut set = JoinSet::new();
+	for (index, grant) in list.grants.iter().enumerate() {
+		let permit = lookups.clone().acquire_owned().await.expect("the lookup semaphore is never closed");
+		let (grpc, token, user_id) = (st.grpc.clone(), identity_token.clone(), grant.user_id.clone());
+		set.spawn(async move {
+			let looked_up = grpc.admin_get_user(&token, &user_id).await;
+			drop(permit);
+			(index, looked_up)
+		});
+	}
+	while let Some(joined) = set.join_next().await {
+		match joined {
+			Ok((index, Ok(profile))) => list.grants[index].email = Some(profile.email).filter(|email| !email.is_empty()),
+			Ok((index, Err(status))) => {
+				tracing::debug!(code = ?status.code(), user_id = %list.grants[index].user_id, "grant holder not resolvable in the directory; listing without email");
+			}
+			Err(join) => tracing::warn!(error = %join, "a grant email lookup task ended abnormally; listing without email"),
+		}
+	}
+	Ok(Json(list))
 }
 
 /// `POST /api/admin/allocations/grants/grant` — raise one investor to `view` | `invest`
@@ -1154,6 +1195,11 @@ mod admin_route_tests {
 	const SERVICE: &str = "quy-nhon";
 	/// What the stub's exchange seam mints. The fees RPCs accept nothing else.
 	const MONEY_TOKEN: &str = "banking-access-token";
+	/// The one investor the stub directory can name, and how it names them.
+	const KNOWN_INVESTOR: &str = "investor-7";
+	const KNOWN_INVESTOR_EMAIL: &str = "investor7@example.test";
+	/// A grant holder the directory has never heard of — a banking-only mirror.
+	const UNMIRRORED_INVESTOR: &str = "investor-9";
 
 	// ── the stub hub ────────────────────────────────────────────────────────────
 
@@ -1345,8 +1391,21 @@ mod admin_route_tests {
 			Err(Status::unimplemented("not reached by the fees routes"))
 		}
 
-		async fn get_user(&self, _: GrpcRequest<cc::GetUserRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
-			Err(Status::unimplemented("not reached by the fees routes"))
+		/// The directory knows exactly one investor. The grants route asks here for each
+		/// grant holder's email, and an id it cannot name must come back NOT_FOUND, the way
+		/// the identity plane answers a banking-only mirror.
+		async fn get_user(&self, request: GrpcRequest<cc::GetUserRequest>) -> Result<GrpcResponse<cc::UserProfile>, Status> {
+			self.guard()?;
+			let user_id = request.into_inner().user_id;
+			if user_id != KNOWN_INVESTOR {
+				return Err(Status::not_found("user"));
+			}
+			Ok(GrpcResponse::new(cc::UserProfile {
+				user_id,
+				email: KNOWN_INVESTOR_EMAIL.into(),
+				role: "investor".into(),
+				..Default::default()
+			}))
 		}
 
 		async fn set_role(&self, _: GrpcRequest<cc::SetRoleRequest>) -> Result<GrpcResponse<cc::SetRoleResponse>, Status> {
@@ -1555,16 +1614,19 @@ mod admin_route_tests {
 			Ok(GrpcResponse::new(bk::RevokeAllocationAccessResponse {}))
 		}
 
+		/// Two standing grants: one holder the directory knows, one it does not.
 		async fn list_allocation_access_grants(&self, request: GrpcRequest<bk::ListAllocationAccessGrantsRequest>) -> Result<GrpcResponse<bk::AllocationAccessGrantList>, Status> {
 			self.guard_money_plane(&request)?;
+			let service = request.into_inner().service;
+			let grant = |user_id: &str| bk::AllocationAccessGrant {
+				service: service.clone(),
+				user_id: user_id.into(),
+				level: "invest".into(),
+				granted_by: "user-1".into(),
+				granted_at: 1_750_000_400,
+			};
 			Ok(GrpcResponse::new(bk::AllocationAccessGrantList {
-				grants: vec![bk::AllocationAccessGrant {
-					service: request.into_inner().service,
-					user_id: "investor-7".into(),
-					level: "invest".into(),
-					granted_by: "user-1".into(),
-					granted_at: 1_750_000_400,
-				}],
+				grants: vec![grant(KNOWN_INVESTOR), grant(UNMIRRORED_INVESTOR)],
 			}))
 		}
 
@@ -2438,10 +2500,31 @@ mod admin_route_tests {
 		assert_eq!(status, StatusCode::OK);
 		let row = &body["grants"][0];
 		assert_eq!(row["service"], SERVICE);
-		assert_eq!(row["user_id"], "investor-7");
+		assert_eq!(row["user_id"], KNOWN_INVESTOR);
 		assert_eq!(row["level"], "invest");
 		assert_eq!(row["granted_by"], "user-1");
 		assert_eq!(row["granted_at"], "1750000400");
+	}
+
+	/// The grants table showed a raw id where the operator expected a person (banking#252).
+	/// The email comes from the identity plane, per holder; a holder the directory cannot
+	/// name keeps their row — with `email: null`, never a dropped grant or a failed page.
+	#[tokio::test]
+	async fn the_grant_list_names_each_holder_by_email_when_the_directory_can() {
+		let app = app(serve(Hub::new("admin")).await);
+
+		let (status, body) = send(&app, signed("GET", "/api/admin/allocations/grants?service=quy-nhon", None, false)).await;
+		assert_eq!(status, StatusCode::OK);
+		let grants = body["grants"].as_array().expect("a list of grants");
+		assert_eq!(grants.len(), 2, "an unresolvable holder must not drop out of the list");
+		let known = grants.iter().find(|g| g["user_id"] == KNOWN_INVESTOR).expect("the mirrored investor lists");
+		assert_eq!(known["email"], KNOWN_INVESTOR_EMAIL);
+		let unmirrored = grants.iter().find(|g| g["user_id"] == UNMIRRORED_INVESTOR).expect("the banking-only investor lists too");
+		assert!(
+			unmirrored["email"].is_null(),
+			"an id the directory cannot name has no email to show, not a made-up one: {unmirrored}"
+		);
+		assert!(unmirrored.get("email").is_some(), "the key is present so the client can tell 'unknown' from 'not asked'");
 	}
 
 	/// The hub re-checks `AllocationManage` and answers its own codes; a grant for a user

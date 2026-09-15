@@ -29,7 +29,7 @@ use domain::{
 	balance::ServiceId,
 	error::DomainError,
 	money::Shares,
-	users::UserId,
+	users::{ConciergeUserId, UserId},
 };
 
 #[async_trait]
@@ -118,12 +118,19 @@ pub struct AllocationRecord {
 }
 
 /// One investor raised above a product's default level.
+///
+/// `user_id` and `granted_by` are the hub's own ids — what the grants table stores and
+/// what the subscribe gate reads. The concierge mirrors ride along because the console
+/// names people by their identity-plane id, and answering "who is this" would otherwise
+/// cost a second read per row. `None` when the bridge has not mirrored the user yet.
 #[derive(Debug)]
 pub struct AllocationAccessGrant {
 	pub service: ServiceId,
 	pub user_id: UserId,
+	pub concierge_user_id: Option<ConciergeUserId>,
 	pub level: AllocationAccess,
 	pub granted_by: UserId,
+	pub granted_by_concierge_id: Option<ConciergeUserId>,
 	/// Unix seconds the grant was (last) written.
 	pub granted_at: i64,
 }
