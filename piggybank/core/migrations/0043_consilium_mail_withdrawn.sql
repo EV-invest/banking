@@ -12,9 +12,19 @@
 -- back. The audit trail has to keep the two apart.
 --
 -- Expand only: one nullable column, nothing rewritten. A row written by a binary that does
--- not know the column reads as "not withdrawn". A worker that does not know it would still
--- deliver a withdrawn row — the mailer runs as a singleton, so that window is the one
--- restart that swaps the binary.
+-- not know the column reads as "not withdrawn".
+--
+-- THE ROLL-OUT WINDOW. `ev-banking-piggybank` rolls with maxSurge=1 / maxUnavailable=0: the
+-- new pod applies this migration and serves requests (cancel included) while the old pod
+-- still holds the mailer's singleton lock. A cancel in that overlap writes `withdrawn_at`
+-- that the OLD worker does not filter on: it hands the withdrawn notice to the relay — the
+-- holder is told about terms that will never bind — and its `SET sent_at = now()` then trips
+-- the CHECK below, so its whole pass fails on that row, every sweep, until the old pod is
+-- gone. The mail was delivered; the row says withdrawn and unsent. Operator's move, per
+-- such row: it is a delivered mail and the audit trail should say so — set `sent_at` and
+-- clear `withdrawn_at` by hand (`UPDATE consilium_mail SET sent_at = now(), withdrawn_at =
+-- NULL WHERE id = …`), with the relay's log as the evidence. Avoid the window by not
+-- cancelling a fee-policy change while a roll-out is in flight.
 
 SET lock_timeout = '3s';
 
