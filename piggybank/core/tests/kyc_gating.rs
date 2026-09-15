@@ -90,9 +90,15 @@ struct Harness {
 	notify: Arc<Notify>,
 	/// This suite is exposed to the shared-outbox race the same way `allocation_registry`
 	/// was (#294/#298): every test deposits and drains, and `a_revenue_payout_is_not_gated_on_kyc`
-	/// drains five times. It has not been caught in the act here — 60 runs at eight threads
-	/// came back green — so the guard closes the shape rather than a captured failure. Held
-	/// for the test's whole life, declared last so it is released after the relay.
+	/// drains five times. It has failed for it in CI — run 34894158429, `a_revenue_payout_is_not_gated_on_kyc`
+	/// panicking on `fund the fee claim: Validation("insufficient available balance to
+	/// withdraw")`: the 200 USDT this test had just deposited and drained was not on the
+	/// ledger when the next line spent it. The user is freshly provisioned per test, so no
+	/// sibling could have moved that claim — the single `drain()` returned before applying
+	/// the test's own row, which is the early return this guard and `drain_to_quiescence`
+	/// close between them. (The local repro attempt did not land it: 60 runs at eight threads
+	/// came back green.) Held for the test's whole life, declared last so it is released
+	/// after the relay.
 	_serial: MutexGuard<'static, ()>,
 }
 
