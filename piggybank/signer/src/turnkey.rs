@@ -19,8 +19,9 @@
 //!    `Unavailable`/`DeadlineExceeded` and terminally fails it on anything else. A ten-second
 //!    Turnkey outage misclassified as terminal is a failed withdrawal, so every transport
 //!    failure, 5xx, rate limit and gateway hiccup maps to [`BackendError::Unavailable`], and
-//!    only a refusal **on the merits** — a policy denial, a missing account, an activity that
-//!    needs a human — is terminal.
+//!    only a refusal **on the merits** — a policy denial, a missing account — is terminal. An
+//!    activity parked for human consensus is terminal too, but travels as
+//!    [`BackendError::RequiresApproval`] with its id, so the hub can tell it from a refusal.
 //! 3. **`HASH_FUNCTION_NO_OP`** on secp256k1 and `NOT_APPLICABLE` on Ed25519. Our builders
 //!    already hashed; a custodian that hashes again signs something the chain never asked
 //!    about. See [`hash_function`].
@@ -569,8 +570,14 @@ fn classify(err: &TurnkeyClientError, op: &'static str) -> BackendError {
 		},
 
 		// Consensus or an extra authenticator is required: a human must act, and re-issuing the
-		// same activity will not summon them.
-		TurnkeyClientError::ActivityRequiresApproval(id) => BackendError::Rejected(format!("{op}: activity {id} requires approval")),
+		// same activity will not summon them. Not a `Rejected` — the activity exists, so the id
+		// travels as its own field for an operator to find it (resuming it is #195). The id is
+		// vendor input headed for the message, the trailer and the hub's `outbox.last_error`:
+		// only a UUID gets through, anything else is a schema drift and is not echoed.
+		TurnkeyClientError::ActivityRequiresApproval(id) => match Uuid::parse_str(id) {
+			Ok(activity_id) => BackendError::RequiresApproval { activity_id },
+			Err(_) => BackendError::Protocol(format!("{op}: activity id is not a UUID")),
+		},
 		TurnkeyClientError::UnexpectedActivityStatus(status) => BackendError::Rejected(format!("{op}: activity status {status}")),
 
 		// Schema drift between this SDK and the API, or a result of the wrong shape. Will not
@@ -583,9 +590,8 @@ fn classify(err: &TurnkeyClientError, op: &'static str) -> BackendError {
 		| TurnkeyClientError::UnexpectedInnerActivityResult(_) => BackendError::Protocol(format!("{op}: unreadable Turnkey response")),
 
 		// Local misconfiguration — the client should not have been built at all.
-		TurnkeyClientError::BuilderMissingApiKey | TurnkeyClientError::ReqwestBuilder(_) | TurnkeyClientError::StamperError(_) => {
-			BackendError::Protocol(format!("{op}: local Turnkey client failure"))
-		}
+		TurnkeyClientError::BuilderMissingApiKey | TurnkeyClientError::ReqwestBuilder(_) | TurnkeyClientError::StamperError(_) =>
+			BackendError::Protocol(format!("{op}: local Turnkey client failure")),
 	}
 }
 
@@ -633,6 +639,7 @@ mod tests {
 	use turnkey_client::generated::{GetWalletsRequest, google::rpc::Status as RpcStatus};
 
 	use super::*;
+	use crate::backend::ACTIVITY_ID_METADATA_KEY;
 
 	/// The classification is what decides whether an outage costs a retry or a withdrawal, so
 	/// assert it where it actually lands: the gRPC code `custody.rs` branches on.
@@ -679,12 +686,36 @@ mod tests {
 				details: Vec::new(),
 			})),
 			TurnkeyClientError::ActivityFailed(None),
-			TurnkeyClientError::ActivityRequiresApproval("act-1".into()),
 			TurnkeyClientError::UnexpectedActivityStatus("ACTIVITY_STATUS_REJECTED".into()),
 		] {
 			assert_ne!(code_for(&err), Code::Unavailable, "a refusal on the merits must not be retried forever: {err}");
 			assert_ne!(code_for(&err), Code::DeadlineExceeded, "DeadlineExceeded is also retried by custody.rs: {err}");
 		}
+	}
+
+	/// Consensus pending is parked like a refusal (the hub retries only Unavailable and
+	/// DeadlineExceeded) but must stay distinguishable from one, and must carry the activity
+	/// id where a machine can read it — that is what lets an operator find the activity today
+	/// and #195 resume it later.
+	#[test]
+	fn approval_required_is_parked_not_retried() {
+		const ACTIVITY_ID: &str = "0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b";
+		let status = Status::from(classify(&TurnkeyClientError::ActivityRequiresApproval(ACTIVITY_ID.into()), "test"));
+		assert_eq!(status.code(), Code::FailedPrecondition);
+		assert_ne!(status.code(), Code::PermissionDenied, "must not be mistaken for a refusal on the merits");
+		assert!(status.message().contains(ACTIVITY_ID), "the message must name the activity: {}", status.message());
+		assert_eq!(status.metadata().get(ACTIVITY_ID_METADATA_KEY).and_then(|v| v.to_str().ok()), Some(ACTIVITY_ID));
+	}
+
+	/// The activity id is the one piece of vendor output that reaches the wire and the hub's
+	/// `outbox.last_error` verbatim, so only a UUID may pass; anything else is a protocol
+	/// error that echoes nothing back.
+	#[test]
+	fn a_non_uuid_activity_id_is_a_protocol_error_and_is_not_echoed() {
+		let status = Status::from(classify(&TurnkeyClientError::ActivityRequiresApproval("act-1\nnext".into()), "test"));
+		assert_eq!(status.code(), Code::Internal);
+		assert!(!status.message().contains("act-1"), "vendor input must not be echoed: {}", status.message());
+		assert!(status.metadata().get(ACTIVITY_ID_METADATA_KEY).is_none());
 	}
 
 	#[test]
