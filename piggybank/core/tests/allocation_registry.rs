@@ -31,10 +31,21 @@ use sqlx::{
 	AssertSqlSafe, PgPool,
 	postgres::{PgConnectOptions, PgPoolOptions},
 };
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, MutexGuard, Notify};
 use uuid::Uuid;
 
 mod common;
+
+/// Every test here builds its own `Relay` and calls `drain()`, which — unlike `Relay::run` —
+/// never takes `OUTBOX_LOCK_KEY`, while the outbox is one table per test binary. Two relays
+/// draining concurrently pick up the same row and both dispatch it; the loser's
+/// `saga_steps` insert then trips the table's second unique key (`tb_transfer_id`), which
+/// its `ON CONFLICT (event_id, leg)` does not cover, the relay files that as a transient
+/// failure and `drain()` returns early — with the calling test's own rows still queued, so
+/// the test read a position the relay had not landed yet (#294). So the tests take turns,
+/// as `relay_recovery` does; production has a single drainer under the advisory lock and
+/// needs none of this. The guard lives in the [`Harness`] so no test can forget it.
+static SERIAL_DRAIN: Mutex<()> = Mutex::const_new(());
 
 struct Harness {
 	pool: PgPool,
@@ -49,9 +60,12 @@ struct Harness {
 	ledger: Arc<dyn Ledger>,
 	relay: Relay,
 	notify: Arc<Notify>,
+	/// Held for the test's whole life — declared last so it is released after the relay.
+	_serial: MutexGuard<'static, ()>,
 }
 
 async fn harness() -> Option<Harness> {
+	let serial = SERIAL_DRAIN.lock().await;
 	let pool = common::pool().await?;
 	let ledger = common::seeded_ledger(&pool, "allocation-registry test").await?;
 
@@ -69,6 +83,7 @@ async fn harness() -> Option<Harness> {
 		ledger,
 		notify,
 		pool,
+		_serial: serial,
 	})
 }
 
@@ -129,7 +144,7 @@ async fn fund_user(h: &Harness, user: UserId, amount: &str) {
 	balance_app::record_deposit(&h.deposits, &h.notify, tx_ref, Party::User(user), Network::Bep20, usdt(amount))
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	drain(h).await;
 }
 
 async fn subscribe(h: &Harness, user: UserId, service: &ServiceId, amount: &str) -> Result<(), domain::error::DomainError> {
@@ -189,7 +204,7 @@ async fn an_unregistered_service_cannot_be_subscribed_into() {
 	assert!(matches!(err, domain::error::DomainError::NotFound { entity: "allocation", .. }), "got {err:?}");
 
 	// And it must be refused BEFORE any money moves — no claim spent, no service claim born.
-	h.relay.drain().await;
+	drain(&h).await;
 	let user_claim = h.ledger.balance(&LedgerAccountKey::UserClaim(user)).await.unwrap();
 	assert_eq!(Usdt::from_base_units(user_claim.available()), usdt("100"), "the user's balance is untouched");
 	let service_claim = h.ledger.balance(&LedgerAccountKey::ServiceClaim(service.clone())).await.unwrap();
@@ -209,7 +224,7 @@ async fn a_draft_allocation_takes_no_money_until_opened() {
 
 	open_to_everyone(&h, &service).await;
 	subscribe(&h, user, &service, "50").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	let held = h.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), user)).await.unwrap();
 	assert_eq!(Shares::from_base_units(held.posted), shares("50"), "units minted at the seed NAV once open");
 }
@@ -223,7 +238,7 @@ async fn closing_stops_new_money_but_never_traps_an_investor() {
 	register(&h, &service).await;
 	open_to_everyone(&h, &service).await;
 	subscribe(&h, user, &service, "100").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 
 	h.allocations.close(&service).await.unwrap();
 	assert!(subscribe(&h, user, &service, "1").await.is_err(), "a closed allocation refuses new subscriptions");
@@ -358,14 +373,14 @@ async fn a_subscription_past_the_unit_cap_is_refused_before_any_money_moves() {
 
 	// At the seed NAV of 1.0 this mints exactly the cap. Landing on it is allowed.
 	subscribe(&h, user, &service, "100").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 
 	let err = subscribe(&h, user, &service, "1").await.unwrap_err();
 	assert!(matches!(err, domain::error::DomainError::Validation(ref m) if m.contains("unit cap")), "got {err:?}");
 
 	// Refused before the ledger, like the registry gate above it: the remaining 100 USDT is
 	// still the user's, and the fund did not quietly issue a 101st unit.
-	h.relay.drain().await;
+	drain(&h).await;
 	let claim = h.ledger.balance(&LedgerAccountKey::UserClaim(user)).await.unwrap();
 	assert_eq!(Usdt::from_base_units(claim.available()), usdt("100"), "the refused subscription spent nothing");
 	let outstanding = h.ledger.balance(&LedgerAccountKey::SharesOutstanding(service.clone())).await.unwrap();
@@ -381,7 +396,7 @@ async fn narrowing_the_cap_below_the_issued_supply_stops_issuance_without_trappi
 	register(&h, &service).await;
 	open_to_everyone(&h, &service).await;
 	subscribe(&h, user, &service, "100").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 
 	// An operator decides the product has run further than intended and pulls the cap in
 	// under what is already out. Legal, and it means "no more units" — not "some units are
@@ -437,7 +452,7 @@ async fn units_issued_in_kind_land_on_the_holder_and_in_the_supply_with_no_cash_
 	let to_company = issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "company").await.unwrap();
 	assert_eq!(to_investor.issuance.state(), IssuanceState::Queued, "recorded, not yet on the ledger");
 	assert!(to_investor.applied_at.is_none());
-	h.relay.drain().await;
+	drain(&h).await;
 
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), investor)).await, shares("3250"));
 	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, shares("13000"));
@@ -485,12 +500,12 @@ async fn a_repeated_idempotency_key_returns_the_same_issuance_and_mints_once() {
 	register(&h, &service).await;
 
 	let first = issue(&h, &service, UnitHolder::Company, "100", None, "retry-me").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	// The console re-sends after a timeout: same key, same request — same row, no second mint.
 	let again = issue(&h, &service, UnitHolder::Company, "100", None, "retry-me").await.unwrap();
 	assert_eq!(again.issuance.id(), first.issuance.id());
 	assert_eq!(again.issuance.state(), IssuanceState::Applied, "the repeat reads the row as it stands now");
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, shares("100"), "one mint, not two");
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("100"));
 
@@ -511,7 +526,7 @@ async fn an_issuance_defaults_its_cost_basis_to_units_times_nav() {
 	register(&h, &service).await;
 	// Seed the supply so a valuation can be posted, then mark the fund at NAV 1.25.
 	issue(&h, &service, UnitHolder::Company, "800", Some("0"), "seed").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("1000"), "itest", now_unix())
 		.await
 		.unwrap();
@@ -519,7 +534,7 @@ async fn an_issuance_defaults_its_cost_basis_to_units_times_nav() {
 	let record = issue(&h, &service, UnitHolder::User(investor), "200", None, "at-mark").await.unwrap();
 	assert_eq!(record.issuance.nav(), Nav::parse_decimal("1.25").unwrap());
 	assert_eq!(record.issuance.cost_basis(), usdt("250"), "200 units at 1.25");
-	h.relay.drain().await;
+	drain(&h).await;
 	let position = h.positions.find(investor, &service).await.unwrap().unwrap();
 	assert_eq!(position.cost_basis, usdt("250"));
 	assert_eq!(position.high_water_mark, Nav::parse_decimal("1.25").unwrap());
@@ -546,7 +561,7 @@ async fn an_issuance_is_gated_by_the_registry_the_holder_and_the_cap() {
 	let err = issue(&h, &service, UnitHolder::User(UserId::new()), "10", None, "nobody").await.unwrap_err();
 	assert!(matches!(err, DomainError::NotFound { entity: "user", .. }), "got {err:?}");
 	issue(&h, &service, UnitHolder::User(investor), "10", None, "somebody").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 
 	// The cap is the same gate a subscription runs, in-flight mints included: 20 issued
 	// against a cap of 25 leaves room for 5, not 6.
@@ -554,7 +569,7 @@ async fn an_issuance_is_gated_by_the_registry_the_holder_and_the_cap() {
 	let err = issue(&h, &service, UnitHolder::Company, "6", None, "over").await.unwrap_err();
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("unit cap")), "got {err:?}");
 	issue(&h, &service, UnitHolder::Company, "5", None, "fits").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("25"));
 	// The refused issuance left no row behind to retry into.
 	assert!(h.issuances.find_by_key(&service, &IdempotencyKey::parse("over").unwrap()).await.unwrap().is_none());
@@ -571,7 +586,7 @@ async fn capping_at_the_issued_supply_closes_the_product_to_further_units() {
 	register(&h, &service).await;
 	issue(&h, &service, UnitHolder::User(investor), "3250", Some("3250"), "investor").await.unwrap();
 	issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "company").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 
 	h.allocations.set_unit_cap(&service, shares("16250")).await.unwrap();
 	let view = funds_app::fund_nav_view(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), investor, false, now_unix())
@@ -615,7 +630,7 @@ async fn an_issuance_is_logged_and_reaches_the_relay_as_its_own_kind() {
 	.unwrap();
 	assert_eq!(logged, 1, "the issuance is an audit fact");
 	assert_eq!(relayed, 1, "and, unlike a registry event, a money move the relay must post");
-	h.relay.drain().await;
+	drain(&h).await;
 	let dispatched: bool = sqlx::query_scalar("SELECT dispatched_at IS NOT NULL FROM outbox WHERE aggregate_id = $1")
 		.bind(id)
 		.fetch_one(&h.pool)
@@ -635,7 +650,7 @@ async fn the_companys_stake_moves_to_a_user_without_the_supply_moving() {
 	register(&h, &service).await;
 	issue(&h, &service, UnitHolder::User(investor), "3250", Some("3250"), "investor").await.unwrap();
 	issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "company").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	// Mark the fund so the hand-over is priced at something other than the seed NAV.
 	funds_app::post_fund_valuation(&h.allocations, &h.nav, h.ledger.as_ref(), service.clone(), usdt("20312.5"), "itest", now_unix())
 		.await
@@ -647,7 +662,7 @@ async fn the_companys_stake_moves_to_a_user_without_the_supply_moving() {
 	assert_eq!(record.issuance.state(), IssuanceState::Queued, "recorded, not yet on the ledger");
 	assert_eq!(record.issuance.nav(), Nav::parse_decimal("1.25").unwrap());
 	assert_eq!(record.issuance.cost_basis(), usdt("16250"), "13000 units at 1.25 when the operator states nothing");
-	h.relay.drain().await;
+	drain(&h).await;
 
 	assert_eq!(
 		units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await,
@@ -701,15 +716,15 @@ async fn a_stake_transfer_shares_the_issuance_key_space_and_moves_units_once() {
 	let owner = provisioned_user(&h).await;
 	register(&h, &service).await;
 	issue(&h, &service, UnitHolder::Company, "100", Some("0"), "seed").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 
 	let first = transfer_stake(&h, &service, owner, "40", Some("40"), "hand-over").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	// The console re-sends after a timeout: same key, same request — same row, no second move.
 	let again = transfer_stake(&h, &service, owner, "40", Some("40"), "hand-over").await.unwrap();
 	assert_eq!(again.issuance.id(), first.issuance.id());
 	assert_eq!(again.issuance.state(), IssuanceState::Applied, "the repeat reads the row as it stands now");
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, shares("60"), "one move, not two");
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), owner)).await, shares("40"));
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("100"));
@@ -724,7 +739,7 @@ async fn a_stake_transfer_shares_the_issuance_key_space_and_moves_units_once() {
 	let err = issue(&h, &service, UnitHolder::User(owner), "40", Some("40"), "hand-over").await.unwrap_err();
 	assert!(matches!(err, DomainError::Conflict(_)), "a hand-over's key is not a mint's retry: {err:?}");
 	// Nothing of the refused requests reached the ledger.
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("100"));
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), owner)).await, shares("40"));
 }
@@ -745,7 +760,7 @@ async fn a_stake_transfer_is_gated_by_the_registry_the_user_and_what_the_company
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("company holds")), "got {err:?}");
 
 	issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "seed").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	// A user nobody can sign in as is refused: units handed to them could never be redeemed.
 	let err = transfer_stake(&h, &service, UserId::new(), "10", None, "nobody").await.unwrap_err();
 	assert!(matches!(err, DomainError::NotFound { entity: "user", .. }), "got {err:?}");
@@ -757,7 +772,7 @@ async fn a_stake_transfer_is_gated_by_the_registry_the_user_and_what_the_company
 	// a product capped at its issued supply still lets the company hand its units over.
 	h.allocations.set_unit_cap(&service, shares("13000")).await.unwrap();
 	transfer_stake(&h, &service, owner, "13000", None, "all-of-it").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, Shares::ZERO);
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), owner)).await, shares("13000"));
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("13000"));
@@ -1304,7 +1319,7 @@ async fn a_queued_mint_is_reported_beside_the_settled_supply_until_the_relay_pos
 	assert_eq!(holders.units_outstanding, Shares::ZERO, "nothing has posted yet");
 	assert_eq!(holders.queued_units, shares("13000"), "the recorded mint is the signal to wait");
 
-	h.relay.drain().await;
+	drain(&h).await;
 	let holders = issuance_app::unit_holders(&h.allocations, h.ledger.as_ref(), &h.issuances, service.clone()).await.unwrap();
 	assert_eq!(holders.units_outstanding, shares("13000"));
 	assert_eq!(holders.company_units, shares("13000"));
@@ -1372,7 +1387,7 @@ async fn retiring_units_on_a_closed_product_burns_them_out_of_the_holder_and_the
 	let allocation = register(&h, &service).await;
 	issue(&h, &service, UnitHolder::User(investor), "3250", Some("3250"), "investor").await.unwrap();
 	issue(&h, &service, UnitHolder::Company, "13000", Some("13000"), "company").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	h.allocations.close(&service).await.unwrap();
 
 	let from_investor = retire(&h, &service, UnitHolder::User(investor), "1000", "retire-investor", false).await.unwrap();
@@ -1382,7 +1397,7 @@ async fn retiring_units_on_a_closed_product_burns_them_out_of_the_holder_and_the
 	assert_eq!(from_investor.issuance.cost_basis(), usdt("1000"), "the written-off basis defaults to units × NAV");
 	assert_eq!(from_investor.issuance.state(), IssuanceState::Queued, "recorded, not yet burnt");
 	assert_eq!(issuance_rows(&h, &service).await, 4, "one history: two mints, two retirements");
-	h.relay.drain().await;
+	drain(&h).await;
 
 	assert_eq!(units_of(&h, LedgerAccountKey::UserShares(service.clone(), investor)).await, shares("2250"));
 	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, shares("10000"));
@@ -1424,7 +1439,7 @@ async fn retiring_units_out_of_a_live_product_needs_force() {
 	let service = unique_service();
 	register(&h, &service).await;
 	issue(&h, &service, UnitHolder::Company, "100", Some("0"), "seed").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 
 	// A draft and an open product both refuse: a closed door first, or an explicit
 	// override — and the refusal is a precondition the operator can lift, not bad input.
@@ -1440,7 +1455,7 @@ async fn retiring_units_out_of_a_live_product_needs_force() {
 
 	// The override is the operator saying "on a live product, yes".
 	retire(&h, &service, UnitHolder::Company, "40", "burn", true).await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, shares("60"));
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("60"));
 	assert_eq!(
@@ -1456,16 +1471,16 @@ async fn a_retirement_shares_the_issuance_key_space_and_burns_once() {
 	let service = unique_service();
 	register(&h, &service).await;
 	issue(&h, &service, UnitHolder::Company, "100", Some("0"), "seed").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	h.allocations.close(&service).await.unwrap();
 
 	let first = retire(&h, &service, UnitHolder::Company, "40", "burn", false).await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	// The console re-sends after a timeout: same key, same request — same row, no second burn.
 	let again = retire(&h, &service, UnitHolder::Company, "40", "burn", false).await.unwrap();
 	assert_eq!(again.issuance.id(), first.issuance.id());
 	assert_eq!(again.issuance.state(), IssuanceState::Applied, "the repeat reads the row as it stands now");
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(units_of(&h, LedgerAccountKey::CompanyShares(service.clone())).await, shares("60"), "one burn, not two");
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("60"));
 
@@ -1477,7 +1492,7 @@ async fn a_retirement_shares_the_issuance_key_space_and_burns_once() {
 	assert!(matches!(err, DomainError::Conflict(_)), "a mint's key is not a retirement's retry: {err:?}");
 	let err = issue(&h, &service, UnitHolder::Company, "40", None, "burn").await.unwrap_err();
 	assert!(matches!(err, DomainError::Conflict(_)), "a retirement's key is not a mint's retry: {err:?}");
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(issuance_rows(&h, &service).await, 2);
 	assert_eq!(units_of(&h, LedgerAccountKey::SharesOutstanding(service.clone())).await, shares("60"));
 
@@ -1503,7 +1518,7 @@ async fn a_retirement_is_gated_by_the_registry_the_holder_and_what_is_available(
 
 	register(&h, &service).await;
 	issue(&h, &service, UnitHolder::User(investor), "100", Some("100"), "seed").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	h.allocations.close(&service).await.unwrap();
 	// A user nobody can sign in as holds nothing to retire.
 	let err = retire(&h, &service, UnitHolder::User(UserId::new()), "10", "nobody", false).await.unwrap_err();
@@ -1522,7 +1537,7 @@ async fn a_retirement_is_gated_by_the_registry_the_holder_and_what_is_available(
 	funds_app::request_redemption(&fund_ports(&h), &h.reds, investor, service.clone(), shares("30"), now_unix())
 		.await
 		.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	let holding = h.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), investor)).await.unwrap();
 	assert_eq!(Shares::from_base_units(holding.posted), shares("100"), "the burn is only reserved");
 	assert_eq!(Shares::from_base_units(holding.available()), shares("70"));
@@ -1530,7 +1545,7 @@ async fn a_retirement_is_gated_by_the_registry_the_holder_and_what_is_available(
 	assert!(matches!(err, DomainError::Validation(ref m) if m.contains("reserved by a redemption")), "got {err:?}");
 	// Exactly what is free fits.
 	retire(&h, &service, UnitHolder::User(investor), "70", "all-free", false).await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	let holding = h.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), investor)).await.unwrap();
 	assert_eq!(Shares::from_base_units(holding.posted), shares("30"), "only the reserved units remain");
 	assert_eq!(Shares::from_base_units(holding.available()), Shares::ZERO);
@@ -1577,7 +1592,7 @@ async fn the_first_in_kind_mint_marks_the_product_in_kind_and_nothing_else_touch
 	);
 	// …the second mint and a hand-over out of the company's stake leave none.
 	issue(&h, &service, UnitHolder::User(investor), "10", None, "again").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	transfer_stake(&h, &service, investor, "20", None, "hand-over").await.unwrap();
 	assert_eq!(h.allocations.find(&service).await.unwrap().unwrap().backing(), AllocationBacking::InKind);
 	assert_eq!(backing_changes(&h, &allocation).await, 1, "a repeat is idempotent and unlogged");
@@ -1608,7 +1623,7 @@ async fn a_redemption_is_refused_on_an_in_kind_product_until_the_operator_declar
 	let investor = provisioned_user(&h).await;
 	register(&h, &service).await;
 	issue(&h, &service, UnitHolder::User(investor), "100", Some("100"), "seed").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	open_to_everyone(&h, &service).await;
 
 	// The state gate passes (open), the holder has the units, and still: the fund holds
@@ -1627,7 +1642,7 @@ async fn a_redemption_is_refused_on_an_in_kind_product_until_the_operator_declar
 		.await
 		.unwrap();
 	assert_eq!(recorded, 0, "refused before anything is written");
-	h.relay.drain().await;
+	drain(&h).await;
 	assert_eq!(
 		Shares::from_base_units(h.ledger.balance(&LedgerAccountKey::UserShares(service.clone(), investor)).await.unwrap().available()),
 		shares("100")
@@ -1670,7 +1685,7 @@ async fn a_row_written_by_a_pod_that_predates_the_backing_column_reads_as_cash()
 	let user = UserId::new();
 	fund_user(&h, user, "10").await;
 	subscribe(&h, user, &service, "10").await.unwrap();
-	h.relay.drain().await;
+	drain(&h).await;
 	funds_app::request_redemption(&fund_ports(&h), &h.reds, user, service.clone(), shares("10"), now_unix())
 		.await
 		.expect("a cash-backed legacy row redeems");
@@ -1690,4 +1705,24 @@ async fn a_row_written_by_a_pod_that_predates_the_backing_column_reads_as_cash()
 	let db_err = err.as_database_error().expect("a server-side error");
 	assert_eq!(db_err.code().as_deref(), Some("23514"), "23514 is check_violation; got {err}");
 	assert_eq!(db_err.constraint(), Some("allocations_backing_check"), "refused by some other constraint: {err}");
+}
+
+/// Drain the outbox to quiescence. `Relay::drain` applies one pass and answers `true` when
+/// a transient failure told it to back off — `Relay::run` sleeps and comes back, so a test
+/// that took one pass for "everything landed" read the ledger before its own rows did
+/// (#294). A few passes cover a real hiccup; a backlog still standing after them is a
+/// finding, named by the outbox's own reasons instead of surfacing as a wrong balance later.
+async fn drain(h: &Harness) {
+	const PASSES: usize = 5;
+	for _ in 0..PASSES {
+		if !h.relay.drain().await {
+			return;
+		}
+		tokio::task::yield_now().await;
+	}
+	let backlog: Vec<(i64, String, Option<String>)> = sqlx::query_as("SELECT seq, kind, last_error FROM outbox WHERE dispatched_at IS NULL AND parked_at IS NULL ORDER BY seq")
+		.fetch_all(&h.pool)
+		.await
+		.unwrap();
+	panic!("the outbox still holds a backlog after {PASSES} relay passes: {backlog:?}");
 }
