@@ -10,13 +10,15 @@
    it look like a layout bug rather than a build one. The theme emits variables only, so
    leaving it unlayered costs nothing.
 
-   Tokens come from the same source the app uses, so `text-main-mist` / `bg-main-accent-t1`
-   / `border-border` resolve identically. Anything the app-only entry point carries is
+   Tokens come from the same two sources the app uses — the kit's sheet plus the
+   cabinet's legacy alias layer — so `text-main-mist` / `bg-main-accent-t1` /
+   `border-border` resolve identically. Anything the app-only entry point carries is
    invisible here, so a palette change that lands in globals.css alone leaves the remote
    painting the old colours against a host that has already moved. */
 @import "tailwindcss/theme.css";
 @import "tailwindcss/utilities.css" layer(reamfe);
-@import "@evinvest/uikit/styles/tokens-legacy.css" layer(reamfe);
+@import "@evinvest/uikit/styles/tokens.css" layer(reamfe);
+@import "../../application/styles/tokens-legacy.css" layer(reamfe);
 
 @source "../../features/account-chip/ui/account-chip.tsx";
 
