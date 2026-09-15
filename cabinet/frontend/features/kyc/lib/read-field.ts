@@ -27,20 +27,16 @@ export function readBoolean(body: unknown, key: string): boolean | null {
 }
 
 /**
- * A nested object, or `null` for anything else — including JSON `null`, which is how the
- * status route says "no case is running" and is therefore not a parse failure.
+ * The raw value at `key`, with `undefined` reserved for "the key is not there".
+ *
+ * The three narrowers above all answer `null` for both "absent" and "present but the wrong
+ * type", which is right when either one means the same thing to the caller. It does not when
+ * a key is OPTIONAL on the wire: `/kyc/status` sends `case: null` for "no attempt is running"
+ * and an object for one that is, so a reader has to tell an absent `case` (not a status
+ * document), a null one (nothing running) and a malformed one (drift) apart — three answers,
+ * which no `T | null` can carry. Callers that need that distinction branch on this directly.
  */
-export function readObject(body: unknown, key: string): unknown {
-  const value = readField(body, key);
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
-}
-
-/** True when the key is present at all, whatever it holds — `null` included. */
-export function hasField(body: unknown, key: string): boolean {
-  return typeof body === "object" && body !== null && key in body;
-}
-
-function readField(body: unknown, key: string): unknown {
+export function readField(body: unknown, key: string): unknown {
   if (typeof body !== "object" || body === null || !(key in body)) return undefined;
   return (body as Record<string, unknown>)[key];
 }

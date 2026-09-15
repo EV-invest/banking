@@ -59,7 +59,11 @@ function Outcome({ state, className }: { state: StartState; className?: string }
       <Note className={className}>
         {t("profile.kyc.unavailable")}{" "}
         <a
-          href={`mailto:${contact}`}
+          // Encoded, not interpolated: the address is the plane's to send, and `?`/`&` in it
+          // would make the query half of a `mailto:` — a pre-filled letter to a third party
+          // behind a link the reader was told is support. `kyc-contract` refuses that shape
+          // on the way in; this is the second half of the same rule, at the point of use.
+          href={`mailto:${encodeURIComponent(contact)}`}
           className="font-medium text-accent-debug underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t("profile.kyc.contact", { contact })}

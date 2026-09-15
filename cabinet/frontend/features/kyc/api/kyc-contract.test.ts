@@ -78,3 +78,20 @@ test("contact rides on kyc_unavailable and on nothing else", () => {
   assert.deepEqual(parseErrorBody({ error: "kyc_unavailable" }), { error: "kyc_unavailable", contact: null });
   assert.deepEqual(parseErrorBody({ error: "internal", contact: "support@ev.invest" }), { error: "internal", contact: null });
 });
+
+test("a `case` that is present but not an object is drift, not 'nothing running'", () => {
+  // The dangerous direction: reading these as `{ case: null }` is an AFFIRMATIVE "no attempt
+  // is running", which re-opens the start gate and buys a second billed vendor session — and
+  // does it silently, which is the opposite of what pinning the shape is for.
+  for (const malformed of [5, "pending", true, [{ status: "pending" }], []]) {
+    assert.equal(parseStatus({ level: 0, case: malformed }), null, JSON.stringify(malformed));
+  }
+});
+
+test("a contact that is not an address is dropped", () => {
+  // It is the one field of these bodies the cabinet puts back into a URL (`mailto:`), so
+  // query syntax in it would turn "write to support" into a letter addressed elsewhere.
+  for (const contact of ["kyc@evinvest.ltd?cc=attacker@evil.example", "kyc@evinvest.ltd&body=x", "https://evil.example", "plain text", "a@b"]) {
+    assert.deepEqual(parseErrorBody({ error: "kyc_unavailable", contact }), { error: "kyc_unavailable", contact: null }, contact);
+  }
+});

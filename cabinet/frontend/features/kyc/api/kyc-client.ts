@@ -3,13 +3,15 @@
 // Browser → shell KYC client (site-root `/api/kyc/start`, `/api/kyc/status`). Verification is
 // identity-plane work and the identity plane is shell-owned, exactly like `/api/auth/sessions`
 // — hence `scope: "shell"`, no zone prefix. Transport, CSRF and the session pre-flight/replay
-// belong to `@/shared/lib/api-client`; the wire shapes belong to ./kyc-contract; only the
-// answer-shaping — which wire answer is which OUTCOME for a screen — is here.
+// belong to `@/shared/lib/api-client`; the wire shapes belong to ./kyc-contract; which refusal
+// is which outcome belongs to ./start-outcome. What is left here is the I/O those three share.
 
-import { config } from "@/config";
-import { parseErrorBody, parseStartResponse, parseStatus, type KycStatus } from "@/features/kyc/api/kyc-contract";
+import { createSentrySink } from "@evinvest/error-monitoring";
+
+import { parseStartResponse, parseStatus, type KycStatus } from "@/features/kyc/api/kyc-contract";
+import { classifyRefusal } from "@/features/kyc/api/start-outcome";
 import { providerUrl } from "@/features/kyc/lib/provider-url";
-import { readString } from "@/features/kyc/lib/read-field";
+import { extraProviderHosts } from "@/shared/config/kyc-provider";
 import { RequestError, requestJson } from "@/shared/lib/api-client";
 
 /**
@@ -37,28 +39,38 @@ export async function startVerification(): Promise<KycStart> {
     // identity plane's. Restating `{ tier: 1 }` here would be a second place to change it.
     const data = await requestJson<unknown>("/api/kyc/start", { method: "POST", scope: "shell" });
     const started = parseStartResponse(data);
-    const url = providerUrl(started?.redirectUrl ?? null, config.public.kycProviderHost);
-    return url ? { kind: "started", redirectUrl: url } : { kind: "failed", error: unusable() };
+    const url = providerUrl(started?.redirectUrl ?? null, extraProviderHosts(), selfHost());
+    if (url !== null) return { kind: "started", redirectUrl: url };
+    // A redirect we refused is not the same event as an answer we could not read, even
+    // though the reader is owed the same sentence for both. Somebody tried to send an
+    // authenticated cabinet user to a host that is not the vendor's — or the vendor moved
+    // and nobody said so — and the reader's response to "please try again" is to try again,
+    // not to write in. Unreported, that lasts exactly as long as nobody looks.
+    if (started !== null) reportRefusedRedirect(started.redirectUrl);
+    return { kind: "failed", error: unusable() };
   } catch (error) {
     return classify(error);
   }
 }
 
 /**
- * The caller's tier and their running case, or `null` when the plane cannot tell us.
+ * The caller's tier and their running case. `null` ONLY for a plane that does not have the
+ * route: a cabinet deployed ahead of the concierge release that adds it (#75) gets a 404
+ * here and must keep working exactly as it does today, falling back to the tier the profile
+ * already carries.
  *
- * `null` rather than a throw because every consumer of this answers the same way — fall back
- * to the tier the profile already carries — and because the commonest reason for it is not an
- * error at all: a cabinet deployed ahead of the concierge release that adds the route gets a
- * 404 here, and must keep working exactly as it does today.
+ * Everything else is re-raised. Flattening a 5xx, a network failure or an expired session
+ * into the same `null` would make "the route is not deployed yet" and "the plane is down"
+ * one state, which no screen could then render differently — and would swallow
+ * `SessionExpiredError` before the keeper that moves to /login ever sees it.
  */
 export async function fetchKycStatus(): Promise<KycStatus | null> {
-  try {
-    // A GET: no CSRF token, and nothing is spent by asking.
-    return parseStatus(await requestJson<unknown>("/api/kyc/status", { scope: "shell" }));
-  } catch {
-    return null;
-  }
+  // A GET: no CSRF token, and nothing is spent by asking.
+  const data = await requestJson<unknown>("/api/kyc/status", { scope: "shell" }).catch((error: unknown) => {
+    if (error instanceof RequestError && error.status === 404) return null;
+    throw error;
+  });
+  return data === null ? null : parseStatus(data);
 }
 
 /**
@@ -70,41 +82,42 @@ function unusable(): RequestError {
   return new RequestError("We couldn't start verification. Please try again.", 0, "err.kycStartFailed");
 }
 
+/** `undefined` during SSR of this client component, where there is no location to compare to. */
+function selfHost(): string | undefined {
+  return typeof window === "undefined" ? undefined : window.location.host;
+}
+
+/**
+ * The host only. The rest of a session URL is the vendor's session id — a credential, and
+ * `NEXT_PUBLIC_SENTRY_DSN` ships to every browser, so what goes out of here is the one field
+ * that answers "whose host was it".
+ *
+ * Sentry is imported lazily, the way `@evinvest/error-monitoring`'s own provider imports it:
+ * a static import here would put the SDK in the static graph of every screen that can start
+ * verification, to report something that happens on no normal run. Unconfigured (no DSN,
+ * local dev) the import resolves and `captureException` is a no-op.
+ */
+function reportRefusedRedirect(redirectUrl: string): void {
+  let host: string;
+  try {
+    host = new URL(redirectUrl).host;
+  } catch {
+    host = "<unparseable>";
+  }
+  void import("@sentry/react").then(
+    (Sentry) => createSentrySink(Sentry).reportError(new Error("kyc: refused the identity plane's redirect host"), { host }),
+    () => {},
+  );
+}
+
 function classify(error: unknown): KycStart {
   if (!(error instanceof RequestError)) {
     // Includes SessionExpiredError, whose own code already says to sign in again.
     return { kind: "failed", error };
   }
-  // Keyed on the body's code, not on the status: the plane publishes a closed dictionary and
-  // answers every refusal with one, so the status is now corroboration rather than evidence.
-  // (This retires the old "a 403 with no body is a stale token" heuristic — there is no
-  // bodyless refusal left for it to match.)
-  const body = parseErrorBody(error.body);
-  switch (body?.error) {
-    case "kyc_unavailable":
-      return { kind: "unavailable", contact: body.contact };
-    case "throttled":
-      return { kind: "throttled" };
-    case "csrf":
-      return { kind: "stale" };
-    // `internal` is the one code the transport's own table does not word, so it would reach
-    // the reader as the literal string "internal". Re-keyed to the sentence every other 5xx
-    // in the cabinet gets.
-    case "internal":
-      return { kind: "failed", error: new RequestError("The service is temporarily unavailable. Please try again.", error.status, "err.serverUnavailable", error.body) };
-    // `unauthenticated` IS in that table (`err.unauthenticated`), and a session the shell
-    // confirms is gone has already been turned into SessionExpiredError upstream.
-    case "unauthenticated":
-      return { kind: "failed", error };
-    default:
-      break;
-  }
-  // No code we know: fall back to what the status alone can say, so a plane that has not
-  // shipped the dictionary yet still gets the outcomes that have their own wording. The 403
-  // branch keeps the old rule — a refusal that NAMES a reason is a refusal on the merits, and
-  // telling that reader the page went stale sends them reloading forever instead of to
-  // support; only a bodyless one is the identity plane's plain-text `csrf check failed`.
-  if (error.status === 429) return { kind: "throttled" };
-  if (error.status === 403 && readString(error.body, "error") === null) return { kind: "stale" };
-  return { kind: "failed", error };
+  const refusal = classifyRefusal(error.status, error.body);
+  // `plain` is every refusal `shared/lib/api-client`'s own table already words — including
+  // `internal`, which that table now keys to `err.serverUnavailable` rather than having this
+  // layer restate the English sentence for it.
+  return refusal.kind === "plain" ? { kind: "failed", error } : refusal;
 }
