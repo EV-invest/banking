@@ -769,7 +769,7 @@
   },
   "admin.fees.col.performanceUsdt": {
     "en": "Performance, USDT",
-    "t": "Performance, USDT"
+    "t": "Performance-Gebühr, USDT"
   },
   "admin.fees.col.reason": {
     "en": "Reason",
