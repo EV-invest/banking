@@ -44,10 +44,18 @@ use piggybank_core::{
 	},
 };
 use sqlx::PgPool;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 use uuid::Uuid;
 
 mod common;
+
+/// Every test here builds its own `Relay` and calls `drain()`, which — unlike `Relay::run` —
+/// never takes `OUTBOX_LOCK_KEY`, while the outbox is one table per test binary. Two relays
+/// draining concurrently pick up the same row and both act on it (observed: a row with
+/// `dispatched_at` AND `parked_at` set, each written by a different custody fake) — the
+/// mechanism behind the `relay_recovery` flakes. So the tests take turns; production has a
+/// single drainer under the advisory lock and needs none of this.
+static SERIAL_DRAIN: Mutex<()> = Mutex::const_new(());
 
 struct Harness {
 	pool: PgPool,
@@ -140,6 +148,7 @@ async fn active_user(h: &Harness) -> UserId {
 /// queryable, and reconciliation surfaces it in the parked-row scan.
 #[tokio::test]
 async fn a_parked_event_is_not_dispatched_and_reconciliation_surfaces_it() {
+	let _serial = SERIAL_DRAIN.lock().await;
 	let Some(h) = harness().await else { return };
 	let event_id = Uuid::new_v4();
 	let aggregate_id = Uuid::new_v4();
@@ -177,6 +186,7 @@ async fn a_parked_event_is_not_dispatched_and_reconciliation_surfaces_it() {
 /// `queued` withdrawal past the max age is auto-cancelled (safe — never broadcast).
 #[tokio::test]
 async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
+	let _serial = SERIAL_DRAIN.lock().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Bep20;
 
@@ -258,6 +268,7 @@ async fn the_reaper_alerts_on_stuck_processing_and_reaps_queued_withdrawals() {
 /// custody park), because a live one is only drainable while the row is `processing`.
 #[tokio::test]
 async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
+	let _serial = SERIAL_DRAIN.lock().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Trc20;
 	let user = active_user(&h).await;
@@ -344,6 +355,7 @@ async fn an_unparked_dispatch_after_fail_is_reparked_and_never_broadcast() {
 /// locked for the operator instead of refunding a user who may also be paid on-chain.
 #[tokio::test]
 async fn a_fail_void_parks_when_a_broadcast_row_exists() {
+	let _serial = SERIAL_DRAIN.lock().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Bep20;
 	let user = active_user(&h).await;
@@ -410,6 +422,7 @@ async fn a_fail_void_parks_when_a_broadcast_row_exists() {
 /// the outbox (no in-memory floor) and dispatches it.
 #[tokio::test]
 async fn an_unparked_event_is_re_driven_and_dispatched() {
+	let _serial = SERIAL_DRAIN.lock().await;
 	let Some(h) = harness().await else { return };
 	let user = active_user(&h).await;
 	let event = LedgerEvent::Deposited {
@@ -458,6 +471,7 @@ async fn an_unparked_event_is_re_driven_and_dispatched() {
 /// FAILED_PRECONDITION vs NOT_FOUND precisely.
 #[tokio::test]
 async fn unpark_refuses_compensated_and_dispatched_rows() {
+	let _serial = SERIAL_DRAIN.lock().await;
 	let Some(h) = harness().await else { return };
 	let compensated_seq: i64 = sqlx::query_scalar(
 		"INSERT INTO outbox (event_id, aggregate, aggregate_id, kind, payload, parked_at, last_error) \
@@ -513,6 +527,7 @@ async fn unpark_refuses_compensated_and_dispatched_rows() {
 /// The redelivery must instead recognize the applied legs and complete the fee.
 #[tokio::test]
 async fn a_redelivered_half_applied_settle_completes_instead_of_parking() {
+	let _serial = SERIAL_DRAIN.lock().await;
 	let Some(h) = harness().await else { return };
 	let network = Network::Bep20;
 	let user = active_user(&h).await;
@@ -659,4 +674,86 @@ async fn backdate_withdrawal(pool: &PgPool, id: Uuid) {
 		.execute(pool)
 		.await
 		.expect("backdate the withdrawal");
+}
+
+/// A custody adapter that refuses every broadcast with a caller-chosen reason — the shape
+/// `custody.rs` produces for any non-retryable signer status (e.g. `FailedPrecondition`
+/// with the custodian's activity id in the message).
+struct RefusingCustody {
+	reason: &'static str,
+	broadcasts: Arc<AtomicUsize>,
+}
+
+impl Gateway for RefusingCustody {}
+
+#[async_trait]
+impl Custody for RefusingCustody {
+	async fn broadcast(&self, _request: &BroadcastRequest) -> Result<(), CustodyError> {
+		self.broadcasts.fetch_add(1, Ordering::SeqCst);
+		Err(CustodyError::Rejected(self.reason.to_owned()))
+	}
+}
+
+/// banking#196: a signer answer the hub must not retry (the custodian parked the activity
+/// for a human) parks the Dispatched event exactly once, and the park reason — what
+/// `ListParkedEvents` shows the operator — carries the custodian's activity id verbatim.
+#[tokio::test]
+async fn a_custody_refusal_parks_the_broadcast_once_and_names_the_activity_in_last_error() {
+	let _serial = SERIAL_DRAIN.lock().await;
+	let Some(h) = harness().await else { return };
+	let network = Network::Bep20;
+	const ACTIVITY_ID: &str = "0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b";
+
+	let user = active_user(&h).await;
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::User(user), network, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	// Seed the rail so the request auto-dispatches to `processing` (a Dispatched row exists).
+	balance_app::record_deposit(&h.deposits, &h.notify, unique_tx_ref(), Party::Piggybank, network, usdt("100"))
+		.await
+		.unwrap();
+	h.relay.drain().await;
+	let withdrawal = withdrawal_app::request_withdrawal(
+		&withdrawal_ports(&h),
+		&admission(&h, KycGate::ENFORCED),
+		WithdrawalId::new(),
+		user,
+		network,
+		destination(network),
+		usdt("50"),
+	)
+	.await
+	.unwrap();
+	assert_eq!(withdrawal.state(), WithdrawalState::Processing, "a liquid rail auto-dispatches to processing");
+
+	let broadcasts = Arc::new(AtomicUsize::new(0));
+	let refusing = Relay::new(
+		h.pool.clone(),
+		h.ledger.clone(),
+		Arc::new(RefusingCustody {
+			reason: "signer: key custodian requires approval for activity 0f6a2b3c-4d5e-4f70-8a9b-0c1d2e3f4a5b",
+			broadcasts: broadcasts.clone(),
+		}),
+		h.notify.clone(),
+	);
+	refusing.drain().await;
+	// A second drain must not re-deliver a parked row: a refusal is terminal, not a retry.
+	refusing.drain().await;
+
+	let (is_dispatched, is_parked, last_error): (bool, bool, Option<String>) =
+		sqlx::query_as("SELECT dispatched_at IS NOT NULL, parked_at IS NOT NULL, last_error FROM outbox WHERE aggregate_id = $1 AND kind = 'withdrawals' ORDER BY seq DESC LIMIT 1")
+			.bind(withdrawal.id().raw())
+			.fetch_one(&h.pool)
+			.await
+			.expect("the withdrawal's Dispatched row is queryable");
+	assert!(!is_dispatched, "a refused broadcast must never be marked dispatched");
+	assert!(is_parked, "a non-retryable custody refusal parks the event");
+	let last_error = last_error.expect("a parked row records why");
+	assert!(last_error.contains("custody rejected"), "the park reason names custody: {last_error}");
+	assert!(last_error.contains(ACTIVITY_ID), "the operator must see the custodian's activity id: {last_error}");
+	assert_eq!(broadcasts.load(Ordering::SeqCst), 1, "a parked broadcast is not retried");
+
+	let after = h.withdrawals.find_by_id(withdrawal.id()).await.unwrap().unwrap();
+	assert_eq!(after.state(), WithdrawalState::Processing, "the park is the outbox's; the withdrawal waits for a human");
 }
