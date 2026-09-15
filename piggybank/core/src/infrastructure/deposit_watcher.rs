@@ -284,12 +284,14 @@ impl DepositWatcher {
 				Ok(chunk) => chunk,
 				Err(err) if matches!(cursor, CursorPolicy::Advance) && is_pruned(&err) && clamps < PRUNE_CLAMPS_PER_SCAN => {
 					clamps += 1;
-					let first = first_retained_block(next, to, |block| self.is_retained(block, to, &topic_addrs)).await?;
-					if first <= next {
-						// Even the head of the window is pruned — nothing here can be scanned,
-						// and jumping to `to` would only hide that behind a clean cursor.
+					let Some(first) = first_retained_block(next, to, |block| self.is_retained(block, to, &topic_addrs)).await? else {
+						// No confirmed boundary: the provider refuses everything (its log index is
+						// off), or it answered the same block both ways (a pool of nodes with
+						// different retention). Neither is a prune to skip past — keep the cursor
+						// where it is and back off as before, so a re-read on a better node or a
+						// recovered index still credits these blocks.
 						return Err(err);
-					}
+					};
 					let skipped_to = first - 1;
 					// `error!`, not `warn!`: this is a money incident that reaches Sentry, and the
 					// from/to are what the operator needs to reconcile the window by hand.
@@ -611,20 +613,27 @@ fn rpc_host(url: &str) -> &str {
 	url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or(url)
 }
 
-/// The oldest block in `(pruned, hi]` that `probe` reports as still served, by bisection.
+/// The oldest block in `(pruned, hi]` that `probe` reports as still served, by bisection —
+/// or `None` when no boundary can be trusted, in which case nothing may be skipped.
 ///
-/// `pruned` is a block the provider just refused; `hi` is taken as served without asking —
-/// it is the safe head, derived from the height the same provider just reported, and a
-/// node does not prune its own tip. Retention is a suffix of the chain, so "served" is
-/// monotonic in the block number and bisection is sound. Returns `hi` unchanged when the
-/// window is empty or every probe is refused, which the caller reads as "nothing here can
-/// be scanned".
+/// Bisection assumes retention is a suffix of the chain, so "served" is monotonic in the
+/// block number. Two things break that in practice, and both are checked with the probe
+/// rather than assumed: a provider that refuses EVERYTHING (log index off, reindexing) has
+/// no boundary at all, and a keyed pool of nodes with different retention answers the same
+/// block both ways depending on which backend picks up the call. So `pruned` is re-probed
+/// first (a refusal that does not repeat is not a prune), `hi` is probed rather than taken
+/// on faith, and the block just below the found boundary is probed once more — it was
+/// refused during the bisection, and if it is served now the boundary is noise. Only a
+/// boundary that survives all three is returned; the caller persists a skip on nothing less.
 ///
-/// Cost is `log2(hi − pruned)` probes — twenty-odd calls for a scan a million blocks
+/// Cost is `log2(hi − pruned) + 3` probes — twenty-odd calls for a scan a million blocks
 /// behind — against a cycle that was otherwise failing forever.
-async fn first_retained_block<E>(pruned: u64, mut hi: u64, mut probe: impl AsyncFnMut(u64) -> Result<bool, E>) -> Result<u64, E> {
+async fn first_retained_block<E>(pruned: u64, mut hi: u64, mut probe: impl AsyncFnMut(u64) -> Result<bool, E>) -> Result<Option<u64>, E> {
+	if hi <= pruned || probe(pruned).await? || !probe(hi).await? {
+		return Ok(None);
+	}
 	let mut lo = pruned;
-	while hi.saturating_sub(lo) > 1 {
+	while hi - lo > 1 {
 		let mid = lo + (hi - lo) / 2;
 		if probe(mid).await? {
 			hi = mid;
@@ -632,7 +641,12 @@ async fn first_retained_block<E>(pruned: u64, mut hi: u64, mut probe: impl Async
 			lo = mid;
 		}
 	}
-	Ok(hi)
+	// `lo` was refused once on the way down (or is `pruned`, refused twice by now); a second
+	// answer that differs is the pool disagreeing with itself, not a boundary.
+	if probe(lo).await? {
+		return Ok(None);
+	}
+	Ok(Some(hi))
 }
 
 /// The refusal that only a LATER window can get past — see [`RpcAction::Pruned`].
@@ -845,32 +859,81 @@ mod tests {
 		assert!(!is_pruned(&WatcherError::Db("connection closed".into())));
 	}
 
+	/// A probe over a chain whose retention is a clean suffix starting at `retained_from`.
+	fn suffix_probe(retained_from: u64, probes: &mut u32) -> impl AsyncFnMut(u64) -> Result<bool, ()> {
+		async move |block| {
+			*probes += 1;
+			Ok(block >= retained_from)
+		}
+	}
+
 	/// The clamp finds the retention boundary by bisection, without a configured window size
 	/// — the provider's window is neither documented nor stable — and does so in
 	/// `log2(lag)` probes, not `lag`.
 	#[tokio::test]
 	async fn bisection_finds_the_oldest_retained_block() {
-		let retained_from = 1_000_000u64;
 		let mut probes = 0u32;
-		let first = first_retained_block::<()>(500_000, 1_500_000, async |block| {
+		let first = first_retained_block(500_000, 1_500_000, suffix_probe(1_000_000, &mut probes)).await.expect("probe never fails");
+		assert_eq!(first, Some(1_000_000));
+		assert!(probes <= 24, "a million-block lag must take ~log2 probes, took {probes}");
+
+		// The boundary sits right above the refused block: the smallest possible skip.
+		let first = first_retained_block(41, 100, suffix_probe(42, &mut probes)).await.expect("probe never fails");
+		assert_eq!(first, Some(42));
+		// Everything below the head is gone: the answer is the head itself.
+		let first = first_retained_block(0, 100, suffix_probe(100, &mut probes)).await.expect("probe never fails");
+		assert_eq!(first, Some(100));
+	}
+
+	/// A provider that refuses every block has no retention boundary — its log index is off
+	/// or rebuilding — and the scan must NOT skip to the head on the strength of nothing:
+	/// before this check the cursor jumped to `safe_head − 1` every cycle with no block
+	/// confirmed, where the old behaviour (hold the cursor, back off) would have caught up
+	/// by itself once the index returned.
+	#[tokio::test]
+	async fn a_provider_refusing_everything_yields_no_boundary() {
+		let mut probes = 0u32;
+		let first = first_retained_block::<()>(500_000, 1_500_000, async |_| {
 			probes += 1;
-			Ok(block >= retained_from)
+			Ok(false)
 		})
 		.await
 		.expect("probe never fails");
-		assert_eq!(first, retained_from);
-		assert!(probes <= 21, "a million-block lag must take ~log2 probes, took {probes}");
-
-		// The boundary sits right above the refused block: the smallest possible skip.
-		let first = first_retained_block::<()>(41, 100, async |block| Ok(block >= 42)).await.expect("probe never fails");
-		assert_eq!(first, 42);
-		// Everything below the head is gone: the answer is the head itself.
-		let first = first_retained_block::<()>(0, 100, async |block| Ok(block >= 100)).await.expect("probe never fails");
-		assert_eq!(first, 100);
+		assert_eq!(first, None);
+		assert_eq!(probes, 2, "re-probe `pruned`, probe `hi`, and stop");
 	}
 
-	/// An empty or fully-pruned window returns `hi` unchanged — the caller's signal that
-	/// there is nothing to jump to — and never probes past the window it was given.
+	/// A keyed pool (allnodes) fronts nodes of different retention, so the same block can be
+	/// refused by one backend and served by the next. Bisection over such answers lands on an
+	/// arbitrary block; skipping up to it would write off a window a plain retry would have
+	/// read. Every block is refused on first sight and served on second — the boundary the
+	/// bisection finds fails its confirmation probe, so nothing is skipped.
+	#[tokio::test]
+	async fn an_inconsistent_pool_yields_no_boundary() {
+		let mut seen = std::collections::HashSet::new();
+		let first = first_retained_block::<()>(500, 2_000, async |block| Ok(!seen.insert(block) || block >= 1_000))
+			.await
+			.expect("probe never fails");
+		assert_eq!(first, None);
+	}
+
+	/// A refusal that does not repeat was one backend's opinion, not a prune: the re-probe of
+	/// the refused block is the first thing asked, and a "served" there ends the search
+	/// without touching anything else.
+	#[tokio::test]
+	async fn a_refusal_that_does_not_repeat_yields_no_boundary() {
+		let mut probes = 0u32;
+		let first = first_retained_block::<()>(500, 2_000, async |_| {
+			probes += 1;
+			Ok(true)
+		})
+		.await
+		.expect("probe never fails");
+		assert_eq!(first, None);
+		assert_eq!(probes, 1);
+	}
+
+	/// An empty window returns `None` without asking anything.
 	#[tokio::test]
 	async fn bisection_over_an_empty_window_asks_nothing() {
 		let mut probes = 0u32;
@@ -880,10 +943,8 @@ mod tests {
 		})
 		.await
 		.expect("probe never fails");
-		assert_eq!(first, 100);
+		assert_eq!(first, None);
 		assert_eq!(probes, 0);
-		let first = first_retained_block::<()>(100, 101, async |_| Ok(false)).await.expect("probe never fails");
-		assert_eq!(first, 101);
 	}
 
 	/// A probe failing for any reason other than "pruned" — a rate limit that outlived its

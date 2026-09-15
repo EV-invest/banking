@@ -1083,8 +1083,13 @@ for the oldest block still served, jumps the cursor there, and files the skipped
 Sentry-shipped `error!` with its `from`/`to` — those deposits are **not credited** and the
 operator reconciles the window by hand with `RecordDeposit`. Retrying the pruned window
 instead (the pre-#309 behaviour: cycle backoff to 300 s, forever) loses every deposit after
-the gap as well. A backfill (`CursorPolicy::Leave`) never clamps — the operator chose that
-window, so it gets the refusal back.
+the gap as well. The skip is persisted only on a boundary the provider **confirmed**: the
+refused block is re-probed (a refusal that does not repeat is one backend's opinion), the
+head is probed rather than assumed, and the block under the boundary is probed once more —
+a provider refusing everything (index off) or a keyed pool answering the same block both
+ways yields no boundary, and the cycle holds its cursor and backs off as before. A backfill
+(`CursorPolicy::Leave`) never clamps — the operator chose that window, so it gets the
+refusal back.
 
 [`reaper`](src/infrastructure/reaper.rs) (`Reaper::sweep`) owns the timeout for abandoned
 sagas (TB pendings are `timeout = 0`, so nothing auto-voids). Split by safety per the
