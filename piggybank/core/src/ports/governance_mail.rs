@@ -132,7 +132,9 @@ pub struct FeePolicyApproval {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FeePolicyNotice {
 	/// The holder's id IN THE IDENTITY PLANE — the same rule as a consent: concierge refuses
-	/// the mail unless this is the addressee, so a notice cannot be redirected.
+	/// the mail unless this is the addressee, so a notice cannot be redirected. Filled in by
+	/// the worker from the recipient's mirror at send time (the queue row may predate it);
+	/// the value written at enqueue is informational.
 	pub subject_user_id: String,
 	/// The product's display name.
 	pub fund: String,
