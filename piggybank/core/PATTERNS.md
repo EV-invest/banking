@@ -534,25 +534,41 @@ properties follow, and each is pinned by a test in
 What cannot be collected — the holder's units are locked by a queued redemption or
 escrowed by a resting sell order on the book, or the charge floors below one base unit of
 share — is carried as `fund_positions.fee_debt` and taken on the next assessment. It is
-never written off and never becomes a negative balance. When **nothing** is collectable
-the assessment persists nothing at all and leaves both clocks where they are, so the
-accrual simply continues into the next sweep (`FeeCharge::is_empty`).
+never written off and never becomes a negative balance. Only a charge that is not **owed**
+at all (a zero policy, a clock that did not run, a residue flooring to nothing) persists
+nothing and leaves both clocks where they are, so the accrual simply continues into the
+next sweep (`FeeCharge::is_empty` is `due.is_zero()`, not "nothing collected").
 
-The cap is the holding's **available** balance on `UserShares`, and both escrows already
-fall outside it: a queued redemption is a pending debit (`locked`), a resting sell has
-moved its units into `BookShares` outright (`posted`). So an order changes *which* road
-the fee takes but not the rule — with some units free, the charge takes those and carries
-the rest as debt; with every unit in an order, nothing is charged, nothing is recorded,
-and the elapsed window is still owed: the next assessment after the order ends charges it
-in full, which is the same money as debt would have been (management is a function of
-elapsed time on the basis, and the basis did not move). The escrow itself is never drawn
-on — it belongs to the order until the book releases it — and the holding cannot go
-negative, because the cap floors at what it has. Pinned by the two escrow tests in
-[`tests/fee_policy.rs`](tests/fee_policy.rs). The residual window is the few milliseconds
-between a placement being recorded and the relay applying its lock, during which an
-assessment still sees the units as free: a clawback landing there makes the lock park on
-the non-negative flag and the order is marked `rejected` — the designed backstop, not a
-negative balance.
+**The fee is owed on the whole position and collected from the free holding** (#255).
+`PositionSnapshot` carries two unit figures: `units`, the position the fee is measured on
+— `UserShares.posted + BookShares(svc, user).posted`, so a resting sell's escrow and a
+queued redemption's reserve both count, because an order or a pending exit changes where
+the units sit and not who owns them (and `MarketValue` management is priced on all of
+them) — and `collectable`, the holding's **available** balance, which caps the clawback.
+Both escrows fall outside the cap: a queued redemption is a pending debit (`locked`), a
+resting sell has moved its units into `BookShares` outright. So an order changes *which*
+road the fee takes but not the amount — with some units free, the charge takes those and
+carries the rest as debt; with every unit in an order, the charge is still recorded, with
+`charged_units = 0` (`0041` widened the audit row's CHECK for exactly this), the whole
+amount lands in `fee_debt`, the clocks move, and the next assessment after the order ends
+collects the debt plus only the seconds since. `FeeAssessment::record` raises `Charged`
+only when `charged_units > 0`, so the relay never sees a zero transfer; the audit row, the
+debt and the clocks commit either way. The escrow itself is never drawn on — it belongs to
+the order until the book releases it — and the holding cannot go negative, because the cap
+floors at what it has. Pinned by the three escrow tests in
+[`tests/fee_policy.rs`](tests/fee_policy.rs).
+
+The alternative — pausing the clock while the units are escrowed, and telling the holder
+— was rejected because it *is* the hole this closes: a holder who keeps an ask resting
+defers their fee for as long as they like and is billed the whole stretch in one blow the
+day it comes off, while the fund carried their capital the entire time. The debt road
+already existed (`0023`, [`fee_accrual`](src/infrastructure/fee_accrual.rs)) and adds no
+new state.
+
+The residual window is the few milliseconds between a placement being recorded and the
+relay applying its lock, during which an assessment still sees the units as free: a
+clawback landing there makes the lock park on the non-negative flag and the order is
+marked `rejected` — the designed backstop, not a negative balance.
 
 ### Ordering, clocks, and the atomic write
 
@@ -566,7 +582,8 @@ mid-period charge cannot silently restart the period.
 `PgFeeAssessments::charge` commits four things in one transaction under the
 `fund_positions` row lock: the `fee_assessments` audit row, the new debt/mark/clocks,
 the projection's `units` **decremented by the clawback**, and the `Charged` event into
-`event_log` + `outbox`. The `units` decrement is load-bearing and easy to miss: the
+`event_log` + `outbox` (absent when nothing was collected — the first three still
+commit). The `units` decrement is load-bearing and easy to miss: the
 redemption settle reduces cost basis by `(units − redeemed) / units` against the
 *projection's* count (`0010`), so a clawback that took units without telling the
 projection would leave that denominator permanently too large and every later settle
@@ -1114,8 +1131,8 @@ to the default one: `TIGERBEETLE_PORT=3034 TBCLUSTER=1 nix run .#tb`, then
 share-key ledger sides), the subscription/redemption aggregates, the withdrawal
 transitions, the allocation registry's state machine, and the fee arithmetic (the flat-year
 2%, the 20% taken net of management, the mark refusing to charge a mere recovery, the
-hurdle, the deferral of an uncollectable charge into debt, and a backwards clock charging
-nothing);
+hurdle, the deferral of an uncollectable charge into debt — recorded, not skipped, and
+raising no clawback event — and a backwards clock charging nothing);
 `piggybank/core/tests/allocation_registry.rs` covers the gate against real Postgres +
 TigerBeetle (an unregistered service refused *before* any money moves, a draft taking
 nothing, a closed allocation still redeeming, double registration as a conflict, the
@@ -1175,11 +1192,12 @@ untouched, `SharesOutstanding` is unchanged so no other holder pays, and two inv
 the same NAV owe different fees when they entered at different prices — plus the bulk
 settlement (the only moment a fee becomes cash), its refusal when the fund's claim is
 short, the sweeper end to end, a fund with no policy never being charged, and the book's
-escrow against the clawback — every unit in a resting sell charges nothing and moves no
-clock, the year being collected once the order is cancelled; most units in one caps the
-charge at the free holding, carries the rest as debt, and collects it on the next
-assessment after the cancel, with the holding exactly empty and the escrow untouched
-either way. Note that
+escrow against the clawback — every unit in a resting sell is charged as debt with nothing
+collected, the audit row written with `charged_units = 0`, the clocks moved and the ledger
+untouched, the debt (and only the seconds since, never the year again) being collected
+once the order is cancelled; most units in one caps the charge at the free holding,
+carries the rest as debt, and collects it on the next assessment after the cancel, with
+the holding exactly empty and the escrow untouched either way. Note that
 the accrual clocks are DB-stamped while `now` is caller-supplied, so those tests overshoot
 a period boundary by an hour and compare amounts with a tolerance rather than for equality;
 the sub-second jitter is 3e-8 of a year's fee and never accumulates. `piggybank/core/tests/kyc_gating.rs` covers the verification floor against real Postgres +

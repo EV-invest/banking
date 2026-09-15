@@ -107,6 +107,9 @@ async fn accrued_management(conn: &mut PgConnection, row: &sqlx::postgres::PgRow
 
 	let snapshot = PositionSnapshot {
 		units,
+		// Only the management leg is read off this snapshot, and it never collects; the cap
+		// is irrelevant here, so the projection's whole position stands in for both.
+		collectable: units,
 		cost_basis: Usdt::from_base_units(parse_units(&row.try_get::<String, _>("cost_basis").map_err(repo_err)?, "cost basis")?),
 		high_water_mark: Nav::from_base_units(parse_units(&row.try_get::<String, _>("high_water_mark").map_err(repo_err)?, "high-water mark")?),
 		debt: Usdt::ZERO,

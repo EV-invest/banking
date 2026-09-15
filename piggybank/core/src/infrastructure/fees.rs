@@ -6,7 +6,10 @@
 //! 1. the immutable `fee_assessments` audit row;
 //! 2. the position's new `fee_debt`, `high_water_mark`, and accrual clocks;
 //! 3. the projection's `units`, decremented by what was clawed back;
-//! 4. the `Charged` event, into `event_log` **and** `outbox`.
+//! 4. the `Charged` event, into `event_log` **and** `outbox` — when anything WAS clawed
+//!    back. A charge that deferred entirely into debt (every unit escrowed or reserved)
+//!    still commits (1)–(3) — the audit row with `charged_units = 0`, the debt, the moved
+//!    clock — and raises no event, because there is no transfer for the relay to post.
 //!
 //! (3) is easy to miss and load-bearing. A redemption settle reduces the cost basis by
 //! `(units − redeemed) / units` using the *projection's* unit count (migration 0010 —
