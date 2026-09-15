@@ -26,9 +26,9 @@ export type ConsiliumRefusal =
    */
   | { kind: "mail-not-configured" }
   /**
-   * The owner roster changed within the last 48 hours and payouts are paused until it
-   * settles. The delay exists to make a roster seizure and a payout two visible events
-   * rather than one motion (docs/CONSILIUM.md).
+   * The owner roster changed within the last 48 hours and no consilium of any kind opens
+   * until it settles. The delay exists to make a roster seizure and a payout two visible
+   * events rather than one motion (docs/CONSILIUM.md).
    */
   | { kind: "cooling-off"; hours: number; minutes: number }
   /** Below three owners the threshold is arithmetically unreachable. */

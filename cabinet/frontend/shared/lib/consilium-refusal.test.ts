@@ -57,6 +57,16 @@ test("a fund below the floor is recognised, with its owner count", () => {
   assert.deepEqual(classifyConsiliumRefusal(TOO_FEW_FEE_POLICY), { kind: "too-few-owners", ownerCount: 2 });
 });
 
+test("the cooling-off classifies the same whichever kind of consilium was refused", () => {
+  // Since #250 `require_settled_roster` names the kind too; the clock is still parsed.
+  for (const noun of ["payout", "payment", "valuation-override", "fee-policy"]) {
+    const message =
+      `the owner roster changed less than 48h ago; a ${noun} consilium cannot be opened until the cooling-off period lifts in 12h 30m`;
+    const refusal = classifyConsiliumRefusal(new WireError(message));
+    assert.deepEqual(refusal, { kind: "cooling-off", hours: 12, minutes: 30 }, noun);
+  }
+});
+
 test("the owner floor classifies the same whichever kind of consilium was refused", () => {
   // The match is anchored on the condition, not on the noun, so a kind the backend names
   // later still lands on the same explanation rather than on its raw prose.
