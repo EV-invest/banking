@@ -74,13 +74,32 @@ pub async fn outbox_serial() -> tokio::sync::MutexGuard<'static, ()> {
 /// away for tens of milliseconds, not microseconds; a backlog still standing after them is a
 /// finding, named by the outbox's own reasons instead of surfacing as a wrong balance later.
 ///
+/// A park is the other way an event fails to land, and `drain` cannot report it: `next_batch`
+/// skips parked rows, so the pass after a park returns `Drained` — "the outbox is empty" and
+/// "the last live row was parked" are the same `false`. Reading that as "it all landed" is
+/// exactly the silent wrong balance this helper exists to prevent, and it is reachable rather
+/// than theoretical — the settle-time liquidity pre-check parks a whole disbursement when the
+/// rail is short. So a park raised during the call is reported here, with the relay's reason.
+///
 /// The caller holds [`outbox_serial`]: without it a sibling's relay is draining the same
 /// table, and the early return this loop retries past is exactly what that race produces.
 pub async fn drain_to_quiescence(relay: &Relay, pool: &PgPool) {
 	const PASSES: usize = 5;
 	const BACKOFF: std::time::Duration = std::time::Duration::from_millis(100);
+	// Parked is terminal and the outbox is one table per binary, so a row parked earlier in
+	// the run stays there: only the rows this call parked are this caller's finding.
+	let parked_before: Vec<i64> = sqlx::query_scalar("SELECT seq FROM outbox WHERE parked_at IS NOT NULL")
+		.fetch_all(pool)
+		.await
+		.expect("read the outbox's parked rows");
 	for _ in 0..PASSES {
 		if !relay.drain().await {
+			let parked: Vec<(i64, String, Option<String>)> = sqlx::query_as("SELECT seq, kind, last_error FROM outbox WHERE parked_at IS NOT NULL AND seq <> ALL($1) ORDER BY seq")
+				.bind(parked_before.as_slice())
+				.fetch_all(pool)
+				.await
+				.expect("read the outbox's parked rows");
+			assert!(parked.is_empty(), "the relay parked an event instead of applying it: {parked:?}");
 			return;
 		}
 		tokio::time::sleep(BACKOFF).await;
@@ -89,6 +108,10 @@ pub async fn drain_to_quiescence(relay: &Relay, pool: &PgPool) {
 		.fetch_all(pool)
 		.await
 		.expect("read the outbox backlog");
+	assert!(
+		!backlog.is_empty(),
+		"drain kept throttling for {PASSES} passes with nothing left queued — the relay's own read of the outbox is what failed (see its `relay:` warnings)"
+	);
 	panic!("the outbox still holds a backlog after {PASSES} relay passes: {backlog:?}");
 }
 
