@@ -1,7 +1,14 @@
 "use client";
 
-// One answer to "what may this screen offer?", shared by the profile card, the home banner
-// and the wallet, so none of them has to compose a tier and a case for itself.
+// One answer to "what may this screen offer?", so no screen has to compose a tier and a case
+// for itself.
+//
+// Its caller today is the profile card's start row, and that is the whole list: the banner
+// (#213) and the money screens (#215) are the two PRs above this one in the stack, and until
+// they land those surfaces still read the profile's mirrored tier alone. Said plainly here
+// because the first draft of this comment promised all three, and a promise in a docblock
+// reads as coverage — the money screens are exactly where offering a doomed start costs a
+// paid vendor session.
 //
 // Two sources, in a fixed order of trust. `/kyc/status` is authoritative and fresh — it is
 // the only thing that knows a case is running. The profile is the fallback, and stays the

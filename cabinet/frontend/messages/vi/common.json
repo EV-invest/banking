@@ -4795,6 +4795,10 @@
     "en": "Verification in progress",
     "t": "Đang xác minh"
   },
+  "profile.kyc.casePill": {
+    "en": "In review",
+    "t": "Đang duyệt"
+  },
   "profile.kyc.caseResumeSub": {
     "en": "You've already started — pick up where you left off",
     "t": "Bạn đã bắt đầu — hãy tiếp tục từ chỗ đang dở"

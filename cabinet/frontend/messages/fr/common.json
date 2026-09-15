@@ -4795,6 +4795,10 @@
     "en": "Verification in progress",
     "t": "Vérification en cours"
   },
+  "profile.kyc.casePill": {
+    "en": "In review",
+    "t": "En examen"
+  },
   "profile.kyc.caseResumeSub": {
     "en": "You've already started — pick up where you left off",
     "t": "Vous avez déjà commencé — reprenez là où vous vous êtes arrêté"

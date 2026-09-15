@@ -1196,6 +1196,7 @@
   "profile.hintAtNav": "at current NAV",
   "profile.identityAndStanding": "Identity and account standing",
   "profile.identityVerification": "Identity verification",
+  "profile.kyc.casePill": "In review",
   "profile.kyc.caseResumeSub": "You've already started — pick up where you left off",
   "profile.kyc.caseReviewSub": "Your documents are with our reviewers — we'll email you the decision",
   "profile.kyc.caseTitle": "Verification in progress",
