@@ -12,10 +12,11 @@
 import { useId } from "react";
 
 import { useLocale, useT } from "@evinvest/i18n/react";
-import { Field, FieldDescription, FieldError, FieldLabel, Input } from "@evinvest/uikit";
+import { DateTimePicker, Field, FieldDescription, FieldError, FieldLabel, Input } from "@evinvest/uikit";
 
 import { cn } from "@/shared/lib/cn";
 import { formatMoment } from "@/shared/lib/datetime";
+import { intlLocale } from "@/shared/lib/intl-locale";
 import { MAX_EFFECTIVE_FROM_HORIZON_SECS, type ChangeRequirement } from "@/shared/lib/fee-terms";
 import { effectiveFromLifted, localDateTimeValue, noticeFloor, type TermsDraft } from "@/views/admin/fees/lib/schedule";
 
@@ -56,9 +57,13 @@ export function ScheduleFields({
   const reasonErrorId = `${reasonId}-error`;
   const consilium = requirement === "owner_consilium";
   // The picker's bounds are the plane's: no earlier than now (earlier is lifted, not
-  // refused, so this is guidance rather than a gate) and no further than the horizon.
-  const min = localDateTimeValue(new Date(now * 1000));
-  const max = localDateTimeValue(new Date((now + MAX_EFFECTIVE_FROM_HORIZON_SECS) * 1000));
+  // refused, so this is guidance rather than a gate — and with nobody holding units the
+  // floor IS now) and no further than the horizon. The picker clamps to `min`, so a
+  // floor here would make the lifted preview below unreachable. The draft keeps the
+  // `datetime-local` string the `effectiveFromSeconds` contract reads; the picker
+  // speaks local-zone `Date`s.
+  const min = new Date(now * 1000);
+  const max = new Date((now + MAX_EFFECTIVE_FROM_HORIZON_SECS) * 1000);
   // Said as a preview, not an error: the plane will lift the moment, and the operator
   // should read the moment it will actually be before the click. Under the owners' path
   // the floor is counted from their approval, which nobody can date yet.
@@ -68,13 +73,24 @@ export function ScheduleFields({
     <>
       <Field data-invalid={effectiveFromError !== null || undefined}>
         <FieldLabel htmlFor={whenId}>{t("admin.fees.effectiveFrom")}</FieldLabel>
-        <Input
+        <DateTimePicker
           id={whenId}
-          type="datetime-local"
+          value={draft.effectiveFrom ? new Date(draft.effectiveFrom) : null}
+          onChange={(at) => onChange("effectiveFrom", at ? localDateTimeValue(at) : "")}
           min={min}
           max={max}
-          value={draft.effectiveFrom}
-          onChange={(e) => onChange("effectiveFrom", e.target.value)}
+          today={new Date(now * 1000)}
+          locale={intlLocale(locale)}
+          format={(at) => formatMoment(String(Math.floor(at.getTime() / 1000)), locale)}
+          placeholder={t("admin.fees.dateTime.placeholder")}
+          labels={{
+            previousMonth: t("ui.dateTime.previousMonth"),
+            nextMonth: t("ui.dateTime.nextMonth"),
+            hours: t("ui.dateTime.hours"),
+            minutes: t("ui.dateTime.minutes"),
+            clear: t("ui.dateTime.clear"),
+            dialog: t("ui.dateTime.dialog"),
+          }}
           disabled={disabled}
           className="tabular-nums"
           aria-invalid={effectiveFromError !== null || undefined}

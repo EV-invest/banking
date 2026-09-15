@@ -807,6 +807,10 @@
     "en": "A price, not a detail — crystallizing more often measurably raises what an investor pays over a fund's life, because each reset locks in gains a later loss can no longer claw back.",
     "t": "Đây là một mức giá, không phải chi tiết nhỏ — chốt phí càng thường xuyên thì tổng chi phí nhà đầu tư trả trong vòng đời quỹ càng cao rõ rệt, vì mỗi lần đặt lại đều chốt cứng phần lãi mà khoản lỗ sau đó không còn bù trừ được."
   },
+  "admin.fees.dateTime.placeholder": {
+    "en": "As soon as the notice allows",
+    "t": "Ngay khi thời hạn thông báo cho phép"
+  },
   "admin.fees.effectiveFrom": {
     "en": "Takes effect",
     "t": "Có hiệu lực"
@@ -6194,6 +6198,30 @@
   "ui.copy": {
     "en": "Copy",
     "t": "Sao chép"
+  },
+  "ui.dateTime.clear": {
+    "en": "Clear",
+    "t": "Xóa"
+  },
+  "ui.dateTime.dialog": {
+    "en": "Choose date and time",
+    "t": "Chọn ngày và giờ"
+  },
+  "ui.dateTime.hours": {
+    "en": "Hours",
+    "t": "Giờ"
+  },
+  "ui.dateTime.minutes": {
+    "en": "Minutes",
+    "t": "Phút"
+  },
+  "ui.dateTime.nextMonth": {
+    "en": "Next month",
+    "t": "Tháng sau"
+  },
+  "ui.dateTime.previousMonth": {
+    "en": "Previous month",
+    "t": "Tháng trước"
   },
   "ui.deliveryTopics": {
     "en": "Delivery & topics",
