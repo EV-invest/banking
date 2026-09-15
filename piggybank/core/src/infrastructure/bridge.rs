@@ -195,26 +195,6 @@ impl BridgeConsumer {
 		if response.events.is_empty() {
 			return Ok(false);
 		}
-		// THE CURSOR MUST MOVE, OR THIS DRAIN ENDS. `drain` loops while a full batch comes
-		// back, and the only thing that makes the next pull ask for something different is
-		// `next_position` advancing. The server's contract (`position > after_position`)
-		// says it always does, so this cannot happen today — and that is exactly why it is
-		// worth a line: were the contract to change, or a position to be handed back
-		// unchanged for any other reason, the loop below would re-pull and re-apply the same
-		// batch as fast as the network allows, hammering the identity plane with a hot loop
-		// that reads, from the outside, as an unexplained load spike (#181). Returning here
-		// degrades that into one WARN per poll instead. Nothing is consumed and nothing is
-		// lost: the cursor stays put, so the batch is re-delivered to a build that can move
-		// past it.
-		if response.next_position <= after {
-			warn!(
-				cursor = after,
-				next_position = response.next_position,
-				events = response.events.len(),
-				"bridge: server returned events but did not advance the cursor — ending this drain instead of re-pulling the same batch"
-			);
-			return Ok(false);
-		}
 		for event in &response.events {
 			if self.apply(event, Freshness::Live).await? == Outcome::Unreadable {
 				// HEAD-OF-LINE STOP. RETURNING HERE IS LOAD-BEARING TWICE OVER.
@@ -228,6 +208,33 @@ impl BridgeConsumer {
 				// unchanged cursor re-delivers it.
 				return Ok(false);
 			}
+		}
+		// THE CURSOR MUST MOVE, OR THIS DRAIN ENDS — BUT THE BATCH IS APPLIED FIRST.
+		//
+		// `drain` loops while a full batch comes back, and the only thing that makes the next
+		// pull ask for something different is `next_position` advancing. The server's contract
+		// (`position > after_position`) says it always does, so this cannot happen today — and
+		// that is exactly why it is worth a line: were the contract to change, or a position to
+		// be handed back unchanged for any other reason, the loop above would re-pull and
+		// re-apply the same batch as fast as the network allows, hammering the identity plane
+		// with a hot loop that reads, from the outside, as an unexplained load spike (#181).
+		// Ending the drain here degrades that into one batch and one WARN per poll.
+		//
+		// STOPPING BEFORE THE APPLY WOULD BE WORSE THAN THE HOT LOOP IT REPLACES. The batch is
+		// not lost either way — the cursor stays put, so concierge keeps re-delivering it until
+		// a build that can move past it pulls — but a SUSPENDED, a tier downgrade or a revoke
+		// floor that is never applied leaves the money gate running on rules the identity plane
+		// has already withdrawn, for as long as it takes to ship that build. Applying costs
+		// nothing: it is the same idempotent re-apply a redelivery performs, under the per-user
+		// sequence guard. So the events land and only the cursor stands still.
+		if response.next_position <= after {
+			warn!(
+				cursor = after,
+				next_position = response.next_position,
+				events = response.events.len(),
+				"bridge: server returned events but did not advance the cursor — applied this batch and ending the drain instead of re-pulling it"
+			);
+			return Ok(false);
 		}
 		self.advance_cursor(after, response.next_position).await?;
 		// A short batch (server gave back fewer than it caps) means we caught up.

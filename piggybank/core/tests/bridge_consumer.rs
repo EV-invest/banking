@@ -790,11 +790,17 @@ fn span_of_first(log: &PullLog, n: usize) -> Option<Duration> {
 const CONSUMER_GRACE: Duration = Duration::from_secs(30);
 const OBSERVE_CAP: Duration = Duration::from_secs(20);
 
-/// A server that breaks the pull contract: it hands back a FULL batch every time — which
-/// is what makes `drain` loop for more — while leaving `next_position` at the cursor the
-/// consumer sent, so the next pull asks the same question and gets the same answer.
+/// A server that breaks the pull contract: it hands back events while leaving
+/// `next_position` at the cursor the consumer sent, so the next pull asks the same question
+/// and gets the same answer.
+///
+/// `full` picks the batch size, because the two tests here want opposite things from it. A
+/// FULL batch is what makes `drain` loop for more, and therefore what a hot loop is made of;
+/// a single event lets `drain` stop on its own, so what is left to observe is whether the
+/// batch was applied on the way out.
 struct StuckUserEvents {
 	event: UserLifecycleEvent,
+	full: bool,
 	pulls: PullLog,
 }
 
@@ -803,10 +809,11 @@ impl UserEvents for StuckUserEvents {
 	async fn pull_user_lifecycle(&self, request: Request<PullUserLifecycleRequest>) -> Result<Response<PullUserLifecycleResponse>, Status> {
 		record(&self.pulls);
 		let req = request.into_inner();
+		// `limit` is what the consumer asked for, so a batch of that size is a full one
+		// whatever `PULL_LIMIT` happens to be — the test does not need to know it.
+		let count = if self.full { req.limit.max(1) as usize } else { 1 };
 		Ok(Response::new(PullUserLifecycleResponse {
-			// `limit` is what the consumer asked for, so a batch of that size is a full one
-			// whatever `PULL_LIMIT` happens to be — the test does not need to know it.
-			events: vec![self.event.clone(); req.limit.max(1) as usize],
+			events: vec![self.event.clone(); count],
 			next_position: req.after_position,
 		}))
 	}
@@ -931,6 +938,7 @@ async fn a_pull_that_cannot_move_the_cursor_ends_the_drain_instead_of_spinning()
 		&pool,
 		StuckUserEvents {
 			event: event(&subject, Kind::SessionsRevoked, 1),
+			full: true,
 			pulls: pulls.clone(),
 		},
 		POLL,
@@ -978,5 +986,64 @@ async fn a_failing_cycle_backs_off_instead_of_retrying_at_the_poll_interval() {
 	assert!(
 		span >= Duration::from_millis(1500),
 		"a failing cycle must back off, not retry at the poll interval — {WANT} attempts inside {span:?} at a {POLL:?} poll"
+	);
+}
+
+/// A BATCH THE CURSOR CANNOT MOVE PAST IS STILL APPLIED.
+///
+/// Ending the drain protects the identity plane from a hot loop. It must not also stop the
+/// freeze from reaching the money gate: the cursor standing still means concierge keeps the
+/// batch and re-delivers it — to this build too, every poll — and applying it is the same
+/// idempotent no-op a redelivery already is, so holding it back buys nothing and leaves a
+/// suspension, a tier downgrade or a revoke floor unmirrored until a build that can move
+/// past the batch ships. That is strictly worse than the hot loop this replaced, which at
+/// least mirrored (#181).
+///
+/// One event per pull, so `drain` stops on the short batch whatever the cursor does: what
+/// is under test here is the apply, not the looping.
+#[tokio::test]
+async fn a_batch_the_cursor_cannot_move_past_is_still_applied() {
+	let Some(pool) = pool().await else {
+		eprintln!("DATABASE_URL unset — skipping real-DB test");
+		return;
+	};
+	let subject = unique_subject();
+	PgUsers::new(pool.clone())
+		.provision(
+			domain::auth::AuthSubject::parse(&subject).unwrap(),
+			domain::users::Email::parse("stuck-apply@example.com").unwrap(),
+			true,
+		)
+		.await
+		.expect("provision the subject the stuck batch suspends");
+
+	const POLL: Duration = Duration::from_millis(50);
+	// Two pulls: the consumer is sequential, so the second one having been recorded means
+	// the first one's batch was applied to completion, not merely received.
+	const WANT: usize = 2;
+	let pulls = pull_log();
+	let finished = drive_misbehaving(
+		&pool,
+		StuckUserEvents {
+			event: event(&subject, Kind::Suspended, 1),
+			full: false,
+			pulls: pulls.clone(),
+		},
+		POLL,
+		pulls.clone(),
+		WANT,
+	)
+	.await;
+
+	assert!(finished, "the consumer winds down on cancellation");
+	let user_id = user_id_for(&pool, &subject).await.expect("the subject keeps its banking row");
+	assert!(
+		blocked(&pool, user_id).await,
+		"a SUSPENDED the cursor cannot move past must still freeze the user — refusing to apply it leaves the money gate open on rules concierge has already withdrawn"
+	);
+	assert_eq!(
+		cursor_position(&pool).await,
+		0,
+		"and nothing is consumed: the batch stays in concierge's outbox for a build that can move past it"
 	);
 }
