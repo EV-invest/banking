@@ -245,17 +245,32 @@ impl ConsiliumMailer {
 		// The recipient is addressed in the plane that OWNS identities, so the money
 		// plane cannot redirect a governance mail. Without the mirrored id there is no
 		// safe address to send to, and guessing is not an option.
+		//
+		// What a missing mirror costs the row depends on the kind. A holder's NOTICE is queued
+		// whether or not the holder was mirrored at the time (#325): units can be issued
+		// before the holder ever opens the cabinet, and the mirror lands with their first
+		// login — hours or days later. Nothing about the message was refused, so the row is
+		// DEFERRED like a relay outage, charged no attempt, and the mirror landing anywhere
+		// inside the notice period is enough for the next pass to reach them; past the
+		// deferral ceiling (equal to the notice period) `defer` retires it with this same
+		// reason, which is the row the operator's acknowledgement is then offered over. An
+		// approval or a consent is charged as before: its token is bound to a subject the
+		// caller had to resolve at open, so an empty mirror there is a fault worth an alert
+		// within minutes, not a login still to come.
 		let Some(recipient) = concierge_user_id else {
-			self.fail(&mut tx, id, "recipient has no mirrored concierge user id", Some(&mail)).await?;
+			const NO_MIRROR: &str = "recipient has no mirrored concierge user id";
+			if matches!(mail, GovernanceMail::FeePolicyNotice(_)) {
+				self.defer(&mut tx, id, NO_MIRROR, &mail).await?;
+			} else {
+				self.fail(&mut tx, id, NO_MIRROR, Some(&mail)).await?;
+			}
 			tx.commit().await.map_err(repo_err)?;
 			return Ok(false);
 		};
 		// A holder's notice names its addressee in the identity plane as a consent does,
-		// and concierge refuses the two disagreeing — but unlike a consent it is queued
-		// whether or not the holder was mirrored at the time (#325), so the name is taken
-		// from the mirror of THIS moment, the same row the address above came from. A
-		// holder mirrored after the change was scheduled is then reached on the next pass
-		// instead of the row being charged an attempt per pass for an empty name.
+		// and concierge refuses the two disagreeing — so the name is taken from the mirror
+		// of THIS moment, the same row the address above came from, never from whatever the
+		// queue row was written with before the mirror existed.
 		if let GovernanceMail::FeePolicyNotice(notice) = &mut mail {
 			notice.subject_user_id = recipient.to_string();
 		}
@@ -304,7 +319,8 @@ impl ConsiliumMailer {
 	}
 
 	/// Put a row back for later WITHOUT charging an attempt: the relay is throttling this
-	/// recipient or is down, and neither says anything about the message. The wait doubles
+	/// recipient or is down, or a holder's notice has no mirror to be addressed to yet, and
+	/// none of that says anything about the message. The wait doubles
 	/// from the sweep interval up to [`MAX_DEFERRAL_BACKOFF`]; past [`DEFERRAL_CEILING`] from
 	/// creation the row is given up on the way a failed one is, so a permanently throttled
 	/// recipient still becomes an alert rather than a silent stall.
@@ -319,7 +335,7 @@ impl ConsiliumMailer {
 			self.retire(conn, id, reason, Some(mail)).await?;
 			error!(
 				mail_id = id,
-				"consilium mailer: giving up on a governance mail deferred for over {DEFERRAL_CEILING:?} — an owner will not be told: {reason}"
+				"consilium mailer: giving up on a governance mail deferred for over {DEFERRAL_CEILING:?} — its recipient will not be told: {reason}"
 			);
 			return Ok(());
 		}
@@ -336,12 +352,7 @@ impl ConsiliumMailer {
 			.execute(&mut *conn)
 			.await
 			.map_err(repo_err)?;
-		warn!(
-			mail_id = id,
-			deferrals,
-			?backoff,
-			"consilium mailer: delivery deferred by the relay (no attempt charged): {reason}"
-		);
+		warn!(mail_id = id, deferrals, ?backoff, "consilium mailer: delivery deferred (no attempt charged): {reason}");
 		Ok(())
 	}
 

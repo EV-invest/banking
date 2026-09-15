@@ -395,16 +395,6 @@ async fn let_the_backoff_run(h: &Harness, change: &FeePolicyChange) {
 		.unwrap();
 }
 
-/// One notice row as the mailer left it: `(attempts, last_error, sent, subject_user_id)`.
-async fn notice_row(h: &Harness, change: &FeePolicyChange, user: UserId) -> (i32, Option<String>, bool, String) {
-	sqlx::query_as("SELECT attempts, last_error, sent_at IS NOT NULL, payload ->> 'subject_user_id' FROM consilium_mail WHERE fee_policy_change_id = $1 AND user_id = $2")
-		.bind(change.id.raw())
-		.bind(user.raw())
-		.fetch_one(&h.pool)
-		.await
-		.unwrap()
-}
-
 /// Clear the global roster and the cooling-off clock, then seat `n` fresh owners.
 async fn owners(h: &Harness, n: usize) -> Vec<UserId> {
 	sqlx::query("UPDATE users SET role = 'investor' WHERE role = 'owner'").execute(&h.pool).await.unwrap();
@@ -639,10 +629,24 @@ async fn a_change_does_not_bind_while_a_holder_notice_has_been_given_up_on() {
 	assert_eq!(change_of(&h, &change).await.state, FeePolicyChangeState::Active);
 }
 
+/// One notice row as the mailer left it: `(attempts, deferrals, last_error, sent, subject_user_id)`.
+async fn notice_row(h: &Harness, change: &FeePolicyChange, user: UserId) -> (i32, i32, Option<String>, bool, String) {
+	sqlx::query_as("SELECT attempts, deferrals, last_error, sent_at IS NOT NULL, payload ->> 'subject_user_id' FROM consilium_mail WHERE fee_policy_change_id = $1 AND user_id = $2")
+		.bind(change.id.raw())
+		.bind(user.raw())
+		.fetch_one(&h.pool)
+		.await
+		.unwrap()
+}
+
+const NO_MIRROR: &str = "recipient has no mirrored concierge user id";
+
 /// A holder the identity plane had not mirrored when the change was scheduled (#325): the
 /// notice is queued with no addressee, and the worker names one from the mirror at SEND
-/// time — so the mirror landing after the scheduling is enough for the notice to go out,
-/// addressed to it, and the row is never charged for an empty name it could have filled.
+/// time. Until the mirror lands the row is DEFERRED, not charged — units can be issued days
+/// before the holder's first cabinet login, and a row charged per pass would be given up on
+/// five minutes after the scheduling — so a mirror landing after far more passes than the
+/// attempt ceiling is still enough for the notice to go out, addressed to it.
 #[tokio::test]
 async fn a_holder_mirrored_after_the_scheduling_is_still_told() {
 	let _lock = exclusive().await;
@@ -661,19 +665,24 @@ async fn a_holder_mirrored_after_the_scheduling_is_still_told() {
 	let (_, mail) = notices(&h, &change).await.pop().expect("queued for the unmirrored holder all the same");
 	assert_eq!(mail["subject_user_id"], "", "no identity-plane id to name yet");
 
-	// Still unmirrored when the worker gets to it: charged, and the reason says what is
-	// missing — not that the relay refused a name.
+	// Still unmirrored, pass after pass — more of them than the attempt ceiling allows a
+	// refused mail: deferred every time, nothing charged, the reason saying what is missing.
 	let relay = Arc::new(SwitchedRelay::default());
 	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
-	assert_eq!(mailer.drain().await.unwrap(), 0);
-	let (attempts, last_error, sent, _) = notice_row(&h, &change, late).await;
-	assert_eq!((attempts, sent), (1, false));
-	assert_eq!(last_error.as_deref(), Some("recipient has no mirrored concierge user id"));
+	for pass in 1..=12 {
+		let_the_backoff_run(&h, &change).await;
+		assert_eq!(mailer.drain().await.unwrap(), 0);
+		let (attempts, deferrals, last_error, sent, _) = notice_row(&h, &change, late).await;
+		assert_eq!((attempts, deferrals, sent), (0, pass, false), "pass {pass}: deferred, not charged");
+		assert_eq!(last_error.as_deref(), Some(NO_MIRROR));
+	}
 	assert!(relay.seen.lock().unwrap().is_empty(), "nothing was handed over without an address");
+	assert_eq!(change_of(&h, &change).await.notices_given_up, 0, "still being tried, so nothing to acknowledge yet");
 
 	// The bridge mirrors the holder (a first cabinet login): the next pass reaches them,
 	// addressed to that id in the identity plane, and the row says so afterwards.
 	let concierge_id = mirror(&h, late).await;
+	let_the_backoff_run(&h, &change).await;
 	assert_eq!(mailer.drain().await.unwrap(), 1);
 	let seen = relay.seen.lock().unwrap().clone();
 	let [(recipient, GovernanceMail::FeePolicyNotice(notice))] = seen.as_slice() else {
@@ -686,13 +695,66 @@ async fn a_holder_mirrored_after_the_scheduling_is_still_told() {
 		"named as it is addressed — concierge refuses the two disagreeing"
 	);
 	assert_eq!(notice.proposed.management_bps, 200);
-	let (attempts, _, sent, subject) = notice_row(&h, &change, late).await;
-	assert_eq!((attempts, sent), (1, true), "delivered on the pass after the mirror landed");
+	let (attempts, _, _, sent, subject) = notice_row(&h, &change, late).await;
+	assert_eq!((attempts, sent), (0, true), "delivered on the pass after the mirror landed, never charged");
 	assert_eq!(subject, concierge_id.to_string(), "the audit row names who it went to");
 
 	// Told, so the dearer terms bind once the period has run — with nobody's acknowledgement.
 	assert_eq!(change_of(&h, &change).await.undelivered_notices, 0);
 	let_the_notice_run(&h, &change).await;
+	assert!(h.changes.promote(change.id, now()).await.unwrap());
+	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
+}
+
+/// A holder still unmirrored a whole notice period after the scheduling: the deferral runs
+/// out at the ceiling and the notice is given up on with the same reason as before — the row
+/// the operator's acknowledgement (0042) is offered over, so a holder the identity plane
+/// never mirrors still has the documented way through, and not one minute earlier than the
+/// notice period they were owed. An approval mail to an unmirrored owner is charged as
+/// before: five minutes, not a day, before somebody is told.
+#[tokio::test]
+async fn an_unmirrored_holder_is_given_up_on_at_the_ceiling_and_can_then_be_acknowledged() {
+	let _lock = exclusive().await;
+	let Some(h) = harness().await else { return };
+	let service = unique_service();
+	open_fund(&h, &service).await;
+	let cheaper = policy(100, 2_000, 0, ManagementBasis::InvestedCapital, CrystallizationPeriod::Annual);
+	install(&h, &service, cheaper).await;
+	let never = unmirrored_investor(&h).await;
+	fund_user(&h, never, "1000").await;
+	subscribe(&h, never, &service, "1000").await;
+	quiet_queue(&h).await;
+	let requester = UserId::new();
+	let change = schedule(&h, requester, &service, FeePolicy::HOUSE, 0, "").await.unwrap();
+
+	let relay = Arc::new(SwitchedRelay::default());
+	let mailer = ConsiliumMailer::new(h.pool.clone(), relay.clone());
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	assert_eq!(notice_row(&h, &change, never).await.0, 0, "deferred, not charged");
+	// The notice period runs out with the holder still unmirrored.
+	sqlx::query("UPDATE consilium_mail SET created_at = now() - interval '25 hours' WHERE fee_policy_change_id = $1")
+		.bind(change.id.raw())
+		.execute(&h.pool)
+		.await
+		.unwrap();
+	let_the_backoff_run(&h, &change).await;
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+	let (attempts, _, last_error, sent, _) = notice_row(&h, &change, never).await;
+	assert!(attempts >= 10 && !sent, "given up on: attempts={attempts}");
+	assert_eq!(last_error.as_deref(), Some(NO_MIRROR));
+	assert!(relay.seen.lock().unwrap().is_empty());
+	// And never asked about again — a mirror landing now would be too late for the mailer.
+	mirror(&h, never).await;
+	let_the_backoff_run(&h, &change).await;
+	assert_eq!(mailer.drain().await.unwrap(), 0);
+
+	// The dearer terms wait on the operator, exactly as a refused notice did.
+	let_the_notice_run(&h, &change).await;
+	assert_eq!(change_of(&h, &change).await.notices_given_up, 1);
+	let refused = h.changes.promote(change.id, now()).await.unwrap_err();
+	assert!(refused.to_string().contains("1 of them given up on"), "{refused}");
+	let acknowledged = acknowledge(&h, &service, &change, requester).await.unwrap();
+	assert_eq!(acknowledged.notices_waiver.map(|waiver| waiver.users), Some(vec![never]));
 	assert!(h.changes.promote(change.id, now()).await.unwrap());
 	assert_eq!(h.policies.find(&service).await.unwrap(), Some(FeePolicy::HOUSE));
 }

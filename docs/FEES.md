@@ -222,10 +222,17 @@ change is scheduled.
 A notice is queued for every holder with an account row, whether or not the identity plane
 has mirrored them yet. Its addressee (`subject_user_id`, which concierge checks against the
 recipient) is named by the mailer from `users.concierge_user_id` **at the moment it sends**,
-not from whatever the queue row was written with — so a holder whose mirror lands after the
-scheduling (a first cabinet login) is reached on the next pass, rather than the row being
-refused pass after pass for an empty name until the mailer gave up on it (#325). A holder
-still unmirrored when the mailer gets to the row is retired within minutes, as before.
+not from whatever the queue row was written with (#325). Until the mirror lands, the notice
+is **deferred**, not charged — units can be issued days before the holder's first cabinet
+login, and a row charged an attempt per pass would be given up on five minutes after the
+scheduling — so a mirror landing anywhere inside the notice period is reached on the next
+pass (within the hour: the deferral backoff caps there). A holder still unmirrored a full
+`DEFERRAL_CEILING` (24 hours, the notice period) after the scheduling is given up on with
+the reason "recipient has no mirrored concierge user id", the row the acknowledgement below
+is offered over. Only the notice is treated this way: an approval or a consent to an
+unmirrored recipient is still charged per pass and retired within minutes — its token is
+bound to a subject the caller had to resolve when it opened, so an empty mirror there is a
+fault worth an alert, not a login still to come.
 
 The owners, for their part, are told how the consilium ended: one outcome mail
 (`GovernanceMail::PayoutOutcome`) to the initiator and to every seat on each closed state —
@@ -328,9 +335,9 @@ been told. Only the holders of the moment count — a recipient who has since re
 unit holds nothing back.
 
 A loosening binds regardless, with a `warn!` naming the undelivered count: nobody is worse
-off, and a holder the identity plane cannot reach (an unverified mailbox, no mirrored id —
-their notice is retired within minutes of every scheduling) would otherwise pin a product's
-terms forever, the lowering of a legacy rate above today's ceiling included. A tightening
+off, and a holder the identity plane cannot reach (an unverified mailbox; a mirror that
+never lands, on which every notice to them is given up on a day after its scheduling) would
+otherwise pin a product's terms forever, the lowering of a legacy rate above today's ceiling included. A tightening
 over such a holder has one way through: the relay coming back promotes it by itself on the
 next tick; for a holder who stays unreachable, an operator takes responsibility explicitly.
 
