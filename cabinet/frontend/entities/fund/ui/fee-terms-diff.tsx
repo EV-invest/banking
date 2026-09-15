@@ -28,7 +28,7 @@ export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefin
     <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+          <tr className="border-b border-border text-left text-xs text-ink-soft">
             <th className="px-3 py-2 font-medium" />
             <th className="px-3 py-2 font-medium">{t("consilium.feePolicy.now")}</th>
             <th className="px-3 py-2 font-medium">{t("consilium.feePolicy.proposed")}</th>
@@ -39,9 +39,9 @@ export function FeeTermsDiff({ from, to }: { from: FeeTermsLike | null | undefin
             const moved = row.now !== row.next;
             return (
               <tr key={row.key} className="border-b border-border/50 last:border-0">
-                <td className="px-3 py-2 text-muted-foreground">{t(row.key)}</td>
-                <td className="px-3 py-2 tabular-nums text-muted-foreground">{row.now ?? t("consilium.feePolicy.nothingCharged")}</td>
-                <td className={cn("px-3 py-2 tabular-nums", moved ? "font-semibold text-main-accent-t3" : "text-foreground")}>{row.next}</td>
+                <td className="px-3 py-2 text-ink-soft">{t(row.key)}</td>
+                <td className="px-3 py-2 tabular-nums text-ink-soft">{row.now ?? t("consilium.feePolicy.nothingCharged")}</td>
+                <td className={cn("px-3 py-2 tabular-nums", moved ? "font-semibold text-accent-warn" : "text-ink")}>{row.next}</td>
               </tr>
             );
           })}

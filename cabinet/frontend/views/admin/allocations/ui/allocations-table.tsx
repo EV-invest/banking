@@ -58,7 +58,7 @@ export function AllocationsTable({
           }
         >
           {!rows ? null : rows.length === 0 ? (
-            <p className="p-8 text-center text-sm text-muted-foreground">{t("admin.alloc.empty")}</p>
+            <p className="p-8 text-center text-sm text-ink-soft">{t("admin.alloc.empty")}</p>
           ) : compact ? (
             <div className="divide-y divide-border">
               {rows.map((row) => (
@@ -74,7 +74,7 @@ export function AllocationsTable({
                 <thead>
                   {/* i18n-max: 14 per header — auto-layout table; a long header widens its
                       column and squeezes the Product cell. */}
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
                     <th className="px-5 py-3 font-medium">{t("admin.alloc.col.product")}</th>
                     <th className="px-5 py-3 font-medium">{t("admin.alloc.col.serviceId")}</th>
                     <th className="px-5 py-3 font-medium">{t("admin.col.state")}</th>

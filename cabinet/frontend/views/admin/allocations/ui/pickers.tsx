@@ -26,7 +26,7 @@ export function IconSelect({ value, onChange, className }: { value: AllocationIc
         if (picked) onChange(picked);
       }}
     >
-      <SelectTrigger className={cn("w-full border-border bg-main-surface", className)}>
+      <SelectTrigger className={cn("w-full border-border bg-secondary", className)}>
         <span className="flex min-w-0 items-center gap-1.5">
           <ProductIcon icon={value} className="size-3.5 shrink-0" />
           <span className="truncate">{t(`admin.alloc.icon.${value}`)}</span>
@@ -57,7 +57,7 @@ export function AccessSelect({ value, onChange, className }: { value: Allocation
         if (picked) onChange(picked);
       }}
     >
-      <SelectTrigger className={cn("w-full border-border bg-main-surface", className)}>
+      <SelectTrigger className={cn("w-full border-border bg-secondary", className)}>
         <span className="truncate">{accessLabel(value, t)}</span>
       </SelectTrigger>
       <SelectContent>

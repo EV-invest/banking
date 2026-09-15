@@ -82,7 +82,7 @@ export function Choice<T extends string>({
 export function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
+      <dt className="text-ink-soft">{label}</dt>
       <dd className="font-medium tabular-nums">{value}</dd>
     </div>
   );

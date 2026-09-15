@@ -37,15 +37,15 @@ export function FundPicker({
             pressed={active}
             // Pressing the selected fund again keeps it selected: the screen always shows one.
             onPressedChange={(pressed) => pressed && onSelect(fund.service)}
-            className={cn("h-auto flex-col items-start gap-0 px-3 py-2 text-left text-sm", active && "border-main-accent-t1 bg-main-accent-t1/10")}
+            className={cn("h-auto flex-col items-start gap-0 px-3 py-2 text-left text-sm", active && "border-primary bg-primary/10")}
           >
             <span className="block font-medium">{fund.title}</span>
-            <span className="block text-xs tabular-nums text-muted-foreground">
+            <span className="block text-xs tabular-nums text-ink-soft">
               {policy?.configured ? `${pct(policy.management_bps)} / ${pct(policy.performance_bps)}` : t("admin.fees.noFee")}
             </span>
             {/* Said on the chip, not only on the card: a change on the way is what an
                 operator scanning the row most needs to know before they pick a fund. */}
-            {pending && <span className="block text-xs text-main-accent-t1">{t("admin.fees.pendingChip")}</span>}
+            {pending && <span className="block text-xs text-accent-debug">{t("admin.fees.pendingChip")}</span>}
           </Toggle>
         );
       })}

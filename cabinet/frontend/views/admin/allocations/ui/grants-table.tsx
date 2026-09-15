@@ -31,7 +31,7 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
     <table className="w-full text-sm">
       <thead>
         {/* i18n-max: 10 per header — the grants table sits in a 340px panel. */}
-        <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+        <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-soft">
           <th className="py-2 font-medium">{t("admin.col.user")}</th>
           <th className="py-2 font-medium">{t("admin.alloc.grants.col.level")}</th>
           <th className="py-2 font-medium">{t("admin.alloc.grants.col.grantedBy")}</th>
@@ -49,7 +49,7 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
                   <div className="truncate text-sm" title={g.email}>
                     {g.email}
                   </div>
-                  <div className="truncate font-mono-tech text-xs text-muted-foreground">{g.user_id}</div>
+                  <div className="truncate font-mono-tech text-xs text-ink-soft">{g.user_id}</div>
                 </>
               ) : (
                 <div className="truncate font-mono-tech text-xs">{g.user_id}</div>
@@ -58,10 +58,10 @@ export function GrantsTable({ grants, busyUserId, onRevoke }: { grants: Allocati
             <td className="py-2 pr-2">
               <span className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", accessTone(g.level))}>{accessLabel(g.level, t)}</span>
             </td>
-            <td className="py-2 pr-2 font-mono-tech text-xs text-muted-foreground">{g.granted_by}</td>
+            <td className="py-2 pr-2 font-mono-tech text-xs text-ink-soft">{g.granted_by}</td>
             <td className="py-2 text-right">
               <div className="flex items-center justify-end gap-2">
-                <span className="text-xs text-muted-foreground">{ago(g.granted_at, t)}</span>
+                <span className="text-xs text-ink-soft">{ago(g.granted_at, t)}</span>
                 <Button type="button" variant="outline" size="sm" disabled={busyUserId === g.user_id} onClick={() => onRevoke(g.user_id)}>
                   {busyUserId === g.user_id ? <Loader2 className="size-3.5 animate-spin" /> : t("admin.alloc.grants.revoke")}
                 </Button>

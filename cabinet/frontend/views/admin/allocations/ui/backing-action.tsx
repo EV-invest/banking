@@ -48,13 +48,13 @@ export function BackingAction({ allocation }: { allocation: Allocation }) {
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.backing.title")}</p>
-          <p className="text-xs text-muted-foreground">{t(backingHintKey(backing))}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.backing.title")}</p>
+          <p className="text-xs text-ink-soft">{t(backingHintKey(backing))}</p>
         </div>
         <BackingBadge backing={backing} verbose className="shrink-0" />
       </div>
       {confirming ? (
-        <div className="space-y-2 rounded-lg border border-border bg-main-surface p-3">
+        <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
           <p className="text-xs">{t(next === "cash" ? "admin.alloc.backing.confirmCash" : "admin.alloc.backing.confirmInKind", { service: allocation.service })}</p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" size="sm" className="flex-1" disabled={busy} onClick={() => setConfirming(false)}>
@@ -73,7 +73,7 @@ export function BackingAction({ allocation }: { allocation: Allocation }) {
         </Button>
       )}
       {error && (
-        <p className="flex items-center gap-2 text-xs text-destructive">
+        <p className="flex items-center gap-2 text-xs text-accent-error">
           <TriangleAlert className="size-3.5" /> {error}
         </p>
       )}

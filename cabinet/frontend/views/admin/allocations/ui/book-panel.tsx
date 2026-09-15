@@ -65,20 +65,20 @@ export function BookPanel({ allocation, onClose, className }: { allocation: Allo
         <PanelHeader allocation={allocation} onClose={onClose} />
 
         {error && (
-          <p className="flex items-center gap-2 text-xs text-destructive">
+          <p className="flex items-center gap-2 text-xs text-accent-error">
             <TriangleAlert className="size-3.5" /> {error}
           </p>
         )}
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("admin.alloc.book.title")}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{t("admin.alloc.book.title")}</p>
             <UnbackedAckBadge acknowledged={read.data?.allow_unbacked_trading === true} />
           </div>
           <Settled loading={!read.data && !read.error} skeleton={<Skeleton className="h-40 w-full" />}>
             {(read.data || read.error) && <BookForm key={read.data?.updated_at ?? "none"} allocation={allocation} policy={read.data ?? null} busy={busy} saved={saved} onSubmit={save} />}
           </Settled>
-          <p className="text-xs text-muted-foreground">{t("admin.alloc.book.note")}</p>
+          <p className="text-xs text-ink-soft">{t("admin.alloc.book.note")}</p>
         </div>
       </CardContent>
     </Card>

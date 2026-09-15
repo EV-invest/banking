@@ -29,14 +29,14 @@ export function FeePolicyTermsBlock({ terms, payloadHash }: { terms: ConsiliumFe
     <>
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{t("consilium.feePolicy.fund")}</FieldCaption>
-        <p className="text-2xl font-semibold leading-tight text-foreground">{terms.allocation_name || terms.service}</p>
+        <p className="text-2xl font-semibold leading-tight text-ink">{terms.allocation_name || terms.service}</p>
       </div>
 
       <FeeTermsDiff from={terms.from} to={terms.to} />
 
       <div className="flex flex-col gap-1.5">
         <FieldCaption>{t("consilium.feePolicy.reason")}</FieldCaption>
-        <blockquote className="whitespace-pre-line border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed text-foreground">{terms.reason?.trim() || "—"}</blockquote>
+        <blockquote className="whitespace-pre-line border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed text-ink">{terms.reason?.trim() || "—"}</blockquote>
       </div>
 
       <div className="flex flex-col gap-2.5">
@@ -48,7 +48,7 @@ export function FeePolicyTermsBlock({ terms, payloadHash }: { terms: ConsiliumFe
         <DetailRow label={t("approval.payloadHash")} value={hashPrefix(payloadHash)} mono />
       </div>
 
-      <p className="text-xs text-muted-foreground">{t("approval.feePolicy.payloadHashHint")}</p>
+      <p className="text-xs text-ink-soft">{t("approval.feePolicy.payloadHashHint")}</p>
 
       <Separator />
     </>

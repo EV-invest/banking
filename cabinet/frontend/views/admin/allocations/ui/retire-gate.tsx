@@ -16,7 +16,7 @@ export function RetireGate({ force, onForce }: { force: boolean; onForce: (force
   const id = useId();
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">{t("admin.alloc.retire.closeFirst")}</p>
+      <p className="text-xs text-ink-soft">{t("admin.alloc.retire.closeFirst")}</p>
       <div className="flex items-start gap-2">
         <Checkbox id={id} checked={force} onCheckedChange={onForce} className="mt-0.5" />
         <label htmlFor={id} className="text-xs">
@@ -24,7 +24,7 @@ export function RetireGate({ force, onForce }: { force: boolean; onForce: (force
         </label>
       </div>
       {force && (
-        <p className="flex items-start gap-2 text-xs text-main-accent-t3">
+        <p className="flex items-start gap-2 text-xs text-accent-warn">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.retire.forceWarning")}
         </p>
       )}

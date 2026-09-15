@@ -31,7 +31,7 @@ export function OpenedReceipt({ payment, onDismiss }: { payment: Payment; onDism
             ? t("admin.payments.openedConsentBody", { email: consent.subject_email })
             : t("admin.payments.openedConsiliumBody")}
         </p>
-        <p className="text-xs tabular-nums text-muted-foreground">
+        <p className="text-xs tabular-nums text-ink-soft">
           {t("admin.payments.openedExpires", { at: formatMoment(payment.expires_at, locale), left: expiresIn(payment.expires_at, t) })}
         </p>
         <div className="flex flex-wrap gap-2 text-ink">

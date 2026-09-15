@@ -90,10 +90,10 @@ export function RetireAction({ allocation, holders }: { allocation: Allocation; 
       )}
       {step === "editing" && <RetireForm draft={draft} companyUnits={holders.company_units} onChange={setDraft} onReview={() => setStep("confirming")} onCancel={() => { setStep("closed"); setError(null); }} />}
       {step === "confirming" && draft.holder && (
-        <div className="space-y-2 rounded-lg border border-border bg-main-surface p-3">
+        <div className="space-y-2 rounded-lg border border-border bg-secondary p-3">
           <p className="text-xs tabular-nums">{t("admin.alloc.retire.confirm", { units: formatUnits(draft.units.trim()), holder: holderLabel })}</p>
           {live && (
-            <p className="flex items-start gap-2 text-xs text-main-accent-t3">
+            <p className="flex items-start gap-2 text-xs text-accent-warn">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" /> {t("admin.alloc.retire.forceConfirm")}
             </p>
           )}
@@ -110,7 +110,7 @@ export function RetireAction({ allocation, holders }: { allocation: Allocation; 
       )}
       {last && <IssuanceResult outcome={last} kind="retire" />}
       {error && (
-        <p className="flex items-center gap-2 text-xs text-destructive">
+        <p className="flex items-center gap-2 text-xs text-accent-error">
           <TriangleAlert className="size-3.5" /> {error}
         </p>
       )}

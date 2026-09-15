@@ -32,15 +32,15 @@ export function TickerPane({ product, status }: { product: Product; status: Book
           the product, and the same mark and tint identify which one. */}
       <Link
         href={`/invest/${encodeURIComponent(product.service)}`}
-        className="flex shrink-0 items-center gap-2.5 rounded-md pr-2 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex shrink-0 items-center gap-2.5 rounded-md pr-2 outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <ArrowLeft className="size-4 text-muted-foreground" />
+        <ArrowLeft className="size-4 text-ink-soft" />
         <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg", productTone(product.service))}>
           <ProductIcon icon={product.icon} className="size-4" />
         </span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold">{product.title}</span>
-          <span className="block font-mono-tech text-xs text-muted-foreground">{product.service}</span>
+          <span className="block font-mono-tech text-xs text-ink-soft">{product.service}</span>
         </span>
       </Link>
       <TickerStat label={t("trade.ticker.last")} value={price(book?.last_price)} className={book?.last_side === "sell" ? "text-accent-error" : book?.last_side === "buy" ? "text-positive" : undefined} />
@@ -61,8 +61,8 @@ function StreamChip({ status }: { status: BookStreamStatus }) {
   if (status === "idle") return null;
   const live = status === "live";
   return (
-    <Badge variant="outline" className="ml-auto shrink-0 gap-1.5 rounded-full font-medium text-muted-foreground">
-      <span className={cn("size-1.5 rounded-full", live ? "bg-positive" : status === "paused" ? "bg-muted-foreground" : "animate-pulse bg-accent-warn")} />
+    <Badge variant="outline" className="ml-auto shrink-0 gap-1.5 rounded-full font-medium text-ink-soft">
+      <span className={cn("size-1.5 rounded-full", live ? "bg-positive" : status === "paused" ? "bg-ink-soft" : "animate-pulse bg-accent-warn")} />
       {t(`trade.stream.${status}`)}
     </Badge>
   );

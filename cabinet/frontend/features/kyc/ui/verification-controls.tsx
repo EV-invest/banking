@@ -60,7 +60,7 @@ function Outcome({ state, className }: { state: StartState; className?: string }
         {t("profile.kyc.unavailable")}{" "}
         <a
           href={`mailto:${contact}`}
-          className="font-medium text-main-accent-t1 underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="font-medium text-accent-debug underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t("profile.kyc.contact", { contact })}
         </a>
@@ -76,7 +76,7 @@ function Outcome({ state, className }: { state: StartState; className?: string }
 
 function Note({ tone, className, children }: { tone?: "destructive"; className?: string; children: ReactNode }) {
   return (
-    <p className={cn("text-xs leading-snug", className, tone === "destructive" ? "text-destructive" : "text-muted-foreground")}>
+    <p className={cn("text-xs leading-snug", className, tone === "destructive" ? "text-accent-error" : "text-ink-soft")}>
       {children}
     </p>
   );

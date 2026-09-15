@@ -44,10 +44,10 @@ export function TermsFields({
       <Showcase bps={bps} />
 
       <Choice label={t("admin.fees.chargedOn")} value={draft.basis} onChange={(v) => onChange("basis", v)} options={BASES} disabled={disabled} />
-      <p className="text-xs text-muted-foreground">{t("admin.fees.basisNote")}</p>
+      <p className="text-xs text-ink-soft">{t("admin.fees.basisNote")}</p>
 
       <Choice label={t("admin.fees.lockedIn")} value={draft.crystallization} onChange={(v) => onChange("crystallization", v)} options={PERIODS} disabled={disabled} />
-      <p className="text-xs text-muted-foreground">{t("admin.fees.crystallizationNote")}</p>
+      <p className="text-xs text-ink-soft">{t("admin.fees.crystallizationNote")}</p>
     </>
   );
 }

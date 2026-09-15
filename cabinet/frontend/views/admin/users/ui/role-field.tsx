@@ -46,7 +46,7 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
   return (
     <div className="flex flex-col gap-1.5 py-1">
       <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="flex items-center gap-1.5 text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-ink-soft">
           {t("admin.users.role")}
           <TipAnchor anchor="admin.users.access.role" />
         </span>
@@ -56,7 +56,7 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
             it is one press away. The current role renders on the trigger even when it is not
             among the items, the same way `KycField` shows a tier it cannot re-send. */}
         <Select value={role} onValueChange={(next) => void run("role", () => setUserRole(userId, next))}>
-          <SelectTrigger size="sm" className="border-border bg-main-surface" disabled={working || seated}>
+          <SelectTrigger size="sm" className="border-border bg-secondary" disabled={working || seated}>
             <span className="flex items-center gap-1.5">
               {working && <Loader2 className="size-3 animate-spin" />}
               {roleLabel(role, t)}
@@ -72,11 +72,11 @@ export function RoleField({ userId, role, busy, run }: RoleFieldProps) {
         </Select>
       </div>
 
-      <p className="text-xs leading-relaxed text-muted-foreground">
+      <p className="text-xs leading-relaxed text-ink-soft">
         {seated ? t("admin.users.ownerSeatHeld") : t("admin.users.adminViaProposal")}{" "}
         {/* The destination is the link text, so the sentence stops outside it — a trailing
             full stop inside the anchor would be underlined and clickable. */}
-        <Link href="/consilium" className="rounded-xs underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+        <Link href="/consilium" className="rounded-xs underline underline-offset-2 outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-ring">
           {t("nav.consilium")}
         </Link>
         .

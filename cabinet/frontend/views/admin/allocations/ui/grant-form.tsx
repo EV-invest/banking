@@ -11,7 +11,7 @@ import { cn } from "@/shared/lib/cn";
 import { GRANT_LEVELS, accessLabel } from "@/views/admin/allocations/lib/access";
 import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-picker";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 /** Raise one investor above the product's default. Only `view` and `invest` are offered —
  *  a grant may never carry `hidden`, which lives on the row's own access picker instead. */
@@ -21,16 +21,16 @@ export function GrantForm({ busy, onSubmit }: { busy: boolean; onSubmit: (userId
   const [level, setLevel] = useState<AllocationGrantLevel>("invest");
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <div className="grid gap-2.5">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">{t("admin.alloc.grants.field.user")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.grants.field.user")}</span>
           <UserPicker value={user} onPick={setUser} />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">{t("admin.alloc.grants.field.level")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.grants.field.level")}</span>
           <Select value={level} onValueChange={(v) => setLevel(GRANT_LEVELS.find((l) => l === v) ?? level)}>
-            <SelectTrigger className="w-full border-border bg-main-surface">
+            <SelectTrigger className="w-full border-border bg-secondary">
               <span className="truncate">{accessLabel(level, t)}</span>
             </SelectTrigger>
             <SelectContent>

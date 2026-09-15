@@ -48,7 +48,7 @@ export function ApprovalPage({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-[calc(100dvh-var(--ev-shell-offset,0px))] justify-center px-4 py-10 lg:py-16">
       <div className="flex w-full max-w-160 flex-col gap-6">
-        <Logo className="h-8 w-auto text-main-mist" />
+        <Logo className="h-8 w-auto text-ink" />
         {children}
       </div>
     </main>
@@ -74,15 +74,15 @@ export function ApprovalTitle({ children }: { children: ReactNode }) {
  * as a generated spec sheet rather than as something written for a reader.
  */
 export function FieldCaption({ children }: { children: ReactNode }) {
-  return <span className="text-xs font-medium text-muted-foreground">{children}</span>;
+  return <span className="text-xs font-medium text-ink-soft">{children}</span>;
 }
 
 /** A labelled figure. The value is `tabular-nums` because most of these are numbers or times. */
 export function DetailRow({ label, value, mono = false, tone }: { label: string; value: ReactNode; mono?: boolean; tone?: string }) {
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-      <span className="shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
-      <span className={cn("min-w-0 text-sm font-medium tabular-nums", mono && "break-all font-mono-tech", tone ?? "text-foreground")}>{value}</span>
+      <span className="shrink-0 text-xs font-medium text-ink-soft">{label}</span>
+      <span className={cn("min-w-0 text-sm font-medium tabular-nums", mono && "break-all font-mono-tech", tone ?? "text-ink")}>{value}</span>
     </div>
   );
 }
@@ -99,7 +99,7 @@ export function FullAddress({ label, address }: { label: string; address: string
   return (
     <div className="flex flex-col gap-1.5">
       <FieldCaption>{label}</FieldCaption>
-      <p className="break-all rounded-lg border border-border bg-main-surface px-3.5 py-3 font-mono-tech text-base leading-relaxed text-foreground">
+      <p className="break-all rounded-lg border border-border bg-secondary px-3.5 py-3 font-mono-tech text-base leading-relaxed text-ink">
         {address}
       </p>
     </div>
@@ -270,7 +270,7 @@ export function ApprovalBurned({ description }: { description?: string }) {
   return (
     <ApprovalOutcome
       icon={<ShieldX />}
-      tone="text-destructive"
+      tone="text-accent-error"
       title={t("approval.burned.title")}
       description={description ?? t("approval.burned.body")}
     />

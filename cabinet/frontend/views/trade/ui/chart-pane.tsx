@@ -42,7 +42,7 @@ export function ChartPane({ service }: { service: string }) {
         <TerminalChart ref={host} className={cn(state.kind !== "ready" && "opacity-40")} />
         {state.kind !== "ready" && (
           // Drawn beside the host, never inside it: the engine owns the host's children.
-          <p className={cn("pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-xs", state.kind === "failed" ? "text-destructive" : "text-muted-foreground")}>
+          <p className={cn("pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-xs", state.kind === "failed" ? "text-accent-error" : "text-ink-soft")}>
             {state.kind === "loading" ? t("ui.loading") : state.kind === "empty" ? t("trade.chart.empty") : errorMessage(state.error, t)}
           </p>
         )}

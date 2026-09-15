@@ -51,7 +51,7 @@ export function ConsentDecisionCard({
         <CardDescription className="text-balance">{t("consent.decisionLead")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="text-xs text-muted-foreground">{t("approval.votingAs", { email })}</p>
+        <p className="text-xs text-ink-soft">{t("approval.votingAs", { email })}</p>
 
         <CodeField value={code} onChange={setCode} disabled={pending !== null} attemptsRemaining={rejectedAttempts} />
 

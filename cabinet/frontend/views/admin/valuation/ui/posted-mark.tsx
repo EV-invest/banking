@@ -16,10 +16,10 @@ import { formatExactUsdt, formatNav } from "@/shared/lib/money";
 export function PostedMark({ mark, onClose }: { mark: FundNav; onClose: () => void }) {
   const t = useT();
   return (
-    <Alert role="status" className="border-main-accent-t2/40 bg-main-accent-t2/10">
-      <CheckCircle2 className="size-4 text-main-accent-t2" />
+    <Alert role="status" className="border-positive/40 bg-positive/10">
+      <CheckCircle2 className="size-4 text-positive" />
       <AlertTitle>{t("admin.valuation.postedTitle")}</AlertTitle>
-      <AlertDescription className="gap-3 text-foreground">
+      <AlertDescription className="gap-3 text-ink">
         <p className="leading-relaxed tabular-nums">
           {t("admin.valuation.postedBody", { nav: formatNav(mark.nav), aum: formatExactUsdt(mark.aum) })}
         </p>

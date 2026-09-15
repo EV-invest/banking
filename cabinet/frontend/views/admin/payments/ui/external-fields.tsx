@@ -65,7 +65,7 @@ export function ExternalFields({
                 htmlFor={id}
                 className={cn(
                   "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
-                  selected ? "border-primary bg-primary/10" : "border-border hover:bg-foreground/5",
+                  selected ? "border-primary bg-primary/10" : "border-border hover:bg-ink/5",
                 )}
               >
                 <RadioGroupItem id={id} value={rail.network} />

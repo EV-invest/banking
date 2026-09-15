@@ -37,11 +37,11 @@ export function NoticeWaiver({ change }: { change: FeePolicyChange }) {
     case "none":
       return null;
     case "queued":
-      return <p className="text-xs text-muted-foreground">{t("admin.fees.notices.queued", { n: summary.queued })}</p>;
+      return <p className="text-xs text-ink-soft">{t("admin.fees.notices.queued", { n: summary.queued })}</p>;
     case "waived": {
       const at = formatMoment(summary.at, locale);
       return (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-soft">
           {summary.by
             ? t("admin.fees.waiver.acknowledged", { by: summary.by, at, n: summary.holders })
             : t("admin.fees.waiver.acknowledgedAnon", { at, n: summary.holders })}
@@ -95,10 +95,10 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
   return (
     // The tint sits on the root, not the icon: the uikit `Alert` paints its icon
     // `currentColor` with a selector that outranks a colour class on the `svg` itself.
-    <Alert role="status" className="border-main-accent-t3/40 bg-main-accent-t3/10 text-main-accent-t3">
+    <Alert role="status" className="border-accent-warn/40 bg-accent-warn/10 text-accent-warn">
       <MailWarning className="size-4" />
-      <AlertTitle className="text-foreground">{t("admin.fees.notices.givenUpTitle", { n: givenUp })}</AlertTitle>
-      <AlertDescription className="gap-3 text-foreground">
+      <AlertTitle className="text-ink">{t("admin.fees.notices.givenUpTitle", { n: givenUp })}</AlertTitle>
+      <AlertDescription className="gap-3 text-ink">
         <p className="text-sm leading-relaxed">
           {t("admin.fees.notices.givenUpBody", { n: givenUp })}
           {queued > 0 && <> {t("admin.fees.notices.moreQueued", { n: queued })}</>}
@@ -110,7 +110,7 @@ function GivenUpNotices({ change, givenUp, queued, waiver }: { change: FeePolicy
               : t("admin.fees.notices.alreadyWaivedAnon", { at: formatMoment(waiver.at, locale), n: waiver.holders })}
           </p>
         )}
-        {problem && <p className="text-xs text-destructive">{problem}</p>}
+        {problem && <p className="text-xs text-accent-error">{problem}</p>}
         {confirming ? (
           <>
             <p className="text-sm leading-relaxed">
@@ -155,7 +155,7 @@ export function WaiverNote({ change }: { change: FeePolicyChange }) {
   const waiver = waiverRecord(change);
   if (!waiver) return null;
   return (
-    <p className="mt-1 text-xs text-muted-foreground">
+    <p className="mt-1 text-xs text-ink-soft">
       {waiver.by ? t("admin.fees.waiver.row", { by: waiver.by, n: waiver.holders }) : t("admin.fees.waiver.rowAnon", { n: waiver.holders })}
     </p>
   );

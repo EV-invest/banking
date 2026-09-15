@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/cn";
 import { EMPTY_ISSUE_DRAFT, afterIssued, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft, type SubmissionKey } from "@/views/admin/allocations/lib/issuance";
 import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-picker";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function IssueForm({ service, busy, onSubmit }: { service: string; busy: boolean; onSubmit: (body: IssueUnitsBody, holderLabel: string) => Promise<boolean> }) {
   const t = useT();
@@ -53,12 +53,12 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <div className="grid gap-2.5">
         {/* Not a `<label>`: the toggle is a pair of buttons, and wrapping them would make
             the caption a third click target. */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">{t("admin.alloc.issue.field.holder")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.holder")}</span>
           <ToggleGroup type="single" variant="outline" size="sm" value={kind} onValueChange={setKind} className="w-full">
             <ToggleGroupItem value="user" className="flex-1">
               {t("admin.alloc.issue.holder.investor")}
@@ -70,14 +70,14 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
         </div>
         {kind === "user" && <UserPicker value={pickedUser} onPick={(u) => setDraft((d) => ({ ...d, holder: { kind: "user", userId: u.userId, label: u.email || u.userId } }))} />}
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">{t("admin.alloc.issue.field.units")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.units")}</span>
           <Input inputMode="decimal" value={draft.units} onChange={(e) => setDraft((d) => ({ ...d, units: e.target.value }))} className="w-full tabular-nums" />
-          {problem === "units" && draft.units.trim() !== "" && <span className="text-xs text-destructive">{t("admin.alloc.issue.problem.units")}</span>}
+          {problem === "units" && draft.units.trim() !== "" && <span className="text-xs text-accent-error">{t("admin.alloc.issue.problem.units")}</span>}
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">{t("admin.alloc.issue.field.costBasis")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.costBasis")}</span>
           <Input inputMode="decimal" value={draft.costBasis} onChange={(e) => setDraft((d) => ({ ...d, costBasis: e.target.value }))} className="w-full tabular-nums" />
-          <span className={cn("text-xs", problem === "costBasis" ? "text-destructive" : "text-muted-foreground")}>
+          <span className={cn("text-xs", problem === "costBasis" ? "text-accent-error" : "text-ink-soft")}>
             {t(problem === "costBasis" ? "admin.alloc.issue.problem.costBasis" : "admin.alloc.issue.costBasisHint")}
           </span>
         </label>
@@ -88,7 +88,7 @@ export function IssueForm({ service, busy, onSubmit }: { service: string; busy: 
       </Button>
       {/* The kit dims a disabled button to half opacity, which on a teal fill over navy
           reads as "slightly quieter" rather than "off" — so the button also says why. */}
-      {reason && <p className="text-center text-xs text-muted-foreground">{t(reason)}</p>}
+      {reason && <p className="text-center text-xs text-ink-soft">{t(reason)}</p>}
     </div>
   );
 }

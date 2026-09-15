@@ -62,7 +62,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
   }
 
   return (
-    <Card className="h-fit border-main-accent-t1/40">
+    <Card className="h-fit border-accent-debug/40">
       <CardContent className="space-y-3 py-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-sm font-semibold">{t("admin.fees.pendingTitle")}</p>
@@ -71,7 +71,7 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
           </Badge>
         </div>
         <p className="text-sm tabular-nums">{termsSummary(change, t)}</p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-soft">
           {awaiting
             ? t("admin.fees.pending.awaiting", { version: change.version })
             : kind === "immediate"
@@ -79,12 +79,12 @@ export function PendingCard({ change, onCancelled }: { change: FeePolicyChange; 
               : t("admin.fees.pending.scheduled", { version: change.version, at: formatMoment(change.effective_from, locale) })}
         </p>
         {change.reason.trim() && (
-          <blockquote className="border-l-2 border-main-accent-t3/60 pl-3 text-sm leading-relaxed">{change.reason.trim()}</blockquote>
+          <blockquote className="border-l-2 border-accent-warn/60 pl-3 text-sm leading-relaxed">{change.reason.trim()}</blockquote>
         )}
-        <p className="text-xs text-muted-foreground">{t("admin.fees.pending.requested", { when: ago(change.requested_at, t) })}</p>
+        <p className="text-xs text-ink-soft">{t("admin.fees.pending.requested", { when: ago(change.requested_at, t) })}</p>
         <NoticeWaiver change={change} />
 
-        {problem && <p className="text-xs text-destructive">{problem}</p>}
+        {problem && <p className="text-xs text-accent-error">{problem}</p>}
 
         {confirming ? (
           <Alert variant="destructive" role="status">

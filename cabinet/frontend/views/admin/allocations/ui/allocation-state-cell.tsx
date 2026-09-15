@@ -13,9 +13,9 @@ import { stateLabel } from "@/views/admin/lib/format";
 // `closed` is amber rather than destructive: it stops new subscriptions but investors
 // can still redeem out of it, so it is a wind-down, not a failure.
 const STATE_TONE: Record<AllocationState, string> = {
-  draft: "border-border text-muted-foreground",
-  open: "border-main-accent-t2/40 bg-main-accent-t2/10 text-main-accent-t2",
-  closed: "border-main-accent-t3/40 bg-main-accent-t3/10 text-main-accent-t3",
+  draft: "border-border text-ink-soft",
+  open: "border-positive/40 bg-positive/10 text-positive",
+  closed: "border-accent-warn/40 bg-accent-warn/10 text-accent-warn",
 };
 
 // Catalogue keys, not finished prose: this map is module scope, so it holds what to say

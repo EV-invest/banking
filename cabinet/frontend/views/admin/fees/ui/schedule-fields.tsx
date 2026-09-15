@@ -99,7 +99,7 @@ export function ScheduleFields({
         {effectiveFromError !== null && <FieldError id={whenErrorId}>{effectiveFromError}</FieldError>}
         {/* Always mounted: a live region that appears together with its text is not
             announced, and a description the input names must exist to be read. */}
-        <FieldDescription id={whenPreviewId} role="status" className="text-xs text-main-accent-t3">
+        <FieldDescription id={whenPreviewId} role="status" className="text-xs text-accent-warn">
           {lifted && effectiveFromError === null
             ? consilium
               ? t("admin.fees.effectiveFromLiftedConsilium")
@@ -133,7 +133,7 @@ export function ScheduleFields({
           parse: a requirement computed from a field the form is about to reject would
           name a decision nobody can send. */}
       {requirement && (
-        <p className={cn("text-xs", consilium ? "text-main-accent-t3" : "text-muted-foreground")}>
+        <p className={cn("text-xs", consilium ? "text-accent-warn" : "text-ink-soft")}>
           {t(consilium ? "admin.fees.requirement.consilium" : "admin.fees.requirement.admin")}
         </p>
       )}

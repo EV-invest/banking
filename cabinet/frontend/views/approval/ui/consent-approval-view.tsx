@@ -80,7 +80,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
             {/* Two keys, one sentence each: the first is the whole point of the page, and it
                 carries its weight in markup rather than in capitals a screen reader spells
                 out letter by letter. */}
-            <strong className="font-semibold text-foreground">{t("consent.leadOwn")}</strong> {t("consent.lead", { initiator: invitation.initiator_email })}
+            <strong className="font-semibold text-ink">{t("consent.leadOwn")}</strong> {t("consent.lead", { initiator: invitation.initiator_email })}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -91,7 +91,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
             <DetailRow
               label={t("approval.expires")}
               value={t("approval.expiresValue", { at: formatMoment(invitation.expires_at, locale), left: expiresIn(invitation.expires_at, t) })}
-              tone={expired ? "text-destructive" : undefined}
+              tone={expired ? "text-accent-error" : undefined}
             />
           </div>
         </CardContent>
@@ -104,7 +104,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
       ) : settled ? (
         <ApprovalOutcome
           icon={settled === "approve" ? <CheckCircle2 /> : <XCircle />}
-          tone={settled === "approve" ? "text-main-accent-t2" : "text-muted-foreground"}
+          tone={settled === "approve" ? "text-positive" : "text-ink-soft"}
           title={t(settled === "approve" ? "consent.decided.approvedTitle" : "consent.decided.rejectedTitle")}
           description={t(justDecided ? (settled === "approve" ? "consent.decided.approvedFresh" : "consent.decided.rejectedFresh") : "approval.decided.body")}
         />
@@ -112,7 +112,7 @@ export function ConsentApprovalView({ token }: { token: string }) {
         <ConsentDecisionCard email={invitation.subject_email} pending={pending} rejectedAttempts={rejectedAttempts} error={error} onDecide={decide} />
       )}
 
-      <p className="text-center text-xs text-muted-foreground">{t("approval.footnote")}</p>
+      <p className="text-center text-xs text-ink-soft">{t("approval.footnote")}</p>
     </ApprovalPage>
   );
 }

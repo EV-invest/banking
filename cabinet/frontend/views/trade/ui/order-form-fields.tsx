@@ -54,17 +54,17 @@ export function OrderFormFields({
 
       {!market && (
         <div className="space-y-1">
-          <Label htmlFor="order-price" className="text-xs text-muted-foreground">
+          <Label htmlFor="order-price" className="text-xs text-ink-soft">
             {t("trade.form.price")}
           </Label>
           <Input id="order-price" inputMode="decimal" placeholder="0.00" value={draft.price} disabled={disabled} onChange={(e) => onChange((d) => ({ ...d, price: e.target.value }))} className="w-full font-mono-tech tabular-nums" />
-          {priceProblem && draft.price.trim() !== "" && <p className="text-xs text-destructive">{t(`trade.form.problem.${problem}`, { tick: formatUsdt(context.policy?.price_tick) })}</p>}
+          {priceProblem && draft.price.trim() !== "" && <p className="text-xs text-accent-error">{t(`trade.form.problem.${problem}`, { tick: formatUsdt(context.policy?.price_tick) })}</p>}
         </div>
       )}
 
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <Label htmlFor="order-size" className="text-xs text-muted-foreground">
+          <Label htmlFor="order-size" className="text-xs text-ink-soft">
             {t("trade.form.size")}
           </Label>
           {!buying && position?.units && !isZero(position.units) && (
@@ -74,13 +74,13 @@ export function OrderFormFields({
           )}
         </div>
         <Input id="order-size" inputMode="decimal" placeholder="0" value={draft.size} disabled={disabled} onChange={(e) => onChange((d) => ({ ...d, size: e.target.value }))} className="w-full font-mono-tech tabular-nums" />
-        {sizeProblem && draft.size.trim() !== "" && <p className="text-xs text-destructive">{t(`trade.form.problem.${problem}`, { lot: formatUnits(context.policy?.lot_size) })}</p>}
-        {problem === "noQuote" && <p className="text-xs text-destructive">{t("trade.form.problem.noQuote")}</p>}
+        {sizeProblem && draft.size.trim() !== "" && <p className="text-xs text-accent-error">{t(`trade.form.problem.${problem}`, { lot: formatUnits(context.policy?.lot_size) })}</p>}
+        {problem === "noQuote" && <p className="text-xs text-accent-error">{t("trade.form.problem.noQuote")}</p>}
       </div>
 
       {!market && (
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">{t("trade.form.tif")}</Label>
+          <Label className="text-xs text-ink-soft">{t("trade.form.tif")}</Label>
           <Select value={draft.tif} onValueChange={(v) => onChange((d) => ({ ...d, tif: ORDER_TIFS.find((x) => x === v) ?? d.tif }))}>
             <SelectTrigger className="w-full text-xs" disabled={disabled}>
               <span className="truncate">{t(`trade.form.tifLabel.${draft.tif}`)}</span>
@@ -101,7 +101,7 @@ export function OrderFormFields({
         <OrderFormRow label={t("trade.form.fee")} value={fee === null ? "—" : `${formatUsdt(asDecimal(fee))} USDT`} />
         <OrderFormRow
           label={t("trade.form.available")}
-          className={cn(problem === "funds" && "text-destructive")}
+          className={cn(problem === "funds" && "text-accent-error")}
           value={buying ? (context.availableCash === null ? "—" : `${formatUsdt(context.availableCash)} USDT`) : context.availableUnits === null ? "—" : t("dash.unitsAmount", { n: Number(context.availableUnits), units: formatUnits(context.availableUnits) })}
         />
         {!buying && position?.units_in_orders && !isZero(position.units_in_orders) && <OrderFormRow label={t("trade.form.inOrders")} value={formatUnits(position.units_in_orders)} />}

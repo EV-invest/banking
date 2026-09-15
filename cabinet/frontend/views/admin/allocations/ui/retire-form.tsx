@@ -31,10 +31,10 @@ export function RetireForm({ draft, companyUnits, onChange, onReview, onCancel }
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-main-surface p-3">
+    <div className="space-y-3 rounded-lg border border-border bg-secondary p-3">
       <div className="grid gap-2.5">
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">{t("admin.alloc.issue.field.holder")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.holder")}</span>
           <ToggleGroup type="single" variant="outline" size="sm" value={kind} onValueChange={setKind} className="w-full">
             <ToggleGroupItem value="user" className="flex-1">
               {t("admin.alloc.issue.holder.investor")}
@@ -46,18 +46,18 @@ export function RetireForm({ draft, companyUnits, onChange, onReview, onCancel }
         </div>
         {kind === "user" && <UserPicker value={pickedUser} onPick={(u) => onChange({ ...draft, holder: { kind: "user", userId: u.userId, label: u.email || u.userId } })} />}
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">{t("admin.alloc.issue.field.units")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.units")}</span>
           <Input inputMode="decimal" value={draft.units} onChange={(e) => onChange({ ...draft, units: e.target.value })} className="w-full tabular-nums" />
           {/* The company's settled stake is the one figure this form can cap against; an
               investor's available units are the hub's to know, and its refusal names them. */}
-          <span className={cn("text-xs tabular-nums", unitsProblem ? "text-destructive" : "text-muted-foreground")}>
+          <span className={cn("text-xs tabular-nums", unitsProblem ? "text-accent-error" : "text-ink-soft")}>
             {unitsProblem === "units" ? t("admin.alloc.issue.problem.units") : kind === "company" ? t("admin.alloc.transfer.available", { units: formatUnits(companyUnits) }) : t("admin.alloc.retire.investorHint")}
           </span>
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs text-muted-foreground">{t("admin.alloc.issue.field.costBasis")}</span>
+          <span className="text-xs text-ink-soft">{t("admin.alloc.issue.field.costBasis")}</span>
           <Input inputMode="decimal" value={draft.costBasis} onChange={(e) => onChange({ ...draft, costBasis: e.target.value })} className="w-full tabular-nums" />
-          <span className={cn("text-xs", problem === "costBasis" ? "text-destructive" : "text-muted-foreground")}>
+          <span className={cn("text-xs", problem === "costBasis" ? "text-accent-error" : "text-ink-soft")}>
             {t(problem === "costBasis" ? "admin.alloc.issue.problem.costBasis" : "admin.alloc.retire.costBasisHint")}
           </span>
         </label>
@@ -70,7 +70,7 @@ export function RetireForm({ draft, companyUnits, onChange, onReview, onCancel }
           {t("admin.alloc.retire.review")}
         </Button>
       </div>
-      {reason && <p className="text-center text-xs text-muted-foreground">{t(reason)}</p>}
+      {reason && <p className="text-center text-xs text-ink-soft">{t(reason)}</p>}
     </div>
   );
 }

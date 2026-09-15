@@ -24,9 +24,9 @@ export function PaymentEndSummary({ end, className }: { end: PaymentEnd; classNa
   const external = end.kind === "external";
   return (
     <span className={cn("flex min-w-0 flex-col gap-0.5", className)}>
-      <span className="truncate font-medium text-foreground">{end.label || "—"}</span>
+      <span className="truncate font-medium text-ink">{end.label || "—"}</span>
       {external ? (
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
           <NetworkMark network={end.network} className="size-3.5 shrink-0" />
           <span className="shrink-0">{networkLabel(end.network)}</span>
           <span className="min-w-0 truncate font-mono-tech">{shortAddress(end.address)}</span>
@@ -36,7 +36,7 @@ export function PaymentEndSummary({ end, className }: { end: PaymentEnd; classNa
           </InfoTip>
         </span>
       ) : end.detail ? (
-        <span className="truncate text-xs text-muted-foreground">{end.detail}</span>
+        <span className="truncate text-xs text-ink-soft">{end.detail}</span>
       ) : null}
     </span>
   );

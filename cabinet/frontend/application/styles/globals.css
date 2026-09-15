@@ -1,10 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@evinvest/uikit/styles/tokens.css";
-/* The pre-0.10 vocabulary the cabinet's own markup still writes, layered over the
-   kit's tokens. Local since uikit 0.14 dropped its `tokens-legacy.css`; the account-chip
-   remote imports the same file, so both entry points keep painting the same palette. */
-@import "./tokens-legacy.css";
+
+/* Token values are the kit's. A fix that has to ship before lib republishes is mirrored
+   between these two markers and nowhere else — `shared/config/token-override.test.ts`
+   rejects a kit token redeclared outside them, and fails the block itself once the
+   installed uikit carries the same value, so the mirror cannot outlive its bump. */
+/* BEGIN temporary token override */
+/* END temporary token override */
 
 /* The shared UI kit ships compiled; point Tailwind at its dist so the classes
    baked into @evinvest/uikit components are generated. Deps hoist to the REPO
@@ -57,7 +60,7 @@
     font-family: var(--font-sans);
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-ink antialiased;
   }
   /* Headings inherit Inter from the `*` rule above; they keep only the optical
      tightening large Inter wants. Small headings opt back out with

@@ -25,10 +25,10 @@ export function triggerLabel(trigger: string | undefined, t: Translate): string 
 
 /** Token classes for a state pill. Neutral unless the state carries real news. */
 export function changeStateTone(state: string | undefined): string {
-  if (state === "active") return "text-main-accent-t2";
-  if (state === "scheduled" || state === "awaiting_consilium") return "text-main-accent-t1";
-  if (state === "rejected") return "text-destructive";
-  return "text-muted-foreground";
+  if (state === "active") return "text-positive";
+  if (state === "scheduled" || state === "awaiting_consilium") return "text-accent-debug";
+  if (state === "rejected") return "text-accent-error";
+  return "text-ink-soft";
 }
 
 /** Pending means the change is still on its way — the two states a cancel can reach. */

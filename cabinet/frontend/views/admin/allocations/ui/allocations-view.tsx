@@ -20,7 +20,7 @@ import { AllocationsTable } from "@/views/admin/allocations/ui/allocations-table
 import { RegisterForm } from "@/views/admin/allocations/ui/register-form";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function AllocationsView() {
   const t = useT();
@@ -77,9 +77,9 @@ export function AllocationsView() {
 
       <StaggerItem as="section" className="flex gap-6">
         <div className="min-w-0 flex-1 space-y-3">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-ink-soft">
             {t("admin.alloc.registry")}
-            {rows && <span className="rounded-full bg-main-accent-t1/15 px-2 py-0.5 text-xs font-semibold text-main-accent-t1">{rows.length}</span>}
+            {rows && <span className="rounded-full bg-accent-debug/15 px-2 py-0.5 text-xs font-semibold text-accent-debug">{rows.length}</span>}
           </p>
           <AllocationsTable
             rows={rows}
@@ -97,7 +97,7 @@ export function AllocationsView() {
           {/* One key for the whole paragraph, with the state name interpolated: a translator
               has to be able to move `draft` to wherever the sentence puts it in their
               language, which splitting the note around the `<span>` would forbid. */}
-          <p className="max-w-3xl text-xs text-muted-foreground">{t("admin.alloc.footnote", { state: t("admin.state.draft") })}</p>
+          <p className="max-w-3xl text-xs text-ink-soft">{t("admin.alloc.footnote", { state: t("admin.state.draft") })}</p>
         </div>
 
         <AllocationSidePanel panel={openPanel} onClose={() => setPanel(null)} />

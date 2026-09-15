@@ -31,7 +31,7 @@ export function TradesTape({ service }: { service: string }) {
 
   return (
     <div className="py-1">
-      <div className="grid grid-cols-3 gap-2 px-3 py-1 text-right text-xs text-muted-foreground [&>*:first-child]:text-left">
+      <div className="grid grid-cols-3 gap-2 px-3 py-1 text-right text-xs text-ink-soft [&>*:first-child]:text-left">
         <span>{t("trade.book.col.price")}</span>
         <span>{t("trade.book.col.size")}</span>
         <span>{t("trade.tape.col.time")}</span>

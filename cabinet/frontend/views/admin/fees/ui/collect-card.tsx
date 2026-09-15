@@ -61,7 +61,7 @@ export function CollectCard({ service }: { service: string }) {
       <CardContent className="space-y-4 py-6">
         <div className="space-y-1">
           <p className="text-sm font-semibold">{t("admin.fees.collected")}</p>
-          <p className="text-xs text-muted-foreground">{t("admin.fees.collectedSub")}</p>
+          <p className="text-xs text-ink-soft">{t("admin.fees.collectedSub")}</p>
         </div>
 
         {shares.isLoading ? (
@@ -75,20 +75,20 @@ export function CollectCard({ service }: { service: string }) {
           </dl>
         )}
 
-        <p className="text-xs text-muted-foreground">{t("admin.fees.settleNote")}</p>
+        <p className="text-xs text-ink-soft">{t("admin.fees.settleNote")}</p>
 
-        {problem && <p className="text-xs text-destructive">{problem}</p>}
+        {problem && <p className="text-xs text-accent-error">{problem}</p>}
         {/* Two independently complete sentences, so the settlement line and the pointer to
             the payout screen stay separate keys; the screen's own name is interpolated so it
             tracks whatever the nav calls it. The emphasis on that name is the one casualty
             of keeping the sentence whole for translators. */}
-        {done && !problem && <p className="text-xs text-main-accent-t2">{`${done} ${t("admin.fees.withdrawableFrom", { screen: t("nav.revenue") })}`}</p>}
+        {done && !problem && <p className="text-xs text-positive">{`${done} ${t("admin.fees.withdrawableFrom", { screen: t("nav.revenue") })}`}</p>}
 
         <Button type="button" variant="outline" onClick={settle} disabled={busy || data === null || nothing}>
           {busy && <Loader2 className="size-4 animate-spin" />}
           {t("admin.fees.settleAll")}
         </Button>
-        {nothing && <p className="text-xs text-muted-foreground">{t("admin.fees.nothingToSettle")}</p>}
+        {nothing && <p className="text-xs text-ink-soft">{t("admin.fees.nothingToSettle")}</p>}
       </CardContent>
     </Card>
   );

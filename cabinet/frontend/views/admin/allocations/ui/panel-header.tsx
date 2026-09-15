@@ -16,13 +16,13 @@ export function PanelHeader({ allocation, onClose }: { allocation: Allocation; o
     <div className="flex items-start justify-between gap-2">
       <div className="min-w-0">
         <p className="truncate font-semibold">{allocation.title}</p>
-        <p className="truncate font-mono-tech text-xs text-muted-foreground">{allocation.service}</p>
+        <p className="truncate font-mono-tech text-xs text-ink-soft">{allocation.service}</p>
       </div>
       <button
         type="button"
         onClick={onClose}
         aria-label={t("ui.close")}
-        className="rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="rounded-md text-ink-soft outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="size-4" />
       </button>

@@ -16,7 +16,7 @@ import type { Allocation, AllocationIcon } from "@/shared/contracts/admin";
 import { cn } from "@/shared/lib/cn";
 import { IconSelect } from "@/views/admin/allocations/ui/pickers";
 
-const TEAL_CTA = "bg-main-accent-t1 text-main-black hover:bg-main-accent-t1/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function AllocationEditor({ row, busy, onSave }: { row: Allocation; busy: boolean; onSave: (body: AllocationWrite) => void }) {
   const t = useT();
@@ -31,17 +31,17 @@ export function AllocationEditor({ row, busy, onSave }: { row: Allocation; busy:
       {/* `flex flex-col`, not `block` + `space-y`: the uikit Input is `inline-flex`, so a
           narrow one shares the line with its label unless the column is explicit. */}
       <label className="flex w-56 max-w-full flex-col gap-1.5">
-        <span className="text-xs text-muted-foreground">{t("admin.alloc.field.title")}</span>
+        <span className="text-xs text-ink-soft">{t("admin.alloc.field.title")}</span>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full" />
       </label>
       <label className="flex min-w-56 max-w-full flex-1 flex-col gap-1.5">
-        <span className="text-xs text-muted-foreground">{t("admin.alloc.field.summary")}</span>
+        <span className="text-xs text-ink-soft">{t("admin.alloc.field.summary")}</span>
         <Input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t("admin.alloc.placeholder.summary")} className="w-full" />
       </label>
       {/* Not a `<label>`: the trigger is a button, and wrapping it would make the caption
           a second click target that reopens the popup it just closed. */}
       <div className="flex w-44 max-w-full flex-col gap-1.5">
-        <span className="text-xs text-muted-foreground">{t("admin.alloc.field.icon")}</span>
+        <span className="text-xs text-ink-soft">{t("admin.alloc.field.icon")}</span>
         <IconSelect value={icon} onChange={setIcon} />
       </div>
       <Button type="button" className={cn(TEAL_CTA)} disabled={busy || !title.trim()} onClick={() => onSave({ service: row.service, title, summary, icon })}>
