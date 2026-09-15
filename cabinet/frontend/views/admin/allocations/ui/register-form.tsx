@@ -12,7 +12,7 @@ import { cn } from "@/shared/lib/cn";
 import { StaggerItem } from "@/shared/ui/motion";
 import { IconSelect } from "@/views/admin/allocations/ui/pickers";
 
-const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function RegisterForm({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () => void; onSubmit: (body: AllocationWrite) => void }) {
   const t = useT();

@@ -22,7 +22,7 @@ import { ago, compactUnits, formatNav, formatUnits, formatUsd, fractionOfCap, st
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 import { ValuationActions } from "@/views/admin/valuation/ui/valuation-actions";
 
-const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 // "EV Trading (trading)", with the state trailing when it is not the plain open case.
 // Two keys rather than one with an optional tail: the punctuation joining a name to a

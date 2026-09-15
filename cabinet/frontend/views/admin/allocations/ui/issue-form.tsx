@@ -15,7 +15,7 @@ import { cn } from "@/shared/lib/cn";
 import { EMPTY_ISSUE_DRAFT, afterIssued, issueDraftProblem, issueUnitsBody, submissionKeyFor, type IssueDraft, type SubmissionKey } from "@/views/admin/allocations/lib/issuance";
 import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-picker";
 
-const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function IssueForm({ service, busy, onSubmit }: { service: string; busy: boolean; onSubmit: (body: IssueUnitsBody, holderLabel: string) => Promise<boolean> }) {
   const t = useT();

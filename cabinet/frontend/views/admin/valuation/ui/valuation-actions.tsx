@@ -20,7 +20,7 @@ import { TipAnchor } from "@/shared/tips";
 import { Link } from "@/shared/ui/cabinet-link";
 import { PostedMark } from "@/views/admin/valuation/ui/posted-mark";
 
-const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 type Route = "post" | "propose";
 

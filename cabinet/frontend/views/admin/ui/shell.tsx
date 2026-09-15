@@ -45,7 +45,7 @@ export function AdminHeader({ eyebrow, title, subtitle, action }: { eyebrow: str
   return (
     <StaggerItem as="header" className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
-        <p className="font-mono-tech text-xs uppercase tracking-widest text-accent-debug">{eyebrow}</p>
+        <p className="font-mono-tech text-xs uppercase tracking-widest text-primary">{eyebrow}</p>
         <h1 className="text-2xl font-semibold text-ink">{title}</h1>
         <p className="text-sm text-ink-soft">{subtitle}</p>
       </div>

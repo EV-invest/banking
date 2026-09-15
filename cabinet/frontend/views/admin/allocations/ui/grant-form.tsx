@@ -11,7 +11,7 @@ import { cn } from "@/shared/lib/cn";
 import { GRANT_LEVELS, accessLabel } from "@/views/admin/allocations/lib/access";
 import { UserPicker, type PickedUser } from "@/views/admin/allocations/ui/user-picker";
 
-const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 /** Raise one investor above the product's default. Only `view` and `invest` are offered —
  *  a grant may never carry `hidden`, which lives on the row's own access picker instead. */

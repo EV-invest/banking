@@ -35,13 +35,14 @@ const RANGE_LABEL_KEYS: Readonly<Record<(typeof RANGES)[number], string>> = {
   all: "dash.range.all",
 };
 
-// Allocation slices cycle the brand accent tiers. The bar names its tier twice because
-// Progress paints track and indicator from `--primary`, and the child selector is the only
-// way to reach the indicator without forking the component.
+// Allocation slices cycle the chart palette — distinguishable hues carrying no
+// significance. The bar names its rung twice because Progress paints track and indicator
+// from `--primary`, and the child selector is the only way to reach the indicator without
+// forking the component.
 const ACCENTS = [
-  { dot: "bg-accent-debug", bar: "bg-accent-debug/20 *:bg-accent-debug" },
-  { dot: "bg-positive", bar: "bg-positive/20 *:bg-positive" },
-  { dot: "bg-accent-warn", bar: "bg-accent-warn/20 *:bg-accent-warn" },
+  { dot: "bg-chart-1", bar: "bg-chart-1/20 *:bg-chart-1" },
+  { dot: "bg-chart-2", bar: "bg-chart-2/20 *:bg-chart-2" },
+  { dot: "bg-chart-3", bar: "bg-chart-3/20 *:bg-chart-3" },
   { dot: "bg-chart-4", bar: "bg-chart-4/20 *:bg-chart-4" },
 ] as const;
 
@@ -218,7 +219,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
     <StaggerItem as={Card} className={cn("flex-1 gap-4 lg:gap-5 xl:h-full", CARD_FROM_LG, className)}>
       <div className="flex flex-col gap-3.5 lg:flex-row lg:items-start lg:justify-between lg:gap-4 lg:px-6">
         <div className="flex min-w-0 flex-col gap-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-accent-debug">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-primary">
             {t("dash.portfolioValue")}
             <TipAnchor anchor="dashboard.performance.portfolio-value" />
           </p>
@@ -243,7 +244,7 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
               onClick={() => setRange(r)}
               className={cn(
                 "rounded-md py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring lg:px-3 lg:py-1.5 lg:text-xs",
-                r === range ? "bg-accent-debug/15 font-semibold text-accent-debug" : "font-medium text-ink-soft hover:text-ink",
+                r === range ? "bg-primary/15 font-semibold text-primary" : "font-medium text-ink-soft hover:text-ink",
               )}
             >
               {t(RANGE_LABEL_KEYS[r])}
@@ -253,8 +254,8 @@ function PerfCard({ value, loading, allTimePct, className }: { value: string | u
       </div>
       <CardContent className="flex flex-col gap-3 px-0 lg:gap-5 lg:px-6 xl:flex-1">
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 lg:order-2">
-          <Legend dot="bg-accent-warn" label={t("dash.fundPerformance")} />
-          <Legend dot="bg-positive" label={t("dash.yourParticipation")} />
+          <Legend dot="bg-chart-3" label={t("dash.fundPerformance")} />
+          <Legend dot="bg-chart-2" label={t("dash.yourParticipation")} />
         </div>
         {/* No performance series exists in `shared/contracts` yet, so the plot area says so
             rather than drawing a line that traces back to nothing. */}

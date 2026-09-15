@@ -22,7 +22,7 @@ import { backingOf } from "@/views/admin/allocations/lib/backing";
 import { bookPolicyDraft, bookPolicyProblem, hasAdvancedTerms, needsAcknowledgement, setBookPolicyBody, type BookPolicyDraft } from "@/views/admin/allocations/lib/book-policy";
 import { BookUnbackedAck } from "@/views/admin/allocations/ui/book-unbacked-ack";
 
-const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function BookForm({ allocation, policy, busy, saved, onSubmit }: { allocation: Allocation; policy: BookPolicy | null; busy: boolean; saved: boolean; onSubmit: (body: SetBookPolicyBody) => Promise<boolean> }) {
   const t = useT();

@@ -21,7 +21,7 @@ import { compactUnits, formatUnits } from "@/shared/lib/money";
 import { revalidateTag } from "@/shared/lib/resource";
 import { pinCapVerdict, type PinCapVerdict } from "@/views/admin/allocations/lib/pin-cap";
 
-const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function PinCapAction({ allocation, holders }: { allocation: Allocation; holders: UnitHolders }) {
   const t = useT();

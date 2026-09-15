@@ -56,7 +56,7 @@ export async function LoginView({ searchParams }: { searchParams: Promise<{ erro
 
         <div className="relative flex max-w-md flex-col gap-5">
           {/* The brand mark itself, not a phrase — it reads "EV INVEST" in every locale. */}
-          <p className="text-xs font-semibold tracking-widest text-accent-debug">EV INVEST</p>
+          <p className="text-xs font-semibold tracking-widest text-primary">EV INVEST</p>
           <h2 className="text-5xl font-semibold leading-tight text-white">{t("auth.brandHeadline")}</h2>
           <p className="text-base leading-6 text-ink-soft">{t("auth.brandBlurb")}</p>
         </div>

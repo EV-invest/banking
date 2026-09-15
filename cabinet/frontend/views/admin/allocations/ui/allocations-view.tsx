@@ -20,7 +20,7 @@ import { AllocationsTable } from "@/views/admin/allocations/ui/allocations-table
 import { RegisterForm } from "@/views/admin/allocations/ui/register-form";
 import { AdminHeader, AdminScreen } from "@/views/admin/ui/shell";
 
-const TEAL_CTA = "bg-accent-debug text-background hover:bg-accent-debug/90";
+const TEAL_CTA = "bg-primary text-on-primary hover:bg-primary/90";
 
 export function AllocationsView() {
   const t = useT();
