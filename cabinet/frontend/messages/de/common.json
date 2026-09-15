@@ -4223,6 +4223,10 @@
     "en": "Payments",
     "t": "Zahlungen"
   },
+  "nav.profile": {
+    "en": "Profile",
+    "t": "Profil"
+  },
   "nav.revenue": {
     "en": "Revenue stats",
     "t": "Ertragsstatistik"
@@ -4779,17 +4783,41 @@
     "en": "To a product",
     "t": "An ein Produkt"
   },
-  "profile.accountSnapshot": {
-    "en": "Account snapshot",
-    "t": "Kontoübersicht"
+  "profile.activeSince": {
+    "en": "Active since {date}",
+    "t": "Aktiv seit {date}"
+  },
+  "profile.activity": {
+    "en": "Activity",
+    "t": "Aktivität"
+  },
+  "profile.activityCapped": {
+    "en": "Counted over your {n} most recent operations",
+    "t": "Gezählt über Ihre {n} letzten Vorgänge"
+  },
+  "profile.activitySub": {
+    "en": "Everything that has moved money on this account",
+    "t": "Alles, was auf diesem Konto Geld bewegt hat"
+  },
+  "profile.completeDetails": {
+    "en": "Complete your details in Settings — verification and compliance checks rely on them.",
+    "t": "Vervollständigen Sie Ihre Angaben in den Optionen — Prüfung und Compliance-Kontrollen stützen sich darauf."
   },
   "profile.dateOfBirth": {
     "en": "Date of birth",
     "t": "Geburtsdatum"
   },
-  "profile.editProfile": {
-    "en": "Edit profile",
-    "t": "Profil bearbeiten"
+  "profile.edit": {
+    "en": "Edit",
+    "t": "Bearbeiten"
+  },
+  "profile.editInSettings": {
+    "en": "Edit in Settings",
+    "t": "In Optionen ändern"
+  },
+  "profile.hintAtNav": {
+    "en": "at current NAV",
+    "t": "zum aktuellen NAV"
   },
   "profile.identityAndStanding": {
     "en": "Identity and account standing",
@@ -4847,6 +4875,10 @@
     "en": "Raised by verification and review",
     "t": "Wird durch Verifizierung und Prüfung angehoben"
   },
+  "profile.lastActivity": {
+    "en": "Last activity",
+    "t": "Letzte Aktivität"
+  },
   "profile.legalName": {
     "en": "Legal name",
     "t": "Vollständiger Name"
@@ -4855,13 +4887,13 @@
     "en": "Nationality",
     "t": "Staatsangehörigkeit"
   },
-  "profile.personalInformation": {
-    "en": "Personal information",
-    "t": "Persönliche Angaben"
+  "profile.noActivityBody": {
+    "en": "Your first deposit will appear here.",
+    "t": "Ihre erste Einzahlung erscheint hier."
   },
-  "profile.personalInformationSub": {
-    "en": "Used for compliance and statements",
-    "t": "Für Compliance und Abrechnungen verwendet"
+  "profile.noActivityTitle": {
+    "en": "No activity yet",
+    "t": "Noch keine Aktivität"
   },
   "profile.phoneNumber": {
     "en": "Phone number",
@@ -4879,25 +4911,21 @@
     "en": "Residential address",
     "t": "Wohnanschrift"
   },
-  "profile.roleAccount": {
-    "en": "{role} account",
-    "t": "{role}-Konto"
-  },
   "profile.subtitle": {
-    "en": "Your personal details and verification status",
-    "t": "Ihre persönlichen Angaben und Ihr Prüfstatus"
+    "en": "Who you are on the platform and how your account stands",
+    "t": "Wer Sie auf der Plattform sind und wie Ihr Konto steht"
   },
   "profile.taxResidence": {
     "en": "Tax residence",
     "t": "Steuerlicher Wohnsitz"
   },
-  "profile.totalInvested": {
-    "en": "Total invested",
-    "t": "Gesamt investiert"
-  },
   "profile.unverified": {
     "en": "Unverified",
     "t": "Unbestätigt"
+  },
+  "profile.viewAllActivity": {
+    "en": "View all activity",
+    "t": "Alle Aktivitäten anzeigen"
   },
   "session.breakGlass.body": {
     "en": "This fund has no owner in the register yet, so your role comes from the OWNER_SUBJECTS emergency allowlist and not from the register itself. It is real authority over this console, but it seats nobody: you hold no vote in the consilium. A seat is written once by the genesis seed when the service starts, or granted afterwards by a consilium of the existing owners — and this notice goes away for good the moment the first owner is seated.",
@@ -4910,10 +4938,6 @@
   "settings.a11y.sections": {
     "en": "Settings sections",
     "t": "Bereiche der Einstellungen"
-  },
-  "settings.accountSub": {
-    "en": "Your contact details and preferences",
-    "t": "Ihre Kontaktdaten und Präferenzen"
   },
   "settings.baseCurrency": {
     "en": "Base currency",
@@ -4967,17 +4991,81 @@
     "en": "Your password, two-factor authentication and recovery are configured in your Google Account.",
     "t": "Ihr Passwort, die Zwei-Faktor-Authentifizierung und die Wiederherstellung richten Sie in Ihrem Google-Konto ein."
   },
-  "settings.nav.general": {
-    "en": "General",
-    "t": "Allgemein"
+  "settings.group.cabinet": {
+    "en": "Cabinet",
+    "t": "Cabinet"
+  },
+  "settings.group.cabinetSub": {
+    "en": "How the cabinet looks and how it reaches you",
+    "t": "Wie das Cabinet aussieht und wie es Sie erreicht"
+  },
+  "settings.group.profileSub": {
+    "en": "Who you are and how your account is protected",
+    "t": "Wer Sie sind und wie Ihr Konto geschützt ist"
+  },
+  "settings.hint.address": {
+    "en": "Your current home address.",
+    "t": "Ihre aktuelle Wohnanschrift."
+  },
+  "settings.hint.baseCurrency": {
+    "en": "Saved to your account. Balances in the cabinet are always shown in USD.",
+    "t": "Im Konto gespeichert. Salden im Cabinet werden immer in USD angezeigt."
+  },
+  "settings.hint.dateOfBirth": {
+    "en": "As on your identity document.",
+    "t": "Wie in Ihrem Ausweisdokument."
+  },
+  "settings.hint.email": {
+    "en": "Comes from your Google account and can't be changed here.",
+    "t": "Stammt aus Ihrem Google-Konto und kann hier nicht geändert werden."
+  },
+  "settings.hint.language": {
+    "en": "Applies as soon as you save; the whole cabinet switches.",
+    "t": "Gilt sofort nach dem Speichern; das ganze Cabinet wechselt."
+  },
+  "settings.hint.phone": {
+    "en": "Used to reach you about your account.",
+    "t": "Um Sie zu Ihrem Konto zu erreichen."
+  },
+  "settings.hint.preferredName": {
+    "en": "How the cabinet and our emails address you.",
+    "t": "Wie das Cabinet und unsere E-Mails Sie ansprechen."
+  },
+  "settings.hint.timeZone": {
+    "en": "Saved to your account. The cabinet itself shows times in your device's time zone.",
+    "t": "Im Konto gespeichert. Das Cabinet selbst zeigt Zeiten in der Zeitzone Ihres Geräts."
+  },
+  "settings.nav.personal": {
+    "en": "Personal details",
+    "t": "Persönliche Angaben"
+  },
+  "settings.nav.preferences": {
+    "en": "Preferences",
+    "t": "Einstellungen"
   },
   "settings.noSessions": {
     "en": "No active sessions.",
     "t": "Keine aktiven Sitzungen."
   },
+  "settings.notificationsSub": {
+    "en": "Which channels reach you and which events you follow",
+    "t": "Welche Kanäle Sie erreichen und welchen Ereignissen Sie folgen"
+  },
+  "settings.personalRowSub": {
+    "en": "Name, phone, address, tax residence",
+    "t": "Name, Telefon, Anschrift, Steuersitz"
+  },
+  "settings.personalSub": {
+    "en": "Your identity as the fund records it",
+    "t": "Ihre Identität, wie der Fonds sie erfasst"
+  },
   "settings.phone": {
     "en": "Phone",
     "t": "Telefon"
+  },
+  "settings.preferencesSub": {
+    "en": "How the cabinet is displayed to you. Saved to your account, so every device follows",
+    "t": "Wie das Cabinet Ihnen angezeigt wird. Im Konto gespeichert, gilt also auf jedem Gerät"
   },
   "settings.revoke": {
     "en": "Revoke",
@@ -5054,6 +5142,10 @@
   "settings.tz.hoChiMinh": {
     "en": "Asia / Ho Chi Minh",
     "t": "Asien / Ho-Chi-Minh-Stadt"
+  },
+  "settings.viewProfile": {
+    "en": "View profile",
+    "t": "Profil anzeigen"
   },
   "status.backHome": {
     "en": "Back to home",
