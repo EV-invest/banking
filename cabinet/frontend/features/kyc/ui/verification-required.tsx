@@ -3,11 +3,11 @@
 import { useT } from "@evinvest/i18n/react";
 
 import { ShieldCheck } from "lucide-react";
+import { useState } from "react";
 
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@evinvest/uikit";
+import { Button, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@evinvest/uikit";
 
-import { useStartVerification } from "@/features/kyc/model/use-start-verification";
-import { StartVerificationButton, VerificationOutcome } from "@/features/kyc/ui/verification-controls";
+import { VerificationDialog } from "@/features/kyc/ui/verification-dialog";
 import { cn } from "@/shared/lib/cn";
 
 /**
@@ -20,12 +20,14 @@ import { cn } from "@/shared/lib/cn";
  * click. Withdraw had the mirror of it: a form that filled in completely and refused on
  * submit.
  *
- * Title and description are the caller's because what is closed differs between the two
- * screens; the way out is identical, so it lives here.
+ * Title and description are the caller's because what is closed differs between the screens;
+ * the way out is identical, so it lives here — and it is the SAME dialog the profile card and
+ * the home banner open (#213/#215), so the account of what verification involves is written
+ * once rather than three times.
  */
 export function VerificationRequired({ title, description, className }: { title: string; description: string; className?: string }) {
   const t = useT();
-  const start = useStartVerification();
+  const [open, setOpen] = useState(false);
 
   return (
     // uikit's Empty draws a dashed frame but leaves the border width to the caller, and
@@ -38,13 +40,13 @@ export function VerificationRequired({ title, description, className }: { title:
         <EmptyTitle>{title}</EmptyTitle>
         <EmptyDescription>{description}</EmptyDescription>
       </EmptyHeader>
-      {/* `gap-2` rather than the default: the message below the button is a note on it, and
-          an outcome-free block would otherwise carry the full gap under a lone control. */}
-      <EmptyContent className="gap-2">
+      <EmptyContent>
         {/* i18n-max: 16 — the uikit Button is shrink-0. */}
-        <StartVerificationButton start={start} label={t("kyc.verifyNow")} />
-        <VerificationOutcome start={start} className="text-center" />
+        <Button type="button" onClick={() => setOpen(true)}>
+          {t("kyc.verifyNow")}
+        </Button>
       </EmptyContent>
+      <VerificationDialog open={open} onOpenChange={setOpen} />
     </Empty>
   );
 }

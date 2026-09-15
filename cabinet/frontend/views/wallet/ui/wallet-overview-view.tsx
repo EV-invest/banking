@@ -6,7 +6,10 @@ import { TriangleAlert } from "lucide-react";
 import { Link } from "@/shared/ui/cabinet-link";
 import { Skeleton } from "@evinvest/uikit";
 
+import { isUnverified } from "@/entities/user/lib/kyc";
+import { profileResource } from "@/entities/user/model/profile-resource";
 import { walletResource } from "@/entities/wallet/model/wallet-resource";
+import { VerificationRequired } from "@/features/kyc";
 import { errorMessage } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/cn";
 import { useResource } from "@/shared/lib/resource";
@@ -26,6 +29,13 @@ export function WalletOverviewView() {
   // any of them shows the figure immediately and refreshes it behind the number. A failed
   // refresh reports itself without blanking what is already on screen.
   const { data: wallet, error: failure, isLoading: loading } = useResource(walletResource);
+  // Shared with the sidebar chip and every other screen, and prefetched at boot, so the tier
+  // is normally known on the first frame. A read that FAILED must not gate anything — a
+  // verified user would lose their rails to an unrelated blip — so only a settled `tier 0`
+  // closes the list, exactly as `deposit-view` decides it.
+  const { data: profile, error: profileError, isLoading: profileLoading } = useResource(profileResource);
+  const tierKnown = !profileLoading || profileError !== null;
+  const gated = tierKnown && isUnverified(profile);
   const error = wallet ? null : failure ? errorMessage(failure, t) : null;
 
   const balance = wallet?.balance;
@@ -122,12 +132,20 @@ export function WalletOverviewView() {
           whichever of them it is showing, and giving each branch its own item would make
           the sequence depend on which one happened to render. */}
       <StaggerItem>
-        {loading ? (
+        {loading || profileLoading ? (
           <div className="grid gap-3.5 lg:grid-cols-2 lg:gap-5 xl:grid-cols-3">
             <Skeleton className="h-27 rounded-xl" />
             <Skeleton className="hidden h-31 rounded-xl lg:block" />
             <Skeleton className="hidden h-31 rounded-xl xl:block" />
           </div>
+        ) : gated ? (
+          // The rails themselves, not a notice above them: below tier 1 the hub issues no
+          // deposit address on ANY network and refuses every withdrawal, so every action on
+          // every card can only refuse. Leaving them clickable is the wrong-cause bug of #215
+          // one screen earlier — a rail named as the problem when the account is. The balance
+          // above stays, deliberately: the hub shows it to an unverified caller on purpose,
+          // and hiding it would say their money is gated when only the rails are.
+          <VerificationRequired title={t("wallet.overviewVerifyTitle")} description={t("wallet.overviewVerifyBody")} />
         ) : rails.length === 0 ? (
           <p className="text-sm text-ink-soft">{t("wallet.noRails")}</p>
         ) : (

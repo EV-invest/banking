@@ -6587,6 +6587,14 @@
     "en": "No deposit or withdrawal rails are available right now — check back soon.",
     "t": "Derzeit ist weder ein Einzahlungs- noch ein Auszahlungskanal verfügbar — schauen Sie bald wieder vorbei."
   },
+  "wallet.overviewVerifyTitle": {
+    "en": "Verify your identity to use these rails",
+    "t": "Bestätigen Sie Ihre Identität, um diese Netzwerke zu nutzen"
+  },
+  "wallet.overviewVerifyBody": {
+    "en": "Deposit addresses are issued and withdrawals open once your identity is verified. Your balance above is unaffected.",
+    "t": "Einzahlungsadressen und Auszahlungen stehen zur Verfügung, sobald Ihre Identität bestätigt ist. Ihr Guthaben oben bleibt unberührt."
+  },
   "wallet.noWithdrawRails": {
     "en": "No withdrawal rails are available right now — check back soon.",
     "t": "Derzeit ist kein Auszahlungskanal verfügbar — schauen Sie bald wieder vorbei."
